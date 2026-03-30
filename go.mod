@@ -20,7 +20,7 @@ require (
 	go.lsp.dev/jsonrpc2 v0.10.0
 	go.lsp.dev/protocol v0.12.0
 	go.lsp.dev/uri v0.3.0
-	go.mongodb.org/mongo-driver v1.17.6
+	go.mongodb.org/mongo-driver v1.17.9
 	go.starlark.net v0.0.0-20260102030733-3fee463870c9
 	go.uber.org/zap v1.21.0
 	gopkg.in/yaml.v3 v3.0.1
