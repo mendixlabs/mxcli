@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/chzyer/readline v1.5.1
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/jackc/pgx/v5 v5.8.0
+	github.com/jackc/pgx/v5 v5.9.1
 	github.com/mattn/go-runewidth v0.0.21
 	github.com/microsoft/go-mssqldb v1.9.8
 	github.com/pmezard/go-difflib v1.0.0
