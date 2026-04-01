@@ -727,6 +727,7 @@ type ResultHandlingMapping struct {
 	MappingID      model.ID `json:"mappingId"`
 	ResultEntityID model.ID `json:"resultEntityId,omitempty"`
 	ResultVariable string   `json:"resultVariable,omitempty"`
+	SingleObject   bool     `json:"singleObject,omitempty"` // true when mapping returns a single object (not a list)
 }
 
 func (ResultHandlingMapping) isResultHandling() {}

@@ -27,6 +27,18 @@ func (fb *flowBuilder) buildFlowGraph(stmts []ast.MicroflowStatement, returns *a
 	// Set baseY for branch restoration (this is the center line)
 	fb.baseY = fb.posY
 
+	// Pre-scan: if the first statement carries an @position annotation, shift the
+	// StartEvent to be one spacing unit to the left of that position so it doesn't
+	// end up behind activities that use explicit coordinates.
+	for _, stmt := range stmts {
+		if ann := getStatementAnnotations(stmt); ann != nil && ann.Position != nil {
+			fb.posX = ann.Position.X - fb.spacing
+			fb.posY = ann.Position.Y
+			fb.baseY = fb.posY
+			break
+		}
+	}
+
 	// Create StartEvent - Position is the CENTER point (RelativeMiddlePoint in Mendix)
 	startEvent := &microflows.StartEvent{
 		BaseMicroflowObject: microflows.BaseMicroflowObject{

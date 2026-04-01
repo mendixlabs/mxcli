@@ -489,6 +489,28 @@ func (b *Builder) ExitShowStatement(ctx *parser.ShowStatementContext) {
 			}
 		}
 		b.statements = append(b.statements, stmt)
+	} else if ctx.JSON() != nil && ctx.STRUCTURES() != nil {
+		// SHOW JSON STRUCTURES [IN module]
+		stmt := &ast.ShowStmt{ObjectType: ast.ShowJsonStructures}
+		if ctx.IN() != nil {
+			if qn := ctx.QualifiedName(); qn != nil {
+				stmt.InModule = getQualifiedNameText(qn)
+			} else if id := ctx.IDENTIFIER(); id != nil {
+				stmt.InModule = id.GetText()
+			}
+		}
+		b.statements = append(b.statements, stmt)
+	} else if ctx.IMPORT() != nil && ctx.MAPPINGS() != nil {
+		// SHOW IMPORT MAPPINGS [IN module]
+		stmt := &ast.ShowStmt{ObjectType: ast.ShowImportMappings}
+		if ctx.IN() != nil {
+			if qn := ctx.QualifiedName(); qn != nil {
+				stmt.InModule = getQualifiedNameText(qn)
+			} else if id := ctx.IDENTIFIER(); id != nil {
+				stmt.InModule = id.GetText()
+			}
+		}
+		b.statements = append(b.statements, stmt)
 	} else if ctx.WIDGETS() != nil {
 		// SHOW WIDGETS [WHERE ...] [IN module]
 		stmt := &ast.ShowWidgetsStmt{
@@ -815,6 +837,16 @@ func (b *Builder) ExitDescribeStatement(ctx *parser.DescribeStatementContext) {
 	} else if ctx.PUBLISHED() != nil && ctx.REST() != nil && ctx.SERVICE() != nil {
 		b.statements = append(b.statements, &ast.DescribeStmt{
 			ObjectType: ast.DescribePublishedRestService,
+			Name:       name,
+		})
+	} else if ctx.JSON() != nil && ctx.STRUCTURE() != nil {
+		b.statements = append(b.statements, &ast.DescribeStmt{
+			ObjectType: ast.DescribeJsonStructure,
+			Name:       name,
+		})
+	} else if ctx.IMPORT() != nil && ctx.MAPPING() != nil {
+		b.statements = append(b.statements, &ast.DescribeStmt{
+			ObjectType: ast.DescribeImportMapping,
 			Name:       name,
 		})
 	}

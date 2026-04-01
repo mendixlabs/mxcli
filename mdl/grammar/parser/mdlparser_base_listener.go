@@ -1450,6 +1450,48 @@ func (s *BaseMDLParserListener) EnterCreateConfigurationStatement(ctx *CreateCon
 func (s *BaseMDLParserListener) ExitCreateConfigurationStatement(ctx *CreateConfigurationStatementContext) {
 }
 
+// EnterCreateJsonStructureStatement is called when production createJsonStructureStatement is entered.
+func (s *BaseMDLParserListener) EnterCreateJsonStructureStatement(ctx *CreateJsonStructureStatementContext) {
+}
+
+// ExitCreateJsonStructureStatement is called when production createJsonStructureStatement is exited.
+func (s *BaseMDLParserListener) ExitCreateJsonStructureStatement(ctx *CreateJsonStructureStatementContext) {
+}
+
+// EnterCreateImportMappingStatement is called when production createImportMappingStatement is entered.
+func (s *BaseMDLParserListener) EnterCreateImportMappingStatement(ctx *CreateImportMappingStatementContext) {
+}
+
+// ExitCreateImportMappingStatement is called when production createImportMappingStatement is exited.
+func (s *BaseMDLParserListener) ExitCreateImportMappingStatement(ctx *CreateImportMappingStatementContext) {
+}
+
+// EnterImportMappingSchemaClause is called when production importMappingSchemaClause is entered.
+func (s *BaseMDLParserListener) EnterImportMappingSchemaClause(ctx *ImportMappingSchemaClauseContext) {
+}
+
+// ExitImportMappingSchemaClause is called when production importMappingSchemaClause is exited.
+func (s *BaseMDLParserListener) ExitImportMappingSchemaClause(ctx *ImportMappingSchemaClauseContext) {
+}
+
+// EnterImportMappingElement is called when production importMappingElement is entered.
+func (s *BaseMDLParserListener) EnterImportMappingElement(ctx *ImportMappingElementContext) {}
+
+// ExitImportMappingElement is called when production importMappingElement is exited.
+func (s *BaseMDLParserListener) ExitImportMappingElement(ctx *ImportMappingElementContext) {}
+
+// EnterImportMappingHandling is called when production importMappingHandling is entered.
+func (s *BaseMDLParserListener) EnterImportMappingHandling(ctx *ImportMappingHandlingContext) {}
+
+// ExitImportMappingHandling is called when production importMappingHandling is exited.
+func (s *BaseMDLParserListener) ExitImportMappingHandling(ctx *ImportMappingHandlingContext) {}
+
+// EnterImportMappingValueType is called when production importMappingValueType is entered.
+func (s *BaseMDLParserListener) EnterImportMappingValueType(ctx *ImportMappingValueTypeContext) {}
+
+// ExitImportMappingValueType is called when production importMappingValueType is exited.
+func (s *BaseMDLParserListener) ExitImportMappingValueType(ctx *ImportMappingValueTypeContext) {}
+
 // EnterCreateRestClientStatement is called when production createRestClientStatement is entered.
 func (s *BaseMDLParserListener) EnterCreateRestClientStatement(ctx *CreateRestClientStatementContext) {
 }

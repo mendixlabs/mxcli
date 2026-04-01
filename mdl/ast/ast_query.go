@@ -84,6 +84,8 @@ const (
 	ShowContractActions      // SHOW CONTRACT ACTIONS FROM Module.Service
 	ShowContractChannels     // SHOW CONTRACT CHANNELS FROM Module.Service (AsyncAPI)
 	ShowContractMessages     // SHOW CONTRACT MESSAGES FROM Module.Service (AsyncAPI)
+	ShowJsonStructures       // SHOW JSON STRUCTURES [IN module]
+	ShowImportMappings       // SHOW IMPORT MAPPINGS [IN module]
 )
 
 // String returns the human-readable name of the show object type.
@@ -199,6 +201,10 @@ func (t ShowObjectType) String() string {
 		return "CONTRACT CHANNELS"
 	case ShowContractMessages:
 		return "CONTRACT MESSAGES"
+	case ShowJsonStructures:
+		return "JSON STRUCTURES"
+	case ShowImportMappings:
+		return "IMPORT MAPPINGS"
 	default:
 		return "UNKNOWN"
 	}
@@ -254,6 +260,8 @@ const (
 	DescribeContractEntity       // DESCRIBE CONTRACT ENTITY Service.EntityName [FORMAT mdl]
 	DescribeContractAction       // DESCRIBE CONTRACT ACTION Service.ActionName [FORMAT mdl]
 	DescribeContractMessage      // DESCRIBE CONTRACT MESSAGE Service.MessageName
+	DescribeJsonStructure        // DESCRIBE JSON STRUCTURE Module.Name
+	DescribeImportMapping        // DESCRIBE IMPORT MAPPING Module.Name
 )
 
 // String returns the human-readable name of the describe object type.
@@ -317,6 +325,10 @@ func (t DescribeObjectType) String() string {
 		return "CONTRACT ACTION"
 	case DescribeContractMessage:
 		return "CONTRACT MESSAGE"
+	case DescribeJsonStructure:
+		return "JSON STRUCTURE"
+	case DescribeImportMapping:
+		return "IMPORT MAPPING"
 	default:
 		return "UNKNOWN"
 	}

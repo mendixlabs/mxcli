@@ -314,6 +314,18 @@ func (e *Executor) executeInner(stmt ast.Statement) error {
 	case *ast.DropODataServiceStmt:
 		return e.dropODataService(s)
 
+	// JSON Structure statements
+	case *ast.CreateJsonStructureStmt:
+		return e.execCreateJsonStructure(s)
+	case *ast.DropJsonStructureStmt:
+		return e.execDropJsonStructure(s)
+
+	// Import Mapping statements
+	case *ast.CreateImportMappingStmt:
+		return e.execCreateImportMapping(s)
+	case *ast.DropImportMappingStmt:
+		return e.execDropImportMapping(s)
+
 	// REST client statements
 	case *ast.CreateRestClientStmt:
 		return e.createRestClient(s)
@@ -794,6 +806,10 @@ func (e *Executor) execShow(s *ast.ShowStmt) error {
 		return e.showContractChannels(s.Name)
 	case ast.ShowContractMessages:
 		return e.showContractMessages(s.Name)
+	case ast.ShowJsonStructures:
+		return e.showJsonStructures(s.InModule)
+	case ast.ShowImportMappings:
+		return e.showImportMappings(s.InModule)
 	default:
 		return fmt.Errorf("unknown show object type")
 	}
@@ -863,6 +879,10 @@ func (e *Executor) execDescribe(s *ast.DescribeStmt) error {
 		return e.describeContractAction(s.Name, s.Format)
 	case ast.DescribeContractMessage:
 		return e.describeContractMessage(s.Name)
+	case ast.DescribeJsonStructure:
+		return e.describeJsonStructure(s.Name)
+	case ast.DescribeImportMapping:
+		return e.describeImportMapping(s.Name)
 	default:
 		return fmt.Errorf("unknown describe object type")
 	}

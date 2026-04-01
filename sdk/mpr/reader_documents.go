@@ -705,3 +705,95 @@ func (r *Reader) GetModuleSecurity(moduleID model.ID) (*security.ModuleSecurity,
 
 	return nil, fmt.Errorf("module security not found for module: %s", moduleID)
 }
+
+// ListJsonStructures returns all JSON structure documents in the project.
+func (r *Reader) ListJsonStructures() ([]*model.JsonStructure, error) {
+	units, err := r.listUnitsByType("JsonStructures$JsonStructure")
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*model.JsonStructure
+	for _, u := range units {
+		js, err := r.parseJsonStructure(u.ID, u.ContainerID, u.Contents)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse JSON structure %s: %w", u.ID, err)
+		}
+		result = append(result, js)
+	}
+	return result, nil
+}
+
+// GetJsonStructureByQualifiedName retrieves a JSON structure by its qualified name (Module.Name).
+func (r *Reader) GetJsonStructureByQualifiedName(moduleName, name string) (*model.JsonStructure, error) {
+	all, err := r.ListJsonStructures()
+	if err != nil {
+		return nil, err
+	}
+
+	modules, err := r.ListModules()
+	if err != nil {
+		return nil, err
+	}
+
+	moduleID := ""
+	for _, m := range modules {
+		if m.Name == moduleName {
+			moduleID = string(m.ID)
+			break
+		}
+	}
+
+	for _, js := range all {
+		if js.Name == name && (moduleID == "" || string(js.ContainerID) == moduleID) {
+			return js, nil
+		}
+	}
+	return nil, fmt.Errorf("JSON structure %s.%s not found", moduleName, name)
+}
+
+// ListImportMappings returns all import mapping documents in the project.
+func (r *Reader) ListImportMappings() ([]*model.ImportMapping, error) {
+	units, err := r.listUnitsByType("ImportMappings$ImportMapping")
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*model.ImportMapping
+	for _, u := range units {
+		im, err := r.parseImportMapping(u.ID, u.ContainerID, u.Contents)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse import mapping %s: %w", u.ID, err)
+		}
+		result = append(result, im)
+	}
+	return result, nil
+}
+
+// GetImportMappingByQualifiedName retrieves an import mapping by its qualified name (Module.Name).
+func (r *Reader) GetImportMappingByQualifiedName(moduleName, name string) (*model.ImportMapping, error) {
+	all, err := r.ListImportMappings()
+	if err != nil {
+		return nil, err
+	}
+
+	modules, err := r.ListModules()
+	if err != nil {
+		return nil, err
+	}
+
+	moduleID := ""
+	for _, m := range modules {
+		if m.Name == moduleName {
+			moduleID = string(m.ID)
+			break
+		}
+	}
+
+	for _, im := range all {
+		if im.Name == name && (moduleID == "" || string(im.ContainerID) == moduleID) {
+			return im, nil
+		}
+	}
+	return nil, fmt.Errorf("import mapping %s.%s not found", moduleName, name)
+}

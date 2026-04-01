@@ -99,6 +99,8 @@ createStatement
       | createDemoUserStatement
       | createImageCollectionStatement
       | createConfigurationStatement
+      | createJsonStructureStatement
+      | createImportMappingStatement
       )
     ;
 
@@ -259,6 +261,8 @@ dropStatement
     | DROP REST CLIENT qualifiedName
     | DROP CONFIGURATION STRING_LITERAL
     | DROP FOLDER STRING_LITERAL IN (qualifiedName | IDENTIFIER)
+    | DROP JSON STRUCTURE qualifiedName
+    | DROP IMPORT MAPPING qualifiedName
     ;
 
 renameStatement
@@ -2064,6 +2068,68 @@ createConfigurationStatement
     ;
 
 /**
+ * CREATE JSON STRUCTURE Module.Name FROM '{"id": 1, "name": "test"}'
+ *   [FOLDER 'Private'];
+ *
+ * Auto-derives the element tree from the provided JSON snippet.
+ */
+createJsonStructureStatement
+    : JSON STRUCTURE qualifiedName
+      (FOLDER STRING_LITERAL)?
+      FROM STRING_LITERAL
+    ;
+
+/**
+ * CREATE IMPORT MAPPING Module.Name
+ *   FROM JSON STRUCTURE Module.JsonStructure
+ * {
+ *   root -> Module.Entity (Create) {
+ *     id -> Id (Integer, KEY);
+ *     name -> Name (String);
+ *     items -> Module.Item (Create) VIA Module.Entity_Item {
+ *       itemId -> Id (Integer, KEY);
+ *     };
+ *   };
+ * };
+ */
+createImportMappingStatement
+    : IMPORT MAPPING qualifiedName
+      importMappingSchemaClause?
+      LBRACE importMappingElement RBRACE
+    ;
+
+importMappingSchemaClause
+    : FROM JSON STRUCTURE qualifiedName
+    | FROM XML SCHEMA qualifiedName
+    ;
+
+importMappingElement
+    : identifierOrKeyword ARROW qualifiedName LPAREN importMappingHandling RPAREN
+      (VIA qualifiedName)?
+      (LBRACE importMappingElement* RBRACE)?
+    | identifierOrKeyword ARROW identifierOrKeyword
+      LPAREN importMappingValueType (COMMA KEY)? RPAREN
+    ;
+
+importMappingHandling
+    : CREATE
+    | FIND
+    | UPDATE
+    | IDENTIFIER
+    ;
+
+importMappingValueType
+    : STRING_TYPE
+    | INTEGER_TYPE
+    | LONG_TYPE
+    | DECIMAL_TYPE
+    | BOOLEAN_TYPE
+    | DATETIME_TYPE
+    | DATE_TYPE
+    | BINARY_TYPE
+    ;
+
+/**
  * CREATE REST CLIENT Module.Name
  * BASE URL 'https://api.example.com/v1'
  * AUTHENTICATION NONE | BASIC (USERNAME = ..., PASSWORD = ...)
@@ -2538,6 +2604,8 @@ showStatement
     | SHOW FRAGMENTS                                           // SHOW FRAGMENTS
     | SHOW DATABASE CONNECTIONS (IN (qualifiedName | IDENTIFIER))?  // SHOW DATABASE CONNECTIONS [IN module]
     | SHOW REST CLIENTS (IN (qualifiedName | IDENTIFIER))?           // SHOW REST CLIENTS [IN module]
+    | SHOW JSON STRUCTURES (IN (qualifiedName | IDENTIFIER))?       // SHOW JSON STRUCTURES [IN module]
+    | SHOW IMPORT MAPPINGS (IN (qualifiedName | IDENTIFIER))?       // SHOW IMPORT MAPPINGS [IN module]
     | SHOW PUBLISHED REST SERVICES (IN (qualifiedName | IDENTIFIER))? // SHOW PUBLISHED REST SERVICES [IN module]
     ;
 
@@ -2627,6 +2695,8 @@ describeStatement
     | DESCRIBE IMAGE COLLECTION qualifiedName           // DESCRIBE IMAGE COLLECTION Module.Name
     | DESCRIBE REST CLIENT qualifiedName                // DESCRIBE REST CLIENT Module.Name
     | DESCRIBE PUBLISHED REST SERVICE qualifiedName    // DESCRIBE PUBLISHED REST SERVICE Module.Name
+    | DESCRIBE JSON STRUCTURE qualifiedName             // DESCRIBE JSON STRUCTURE Module.Name
+    | DESCRIBE IMPORT MAPPING qualifiedName             // DESCRIBE IMPORT MAPPING Module.Name
     | DESCRIBE FRAGMENT identifierOrKeyword            // DESCRIBE FRAGMENT Name
     ;
 
@@ -3258,6 +3328,7 @@ keyword
     | URL | POSITION | SORT                                      // Common attribute names
     | GENERATE | CONNECTOR | EXEC | TABLES | VIEWS              // SQL generate keywords
     | COLLECTION                                               // Image collection keyword
+    | STRUCTURES | MAPPINGS | VIA | KEY | SCHEMA               // JSON Structure / Import Mapping keywords
     | FILE_KW                                                    // REST client file keyword
     | SEND | REQUEST                                               // REST operation call keywords
     ;

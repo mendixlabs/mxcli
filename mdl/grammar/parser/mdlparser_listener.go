@@ -700,6 +700,24 @@ type MDLParserListener interface {
 	// EnterCreateConfigurationStatement is called when entering the createConfigurationStatement production.
 	EnterCreateConfigurationStatement(c *CreateConfigurationStatementContext)
 
+	// EnterCreateJsonStructureStatement is called when entering the createJsonStructureStatement production.
+	EnterCreateJsonStructureStatement(c *CreateJsonStructureStatementContext)
+
+	// EnterCreateImportMappingStatement is called when entering the createImportMappingStatement production.
+	EnterCreateImportMappingStatement(c *CreateImportMappingStatementContext)
+
+	// EnterImportMappingSchemaClause is called when entering the importMappingSchemaClause production.
+	EnterImportMappingSchemaClause(c *ImportMappingSchemaClauseContext)
+
+	// EnterImportMappingElement is called when entering the importMappingElement production.
+	EnterImportMappingElement(c *ImportMappingElementContext)
+
+	// EnterImportMappingHandling is called when entering the importMappingHandling production.
+	EnterImportMappingHandling(c *ImportMappingHandlingContext)
+
+	// EnterImportMappingValueType is called when entering the importMappingValueType production.
+	EnterImportMappingValueType(c *ImportMappingValueTypeContext)
+
 	// EnterCreateRestClientStatement is called when entering the createRestClientStatement production.
 	EnterCreateRestClientStatement(c *CreateRestClientStatementContext)
 
@@ -1821,6 +1839,24 @@ type MDLParserListener interface {
 
 	// ExitCreateConfigurationStatement is called when exiting the createConfigurationStatement production.
 	ExitCreateConfigurationStatement(c *CreateConfigurationStatementContext)
+
+	// ExitCreateJsonStructureStatement is called when exiting the createJsonStructureStatement production.
+	ExitCreateJsonStructureStatement(c *CreateJsonStructureStatementContext)
+
+	// ExitCreateImportMappingStatement is called when exiting the createImportMappingStatement production.
+	ExitCreateImportMappingStatement(c *CreateImportMappingStatementContext)
+
+	// ExitImportMappingSchemaClause is called when exiting the importMappingSchemaClause production.
+	ExitImportMappingSchemaClause(c *ImportMappingSchemaClauseContext)
+
+	// ExitImportMappingElement is called when exiting the importMappingElement production.
+	ExitImportMappingElement(c *ImportMappingElementContext)
+
+	// ExitImportMappingHandling is called when exiting the importMappingHandling production.
+	ExitImportMappingHandling(c *ImportMappingHandlingContext)
+
+	// ExitImportMappingValueType is called when exiting the importMappingValueType production.
+	ExitImportMappingValueType(c *ImportMappingValueTypeContext)
 
 	// ExitCreateRestClientStatement is called when exiting the createRestClientStatement production.
 	ExitCreateRestClientStatement(c *CreateRestClientStatementContext)

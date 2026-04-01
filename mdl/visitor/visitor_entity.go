@@ -690,6 +690,14 @@ func (b *Builder) ExitDropStatement(ctx *parser.DropStatementContext) {
 		b.statements = append(b.statements, &ast.DropRestClientStmt{
 			Name: buildQualifiedName(names[0]),
 		})
+	} else if ctx.JSON() != nil && ctx.STRUCTURE() != nil {
+		b.statements = append(b.statements, &ast.DropJsonStructureStmt{
+			Name: buildQualifiedName(names[0]),
+		})
+	} else if ctx.IMPORT() != nil && ctx.MAPPING() != nil {
+		b.statements = append(b.statements, &ast.DropImportMappingStmt{
+			Name: buildQualifiedName(names[0]),
+		})
 	} else if ctx.FOLDER() != nil {
 		folderPath := unquoteString(ctx.STRING_LITERAL().GetText())
 		// Module can be a qualifiedName or IDENTIFIER

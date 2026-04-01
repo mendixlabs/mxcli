@@ -459,8 +459,8 @@ func parseActionActivity(raw map[string]any) *microflows.ActionActivity {
 		activity.ErrorHandlingType = microflows.ErrorHandlingType(errorHandling)
 	}
 
-	// Parse the action
-	if action, ok := raw["Action"].(map[string]any); ok {
+	// Parse the action (may be map[string]any or primitive.D depending on decode path)
+	if action := toMap(raw["Action"]); action != nil {
 		activity.Action = parseMicroflowAction(action)
 	}
 

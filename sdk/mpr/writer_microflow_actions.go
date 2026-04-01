@@ -692,17 +692,38 @@ func serializeRestResultHandling(rh microflows.ResultHandling, outputVar string)
 			{Key: "$Type", Value: "Microflows$ResultHandling"},
 			{Key: "Bind", Value: true},
 		}
-		// ImportMappingCall - Mapping is BY_NAME_REFERENCE (qualified name string)
+		// ImportMappingCall - uses ReturnValueMapping (Studio Pro field name)
+		// with all required fields to make the mapping link visible in Studio Pro.
+		// SingleObject drives ForceSingleOccurrence and Range.SingleObject.
 		importCall := bson.D{
 			{Key: "$ID", Value: idToBsonBinary(GenerateID())},
 			{Key: "$Type", Value: "Microflows$ImportMappingCall"},
-			{Key: "Mapping", Value: string(h.MappingID)}, // Use qualified name string
+			{Key: "Commit", Value: "YesWithoutEvents"},
+			{Key: "ContentType", Value: "Json"},
+			{Key: "ForceSingleOccurrence", Value: h.SingleObject},
+			{Key: "ObjectHandlingBackup", Value: "Create"},
+			{Key: "ParameterVariableName", Value: ""},
+			{Key: "Range", Value: bson.D{
+				{Key: "$ID", Value: idToBsonBinary(GenerateID())},
+				{Key: "$Type", Value: "Microflows$ConstantRange"},
+				{Key: "SingleObject", Value: h.SingleObject},
+			}},
+			{Key: "ReturnValueMapping", Value: string(h.MappingID)},
 		}
 		doc = append(doc, bson.E{Key: "ImportMappingCall", Value: importCall})
-		// VariableType with Entity - Entity is BY_NAME_REFERENCE (qualified name string)
-		varType := bson.D{
-			{Key: "$ID", Value: idToBsonBinary(GenerateID())},
-			{Key: "$Type", Value: "DataTypes$ObjectType"},
+		// VariableType: ObjectType for single-object mappings, ListType for multi-object.
+		varTypeID := idToBsonBinary(GenerateID())
+		var varType bson.D
+		if h.SingleObject {
+			varType = bson.D{
+				{Key: "$ID", Value: varTypeID},
+				{Key: "$Type", Value: "DataTypes$ObjectType"},
+			}
+		} else {
+			varType = bson.D{
+				{Key: "$ID", Value: varTypeID},
+				{Key: "$Type", Value: "DataTypes$ListType"},
+			}
 		}
 		if h.ResultEntityID != "" {
 			varType = append(varType, bson.E{Key: "Entity", Value: string(h.ResultEntityID)})

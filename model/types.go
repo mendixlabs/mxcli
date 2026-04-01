@@ -295,6 +295,8 @@ const (
 	DocumentTypeRule                  DocumentType = "Rules$Rule"
 	DocumentTypeConsumedODataService  DocumentType = "Rest$ConsumedODataService"
 	DocumentTypePublishedODataService DocumentType = "ODataPublish$PublishedODataService2"
+	DocumentTypeJsonStructure         DocumentType = "JsonStructures$JsonStructure"
+	DocumentTypeImportMapping         DocumentType = "ImportMappings$ImportMapping"
 )
 
 // ConsumedODataService represents a consumed OData service (OData client).
@@ -789,6 +791,92 @@ type DistributionSettings struct {
 	BaseElement
 	IsDistributable bool   `json:"isDistributable"`
 	Version         string `json:"version,omitempty"`
+}
+
+// ============================================================================
+// JSON Structures
+// ============================================================================
+
+// JsonStructure represents a JsonStructures$JsonStructure document.
+type JsonStructure struct {
+	BaseElement
+	ContainerID   ID           `json:"containerId"`
+	Name          string       `json:"name"`
+	Documentation string       `json:"documentation,omitempty"`
+	Excluded      bool         `json:"excluded,omitempty"`
+	ExportLevel   string       `json:"exportLevel,omitempty"`
+	JsonSnippet   string       `json:"jsonSnippet,omitempty"`
+	Elements      []*JsonElement `json:"elements,omitempty"`
+}
+
+// GetName returns the JSON structure's name.
+func (j *JsonStructure) GetName() string { return j.Name }
+
+// GetContainerID returns the ID of the containing module.
+func (j *JsonStructure) GetContainerID() ID { return j.ContainerID }
+
+// JsonElement represents a single element in a JSON structure's element tree.
+type JsonElement struct {
+	BaseElement
+	ExposedName     string         `json:"exposedName,omitempty"`
+	ExposedItemName string         `json:"exposedItemName,omitempty"`
+	ElementType     string         `json:"elementType,omitempty"`   // "Object", "Array", "Value"
+	PrimitiveType   string         `json:"primitiveType,omitempty"` // "String", "Integer", "Boolean", "Decimal", "DateTime", "Unknown"
+	Path            string         `json:"path,omitempty"`
+	OriginalValue   string         `json:"originalValue,omitempty"`
+	MinOccurs       int            `json:"minOccurs,omitempty"`
+	MaxOccurs       int            `json:"maxOccurs,omitempty"`
+	FractionDigits  int            `json:"fractionDigits,omitempty"`
+	TotalDigits     int            `json:"totalDigits,omitempty"`
+	MaxLength       int            `json:"maxLength,omitempty"`
+	Nillable        bool           `json:"nillable,omitempty"`
+	IsDefaultType   bool           `json:"isDefaultType,omitempty"`
+	Children        []*JsonElement `json:"children,omitempty"`
+}
+
+// ============================================================================
+// Import Mappings
+// ============================================================================
+
+// ImportMapping represents an ImportMappings$ImportMapping document.
+type ImportMapping struct {
+	BaseElement
+	ContainerID   ID                    `json:"containerId"`
+	Name          string                `json:"name"`
+	Documentation string                `json:"documentation,omitempty"`
+	Excluded      bool                  `json:"excluded,omitempty"`
+	ExportLevel   string                `json:"exportLevel,omitempty"`
+	// Schema source (at most one is set)
+	JsonStructure     string `json:"jsonStructure,omitempty"`     // qualified name
+	XmlSchema         string `json:"xmlSchema,omitempty"`         // qualified name
+	MessageDefinition string `json:"messageDefinition,omitempty"` // qualified name
+	// Mapping tree (top-level elements, usually one root)
+	Elements []*ImportMappingElement `json:"elements,omitempty"`
+}
+
+// GetName returns the import mapping's name.
+func (m *ImportMapping) GetName() string { return m.Name }
+
+// GetContainerID returns the ID of the containing module.
+func (m *ImportMapping) GetContainerID() ID { return m.ContainerID }
+
+// ImportMappingElement represents either an object or value mapping element.
+type ImportMappingElement struct {
+	BaseElement
+	// "Object" or "Value"
+	Kind string `json:"kind"`
+	// Object mapping fields
+	Entity         string `json:"entity,omitempty"`         // qualified entity name
+	ObjectHandling string `json:"objectHandling,omitempty"` // "Create", "Find", "FindOrCreate", "Custom"
+	Association    string `json:"association,omitempty"`    // qualified association name
+	// Value mapping fields
+	Attribute string `json:"attribute,omitempty"` // qualified attribute name (Module.Entity.Attr)
+	DataType  string `json:"dataType,omitempty"`  // "String", "Integer", "Boolean", etc.
+	IsKey     bool   `json:"isKey,omitempty"`
+	// Shared fields
+	ExposedName string                  `json:"exposedName,omitempty"`
+	JsonPath    string                  `json:"jsonPath,omitempty"`
+	Children    []*ImportMappingElement `json:"children,omitempty"`
 }
 
 // UnknownElement is a generic fallback for BSON elements with unrecognized $Type values.

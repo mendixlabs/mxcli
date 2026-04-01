@@ -473,7 +473,17 @@ func parseResultHandling(raw map[string]any, handlingType string) microflows.Res
 		result := &microflows.ResultHandlingMapping{}
 		result.ID = model.ID(extractBsonID(raw["$ID"]))
 		result.ResultVariable = extractString(raw["ResultVariableName"])
-		// ImportMappingCall would be parsed here if needed
+		if call := toMap(raw["ImportMappingCall"]); call != nil {
+			// Newer BSON uses "Mapping", older uses "ReturnValueMapping"
+			mappingRef := extractString(call["Mapping"])
+			if mappingRef == "" {
+				mappingRef = extractString(call["ReturnValueMapping"])
+			}
+			result.MappingID = model.ID(mappingRef)
+		}
+		if varType := toMap(raw["VariableType"]); varType != nil {
+			result.ResultEntityID = model.ID(extractString(varType["Entity"]))
+		}
 		return result
 	case "None":
 		result := &microflows.ResultHandlingNone{}
