@@ -2,6 +2,12 @@
 
 This file provides guidance for Claude Code when working with this repository.
 
+## Canonical Test Project Path
+
+**ALWAYS use:** `/Users/Dennis.Kho/Sandbox/KhodeClaudeLab-main/KhodeClaudeLab.mpr`
+
+A disposable test copy exists at `/tmp/KhodeClaudeLab-test/` — **never use it for `mxcli exec` or write operations**. Before running any `mxcli -p <path> exec` command, verify the path starts with `/Users/Dennis.Kho/Sandbox/KhodeClaudeLab-main/`. If the path points to `/tmp/` or any other copy, stop and correct it first.
+
 ## Project Overview
 
 **ModelSDK Go** is a Go library for reading and modifying Mendix application projects (`.mpr` files) stored locally on disk. It's a Go-native alternative to the TypeScript-based Mendix Model SDK, enabling programmatic access without cloud connectivity.
@@ -150,6 +156,19 @@ When adding new types, always verify the storage name by:
 3. Looking at the parser cases in `sdk/mpr/parser_microflow.go`
 
 **IMPORTANT**: When unsure about the correct BSON structure for a new feature, **ask the user to create a working example in Mendix Studio Pro** so you can compare the generated BSON against a known-good reference.
+
+### Generated Metamodel $Type Naming Trap (MappingElements)
+
+**CRITICAL**: The Go struct names in `generated/metamodel/types.go` are NOT reliable sources for BSON `$Type` strings. The generated code embeds the namespace word in element type names, but the real Mendix BSON does NOT.
+
+| Go struct (WRONG as $Type) | Correct BSON $Type |
+|----------------------------|--------------------|
+| `ImportMappingsImportObjectMappingElement` | `ImportMappings$ObjectMappingElement` |
+| `ImportMappingsImportValueMappingElement` | `ImportMappings$ValueMappingElement` |
+| `ExportMappingsExportObjectMappingElement` | `ExportMappings$ObjectMappingElement` |
+| `ExportMappingsExportValueMappingElement` | `ExportMappings$ValueMappingElement` |
+
+**Rule**: MappingElement `$Type` names follow `Namespace$ElementKind` — the namespace prefix word is never repeated inside the element name. Both mistakes have been encountered in production and caused `TypeCacheUnknownTypeException`. Always verify against the working writer code (`writer_import_mapping.go`, `writer_export_mapping.go`) or a Studio Pro-created MPR before writing a new mapping serializer.
 
 ### Pluggable Widget Templates
 

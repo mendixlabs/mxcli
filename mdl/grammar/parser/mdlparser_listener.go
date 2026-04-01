@@ -718,6 +718,18 @@ type MDLParserListener interface {
 	// EnterImportMappingValueType is called when entering the importMappingValueType production.
 	EnterImportMappingValueType(c *ImportMappingValueTypeContext)
 
+	// EnterCreateExportMappingStatement is called when entering the createExportMappingStatement production.
+	EnterCreateExportMappingStatement(c *CreateExportMappingStatementContext)
+
+	// EnterExportMappingSchemaClause is called when entering the exportMappingSchemaClause production.
+	EnterExportMappingSchemaClause(c *ExportMappingSchemaClauseContext)
+
+	// EnterExportMappingNullValuesClause is called when entering the exportMappingNullValuesClause production.
+	EnterExportMappingNullValuesClause(c *ExportMappingNullValuesClauseContext)
+
+	// EnterExportMappingElement is called when entering the exportMappingElement production.
+	EnterExportMappingElement(c *ExportMappingElementContext)
+
 	// EnterCreateRestClientStatement is called when entering the createRestClientStatement production.
 	EnterCreateRestClientStatement(c *CreateRestClientStatementContext)
 
@@ -1857,6 +1869,18 @@ type MDLParserListener interface {
 
 	// ExitImportMappingValueType is called when exiting the importMappingValueType production.
 	ExitImportMappingValueType(c *ImportMappingValueTypeContext)
+
+	// ExitCreateExportMappingStatement is called when exiting the createExportMappingStatement production.
+	ExitCreateExportMappingStatement(c *CreateExportMappingStatementContext)
+
+	// ExitExportMappingSchemaClause is called when exiting the exportMappingSchemaClause production.
+	ExitExportMappingSchemaClause(c *ExportMappingSchemaClauseContext)
+
+	// ExitExportMappingNullValuesClause is called when exiting the exportMappingNullValuesClause production.
+	ExitExportMappingNullValuesClause(c *ExportMappingNullValuesClauseContext)
+
+	// ExitExportMappingElement is called when exiting the exportMappingElement production.
+	ExitExportMappingElement(c *ExportMappingElementContext)
 
 	// ExitCreateRestClientStatement is called when exiting the createRestClientStatement production.
 	ExitCreateRestClientStatement(c *CreateRestClientStatementContext)

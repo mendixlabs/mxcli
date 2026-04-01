@@ -64,3 +64,44 @@ type ImportMappingElementDef struct {
 	DataType  string // "String", "Integer", "Boolean", "Decimal", "DateTime"
 	IsKey     bool
 }
+
+// ============================================================================
+// Export Mapping Statements
+// ============================================================================
+
+// CreateExportMappingStmt represents:
+//
+//	CREATE EXPORT MAPPING Module.Name
+//	  [TO JSON STRUCTURE Module.JsonStructure | TO XML SCHEMA Module.Schema]
+//	  [NULL VALUES LeaveOutElement | SendAsNil]
+//	{ Module.Entity -> root { ... } }
+type CreateExportMappingStmt struct {
+	Name            QualifiedName
+	SchemaKind      string        // "JSON_STRUCTURE" or "XML_SCHEMA" or ""
+	SchemaRef       QualifiedName // qualified name of the schema source
+	NullValueOption string        // "LeaveOutElement" or "SendAsNil" (default: "LeaveOutElement")
+	RootElement     *ExportMappingElementDef
+}
+
+func (s *CreateExportMappingStmt) isStatement() {}
+
+// DropExportMappingStmt represents: DROP EXPORT MAPPING Module.Name
+type DropExportMappingStmt struct {
+	Name QualifiedName
+}
+
+func (s *DropExportMappingStmt) isStatement() {}
+
+// ExportMappingElementDef represents one element in an export mapping tree.
+// It may be an object mapping (entity → JSON key) or a value mapping (attribute → JSON key).
+type ExportMappingElementDef struct {
+	// JSON field name (the RHS of ->)
+	JsonName string
+	// Object mapping fields (set when mapping from an entity)
+	Entity      string // qualified entity name (e.g. "Module.Customer")
+	Association string // qualified association name for VIA clause
+	Children    []*ExportMappingElementDef
+	// Value mapping fields (set when mapping from an attribute)
+	Attribute string // attribute name (unqualified, e.g. "Name")
+	DataType  string // "String", "Integer", "Boolean", "Decimal", "DateTime"
+}

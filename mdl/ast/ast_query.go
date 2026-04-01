@@ -86,6 +86,7 @@ const (
 	ShowContractMessages     // SHOW CONTRACT MESSAGES FROM Module.Service (AsyncAPI)
 	ShowJsonStructures       // SHOW JSON STRUCTURES [IN module]
 	ShowImportMappings       // SHOW IMPORT MAPPINGS [IN module]
+	ShowExportMappings       // SHOW EXPORT MAPPINGS [IN module]
 )
 
 // String returns the human-readable name of the show object type.
@@ -205,6 +206,8 @@ func (t ShowObjectType) String() string {
 		return "JSON STRUCTURES"
 	case ShowImportMappings:
 		return "IMPORT MAPPINGS"
+	case ShowExportMappings:
+		return "EXPORT MAPPINGS"
 	default:
 		return "UNKNOWN"
 	}
@@ -262,6 +265,7 @@ const (
 	DescribeContractMessage      // DESCRIBE CONTRACT MESSAGE Service.MessageName
 	DescribeJsonStructure        // DESCRIBE JSON STRUCTURE Module.Name
 	DescribeImportMapping        // DESCRIBE IMPORT MAPPING Module.Name
+	DescribeExportMapping        // DESCRIBE EXPORT MAPPING Module.Name
 )
 
 // String returns the human-readable name of the describe object type.
@@ -329,6 +333,8 @@ func (t DescribeObjectType) String() string {
 		return "JSON STRUCTURE"
 	case DescribeImportMapping:
 		return "IMPORT MAPPING"
+	case DescribeExportMapping:
+		return "EXPORT MAPPING"
 	default:
 		return "UNKNOWN"
 	}

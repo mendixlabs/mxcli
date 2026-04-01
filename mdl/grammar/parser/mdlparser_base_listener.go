@@ -1492,6 +1492,36 @@ func (s *BaseMDLParserListener) EnterImportMappingValueType(ctx *ImportMappingVa
 // ExitImportMappingValueType is called when production importMappingValueType is exited.
 func (s *BaseMDLParserListener) ExitImportMappingValueType(ctx *ImportMappingValueTypeContext) {}
 
+// EnterCreateExportMappingStatement is called when production createExportMappingStatement is entered.
+func (s *BaseMDLParserListener) EnterCreateExportMappingStatement(ctx *CreateExportMappingStatementContext) {
+}
+
+// ExitCreateExportMappingStatement is called when production createExportMappingStatement is exited.
+func (s *BaseMDLParserListener) ExitCreateExportMappingStatement(ctx *CreateExportMappingStatementContext) {
+}
+
+// EnterExportMappingSchemaClause is called when production exportMappingSchemaClause is entered.
+func (s *BaseMDLParserListener) EnterExportMappingSchemaClause(ctx *ExportMappingSchemaClauseContext) {
+}
+
+// ExitExportMappingSchemaClause is called when production exportMappingSchemaClause is exited.
+func (s *BaseMDLParserListener) ExitExportMappingSchemaClause(ctx *ExportMappingSchemaClauseContext) {
+}
+
+// EnterExportMappingNullValuesClause is called when production exportMappingNullValuesClause is entered.
+func (s *BaseMDLParserListener) EnterExportMappingNullValuesClause(ctx *ExportMappingNullValuesClauseContext) {
+}
+
+// ExitExportMappingNullValuesClause is called when production exportMappingNullValuesClause is exited.
+func (s *BaseMDLParserListener) ExitExportMappingNullValuesClause(ctx *ExportMappingNullValuesClauseContext) {
+}
+
+// EnterExportMappingElement is called when production exportMappingElement is entered.
+func (s *BaseMDLParserListener) EnterExportMappingElement(ctx *ExportMappingElementContext) {}
+
+// ExitExportMappingElement is called when production exportMappingElement is exited.
+func (s *BaseMDLParserListener) ExitExportMappingElement(ctx *ExportMappingElementContext) {}
+
 // EnterCreateRestClientStatement is called when production createRestClientStatement is entered.
 func (s *BaseMDLParserListener) EnterCreateRestClientStatement(ctx *CreateRestClientStatementContext) {
 }

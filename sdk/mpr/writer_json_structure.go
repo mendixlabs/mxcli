@@ -5,14 +5,44 @@ package mpr
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/mendixlabs/mxcli/model"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
+
+// dateTimeRegex matches ISO 8601 datetime strings (must have date + T + time).
+var dateTimeRegex = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}`)
+
+// parseDateTime attempts to parse an ISO 8601 datetime string and reformat it
+// to Studio Pro's canonical form: 7 decimal places (100-nanosecond precision), UTC.
+// Returns (formatted, true) if recognized, ("", false) otherwise.
+func parseDateTime(s string) (string, bool) {
+	if !dateTimeRegex.MatchString(s) {
+		return "", false
+	}
+	var t time.Time
+	var err error
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		t, err = time.Parse(layout, s)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return "", false
+	}
+	t = t.UTC()
+	// Format with exactly 7 decimal places (Studio Pro uses .NET 100-nanosecond ticks)
+	hundredNanos := t.Nanosecond() / 100
+	formatted := t.Format("2006-01-02T15:04:05") + fmt.Sprintf(".%07d", hundredNanos) + "Z"
+	return `"` + formatted + `"`, true
+}
 
 // CreateJsonStructure creates a new JSON structure document.
 func (w *Writer) CreateJsonStructure(js *model.JsonStructure) error {
@@ -194,7 +224,8 @@ func deriveElement(exposedName, jsonKey, parentPath string, val any) *model.Json
 		elem.PrimitiveType = "Unknown"
 		elem.MaxLength = -1
 		itemName := singularize(exposedName)
-		elem.ExposedItemName = itemName
+		// ExposedItemName on the Array container must be "" — Studio Pro expects this.
+		// The singularized name is only used as ExposedName of the child item Object element.
 		// Derive schema from first element if available; item path appends |(Object)
 		if len(v) > 0 {
 			itemElem := deriveElement(itemName, "", path+"|(Object)", v[0])
@@ -203,10 +234,20 @@ func deriveElement(exposedName, jsonKey, parentPath string, val any) *model.Json
 		}
 	case string:
 		elem.ElementType = "Value"
-		elem.PrimitiveType = "String"
-		elem.OriginalValue = `"` + v + `"`
+		if formatted, ok := parseDateTime(v); ok {
+			// Studio Pro detects ISO 8601 datetime strings as DateTime, not String.
+			// MaxLength for DateTime is -1 (same as Integer/Boolean), not 0.
+			elem.PrimitiveType = "DateTime"
+			elem.MaxLength = -1
+			elem.OriginalValue = formatted
+		} else {
+			elem.PrimitiveType = "String"
+			elem.OriginalValue = `"` + v + `"`
+		}
 	case float64:
+		// Integer/Decimal values use MaxLength=-1 (not applicable), unlike String which uses MaxLength=0.
 		elem.ElementType = "Value"
+		elem.MaxLength = -1
 		if v == float64(int64(v)) {
 			elem.PrimitiveType = "Integer"
 			elem.OriginalValue = fmt.Sprintf("%d", int64(v))
@@ -215,7 +256,9 @@ func deriveElement(exposedName, jsonKey, parentPath string, val any) *model.Json
 			elem.OriginalValue = fmt.Sprintf("%g", v)
 		}
 	case bool:
+		// Boolean values use MaxLength=-1 (not applicable), unlike String which uses MaxLength=0.
 		elem.ElementType = "Value"
+		elem.MaxLength = -1
 		elem.PrimitiveType = "Boolean"
 		if v {
 			elem.OriginalValue = "true"
@@ -249,6 +292,9 @@ func singularize(name string) string {
 	lower := strings.ToLower(name)
 	if strings.HasSuffix(lower, "data") {
 		return name[:len(name)-1] + "um" // data → datum
+	}
+	if strings.HasSuffix(lower, "ies") {
+		return name[:len(name)-3] + "y" // Countries → Country, LegalEntities → LegalEntity
 	}
 	if len(name) > 1 && name[len(name)-1] == 's' {
 		return name[:len(name)-1]

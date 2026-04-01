@@ -105,6 +105,83 @@ func buildImportMappingElement(ctx *parser.ImportMappingElementContext) *ast.Imp
 	return elem
 }
 
+// ExitCreateExportMappingStatement is called when exiting the createExportMappingStatement production.
+func (b *Builder) ExitCreateExportMappingStatement(ctx *parser.CreateExportMappingStatementContext) {
+	stmt := &ast.CreateExportMappingStmt{
+		Name: buildQualifiedName(ctx.QualifiedName()),
+	}
+
+	// Parse schema clause
+	if schemaCtx := ctx.ExportMappingSchemaClause(); schemaCtx != nil {
+		sc := schemaCtx.(*parser.ExportMappingSchemaClauseContext)
+		if sc.JSON() != nil {
+			stmt.SchemaKind = "JSON_STRUCTURE"
+		} else {
+			stmt.SchemaKind = "XML_SCHEMA"
+		}
+		if sc.QualifiedName() != nil {
+			stmt.SchemaRef = buildQualifiedName(sc.QualifiedName())
+		}
+	}
+
+	// Parse null values clause
+	if nullCtx := ctx.ExportMappingNullValuesClause(); nullCtx != nil {
+		nc := nullCtx.(*parser.ExportMappingNullValuesClauseContext)
+		if nc.IdentifierOrKeyword() != nil {
+			stmt.NullValueOption = identifierOrKeywordText(nc.IdentifierOrKeyword().(*parser.IdentifierOrKeywordContext))
+		}
+	}
+
+	// Parse the root mapping element
+	if elemCtx := ctx.ExportMappingElement(); elemCtx != nil {
+		stmt.RootElement = buildExportMappingElement(elemCtx.(*parser.ExportMappingElementContext))
+	}
+
+	b.statements = append(b.statements, stmt)
+}
+
+// buildExportMappingElement converts an exportMappingElement context to an AST node.
+func buildExportMappingElement(ctx *parser.ExportMappingElementContext) *ast.ExportMappingElementDef {
+	elem := &ast.ExportMappingElementDef{}
+
+	// Distinguish object vs value element by presence of importMappingValueType
+	if ctx.ImportMappingValueType() != nil {
+		// Value mapping: identifierOrKeyword -> identifierOrKeyword (Type)
+		// AllIdentifierOrKeyword()[0] = attribute name, [1] = JSON name
+		allIdent := ctx.AllIdentifierOrKeyword()
+		if len(allIdent) >= 1 {
+			elem.Attribute = identifierOrKeywordText(allIdent[0].(*parser.IdentifierOrKeywordContext))
+		}
+		if len(allIdent) >= 2 {
+			elem.JsonName = identifierOrKeywordText(allIdent[1].(*parser.IdentifierOrKeywordContext))
+		}
+		elem.DataType = extractImportValueType(ctx.ImportMappingValueType().(*parser.ImportMappingValueTypeContext))
+	} else {
+		// Object mapping: qualifiedName [VIA qualifiedName] -> identifierOrKeyword { children }
+		// AllQualifiedName()[0] = entity, [1] = association (if VIA present)
+		// AllIdentifierOrKeyword()[0] = JSON name (the one directly after ARROW)
+		allQN := ctx.AllQualifiedName()
+		if len(allQN) >= 1 {
+			elem.Entity = allQN[0].GetText()
+		}
+		if ctx.VIA() != nil && len(allQN) >= 2 {
+			elem.Association = allQN[1].GetText()
+		}
+		// The identifierOrKeyword after ARROW is the JSON exposed name
+		allIdent := ctx.AllIdentifierOrKeyword()
+		if len(allIdent) >= 1 {
+			elem.JsonName = identifierOrKeywordText(allIdent[0].(*parser.IdentifierOrKeywordContext))
+		}
+		// Nested children
+		for _, childCtx := range ctx.AllExportMappingElement() {
+			child := buildExportMappingElement(childCtx.(*parser.ExportMappingElementContext))
+			elem.Children = append(elem.Children, child)
+		}
+	}
+
+	return elem
+}
+
 // extractImportMappingHandling extracts the handling string from the grammar context.
 func extractImportMappingHandling(ctx *parser.ImportMappingHandlingContext) string {
 	if ctx.CREATE() != nil {

@@ -77,6 +77,9 @@ func parseJsonElement(raw map[string]any) *model.JsonElement {
 	if v, ok := raw["PrimitiveType"].(string); ok {
 		elem.PrimitiveType = v
 	}
+	if v, ok := raw["Path"].(string); ok {
+		elem.Path = v
+	}
 	if v, ok := raw["MinOccurs"].(int32); ok {
 		elem.MinOccurs = int(v)
 	}

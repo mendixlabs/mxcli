@@ -511,6 +511,17 @@ func (b *Builder) ExitShowStatement(ctx *parser.ShowStatementContext) {
 			}
 		}
 		b.statements = append(b.statements, stmt)
+	} else if ctx.EXPORT() != nil && ctx.MAPPINGS() != nil {
+		// SHOW EXPORT MAPPINGS [IN module]
+		stmt := &ast.ShowStmt{ObjectType: ast.ShowExportMappings}
+		if ctx.IN() != nil {
+			if qn := ctx.QualifiedName(); qn != nil {
+				stmt.InModule = getQualifiedNameText(qn)
+			} else if id := ctx.IDENTIFIER(); id != nil {
+				stmt.InModule = id.GetText()
+			}
+		}
+		b.statements = append(b.statements, stmt)
 	} else if ctx.WIDGETS() != nil {
 		// SHOW WIDGETS [WHERE ...] [IN module]
 		stmt := &ast.ShowWidgetsStmt{
@@ -847,6 +858,11 @@ func (b *Builder) ExitDescribeStatement(ctx *parser.DescribeStatementContext) {
 	} else if ctx.IMPORT() != nil && ctx.MAPPING() != nil {
 		b.statements = append(b.statements, &ast.DescribeStmt{
 			ObjectType: ast.DescribeImportMapping,
+			Name:       name,
+		})
+	} else if ctx.EXPORT() != nil && ctx.MAPPING() != nil {
+		b.statements = append(b.statements, &ast.DescribeStmt{
+			ObjectType: ast.DescribeExportMapping,
 			Name:       name,
 		})
 	}

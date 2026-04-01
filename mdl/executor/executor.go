@@ -326,6 +326,12 @@ func (e *Executor) executeInner(stmt ast.Statement) error {
 	case *ast.DropImportMappingStmt:
 		return e.execDropImportMapping(s)
 
+	// Export Mapping statements
+	case *ast.CreateExportMappingStmt:
+		return e.execCreateExportMapping(s)
+	case *ast.DropExportMappingStmt:
+		return e.execDropExportMapping(s)
+
 	// REST client statements
 	case *ast.CreateRestClientStmt:
 		return e.createRestClient(s)
@@ -810,6 +816,8 @@ func (e *Executor) execShow(s *ast.ShowStmt) error {
 		return e.showJsonStructures(s.InModule)
 	case ast.ShowImportMappings:
 		return e.showImportMappings(s.InModule)
+	case ast.ShowExportMappings:
+		return e.showExportMappings(s.InModule)
 	default:
 		return fmt.Errorf("unknown show object type")
 	}
@@ -883,6 +891,8 @@ func (e *Executor) execDescribe(s *ast.DescribeStmt) error {
 		return e.describeJsonStructure(s.Name)
 	case ast.DescribeImportMapping:
 		return e.describeImportMapping(s.Name)
+	case ast.DescribeExportMapping:
+		return e.describeExportMapping(s.Name)
 	default:
 		return fmt.Errorf("unknown describe object type")
 	}

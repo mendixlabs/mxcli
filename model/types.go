@@ -297,6 +297,7 @@ const (
 	DocumentTypePublishedODataService DocumentType = "ODataPublish$PublishedODataService2"
 	DocumentTypeJsonStructure         DocumentType = "JsonStructures$JsonStructure"
 	DocumentTypeImportMapping         DocumentType = "ImportMappings$ImportMapping"
+	DocumentTypeExportMapping         DocumentType = "ExportMappings$ExportMapping"
 )
 
 // ConsumedODataService represents a consumed OData service (OData client).
@@ -877,6 +878,50 @@ type ImportMappingElement struct {
 	ExposedName string                  `json:"exposedName,omitempty"`
 	JsonPath    string                  `json:"jsonPath,omitempty"`
 	Children    []*ImportMappingElement `json:"children,omitempty"`
+}
+
+// ============================================================================
+// Export Mappings
+// ============================================================================
+
+// ExportMapping represents an ExportMappings$ExportMapping document.
+type ExportMapping struct {
+	BaseElement
+	ContainerID   ID                     `json:"containerId"`
+	Name          string                 `json:"name"`
+	Documentation string                 `json:"documentation,omitempty"`
+	Excluded      bool                   `json:"excluded,omitempty"`
+	ExportLevel   string                 `json:"exportLevel,omitempty"`
+	// Schema source (at most one is set)
+	JsonStructure     string `json:"jsonStructure,omitempty"`     // qualified name
+	XmlSchema         string `json:"xmlSchema,omitempty"`         // qualified name
+	MessageDefinition string `json:"messageDefinition,omitempty"` // qualified name
+	// NullValueOption controls how null values are serialized: "LeaveOutElement" or "SendAsNil"
+	NullValueOption string                 `json:"nullValueOption,omitempty"`
+	Elements        []*ExportMappingElement `json:"elements,omitempty"`
+}
+
+// GetName returns the export mapping's name.
+func (m *ExportMapping) GetName() string { return m.Name }
+
+// GetContainerID returns the ID of the containing module.
+func (m *ExportMapping) GetContainerID() ID { return m.ContainerID }
+
+// ExportMappingElement represents either an object or value mapping element in an export mapping.
+type ExportMappingElement struct {
+	BaseElement
+	// "Object" or "Value"
+	Kind string `json:"kind"`
+	// Object mapping fields
+	Entity      string `json:"entity,omitempty"`      // qualified entity name
+	Association string `json:"association,omitempty"` // qualified association name (VIA clause)
+	// Value mapping fields
+	Attribute string `json:"attribute,omitempty"` // qualified attribute name (Module.Entity.Attr)
+	DataType  string `json:"dataType,omitempty"`  // "String", "Integer", "Boolean", etc.
+	// Shared fields
+	ExposedName string                  `json:"exposedName,omitempty"`
+	JsonPath    string                  `json:"jsonPath,omitempty"`
+	Children    []*ExportMappingElement `json:"children,omitempty"`
 }
 
 // UnknownElement is a generic fallback for BSON elements with unrecognized $Type values.

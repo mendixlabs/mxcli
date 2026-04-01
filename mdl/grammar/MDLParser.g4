@@ -101,6 +101,7 @@ createStatement
       | createConfigurationStatement
       | createJsonStructureStatement
       | createImportMappingStatement
+      | createExportMappingStatement
       )
     ;
 
@@ -263,6 +264,7 @@ dropStatement
     | DROP FOLDER STRING_LITERAL IN (qualifiedName | IDENTIFIER)
     | DROP JSON STRUCTURE qualifiedName
     | DROP IMPORT MAPPING qualifiedName
+    | DROP EXPORT MAPPING qualifiedName
     ;
 
 renameStatement
@@ -2130,6 +2132,42 @@ importMappingValueType
     ;
 
 /**
+ * CREATE EXPORT MAPPING Module.Name
+ *   [TO JSON STRUCTURE Module.JsonStructure]
+ *   [NULL VALUES LeaveOutElement]
+ * {
+ *   Module.Customer -> root {
+ *     Name -> name (String)
+ *     Module.Address VIA Module.Customer_Address -> addresses {
+ *       Street -> street (String)
+ *     }
+ *   }
+ * };
+ */
+createExportMappingStatement
+    : EXPORT MAPPING qualifiedName
+      exportMappingSchemaClause?
+      exportMappingNullValuesClause?
+      LBRACE exportMappingElement RBRACE
+    ;
+
+exportMappingSchemaClause
+    : TO JSON STRUCTURE qualifiedName
+    | TO XML SCHEMA qualifiedName
+    ;
+
+exportMappingNullValuesClause
+    : NULL VALUES identifierOrKeyword
+    ;
+
+exportMappingElement
+    : qualifiedName (VIA qualifiedName)? ARROW identifierOrKeyword
+      (LBRACE exportMappingElement* RBRACE)?
+    | identifierOrKeyword ARROW identifierOrKeyword
+      LPAREN importMappingValueType RPAREN
+    ;
+
+/**
  * CREATE REST CLIENT Module.Name
  * BASE URL 'https://api.example.com/v1'
  * AUTHENTICATION NONE | BASIC (USERNAME = ..., PASSWORD = ...)
@@ -2606,6 +2644,7 @@ showStatement
     | SHOW REST CLIENTS (IN (qualifiedName | IDENTIFIER))?           // SHOW REST CLIENTS [IN module]
     | SHOW JSON STRUCTURES (IN (qualifiedName | IDENTIFIER))?       // SHOW JSON STRUCTURES [IN module]
     | SHOW IMPORT MAPPINGS (IN (qualifiedName | IDENTIFIER))?       // SHOW IMPORT MAPPINGS [IN module]
+    | SHOW EXPORT MAPPINGS (IN (qualifiedName | IDENTIFIER))?       // SHOW EXPORT MAPPINGS [IN module]
     | SHOW PUBLISHED REST SERVICES (IN (qualifiedName | IDENTIFIER))? // SHOW PUBLISHED REST SERVICES [IN module]
     ;
 
@@ -2697,6 +2736,7 @@ describeStatement
     | DESCRIBE PUBLISHED REST SERVICE qualifiedName    // DESCRIBE PUBLISHED REST SERVICE Module.Name
     | DESCRIBE JSON STRUCTURE qualifiedName             // DESCRIBE JSON STRUCTURE Module.Name
     | DESCRIBE IMPORT MAPPING qualifiedName             // DESCRIBE IMPORT MAPPING Module.Name
+    | DESCRIBE EXPORT MAPPING qualifiedName             // DESCRIBE EXPORT MAPPING Module.Name
     | DESCRIBE FRAGMENT identifierOrKeyword            // DESCRIBE FRAGMENT Name
     ;
 

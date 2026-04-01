@@ -777,23 +777,106 @@ func (r *Reader) GetImportMappingByQualifiedName(moduleName, name string) (*mode
 		return nil, err
 	}
 
+	moduleMap, err := r.buildContainerModuleNameMap()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, im := range all {
+		if im.Name == name && moduleMap[im.ContainerID] == moduleName {
+			return im, nil
+		}
+	}
+	return nil, fmt.Errorf("import mapping %s.%s not found", moduleName, name)
+}
+
+// ListExportMappings returns all export mapping documents in the project.
+func (r *Reader) ListExportMappings() ([]*model.ExportMapping, error) {
+	units, err := r.listUnitsByType("ExportMappings$ExportMapping")
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*model.ExportMapping
+	for _, u := range units {
+		em, err := r.parseExportMapping(u.ID, u.ContainerID, u.Contents)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse export mapping %s: %w", u.ID, err)
+		}
+		result = append(result, em)
+	}
+	return result, nil
+}
+
+// GetExportMappingByQualifiedName retrieves an export mapping by its qualified name (Module.Name).
+func (r *Reader) GetExportMappingByQualifiedName(moduleName, name string) (*model.ExportMapping, error) {
+	all, err := r.ListExportMappings()
+	if err != nil {
+		return nil, err
+	}
+
+	moduleMap, err := r.buildContainerModuleNameMap()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, em := range all {
+		if em.Name == name && moduleMap[em.ContainerID] == moduleName {
+			return em, nil
+		}
+	}
+	return nil, fmt.Errorf("export mapping %s.%s not found", moduleName, name)
+}
+
+// buildContainerModuleNameMap builds a map from any container ID (including folders)
+// to the enclosing module name, by walking the containment hierarchy.
+// This handles documents nested inside folders within modules.
+func (r *Reader) buildContainerModuleNameMap() (map[model.ID]string, error) {
 	modules, err := r.ListModules()
 	if err != nil {
 		return nil, err
 	}
 
-	moduleID := ""
+	// Build module ID → name and module ID set
+	moduleNames := make(map[model.ID]string, len(modules))
 	for _, m := range modules {
-		if m.Name == moduleName {
-			moduleID = string(m.ID)
-			break
-		}
+		moduleNames[m.ID] = m.Name
 	}
 
-	for _, im := range all {
-		if im.Name == name && (moduleID == "" || string(im.ContainerID) == moduleID) {
-			return im, nil
-		}
+	// Build container → parent map from all units
+	units, err := r.ListUnits()
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("import mapping %s.%s not found", moduleName, name)
+	parentOf := make(map[model.ID]model.ID, len(units))
+	for _, u := range units {
+		parentOf[u.ID] = u.ContainerID
+	}
+
+	// Walk up from any container ID to find the enclosing module name
+	result := make(map[model.ID]string)
+	var findModule func(id model.ID) string
+	findModule = func(id model.ID) string {
+		if cached, ok := result[id]; ok {
+			return cached
+		}
+		if name, ok := moduleNames[id]; ok {
+			result[id] = name
+			return name
+		}
+		parent, ok := parentOf[id]
+		if !ok || parent == id {
+			return ""
+		}
+		name := findModule(parent)
+		result[id] = name
+		return name
+	}
+
+	// Pre-populate for all units so callers just do a single map lookup
+	for _, u := range units {
+		findModule(u.ContainerID)
+	}
+
+	return result, nil
 }

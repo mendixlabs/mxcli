@@ -147,15 +147,21 @@ func printImportMappingElement(e *Executor, elem *model.ImportMappingElement, de
 		if elem.Association != "" {
 			via = " VIA " + elem.Association
 		}
+		// Empty ExposedName means root element — use "" so output is valid re-executable MDL.
+		// The grammar requires identifierOrKeyword before ->, so bare -> is not valid.
+		jsonKey := elem.ExposedName
+		if jsonKey == "" {
+			jsonKey = `""`
+		}
 		if len(elem.Children) > 0 {
-			fmt.Fprintf(e.output, "%s%s -> %s (%s)%s {\n", indent, elem.ExposedName, entityOrName, handling, via)
+			fmt.Fprintf(e.output, "%s%s -> %s (%s)%s {\n", indent, jsonKey, entityOrName, handling, via)
 			for _, child := range elem.Children {
 				printImportMappingElement(e, child, depth+1)
 				fmt.Fprintln(e.output, ";")
 			}
 			fmt.Fprintf(e.output, "%s}", indent)
 		} else {
-			fmt.Fprintf(e.output, "%s%s -> %s (%s)%s", indent, elem.ExposedName, entityOrName, handling, via)
+			fmt.Fprintf(e.output, "%s%s -> %s (%s)%s", indent, jsonKey, entityOrName, handling, via)
 		}
 	} else {
 		// Value mapping

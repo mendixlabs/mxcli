@@ -55,6 +55,13 @@ func (w *Writer) serializeImportMapping(im *model.ImportMapping) ([]byte, error)
 		exportLevel = "Hidden"
 	}
 
+	// ParameterType is a required sub-document even when not used (DataTypes$UnknownType).
+	// Without it Studio Pro fails to render the schema source and mapping elements correctly.
+	parameterType := bson.M{
+		"$ID":   idToBsonBinary(generateUUID()),
+		"$Type": "DataTypes$UnknownType",
+	}
+
 	doc := bson.M{
 		"$ID":               idToBsonBinary(string(im.ID)),
 		"$Type":             "ImportMappings$ImportMapping",
@@ -66,10 +73,15 @@ func (w *Writer) serializeImportMapping(im *model.ImportMapping) ([]byte, error)
 		"XmlSchema":         im.XmlSchema,
 		"MessageDefinition": im.MessageDefinition,
 		"Elements":          elements,
-		// Required fields with defaults
+		// Required fields with defaults — verified against Studio Pro-created BSON
 		"UseSubtransactionsForMicroflows": false,
-		"PublicName":                      im.Name,
+		"PublicName":                      "", // Studio Pro writes "" not the mapping name
 		"XsdRootElementName":              "",
+		"MappingSourceReference":          nil,
+		"ParameterType":                   parameterType,
+		"OperationName":                   "",
+		"ServiceName":                     "",
+		"WsdlFile":                        "",
 	}
 	return bson.Marshal(doc)
 }
@@ -108,6 +120,10 @@ func serializeImportObjectElement(id string, elem *model.ImportMappingElement, p
 		objectHandling = "Create"
 	}
 
+	// IMPORTANT: The correct $Type is "ImportMappings$ObjectMappingElement" (no "Import" prefix in the element name).
+	// The generated metamodel (ImportMappingsImportObjectMappingElement) is misleading — Studio Pro will throw
+	// TypeCacheUnknownTypeException if you use "ImportMappings$ImportObjectMappingElement".
+	// Rule: MappingElement $Type names do NOT repeat the namespace prefix (same for ExportMappings).
 	return bson.M{
 		"$ID":                               idToBsonBinary(id),
 		"$Type":                             "ImportMappings$ObjectMappingElement",
