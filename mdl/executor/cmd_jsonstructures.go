@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/sdk/mpr"
@@ -184,7 +185,7 @@ func capitalizeFirstRune(s string) string {
 		return s
 	}
 	runes := []rune(s)
-	runes[0] = rune(strings.ToUpper(string(runes[0]))[0])
+	runes[0] = unicode.ToUpper(runes[0])
 	return string(runes)
 }
 
