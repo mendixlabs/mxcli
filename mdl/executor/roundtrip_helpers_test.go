@@ -430,6 +430,15 @@ func (e *testEnv) assertRoundtrip(createMDL string, opts ...RoundtripOption) Rou
 	case *ast.CreateRestClientStmt:
 		qualifiedName = s.Name.String()
 		describeCmd = "DESCRIBE REST CLIENT " + qualifiedName + ";"
+	case *ast.CreateJsonStructureStmt:
+		qualifiedName = s.Name.String()
+		describeCmd = "DESCRIBE JSON STRUCTURE " + qualifiedName + ";"
+	case *ast.CreateImportMappingStmt:
+		qualifiedName = s.Name.String()
+		describeCmd = "DESCRIBE IMPORT MAPPING " + qualifiedName + ";"
+	case *ast.CreateExportMappingStmt:
+		qualifiedName = s.Name.String()
+		describeCmd = "DESCRIBE EXPORT MAPPING " + qualifiedName + ";"
 	default:
 		e.t.Fatalf("Unsupported statement type for roundtrip: %T", prog.Statements[0])
 		return result
