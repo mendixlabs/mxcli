@@ -445,6 +445,7 @@ func (c *mdlCompleter) dynamicComplete(line, lineUpper string) ([][]rune, int) {
 		"DESCRIBE DATABASE CONNECTION ":    c.executor.GetDatabaseConnectionNames,
 		"DESCRIBE REST CLIENT ":            c.executor.GetRestClientNames,
 		"DESCRIBE BUSINESS EVENT SERVICE ": c.executor.GetBusinessEventServiceNames,
+		"DESCRIBE JSON STRUCTURE ":         c.executor.GetJsonStructureNames,
 		"DROP ENTITY ":                     c.executor.GetEntityNames,
 		"DROP DATABASE CONNECTION ":        c.executor.GetDatabaseConnectionNames,
 		"DROP BUSINESS EVENT SERVICE ":     c.executor.GetBusinessEventServiceNames,
@@ -454,6 +455,7 @@ func (c *mdlCompleter) dynamicComplete(line, lineUpper string) ([][]rune, int) {
 		"DROP PAGE ":                       c.executor.GetPageNames,
 		"DROP SNIPPET ":                    c.executor.GetSnippetNames,
 		"DROP REST CLIENT ":                c.executor.GetRestClientNames,
+		"DROP JSON STRUCTURE ":             c.executor.GetJsonStructureNames,
 	}
 
 	for pattern, getter := range qualifiedPatterns {

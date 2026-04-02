@@ -54,13 +54,13 @@ func (r *Reader) ListJavaActions() ([]*JavaAction, error) {
 // JavaScriptAction represents a JavaScript action.
 type JavaScriptAction struct {
 	model.BaseElement
-	ContainerID             model.ID                          `json:"containerId"`
-	Name                    string                            `json:"name"`
-	Documentation           string                            `json:"documentation,omitempty"`
-	Platform                string                            `json:"platform,omitempty"`
-	Excluded                bool                              `json:"excluded"`
-	ExportLevel             string                            `json:"exportLevel,omitempty"`
-	ActionDefaultReturnName string                            `json:"actionDefaultReturnName,omitempty"`
+	ContainerID             model.ID                           `json:"containerId"`
+	Name                    string                             `json:"name"`
+	Documentation           string                             `json:"documentation,omitempty"`
+	Platform                string                             `json:"platform,omitempty"`
+	Excluded                bool                               `json:"excluded"`
+	ExportLevel             string                             `json:"exportLevel,omitempty"`
+	ActionDefaultReturnName string                             `json:"actionDefaultReturnName,omitempty"`
 	ReturnType              javaactions.CodeActionReturnType   `json:"returnType,omitempty"`
 	Parameters              []*javaactions.JavaActionParameter `json:"parameters,omitempty"`
 	TypeParameters          []*javaactions.TypeParameterDef    `json:"typeParameters,omitempty"`
@@ -277,6 +277,65 @@ func (r *Reader) ListImageCollections() ([]*ImageCollection, error) {
 			return nil, fmt.Errorf("failed to parse image collection %s: %w", u.ID, err)
 		}
 		result = append(result, ic)
+	}
+
+	return result, nil
+}
+
+// JsonStructure represents a JSON structure document.
+type JsonStructure struct {
+	model.BaseElement
+	ContainerID   model.ID       `json:"containerId"`
+	Name          string         `json:"name"`
+	Documentation string         `json:"documentation,omitempty"`
+	JsonSnippet   string         `json:"jsonSnippet,omitempty"`
+	Elements      []*JsonElement `json:"elements,omitempty"`
+	Excluded      bool           `json:"excluded,omitempty"`
+	ExportLevel   string         `json:"exportLevel,omitempty"`
+}
+
+// JsonElement represents an element in a JSON structure's element tree.
+type JsonElement struct {
+	ExposedName     string         `json:"exposedName"`
+	ExposedItemName string         `json:"exposedItemName,omitempty"`
+	Path            string         `json:"path"`
+	ElementType     string         `json:"elementType"`   // "Object", "Array", "Value", "Choice"
+	PrimitiveType   string         `json:"primitiveType"` // "String", "Integer", "Boolean", "Decimal", "Unknown"
+	MinOccurs       int            `json:"minOccurs"`
+	MaxOccurs       int            `json:"maxOccurs"` // -1 = unbounded
+	Nillable        bool           `json:"nillable,omitempty"`
+	IsDefaultType   bool           `json:"isDefaultType,omitempty"`
+	MaxLength       int            `json:"maxLength"`      // -1 = unset
+	FractionDigits  int            `json:"fractionDigits"` // -1 = unset
+	TotalDigits     int            `json:"totalDigits"`    // -1 = unset
+	OriginalValue   string         `json:"originalValue,omitempty"`
+	Children        []*JsonElement `json:"children,omitempty"`
+}
+
+// GetName returns the JSON structure's name.
+func (js *JsonStructure) GetName() string {
+	return js.Name
+}
+
+// GetContainerID returns the container ID.
+func (js *JsonStructure) GetContainerID() model.ID {
+	return js.ContainerID
+}
+
+// ListJsonStructures returns all JSON structures in the project.
+func (r *Reader) ListJsonStructures() ([]*JsonStructure, error) {
+	units, err := r.listUnitsByType("JsonStructures$JsonStructure")
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*JsonStructure
+	for _, u := range units {
+		js, err := r.parseJsonStructure(u.ID, u.ContainerID, u.Contents)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse JSON structure %s: %w", u.ID, err)
+		}
+		result = append(result, js)
 	}
 
 	return result, nil

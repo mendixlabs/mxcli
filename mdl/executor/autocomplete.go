@@ -335,3 +335,27 @@ func (e *Executor) GetBusinessEventServiceNames(moduleFilter string) []string {
 	}
 	return names
 }
+
+// GetJsonStructureNames returns qualified JSON structure names, optionally filtered by module.
+func (e *Executor) GetJsonStructureNames(moduleFilter string) []string {
+	if e.reader == nil {
+		return nil
+	}
+	h, err := e.getHierarchy()
+	if err != nil {
+		return nil
+	}
+	structures, err := e.reader.ListJsonStructures()
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0)
+	for _, js := range structures {
+		modID := h.FindModuleID(js.ContainerID)
+		modName := h.GetModuleName(modID)
+		if moduleFilter == "" || modName == moduleFilter {
+			names = append(names, modName+"."+js.Name)
+		}
+	}
+	return names
+}

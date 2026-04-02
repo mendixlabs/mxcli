@@ -332,6 +332,18 @@ CREATE OR REPLACE NAVIGATION Responsive
 
 **Export levels:** `'Hidden'` (default, internal to module), `'Public'` (accessible from other modules).
 
+## JSON Structures
+
+| Statement | Syntax | Notes |
+|-----------|--------|-------|
+| Show structures | `SHOW JSON STRUCTURES [IN Module];` | List all or filter by module |
+| Describe structure | `DESCRIBE JSON STRUCTURE Module.Name;` | Re-executable CREATE OR REPLACE + element tree |
+| Create structure | `CREATE JSON STRUCTURE Module.Name [COMMENT 'text'] SNIPPET '...json...';` | Element tree auto-built from snippet |
+| Create (multi-line) | `CREATE JSON STRUCTURE Module.Name SNIPPET $${ "key": "value" }$$;` | Dollar-quoted snippet for readability |
+| Create or replace | `CREATE OR REPLACE JSON STRUCTURE Module.Name SNIPPET '...';` | Idempotent — preferred for AI agents |
+| Create with name map | `CREATE JSON STRUCTURE Module.Name SNIPPET '...' CUSTOM NAME MAP ('jsonKey' AS 'CustomName', ...);` | Override auto-generated ExposedNames |
+| Drop structure | `DROP JSON STRUCTURE Module.Name;` | |
+
 ## Java Actions
 
 | Statement | Syntax | Notes |

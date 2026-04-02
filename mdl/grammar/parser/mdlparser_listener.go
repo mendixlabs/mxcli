@@ -259,6 +259,12 @@ type MDLParserListener interface {
 	// EnterImageName is called when entering the imageName production.
 	EnterImageName(c *ImageNameContext)
 
+	// EnterCreateJsonStructureStatement is called when entering the createJsonStructureStatement production.
+	EnterCreateJsonStructureStatement(c *CreateJsonStructureStatementContext)
+
+	// EnterCustomNameMapping is called when entering the customNameMapping production.
+	EnterCustomNameMapping(c *CustomNameMappingContext)
+
 	// EnterCreateValidationRuleStatement is called when entering the createValidationRuleStatement production.
 	EnterCreateValidationRuleStatement(c *CreateValidationRuleStatementContext)
 
@@ -1383,6 +1389,12 @@ type MDLParserListener interface {
 
 	// ExitImageName is called when exiting the imageName production.
 	ExitImageName(c *ImageNameContext)
+
+	// ExitCreateJsonStructureStatement is called when exiting the createJsonStructureStatement production.
+	ExitCreateJsonStructureStatement(c *CreateJsonStructureStatementContext)
+
+	// ExitCustomNameMapping is called when exiting the customNameMapping production.
+	ExitCustomNameMapping(c *CustomNameMappingContext)
 
 	// ExitCreateValidationRuleStatement is called when exiting the createValidationRuleStatement production.
 	ExitCreateValidationRuleStatement(c *CreateValidationRuleStatementContext)

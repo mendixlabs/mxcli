@@ -71,16 +71,16 @@ const (
 
 // Executor executes MDL statements against a Mendix project.
 type Executor struct {
-	writer    *mpr.Writer
-	reader    *mpr.Reader
-	output    io.Writer
-	guard     *outputGuard                       // line-limit wrapper around output
-	mprPath   string
-	settings  map[string]any
-	cache     *executorCache
-	catalog   *catalog.Catalog
-	quiet     bool                               // suppress connection and status messages
-	logger    *diaglog.Logger                    // session diagnostics logger (nil = no logging)
+	writer        *mpr.Writer
+	reader        *mpr.Reader
+	output        io.Writer
+	guard         *outputGuard // line-limit wrapper around output
+	mprPath       string
+	settings      map[string]any
+	cache         *executorCache
+	catalog       *catalog.Catalog
+	quiet         bool                               // suppress connection and status messages
+	logger        *diaglog.Logger                    // session diagnostics logger (nil = no logging)
 	fragments     map[string]*ast.DefineFragmentStmt // script-scoped fragment definitions
 	sqlMgr        *sqllib.Manager                    // external SQL connection manager (lazy init)
 	themeRegistry *ThemeRegistry                     // cached theme design property definitions (lazy init)
@@ -279,6 +279,12 @@ func (e *Executor) executeInner(stmt ast.Statement) error {
 		return e.execCreateImageCollection(s)
 	case *ast.DropImageCollectionStmt:
 		return e.execDropImageCollection(s)
+
+	// JSON structure statements
+	case *ast.CreateJsonStructureStmt:
+		return e.execCreateJsonStructure(s)
+	case *ast.DropJsonStructureStmt:
+		return e.execDropJsonStructure(s)
 
 	// Workflow statements
 	case *ast.CreateWorkflowStmt:
@@ -784,6 +790,8 @@ func (e *Executor) execShow(s *ast.ShowStmt) error {
 		return e.showDatabaseConnections(s.InModule)
 	case ast.ShowImageCollections:
 		return e.showImageCollections(s.InModule)
+	case ast.ShowJsonStructures:
+		return e.showJsonStructures(s.InModule)
 	case ast.ShowRestClients:
 		return e.showRestClients(s.InModule)
 	case ast.ShowPublishedRestServices:
@@ -857,6 +865,8 @@ func (e *Executor) execDescribe(s *ast.DescribeStmt) error {
 		return e.describeFragment(s.Name)
 	case ast.DescribeImageCollection:
 		return e.describeImageCollection(s.Name)
+	case ast.DescribeJsonStructure:
+		return e.describeJsonStructure(s.Name)
 	case ast.DescribeRestClient:
 		return e.describeRestClient(s.Name)
 	case ast.DescribePublishedRestService:

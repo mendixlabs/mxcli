@@ -665,3 +665,58 @@ func (b *Builder) buildDatabaseConnections() error {
 	b.report("Database Connections", len(connections))
 	return nil
 }
+
+func (b *Builder) buildJsonStructures() error {
+	structures, err := b.reader.ListJsonStructures()
+	if err != nil {
+		return err
+	}
+
+	stmt, err := b.tx.Prepare(`
+		INSERT INTO json_structures (Name, QualifiedName, ModuleName,
+			ElementCount, HasSnippet, Documentation, ExportLevel, Folder,
+			ProjectId, ProjectName, SnapshotId, SnapshotDate, SnapshotSource)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	projectID, projectName, snapshotID, snapshotDate, snapshotSource, _, _, _ := b.snapshotMeta()
+
+	for _, js := range structures {
+		moduleID := b.hierarchy.findModuleID(js.ContainerID)
+		moduleName := b.hierarchy.getModuleName(moduleID)
+		qualifiedName := moduleName + "." + js.Name
+		folderPath := b.hierarchy.buildFolderPath(js.ContainerID)
+
+		elemCount := 0
+		if len(js.Elements) > 0 {
+			elemCount = len(js.Elements[0].Children)
+		}
+
+		hasSnippet := 0
+		if js.JsonSnippet != "" {
+			hasSnippet = 1
+		}
+
+		_, err := stmt.Exec(
+			js.Name,
+			qualifiedName,
+			moduleName,
+			elemCount,
+			hasSnippet,
+			js.Documentation,
+			js.ExportLevel,
+			folderPath,
+			projectID, projectName, snapshotID, snapshotDate, snapshotSource,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	b.report("JSON Structures", len(structures))
+	return nil
+}

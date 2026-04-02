@@ -98,6 +98,7 @@ createStatement
       | createUserRoleStatement
       | createDemoUserStatement
       | createImageCollectionStatement
+      | createJsonStructureStatement
       | createConfigurationStatement
       )
     ;
@@ -256,6 +257,7 @@ dropStatement
     | DROP BUSINESS EVENT SERVICE qualifiedName
     | DROP WORKFLOW qualifiedName
     | DROP IMAGE COLLECTION qualifiedName
+    | DROP JSON STRUCTURE qualifiedName
     | DROP REST CLIENT qualifiedName
     | DROP CONFIGURATION STRING_LITERAL
     | DROP FOLDER STRING_LITERAL IN (qualifiedName | IDENTIFIER)
@@ -810,6 +812,19 @@ imageName
     : IDENTIFIER
     | QUOTED_IDENTIFIER
     | commonNameKeyword
+    ;
+
+// =============================================================================
+// JSON STRUCTURE CREATION
+// =============================================================================
+
+createJsonStructureStatement
+    : JSON STRUCTURE qualifiedName (COMMENT STRING_LITERAL)? SNIPPET (STRING_LITERAL | DOLLAR_STRING)
+      (CUSTOM_NAME_MAP LPAREN customNameMapping (COMMA customNameMapping)* RPAREN)?
+    ;
+
+customNameMapping
+    : STRING_LITERAL AS STRING_LITERAL   // 'jsonKey' AS 'CustomName'
     ;
 
 // =============================================================================
@@ -2499,6 +2514,7 @@ showStatement
     | SHOW JAVA ACTIONS (IN (qualifiedName | IDENTIFIER))?
     | SHOW JAVASCRIPT ACTIONS (IN (qualifiedName | IDENTIFIER))?
     | SHOW IMAGE COLLECTION (IN (qualifiedName | IDENTIFIER))?   // SHOW IMAGE COLLECTION [IN Module]
+    | SHOW JSON STRUCTURES (IN (qualifiedName | IDENTIFIER))?    // SHOW JSON STRUCTURES [IN Module]
     | SHOW ENTITY qualifiedName
     | SHOW ASSOCIATION qualifiedName
     | SHOW PAGE qualifiedName
@@ -2629,6 +2645,7 @@ describeStatement
     | DESCRIBE FRAGMENT FROM PAGE qualifiedName WIDGET identifierOrKeyword     // DESCRIBE FRAGMENT FROM PAGE Module.Page WIDGET name
     | DESCRIBE FRAGMENT FROM SNIPPET qualifiedName WIDGET identifierOrKeyword  // DESCRIBE FRAGMENT FROM SNIPPET Module.Snippet WIDGET name
     | DESCRIBE IMAGE COLLECTION qualifiedName           // DESCRIBE IMAGE COLLECTION Module.Name
+    | DESCRIBE JSON STRUCTURE qualifiedName              // DESCRIBE JSON STRUCTURE Module.Name
     | DESCRIBE REST CLIENT qualifiedName                // DESCRIBE REST CLIENT Module.Name
     | DESCRIBE PUBLISHED REST SERVICE qualifiedName    // DESCRIBE PUBLISHED REST SERVICE Module.Name
     | DESCRIBE FRAGMENT identifierOrKeyword            // DESCRIBE FRAGMENT Name
@@ -3265,4 +3282,5 @@ keyword
     | COLLECTION                                               // Image collection keyword
     | FILE_KW                                                    // REST client file keyword
     | SEND | REQUEST                                               // REST operation call keywords
+    | STRUCTURES                                                   // JSON structure keywords
     ;

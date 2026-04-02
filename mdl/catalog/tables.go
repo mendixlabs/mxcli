@@ -727,6 +727,23 @@ func (c *Catalog) createTables() error {
 			SnapshotId TEXT
 		)`,
 
+		`CREATE TABLE IF NOT EXISTS json_structures (
+			Id INTEGER PRIMARY KEY AUTOINCREMENT,
+			Name TEXT NOT NULL,
+			QualifiedName TEXT NOT NULL,
+			ModuleName TEXT NOT NULL,
+			ElementCount INTEGER DEFAULT 0,
+			HasSnippet INTEGER DEFAULT 0,
+			Documentation TEXT,
+			ExportLevel TEXT,
+			Folder TEXT,
+			ProjectId TEXT,
+			ProjectName TEXT,
+			SnapshotId TEXT,
+			SnapshotDate TEXT,
+			SnapshotSource TEXT
+		)`,
+
 		// Objects view - union of all object types
 		`CREATE VIEW IF NOT EXISTS objects AS
 			SELECT Id, 'MODULE' as ObjectType, Name, QualifiedName, '' as ModuleName, Folder, Description,

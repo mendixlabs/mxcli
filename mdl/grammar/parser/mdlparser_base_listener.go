@@ -552,6 +552,20 @@ func (s *BaseMDLParserListener) EnterImageName(ctx *ImageNameContext) {}
 // ExitImageName is called when production imageName is exited.
 func (s *BaseMDLParserListener) ExitImageName(ctx *ImageNameContext) {}
 
+// EnterCreateJsonStructureStatement is called when production createJsonStructureStatement is entered.
+func (s *BaseMDLParserListener) EnterCreateJsonStructureStatement(ctx *CreateJsonStructureStatementContext) {
+}
+
+// ExitCreateJsonStructureStatement is called when production createJsonStructureStatement is exited.
+func (s *BaseMDLParserListener) ExitCreateJsonStructureStatement(ctx *CreateJsonStructureStatementContext) {
+}
+
+// EnterCustomNameMapping is called when production customNameMapping is entered.
+func (s *BaseMDLParserListener) EnterCustomNameMapping(ctx *CustomNameMappingContext) {}
+
+// ExitCustomNameMapping is called when production customNameMapping is exited.
+func (s *BaseMDLParserListener) ExitCustomNameMapping(ctx *CustomNameMappingContext) {}
+
 // EnterCreateValidationRuleStatement is called when production createValidationRuleStatement is entered.
 func (s *BaseMDLParserListener) EnterCreateValidationRuleStatement(ctx *CreateValidationRuleStatementContext) {
 }

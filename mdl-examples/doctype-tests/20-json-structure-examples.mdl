@@ -1,0 +1,71 @@
+-- =============================================================================
+-- JSON Structure Examples
+-- =============================================================================
+
+-- List all JSON structures in the project
+SHOW JSON STRUCTURES;
+
+-- List JSON structures in a specific module
+SHOW JSON STRUCTURES IN MyModule;
+
+-- Describe a JSON structure (shows element tree + JSON snippet)
+DESCRIBE JSON STRUCTURE MyModule.CustomerResponse;
+
+-- Create a JSON structure from a JSON snippet (single-line)
+CREATE JSON STRUCTURE MyModule.SimpleItem SNIPPET '{"id": 1, "name": "John", "active": true}';
+
+-- Create a JSON structure from a multi-line JSON snippet (use $$ quoting)
+CREATE JSON STRUCTURE MyModule.CustomerResponse SNIPPET $${
+  "id": 1,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "active": true,
+  "addresses": [
+    {
+      "street": "123 Main St",
+      "city": "Springfield",
+      "zipCode": "62701"
+    }
+  ],
+  "tags": ["premium", "verified"]
+}$$;
+
+-- Create with a documentation comment
+CREATE JSON STRUCTURE MyModule.ApiError
+  COMMENT 'Standard API error response'
+  SNIPPET $${"code": 400, "message": "Bad Request", "details": [{"field": "email", "error": "Invalid email format"}]}$$;
+
+-- Create with custom name mappings (matches Studio Pro's "Custom name" column)
+CREATE JSON STRUCTURE MyModule.ExternalApi SNIPPET $${"kvkNummer": "68750110", "vestigingsnummer": "000037178598", "naam": "Acme Corp"}$$
+CUSTOM NAME MAP (
+  'kvkNummer' AS 'ChamberOfCommerceNumber',
+  'vestigingsnummer' AS 'BranchNumber',
+  'naam' AS 'CompanyName'
+);
+
+-- Edit (replace) an existing JSON structure with an updated schema
+CREATE OR REPLACE JSON STRUCTURE MyModule.CustomerResponse SNIPPET $${
+  "id": 1,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "+1-555-0123",
+  "active": true,
+  "addresses": [
+    {
+      "street": "123 Main St",
+      "city": "Springfield",
+      "zipCode": "62701",
+      "country": "US"
+    }
+  ],
+  "tags": ["premium", "verified"]
+}$$;
+
+-- Delete JSON structures
+DROP JSON STRUCTURE MyModule.SimpleItem;
+
+DROP JSON STRUCTURE MyModule.ApiError;
+
+DROP JSON STRUCTURE MyModule.ExternalApi;
+
+DROP JSON STRUCTURE MyModule.CustomerResponse;

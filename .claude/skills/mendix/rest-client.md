@@ -8,6 +8,34 @@ Use this skill when creating, modifying, or calling Consumed REST Clients in MDL
 - Calling REST service operations from microflows (`SEND REST REQUEST`)
 - Listing or inspecting REST clients (`SHOW REST CLIENTS`, `DESCRIBE REST CLIENT`)
 
+## JSON Structures
+
+Define JSON structures from a sample snippet before creating import/export mappings.
+
+```sql
+CREATE JSON STRUCTURE Module.Name SNIPPET '{"id": 1, "name": "John"}';
+
+-- Multi-line (use $$ quoting)
+CREATE JSON STRUCTURE Module.Name SNIPPET $${ "id": 1, "items": [{"name": "A"}] }$$;
+
+-- With documentation
+CREATE JSON STRUCTURE Module.Name COMMENT 'API response' SNIPPET '...';
+
+-- Custom name mapping for non-English keys
+CREATE JSON STRUCTURE Module.Name SNIPPET $${"kvkNummer": "123"}$$
+CUSTOM NAME MAP ('kvkNummer' AS 'ChamberOfCommerceNumber');
+
+-- Idempotent update
+CREATE OR REPLACE JSON STRUCTURE Module.Name SNIPPET '...';
+
+-- Browse and delete
+SHOW JSON STRUCTURES;
+DESCRIBE JSON STRUCTURE Module.Name;
+DROP JSON STRUCTURE Module.Name;
+```
+
+Type inference: ISO 8601 strings → DateTime, integers → Integer, decimals → Decimal, booleans → Boolean. Snippet is auto-formatted when stored.
+
 ## CREATE REST CLIENT
 
 ```sql

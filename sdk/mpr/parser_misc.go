@@ -641,3 +641,108 @@ func (r *Reader) parseImageCollection(unitID, containerID string, contents []byt
 
 	return ic, nil
 }
+
+// parseJsonStructure parses JSON structure contents from BSON.
+func (r *Reader) parseJsonStructure(unitID, containerID string, contents []byte) (*JsonStructure, error) {
+	contents, err := r.resolveContents(unitID, contents)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw map[string]any
+	if err := bson.Unmarshal(contents, &raw); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal BSON: %w", err)
+	}
+
+	js := &JsonStructure{}
+	js.ID = model.ID(unitID)
+	js.TypeName = "JsonStructures$JsonStructure"
+	js.ContainerID = model.ID(containerID)
+
+	if name, ok := raw["Name"].(string); ok {
+		js.Name = name
+	}
+	if doc, ok := raw["Documentation"].(string); ok {
+		js.Documentation = doc
+	}
+	if snippet, ok := raw["JsonSnippet"].(string); ok {
+		js.JsonSnippet = snippet
+	}
+	if exp, ok := raw["ExportLevel"].(string); ok {
+		js.ExportLevel = exp
+	}
+	if exc, ok := raw["Excluded"].(bool); ok {
+		js.Excluded = exc
+	}
+
+	// Parse elements (bson.A with version prefix)
+	if elements, ok := raw["Elements"].(bson.A); ok {
+		for _, elem := range elements {
+			if elemMap, ok := elem.(map[string]any); ok {
+				js.Elements = append(js.Elements, parseJsonElement(elemMap))
+			}
+		}
+	}
+
+	return js, nil
+}
+
+// parseJsonElement recursively parses a JsonStructures$JsonElement from BSON.
+func parseJsonElement(raw map[string]any) *JsonElement {
+	elem := &JsonElement{
+		MaxLength:      -1,
+		FractionDigits: -1,
+		TotalDigits:    -1,
+	}
+
+	if v, ok := raw["ExposedName"].(string); ok {
+		elem.ExposedName = v
+	}
+	if v, ok := raw["ExposedItemName"].(string); ok {
+		elem.ExposedItemName = v
+	}
+	if v, ok := raw["Path"].(string); ok {
+		elem.Path = v
+	}
+	if v, ok := raw["ElementType"].(string); ok {
+		elem.ElementType = v
+	}
+	if v, ok := raw["PrimitiveType"].(string); ok {
+		elem.PrimitiveType = v
+	}
+	if v, ok := raw["MinOccurs"].(int32); ok {
+		elem.MinOccurs = int(v)
+	}
+	if v, ok := raw["MaxOccurs"].(int32); ok {
+		elem.MaxOccurs = int(v)
+	}
+	if v, ok := raw["Nillable"].(bool); ok {
+		elem.Nillable = v
+	}
+	if v, ok := raw["IsDefaultType"].(bool); ok {
+		elem.IsDefaultType = v
+	}
+	if v, ok := raw["MaxLength"].(int32); ok {
+		elem.MaxLength = int(v)
+	}
+	if v, ok := raw["FractionDigits"].(int32); ok {
+		elem.FractionDigits = int(v)
+	}
+	if v, ok := raw["TotalDigits"].(int32); ok {
+		elem.TotalDigits = int(v)
+	}
+	if v, ok := raw["OriginalValue"].(string); ok {
+		elem.OriginalValue = v
+	}
+
+	// Parse children (bson.A with version prefix)
+	if children, ok := raw["Children"].(bson.A); ok {
+		for _, child := range children {
+			if childMap, ok := child.(map[string]any); ok {
+				elem.Children = append(elem.Children, parseJsonElement(childMap))
+			}
+		}
+	}
+
+	return elem
+}

@@ -79,12 +79,13 @@ const (
 	ShowImageCollections      // SHOW IMAGE COLLECTIONS [IN module]
 	ShowRestClients           // SHOW REST CLIENTS [IN module]
 	ShowPublishedRestServices // SHOW PUBLISHED REST SERVICES [IN module]
-	ShowConstantValues       // SHOW CONSTANT VALUES [IN module]
-	ShowContractEntities     // SHOW CONTRACT ENTITIES FROM Module.Service
-	ShowContractActions      // SHOW CONTRACT ACTIONS FROM Module.Service
-	ShowContractChannels     // SHOW CONTRACT CHANNELS FROM Module.Service (AsyncAPI)
-	ShowContractMessages     // SHOW CONTRACT MESSAGES FROM Module.Service (AsyncAPI)
-	ShowLanguages            // SHOW LANGUAGES
+	ShowConstantValues        // SHOW CONSTANT VALUES [IN module]
+	ShowContractEntities      // SHOW CONTRACT ENTITIES FROM Module.Service
+	ShowContractActions       // SHOW CONTRACT ACTIONS FROM Module.Service
+	ShowContractChannels      // SHOW CONTRACT CHANNELS FROM Module.Service (AsyncAPI)
+	ShowContractMessages      // SHOW CONTRACT MESSAGES FROM Module.Service (AsyncAPI)
+	ShowLanguages             // SHOW LANGUAGES
+	ShowJsonStructures        // SHOW JSON STRUCTURES [IN module]
 )
 
 // String returns the human-readable name of the show object type.
@@ -202,6 +203,8 @@ func (t ShowObjectType) String() string {
 		return "CONTRACT MESSAGES"
 	case ShowLanguages:
 		return "LANGUAGES"
+	case ShowJsonStructures:
+		return "JSON STRUCTURES"
 	default:
 		return "UNKNOWN"
 	}
@@ -274,6 +277,7 @@ const (
 	DescribeContractEntity       // DESCRIBE CONTRACT ENTITY Service.EntityName [FORMAT mdl]
 	DescribeContractAction       // DESCRIBE CONTRACT ACTION Service.ActionName [FORMAT mdl]
 	DescribeContractMessage      // DESCRIBE CONTRACT MESSAGE Service.MessageName
+	DescribeJsonStructure        // DESCRIBE JSON STRUCTURE Module.Name
 )
 
 // String returns the human-readable name of the describe object type.
@@ -337,6 +341,8 @@ func (t DescribeObjectType) String() string {
 		return "CONTRACT ACTION"
 	case DescribeContractMessage:
 		return "CONTRACT MESSAGE"
+	case DescribeJsonStructure:
+		return "JSON STRUCTURE"
 	default:
 		return "UNKNOWN"
 	}
