@@ -71,19 +71,19 @@ const (
 
 // AlterEntityStmt represents: ALTER ENTITY Module.Name ADD/DROP/RENAME/MODIFY ATTRIBUTE ...
 type AlterEntityStmt struct {
-	Name          QualifiedName
-	Operation     AlterEntityOp
-	Attribute     *Attribute // For ADD ATTRIBUTE
-	AttributeName string     // For RENAME/MODIFY/DROP ATTRIBUTE
-	NewName       string     // For RENAME ATTRIBUTE
-	DataType             DataType       // For MODIFY ATTRIBUTE
-	Calculated           bool           // For MODIFY ATTRIBUTE with CALCULATED
-	CalculatedMicroflow  *QualifiedName // For MODIFY ATTRIBUTE with CALCULATED microflow
-	Documentation        string         // For SET DOCUMENTATION
-	Comment       string     // For SET COMMENT
-	Index         *Index     // For ADD INDEX
-	IndexName     string     // For DROP INDEX
-	Position      *Position  // For SET POSITION
+	Name                QualifiedName
+	Operation           AlterEntityOp
+	Attribute           *Attribute     // For ADD ATTRIBUTE
+	AttributeName       string         // For RENAME/MODIFY/DROP ATTRIBUTE
+	NewName             string         // For RENAME ATTRIBUTE
+	DataType            DataType       // For MODIFY ATTRIBUTE
+	Calculated          bool           // For MODIFY ATTRIBUTE with CALCULATED
+	CalculatedMicroflow *QualifiedName // For MODIFY ATTRIBUTE with CALCULATED microflow
+	Documentation       string         // For SET DOCUMENTATION
+	Comment             string         // For SET COMMENT
+	Index               *Index         // For ADD INDEX
+	IndexName           string         // For DROP INDEX
+	Position            *Position      // For SET POSITION
 }
 
 func (s *AlterEntityStmt) isStatement() {}

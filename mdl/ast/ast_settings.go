@@ -8,9 +8,9 @@ type AlterSettingsStmt struct {
 	ConfigName string         // For CONFIGURATION section: the configuration name (e.g., "Default")
 	Properties map[string]any // Key-value pairs to set
 	// For CONSTANT section:
-	ConstantId    string // Qualified constant name
-	Value         string // Constant value
-	DropConstant  bool   // If true, remove the constant override instead of setting it
+	ConstantId   string // Qualified constant name
+	Value        string // Constant value
+	DropConstant bool   // If true, remove the constant override instead of setting it
 }
 
 func (s *AlterSettingsStmt) isStatement() {}

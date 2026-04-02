@@ -73,14 +73,14 @@ func (w *Writer) serializeExportMapping(em *model.ExportMapping) ([]byte, error)
 		"NullValueOption":   nullValueOption,
 		"Elements":          elements,
 		// Required fields with defaults — verified against Studio Pro-created BSON
-		"PublicName":              "", // Studio Pro writes "" not the mapping name
-		"XsdRootElementName":      "",
-		"IsHeaderParameter":       false,
-		"ParameterName":           "",
-		"OperationName":           "",
-		"ServiceName":             "",
-		"WsdlFile":                "",
-		"MappingSourceReference":  nil,
+		"PublicName":             "", // Studio Pro writes "" not the mapping name
+		"XsdRootElementName":     "",
+		"IsHeaderParameter":      false,
+		"ParameterName":          "",
+		"OperationName":          "",
+		"ServiceName":            "",
+		"WsdlFile":               "",
+		"MappingSourceReference": nil,
 	}
 	return bson.Marshal(doc)
 }

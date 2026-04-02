@@ -54,13 +54,13 @@ func (r *Reader) ListJavaActions() ([]*JavaAction, error) {
 // JavaScriptAction represents a JavaScript action.
 type JavaScriptAction struct {
 	model.BaseElement
-	ContainerID             model.ID                          `json:"containerId"`
-	Name                    string                            `json:"name"`
-	Documentation           string                            `json:"documentation,omitempty"`
-	Platform                string                            `json:"platform,omitempty"`
-	Excluded                bool                              `json:"excluded"`
-	ExportLevel             string                            `json:"exportLevel,omitempty"`
-	ActionDefaultReturnName string                            `json:"actionDefaultReturnName,omitempty"`
+	ContainerID             model.ID                           `json:"containerId"`
+	Name                    string                             `json:"name"`
+	Documentation           string                             `json:"documentation,omitempty"`
+	Platform                string                             `json:"platform,omitempty"`
+	Excluded                bool                               `json:"excluded"`
+	ExportLevel             string                             `json:"exportLevel,omitempty"`
+	ActionDefaultReturnName string                             `json:"actionDefaultReturnName,omitempty"`
 	ReturnType              javaactions.CodeActionReturnType   `json:"returnType,omitempty"`
 	Parameters              []*javaactions.JavaActionParameter `json:"parameters,omitempty"`
 	TypeParameters          []*javaactions.TypeParameterDef    `json:"typeParameters,omitempty"`

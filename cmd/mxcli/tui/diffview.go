@@ -13,7 +13,7 @@ import (
 type DiffViewMode int
 
 const (
-	DiffViewUnified    DiffViewMode = iota
+	DiffViewUnified DiffViewMode = iota
 	DiffViewSideBySide
 	DiffViewPlainDiff // standard unified diff text (LLM-friendly)
 )

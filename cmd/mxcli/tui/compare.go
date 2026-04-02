@@ -74,12 +74,12 @@ func (p comparePane) lineInfo() string {
 
 // CompareView is a side-by-side comparison overlay (lazygit-style).
 type CompareView struct {
-	kind         CompareKind
-	focus        CompareFocus
-	left         comparePane
-	right        comparePane
-	sync         bool // synchronized scrolling
-	copiedFlash  bool
+	kind        CompareKind
+	focus       CompareFocus
+	left        comparePane
+	right       comparePane
+	sync        bool // synchronized scrolling
+	copiedFlash bool
 
 	// Fuzzy picker
 	picker      bool
@@ -119,7 +119,7 @@ func (c *CompareView) Show(kind CompareKind, w, h int) {
 
 func (c CompareView) paneDimensions() (int, int) {
 	pw := (c.width - 6) / 2 // borders + gap
-	ph := c.height - 4       // header + footer + borders
+	ph := c.height - 4      // header + footer + borders
 	if pw < 20 {
 		pw = 20
 	}
@@ -619,5 +619,3 @@ func (c CompareView) loadForCompare(qname, nodeType string, side CompareFocus, k
 	}
 	return nil
 }
-
-

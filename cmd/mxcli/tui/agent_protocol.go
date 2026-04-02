@@ -9,7 +9,7 @@ import (
 // AgentRequest is a JSON command from an external agent (e.g. Claude).
 type AgentRequest struct {
 	ID     int    `json:"id"`
-	Action string `json:"action"`          // "exec", "check", "state", "navigate", "delete", "create_module", "format", "describe", "list"
+	Action string `json:"action"`           // "exec", "check", "state", "navigate", "delete", "create_module", "format", "describe", "list"
 	MDL    string `json:"mdl,omitempty"`    // for "exec", "format"
 	Target string `json:"target,omitempty"` // for "navigate", "delete", "describe", "list" (e.g. "entity:Module.Entity")
 	Name   string `json:"name,omitempty"`   // for "create_module"
@@ -83,19 +83,19 @@ func buildAgentDescribeCmd(target string) (string, error) {
 
 // listKeywords maps lowercase node type names to their MDL SHOW keyword(s).
 var listKeywords = map[string]string{
-	"entities":        "ENTITIES",
-	"associations":    "ASSOCIATIONS",
-	"enumerations":    "ENUMERATIONS",
-	"constants":       "CONSTANTS",
-	"microflows":      "MICROFLOWS",
-	"nanoflows":       "NANOFLOWS",
-	"pages":           "PAGES",
-	"snippets":        "SNIPPETS",
-	"layouts":         "LAYOUTS",
-	"workflows":       "WORKFLOWS",
-	"modules":         "MODULES",
+	"entities":         "ENTITIES",
+	"associations":     "ASSOCIATIONS",
+	"enumerations":     "ENUMERATIONS",
+	"constants":        "CONSTANTS",
+	"microflows":       "MICROFLOWS",
+	"nanoflows":        "NANOFLOWS",
+	"pages":            "PAGES",
+	"snippets":         "SNIPPETS",
+	"layouts":          "LAYOUTS",
+	"workflows":        "WORKFLOWS",
+	"modules":          "MODULES",
 	"imagecollections": "IMAGE COLLECTIONS",
-	"javaactions":     "JAVA ACTIONS",
+	"javaactions":      "JAVA ACTIONS",
 }
 
 // buildListCmd returns the MDL SHOW command for a target like "entities" or "entities:Module".

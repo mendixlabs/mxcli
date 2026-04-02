@@ -18,9 +18,9 @@ import (
 
 func TestWidgetDefinitionJSONRoundTrip(t *testing.T) {
 	original := WidgetDefinition{
-		WidgetID:         "com.mendix.widget.web.combobox.Combobox",
-		MDLName:          "COMBOBOX",
-		TemplateFile:     "combobox.json",
+		WidgetID:        "com.mendix.widget.web.combobox.Combobox",
+		MDLName:         "COMBOBOX",
+		TemplateFile:    "combobox.json",
 		DefaultEditable: "Always",
 		PropertyMappings: []PropertyMapping{
 			{PropertyKey: "attributeEnumeration", Source: "Attribute", Operation: "attribute"},

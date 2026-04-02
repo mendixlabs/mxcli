@@ -13,7 +13,7 @@ import (
 )
 
 // mdlQuote wraps a string in single quotes, escaping any embedded single quotes
-// by doubling them (MDL convention: 'it''s here').
+// by doubling them (MDL convention: 'it”s here').
 func mdlQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }

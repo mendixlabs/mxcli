@@ -11,10 +11,10 @@ type mockView struct {
 }
 
 func (m mockView) Update(tea.Msg) (View, tea.Cmd) { return m, nil }
-func (m mockView) Render(w, h int) string          { return "" }
-func (m mockView) Hints() []Hint                    { return nil }
-func (m mockView) StatusInfo() StatusInfo            { return StatusInfo{} }
-func (m mockView) Mode() ViewMode                   { return m.mode }
+func (m mockView) Render(w, h int) string         { return "" }
+func (m mockView) Hints() []Hint                  { return nil }
+func (m mockView) StatusInfo() StatusInfo         { return StatusInfo{} }
+func (m mockView) Mode() ViewMode                 { return m.mode }
 
 func TestNewViewStack_ActiveReturnsBase(t *testing.T) {
 	base := mockView{mode: ModeBrowser}

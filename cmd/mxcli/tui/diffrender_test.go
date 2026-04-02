@@ -220,4 +220,3 @@ func TestHslice_TruncateTake(t *testing.T) {
 		t.Errorf("expected 'hello', got %q", out)
 	}
 }
-

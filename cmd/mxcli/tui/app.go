@@ -52,18 +52,18 @@ type App struct {
 	statusBar     StatusBar
 	previewEngine *PreviewEngine
 
-	watcher       *Watcher
-	checkErrors   []CheckError // nil = no check run yet, empty = pass
-	checkRunning  bool
+	watcher      *Watcher
+	checkErrors  []CheckError // nil = no check run yet, empty = pass
+	checkRunning bool
 
 	pendingSession *TUISession // session to restore after tree loads
 
 	agentListener    *AgentListener
-	agentAutoProceed bool           // skip human confirmation for agent ops (set before tea.NewProgram)
-	agentPending     *agentPendingOp // non-nil when waiting for user confirmation
+	agentAutoProceed bool                 // skip human confirmation for agent ops (set before tea.NewProgram)
+	agentPending     *agentPendingOp      // non-nil when waiting for user confirmation
 	agentCheckCh     chan<- AgentResponse // non-nil when agent check is in-flight
-	agentCheckReqID  int               // request ID for pending agent check
-	agentExecCtx     *agentExecContext   // non-nil when agent-initiated exec/delete/create is in progress
+	agentCheckReqID  int                  // request ID for pending agent check
+	agentExecCtx     *agentExecContext    // non-nil when agent-initiated exec/delete/create is in progress
 }
 
 // agentPendingOp tracks an in-flight agent operation awaiting user confirmation.

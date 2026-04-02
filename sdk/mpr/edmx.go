@@ -11,10 +11,10 @@ import (
 // EdmxDocument represents a parsed OData $metadata document (EDMX/CSDL).
 // Supports both OData v3 (CSDL 2.0/3.0) and OData v4 (CSDL 4.0).
 type EdmxDocument struct {
-	Version    string            // "1.0" (OData3) or "4.0" (OData4)
-	Schemas    []*EdmSchema      // Schema definitions
-	EntitySets []*EdmEntitySet   // Entity sets from EntityContainer
-	Actions    []*EdmAction      // OData4 actions / OData3 function imports
+	Version    string          // "1.0" (OData3) or "4.0" (OData4)
+	Schemas    []*EdmSchema    // Schema definitions
+	EntitySets []*EdmEntitySet // Entity sets from EntityContainer
+	Actions    []*EdmAction    // OData4 actions / OData3 function imports
 }
 
 // EdmSchema represents an EDM schema namespace.
@@ -322,12 +322,12 @@ type xmlSchema struct {
 }
 
 type xmlEntityType struct {
-	Name                 string                    `xml:"Name,attr"`
-	Key                  *xmlKey                   `xml:"Key"`
-	Properties           []xmlProperty             `xml:"Property"`
-	NavigationProperties []xmlNavigationProperty   `xml:"NavigationProperty"`
-	Documentation        *xmlDocumentation         `xml:"Documentation"`
-	Annotations          []xmlAnnotation           `xml:"Annotation"`
+	Name                 string                  `xml:"Name,attr"`
+	Key                  *xmlKey                 `xml:"Key"`
+	Properties           []xmlProperty           `xml:"Property"`
+	NavigationProperties []xmlNavigationProperty `xml:"NavigationProperty"`
+	Documentation        *xmlDocumentation       `xml:"Documentation"`
+	Annotations          []xmlAnnotation         `xml:"Annotation"`
 }
 
 type xmlKey struct {
@@ -339,11 +339,11 @@ type xmlPropertyRef struct {
 }
 
 type xmlProperty struct {
-	Name      string          `xml:"Name,attr"`
-	Type      string          `xml:"Type,attr"`
-	Nullable  string          `xml:"Nullable,attr"`
-	MaxLength string          `xml:"MaxLength,attr"`
-	Scale     string          `xml:"Scale,attr"`
+	Name        string          `xml:"Name,attr"`
+	Type        string          `xml:"Type,attr"`
+	Nullable    string          `xml:"Nullable,attr"`
+	MaxLength   string          `xml:"MaxLength,attr"`
+	Scale       string          `xml:"Scale,attr"`
 	Annotations []xmlAnnotation `xml:"Annotation"`
 }
 

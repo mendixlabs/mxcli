@@ -19,7 +19,6 @@ type BrowserView struct {
 	mxcliPath     string
 	projectPath   string
 	previewEngine *PreviewEngine
-
 }
 
 // NewBrowserView creates a BrowserView wrapping the Miller view from the given tab.

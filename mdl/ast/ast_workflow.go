@@ -41,13 +41,13 @@ type WorkflowActivityNode interface {
 
 // WorkflowUserTaskNode represents a USER TASK activity.
 type WorkflowUserTaskNode struct {
-	Name           string // identifier name
-	Caption        string // display caption
-	Page           QualifiedName
-	Targeting      WorkflowTargetingNode
-	Entity         QualifiedName // user task entity
-	DueDate        string        // DUE DATE expression
-	Outcomes       []WorkflowUserTaskOutcomeNode
+	Name            string // identifier name
+	Caption         string // display caption
+	Page            QualifiedName
+	Targeting       WorkflowTargetingNode
+	Entity          QualifiedName // user task entity
+	DueDate         string        // DUE DATE expression
+	Outcomes        []WorkflowUserTaskOutcomeNode
 	IsMultiUser     bool                        // Issue #8: true if MULTI USER TASK
 	BoundaryEvents  []WorkflowBoundaryEventNode // Issue #7
 	TaskDescription string                      // from DESCRIPTION 'text'
@@ -57,9 +57,9 @@ func (n *WorkflowUserTaskNode) workflowActivityNode() {}
 
 // WorkflowTargetingNode represents user targeting strategy.
 type WorkflowTargetingNode struct {
-	Kind       string        // "microflow", "xpath", or ""
-	Microflow  QualifiedName // for microflow targeting
-	XPath      string        // for xpath targeting
+	Kind      string        // "microflow", "xpath", or ""
+	Microflow QualifiedName // for microflow targeting
+	XPath     string        // for xpath targeting
 }
 
 // WorkflowUserTaskOutcomeNode represents an outcome of a user task.

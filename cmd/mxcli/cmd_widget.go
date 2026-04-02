@@ -177,7 +177,7 @@ func generateDefJSON(mpkDef *mpk.WidgetDefinition, mdlName string) *executor.Wid
 				mapping.Value = prop.DefaultValue
 			}
 			mappings = append(mappings, mapping)
-		// Skip action, expression, textTemplate, object, icon, image, file — too complex for auto-mapping
+			// Skip action, expression, textTemplate, object, icon, image, file — too complex for auto-mapping
 		}
 	}
 

@@ -8,7 +8,6 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-
 // RenderPlainUnifiedDiff generates a standard unified diff string (no ANSI colors).
 // This format is directly understood by LLMs and tools like patch/git.
 func RenderPlainUnifiedDiff(result *DiffResult, oldTitle, newTitle string) string {

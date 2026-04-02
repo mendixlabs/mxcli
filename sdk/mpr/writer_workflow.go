@@ -134,7 +134,6 @@ func serializeAnnotation(annotation string) bson.D {
 	}
 }
 
-
 // appendActivityBaseFields appends common activity fields to a BSON doc.
 // If annotation is non-empty, it serializes as an object; otherwise null.
 func appendActivityBaseFields(doc bson.D, annotation string) bson.D {

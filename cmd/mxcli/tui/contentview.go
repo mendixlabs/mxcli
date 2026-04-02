@@ -12,11 +12,11 @@ import (
 // ContentView is a scrollable content viewer with line numbers, scrollbar,
 // vim navigation, search, and mouse support.
 type ContentView struct {
-	lines   []string
-	yOffset int
-	width   int
-	height  int
-	gutterW        int
+	lines           []string
+	yOffset         int
+	width           int
+	height          int
+	gutterW         int
 	hideLineNumbers bool
 
 	// Search state

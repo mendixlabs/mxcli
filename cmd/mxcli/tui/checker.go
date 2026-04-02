@@ -33,10 +33,10 @@ type CheckGroup struct {
 
 // CheckGroupItem represents a deduplicated location within a group.
 type CheckGroupItem struct {
-	DocLocation  string // formatted as "Module.DocName (Type)"
-	ElementName  string
-	ElementID    string
-	Count        int // occurrences of the same element-id
+	DocLocation string // formatted as "Module.DocName (Type)"
+	ElementName string
+	ElementID   string
+	Count       int // occurrences of the same element-id
 }
 
 // CheckNavLocation represents a unique document location for error navigation.

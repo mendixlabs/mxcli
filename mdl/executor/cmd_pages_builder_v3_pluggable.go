@@ -82,7 +82,6 @@ func (pb *pageBuilder) cloneActionWithNewID(actionMap bson.D) bson.D {
 	return result
 }
 
-
 // buildWidgetV3ToBSON builds a V3 widget and serializes it directly to BSON.
 func (pb *pageBuilder) buildWidgetV3ToBSON(w *ast.WidgetV3) (bson.D, error) {
 	widget, err := pb.buildWidgetV3(w)

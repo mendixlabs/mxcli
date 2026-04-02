@@ -294,7 +294,7 @@ func runSemanticValidation(text string) []protocol.Diagnostic {
 				},
 				Severity: violationToLSPSeverity(v.Severity),
 				Source:   "mdl-check",
-				Code:    v.RuleID,
+				Code:     v.RuleID,
 				Message:  msg,
 			})
 		}

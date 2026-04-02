@@ -42,10 +42,10 @@ func (e *Executor) showJsonStructures(inModule string) error {
 		}
 		qn := moduleName + "." + js.Name
 		r := row{
-			module:       moduleName,
+			module:        moduleName,
 			qualifiedName: qn,
-			name:         js.Name,
-			elementCount: len(js.Elements),
+			name:          js.Name,
+			elementCount:  len(js.Elements),
 		}
 		if len(moduleName) > modWidth {
 			modWidth = len(moduleName)

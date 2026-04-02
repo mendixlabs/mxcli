@@ -214,8 +214,8 @@ func serializeRestBody(bodyType string) bson.M {
 		}
 	case "FILE":
 		return bson.M{
-			"$ID":   idToBsonBinary(generateUUID()),
-			"$Type": "Rest$StringBody",
+			"$ID":           idToBsonBinary(generateUUID()),
+			"$Type":         "Rest$StringBody",
 			"ValueTemplate": serializeValueTemplate(""),
 		}
 	default:

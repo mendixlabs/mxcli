@@ -17,13 +17,13 @@ import (
 
 // PropertyDef describes a single property from a widget XML definition.
 type PropertyDef struct {
-	Key          string        // e.g. "staticDataSourceCaption"
-	Type         string        // XML type: "attribute", "expression", "textTemplate", "widgets", etc.
+	Key          string // e.g. "staticDataSourceCaption"
+	Type         string // XML type: "attribute", "expression", "textTemplate", "widgets", etc.
 	Caption      string
 	Description  string
-	Category     string        // from enclosing propertyGroup captions, joined with "::"
+	Category     string // from enclosing propertyGroup captions, joined with "::"
 	Required     bool
-	DefaultValue string        // for enumeration/boolean/integer types
+	DefaultValue string // for enumeration/boolean/integer types
 	IsList       bool
 	IsSystem     bool          // true for <systemProperty> elements
 	DataSource   string        // dataSource attribute reference

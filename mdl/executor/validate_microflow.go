@@ -26,7 +26,7 @@ type microflowValidator struct {
 	mfName        string
 	returnType    *ast.MicroflowReturnType // nil = void
 	violations    []linter.Violation
-	loopDepth     int            // Track nesting depth inside loops
+	loopDepth     int             // Track nesting depth inside loops
 	emptyListVars map[string]bool // List variables declared empty and never populated
 }
 

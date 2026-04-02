@@ -24,11 +24,11 @@ type OverlayViewOpts struct {
 	MxcliPath       string
 	ProjectPath     string
 	HideLineNumbers bool
-	Refreshable     bool          // show "r" hint and allow re-triggering via RefreshMsg
-	RefreshMsg      tea.Msg       // message to send when "r" is pressed
-	CheckAnchors    string        // pre-rendered LLM anchor text for check overlays
-	CheckFilter     string        // severity filter: "all", "error", "warning", "deprecation"
-	CheckErrors     []CheckError  // stored errors for re-rendering with different filter
+	Refreshable     bool               // show "r" hint and allow re-triggering via RefreshMsg
+	RefreshMsg      tea.Msg            // message to send when "r" is pressed
+	CheckAnchors    string             // pre-rendered LLM anchor text for check overlays
+	CheckFilter     string             // severity filter: "all", "error", "warning", "deprecation"
+	CheckErrors     []CheckError       // stored errors for re-rendering with different filter
 	CheckNavLocs    []CheckNavLocation // navigable document locations for selection
 }
 
@@ -44,12 +44,12 @@ type OverlayView struct {
 	projectPath  string
 	refreshable  bool
 	refreshMsg   tea.Msg
-	checkAnchors string       // LLM-structured anchor text, replaces generic anchor when set
-	checkFilter  string       // severity filter for check overlays: "all", "error", "warning", "deprecation"
-	checkErrors  []CheckError // stored check errors for re-rendering with different filter
+	checkAnchors string             // LLM-structured anchor text, replaces generic anchor when set
+	checkFilter  string             // severity filter for check overlays: "all", "error", "warning", "deprecation"
+	checkErrors  []CheckError       // stored check errors for re-rendering with different filter
 	checkNavLocs []CheckNavLocation // navigable document locations
-	selectedIdx  int               // cursor index into checkNavLocs (-1 = none)
-	pendingKey   rune              // ']' or '[' waiting for 'e', 0 if none
+	selectedIdx  int                // cursor index into checkNavLocs (-1 = none)
+	pendingKey   rune               // ']' or '[' waiting for 'e', 0 if none
 }
 
 // NewOverlayView creates an OverlayView with the given title, content, dimensions, and options.
@@ -327,4 +327,3 @@ func (ov OverlayView) runMDLReload() tea.Cmd {
 		return overlayContentMsg{Title: title, Content: DetectAndHighlight(out)}
 	}
 }
-

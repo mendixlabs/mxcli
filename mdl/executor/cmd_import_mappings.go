@@ -52,11 +52,11 @@ func (e *Executor) showImportMappings(inModule string) error {
 			src = "(none)"
 		}
 		r := row{
-			module:       moduleName,
+			module:        moduleName,
 			qualifiedName: qn,
-			name:         im.Name,
-			schemaSource: src,
-			elementCount: len(im.Elements),
+			name:          im.Name,
+			schemaSource:  src,
+			elementCount:  len(im.Elements),
 		}
 		if len(moduleName) > modWidth {
 			modWidth = len(moduleName)

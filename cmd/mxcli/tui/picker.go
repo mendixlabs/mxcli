@@ -108,14 +108,14 @@ type PickerDoneMsg struct {
 
 // PickerModel lets the user select from recent projects or type a new path.
 type PickerModel struct {
-	history            []string
-	cursor             int
+	history             []string
+	cursor              int
 	historyScrollOffset int
 
-	input          textinput.Model
-	inputMode      bool
-	pathCandidates []pathCandidate
-	pathCursor     int
+	input            textinput.Model
+	inputMode        bool
+	pathCandidates   []pathCandidate
+	pathCursor       int
 	pathScrollOffset int
 
 	chosen   string

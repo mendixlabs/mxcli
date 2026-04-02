@@ -71,16 +71,16 @@ const (
 
 // Executor executes MDL statements against a Mendix project.
 type Executor struct {
-	writer    *mpr.Writer
-	reader    *mpr.Reader
-	output    io.Writer
-	guard     *outputGuard                       // line-limit wrapper around output
-	mprPath   string
-	settings  map[string]any
-	cache     *executorCache
-	catalog   *catalog.Catalog
-	quiet     bool                               // suppress connection and status messages
-	logger    *diaglog.Logger                    // session diagnostics logger (nil = no logging)
+	writer        *mpr.Writer
+	reader        *mpr.Reader
+	output        io.Writer
+	guard         *outputGuard // line-limit wrapper around output
+	mprPath       string
+	settings      map[string]any
+	cache         *executorCache
+	catalog       *catalog.Catalog
+	quiet         bool                               // suppress connection and status messages
+	logger        *diaglog.Logger                    // session diagnostics logger (nil = no logging)
 	fragments     map[string]*ast.DefineFragmentStmt // script-scoped fragment definitions
 	sqlMgr        *sqllib.Manager                    // external SQL connection manager (lazy init)
 	themeRegistry *ThemeRegistry                     // cached theme design property definitions (lazy init)

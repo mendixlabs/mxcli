@@ -172,4 +172,3 @@ func (al *AgentListener) handleSyncAction(req AgentRequest) (AgentResponse, bool
 	}
 	return AgentResponse{}, false
 }
-

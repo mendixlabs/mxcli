@@ -34,8 +34,8 @@ type FilterState struct {
 	active        bool
 	input         textinput.Model
 	query         string
-	matches       []int // indices into items that match the query
-	historyCursor int   // -1 = editing new query, 0..n = browsing history
+	matches       []int  // indices into items that match the query
+	historyCursor int    // -1 = editing new query, 0..n = browsing history
 	draft         string // user's typed text before browsing history
 }
 
@@ -566,4 +566,3 @@ func (c *Column) deactivateFilter() {
 	c.filter.input.Blur()
 	c.rebuildFiltered()
 }
-

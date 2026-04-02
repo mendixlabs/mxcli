@@ -20,7 +20,7 @@ import (
 var dateTimeRegex = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}`)
 
 // parseDateTime attempts to parse an ISO 8601 datetime string and reformat it
-// to Studio Pro's canonical form: 7 decimal places (100-nanosecond precision), UTC.
+// to Studio Pro's canonical form: 7 decimal places (100-nanosecond precision), local timezone offset.
 // Returns (formatted, true) if recognized, ("", false) otherwise.
 func parseDateTime(s string) (string, bool) {
 	if !dateTimeRegex.MatchString(s) {
@@ -37,10 +37,21 @@ func parseDateTime(s string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	t = t.UTC()
+	t = t.In(time.Local)
 	// Format with exactly 7 decimal places (Studio Pro uses .NET 100-nanosecond ticks)
+	// and the local timezone offset (e.g. +02:00), matching Studio Pro's canonical form.
 	hundredNanos := t.Nanosecond() / 100
-	formatted := t.Format("2006-01-02T15:04:05") + fmt.Sprintf(".%07d", hundredNanos) + "Z"
+	_, offsetSec := t.Zone()
+	sign := "+"
+	if offsetSec < 0 {
+		sign = "-"
+		offsetSec = -offsetSec
+	}
+	offsetHours := offsetSec / 3600
+	offsetMins := (offsetSec % 3600) / 60
+	formatted := t.Format("2006-01-02T15:04:05") +
+		fmt.Sprintf(".%07d", hundredNanos) +
+		fmt.Sprintf("%s%02d:%02d", sign, offsetHours, offsetMins)
 	return `"` + formatted + `"`, true
 }
 

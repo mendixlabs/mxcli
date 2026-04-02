@@ -11,7 +11,7 @@ import (
 type DiffLineType int
 
 const (
-	DiffEqual  DiffLineType = iota
+	DiffEqual DiffLineType = iota
 	DiffInsert
 	DiffDelete
 )

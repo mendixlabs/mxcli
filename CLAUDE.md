@@ -4,9 +4,9 @@ This file provides guidance for Claude Code when working with this repository.
 
 ## Canonical Test Project Path
 
-**ALWAYS use:** `/Users/Dennis.Kho/Sandbox/KhodeClaudeLab-main/KhodeClaudeLab.mpr`
+**ALWAYS use:** `/Users/Dennis.Kho/Sandbox/ClaudeKhodeLab-main/ClaudeKhodeLab.mpr`
 
-A disposable test copy exists at `/tmp/KhodeClaudeLab-test/` — **never use it for `mxcli exec` or write operations**. Before running any `mxcli -p <path> exec` command, verify the path starts with `/Users/Dennis.Kho/Sandbox/KhodeClaudeLab-main/`. If the path points to `/tmp/` or any other copy, stop and correct it first.
+A disposable test copy exists at `/tmp/KhodeClaudeLab-test/` — **never use it for `mxcli exec` or write operations**. Before running any `mxcli -p <path> exec` command, verify the path starts with `/Users/Dennis.Kho/Sandbox/ClaudeKhodeLab-main/`. If the path points to `/tmp/` or any other copy, stop and correct it first.
 
 ## Project Overview
 

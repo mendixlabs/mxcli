@@ -186,18 +186,18 @@ var workflowActivityParsers map[string]func(map[string]any) workflows.WorkflowAc
 
 func init() {
 	workflowActivityParsers = map[string]func(map[string]any) workflows.WorkflowActivity{
-		"Workflows$EndWorkflowActivity":            func(r map[string]any) workflows.WorkflowActivity { return parseEndWorkflowActivity(r) },
-		"Workflows$UserTask":                       func(r map[string]any) workflows.WorkflowActivity { return parseUserTask(r) },
-		"Workflows$SingleUserTaskActivity":         func(r map[string]any) workflows.WorkflowActivity { return parseUserTask(r) },
-		"Workflows$MultiUserTaskActivity":          func(r map[string]any) workflows.WorkflowActivity { return parseMultiUserTask(r) },
-		"Workflows$CallMicroflowTask":              func(r map[string]any) workflows.WorkflowActivity { return parseCallMicroflowTask(r) },
-		"Workflows$CallWorkflowActivity":           func(r map[string]any) workflows.WorkflowActivity { return parseCallWorkflowActivity(r) },
-		"Workflows$ExclusiveSplitActivity":         func(r map[string]any) workflows.WorkflowActivity { return parseExclusiveSplitActivity(r) },
-		"Workflows$ParallelSplitActivity":          func(r map[string]any) workflows.WorkflowActivity { return parseParallelSplitActivity(r) },
-		"Workflows$JumpToActivity":                 func(r map[string]any) workflows.WorkflowActivity { return parseJumpToActivity(r) },
-		"Workflows$WaitForTimerActivity":           func(r map[string]any) workflows.WorkflowActivity { return parseWaitForTimerActivity(r) },
-		"Workflows$WaitForNotificationActivity":    func(r map[string]any) workflows.WorkflowActivity { return parseWaitForNotificationActivity(r) },
-		"Workflows$StartWorkflowActivity":          func(r map[string]any) workflows.WorkflowActivity { return parseStartWorkflowActivity(r) },
+		"Workflows$EndWorkflowActivity":         func(r map[string]any) workflows.WorkflowActivity { return parseEndWorkflowActivity(r) },
+		"Workflows$UserTask":                    func(r map[string]any) workflows.WorkflowActivity { return parseUserTask(r) },
+		"Workflows$SingleUserTaskActivity":      func(r map[string]any) workflows.WorkflowActivity { return parseUserTask(r) },
+		"Workflows$MultiUserTaskActivity":       func(r map[string]any) workflows.WorkflowActivity { return parseMultiUserTask(r) },
+		"Workflows$CallMicroflowTask":           func(r map[string]any) workflows.WorkflowActivity { return parseCallMicroflowTask(r) },
+		"Workflows$CallWorkflowActivity":        func(r map[string]any) workflows.WorkflowActivity { return parseCallWorkflowActivity(r) },
+		"Workflows$ExclusiveSplitActivity":      func(r map[string]any) workflows.WorkflowActivity { return parseExclusiveSplitActivity(r) },
+		"Workflows$ParallelSplitActivity":       func(r map[string]any) workflows.WorkflowActivity { return parseParallelSplitActivity(r) },
+		"Workflows$JumpToActivity":              func(r map[string]any) workflows.WorkflowActivity { return parseJumpToActivity(r) },
+		"Workflows$WaitForTimerActivity":        func(r map[string]any) workflows.WorkflowActivity { return parseWaitForTimerActivity(r) },
+		"Workflows$WaitForNotificationActivity": func(r map[string]any) workflows.WorkflowActivity { return parseWaitForNotificationActivity(r) },
+		"Workflows$StartWorkflowActivity":       func(r map[string]any) workflows.WorkflowActivity { return parseStartWorkflowActivity(r) },
 		"Workflows$EndOfParallelSplitPathActivity": func(r map[string]any) workflows.WorkflowActivity {
 			a := &workflows.EndOfParallelSplitPathActivity{}
 			parseBaseActivity(&a.BaseWorkflowActivity, r)

@@ -866,7 +866,7 @@ func ValidateOQLSyntax(oql string) []linter.Violation {
 				Message: fmt.Sprintf(
 					"invalid association path '%s': association references must use '/' not '.'",
 					wrongPath),
-				Location: linter.Location{DocumentType: "viewentity"},
+				Location:   linter.Location{DocumentType: "viewentity"},
 				Suggestion: fmt.Sprintf("Use '%s' instead", correctPath),
 			})
 		}

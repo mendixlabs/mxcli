@@ -101,6 +101,9 @@ Examples:
 		lint.AddRule(rules.NewWeakPasswordPolicyRule())
 		lint.AddRule(rules.NewDemoUsersActiveRule())
 
+		// MPR008 - requires BSON inspection
+		lint.AddRule(rules.NewOverlappingActivitiesRule())
+
 		// Convention rules (CONV011-CONV014)
 		lint.AddRule(rules.NewNoCommitInLoopRule())
 		lint.AddRule(rules.NewExclusiveSplitCaptionRule())

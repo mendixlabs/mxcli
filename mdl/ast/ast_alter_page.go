@@ -69,8 +69,8 @@ func (s *DropVariableOp) isAlterPageOperation() {}
 
 // SetLayoutOp represents: SET Layout = Module.LayoutName [MAP (Old -> New, ...)]
 type SetLayoutOp struct {
-	NewLayout QualifiedName        // New layout qualified name
-	Mappings  map[string]string    // Old placeholder -> New placeholder (nil = auto-map)
+	NewLayout QualifiedName     // New layout qualified name
+	Mappings  map[string]string // Old placeholder -> New placeholder (nil = auto-map)
 }
 
 func (s *SetLayoutOp) isAlterPageOperation() {}

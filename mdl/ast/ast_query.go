@@ -79,14 +79,14 @@ const (
 	ShowImageCollections      // SHOW IMAGE COLLECTIONS [IN module]
 	ShowRestClients           // SHOW REST CLIENTS [IN module]
 	ShowPublishedRestServices // SHOW PUBLISHED REST SERVICES [IN module]
-	ShowConstantValues       // SHOW CONSTANT VALUES [IN module]
-	ShowContractEntities     // SHOW CONTRACT ENTITIES FROM Module.Service
-	ShowContractActions      // SHOW CONTRACT ACTIONS FROM Module.Service
-	ShowContractChannels     // SHOW CONTRACT CHANNELS FROM Module.Service (AsyncAPI)
-	ShowContractMessages     // SHOW CONTRACT MESSAGES FROM Module.Service (AsyncAPI)
-	ShowJsonStructures       // SHOW JSON STRUCTURES [IN module]
-	ShowImportMappings       // SHOW IMPORT MAPPINGS [IN module]
-	ShowExportMappings       // SHOW EXPORT MAPPINGS [IN module]
+	ShowConstantValues        // SHOW CONSTANT VALUES [IN module]
+	ShowContractEntities      // SHOW CONTRACT ENTITIES FROM Module.Service
+	ShowContractActions       // SHOW CONTRACT ACTIONS FROM Module.Service
+	ShowContractChannels      // SHOW CONTRACT CHANNELS FROM Module.Service (AsyncAPI)
+	ShowContractMessages      // SHOW CONTRACT MESSAGES FROM Module.Service (AsyncAPI)
+	ShowJsonStructures        // SHOW JSON STRUCTURES [IN module]
+	ShowImportMappings        // SHOW IMPORT MAPPINGS [IN module]
+	ShowExportMappings        // SHOW EXPORT MAPPINGS [IN module]
 )
 
 // String returns the human-readable name of the show object type.

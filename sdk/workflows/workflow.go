@@ -117,7 +117,7 @@ type UserTask struct {
 	DueDate         string             `json:"dueDate,omitempty"`         // Due date expression
 	UserTaskEntity  string             `json:"userTaskEntity,omitempty"`  // Qualified name of user task entity
 	OnCreated       string             `json:"onCreated,omitempty"`       // Microflow called on task creation
-	BoundaryEvents  []*BoundaryEvent   `json:"boundaryEvents,omitempty"` // Boundary events (e.g., timers)
+	BoundaryEvents  []*BoundaryEvent   `json:"boundaryEvents,omitempty"`  // Boundary events (e.g., timers)
 }
 
 // ActivityType returns the type name.
@@ -318,8 +318,8 @@ type BoundaryEvent struct {
 	model.BaseElement
 	Caption    string `json:"caption,omitempty"`
 	Flow       *Flow  `json:"flow,omitempty"`       // Activities triggered by the boundary event
-	TimerDelay string `json:"timerDelay,omitempty"`  // Timer delay expression (for timer boundary events)
-	EventType  string `json:"eventType,omitempty"`   // e.g. "InterruptingTimer", "NonInterruptingTimer"
+	TimerDelay string `json:"timerDelay,omitempty"` // Timer delay expression (for timer boundary events)
+	EventType  string `json:"eventType,omitempty"`  // e.g. "InterruptingTimer", "NonInterruptingTimer"
 }
 
 // ============================================================================

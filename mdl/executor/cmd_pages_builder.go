@@ -34,9 +34,9 @@ type pageBuilder struct {
 	themeRegistry    *ThemeRegistry                     // Theme design property definitions (may be nil)
 
 	// Pluggable widget engine (lazily initialized)
-	widgetRegistry      *WidgetRegistry
-	pluggableEngine     *PluggableWidgetEngine
-	pluggableEngineErr  error // stores init failure reason for better error messages
+	widgetRegistry     *WidgetRegistry
+	pluggableEngine    *PluggableWidgetEngine
+	pluggableEngineErr error // stores init failure reason for better error messages
 
 	// Per-operation caches (may change during execution)
 	layoutsCache    []*pages.Layout

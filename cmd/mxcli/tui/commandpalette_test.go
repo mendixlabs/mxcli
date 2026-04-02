@@ -31,7 +31,7 @@ func TestCommandPalette_FuzzyFilter(t *testing.T) {
 
 	tests := []struct {
 		query    string
-		wantMin  int // minimum expected matches
+		wantMin  int    // minimum expected matches
 		wantName string // at least one match should contain this
 	}{
 		{"bson", 1, "BSON Dump"},

@@ -42,7 +42,6 @@ type PreviewPane struct {
 	mode         PreviewMode
 	loading      bool
 	scrollOffset int
-
 }
 
 // navEntry stores one level of the navigation stack for drill-in / go-back.
@@ -503,8 +502,8 @@ func (m MillerView) renderPreview(previewWidth int) string {
 
 		// Wrap all source lines into visual lines
 		type visualLine struct {
-			text       string
-			lineNo     int  // original line number (0 = continuation)
+			text   string
+			lineNo int // original line number (0 = continuation)
 		}
 		var vlines []visualLine
 		for i, line := range srcLines {
@@ -633,7 +632,7 @@ func (m MillerView) columnWidths() (int, int, int) {
 type mouseZone int
 
 const (
-	zoneParent  mouseZone = iota
+	zoneParent mouseZone = iota
 	zoneCurrent
 	zonePreview
 )

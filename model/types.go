@@ -644,18 +644,18 @@ type RestAuthentication struct {
 
 // RestClientOperation represents a single operation in a consumed REST service.
 type RestClientOperation struct {
-	Name             string                `json:"name"`
-	Documentation    string                `json:"documentation,omitempty"`
-	HttpMethod       string                `json:"httpMethod"`       // "GET", "POST", etc.
-	Path             string                `json:"path"`             // e.g. "/pet/{petId}"
+	Name             string                 `json:"name"`
+	Documentation    string                 `json:"documentation,omitempty"`
+	HttpMethod       string                 `json:"httpMethod"`                // "GET", "POST", etc.
+	Path             string                 `json:"path"`                      // e.g. "/pet/{petId}"
 	Parameters       []*RestClientParameter `json:"parameters,omitempty"`      // path parameters
 	QueryParameters  []*RestClientParameter `json:"queryParameters,omitempty"` // query parameters
 	Headers          []*RestClientHeader    `json:"headers,omitempty"`
-	BodyType         string                `json:"bodyType,omitempty"`     // "JSON", "FILE", ""
-	BodyVariable     string                `json:"bodyVariable,omitempty"` // variable name
-	ResponseType     string                `json:"responseType"`           // "JSON", "STRING", "FILE", "STATUS", "NONE"
-	ResponseVariable string                `json:"responseVariable,omitempty"`
-	Timeout          int                   `json:"timeout,omitempty"` // 0 = default (300s)
+	BodyType         string                 `json:"bodyType,omitempty"`     // "JSON", "FILE", ""
+	BodyVariable     string                 `json:"bodyVariable,omitempty"` // variable name
+	ResponseType     string                 `json:"responseType"`           // "JSON", "STRING", "FILE", "STATUS", "NONE"
+	ResponseVariable string                 `json:"responseVariable,omitempty"`
+	Timeout          int                    `json:"timeout,omitempty"` // 0 = default (300s)
 }
 
 // RestClientParameter represents a path or query parameter.
@@ -801,12 +801,12 @@ type DistributionSettings struct {
 // JsonStructure represents a JsonStructures$JsonStructure document.
 type JsonStructure struct {
 	BaseElement
-	ContainerID   ID           `json:"containerId"`
-	Name          string       `json:"name"`
-	Documentation string       `json:"documentation,omitempty"`
-	Excluded      bool         `json:"excluded,omitempty"`
-	ExportLevel   string       `json:"exportLevel,omitempty"`
-	JsonSnippet   string       `json:"jsonSnippet,omitempty"`
+	ContainerID   ID             `json:"containerId"`
+	Name          string         `json:"name"`
+	Documentation string         `json:"documentation,omitempty"`
+	Excluded      bool           `json:"excluded,omitempty"`
+	ExportLevel   string         `json:"exportLevel,omitempty"`
+	JsonSnippet   string         `json:"jsonSnippet,omitempty"`
 	Elements      []*JsonElement `json:"elements,omitempty"`
 }
 
@@ -842,11 +842,11 @@ type JsonElement struct {
 // ImportMapping represents an ImportMappings$ImportMapping document.
 type ImportMapping struct {
 	BaseElement
-	ContainerID   ID                    `json:"containerId"`
-	Name          string                `json:"name"`
-	Documentation string                `json:"documentation,omitempty"`
-	Excluded      bool                  `json:"excluded,omitempty"`
-	ExportLevel   string                `json:"exportLevel,omitempty"`
+	ContainerID   ID     `json:"containerId"`
+	Name          string `json:"name"`
+	Documentation string `json:"documentation,omitempty"`
+	Excluded      bool   `json:"excluded,omitempty"`
+	ExportLevel   string `json:"exportLevel,omitempty"`
 	// Schema source (at most one is set)
 	JsonStructure     string `json:"jsonStructure,omitempty"`     // qualified name
 	XmlSchema         string `json:"xmlSchema,omitempty"`         // qualified name
@@ -887,17 +887,17 @@ type ImportMappingElement struct {
 // ExportMapping represents an ExportMappings$ExportMapping document.
 type ExportMapping struct {
 	BaseElement
-	ContainerID   ID                     `json:"containerId"`
-	Name          string                 `json:"name"`
-	Documentation string                 `json:"documentation,omitempty"`
-	Excluded      bool                   `json:"excluded,omitempty"`
-	ExportLevel   string                 `json:"exportLevel,omitempty"`
+	ContainerID   ID     `json:"containerId"`
+	Name          string `json:"name"`
+	Documentation string `json:"documentation,omitempty"`
+	Excluded      bool   `json:"excluded,omitempty"`
+	ExportLevel   string `json:"exportLevel,omitempty"`
 	// Schema source (at most one is set)
 	JsonStructure     string `json:"jsonStructure,omitempty"`     // qualified name
 	XmlSchema         string `json:"xmlSchema,omitempty"`         // qualified name
 	MessageDefinition string `json:"messageDefinition,omitempty"` // qualified name
 	// NullValueOption controls how null values are serialized: "LeaveOutElement" or "SendAsNil"
-	NullValueOption string                 `json:"nullValueOption,omitempty"`
+	NullValueOption string                  `json:"nullValueOption,omitempty"`
 	Elements        []*ExportMappingElement `json:"elements,omitempty"`
 }
 
@@ -955,4 +955,3 @@ func (u *UnknownElement) GetCaption() string { return u.Caption }
 
 // ActivityType returns the type name (satisfies workflows.WorkflowActivity).
 func (u *UnknownElement) ActivityType() string { return u.TypeName }
-

@@ -11,12 +11,12 @@ import (
 
 // AsyncAPIDocument represents a parsed AsyncAPI 2.x document.
 type AsyncAPIDocument struct {
-	Version  string              // AsyncAPI version (e.g. "2.2.0")
-	Title    string              // Service title
-	DocVersion string            // Document version
+	Version     string // AsyncAPI version (e.g. "2.2.0")
+	Title       string // Service title
+	DocVersion  string // Document version
 	Description string
-	Channels []*AsyncAPIChannel  // Resolved channels
-	Messages []*AsyncAPIMessage  // Resolved messages (from components)
+	Channels    []*AsyncAPIChannel // Resolved channels
+	Messages    []*AsyncAPIMessage // Resolved messages (from components)
 }
 
 // AsyncAPIChannel represents a channel in the AsyncAPI document.
@@ -55,9 +55,9 @@ func ParseAsyncAPI(yamlStr string) (*AsyncAPIDocument, error) {
 	}
 
 	doc := &AsyncAPIDocument{
-		Version:    raw.AsyncAPI,
-		Title:      raw.Info.Title,
-		DocVersion: raw.Info.Version,
+		Version:     raw.AsyncAPI,
+		Title:       raw.Info.Title,
+		DocVersion:  raw.Info.Version,
 		Description: raw.Info.Description,
 	}
 
@@ -154,10 +154,10 @@ func resolveSchemaProperties(schema yamlSchema) []*AsyncAPIProperty {
 // ============================================================================
 
 type yamlAsyncAPI struct {
-	AsyncAPI   string                  `yaml:"asyncapi"`
-	Info       yamlInfo                `yaml:"info"`
-	Channels   map[string]yamlChannel  `yaml:"channels"`
-	Components yamlComponents          `yaml:"components"`
+	AsyncAPI   string                 `yaml:"asyncapi"`
+	Info       yamlInfo               `yaml:"info"`
+	Channels   map[string]yamlChannel `yaml:"channels"`
+	Components yamlComponents         `yaml:"components"`
 }
 
 type yamlInfo struct {
@@ -172,8 +172,8 @@ type yamlChannel struct {
 }
 
 type yamlOperation struct {
-	OperationID string    `yaml:"operationId"`
-	Message     yamlRef   `yaml:"message"`
+	OperationID string  `yaml:"operationId"`
+	Message     yamlRef `yaml:"message"`
 }
 
 type yamlRef struct {
@@ -186,16 +186,16 @@ type yamlComponents struct {
 }
 
 type yamlMessage struct {
-	Name        string    `yaml:"name"`
-	Title       string    `yaml:"title"`
-	Description string    `yaml:"description"`
-	ContentType string    `yaml:"contentType"`
+	Name        string     `yaml:"name"`
+	Title       string     `yaml:"title"`
+	Description string     `yaml:"description"`
+	ContentType string     `yaml:"contentType"`
 	Payload     yamlSchema `yaml:"payload"`
 }
 
 type yamlSchema struct {
-	Ref        string                    `yaml:"$ref"`
-	Type       string                    `yaml:"type"`
+	Ref        string                        `yaml:"$ref"`
+	Type       string                        `yaml:"type"`
 	Properties map[string]yamlSchemaProperty `yaml:"properties"`
 }
 

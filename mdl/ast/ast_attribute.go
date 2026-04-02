@@ -8,19 +8,19 @@ package ast
 
 // Attribute represents an entity attribute definition.
 type Attribute struct {
-	Name          string
-	Type          DataType
-	NotNull       bool
-	NotNullError  string // Custom error message for NOT NULL
-	Unique        bool
-	UniqueError   string // Custom error message for UNIQUE
-	HasDefault    bool
-	DefaultValue  any // string, int64, float64, bool, or QualifiedName for enums
+	Name                string
+	Type                DataType
+	NotNull             bool
+	NotNullError        string // Custom error message for NOT NULL
+	Unique              bool
+	UniqueError         string // Custom error message for UNIQUE
+	HasDefault          bool
+	DefaultValue        any            // string, int64, float64, bool, or QualifiedName for enums
 	Calculated          bool           // attribute is calculated (not stored)
 	CalculatedMicroflow *QualifiedName // microflow that computes the calculated value
-	Comment       string
-	Documentation string
-	RenamedFrom   string // @RenamedFrom annotation value
+	Comment             string
+	Documentation       string
+	RenamedFrom         string // @RenamedFrom annotation value
 }
 
 // ============================================================================
