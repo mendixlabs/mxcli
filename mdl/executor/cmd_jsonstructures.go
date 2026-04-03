@@ -6,6 +6,7 @@ package executor
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -98,15 +99,20 @@ func (e *Executor) describeJsonStructure(name ast.QualifiedName) error {
 	// Detect custom name mappings by comparing ExposedName to auto-generated names
 	customMappings := collectCustomNameMappings(js.Elements)
 	if len(customMappings) > 0 {
+		// Sort keys for deterministic DESCRIBE output
+		keys := make([]string, 0, len(customMappings))
+		for k := range customMappings {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
 		fmt.Fprintf(e.output, "\n  CUSTOM NAME MAP (\n")
-		i := 0
-		for jsonKey, customName := range customMappings {
+		for i, jsonKey := range keys {
 			sep := ","
-			if i == len(customMappings)-1 {
+			if i == len(keys)-1 {
 				sep = ""
 			}
-			fmt.Fprintf(e.output, "    '%s' AS '%s'%s\n", jsonKey, customName, sep)
-			i++
+			fmt.Fprintf(e.output, "    '%s' AS '%s'%s\n", jsonKey, customMappings[jsonKey], sep)
 		}
 		fmt.Fprintf(e.output, "  )")
 	}

@@ -103,6 +103,9 @@ func serializeJsonStructure(js *JsonStructure) ([]byte, error) {
 	return bson.Marshal(doc)
 }
 
+// serializeJsonElement serializes a single JsonElement to BSON.
+// Note: JsonStructures$JsonElement uses int32 for numeric properties (MinOccurs, MaxOccurs, etc.),
+// unlike most other Mendix document types which use int64. Verified against Studio Pro-generated BSON.
 func serializeJsonElement(elem *JsonElement) bson.D {
 	children := bson.A{int32(2)}
 	for _, child := range elem.Children {
@@ -245,16 +248,23 @@ func (b *snippetBuilder) buildElementFromRawObject(exposedName, path, rawJSON st
 
 	// Decode with key order preserved
 	dec := json.NewDecoder(strings.NewReader(rawJSON))
-	dec.Token() // opening {
+	if _, err := dec.Token(); err != nil { // opening {
+		return elem
+	}
 	for dec.More() {
-		tok, _ := dec.Token()
+		tok, err := dec.Token()
+		if err != nil {
+			break
+		}
 		key, ok := tok.(string)
 		if !ok {
 			continue
 		}
 		// Capture the raw value to pass down for nested objects/arrays
 		var rawVal json.RawMessage
-		dec.Decode(&rawVal)
+		if err := dec.Decode(&rawVal); err != nil {
+			break
+		}
 
 		childName := childTracker.uniqueName(b.resolveExposedName(key))
 		childPath := path + "|" + key
