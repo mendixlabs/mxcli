@@ -238,6 +238,38 @@ type FilterOperation struct {
 
 func (FilterOperation) isListOperation() {}
 
+// FindByAttributeOperation finds an element by attribute or association value.
+type FindByAttributeOperation struct {
+	model.BaseElement
+	ListVariable string `json:"listVariable"`
+	Attribute    string `json:"attribute,omitempty"`
+	Association  string `json:"association,omitempty"`
+	Expression   string `json:"expression"`
+}
+
+func (FindByAttributeOperation) isListOperation() {}
+
+// FilterByAttributeOperation filters a list by attribute or association value.
+type FilterByAttributeOperation struct {
+	model.BaseElement
+	ListVariable string `json:"listVariable"`
+	Attribute    string `json:"attribute,omitempty"`
+	Association  string `json:"association,omitempty"`
+	Expression   string `json:"expression"`
+}
+
+func (FilterByAttributeOperation) isListOperation() {}
+
+// RangeOperation takes a range slice from a list.
+type RangeOperation struct {
+	model.BaseElement
+	ListVariable     string `json:"listVariable"`
+	OffsetExpression string `json:"offsetExpression"`
+	LimitExpression  string `json:"limitExpression"`
+}
+
+func (RangeOperation) isListOperation() {}
+
 // SortOperation sorts a list.
 type SortOperation struct {
 	model.BaseElement

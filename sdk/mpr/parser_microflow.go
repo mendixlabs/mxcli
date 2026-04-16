@@ -993,6 +993,34 @@ func parseListOperation(raw map[string]any) microflows.ListOperation {
 			ListVariable1: listVar,
 			ListVariable2: extractString(raw["SecondListOrObjectName"]),
 		}
+	case "Microflows$Find":
+		return &microflows.FindByAttributeOperation{
+			BaseElement:  model.BaseElement{ID: id},
+			ListVariable: listVar,
+			Attribute:    extractString(raw["Attribute"]),
+			Association:  extractString(raw["Association"]),
+			Expression:   extractString(raw["Expression"]),
+		}
+	case "Microflows$Filter":
+		return &microflows.FilterByAttributeOperation{
+			BaseElement:  model.BaseElement{ID: id},
+			ListVariable: listVar,
+			Attribute:    extractString(raw["Attribute"]),
+			Association:  extractString(raw["Association"]),
+			Expression:   extractString(raw["Expression"]),
+		}
+	case "Microflows$ListRange":
+		offset, limit := "", ""
+		if cr, ok := raw["CustomRange"].(map[string]any); ok {
+			offset = extractString(cr["OffsetExpression"])
+			limit = extractString(cr["LimitExpression"])
+		}
+		return &microflows.RangeOperation{
+			BaseElement:      model.BaseElement{ID: id},
+			ListVariable:     listVar,
+			OffsetExpression: offset,
+			LimitExpression:  limit,
+		}
 	default:
 		return nil
 	}

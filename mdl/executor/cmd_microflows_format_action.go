@@ -753,6 +753,24 @@ func (e *Executor) formatListOperation(op microflows.ListOperation, outputVar st
 		return fmt.Sprintf("$%s = CONTAINS($%s, $%s);", outputVar, o.ListVariable, o.ObjectVariable)
 	case *microflows.EqualsOperation:
 		return fmt.Sprintf("$%s = EQUALS($%s, $%s);", outputVar, o.ListVariable1, o.ListVariable2)
+	case *microflows.FindByAttributeOperation:
+		ref := o.Attribute
+		if ref == "" {
+			ref = o.Association
+		}
+		parts := strings.Split(ref, ".")
+		fieldName := parts[len(parts)-1]
+		return fmt.Sprintf("$%s = FIND($%s, $currentObject/%s = %s);", outputVar, o.ListVariable, fieldName, o.Expression)
+	case *microflows.FilterByAttributeOperation:
+		ref := o.Attribute
+		if ref == "" {
+			ref = o.Association
+		}
+		parts := strings.Split(ref, ".")
+		fieldName := parts[len(parts)-1]
+		return fmt.Sprintf("$%s = FILTER($%s, $currentObject/%s = %s);", outputVar, o.ListVariable, fieldName, o.Expression)
+	case *microflows.RangeOperation:
+		return fmt.Sprintf("$%s = RANGE($%s, %s, %s);", outputVar, o.ListVariable, o.OffsetExpression, o.LimitExpression)
 	default:
 		return fmt.Sprintf("$%s = LIST OPERATION %T;", outputVar, op)
 	}

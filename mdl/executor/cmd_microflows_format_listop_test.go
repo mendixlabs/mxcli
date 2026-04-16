@@ -104,3 +104,51 @@ func TestFormatListOperation_Nil(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestFormatListOperation_FindByAttribute(t *testing.T) {
+	e := newTestExecutor()
+	got := e.formatListOperation(&microflows.FindByAttributeOperation{
+		ListVariable: "Orders",
+		Attribute:    "MyModule.Order.Status",
+		Expression:   "'Active'",
+	}, "Found")
+	if got != "$Found = FIND($Orders, $currentObject/Status = 'Active');" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestFormatListOperation_FindByAssociation(t *testing.T) {
+	e := newTestExecutor()
+	got := e.formatListOperation(&microflows.FindByAttributeOperation{
+		ListVariable: "Orders",
+		Association:  "MyModule.Order_Customer",
+		Expression:   "$Customer",
+	}, "Found")
+	if got != "$Found = FIND($Orders, $currentObject/Order_Customer = $Customer);" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestFormatListOperation_FilterByAttribute(t *testing.T) {
+	e := newTestExecutor()
+	got := e.formatListOperation(&microflows.FilterByAttributeOperation{
+		ListVariable: "Orders",
+		Attribute:    "MyModule.Order.IsActive",
+		Expression:   "true",
+	}, "Filtered")
+	if got != "$Filtered = FILTER($Orders, $currentObject/IsActive = true);" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestFormatListOperation_Range(t *testing.T) {
+	e := newTestExecutor()
+	got := e.formatListOperation(&microflows.RangeOperation{
+		ListVariable:     "Orders",
+		OffsetExpression: "0",
+		LimitExpression:  "10",
+	}, "Page")
+	if got != "$Page = RANGE($Orders, 0, 10);" {
+		t.Errorf("got %q", got)
+	}
+}
