@@ -14,7 +14,7 @@ Mendix 11.9 introduces **Agents** as a first-class concept for building agentic 
 | **AgentCommons** | Agent management: versioned agents, tools, knowledge bases, MCP, test cases |
 | **AgentEditorCommons** | Bridge between Studio Pro Agent Editor extension and AgentCommons runtime entities |
 | **MCPClient** | Model Context Protocol client: server connections, tool/prompt discovery, execution |
-| **ConversationalUI** | Chat widgets, message rendering, tool approval UI, trace monitoring, token dashboards |
+| **ConversationalUI** | Chat widgets, message rendering, tool approval UI, trace monitoring, token & observability dashboards |
 
 Currently, `mxcli` has no visibility into agent documents. `SHOW STRUCTURE` reports the Agents module as empty because it only contains `CustomBlobDocument` units, which are not parsed. An AI coding agent cannot discover, inspect, or create agents via MDL.
 
@@ -48,7 +48,7 @@ Key observations about the wrapper:
 - `CustomDocumentType` is the discriminator for the inner JSON schema
 - `Contents` is a JSON string (not nested BSON) — the agent editor extension owns the inner schema
 - `Metadata.ReadableTypeName` is a human-friendly label (also used as the UI badge in Studio Pro)
-- `Excluded` is `false` for documents created in the new Agent Editor extension; observed as `true` on the 4 older agents in the project (likely pre-release format)
+- `Excluded` is `false` by default; can be changed to `true` by the user. Then the document cannot be used by other app logic and no errors will be shown for this document.
 
 ### MODEL — `Contents` JSON schema
 
@@ -56,7 +56,7 @@ Observed in `Agents.MyFirstModel`:
 
 ```json
 {
-  "type": "",
+  "type": "Text generation",
   "name": "",
   "displayName": "",
   "provider": "MxCloudGenAI",
@@ -76,7 +76,7 @@ Observed in `Agents.MyFirstModel`:
 
 - `provider` is a top-level discriminator — `"MxCloudGenAI"` is the only observed value. `providerFields` shape depends on `provider`.
 - `providerFields.key` references a **String constant** (holding the Mendix Cloud GenAI Portal key) by `{documentId, qualifiedName}`.
-- `type`, `name`, `displayName`, `environment`, `deepLinkURL`, `keyId`, `keyName`, `resourceName` are all empty in the sample — they're **Portal-populated** when the user clicks **Test Key** in Studio Pro, not user-set fields.
+- `type`, `name`, `displayName`, `environment`, `deepLinkURL`, `keyId`, `keyName`, `resourceName` are all empty in the sample — they values are decoded from the key the user selects as a string constant. After decoding the key, a call to the backend might update the reference to the exact model if that was changed in the Mendix Cloud GenAI portal. This check can also be triggered by the user when clicking **Test Key** in Studio Pro.
 
 ### KNOWLEDGE BASE — `Contents` JSON schema
 
@@ -94,14 +94,14 @@ Observed in `Agents.Knowledge_base`:
     "modelDisplayName": "",
     "modelName": "",
     "key": {
-      "documentId": "51b85be5-f040-4562-bf4c-086347d387a9",
-      "qualifiedName": "Agents.LLMKey"
+      "documentId": "51b85be5-f040-4562-bf4c-086347d38712",
+      "qualifiedName": "Agents.KnowledbaseKey"
     }
   }
 }
 ```
 
-Same shape as Model, but `providerFields` includes embedding-model info (`modelDisplayName`, `modelName`) instead of `resourceName`. The `key` reference points to the same String constant.
+Same shape as Model, but `providerFields` includes embedding-model info (`modelDisplayName`, `modelName`) instead of `resourceName`. The `key` reference points to a String constant with a knowledge base key generated in the Mendix Cloud GenAI portal.
 
 ### CONSUMED MCP SERVICE — `Contents` JSON schema
 
@@ -112,13 +112,22 @@ Observed in `Agents.Consumed_MCP_service`:
   "protocolVersion": "v2025_03_26",
   "documentation": " fqwef qwec qwefc",
   "version": "0.0.1",
-  "connectionTimeoutSeconds": 30
+  "connectionTimeoutSeconds": 30,
+  "endpoint" : {
+    "documentId": "51b85be5-f040-4562-bf4c-086347d38734",
+    "qualifiedName": "Agents.MCPEndpoint"
+  },
+  "authenticationMicroflow" : {
+    "documentId": "51b85be5-f040-4562-bf4c-086347d387ab",
+    "qualifiedName": "Agents.AuthenticationMicroflow"
+  }
 }
 ```
 
-Notably **absent**: no endpoint URL and no credentials microflow reference. Those are presumably configured at runtime via the `MCPClient.ConsumedMCPService` entity (see the `Agents.MCP_Server_Endpoint` String constant in the same project — used by a runtime microflow, not embedded in the document). This matches real-world deployment: endpoints typically differ across dev/staging/prod.
+Endpoint is a reference to a string constant with the MCP endpoint. If the server requried authentication those can be created in an authentication microflow which the user can optionally select. An authentication microflow cannot have input parameters and needs to return a list of `System.Header`.
+For MCP tool discovery inside Studio Pro, user can add headers in the UI. Those will not be persisted, nor transferred into the authentication microflow to be used at runtime.
 
-Enum values for `protocolVersion`: `"v2024_11_05"` or `"v2025_03_26"`.
+Enum values for `protocolVersion`: `"v2024_11_05"` or `"v2025_03_26"`. Use `v2025_03_26` for newer MCP servers that support streamable http transport, `v2024_11_05` for servers that only support SSE transport.
 
 ### AGENT — `Contents` JSON schema
 
@@ -138,6 +147,10 @@ Simple agent (observed in `AgentEditorCommons.TranslationAgent`):
   "entity": {
     "documentId": "83d81a7b-4a84-416e-a64f-0ffa981c8408",
     "qualifiedName": "System.Language"
+  },
+  "model": {
+    "documentId": "3addaaa1-8bd3-4654-8cc9-2c886d0a01e9",
+    "qualifiedName": "Agents.MyFirstModel"
   }
 }
 ```
@@ -162,6 +175,17 @@ Fully-populated agent (observed in `Agents.Agent007`):
         "qualifiedName": "Agents.Consumed_MCP_service",
         "documentId": "47c9987a-e922-44eb-a389-e641f325ce15"
       }
+    },
+    {
+      "id": "044bc8c2-8ca6-4166-b8f0-9d2245aba8c7",
+      "name": "GetBankHolidays",
+      "description": "Gets bank holidays",
+      "enabled": true,
+      "toolType": "Microlfow",
+      "document": {
+        "qualifiedName": "Agents.GetBankHolidays",
+        "documentId": "47c9987a-e922-44eb-a389-e641f325ce18"
+      }
     }
   ],
   "knowledgebaseTools": [
@@ -176,7 +200,8 @@ Fully-populated agent (observed in `Agents.Agent007`):
         "documentId": "cccc0b5b-7600-47a9-8f6e-5761ce2fc620"
       },
       "collectionIdentifier": "agent1-collection",
-      "maxResults": 3
+      "maxResults": 3,
+      "minSimilarity": 0.5
     }
   ],
   "model": {
@@ -184,18 +209,22 @@ Fully-populated agent (observed in `Agents.Agent007`):
     "qualifiedName": "Agents.MyFirstModel"
   },
   "maxTokens": 16384,
-  "toolChoice": "Auto"
+  "temperature": 0.5,
+  "topP": 1.0,
+  "toolChoice": "Tool",
+  "toolChoiceToolName": "GetBankHolidays"
 }
 ```
 
 Agent schema observations:
-- **`model`**: Reference to a Model document by `{documentId, qualifiedName}`. Optional in the older samples (model set at runtime); present on new Agent Editor agents.
-- **`tools[]`**: Array of tool references. Each entry has a UUID `id`, name, description, `enabled` boolean, and a `toolType` discriminator. Observed `toolType` values: `"MCP"` (a whole MCP service attached as tools). A microflow-tool sample is still missing — likely `"Microflow"` with a `microflow` reference instead of `document`.
-- **`knowledgebaseTools[]`**: Array of KB references. Same base fields plus `collectionIdentifier` and `maxResults`. No `minSimilarity` observed in current schema.
-- **`variables[]`**: Empty in `Agent007`; populated in older samples with `{key, isAttributeInEntity}`.
+- **`model`**: Reference to a Model document by `{documentId, qualifiedName}`.
+- **`tools[]`**: Optional. Array of tool references. Each entry has a UUID `id`, unique `name`, `description`, `enabled` boolean, and a `toolType` discriminator. Observed `toolType` values: `"MCP"` (a whole MCP service attached as tools) or a microflow-tool `"Microflow"` where `document` referencces a microflow document. Tool microflows need to return a String and can only have primitive types and GenAICommons.Request or GenAICommons.Tool objects as input parameters.
+- **`knowledgebaseTools[]`**: Optional. Array of KB references. Same base fields plus `collectionIdentifier`, `maxResults` and `minSimilarity`. ToolType is irrelevant for knowledgebaseTools. MaxResults needs to be a positive integer, minSimilarity is a decimal between 0 and 1.
+- **`variables[]`**: Should be left empty this will be automatically populated by the extension based on the detected variables in the user or system prompt.
 - **`entity`**: Optional. Present on older agents with `isAttributeInEntity: true` variables; absent on `Agent007`.
-- **`maxTokens`**, **`toolChoice`**: Agent-level inference parameters. Enum values for `toolChoice` observed: `"Auto"` (capitalized, not the lowercase `auto` used by `GenAICommons.ENUM_ToolChoice` at runtime). Other likely values: `"None"`, `"Any"`, `"Tool"`.
-- **`temperature`**, **`topP`**: Not observed in any sample — omitted when not set.
+- **`maxTokens`**: Optional. Can be set by the user to restrict the number of tokens to consume in one agent call.
+- **`toolChoice`**: Optional. Agent-level inference parameters. Enum values for `toolChoice` observed: `"Auto"` (capitalized, not the lowercase `auto` used by `GenAICommons.ENUM_ToolChoice` at runtime). Other values: `"None"`, `"Any"`, `"Tool"`. If tool choice is set to `Tool`, then also the `toolChoiceToolName` needs to be set by the unique name referencing one tool in `tools[]`. Only tools where `toolType` = "Microflow" can become tool choice.
+- **`temperature`**, **`topP`**: Optional. Can be set by the user to influence the randomness of the response.
 - **No `UserAccessApproval`/`Access` field** on tools. That's a runtime-only concern (set on `AgentCommons.Tool` entity, not the document). **This is a correction to earlier versions of this proposal.**
 
 ### Observed documents in test3 project
