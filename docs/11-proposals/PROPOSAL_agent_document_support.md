@@ -596,7 +596,7 @@ In `sdk/mpr/writer_customblob.go` (generic wrapper for all four types):
 - Set `Excluded = false`, `ExportLevel = "Hidden"` (matches the new Agent Editor defaults)
 - Generate stable UUIDs for `$ID` and `Metadata.$ID`
 - For `Agent`: generate UUIDs for `id` field on each `tools[]` and `knowledgebaseTools[]` entry
-- For `Model` / `KnowledgeBase`: resolve the `Key` constant reference to `{documentId, qualifiedName}` by looking up the String constant in the reader
+- For `Model` / `KnowledgeBase` / `ConsumedMCPService`: resolve the `Key` or `Endpoint` constant reference to `{documentId, qualifiedName}` by looking up the String constant in the reader
 
 #### 2.2 Add Grammar/AST/Visitor/Executor for CREATE/DROP
 
@@ -645,7 +645,7 @@ Full agent support requires MDL coverage of related `CustomBlobDocument` types a
 
 #### 4.1 `CREATE MODEL` Document
 
-Models are peer `CustomBlobDocument`s that reference a Mendix Cloud GenAI Portal key stored in a **String constant**. The minimum input from the user is the provider and the constant reference — Portal metadata (`displayName`, `keyId`, `keyName`, `environment`, `resourceName`, etc.) is filled by Studio Pro when the user clicks **Test Key** and shouldn't be user-set in MDL.
+Models are peer `CustomBlobDocument`s that reference a Mendix Cloud GenAI Portal key stored in a **String constant**. The minimum input from the user is the provider and the constant reference — Portal metadata (`displayName`, `keyId`, `keyName`, `environment`, `resourceName`, etc.) is filled by Studio Pro when a constant with a valid key value is selected.
 
 Matches the observed BSON for `Agents.MyFirstModel`:
 
@@ -687,12 +687,12 @@ At runtime, `AgentEditorCommons.ASU_AgentEditor` reads the constant and creates 
 
 #### 4.2 `CREATE KNOWLEDGE BASE` Document
 
-Same shape as Model, but `providerFields` carries embedding-model info instead of model-resource info. User-settable fields are just `Provider` and `Key`:
+Same shape as Model, but `providerFields` carries besides information about the knowledgebase also a refrence to an embedding-model. User-settable fields are just `Provider` and `Key`:
 
 ```sql
 CREATE KNOWLEDGE BASE Agents."Knowledge_base" (
   Provider: MxCloudGenAI,
-  Key: Agents.LLMKey
+  Key: Agents.KBKey
 );
 ```
 
@@ -701,13 +701,14 @@ CREATE KNOWLEDGE BASE Agents."Knowledge_base" (
 ```sql
 CREATE KNOWLEDGE BASE Agents."Knowledge_base" (
   Provider: MxCloudGenAI,
-  Key: Agents.LLMKey,
+  Key: Agents.KBKey,
   ModelDisplayName: 'text-embedding-3-large',   -- Portal-populated
   ModelName: 'text-embedding-3-large'           -- Portal-populated
 );
 ```
 
 Referenced from agents via `KNOWLEDGE BASE <Name> { Source: <QualifiedName>, ... }` blocks inside the agent body.
+At runtime, `AgentEditorCommons.ASU_AgentEditor` reads the constant and creates the corresponding `GenAICommons.ConsumedKnowledgeBase`.
 
 **JSON output shape:**
 ```json
@@ -724,18 +725,21 @@ Referenced from agents via `KNOWLEDGE BASE <Name> { Source: <QualifiedName>, ...
 
 #### 4.3 `CREATE CONSUMED MCP SERVICE` Document
 
-Matches the observed BSON for `Agents.Consumed_MCP_service`. Endpoint and credentials are **not** part of the document — they're runtime configuration on the `MCPClient.ConsumedMCPService` entity. The document only carries protocol version, app-level version, timeout, and documentation.
+Matches the observed BSON for `Agents.Consumed_MCP_service`. The document carries protocol version, app-level version, timeout, documentation, and an endpoint constant reference. It can also carry an optional authentication microflow reference.
 
 ```sql
 CREATE CONSUMED MCP SERVICE Agents."Consumed_MCP_service" (
   ProtocolVersion: v2025_03_26,
   Version: '0.0.1',
   ConnectionTimeoutSeconds: 30,
+  Endpoint: Agents.MCPEndpoint,
+  AuthenticationMicroflow: Agents.AuthenticationMicroflow,
   Documentation: 'Description of what this MCP service provides'
 );
 ```
 
 Referenced from agents via `MCP SERVICE <QualifiedName> { ... }` blocks inside the agent body.
+At runtime, `AgentEditorCommons.ASU_AgentEditor` reads the constant and creates the corresponding `MCPClient.ConsumedMCPService`.
 
 **JSON output shape:**
 ```json
@@ -743,7 +747,15 @@ Referenced from agents via `MCP SERVICE <QualifiedName> { ... }` blocks inside t
   "protocolVersion": "v2025_03_26",
   "documentation": "Description of what this MCP service provides",
   "version": "0.0.1",
-  "connectionTimeoutSeconds": 30
+  "connectionTimeoutSeconds": 30,
+  "endpoint": {
+    "documentId": "<uuid>",
+    "qualifiedName": "Agents.MCPEndpoint"
+  },
+  "authenticationMicroflow": {
+    "documentId": "<uuid>",
+    "qualifiedName": "Agents.AuthenticationMicroflow"
+  }
 }
 ```
 
@@ -821,7 +833,7 @@ A "smart app" in Mendix typically has these layers, all expressible in MDL:
 Unlike the initial draft of this proposal, agents in Mendix are **not** wired up by building the request manually in an action microflow. The correct flow is:
 
 1. **Studio Pro design time** — the developer creates agent documents (and model documents) in Studio Pro. Tools, knowledge bases, and MCP servers are **attached to the agent in the agent document itself** (not added at runtime).
-2. **Model key** — a Mendix Cloud GenAI Portal key is stored in a String constant on the model document. At runtime, `ASU_AgentEditor` (registered as after-startup microflow) reads the key and auto-creates the corresponding `GenAICommons.DeployedModel`.
+2. **Model key** — a Mendix Cloud GenAI Portal key is stored in a String constant on the model document. At runtime, `ASU_AgentEditor` (registered as after-startup microflow) reads the key and auto-creates the corresponding `GenAICommons.DeployedModel`, the `GenAICommons.ConsumedKnowledgeBase`, `MCPlient.ConsumedMCPService` and links all up in `AgentCommons.Agent` objects.
 3. **Call Agent activity** — in a microflow, a single **"Call Agent With History"** or **"Call Agent Without History"** toolbox action does everything: resolve the agent's in-use version, select its deployed model, replace variable placeholders from the context object, wire in tools/knowledge bases/MCP servers declared on the agent, and call the LLM.
 4. **Conversational UI** — to use the agent in a chat, call **"New Chat for Agent"** which creates a `ChatContext` pre-configured with the agent's deployed model, system prompt, and action microflow. The action microflow for chat just calls **"Call Agent With History"** with the request built by `Default Preprocessing`.
 
@@ -1019,7 +1031,7 @@ Tools, knowledge bases, and MCP servers are declared in the **agent document its
 ```sql
 -- The agent definition — stored as a CustomBlobDocument in the project
 CREATE AGENT Support."CustomerSupportAgent" (
-  UsageType: Conversational,
+  UsageType: Chat,
   Description: 'Customer support agent with lookup and ticketing tools',
   SystemPrompt: 'You are a helpful customer support agent for an e-commerce company.
 
