@@ -4,6 +4,8 @@ package mprbackend
 
 import (
 	"fmt"
+	"log"
+	"sort"
 	"strings"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -437,7 +439,15 @@ func (b *MprBackend) buildDataGrid2ColumnObject(col *backend.DataGridColumnSpec,
 
 	properties := bson.A{int32(2)}
 
-	for key, entry := range columnPropertyIDs {
+	// Sort keys for deterministic BSON output.
+	colKeys := make([]string, 0, len(columnPropertyIDs))
+	for k := range columnPropertyIDs {
+		colKeys = append(colKeys, k)
+	}
+	sort.Strings(colKeys)
+
+	for _, key := range colKeys {
+		entry := columnPropertyIDs[key]
 		switch key {
 		case "showContentAs":
 			if hasCustomContent {
@@ -632,7 +642,7 @@ func (b *MprBackend) applyDataGridPagingProps(obj bson.D, propertyTypeIDs map[st
 	result := make(bson.D, 0, len(obj))
 	for _, elem := range obj {
 		if elem.Key == "Properties" {
-			if propsArr, ok := elem.Value.(bson.A); ok {
+			if propsArr, ok := elem.Value.(bson.A); ok && len(propsArr) > 0 {
 				updatedProps := bson.A{propsArr[0]}
 				for _, propVal := range propsArr[1:] {
 					propMap, ok := propVal.(bson.D)
@@ -699,6 +709,9 @@ func (b *MprBackend) applyDataGridSelectionProp(obj bson.D, propertyTypeIDs map[
 // BSON property builders (package-level, no receiver needed)
 // ===========================================================================
 
+// buildDataGrid2Property builds a single property BSON document for a DataGrid2 column.
+// attrRef and primitiveValue are reserved for future column types that require direct
+// attribute references or primitive default values; current callers pass empty strings.
 func buildDataGrid2Property(entry pages.PropertyTypeIDEntry, datasource pages.DataSource, attrRef string, primitiveValue string, b *MprBackend) bson.D {
 	var datasourceBSON any
 	if datasource != nil {
@@ -1177,6 +1190,9 @@ func colPropInt(props map[string]any, key string, defaultVal string) string {
 func (b *MprBackend) buildFilterWidgetBSON(widgetID, filterName string, projectPath string) bson.D {
 	rawType, rawObject, _, _, err := widgets.GetTemplateFullBSON(widgetID, types.GenerateID, projectPath)
 	if err != nil || rawType == nil {
+		if err != nil {
+			log.Printf("WARNING: failed to load template for widget %s: %v; using minimal fallback", widgetID, err)
+		}
 		return b.buildMinimalFilterWidgetBSON(widgetID, filterName)
 	}
 

@@ -6,6 +6,8 @@
 package mprbackend
 
 import (
+	"fmt"
+
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
@@ -85,9 +87,11 @@ func (b *MprBackend) Path() string      { return b.path }
 // for new code.
 func (b *MprBackend) MprReader() *mpr.Reader { return b.reader }
 
-func (b *MprBackend) Version() types.MPRVersion                 { return convertMPRVersion(b.reader.Version()) }
-func (b *MprBackend) ProjectVersion() *types.ProjectVersion     { return convertProjectVersion(b.reader.ProjectVersion()) }
-func (b *MprBackend) GetMendixVersion() (string, error)         { return b.reader.GetMendixVersion() }
+func (b *MprBackend) Version() types.MPRVersion { return convertMPRVersion(b.reader.Version()) }
+func (b *MprBackend) ProjectVersion() *types.ProjectVersion {
+	return convertProjectVersion(b.reader.ProjectVersion())
+}
+func (b *MprBackend) GetMendixVersion() (string, error) { return b.reader.GetMendixVersion() }
 
 // Commit is a no-op — the MPR writer auto-commits on each write operation.
 func (b *MprBackend) Commit() error { return nil }
@@ -112,7 +116,9 @@ func (b *MprBackend) DeleteModuleWithCleanup(id model.ID, moduleName string) err
 // FolderBackend
 // ---------------------------------------------------------------------------
 
-func (b *MprBackend) ListFolders() ([]*types.FolderInfo, error) { return convertFolderInfoSlice(b.reader.ListFolders()) }
+func (b *MprBackend) ListFolders() ([]*types.FolderInfo, error) {
+	return convertFolderInfoSlice(b.reader.ListFolders())
+}
 func (b *MprBackend) CreateFolder(folder *model.Folder) error { return b.writer.CreateFolder(folder) }
 func (b *MprBackend) DeleteFolder(id model.ID) error          { return b.writer.DeleteFolder(id) }
 func (b *MprBackend) MoveFolder(id model.ID, newContainerID model.ID) error {
@@ -538,7 +544,7 @@ func (b *MprBackend) GetJsonStructureByQualifiedName(moduleName, name string) (*
 	return convertJsonStructurePtr(b.reader.GetJsonStructureByQualifiedName(moduleName, name))
 }
 func (b *MprBackend) CreateJsonStructure(js *types.JsonStructure) error {
-	return b.writer.CreateJsonStructure(unconvertJsonStructure(js))
+	return b.writer.CreateJsonStructure(js)
 }
 func (b *MprBackend) DeleteJsonStructure(id string) error {
 	return b.writer.DeleteJsonStructure(id)
@@ -617,7 +623,7 @@ func (b *MprBackend) ListImageCollections() ([]*types.ImageCollection, error) {
 	return convertImageCollectionSlice(b.reader.ListImageCollections())
 }
 func (b *MprBackend) CreateImageCollection(ic *types.ImageCollection) error {
-	return b.writer.CreateImageCollection(unconvertImageCollection(ic))
+	return b.writer.CreateImageCollection(ic)
 }
 func (b *MprBackend) DeleteImageCollection(id string) error {
 	return b.writer.DeleteImageCollection(id)
@@ -678,8 +684,10 @@ func (b *MprBackend) UpdateRawUnit(unitID string, contents []byte) error {
 // MetadataBackend
 // ---------------------------------------------------------------------------
 
-func (b *MprBackend) ListAllUnitIDs() ([]string, error)     { return b.reader.ListAllUnitIDs() }
-func (b *MprBackend) ListUnits() ([]*types.UnitInfo, error)   { return convertUnitInfoSlice(b.reader.ListUnits()) }
+func (b *MprBackend) ListAllUnitIDs() ([]string, error) { return b.reader.ListAllUnitIDs() }
+func (b *MprBackend) ListUnits() ([]*types.UnitInfo, error) {
+	return convertUnitInfoSlice(b.reader.ListUnits())
+}
 func (b *MprBackend) GetUnitTypes() (map[string]int, error) { return b.reader.GetUnitTypes() }
 func (b *MprBackend) GetProjectRootID() (string, error)     { return b.reader.GetProjectRootID() }
 func (b *MprBackend) ContentsDir() string                   { return b.reader.ContentsDir() }
@@ -746,6 +754,7 @@ func (b *MprBackend) DeleteAgentEditorAgent(id string) error {
 
 // ---------------------------------------------------------------------------
 // WorkflowMutationBackend
+// ---------------------------------------------------------------------------
 
 // OpenWorkflowForMutation is implemented in workflow_mutator.go.
 func (b *MprBackend) OpenWorkflowForMutation(unitID model.ID) (backend.WorkflowMutator, error) {
@@ -754,13 +763,14 @@ func (b *MprBackend) OpenWorkflowForMutation(unitID model.ID) (backend.WorkflowM
 
 // ---------------------------------------------------------------------------
 // WidgetSerializationBackend
+// ---------------------------------------------------------------------------
 
 func (b *MprBackend) SerializeWidget(w pages.Widget) (any, error) {
-	panic("MprBackend.SerializeWidget not yet implemented")
+	return nil, fmt.Errorf("MprBackend.SerializeWidget not yet implemented")
 }
 
 func (b *MprBackend) SerializeClientAction(a pages.ClientAction) (any, error) {
-	panic("MprBackend.SerializeClientAction not yet implemented")
+	return nil, fmt.Errorf("MprBackend.SerializeClientAction not yet implemented")
 }
 
 func (b *MprBackend) SerializeDataSource(ds pages.DataSource) (any, error) {
@@ -768,5 +778,5 @@ func (b *MprBackend) SerializeDataSource(ds pages.DataSource) (any, error) {
 }
 
 func (b *MprBackend) SerializeWorkflowActivity(a workflows.WorkflowActivity) (any, error) {
-	panic("MprBackend.SerializeWorkflowActivity not yet implemented")
+	return nil, fmt.Errorf("MprBackend.SerializeWorkflowActivity not yet implemented")
 }

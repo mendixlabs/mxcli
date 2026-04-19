@@ -5,9 +5,9 @@ package executor
 
 import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 // convertErrorHandlingType converts AST error handling type to SDK error handling type.
@@ -64,7 +64,7 @@ func (fb *flowBuilder) addErrorHandlerFlow(sourceActivityID model.ID, sourceX in
 		varTypes:     fb.varTypes,
 		declaredVars: fb.declaredVars,
 		measurer:     fb.measurer,
-		reader:       fb.reader,
+		backend:      fb.backend,
 		hierarchy:    fb.hierarchy,
 		restServices: fb.restServices,
 	}

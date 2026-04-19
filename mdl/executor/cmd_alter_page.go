@@ -4,6 +4,7 @@ package executor
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
@@ -112,7 +113,15 @@ func execAlterPage(ctx *ExecContext, s *ast.AlterPageStmt) error {
 // ============================================================================
 
 func applySetPropertyMutator(mutator backend.PageMutator, op *ast.SetPropertyOp) error {
-	for propName, value := range op.Properties {
+	// Sort property names for deterministic application order.
+	propNames := make([]string, 0, len(op.Properties))
+	for k := range op.Properties {
+		propNames = append(propNames, k)
+	}
+	sort.Strings(propNames)
+
+	for _, propName := range propNames {
+		value := op.Properties[propName]
 		if op.Target.IsColumn() {
 			if err := mutator.SetColumnProperty(op.Target.Widget, op.Target.Column, propName, value); err != nil {
 				return mdlerrors.NewBackend("set "+propName+" on "+op.Target.Name(), err)

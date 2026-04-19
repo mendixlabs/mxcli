@@ -4,8 +4,8 @@ package mock
 
 import (
 	"github.com/mendixlabs/mxcli/mdl/backend"
-	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/security"
 )
 

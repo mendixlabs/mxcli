@@ -11,8 +11,8 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/mendixlabs/mxcli/model"
 )
 
 // showImportMappings prints a table of all import mapping documents.

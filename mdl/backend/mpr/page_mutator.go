@@ -143,6 +143,7 @@ func (m *mprPageMutator) InsertWidget(widgetRef string, columnRef string, positi
 
 func (m *mprPageMutator) DropWidget(refs []backend.WidgetRef) error {
 	for _, ref := range refs {
+		// Re-find widget each iteration because previous drops mutate the tree.
 		var result *bsonWidgetResult
 		if ref.IsColumn() {
 			result = findBsonColumn(m.rawData, ref.Widget, ref.Column, m.widgetFinder)
@@ -517,6 +518,11 @@ func dGetString(doc bson.D, key string) string {
 }
 
 // dSet sets a field value in a bson.D in place. Returns true if found.
+// NOTE: callers generally do not check the return value because the keys
+// are structurally guaranteed by the widgetFinder traversal. If a key
+// is absent, the mutation is silently skipped — this is intentional for
+// optional fields (e.g. Appearance, DataSource) that may not be present
+// on every widget type.
 func dSet(doc bson.D, key string, value any) bool {
 	for i := range doc {
 		if doc[i].Key == key {
@@ -1335,6 +1341,8 @@ func setWidgetContentMut(widget bson.D, value any) error {
 	return fmt.Errorf("Content.Template has no Items with Text")
 }
 
+// setWidgetLabelMut sets the widget's Label caption. Returns nil without error
+// if the widget has no Label field — not all widget types support labels.
 func setWidgetLabelMut(widget bson.D, value any) error {
 	label := dGetDoc(widget, "Label")
 	if label == nil {

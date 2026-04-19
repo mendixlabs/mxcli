@@ -3,10 +3,10 @@
 package mprbackend
 
 import (
-	"encoding/hex"
 	"fmt"
 	"log"
 	"regexp"
+	"sort"
 	"strings"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -225,6 +225,7 @@ func (ob *mprWidgetObjectBuilder) SetAttributeObjects(propertyKey string, attrib
 		for _, attrPath := range attributePaths {
 			attrObj, err := createAttributeObject(attrPath, entry.ObjectTypeID, nestedEntry.PropertyTypeID, nestedEntry.ValueTypeID)
 			if err != nil {
+				// TODO(shared-types): propagate error instead of logging — requires interface change.
 				log.Printf("warning: skipping attribute %s: %v", attrPath, err)
 				continue
 			}
@@ -369,6 +370,7 @@ func updatePropertyInArray(arr bson.A, propertyTypeID string, updateFn func(bson
 		}
 	}
 	if !matched {
+		// TODO(shared-types): propagate warning instead of logging — requires interface change.
 		log.Printf("WARNING: updatePropertyInArray: no match for TypePointer %s in %d properties", propertyTypeID, len(arr)-1)
 	}
 	return result
@@ -595,17 +597,17 @@ func createClientTemplateBSONWithParams(text string, entityContext string) bson.
 			attrPath = entityContext + "." + attrName
 		}
 		params = append(params, bson.D{
-			{Key: "$ID", Value: generateBinaryID()},
+			{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 			{Key: "$Type", Value: "Forms$ClientTemplateParameter"},
 			{Key: "AttributeRef", Value: bson.D{
-				{Key: "$ID", Value: generateBinaryID()},
+				{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 				{Key: "$Type", Value: "DomainModels$AttributeRef"},
 				{Key: "Attribute", Value: attrPath},
 				{Key: "EntityRef", Value: nil},
 			}},
 			{Key: "Expression", Value: ""},
 			{Key: "FormattingInfo", Value: bson.D{
-				{Key: "$ID", Value: generateBinaryID()},
+				{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 				{Key: "$Type", Value: "Forms$FormattingInfo"},
 				{Key: "CustomDateFormat", Value: ""},
 				{Key: "DateFormat", Value: "Date"},
@@ -620,10 +622,10 @@ func createClientTemplateBSONWithParams(text string, entityContext string) bson.
 
 	makeText := func(t string) bson.D {
 		return bson.D{
-			{Key: "$ID", Value: generateBinaryID()},
+			{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 			{Key: "$Type", Value: "Texts$Text"},
 			{Key: "Items", Value: bson.A{int32(3), bson.D{
-				{Key: "$ID", Value: generateBinaryID()},
+				{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 				{Key: "$Type", Value: "Texts$Translation"},
 				{Key: "LanguageCode", Value: "en_US"},
 				{Key: "Text", Value: t},
@@ -632,7 +634,7 @@ func createClientTemplateBSONWithParams(text string, entityContext string) bson.
 	}
 
 	return bson.D{
-		{Key: "$ID", Value: generateBinaryID()},
+		{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 		{Key: "$Type", Value: "Forms$ClientTemplate"},
 		{Key: "Fallback", Value: makeText(paramText)},
 		{Key: "Parameters", Value: params},
@@ -643,10 +645,10 @@ func createClientTemplateBSONWithParams(text string, entityContext string) bson.
 func createDefaultClientTemplateBSON(text string) bson.D {
 	makeText := func(t string) bson.D {
 		return bson.D{
-			{Key: "$ID", Value: generateBinaryID()},
+			{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 			{Key: "$Type", Value: "Texts$Text"},
 			{Key: "Items", Value: bson.A{int32(3), bson.D{
-				{Key: "$ID", Value: generateBinaryID()},
+				{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 				{Key: "$Type", Value: "Texts$Translation"},
 				{Key: "LanguageCode", Value: "en_US"},
 				{Key: "Text", Value: t},
@@ -654,90 +656,12 @@ func createDefaultClientTemplateBSON(text string) bson.D {
 		}
 	}
 	return bson.D{
-		{Key: "$ID", Value: generateBinaryID()},
+		{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 		{Key: "$Type", Value: "Forms$ClientTemplate"},
 		{Key: "Fallback", Value: makeText(text)},
 		{Key: "Parameters", Value: bson.A{int32(2)}},
 		{Key: "Template", Value: makeText(text)},
 	}
-}
-
-// ---------------------------------------------------------------------------
-// ID / binary helpers
-// ---------------------------------------------------------------------------
-
-func generateBinaryID() []byte {
-	return hexIDToBlob(types.GenerateID())
-}
-
-func hexIDToBlob(hexStr string) []byte {
-	hexStr = strings.ReplaceAll(hexStr, "-", "")
-	data, err := hex.DecodeString(hexStr)
-	if err != nil || len(data) != 16 {
-		return data
-	}
-	data[0], data[1], data[2], data[3] = data[3], data[2], data[1], data[0]
-	data[4], data[5] = data[5], data[4]
-	data[6], data[7] = data[7], data[6]
-	return data
-}
-
-func hexToBytes(hexStr string) []byte {
-	clean := strings.ReplaceAll(hexStr, "-", "")
-	if len(clean) != 32 {
-		return nil
-	}
-
-	decoded := make([]byte, 16)
-	for i := range 16 {
-		decoded[i] = hexByte(clean[i*2])<<4 | hexByte(clean[i*2+1])
-	}
-
-	blob := make([]byte, 16)
-	blob[0] = decoded[3]
-	blob[1] = decoded[2]
-	blob[2] = decoded[1]
-	blob[3] = decoded[0]
-	blob[4] = decoded[5]
-	blob[5] = decoded[4]
-	blob[6] = decoded[7]
-	blob[7] = decoded[6]
-	copy(blob[8:], decoded[8:])
-
-	return blob
-}
-
-func hexByte(c byte) byte {
-	switch {
-	case c >= '0' && c <= '9':
-		return c - '0'
-	case c >= 'a' && c <= 'f':
-		return c - 'a' + 10
-	case c >= 'A' && c <= 'F':
-		return c - 'A' + 10
-	}
-	return 0
-}
-
-func bytesToHex(b []byte) string {
-	if len(b) != 16 {
-		if len(b) > 1024 {
-			return ""
-		}
-		const hexChars = "0123456789abcdef"
-		result := make([]byte, len(b)*2)
-		for i, v := range b {
-			result[i*2] = hexChars[v>>4]
-			result[i*2+1] = hexChars[v&0x0f]
-		}
-		return string(result)
-	}
-
-	return fmt.Sprintf("%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-		b[3], b[2], b[1], b[0],
-		b[5], b[4],
-		b[7], b[6],
-		b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15])
 }
 
 // ---------------------------------------------------------------------------
@@ -768,7 +692,15 @@ func convertPropertyTypeIDs(src map[string]widgets.PropertyTypeIDEntry) map[stri
 // ---------------------------------------------------------------------------
 
 func ensureRequiredObjectLists(obj bson.D, propertyTypeIDs map[string]pages.PropertyTypeIDEntry) bson.D {
-	for propKey, entry := range propertyTypeIDs {
+	// Sort keys for deterministic BSON output.
+	keys := make([]string, 0, len(propertyTypeIDs))
+	for k := range propertyTypeIDs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, propKey := range keys {
+		entry := propertyTypeIDs[propKey]
 		if entry.ObjectTypeID == "" || len(entry.NestedPropertyIDs) == 0 {
 			continue
 		}
@@ -820,23 +752,30 @@ func ensureRequiredObjectLists(obj bson.D, propertyTypeIDs map[string]pages.Prop
 
 func createDefaultWidgetObject(objectTypeID string, nestedProps map[string]pages.PropertyTypeIDEntry) bson.D {
 	propsArr := bson.A{int32(2)}
-	for _, entry := range nestedProps {
+	// Sort keys for deterministic BSON output.
+	nestedKeys := make([]string, 0, len(nestedProps))
+	for k := range nestedProps {
+		nestedKeys = append(nestedKeys, k)
+	}
+	sort.Strings(nestedKeys)
+	for _, k := range nestedKeys {
+		entry := nestedProps[k]
 		prop := createDefaultWidgetProperty(entry)
 		propsArr = append(propsArr, prop)
 	}
 	return bson.D{
-		{Key: "$ID", Value: generateBinaryID()},
+		{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 		{Key: "$Type", Value: "CustomWidgets$WidgetObject"},
-		{Key: "TypePointer", Value: hexIDToBlob(objectTypeID)},
+		{Key: "TypePointer", Value: types.UUIDToBlob(objectTypeID)},
 		{Key: "Properties", Value: propsArr},
 	}
 }
 
 func createDefaultWidgetProperty(entry pages.PropertyTypeIDEntry) bson.D {
 	return bson.D{
-		{Key: "$ID", Value: generateBinaryID()},
+		{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 		{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
-		{Key: "TypePointer", Value: hexIDToBlob(entry.PropertyTypeID)},
+		{Key: "TypePointer", Value: types.UUIDToBlob(entry.PropertyTypeID)},
 		{Key: "Value", Value: createDefaultWidgetValue(entry)},
 	}
 }
@@ -844,7 +783,7 @@ func createDefaultWidgetProperty(entry pages.PropertyTypeIDEntry) bson.D {
 func createDefaultWidgetValue(entry pages.PropertyTypeIDEntry) bson.D {
 	primitiveVal := entry.DefaultValue
 	expressionVal := ""
-	var textTemplate interface{}
+	var textTemplate any
 
 	switch entry.ValueType {
 	case "Expression":
@@ -863,10 +802,10 @@ func createDefaultWidgetValue(entry pages.PropertyTypeIDEntry) bson.D {
 	}
 
 	return bson.D{
-		{Key: "$ID", Value: generateBinaryID()},
+		{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 		{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 		{Key: "Action", Value: bson.D{
-			{Key: "$ID", Value: generateBinaryID()},
+			{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 			{Key: "$Type", Value: "Forms$NoAction"},
 			{Key: "DisabledDuringExecution", Value: true},
 		}},
@@ -885,7 +824,7 @@ func createDefaultWidgetValue(entry pages.PropertyTypeIDEntry) bson.D {
 		{Key: "SourceVariable", Value: nil},
 		{Key: "TextTemplate", Value: textTemplate},
 		{Key: "TranslatableValue", Value: nil},
-		{Key: "TypePointer", Value: hexIDToBlob(entry.ValueTypeID)},
+		{Key: "TypePointer", Value: types.UUIDToBlob(entry.ValueTypeID)},
 		{Key: "Widgets", Value: bson.A{int32(2)}},
 		{Key: "XPathConstraint", Value: ""},
 	}
@@ -960,24 +899,24 @@ func createAttributeObject(attributePath string, objectTypeID, propertyTypeID, v
 		return nil, mdlerrors.NewValidationf("invalid attribute path %q: expected Module.Entity.Attribute format", attributePath)
 	}
 	return bson.D{
-		{Key: "$ID", Value: hexToBytes(types.GenerateID())},
+		{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 		{Key: "$Type", Value: "CustomWidgets$WidgetObject"},
-		{Key: "Properties", Value: []any{
+		{Key: "Properties", Value: bson.A{
 			int32(2),
 			bson.D{
-				{Key: "$ID", Value: hexToBytes(types.GenerateID())},
+				{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 				{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
-				{Key: "TypePointer", Value: hexToBytes(propertyTypeID)},
+				{Key: "TypePointer", Value: types.UUIDToBlob(propertyTypeID)},
 				{Key: "Value", Value: bson.D{
-					{Key: "$ID", Value: hexToBytes(types.GenerateID())},
+					{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 					{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 					{Key: "Action", Value: bson.D{
-						{Key: "$ID", Value: hexToBytes(types.GenerateID())},
+						{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 						{Key: "$Type", Value: "Forms$NoAction"},
 						{Key: "DisabledDuringExecution", Value: true},
 					}},
 					{Key: "AttributeRef", Value: bson.D{
-						{Key: "$ID", Value: hexToBytes(types.GenerateID())},
+						{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 						{Key: "$Type", Value: "DomainModels$AttributeRef"},
 						{Key: "Attribute", Value: attributePath},
 						{Key: "EntityRef", Value: nil},
@@ -990,18 +929,18 @@ func createAttributeObject(attributePath string, objectTypeID, propertyTypeID, v
 					{Key: "Image", Value: ""},
 					{Key: "Microflow", Value: ""},
 					{Key: "Nanoflow", Value: ""},
-					{Key: "Objects", Value: []any{int32(2)}},
+					{Key: "Objects", Value: bson.A{int32(2)}},
 					{Key: "PrimitiveValue", Value: ""},
 					{Key: "Selection", Value: "None"},
 					{Key: "SourceVariable", Value: nil},
 					{Key: "TextTemplate", Value: nil},
 					{Key: "TranslatableValue", Value: nil},
-					{Key: "TypePointer", Value: hexToBytes(valueTypeID)},
-					{Key: "Widgets", Value: []any{int32(2)}},
+					{Key: "TypePointer", Value: types.UUIDToBlob(valueTypeID)},
+					{Key: "Widgets", Value: bson.A{int32(2)}},
 					{Key: "XPathConstraint", Value: ""},
 				}},
 			},
 		}},
-		{Key: "TypePointer", Value: hexToBytes(objectTypeID)},
+		{Key: "TypePointer", Value: types.UUIDToBlob(objectTypeID)},
 	}, nil
 }

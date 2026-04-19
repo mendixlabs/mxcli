@@ -3,11 +3,13 @@
 package mprbackend
 
 import (
+	"bytes"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/bsonutil"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+
+	"github.com/mendixlabs/mxcli/mdl/bsonutil"
 )
 
 func TestDeepCloneWithNewIDs_RegeneratesAllIDs(t *testing.T) {
@@ -127,13 +129,5 @@ func binaryEqual(a, b any) bool {
 	if !aOk || !bOk {
 		return false
 	}
-	if len(ab.Data) != len(bb.Data) {
-		return false
-	}
-	for i := range ab.Data {
-		if ab.Data[i] != bb.Data[i] {
-			return false
-		}
-	}
-	return true
+	return bytes.Equal(ab.Data, bb.Data)
 }

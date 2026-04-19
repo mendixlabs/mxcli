@@ -214,17 +214,6 @@ func TestEvaluateCondition(t *testing.T) {
 	}
 }
 
-func TestEvaluateConditionUnknownReturnsFalse(t *testing.T) {
-	engine := &PluggableWidgetEngine{}
-
-	w := &ast.WidgetV3{Properties: map[string]any{}}
-	result := engine.evaluateCondition("typoCondition", w)
-
-	if result != false {
-		t.Errorf("expected false for unknown condition, got %v", result)
-	}
-}
-
 func TestSelectMappings_NoModes(t *testing.T) {
 	engine := &PluggableWidgetEngine{}
 

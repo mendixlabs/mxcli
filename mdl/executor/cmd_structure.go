@@ -75,8 +75,8 @@ func structureDepth1JSON(ctx *ExecContext, modules []structureModule) error {
 	odataClientCounts := queryCountByModule(ctx, "odata_clients")
 	odataServiceCounts := queryCountByModule(ctx, "odata_services")
 	beServiceCounts := queryCountByModule(ctx, "business_event_services")
-	constantCounts := countByModuleFromReader(ctx, "constants")
-	scheduledEventCounts := countByModuleFromReader(ctx, "scheduled_events")
+	constantCounts := countByModuleFromBackend(ctx, "constants")
+	scheduledEventCounts := countByModuleFromBackend(ctx, "scheduled_events")
 
 	tr := &TableResult{
 		Columns: []string{
@@ -195,9 +195,9 @@ func structureDepth1(ctx *ExecContext, modules []structureModule) error {
 	odataServiceCounts := queryCountByModule(ctx, "odata_services")
 	beServiceCounts := queryCountByModule(ctx, "business_event_services")
 
-	// Get constants and scheduled events from reader (no catalog tables)
-	constantCounts := countByModuleFromReader(ctx, "constants")
-	scheduledEventCounts := countByModuleFromReader(ctx, "scheduled_events")
+	// Get constants and scheduled events from backend (no catalog tables)
+	constantCounts := countByModuleFromBackend(ctx, "constants")
+	scheduledEventCounts := countByModuleFromBackend(ctx, "scheduled_events")
 
 	// Calculate name column width for alignment
 	nameWidth := 0
@@ -272,8 +272,8 @@ func queryCountByModule(ctx *ExecContext, tableAndWhere string) map[string]int {
 	return counts
 }
 
-// countByModuleFromReader counts elements per module using the reader (for types without catalog tables).
-func countByModuleFromReader(ctx *ExecContext, kind string) map[string]int {
+// countByModuleFromBackend counts elements per module using the backend (for types without catalog tables).
+func countByModuleFromBackend(ctx *ExecContext, kind string) map[string]int {
 	counts := make(map[string]int)
 	h, err := getHierarchy(ctx)
 	if err != nil {
@@ -314,7 +314,7 @@ func pluralize(count int, singular, plural string) string {
 // ============================================================================
 
 func structureDepth2(ctx *ExecContext, modules []structureModule) error {
-	// Pre-load data that needs the reader
+	// Pre-load data from the backend
 	h, err := getHierarchy(ctx)
 	if err != nil {
 		return mdlerrors.NewBackend("build hierarchy", err)

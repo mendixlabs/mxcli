@@ -122,7 +122,7 @@ func (pb *pageBuilder) resolveMicroflow(qualifiedName string) (model.ID, error) 
 		}
 	}
 
-	// Get microflows from reader cache
+	// Get microflows from backend
 	mfs, err := pb.getMicroflows()
 	if err != nil {
 		return "", mdlerrors.NewBackend("list microflows", err)

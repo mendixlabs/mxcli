@@ -18,7 +18,7 @@ import (
 func (fb *flowBuilder) addCreateVariableAction(s *ast.DeclareStmt) model.ID {
 	// Resolve TypeEnumeration → TypeEntity ambiguity using the domain model
 	declType := s.Type
-	if declType.Kind == ast.TypeEnumeration && declType.EnumRef != nil && fb.reader != nil {
+	if declType.Kind == ast.TypeEnumeration && declType.EnumRef != nil && fb.backend != nil {
 		if fb.isEntity(declType.EnumRef.Module, declType.EnumRef.Name) {
 			declType = ast.DataType{Kind: ast.TypeEntity, EntityRef: declType.EnumRef}
 		}
@@ -734,14 +734,14 @@ func (fb *flowBuilder) addRemoveFromListAction(s *ast.RemoveFromListStmt) model.
 
 // isEntity checks whether a qualified name refers to an entity in the domain model.
 func (fb *flowBuilder) isEntity(moduleName, entityName string) bool {
-	if fb.reader == nil {
+	if fb.backend == nil {
 		return false
 	}
-	mod, err := fb.reader.GetModuleByName(moduleName)
+	mod, err := fb.backend.GetModuleByName(moduleName)
 	if err != nil || mod == nil {
 		return false
 	}
-	dm, err := fb.reader.GetDomainModel(mod.ID)
+	dm, err := fb.backend.GetDomainModel(mod.ID)
 	if err != nil || dm == nil {
 		return false
 	}
@@ -755,7 +755,7 @@ func (fb *flowBuilder) isEntity(moduleName, entityName string) bool {
 
 // resolveMemberChange determines whether a member name is an association or attribute
 // and sets the appropriate field on the MemberChange. It queries the domain model
-// to check if the name matches an association on the entity; if no reader is available,
+// to check if the name matches an association on the entity; if no backend is available,
 // it falls back to the dot-contains heuristic.
 //
 // memberName can be either bare ("Order_Customer") or qualified ("MfTest.Order_Customer").
@@ -784,9 +784,9 @@ func (fb *flowBuilder) resolveMemberChange(mc *microflows.MemberChange, memberNa
 	}
 
 	// Query domain model to check if this member is an association
-	if fb.reader != nil {
-		if mod, err := fb.reader.GetModuleByName(moduleName); err == nil && mod != nil {
-			if dm, err := fb.reader.GetDomainModel(mod.ID); err == nil && dm != nil {
+	if fb.backend != nil {
+		if mod, err := fb.backend.GetModuleByName(moduleName); err == nil && mod != nil {
+			if dm, err := fb.backend.GetDomainModel(mod.ID); err == nil && dm != nil {
 				for _, a := range dm.Associations {
 					if a.Name == bareName {
 						mc.AssociationQualifiedName = qualifiedName
@@ -828,16 +828,16 @@ type assocLookupResult struct {
 
 // lookupAssociation finds an association by module and name, returning its type
 // and the qualified names of its parent and child entities. Returns nil if the
-// association cannot be found (e.g., reader is nil or module doesn't exist).
+// association cannot be found (e.g., backend is nil or module doesn't exist).
 func (fb *flowBuilder) lookupAssociation(moduleName, assocName string) *assocLookupResult {
-	if fb.reader == nil {
+	if fb.backend == nil {
 		return nil
 	}
-	mod, err := fb.reader.GetModuleByName(moduleName)
+	mod, err := fb.backend.GetModuleByName(moduleName)
 	if err != nil || mod == nil {
 		return nil
 	}
-	dm, err := fb.reader.GetDomainModel(mod.ID)
+	dm, err := fb.backend.GetDomainModel(mod.ID)
 	if err != nil || dm == nil {
 		return nil
 	}

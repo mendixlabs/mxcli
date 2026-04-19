@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package bsonutil provides BSON-aware ID conversion utilities for model elements.
-// It depends on mdl/types (WASM-safe) and the BSON driver (also WASM-safe),
+// It depends on mdl/types (CGO-free) and the BSON driver (also CGO-free),
 // but does NOT depend on sdk/mpr (which pulls in SQLite/CGO).
 package bsonutil
 
@@ -11,6 +11,10 @@ import (
 )
 
 // IDToBsonBinary converts a hex UUID string to a BSON binary value.
+// If the input is not a valid UUID, a new random ID is generated as a fallback.
+// This matches the legacy sdk/mpr behavior where callers expect a valid binary
+// result without error handling. Consider using ValidateID first if strict
+// validation is needed.
 func IDToBsonBinary(id string) primitive.Binary {
 	blob := types.UUIDToBlob(id)
 	if blob == nil || len(blob) != 16 {

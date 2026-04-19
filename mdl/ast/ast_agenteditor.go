@@ -16,16 +16,16 @@ package ast
 //	  [, DeepLinkURL: '...']
 //	);
 type CreateModelStmt struct {
-	Name             QualifiedName
-	Documentation    string
-	Provider         string         // "MxCloudGenAI" by default
-	Key              *QualifiedName // qualified name of the String constant holding the Portal key
-	DisplayName      string         // optional Portal-populated metadata
-	KeyName          string         // optional Portal-populated metadata
-	KeyID            string         // optional Portal-populated metadata
-	Environment      string         // optional Portal-populated metadata
-	ResourceName     string         // optional Portal-populated metadata
-	DeepLinkURL      string         // optional Portal-populated metadata
+	Name          QualifiedName
+	Documentation string
+	Provider      string         // "MxCloudGenAI" by default
+	Key           *QualifiedName // qualified name of the String constant holding the Portal key
+	DisplayName   string         // optional Portal-populated metadata
+	KeyName       string         // optional Portal-populated metadata
+	KeyID         string         // optional Portal-populated metadata
+	Environment   string         // optional Portal-populated metadata
+	ResourceName  string         // optional Portal-populated metadata
+	DeepLinkURL   string         // optional Portal-populated metadata
 }
 
 func (s *CreateModelStmt) isStatement() {}
@@ -93,21 +93,21 @@ func (s *DropKnowledgeBaseStmt) isStatement() {}
 
 // CreateAgentStmt represents CREATE AGENT Module.Name (...) [{ body }].
 type CreateAgentStmt struct {
-	Name         QualifiedName
+	Name          QualifiedName
 	Documentation string
-	UsageType    string // "Task" or "Conversational"
-	Description  string
-	Model        *QualifiedName // reference to a Model document
-	Entity       *QualifiedName // reference to a domain entity
-	MaxTokens    *int
-	ToolChoice   string
-	Temperature  *float64
-	TopP         *float64
-	SystemPrompt string
-	UserPrompt   string
-	Variables    []AgentVarDef
-	Tools        []AgentToolDef
-	KBTools      []AgentKBToolDef
+	UsageType     string // "Task" or "Conversational"
+	Description   string
+	Model         *QualifiedName // reference to a Model document
+	Entity        *QualifiedName // reference to a domain entity
+	MaxTokens     *int
+	ToolChoice    string
+	Temperature   *float64
+	TopP          *float64
+	SystemPrompt  string
+	UserPrompt    string
+	Variables     []AgentVarDef
+	Tools         []AgentToolDef
+	KBTools       []AgentKBToolDef
 }
 
 func (s *CreateAgentStmt) isStatement() {}
@@ -136,10 +136,10 @@ type AgentToolDef struct {
 
 // AgentKBToolDef represents a KNOWLEDGE BASE block in CREATE AGENT body.
 type AgentKBToolDef struct {
-	Name                 string // per-agent identifier
-	Source               *QualifiedName
-	Collection           string
-	MaxResults           int
-	Description          string
-	Enabled              bool
+	Name        string // per-agent identifier
+	Source      *QualifiedName
+	Collection  string
+	MaxResults  int
+	Description string
+	Enabled     bool
 }

@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/javaactions"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 // addLogMessageAction creates a LOG statement as a LogMessageAction.
@@ -155,8 +155,8 @@ func (fb *flowBuilder) addCallJavaActionAction(s *ast.CallJavaActionStmt) model.
 
 	// Try to look up the Java action definition to detect EntityTypeParameterType parameters
 	var jaDef *javaactions.JavaAction
-	if fb.reader != nil {
-		jaDef, _ = fb.reader.ReadJavaActionByName(actionQN)
+	if fb.backend != nil {
+		jaDef, _ = fb.backend.ReadJavaActionByName(actionQN)
 	}
 
 	// Build a map of parameter name -> param type for the Java action
@@ -691,11 +691,11 @@ func (fb *flowBuilder) addRestCallAction(s *ast.RestCallStmt) model.ID {
 		// looking at the JSON structure it references. If the root JSON element is
 		// an Object, the mapping produces one object; if it is an Array, a list.
 		singleObject := false
-		if fb.reader != nil {
-			if im, err := fb.reader.GetImportMappingByQualifiedName(s.Result.MappingName.Module, s.Result.MappingName.Name); err == nil && im.JsonStructure != "" {
+		if fb.backend != nil {
+			if im, err := fb.backend.GetImportMappingByQualifiedName(s.Result.MappingName.Module, s.Result.MappingName.Name); err == nil && im.JsonStructure != "" {
 				// im.JsonStructure is "Module.Name" — split and look up the JSON structure.
 				if parts := strings.SplitN(im.JsonStructure, ".", 2); len(parts) == 2 {
-					if js, err := fb.reader.GetJsonStructureByQualifiedName(parts[0], parts[1]); err == nil && len(js.Elements) > 0 {
+					if js, err := fb.backend.GetJsonStructureByQualifiedName(parts[0], parts[1]); err == nil && len(js.Elements) > 0 {
 						singleObject = js.Elements[0].ElementType == "Object"
 					}
 				}
@@ -990,12 +990,12 @@ func (fb *flowBuilder) addImportFromMappingAction(s *ast.ImportFromMappingStmt) 
 	}
 
 	// Determine single vs list and result entity from the import mapping
-	if fb.reader != nil {
-		if im, err := fb.reader.GetImportMappingByQualifiedName(s.Mapping.Module, s.Mapping.Name); err == nil {
+	if fb.backend != nil {
+		if im, err := fb.backend.GetImportMappingByQualifiedName(s.Mapping.Module, s.Mapping.Name); err == nil {
 			if im.JsonStructure != "" {
 				parts := strings.SplitN(im.JsonStructure, ".", 2)
 				if len(parts) == 2 {
-					if js, err := fb.reader.GetJsonStructureByQualifiedName(parts[0], parts[1]); err == nil && len(js.Elements) > 0 {
+					if js, err := fb.backend.GetJsonStructureByQualifiedName(parts[0], parts[1]); err == nil && len(js.Elements) > 0 {
 						if js.Elements[0].ElementType == "Array" {
 							resultHandling.SingleObject = false
 						}

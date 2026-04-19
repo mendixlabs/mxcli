@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 	"github.com/mendixlabs/mxcli/sdk/javaactions"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"github.com/mendixlabs/mxcli/sdk/security"
 	"github.com/mendixlabs/mxcli/sdk/workflows"

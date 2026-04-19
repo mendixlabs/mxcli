@@ -3,8 +3,10 @@
 package mpr
 
 import (
-	"github.com/mendixlabs/mxcli/mdl/types"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+
+	"github.com/mendixlabs/mxcli/mdl/bsonutil"
+	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 // GenerateID generates a new unique ID for model elements.
@@ -24,19 +26,12 @@ func BlobToUUID(data []byte) string {
 
 // IDToBsonBinary converts a UUID string to a BSON binary value.
 func IDToBsonBinary(id string) primitive.Binary {
-	blob := types.UUIDToBlob(id)
-	if blob == nil || len(blob) != 16 {
-		blob = types.UUIDToBlob(types.GenerateID())
-	}
-	return primitive.Binary{
-		Subtype: 0x00,
-		Data:    blob,
-	}
+	return bsonutil.IDToBsonBinary(id)
 }
 
 // BsonBinaryToID converts a BSON binary value to a UUID string.
 func BsonBinaryToID(bin primitive.Binary) string {
-	return types.BlobToUUID(bin.Data)
+	return bsonutil.BsonBinaryToID(bin)
 }
 
 // Hash computes a hash for content (used for content deduplication).

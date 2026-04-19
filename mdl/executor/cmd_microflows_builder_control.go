@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 // addIfStatement creates an IF/THEN/ELSE statement using ExclusiveSplit and ExclusiveMerge.
@@ -285,7 +285,7 @@ func (fb *flowBuilder) addLoopStatement(s *ast.LoopStmt) model.ID {
 		varTypes:     fb.varTypes,     // Share variable scope
 		declaredVars: fb.declaredVars, // Share declared vars (fixes nil map panic)
 		measurer:     fb.measurer,     // Share measurer
-		reader:       fb.reader,       // Share reader
+		backend:      fb.backend,      // Share backend
 		hierarchy:    fb.hierarchy,    // Share hierarchy
 		restServices: fb.restServices, // Share REST services for parameter classification
 	}
@@ -359,7 +359,7 @@ func (fb *flowBuilder) addWhileStatement(s *ast.WhileStmt) model.ID {
 		varTypes:     fb.varTypes,
 		declaredVars: fb.declaredVars,
 		measurer:     fb.measurer,
-		reader:       fb.reader,
+		backend:      fb.backend,
 		hierarchy:    fb.hierarchy,
 		restServices: fb.restServices,
 	}

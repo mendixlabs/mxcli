@@ -152,7 +152,7 @@ func execCreateEntity(ctx *ExecContext, s *ast.CreateEntityStmt) error {
 			if a.CalculatedMicroflow != nil {
 				mfID, err := resolveMicroflowByName(ctx, a.CalculatedMicroflow.String())
 				if err != nil {
-					return fmt.Errorf("attribute '%s': %w", a.Name, err)
+					return mdlerrors.NewBackend(fmt.Sprintf("attribute '%s'", a.Name), err)
 				}
 				attrValue.MicroflowID = mfID
 				attrValue.MicroflowName = a.CalculatedMicroflow.String()
@@ -543,7 +543,7 @@ func execAlterEntity(ctx *ExecContext, s *ast.AlterEntityStmt) error {
 			if a.CalculatedMicroflow != nil {
 				mfID, err := resolveMicroflowByName(ctx, a.CalculatedMicroflow.String())
 				if err != nil {
-					return fmt.Errorf("attribute '%s': %w", a.Name, err)
+					return mdlerrors.NewBackend(fmt.Sprintf("attribute '%s'", a.Name), err)
 				}
 				attrValue.MicroflowID = mfID
 				attrValue.MicroflowName = a.CalculatedMicroflow.String()
@@ -635,7 +635,7 @@ func execAlterEntity(ctx *ExecContext, s *ast.AlterEntityStmt) error {
 					if s.CalculatedMicroflow != nil {
 						mfID, err := resolveMicroflowByName(ctx, s.CalculatedMicroflow.String())
 						if err != nil {
-							return fmt.Errorf("attribute '%s': %w", s.AttributeName, err)
+							return mdlerrors.NewBackend(fmt.Sprintf("attribute '%s'", s.AttributeName), err)
 						}
 						attrValue.MicroflowID = mfID
 						attrValue.MicroflowName = s.CalculatedMicroflow.String()

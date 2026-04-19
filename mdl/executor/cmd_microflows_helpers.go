@@ -227,18 +227,18 @@ func (fb *flowBuilder) memberExpressionToString(expr ast.Expression, entityQN, a
 // for an attribute if it is an enumeration type. Returns "" if the attribute is not
 // an enumeration or if the domain model is not available.
 func (fb *flowBuilder) lookupEnumRef(entityQN, attrName string) string {
-	if fb.reader == nil || entityQN == "" || attrName == "" {
+	if fb.backend == nil || entityQN == "" || attrName == "" {
 		return ""
 	}
 	parts := strings.SplitN(entityQN, ".", 2)
 	if len(parts) != 2 {
 		return ""
 	}
-	mod, err := fb.reader.GetModuleByName(parts[0])
+	mod, err := fb.backend.GetModuleByName(parts[0])
 	if err != nil || mod == nil {
 		return ""
 	}
-	dm, err := fb.reader.GetDomainModel(mod.ID)
+	dm, err := fb.backend.GetDomainModel(mod.ID)
 	if err != nil || dm == nil {
 		return ""
 	}

@@ -30,7 +30,7 @@ type flowBuilder struct {
 	measurer            *layoutMeasurer              // For measuring statement dimensions
 	nextConnectionPoint model.ID                     // For compound statements: the exit point differs from entry point
 	nextFlowCase        string                       // If set, next connecting flow uses this case value (for merge-less splits)
-	reader              backend.FullBackend              // For looking up page/microflow references
+	backend             backend.FullBackend          // For looking up page/microflow references
 	hierarchy           *ContainerHierarchy          // For resolving container IDs to module names
 	pendingAnnotations  *ast.ActivityAnnotations     // Pending annotations to attach to next activity
 	restServices        []*model.ConsumedRestService // Cached REST services for parameter classification
@@ -137,7 +137,7 @@ func (fb *flowBuilder) resolveAssociationPaths(expr ast.Expression) ast.Expressi
 // For each segment that is a qualified association name (Module.AssocName), it looks up
 // the association's target entity and inserts it after the association.
 func (fb *flowBuilder) resolvePathSegments(path []string) []string {
-	if fb.reader == nil || len(path) == 0 {
+	if fb.backend == nil || len(path) == 0 {
 		return path
 	}
 

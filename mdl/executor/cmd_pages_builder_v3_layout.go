@@ -5,11 +5,10 @@ package executor
 import (
 	"strings"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/sdk/pages"
-
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/sdk/pages"
 )
 
 func (pb *pageBuilder) buildLayoutGridV3(w *ast.WidgetV3) (*pages.LayoutGrid, error) {

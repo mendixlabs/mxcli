@@ -3,8 +3,8 @@
 package mock
 
 import (
-	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/mendixlabs/mxcli/model"
 )
 
 func (m *MockBackend) ListImportMappings() ([]*model.ImportMapping, error) {

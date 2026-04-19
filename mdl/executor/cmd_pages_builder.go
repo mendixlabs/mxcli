@@ -311,14 +311,12 @@ func (pb *pageBuilder) resolveFolder(folderPath string) (model.ID, error) {
 			if err != nil {
 				return "", mdlerrors.NewBackend(fmt.Sprintf("create folder %s", part), err)
 			}
-			currentContainerID = newFolderID
-
-			// Add to cache
 			pb.foldersCache = append(pb.foldersCache, &types.FolderInfo{
 				ID:          newFolderID,
 				ContainerID: currentContainerID,
 				Name:        part,
 			})
+			currentContainerID = newFolderID
 		}
 	}
 

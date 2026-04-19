@@ -503,7 +503,7 @@ func TestResolveAssociationPaths(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fb := &flowBuilder{
-				reader: nil, // nil reader → no resolution, path unchanged
+				backend: nil, // nil backend → no resolution, path unchanged
 			}
 			got := fb.resolvePathSegments(tt.path)
 

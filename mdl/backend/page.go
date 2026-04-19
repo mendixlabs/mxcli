@@ -24,7 +24,7 @@ type PageBackend interface {
 	UpdateLayout(layout *pages.Layout) error
 	DeleteLayout(id model.ID) error
 
-	// Snippets
+	// Snippets — no GetSnippet: snippets are resolved by qualified name via ListSnippets.
 	ListSnippets() ([]*pages.Snippet, error)
 	CreateSnippet(snippet *pages.Snippet) error
 	UpdateSnippet(snippet *pages.Snippet) error

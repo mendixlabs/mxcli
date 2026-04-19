@@ -403,7 +403,7 @@ func TestResolveMemberChange_FallbackWithoutReader(t *testing.T) {
 		// reader is nil — simulates no project context
 	}
 
-	// Without reader: a name without dot should default to attribute
+	// Without backend: a name without dot should default to attribute
 	mc := &microflows.MemberChange{}
 	fb.resolveMemberChange(mc, "Label", "Demo.Child")
 	if mc.AttributeQualifiedName != "Demo.Child.Label" {

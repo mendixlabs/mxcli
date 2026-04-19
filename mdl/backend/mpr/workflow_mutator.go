@@ -15,7 +15,8 @@ import (
 	"github.com/mendixlabs/mxcli/sdk/workflows"
 )
 
-// bsonArrayMarker is the Mendix BSON array type marker (storageListType 3).
+// bsonArrayMarker is the Mendix BSON array type marker (storageListType 3 = reference/association lists).
+// Contrast with int32(2) used for object lists (storageListType 2).
 const bsonArrayMarker = int32(3)
 
 // Compile-time check.

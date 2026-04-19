@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package mpr - Additional types and utility methods for Reader.
+// Package mpr - Reader methods for listing and querying model units.
 package mpr
 
 import (

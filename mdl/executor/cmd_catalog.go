@@ -680,7 +680,7 @@ func captureDescribe(ctx *ExecContext, objectType string, qualifiedName string) 
 
 // captureDescribeParallel is a goroutine-safe version of captureDescribe.
 // It creates a lightweight ExecContext clone per call with its own output buffer,
-// sharing the reader and pre-warmed cache. Call preWarmCache() before using
+// sharing the backend and pre-warmed cache. Call preWarmCache() before using
 // this from multiple goroutines.
 func captureDescribeParallel(ctx *ExecContext, objectType string, qualifiedName string) (string, error) {
 	parts := strings.SplitN(qualifiedName, ".", 2)

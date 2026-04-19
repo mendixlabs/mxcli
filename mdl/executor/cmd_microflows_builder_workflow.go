@@ -4,9 +4,9 @@ package executor
 
 import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 // wrapAction wraps a MicroflowAction in an ActionActivity with standard positioning.

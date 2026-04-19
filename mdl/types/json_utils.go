@@ -34,9 +34,14 @@ func normalizeDateTimeValue(s string) string {
 	// Find the decimal point after seconds
 	dotIdx := strings.Index(s, ".")
 	if dotIdx == -1 {
-		// No fractional part — insert .0000000 before timezone suffix
-		if idx := strings.IndexAny(s, "Z+-"); idx > 0 {
-			return s[:idx] + ".0000000" + s[idx:]
+		// No fractional part — insert .0000000 before timezone suffix.
+		// Search only after the time portion (index 19+ in "2015-05-22T14:56:29Z")
+		// to avoid matching '-' in the date portion.
+		if len(s) < 19 {
+			return s
+		}
+		if idx := strings.IndexAny(s[19:], "Z+-"); idx >= 0 {
+			return s[:19+idx] + ".0000000" + s[19+idx:]
 		}
 		return s
 	}
@@ -109,7 +114,7 @@ var reservedExposedNames = map[string]bool{
 }
 
 // resolveExposedName returns the custom name if mapped, otherwise capitalizes the JSON key.
-// Reserved names (Id, Type, Name) are prefixed with underscore to match Studio Pro behavior.
+// Reserved names (Id, Type) are prefixed with underscore to match Studio Pro behavior.
 func (b *snippetBuilder) resolveExposedName(jsonKey string) string {
 	if b.customNameMap != nil {
 		if custom, ok := b.customNameMap[jsonKey]; ok {
@@ -214,7 +219,9 @@ func (b *snippetBuilder) buildElementFromRawValue(exposedName, path, jsonKey str
 
 	// Primitive — unmarshal to determine type
 	var val any
-	json.Unmarshal(raw, &val)
+	if err := json.Unmarshal(raw, &val); err != nil {
+		return buildValueElement(exposedName, path, "Unknown", string(raw))
+	}
 
 	switch v := val.(type) {
 	case string:
@@ -226,7 +233,7 @@ func (b *snippetBuilder) buildElementFromRawValue(exposedName, path, jsonKey str
 		return buildValueElement(exposedName, path, primitiveType, fmt.Sprintf("%q", v))
 	case float64:
 		// Check the raw JSON text for a decimal point — Go's %v drops ".0" from 41850.0
-		if v == math.Trunc(v) && !strings.Contains(trimmed, ".") {
+		if v == math.Trunc(v) && !strings.Contains(trimmed, ".") && v >= -(1<<53) && v <= (1<<53) {
 			return buildValueElement(exposedName, path, "Integer", fmt.Sprintf("%v", int64(v)))
 		}
 		return buildValueElement(exposedName, path, "Decimal", fmt.Sprintf("%v", v))
@@ -257,10 +264,14 @@ func (b *snippetBuilder) buildElementFromRawRootArray(exposedName, path, rawJSON
 	}
 
 	dec := json.NewDecoder(strings.NewReader(rawJSON))
-	dec.Token() // opening [
+	if _, err := dec.Token(); err != nil { // opening [
+		return arrayElem
+	}
 	if dec.More() {
 		var firstItem json.RawMessage
-		dec.Decode(&firstItem)
+		if err := dec.Decode(&firstItem); err != nil {
+			return arrayElem
+		}
 
 		itemPath := path + "|(Object)"
 		trimmed := strings.TrimSpace(string(firstItem))
@@ -300,10 +311,14 @@ func (b *snippetBuilder) buildElementFromRawArray(exposedName, path, jsonKey, ra
 
 	// Decode array and get first element as raw JSON
 	dec := json.NewDecoder(strings.NewReader(rawJSON))
-	dec.Token() // opening [
+	if _, err := dec.Token(); err != nil { // opening [
+		return arrayElem
+	}
 	if dec.More() {
 		var firstItem json.RawMessage
-		dec.Decode(&firstItem)
+		if err := dec.Decode(&firstItem); err != nil {
+			return arrayElem
+		}
 
 		trimmed := strings.TrimSpace(string(firstItem))
 

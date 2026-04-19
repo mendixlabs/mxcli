@@ -82,19 +82,19 @@ func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 		MaxResults           int                 `json:"maxResults,omitempty"`
 	}
 	type contentsShape struct {
-		Description        string                `json:"description"`
-		SystemPrompt       string                `json:"systemPrompt"`
-		UserPrompt         string                `json:"userPrompt"`
-		UsageType          string                `json:"usageType"`
+		Description        string                 `json:"description"`
+		SystemPrompt       string                 `json:"systemPrompt"`
+		UserPrompt         string                 `json:"userPrompt"`
+		UsageType          string                 `json:"usageType"`
 		Variables          []agenteditor.AgentVar `json:"variables"`
-		Tools              []toolEntry           `json:"tools"`
-		KnowledgebaseTools []kbToolEntry         `json:"knowledgebaseTools"`
-		Model              *agenteditor.DocRef   `json:"model,omitempty"`
-		Entity             *agenteditor.DocRef   `json:"entity,omitempty"`
-		MaxTokens          *int                  `json:"maxTokens,omitempty"`
-		ToolChoice         string                `json:"toolChoice,omitempty"`
-		Temperature        *float64              `json:"temperature,omitempty"`
-		TopP               *float64              `json:"topP,omitempty"`
+		Tools              []toolEntry            `json:"tools"`
+		KnowledgebaseTools []kbToolEntry          `json:"knowledgebaseTools"`
+		Model              *agenteditor.DocRef    `json:"model,omitempty"`
+		Entity             *agenteditor.DocRef    `json:"entity,omitempty"`
+		MaxTokens          *int                   `json:"maxTokens,omitempty"`
+		ToolChoice         string                 `json:"toolChoice,omitempty"`
+		Temperature        *float64               `json:"temperature,omitempty"`
+		TopP               *float64               `json:"topP,omitempty"`
 	}
 
 	// Convert typed slices (ensure non-nil so JSON emits [] not null).

@@ -8,8 +8,8 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/mendixlabs/mxcli/model"
 )
 
 // showBusinessEventServices displays a table of all business event service documents.

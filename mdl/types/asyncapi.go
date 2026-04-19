@@ -4,6 +4,7 @@ package types
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -61,8 +62,14 @@ func ParseAsyncAPI(yamlStr string) (*AsyncAPIDocument, error) {
 		Description: raw.Info.Description,
 	}
 
-	// Resolve messages from components
-	for name, msg := range raw.Components.Messages {
+	// Resolve messages from components (sorted for deterministic output)
+	messageNames := make([]string, 0, len(raw.Components.Messages))
+	for name := range raw.Components.Messages {
+		messageNames = append(messageNames, name)
+	}
+	sort.Strings(messageNames)
+	for _, name := range messageNames {
+		msg := raw.Components.Messages[name]
 		resolved := &AsyncAPIMessage{
 			Name:        name,
 			Title:       msg.Title,
@@ -88,8 +95,14 @@ func ParseAsyncAPI(yamlStr string) (*AsyncAPIDocument, error) {
 		doc.Messages = append(doc.Messages, resolved)
 	}
 
-	// Resolve channels
-	for channelName, channel := range raw.Channels {
+	// Resolve channels (sorted for deterministic output)
+	channelNames := make([]string, 0, len(raw.Channels))
+	for name := range raw.Channels {
+		channelNames = append(channelNames, name)
+	}
+	sort.Strings(channelNames)
+	for _, channelName := range channelNames {
+		channel := raw.Channels[channelName]
 		if channel.Subscribe != nil {
 			msgName := ""
 			if channel.Subscribe.Message.Ref != "" {
@@ -138,8 +151,16 @@ func asyncRefName(ref string) string {
 }
 
 func resolveAsyncSchemaProperties(schema yamlAsyncSchema) []*AsyncAPIProperty {
-	var props []*AsyncAPIProperty
-	for name, prop := range schema.Properties {
+	// Sort property names for deterministic output
+	names := make([]string, 0, len(schema.Properties))
+	for name := range schema.Properties {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	props := make([]*AsyncAPIProperty, 0, len(names))
+	for _, name := range names {
+		prop := schema.Properties[name]
 		props = append(props, &AsyncAPIProperty{
 			Name:   name,
 			Type:   prop.Type,

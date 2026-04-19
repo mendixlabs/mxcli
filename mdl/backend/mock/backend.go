@@ -7,12 +7,12 @@ package mock
 
 import (
 	"github.com/mendixlabs/mxcli/mdl/backend"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/agenteditor"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 	"github.com/mendixlabs/mxcli/sdk/javaactions"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"github.com/mendixlabs/mxcli/sdk/security"
 	"github.com/mendixlabs/mxcli/sdk/workflows"
@@ -75,19 +75,19 @@ type MockBackend struct {
 	UpdateEnumerationRefsInAllDomainModelsFunc func(oldQualifiedName, newQualifiedName string) error
 
 	// MicroflowBackend
-	ListMicroflowsFunc  func() ([]*microflows.Microflow, error)
-	GetMicroflowFunc    func(id model.ID) (*microflows.Microflow, error)
-	CreateMicroflowFunc func(mf *microflows.Microflow) error
-	UpdateMicroflowFunc func(mf *microflows.Microflow) error
-	DeleteMicroflowFunc func(id model.ID) error
-	MoveMicroflowFunc          func(mf *microflows.Microflow) error
-	ParseMicroflowFromRawFunc  func(raw map[string]any, unitID, containerID model.ID) *microflows.Microflow
-	ListNanoflowsFunc   func() ([]*microflows.Nanoflow, error)
-	GetNanoflowFunc     func(id model.ID) (*microflows.Nanoflow, error)
-	CreateNanoflowFunc  func(nf *microflows.Nanoflow) error
-	UpdateNanoflowFunc  func(nf *microflows.Nanoflow) error
-	DeleteNanoflowFunc  func(id model.ID) error
-	MoveNanoflowFunc    func(nf *microflows.Nanoflow) error
+	ListMicroflowsFunc        func() ([]*microflows.Microflow, error)
+	GetMicroflowFunc          func(id model.ID) (*microflows.Microflow, error)
+	CreateMicroflowFunc       func(mf *microflows.Microflow) error
+	UpdateMicroflowFunc       func(mf *microflows.Microflow) error
+	DeleteMicroflowFunc       func(id model.ID) error
+	MoveMicroflowFunc         func(mf *microflows.Microflow) error
+	ParseMicroflowFromRawFunc func(raw map[string]any, unitID, containerID model.ID) *microflows.Microflow
+	ListNanoflowsFunc         func() ([]*microflows.Nanoflow, error)
+	GetNanoflowFunc           func(id model.ID) (*microflows.Nanoflow, error)
+	CreateNanoflowFunc        func(nf *microflows.Nanoflow) error
+	UpdateNanoflowFunc        func(nf *microflows.Nanoflow) error
+	DeleteNanoflowFunc        func(id model.ID) error
+	MoveNanoflowFunc          func(nf *microflows.Nanoflow) error
 
 	// PageBackend
 	ListPagesFunc          func() ([]*pages.Page, error)

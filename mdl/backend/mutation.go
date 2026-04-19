@@ -19,7 +19,7 @@ func (r WidgetRef) IsColumn() bool { return r.Column != "" }
 
 // Name returns the full reference string for error messages.
 func (r WidgetRef) Name() string {
-	if r.Column != "" {
+	if r.IsColumn() {
 		return r.Widget + "." + r.Column
 	}
 	return r.Widget
@@ -28,6 +28,11 @@ func (r WidgetRef) Name() string {
 // PageMutator provides fine-grained mutation operations on a single
 // page, layout, or snippet unit. Obtain one via PageMutationBackend.OpenPageForMutation.
 // All methods operate on the in-memory representation; call Save to persist.
+//
+// Widget addressing: most methods accept a widgetRef string (widget name).
+// Column-aware operations additionally accept a columnRef string.
+// DropWidget uses []WidgetRef to support mixed widget/column targets in a
+// single call.
 type PageMutator interface {
 	// ContainerType returns "page", "layout", or "snippet".
 	ContainerType() string
@@ -104,16 +109,16 @@ type PageMutator interface {
 // PluggablePropertyContext carries operation-specific values for
 // SetPluggableProperty. Only fields relevant to the operation are used.
 type PluggablePropertyContext struct {
-	AttributePath  string           // "attribute", "association"
-	AttributePaths []string         // "attributeObjects"
-	AssocPath      string           // "association"
-	EntityName     string           // "association"
-	PrimitiveVal   string           // "primitive"
-	DataSource     pages.DataSource // "datasource"
-	ChildWidgets   []pages.Widget   // "widgets"
+	AttributePath  string             // "attribute", "association"
+	AttributePaths []string           // "attributeObjects"
+	AssocPath      string             // "association"
+	EntityName     string             // "association"
+	PrimitiveVal   string             // "primitive"
+	DataSource     pages.DataSource   // "datasource"
+	ChildWidgets   []pages.Widget     // "widgets"
 	Action         pages.ClientAction // "action"
-	TextTemplate   string           // "texttemplate"
-	Selection      string           // "selection"
+	TextTemplate   string             // "texttemplate"
+	Selection      string             // "selection"
 }
 
 // WorkflowMutator provides fine-grained mutation operations on a single
@@ -155,17 +160,26 @@ type WorkflowMutator interface {
 
 	// --- Path operations (parallel split) ---
 
+	// InsertPath adds a new path to a parallel split activity.
 	InsertPath(activityRef string, atPos int, pathCaption string, activities []workflows.WorkflowActivity) error
+
+	// DropPath removes a path by caption from a parallel split activity.
 	DropPath(activityRef string, atPos int, pathCaption string) error
 
 	// --- Branch operations (exclusive split) ---
 
+	// InsertBranch adds a new branch with a condition to an exclusive split activity.
 	InsertBranch(activityRef string, atPos int, condition string, activities []workflows.WorkflowActivity) error
+
+	// DropBranch removes a branch by name from an exclusive split activity.
 	DropBranch(activityRef string, atPos int, branchName string) error
 
 	// --- Boundary event operations ---
 
+	// InsertBoundaryEvent adds a boundary event to the referenced activity.
 	InsertBoundaryEvent(activityRef string, atPos int, eventType string, delay string, activities []workflows.WorkflowActivity) error
+
+	// DropBoundaryEvent removes the boundary event from the referenced activity.
 	DropBoundaryEvent(activityRef string, atPos int) error
 
 	// Save persists the mutations to the backend.
@@ -206,7 +220,7 @@ type WidgetSerializationBackend interface {
 	SerializeWorkflowActivity(a workflows.WorkflowActivity) (any, error)
 }
 
-// WidgetObjectBuilder provides BSON-free operations on a loaded pluggable widget template.
+// WidgetObjectBuilder provides storage-agnostic operations on a loaded pluggable widget template.
 // The executor calls these methods with domain-typed values; the backend handles
 // all storage-specific manipulation internally.
 //
@@ -214,6 +228,8 @@ type WidgetSerializationBackend interface {
 type WidgetObjectBuilder interface {
 	// --- Property operations ---
 	// Each operation finds the property by key (via TypePointer matching) and updates its value.
+	// Set* methods do not return errors — invalid operations are logged as warnings
+	// and deferred to Finalize, which returns the aggregate result.
 
 	SetAttribute(propertyKey string, attributePath string)
 	SetAssociation(propertyKey string, assocPath string, entityName string)
@@ -245,7 +261,7 @@ type WidgetObjectBuilder interface {
 	// --- Finalize ---
 
 	// Finalize builds the CustomWidget from the mutated template.
-	// Returns the widget with RawType/RawObject set from the internal BSON state.
+	// Returns the widget with RawType/RawObject populated from internal state.
 	Finalize(id model.ID, name string, label string, editable string) *pages.CustomWidget
 }
 
@@ -253,10 +269,10 @@ type WidgetObjectBuilder interface {
 // All attribute paths are fully qualified. Child widgets are already built as
 // domain objects; the backend serializes them to storage format internally.
 type DataGridColumnSpec struct {
-	Attribute     string         // Fully qualified attribute path (empty for action/custom-content columns)
-	Caption       string         // Column header caption
-	ChildWidgets  []pages.Widget // Pre-built child widgets (for custom-content columns)
-	Properties    map[string]any // Column properties (Sortable, Resizable, Visible, etc.)
+	Attribute    string         // Fully qualified attribute path (empty for action/custom-content columns)
+	Caption      string         // Column header caption
+	ChildWidgets []pages.Widget // Pre-built child widgets (for custom-content columns)
+	Properties   map[string]any // Column properties (Sortable, Resizable, Visible, etc.)
 }
 
 // DataGridSpec carries all inputs needed to build a DataGrid2 widget object.
@@ -288,7 +304,7 @@ type WidgetBuilderBackend interface {
 	SerializeWidgetToOpaque(w pages.Widget) any
 
 	// SerializeDataSourceToOpaque converts a domain DataSource to an opaque
-	// form suitable for embedding in widget property BSON.
+	// form suitable for embedding in widget properties.
 	SerializeDataSourceToOpaque(ds pages.DataSource) any
 
 	// BuildCreateAttributeObject creates an attribute object for filter widgets.
@@ -296,7 +312,7 @@ type WidgetBuilderBackend interface {
 	BuildCreateAttributeObject(attributePath string, objectTypeID, propertyTypeID, valueTypeID string) (any, error)
 
 	// BuildDataGrid2Widget builds a complete DataGrid2 CustomWidget from domain-typed inputs.
-	// The backend loads the template, constructs the BSON object with columns,
+	// The backend loads the template, constructs the storage object with columns,
 	// datasource, header widgets, paging, and selection, and returns a fully
 	// assembled CustomWidget. Returns the widget with an opaque RawType/RawObject.
 	BuildDataGrid2Widget(id model.ID, name string, spec DataGridSpec, projectPath string) (*pages.CustomWidget, error)

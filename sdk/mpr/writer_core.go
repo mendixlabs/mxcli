@@ -10,21 +10,15 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mendixlabs/mxcli/mdl/bsonutil"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // idToBsonBinary converts a UUID string to BSON Binary format.
-// Mendix stores IDs as Binary with Subtype 0.
+// Delegates to the canonical implementation in bsonutil.
 func idToBsonBinary(id string) primitive.Binary {
-	blob := types.UUIDToBlob(id)
-	if blob == nil || len(blob) != 16 {
-		blob = types.UUIDToBlob(types.GenerateID())
-	}
-	return primitive.Binary{
-		Subtype: 0x00,
-		Data:    blob,
-	}
+	return bsonutil.IDToBsonBinary(id)
 }
 
 // Writer provides methods to write Mendix project files.

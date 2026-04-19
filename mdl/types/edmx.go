@@ -401,12 +401,12 @@ func ResolveNavType(t string) (typeName string, isMany bool) {
 // ============================================================================
 
 type xmlEdmx struct {
-	XMLName      xml.Name          `xml:"Edmx"`
-	Version      string            `xml:"Version,attr"`
-	DataServices []xmlDataServices `xml:"DataServices"`
+	XMLName      xml.Name         `xml:"Edmx"`
+	Version      string           `xml:"Version,attr"`
+	DataServices []xmlDataService `xml:"DataServices"`
 }
 
-type xmlDataServices struct {
+type xmlDataService struct {
 	Schemas []xmlSchema `xml:"Schema"`
 }
 

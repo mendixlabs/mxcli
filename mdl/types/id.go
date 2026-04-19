@@ -13,7 +13,9 @@ import (
 // GenerateID generates a new unique UUID v4 for model elements.
 func GenerateID() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand: " + err.Error())
+	}
 	b[6] = (b[6] & 0x0f) | 0x40 // Version 4
 	b[8] = (b[8] & 0x3f) | 0x80 // Variant is 10
 
@@ -25,15 +27,19 @@ func GenerateID() string {
 		b[10], b[11], b[12], b[13], b[14], b[15])
 }
 
-// GenerateDeterministicID generates a stable UUID from a seed string.
+// GenerateDeterministicID generates a stable UUID v4 from a seed string.
 // Used for System module entities that aren't in the MPR but need consistent IDs.
 func GenerateDeterministicID(seed string) string {
 	h := sha256.Sum256([]byte(seed))
+	// Set UUID version 4 and variant bits on the hash bytes
+	h[6] = (h[6] & 0x0f) | 0x40 // Version 4
+	h[8] = (h[8] & 0x3f) | 0x80 // Variant is 10
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
 		h[0:4], h[4:6], h[6:8], h[8:10], h[10:16])
 }
 
-// BlobToUUID converts a 16-byte binary ID blob to a UUID string.
+// BlobToUUID converts a 16-byte blob in Microsoft GUID format to a UUID string.
+// For non-16-byte input, returns a hex-encoded string as a best-effort fallback.
 func BlobToUUID(data []byte) string {
 	if len(data) != 16 {
 		return hex.EncodeToString(data)
@@ -51,13 +57,8 @@ func UUIDToBlob(uuid string) []byte {
 	if uuid == "" {
 		return nil
 	}
-	var clean strings.Builder
-	for _, c := range uuid {
-		if c != '-' {
-			clean.WriteString(string(c))
-		}
-	}
-	decoded, err := hex.DecodeString(clean.String())
+	clean := strings.ReplaceAll(uuid, "-", "")
+	decoded, err := hex.DecodeString(clean)
 	if err != nil || len(decoded) != 16 {
 		return nil
 	}
@@ -93,11 +94,8 @@ func ValidateID(id string) bool {
 	return true
 }
 
-// Hash computes a hash for content (used for content deduplication).
+// Hash computes a SHA-256 hash for content (used for content deduplication).
 func Hash(content []byte) string {
-	var sum uint64
-	for i, b := range content {
-		sum += uint64(b) * uint64(i+1)
-	}
-	return fmt.Sprintf("%016x", sum)
+	h := sha256.Sum256(content)
+	return hex.EncodeToString(h[:])
 }

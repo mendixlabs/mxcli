@@ -26,5 +26,7 @@ type MappingBackend interface {
 	ListJsonStructures() ([]*types.JsonStructure, error)
 	GetJsonStructureByQualifiedName(moduleName, name string) (*types.JsonStructure, error)
 	CreateJsonStructure(js *types.JsonStructure) error
+	// DeleteJsonStructure removes a JSON structure by ID.
+	// Takes string (not model.ID) to match the SDK writer layer convention.
 	DeleteJsonStructure(id string) error
 }

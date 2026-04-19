@@ -17,7 +17,7 @@ type MicroflowBackend interface {
 	MoveMicroflow(mf *microflows.Microflow) error
 
 	// ParseMicroflowFromRaw builds a Microflow from an already-unmarshalled
-	// BSON map. Used by diff-local and other callers that have raw map data.
+	// map. Used by diff-local and other callers that have raw map data.
 	ParseMicroflowFromRaw(raw map[string]any, unitID, containerID model.ID) *microflows.Microflow
 
 	ListNanoflows() ([]*microflows.Nanoflow, error)

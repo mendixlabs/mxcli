@@ -3,9 +3,9 @@
 package mock
 
 import (
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/javaactions"
-	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 func (m *MockBackend) ListJavaActions() ([]*types.JavaAction, error) {

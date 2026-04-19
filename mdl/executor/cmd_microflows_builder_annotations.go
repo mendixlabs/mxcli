@@ -5,9 +5,9 @@ package executor
 
 import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 // getStatementAnnotations extracts the annotations field from any microflow statement.

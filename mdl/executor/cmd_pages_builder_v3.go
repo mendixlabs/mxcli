@@ -4,14 +4,15 @@ package executor
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 )
 
@@ -60,7 +61,7 @@ func (pb *pageBuilder) buildPageV3(s *ast.CreatePageStmtV3) (*pages.Page, error)
 		layoutID, err := pb.resolveLayout(s.Layout)
 		if err != nil {
 			// Layout not found is not fatal - page will work but may not render correctly
-			fmt.Printf("Warning: layout %s not found\n", s.Layout)
+			log.Printf("warning: layout %s not found", s.Layout)
 		} else {
 			page.LayoutID = layoutID
 
@@ -740,7 +741,7 @@ func (pb *pageBuilder) moduleNameByID(moduleID model.ID) string {
 // getMicroflowReturnEntityName looks up a microflow and returns its return type entity name.
 // Returns empty string if the microflow doesn't return an entity or list of entities.
 func (pb *pageBuilder) getMicroflowReturnEntityName(qualifiedName string) string {
-	// First, check if the microflow was created during this session (not yet in reader cache)
+	// First, check if the microflow was created during this session (not yet in backend cache)
 	if pb.execCache != nil && pb.execCache.createdMicroflows != nil {
 		if info, ok := pb.execCache.createdMicroflows[qualifiedName]; ok {
 			return info.ReturnEntityName
@@ -755,7 +756,7 @@ func (pb *pageBuilder) getMicroflowReturnEntityName(qualifiedName string) string
 	moduleName := parts[0]
 	mfName := strings.Join(parts[1:], ".")
 
-	// Get microflows from reader cache
+	// Get microflows from backend
 	mfs, err := pb.getMicroflows()
 	if err != nil {
 		return ""

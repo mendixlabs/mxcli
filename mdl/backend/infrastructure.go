@@ -16,7 +16,7 @@ type RenameBackend interface {
 }
 
 // RawUnitBackend provides low-level unit access for operations that
-// manipulate raw BSON (e.g. widget patching, alter page/workflow).
+// manipulate raw unit contents (e.g. widget patching, alter page/workflow).
 type RawUnitBackend interface {
 	GetRawUnit(id model.ID) (map[string]any, error)
 	GetRawUnitBytes(id model.ID) ([]byte, error)
@@ -24,6 +24,8 @@ type RawUnitBackend interface {
 	ListRawUnits(objectType string) ([]*types.RawUnitInfo, error)
 	GetRawUnitByName(objectType, qualifiedName string) (*types.RawUnitInfo, error)
 	GetRawMicroflowByName(qualifiedName string) ([]byte, error)
+	// UpdateRawUnit replaces the contents of a unit by ID.
+	// Takes string (not model.ID) to match the SDK writer layer convention.
 	UpdateRawUnit(unitID string, contents []byte) error
 }
 
@@ -45,6 +47,7 @@ type WidgetBackend interface {
 }
 
 // AgentEditorBackend provides agent editor document operations.
+// Delete methods take string IDs to match the SDK writer layer convention.
 type AgentEditorBackend interface {
 	ListAgentEditorModels() ([]*agenteditor.Model, error)
 	ListAgentEditorKnowledgeBases() ([]*agenteditor.KnowledgeBase, error)
@@ -58,4 +61,23 @@ type AgentEditorBackend interface {
 	DeleteAgentEditorConsumedMCPService(id string) error
 	CreateAgentEditorAgent(a *agenteditor.Agent) error
 	DeleteAgentEditorAgent(id string) error
+}
+
+// SettingsBackend provides project settings operations.
+type SettingsBackend interface {
+	GetProjectSettings() (*model.ProjectSettings, error)
+	UpdateProjectSettings(ps *model.ProjectSettings) error
+}
+
+// ImageBackend provides image collection operations.
+type ImageBackend interface {
+	ListImageCollections() ([]*types.ImageCollection, error)
+	CreateImageCollection(ic *types.ImageCollection) error
+	DeleteImageCollection(id string) error
+}
+
+// ScheduledEventBackend provides scheduled event operations.
+type ScheduledEventBackend interface {
+	ListScheduledEvents() ([]*model.ScheduledEvent, error)
+	GetScheduledEvent(id model.ID) (*model.ScheduledEvent, error)
 }

@@ -308,7 +308,7 @@ func TestRegistryUserDefinitionOverrideLogsWarning(t *testing.T) {
 
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
-	defer log.SetOutput(nil)
+	defer log.SetOutput(os.Stderr)
 
 	projectPath := filepath.Join(tmpDir, "App.mpr")
 	if err := reg.LoadUserDefinitions(projectPath); err != nil {

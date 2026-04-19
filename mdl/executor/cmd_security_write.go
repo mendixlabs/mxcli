@@ -10,8 +10,8 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/security"
 )
 
@@ -781,7 +781,7 @@ func execRevokeWorkflowAccess(ctx *ExecContext, s *ast.RevokeWorkflowAccessStmt)
 func validateModuleRole(ctx *ExecContext, role ast.QualifiedName) error {
 	module, err := findModule(ctx, role.Module)
 	if err != nil {
-		return fmt.Errorf("module not found for role %s.%s: %w", role.Module, role.Name, err)
+		return mdlerrors.NewBackend(fmt.Sprintf("module not found for role %s.%s", role.Module, role.Name), err)
 	}
 
 	ms, err := ctx.Backend.GetModuleSecurity(module.ID)
@@ -856,7 +856,7 @@ func execCreateDemoUser(ctx *ExecContext, s *ast.CreateDemoUserStmt) error {
 
 	// Validate password against project password policy
 	if err := ps.PasswordPolicy.ValidatePassword(s.Password); err != nil {
-		return fmt.Errorf("password policy violation for demo user '%s': %w\nhint: check your project's password policy with SHOW PROJECT SECURITY", s.UserName, err)
+		return mdlerrors.NewValidationf("password policy violation for demo user '%s': %v\nhint: check your project's password policy with SHOW PROJECT SECURITY", s.UserName, err)
 	}
 
 	// Check if user already exists

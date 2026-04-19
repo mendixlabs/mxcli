@@ -303,6 +303,7 @@ func (e *Executor) Catalog() *catalog.Catalog {
 
 // Reader returns the MPR reader, or nil if not connected.
 // Deprecated: External callers should migrate to using Backend methods directly.
+// TODO(shared-types): remove once all callers use Backend — target: v0.next milestone.
 func (e *Executor) Reader() *mpr.Reader {
 	if e.backend == nil {
 		return nil
@@ -340,7 +341,7 @@ func (e *Executor) Close() error {
 
 // trackCreatedMicroflow registers a microflow that was created during this session.
 // This allows subsequent page creations to resolve references to the microflow
-// even though the reader cache hasn't been updated.
+// even though the backend cache hasn't been updated.
 func (e *Executor) trackCreatedMicroflow(moduleName, mfName string, id, containerID model.ID, returnEntityName string) {
 	e.ensureCache()
 	if e.cache.createdMicroflows == nil {
@@ -358,7 +359,7 @@ func (e *Executor) trackCreatedMicroflow(moduleName, mfName string, id, containe
 
 // trackCreatedPage registers a page that was created during this session.
 // This allows subsequent page creations to resolve SHOW_PAGE references
-// even though the reader cache hasn't been updated.
+// even though the backend cache hasn't been updated.
 func (e *Executor) trackCreatedPage(moduleName, pageName string, id, containerID model.ID) {
 	e.ensureCache()
 	if e.cache.createdPages == nil {
@@ -375,7 +376,7 @@ func (e *Executor) trackCreatedPage(moduleName, pageName string, id, containerID
 
 // trackCreatedSnippet registers a snippet that was created during this session.
 // This allows subsequent creations to resolve snippet references
-// even though the reader cache hasn't been updated.
+// even though the backend cache hasn't been updated.
 func (e *Executor) trackCreatedSnippet(moduleName, snippetName string, id, containerID model.ID) {
 	e.ensureCache()
 	if e.cache.createdSnippets == nil {

@@ -23,7 +23,7 @@ func isBuiltinModuleEntity(moduleName string) bool {
 }
 
 // execCreateMicroflow handles CREATE MICROFLOW statements.
-// loadRestServices returns all consumed REST services, or nil if no reader.
+// loadRestServices returns all consumed REST services, or nil if no backend.
 func loadRestServices(ctx *ExecContext) ([]*model.ConsumedRestService, error) {
 	if !ctx.Connected() {
 		return nil, nil
@@ -213,7 +213,7 @@ func execCreateMicroflow(ctx *ExecContext, s *ast.CreateMicroflowStmt) error {
 		varTypes:     varTypes,
 		declaredVars: declaredVars,
 		measurer:     &layoutMeasurer{varTypes: varTypes},
-		reader:       ctx.Backend,
+		backend:      ctx.Backend,
 		hierarchy:    hierarchy,
 		restServices: restServices,
 	}
