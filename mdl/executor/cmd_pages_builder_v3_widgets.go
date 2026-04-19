@@ -7,14 +7,12 @@ import (
 	"regexp"
 	"strings"
 
-	"go.mongodb.org/mongo-driver/bson"
-
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/backend"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/pages"
-	"github.com/mendixlabs/mxcli/sdk/widgets"
 )
 
 func (pb *pageBuilder) buildDataViewV3(w *ast.WidgetV3) (*pages.DataView, error) {
@@ -89,21 +87,7 @@ func (pb *pageBuilder) buildDataViewV3(w *ast.WidgetV3) (*pages.DataView, error)
 }
 
 func (pb *pageBuilder) buildDataGridV3(w *ast.WidgetV3) (*pages.CustomWidget, error) {
-	// Build DataGrid2 as a CustomWidget (pluggable widget) like V2 does.
-	// The built-in DataGrid (Forms$DataGrid) has serialization issues.
 	widgetID := model.ID(types.GenerateID())
-
-	// Load embedded template (required for pluggable widgets to work)
-	embeddedType, embeddedObject, embeddedIDs, embeddedObjectTypeID, err := widgets.GetTemplateFullBSON(pages.WidgetIDDataGrid2, types.GenerateID, pb.reader.Path())
-	if err != nil {
-		return nil, mdlerrors.NewBackend("load DataGrid2 template", err)
-	}
-	if embeddedType == nil || embeddedObject == nil {
-		return nil, mdlerrors.NewNotFound("widget template", "DataGrid2")
-	}
-
-	// Convert widget IDs to pages.PropertyTypeIDEntry format
-	propertyTypeIDs := convertPropertyTypeIDs(embeddedIDs)
 
 	// Build datasource from V3 DataSource property
 	var datasource pages.DataSource
@@ -121,71 +105,73 @@ func (pb *pageBuilder) buildDataGridV3(w *ast.WidgetV3) (*pages.CustomWidget, er
 	}
 
 	// Extract column definitions and CONTROLBAR widgets from children
-	var columns []ast.DataGridColumnDef
-	var headerWidgets []bson.D
+	var columns []backend.DataGridColumnSpec
+	var headerWidgets []pages.Widget
 	for _, child := range w.Children {
 		switch strings.ToUpper(child.Type) {
 		case "COLUMN":
 			attr := child.GetAttribute()
-			// Sugar: when no explicit Attribute: property is given, fall back to
-			// the column's name. This lets `COLUMN Sku (Caption: 'SKU')` work
-			// without repeating `Attribute: Sku`. Skip for custom-content columns
-			// (those with a body of child widgets), which don't bind to an attribute.
 			if attr == "" && child.Name != "" && len(child.Children) == 0 {
 				attr = child.Name
 			}
-			col := ast.DataGridColumnDef{
-				Attribute:  attr,
+			col := backend.DataGridColumnSpec{
+				Attribute:  pb.resolveAttributePath(attr),
 				Caption:    child.GetCaption(),
-				ChildrenV3: child.Children, // Child widgets for custom content columns
 				Properties: child.Properties,
+			}
+			// Build child widgets for custom content columns
+			for _, grandchild := range child.Children {
+				childWidget, err := pb.buildWidgetV3(grandchild)
+				if err != nil {
+					return nil, mdlerrors.NewBackend("build column child widget", err)
+				}
+				if childWidget != nil {
+					col.ChildWidgets = append(col.ChildWidgets, childWidget)
+				}
 			}
 			columns = append(columns, col)
 		case "CONTROLBAR":
-			// Build CONTROLBAR widgets as BSON for the filtersPlaceholder property
 			for _, controlBarChild := range child.Children {
-				widgetBSON, err := pb.buildWidgetV3ToBSON(controlBarChild)
+				childWidget, err := pb.buildWidgetV3(controlBarChild)
 				if err != nil {
 					return nil, mdlerrors.NewBackend("build controlbar widget", err)
 				}
-				if widgetBSON != nil {
-					headerWidgets = append(headerWidgets, widgetBSON)
+				if childWidget != nil {
+					headerWidgets = append(headerWidgets, childWidget)
 				}
 			}
 		}
 	}
 
-	// Update the template object with datasource, columns, and header widgets
-	var updatedObject bson.D
-	if len(columns) > 0 || len(headerWidgets) > 0 {
-		// Use full update that replaces columns and/or header widgets
-		updatedObject = pb.updateDataGrid2Object(embeddedObject, propertyTypeIDs, datasource, columns, headerWidgets)
-	} else {
-		// No columns or header widgets defined, use template columns
-		updatedObject = pb.cloneDataGrid2ObjectWithDatasourceOnly(embeddedObject, propertyTypeIDs, datasource)
+	// Collect paging overrides from AST properties
+	pagingOverrides := make(map[string]string)
+	for mdlKey, widgetKey := range dataGridPagingPropMap {
+		if v := w.GetStringProp(mdlKey); v != "" {
+			pagingOverrides[widgetKey] = v
+		} else if iv := w.GetIntProp(mdlKey); iv > 0 {
+			pagingOverrides[widgetKey] = fmt.Sprintf("%d", iv)
+		} else if bv, ok := w.Properties[mdlKey]; ok {
+			if boolVal, isBool := bv.(bool); isBool {
+				if boolVal {
+					pagingOverrides[widgetKey] = "yes"
+				} else {
+					pagingOverrides[widgetKey] = "no"
+				}
+			}
+		}
 	}
 
-	// Apply paging properties from AST if specified
-	updatedObject = pb.applyDataGridPagingProps(updatedObject, propertyTypeIDs, w)
-
-	// Apply selection mode if specified
-	if selection := w.GetSelection(); selection != "" {
-		updatedObject = pb.applyDataGridSelectionProp(updatedObject, propertyTypeIDs, selection)
+	spec := backend.DataGridSpec{
+		DataSource:      datasource,
+		Columns:         columns,
+		HeaderWidgets:   headerWidgets,
+		PagingOverrides: pagingOverrides,
+		SelectionMode:   w.GetSelection(),
 	}
 
-	grid := &pages.CustomWidget{
-		BaseWidget: pages.BaseWidget{
-			BaseElement: model.BaseElement{
-				ID:       widgetID,
-				TypeName: "CustomWidgets$CustomWidget",
-			},
-			Name: w.Name,
-		},
-		Editable:          "Always",
-		RawType:           embeddedType,
-		RawObject:         updatedObject,
-		PropertyTypeIDMap: propertyTypeIDs,
-		ObjectTypeID:      embeddedObjectTypeID,
+	grid, err := pb.widgetBackend.BuildDataGrid2Widget(widgetID, w.Name, spec, pb.backend.Path())
+	if err != nil {
+		return nil, err
 	}
 
 	if err := pb.registerWidgetName(w.Name, grid.ID); err != nil {
@@ -904,103 +890,4 @@ var dataGridPagingPropMap = map[string]string{
 	"ShowPagingButtons": "showPagingButtons",
 	// "ShowNumberOfRows" is defined in DataGrid2 type but not yet fully supported;
 	// setting it to a non-default value causes CE0463 "widget definition changed".
-}
-
-// applyDataGridPagingProps applies paging properties from the AST to the DataGrid2 BSON object.
-// It iterates through the object's Properties array, matching TypePointers to known paging
-// property keys, and replaces PrimitiveValue when a corresponding AST property is set.
-func (pb *pageBuilder) applyDataGridPagingProps(obj bson.D, propertyTypeIDs map[string]pages.PropertyTypeIDEntry, w *ast.WidgetV3) bson.D {
-	// Collect overrides: camelCase key -> string value
-	overrides := make(map[string]string)
-	for mdlKey, widgetKey := range dataGridPagingPropMap {
-		if v := w.GetStringProp(mdlKey); v != "" {
-			overrides[widgetKey] = v
-		} else if iv := w.GetIntProp(mdlKey); iv > 0 {
-			overrides[widgetKey] = fmt.Sprintf("%d", iv)
-		} else if bv, ok := w.Properties[mdlKey]; ok {
-			if boolVal, isBool := bv.(bool); isBool {
-				if boolVal {
-					overrides[widgetKey] = "yes"
-				} else {
-					overrides[widgetKey] = "no"
-				}
-			}
-		}
-	}
-	if len(overrides) == 0 {
-		return obj
-	}
-
-	// Build reverse map: TypePointer ID -> widget property key
-	typePointerToKey := make(map[string]string)
-	for widgetKey, entry := range propertyTypeIDs {
-		typePointerToKey[entry.PropertyTypeID] = widgetKey
-	}
-
-	// Walk the object and replace properties that have overrides
-	result := make(bson.D, 0, len(obj))
-	for _, elem := range obj {
-		if elem.Key == "Properties" {
-			if propsArr, ok := elem.Value.(bson.A); ok {
-				updatedProps := bson.A{propsArr[0]} // Keep version marker
-				for _, propVal := range propsArr[1:] {
-					propMap, ok := propVal.(bson.D)
-					if !ok {
-						updatedProps = append(updatedProps, propVal)
-						continue
-					}
-					tp := pb.getTypePointerFromProperty(propMap)
-					widgetKey := typePointerToKey[tp]
-					if newVal, hasOverride := overrides[widgetKey]; hasOverride {
-						updatedProps = append(updatedProps, pb.clonePropertyWithPrimitiveValue(propMap, newVal))
-					} else {
-						updatedProps = append(updatedProps, propMap)
-					}
-				}
-				result = append(result, bson.E{Key: "Properties", Value: updatedProps})
-			} else {
-				result = append(result, elem)
-			}
-		} else {
-			result = append(result, elem)
-		}
-	}
-	return result
-}
-
-// applyDataGridSelectionProp applies the Selection mode to a DataGrid2 object.
-// DataGrid2 uses the same "itemSelection" property key as Gallery.
-func (pb *pageBuilder) applyDataGridSelectionProp(obj bson.D, propertyTypeIDs map[string]pages.PropertyTypeIDEntry, selectionMode string) bson.D {
-	itemSelectionEntry, ok := propertyTypeIDs["itemSelection"]
-	if !ok {
-		return obj
-	}
-
-	result := make(bson.D, 0, len(obj))
-	for _, elem := range obj {
-		if elem.Key == "Properties" {
-			if propsArr, ok := elem.Value.(bson.A); ok {
-				updatedProps := bson.A{propsArr[0]} // Keep version marker
-				for _, propVal := range propsArr[1:] {
-					propMap, ok := propVal.(bson.D)
-					if !ok {
-						updatedProps = append(updatedProps, propVal)
-						continue
-					}
-					tp := pb.getTypePointerFromProperty(propMap)
-					if tp == itemSelectionEntry.PropertyTypeID {
-						updatedProps = append(updatedProps, pb.buildGallerySelectionProperty(propMap, selectionMode))
-					} else {
-						updatedProps = append(updatedProps, propMap)
-					}
-				}
-				result = append(result, bson.E{Key: "Properties", Value: updatedProps})
-			} else {
-				result = append(result, elem)
-			}
-		} else {
-			result = append(result, elem)
-		}
-	}
-	return result
 }

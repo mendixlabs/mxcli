@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/backend"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // showImportMappings prints a table of all import mapping documents.
@@ -191,7 +191,6 @@ func printImportMappingElement(w io.Writer, elem *model.ImportMappingElement, de
 
 // execCreateImportMapping creates a new import mapping.
 func execCreateImportMapping(ctx *ExecContext, s *ast.CreateImportMappingStmt) error {
-	e := ctx.executor
 	if !ctx.ConnectedForWrite() {
 		return mdlerrors.NewNotConnectedWrite()
 	}
@@ -226,7 +225,7 @@ func execCreateImportMapping(ctx *ExecContext, s *ast.CreateImportMappingStmt) e
 
 	// Build element tree from the AST definition, cloning JSON structure properties
 	if s.RootElement != nil {
-		root := buildImportMappingElementModel(s.Name.Module, s.RootElement, "", "(Object)", e.reader, jsElementsByPath, true)
+		root := buildImportMappingElementModel(s.Name.Module, s.RootElement, "", "(Object)", ctx.Backend, jsElementsByPath, true)
 		im.Elements = append(im.Elements, root)
 	}
 
@@ -244,10 +243,10 @@ func execCreateImportMapping(ctx *ExecContext, s *ast.CreateImportMappingStmt) e
 // It clones properties from the matching JSON structure element (ExposedName, JsonPath,
 // MaxOccurs, ElementType, etc.) and adds mapping-specific bindings (Entity, Attribute,
 // Association, ObjectHandling).
-func buildImportMappingElementModel(moduleName string, def *ast.ImportMappingElementDef, parentEntity, parentPath string, reader *mpr.Reader, jsElems map[string]*types.JsonElement, isRoot bool) *model.ImportMappingElement {
+func buildImportMappingElementModel(moduleName string, def *ast.ImportMappingElementDef, parentEntity, parentPath string, b backend.FullBackend, jsElems map[string]*types.JsonElement, isRoot bool) *model.ImportMappingElement {
 	elem := &model.ImportMappingElement{
 		BaseElement: model.BaseElement{
-			ID: model.ID(mpr.GenerateID()),
+			ID: model.ID(types.GenerateID()),
 		},
 	}
 
@@ -318,13 +317,13 @@ func buildImportMappingElementModel(moduleName string, def *ast.ImportMappingEle
 		}
 
 		for _, child := range def.Children {
-			elem.Children = append(elem.Children, buildImportMappingElementModel(moduleName, child, entity, childPath, reader, jsElems, false))
+			elem.Children = append(elem.Children, buildImportMappingElementModel(moduleName, child, entity, childPath, b, jsElems, false))
 		}
 	} else {
 		// Value mapping — bind to attribute
 		elem.Kind = "Value"
 		elem.TypeName = "ImportMappings$ValueMappingElement"
-		elem.DataType = resolveAttributeType(parentEntity, def.Attribute, reader)
+		elem.DataType = resolveAttributeType(parentEntity, def.Attribute, b)
 		elem.IsKey = def.IsKey
 		attr := def.Attribute
 		if parentEntity != "" && !strings.Contains(attr, ".") {
@@ -349,15 +348,15 @@ func buildJsonElementPathMap(elems []*types.JsonElement, m map[string]*types.Jso
 
 // resolveAttributeType looks up the data type of an entity attribute from the project.
 // Returns "String" as default if the attribute cannot be found.
-func resolveAttributeType(entityQN, attrName string, reader *mpr.Reader) string {
-	if reader == nil || entityQN == "" {
+func resolveAttributeType(entityQN, attrName string, b backend.DomainModelBackend) string {
+	if b == nil || entityQN == "" {
 		return "String"
 	}
 	parts := strings.SplitN(entityQN, ".", 2)
 	if len(parts) != 2 {
 		return "String"
 	}
-	dms, err := reader.ListDomainModels()
+	dms, err := b.ListDomainModels()
 	if err != nil {
 		return "String"
 	}

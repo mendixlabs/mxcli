@@ -658,7 +658,7 @@ func (pb *pageBuilder) resolveAssociationDestination(assocQN, contextEntity stri
 	}
 	modName, assocName := parts[0], parts[1]
 
-	domainModels, err := pb.reader.ListDomainModels()
+	domainModels, err := pb.backend.ListDomainModels()
 	if err != nil {
 		return ""
 	}
@@ -701,7 +701,7 @@ func (pb *pageBuilder) entityQNByID(entityID model.ID) string {
 	if entityID == "" {
 		return ""
 	}
-	domainModels, err := pb.reader.ListDomainModels()
+	domainModels, err := pb.backend.ListDomainModels()
 	if err != nil {
 		return ""
 	}
@@ -725,7 +725,7 @@ func (pb *pageBuilder) moduleNameByID(moduleID model.ID) string {
 	if moduleID == "" {
 		return ""
 	}
-	modules, err := pb.reader.ListModules()
+	modules, err := pb.backend.ListModules()
 	if err != nil {
 		return ""
 	}
@@ -809,7 +809,7 @@ func (pb *pageBuilder) getNanoflowReturnEntityName(qualifiedName string) string 
 		name = qualifiedName
 	}
 
-	nanoflows, err := pb.reader.ListNanoflows()
+	nanoflows, err := pb.backend.ListNanoflows()
 	if err != nil {
 		return ""
 	}
@@ -1134,7 +1134,7 @@ func (pb *pageBuilder) resolveNanoflowByName(nfName string) (model.ID, error) {
 		name = nfName
 	}
 
-	nanoflows, err := pb.reader.ListNanoflows()
+	nanoflows, err := pb.backend.ListNanoflows()
 	if err != nil {
 		return "", mdlerrors.NewBackend("list nanoflows", err)
 	}

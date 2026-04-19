@@ -94,3 +94,17 @@ func (m *MockBackend) BuildCreateAttributeObject(attributePath string, objectTyp
 	}
 	return nil, nil
 }
+
+func (m *MockBackend) BuildDataGrid2Widget(id model.ID, name string, spec backend.DataGridSpec, projectPath string) (*pages.CustomWidget, error) {
+	if m.BuildDataGrid2WidgetFunc != nil {
+		return m.BuildDataGrid2WidgetFunc(id, name, spec, projectPath)
+	}
+	return nil, nil
+}
+
+func (m *MockBackend) BuildFilterWidget(spec backend.FilterWidgetSpec, projectPath string) (pages.Widget, error) {
+	if m.BuildFilterWidgetFunc != nil {
+		return m.BuildFilterWidgetFunc(spec, projectPath)
+	}
+	return nil, nil
+}

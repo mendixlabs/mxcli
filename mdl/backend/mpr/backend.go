@@ -34,6 +34,11 @@ type MprBackend struct {
 	path   string
 }
 
+// New creates a new unconnected MprBackend. Call Connect(path) to open a project.
+func New() *MprBackend {
+	return &MprBackend{}
+}
+
 // Wrap creates an MprBackend that wraps an existing Writer (and its Reader).
 // This is used during migration when the Executor already owns the Writer
 // and we want to expose it through the Backend interface without opening
@@ -74,6 +79,11 @@ func (b *MprBackend) Disconnect() error {
 
 func (b *MprBackend) IsConnected() bool { return b.writer != nil }
 func (b *MprBackend) Path() string      { return b.path }
+
+// MprReader returns the underlying *mpr.Reader for callers that still
+// require direct SDK access (e.g. linter rules). Prefer Backend methods
+// for new code.
+func (b *MprBackend) MprReader() *mpr.Reader { return b.reader }
 
 func (b *MprBackend) Version() types.MPRVersion                 { return convertMPRVersion(b.reader.Version()) }
 func (b *MprBackend) ProjectVersion() *types.ProjectVersion     { return convertProjectVersion(b.reader.ProjectVersion()) }

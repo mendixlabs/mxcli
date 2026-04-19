@@ -3,18 +3,10 @@
 package executor
 
 import (
-	"fmt"
-	"log"
 	"strings"
 
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/mdl/bsonutil"
-	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/pages"
-	"github.com/mendixlabs/mxcli/sdk/widgets"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // unquoteIdentifier strips surrounding double-quotes or backticks from a quoted identifier.
@@ -75,179 +67,6 @@ func (pb *pageBuilder) resolveAssociationPath(assocName string) string {
 	return assocName
 }
 
-// updateWidgetPropertyValue finds and updates a specific property value in a WidgetObject.
-// The updateFn is called with the WidgetValue and should return the modified value.
-func updateWidgetPropertyValue(obj bson.D, propTypeIDs map[string]pages.PropertyTypeIDEntry, propertyKey string, updateFn func(bson.D) bson.D) bson.D {
-	// Find the PropertyTypeID for this key
-	propEntry, ok := propTypeIDs[propertyKey]
-	if !ok {
-		return obj
-	}
-
-	result := make(bson.D, 0, len(obj))
-	for _, elem := range obj {
-		if elem.Key == "Properties" {
-			if arr, ok := elem.Value.(bson.A); ok {
-				result = append(result, bson.E{Key: "Properties", Value: updatePropertyInArray(arr, propEntry.PropertyTypeID, updateFn)})
-				continue
-			}
-		}
-		result = append(result, elem)
-	}
-	return result
-}
-
-// updatePropertyInArray finds a property by TypePointer and updates its value.
-func updatePropertyInArray(arr bson.A, propertyTypeID string, updateFn func(bson.D) bson.D) bson.A {
-	result := make(bson.A, len(arr))
-	matched := false
-	for i, item := range arr {
-		if prop, ok := item.(bson.D); ok {
-			if matchesTypePointer(prop, propertyTypeID) {
-				result[i] = updatePropertyValue(prop, updateFn)
-				matched = true
-			} else {
-				result[i] = item
-			}
-		} else {
-			result[i] = item
-		}
-	}
-	if !matched {
-		log.Printf("WARNING: updatePropertyInArray: no match for TypePointer %s in %d properties", propertyTypeID, len(arr)-1)
-	}
-	return result
-}
-
-// matchesTypePointer checks if a WidgetProperty has the given TypePointer.
-func matchesTypePointer(prop bson.D, propertyTypeID string) bool {
-	// Normalize: strip dashes for comparison (BlobToUUID returns dashed format,
-	// but propertyTypeIDs from template loader use undashed 32-char hex).
-	normalizedTarget := strings.ReplaceAll(propertyTypeID, "-", "")
-	for _, elem := range prop {
-		if elem.Key == "TypePointer" {
-			// Handle both primitive.Binary (from MPR) and []byte (from JSON templates)
-			switch v := elem.Value.(type) {
-			case primitive.Binary:
-				propID := strings.ReplaceAll(types.BlobToUUID(v.Data), "-", "")
-				return propID == normalizedTarget
-			case []byte:
-				propID := strings.ReplaceAll(types.BlobToUUID(v), "-", "")
-				if propID == normalizedTarget {
-					return true
-				}
-				// Also try raw hex encoding (no GUID swap) for templates
-				rawHex := fmt.Sprintf("%x", v)
-				return rawHex == normalizedTarget
-			}
-		}
-	}
-	return false
-}
-
-// updatePropertyValue updates the Value field in a WidgetProperty.
-func updatePropertyValue(prop bson.D, updateFn func(bson.D) bson.D) bson.D {
-	result := make(bson.D, 0, len(prop))
-	for _, elem := range prop {
-		if elem.Key == "Value" {
-			if val, ok := elem.Value.(bson.D); ok {
-				result = append(result, bson.E{Key: "Value", Value: updateFn(val)})
-			} else {
-				result = append(result, elem)
-			}
-		} else {
-			result = append(result, elem)
-		}
-	}
-	return result
-}
-
-// setPrimitiveValue sets the PrimitiveValue field in a WidgetValue.
-func setPrimitiveValue(val bson.D, value string) bson.D {
-	result := make(bson.D, 0, len(val))
-	for _, elem := range val {
-		if elem.Key == "PrimitiveValue" {
-			result = append(result, bson.E{Key: "PrimitiveValue", Value: value})
-		} else {
-			result = append(result, elem)
-		}
-	}
-	return result
-}
-
-// setAssociationRef sets the EntityRef field in a WidgetValue for an association binding
-// on a pluggable widget. Uses DomainModels$IndirectEntityRef with a Steps array containing
-// a DomainModels$EntityRefStep that specifies the association and destination entity.
-// MxBuild requires the EntityRef to resolve the association target (CE0642).
-func setAssociationRef(val bson.D, assocPath string, entityName string) bson.D {
-	result := make(bson.D, 0, len(val))
-	for _, elem := range val {
-		if elem.Key == "EntityRef" && entityName != "" {
-			result = append(result, bson.E{Key: "EntityRef", Value: bson.D{
-				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
-				{Key: "$Type", Value: "DomainModels$IndirectEntityRef"},
-				{Key: "Steps", Value: bson.A{
-					int32(2), // version marker
-					bson.D{
-						{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
-						{Key: "$Type", Value: "DomainModels$EntityRefStep"},
-						{Key: "Association", Value: assocPath},
-						{Key: "DestinationEntity", Value: entityName},
-					},
-				}},
-			}})
-		} else {
-			result = append(result, elem)
-		}
-	}
-	return result
-}
-
-// setAttributeRef sets the AttributeRef field in a WidgetValue.
-// The attrPath must be fully qualified (Module.Entity.Attribute, 2+ dots).
-// If not fully qualified, AttributeRef is set to nil to avoid Studio Pro crash.
-func setAttributeRef(val bson.D, attrPath string) bson.D {
-	result := make(bson.D, 0, len(val))
-	for _, elem := range val {
-		if elem.Key == "AttributeRef" {
-			if strings.Count(attrPath, ".") >= 2 {
-				result = append(result, bson.E{Key: "AttributeRef", Value: bson.D{
-					{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
-					{Key: "$Type", Value: "DomainModels$AttributeRef"},
-					{Key: "Attribute", Value: attrPath},
-					{Key: "EntityRef", Value: nil},
-				}})
-			} else {
-				result = append(result, bson.E{Key: "AttributeRef", Value: nil})
-			}
-		} else {
-			result = append(result, elem)
-		}
-	}
-	return result
-}
-
-// convertPropertyTypeIDs converts widgets.PropertyTypeIDEntry to pages.PropertyTypeIDEntry.
-func convertPropertyTypeIDs(src map[string]widgets.PropertyTypeIDEntry) map[string]pages.PropertyTypeIDEntry {
-	result := make(map[string]pages.PropertyTypeIDEntry)
-	for k, v := range src {
-		entry := pages.PropertyTypeIDEntry{
-			PropertyTypeID: v.PropertyTypeID,
-			ValueTypeID:    v.ValueTypeID,
-			DefaultValue:   v.DefaultValue,
-			ValueType:      v.ValueType,
-			Required:       v.Required,
-			ObjectTypeID:   v.ObjectTypeID,
-		}
-		// Convert nested property IDs if present
-		if len(v.NestedPropertyIDs) > 0 {
-			entry.NestedPropertyIDs = convertPropertyTypeIDs(v.NestedPropertyIDs)
-		}
-		result[k] = entry
-	}
-	return result
-}
-
 // resolveSnippetRef resolves a snippet qualified name to its ID.
 func (pb *pageBuilder) resolveSnippetRef(snippetRef string) (model.ID, error) {
 	if snippetRef == "" {
@@ -264,7 +83,7 @@ func (pb *pageBuilder) resolveSnippetRef(snippetRef string) (model.ID, error) {
 		snippetName = snippetRef
 	}
 
-	snippets, err := pb.reader.ListSnippets()
+	snippets, err := pb.backend.ListSnippets()
 	if err != nil {
 		return "", err
 	}

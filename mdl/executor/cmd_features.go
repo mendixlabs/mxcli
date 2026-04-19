@@ -13,7 +13,7 @@ import (
 
 // checkFeature verifies that a feature is available in the connected project's
 // version. Returns nil if available, or an actionable error with the version
-// requirement and a hint. Safe to call when e.reader is nil (returns nil).
+// requirement and a hint. Safe to call when not connected (returns nil).
 func checkFeature(ctx *ExecContext, area, name, statement, hint string) error {
 
 	if !ctx.Connected() {

@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/backend"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // showExportMappings prints a table of all export mapping documents.
@@ -178,7 +178,6 @@ func printExportMappingElement(w io.Writer, elem *model.ExportMappingElement, de
 
 // execCreateExportMapping creates a new export mapping.
 func execCreateExportMapping(ctx *ExecContext, s *ast.CreateExportMappingStmt) error {
-	e := ctx.executor
 	if !ctx.ConnectedForWrite() {
 		return mdlerrors.NewNotConnectedWrite()
 	}
@@ -217,7 +216,7 @@ func execCreateExportMapping(ctx *ExecContext, s *ast.CreateExportMappingStmt) e
 
 	// Build element tree from the AST definition, cloning JSON structure properties
 	if s.RootElement != nil {
-		root := buildExportMappingElementModel(s.Name.Module, s.RootElement, "", "(Object)", jsElems, e.reader, true)
+		root := buildExportMappingElementModel(s.Name.Module, s.RootElement, "", "(Object)", jsElems, ctx.Backend, true)
 		em.Elements = append(em.Elements, root)
 	}
 
@@ -233,10 +232,10 @@ func execCreateExportMapping(ctx *ExecContext, s *ast.CreateExportMappingStmt) e
 
 // buildExportMappingElementModel converts an AST element definition to a model element.
 // It clones properties from the matching JSON structure element and adds mapping bindings.
-func buildExportMappingElementModel(moduleName string, def *ast.ExportMappingElementDef, parentEntity, parentPath string, jsElems map[string]*types.JsonElement, reader *mpr.Reader, isRoot bool) *model.ExportMappingElement {
+func buildExportMappingElementModel(moduleName string, def *ast.ExportMappingElementDef, parentEntity, parentPath string, jsElems map[string]*types.JsonElement, b backend.FullBackend, isRoot bool) *model.ExportMappingElement {
 	elem := &model.ExportMappingElement{
 		BaseElement: model.BaseElement{
-			ID: model.ID(mpr.GenerateID()),
+			ID: model.ID(types.GenerateID()),
 		},
 	}
 
@@ -308,7 +307,7 @@ func buildExportMappingElementModel(moduleName string, def *ast.ExportMappingEle
 
 				itemElem := &model.ExportMappingElement{
 					BaseElement: model.BaseElement{
-						ID:       model.ID(mpr.GenerateID()),
+						ID:       model.ID(types.GenerateID()),
 						TypeName: "ExportMappings$ObjectMappingElement",
 					},
 					Kind:           "Object",
@@ -327,13 +326,13 @@ func buildExportMappingElementModel(moduleName string, def *ast.ExportMappingEle
 				}
 				// Item's children are the value elements
 				for _, valChild := range itemDef.Children {
-					itemElem.Children = append(itemElem.Children, buildExportMappingElementModel(moduleName, valChild, itemEntity, itemPath, jsElems, reader, false))
+					itemElem.Children = append(itemElem.Children, buildExportMappingElementModel(moduleName, valChild, itemEntity, itemPath, jsElems, b, false))
 				}
 				elem.Children = append(elem.Children, itemElem)
 			} else {
 				// Fallback: treat children as direct item children (no intermediate entity)
 				for _, child := range def.Children {
-					elem.Children = append(elem.Children, buildExportMappingElementModel(moduleName, child, entity, itemPath, jsElems, reader, false))
+					elem.Children = append(elem.Children, buildExportMappingElementModel(moduleName, child, entity, itemPath, jsElems, b, false))
 				}
 			}
 		} else {
@@ -342,14 +341,14 @@ func buildExportMappingElementModel(moduleName string, def *ast.ExportMappingEle
 			elem.Association = assoc
 			elem.ObjectHandling = handling
 			for _, child := range def.Children {
-				elem.Children = append(elem.Children, buildExportMappingElementModel(moduleName, child, entity, lookupPath, jsElems, reader, false))
+				elem.Children = append(elem.Children, buildExportMappingElementModel(moduleName, child, entity, lookupPath, jsElems, b, false))
 			}
 		}
 	} else {
 		// Value mapping — bind to attribute
 		elem.Kind = "Value"
 		elem.TypeName = "ExportMappings$ValueMappingElement"
-		elem.DataType = resolveAttributeType(parentEntity, def.Attribute, reader)
+		elem.DataType = resolveAttributeType(parentEntity, def.Attribute, b)
 		attr := def.Attribute
 		if parentEntity != "" && !strings.Contains(attr, ".") {
 			attr = parentEntity + "." + attr

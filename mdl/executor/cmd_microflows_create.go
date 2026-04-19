@@ -213,7 +213,7 @@ func execCreateMicroflow(ctx *ExecContext, s *ast.CreateMicroflowStmt) error {
 		varTypes:     varTypes,
 		declaredVars: declaredVars,
 		measurer:     &layoutMeasurer{varTypes: varTypes},
-		reader:       e.reader,
+		reader:       ctx.Backend,
 		hierarchy:    hierarchy,
 		restServices: restServices,
 	}

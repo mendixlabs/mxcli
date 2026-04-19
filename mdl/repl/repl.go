@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	"github.com/chzyer/readline"
+	"github.com/mendixlabs/mxcli/mdl/backend"
+	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
 	"github.com/mendixlabs/mxcli/mdl/diaglog"
 	"github.com/mendixlabs/mxcli/mdl/executor"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
@@ -37,8 +39,10 @@ func (r *REPL) SetLogger(l *diaglog.Logger) {
 
 // New creates a new REPL with the given input and output.
 func New(input io.Reader, output io.Writer) *REPL {
+	exec := executor.New(output)
+	exec.SetBackendFactory(func() backend.FullBackend { return mprbackend.New() })
 	return &REPL{
-		executor: executor.New(output),
+		executor: exec,
 		input:    input,
 		output:   output,
 		prompt:   "mdl> ",

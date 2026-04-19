@@ -146,24 +146,26 @@ const (
 	executeTimeout = 5 * time.Minute
 )
 
+// BackendFactory creates a new backend instance for connecting to a project.
+type BackendFactory func() backend.FullBackend
+
 // Executor executes MDL statements against a Mendix project.
 type Executor struct {
-	writer        *mpr.Writer
-	reader        *mpr.Reader
-	backend       backend.FullBackend // domain backend (populated on Connect)
-	output        io.Writer
-	guard         *outputGuard // line-limit wrapper around output
-	mprPath       string
-	settings      map[string]any
-	cache         *executorCache
-	catalog       *catalog.Catalog
-	quiet         bool                               // suppress connection and status messages
-	format        OutputFormat                       // output format (table, json)
-	logger        *diaglog.Logger                    // session diagnostics logger (nil = no logging)
-	fragments     map[string]*ast.DefineFragmentStmt // script-scoped fragment definitions
-	sqlMgr        *sqllib.Manager                    // external SQL connection manager (lazy init)
-	themeRegistry *ThemeRegistry                     // cached theme design property definitions (lazy init)
-	registry      *Registry                          // statement dispatch registry
+	backend        backend.FullBackend // domain backend (populated on Connect)
+	backendFactory BackendFactory      // factory for creating new backend instances
+	output         io.Writer
+	guard          *outputGuard // line-limit wrapper around output
+	mprPath        string
+	settings       map[string]any
+	cache          *executorCache
+	catalog        *catalog.Catalog
+	quiet          bool                               // suppress connection and status messages
+	format         OutputFormat                       // output format (table, json)
+	logger         *diaglog.Logger                    // session diagnostics logger (nil = no logging)
+	fragments      map[string]*ast.DefineFragmentStmt // script-scoped fragment definitions
+	sqlMgr         *sqllib.Manager                    // external SQL connection manager (lazy init)
+	themeRegistry  *ThemeRegistry                     // cached theme design property definitions (lazy init)
+	registry       *Registry                          // statement dispatch registry
 }
 
 // New creates a new executor with the given output writer.
@@ -175,6 +177,11 @@ func New(output io.Writer) *Executor {
 		settings: make(map[string]any),
 		registry: NewRegistry(),
 	}
+}
+
+// SetBackendFactory sets the factory function used to create backend instances on Connect.
+func (e *Executor) SetBackendFactory(f BackendFactory) {
+	e.backendFactory = f
 }
 
 // SetQuiet enables or disables quiet mode (suppresses connection/status messages).
@@ -250,7 +257,7 @@ func (e *Executor) ExecuteProgram(prog *ast.Program) error {
 // trackModifiedDomainModel records a domain model that was modified during execution,
 // so it can be reconciled at the end of the program.
 func (e *Executor) trackModifiedDomainModel(moduleID model.ID, moduleName string) {
-	if e.writer == nil {
+	if e.backend == nil || !e.backend.IsConnected() {
 		return
 	}
 	if e.cache == nil {
@@ -265,17 +272,17 @@ func (e *Executor) trackModifiedDomainModel(moduleID model.ID, moduleName string
 
 // finalizeProgramExecution runs post-execution reconciliation on modified domain models.
 func (e *Executor) finalizeProgramExecution() error {
-	if e.writer == nil || e.cache == nil || len(e.cache.modifiedDomainModels) == 0 {
+	if e.backend == nil || !e.backend.IsConnected() || e.cache == nil || len(e.cache.modifiedDomainModels) == 0 {
 		return nil
 	}
 
 	for moduleID, moduleName := range e.cache.modifiedDomainModels {
-		dm, err := e.reader.GetDomainModel(moduleID)
+		dm, err := e.backend.GetDomainModel(moduleID)
 		if err != nil {
 			continue // module may not have a domain model
 		}
 
-		count, err := e.writer.ReconcileMemberAccesses(dm.ID, moduleName)
+		count, err := e.backend.ReconcileMemberAccesses(dm.ID, moduleName)
 		if err != nil {
 			return mdlerrors.NewBackend(fmt.Sprintf("reconcile security for module %s", moduleName), err)
 		}
@@ -295,21 +302,29 @@ func (e *Executor) Catalog() *catalog.Catalog {
 }
 
 // Reader returns the MPR reader, or nil if not connected.
+// Deprecated: External callers should migrate to using Backend methods directly.
 func (e *Executor) Reader() *mpr.Reader {
-	return e.reader
+	if e.backend == nil {
+		return nil
+	}
+	type readerProvider interface {
+		MprReader() *mpr.Reader
+	}
+	if rp, ok := e.backend.(readerProvider); ok {
+		return rp.MprReader()
+	}
+	return nil
 }
 
 // IsConnected returns true if connected to a project.
 func (e *Executor) IsConnected() bool {
-	return e.writer != nil
+	return e.backend != nil && e.backend.IsConnected()
 }
 
 // Close closes the connection to the project and all SQL connections.
 func (e *Executor) Close() error {
-	if e.writer != nil {
-		e.writer.Close()
-		e.writer = nil
-		e.reader = nil
+	if e.backend != nil && e.backend.IsConnected() {
+		e.backend.Disconnect()
 		e.backend = nil
 	}
 	if e.sqlMgr != nil {

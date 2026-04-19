@@ -35,7 +35,7 @@ func execLint(ctx *ExecContext, s *ast.LintStmt) error {
 
 	// Create lint context
 	lintCtx := linter.NewLintContext(ctx.Catalog)
-	lintCtx.SetReader(e.reader)
+	lintCtx.SetReader(e.Reader())
 
 	// Load configuration
 	projectDir := filepath.Dir(ctx.MprPath)

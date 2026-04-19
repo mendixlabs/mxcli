@@ -7,9 +7,17 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/backend"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
+
+// hierarchySource is the minimal interface needed to build a ContainerHierarchy.
+// Both *mpr.Reader and backend.FullBackend satisfy this.
+type hierarchySource interface {
+	ListModules() ([]*model.Module, error)
+	ListUnits() ([]*types.UnitInfo, error)
+	ListFolders() ([]*types.FolderInfo, error)
+}
 
 // ContainerHierarchy provides efficient module and folder resolution for documents.
 // It caches the container hierarchy to avoid repeated lookups.
@@ -20,43 +28,18 @@ type ContainerHierarchy struct {
 	folderNames     map[model.ID]string
 }
 
-// NewContainerHierarchy creates a new hierarchy from the reader.
-func NewContainerHierarchy(reader *mpr.Reader) (*ContainerHierarchy, error) {
-	h := &ContainerHierarchy{
-		moduleIDs:       make(map[model.ID]bool),
-		moduleNames:     make(map[model.ID]string),
-		containerParent: make(map[model.ID]model.ID),
-		folderNames:     make(map[model.ID]string),
-	}
-
-	// Load modules
-	modules, err := reader.ListModules()
-	if err != nil {
-		return nil, err
-	}
-	for _, m := range modules {
-		h.moduleIDs[m.ID] = true
-		h.moduleNames[m.ID] = m.Name
-	}
-
-	// Load units for container hierarchy
-	units, _ := reader.ListUnits()
-	for _, u := range units {
-		h.containerParent[u.ID] = u.ContainerID
-	}
-
-	// Load folders
-	folders, _ := reader.ListFolders()
-	for _, f := range folders {
-		h.folderNames[f.ID] = f.Name
-		h.containerParent[f.ID] = f.ContainerID
-	}
-
-	return h, nil
+// NewContainerHierarchy creates a new hierarchy from any source that provides
+// modules, units, and folders (e.g. *mpr.Reader or backend.FullBackend).
+func NewContainerHierarchy(src hierarchySource) (*ContainerHierarchy, error) {
+	return newContainerHierarchyImpl(src)
 }
 
 // NewContainerHierarchyFromBackend creates a new hierarchy from a Backend interface.
 func NewContainerHierarchyFromBackend(b backend.FullBackend) (*ContainerHierarchy, error) {
+	return newContainerHierarchyImpl(b)
+}
+
+func newContainerHierarchyImpl(src hierarchySource) (*ContainerHierarchy, error) {
 	h := &ContainerHierarchy{
 		moduleIDs:       make(map[model.ID]bool),
 		moduleNames:     make(map[model.ID]string),
@@ -64,7 +47,7 @@ func NewContainerHierarchyFromBackend(b backend.FullBackend) (*ContainerHierarch
 		folderNames:     make(map[model.ID]string),
 	}
 
-	modules, err := b.ListModules()
+	modules, err := src.ListModules()
 	if err != nil {
 		return nil, err
 	}
@@ -73,12 +56,12 @@ func NewContainerHierarchyFromBackend(b backend.FullBackend) (*ContainerHierarch
 		h.moduleNames[m.ID] = m.Name
 	}
 
-	units, _ := b.ListUnits()
+	units, _ := src.ListUnits()
 	for _, u := range units {
 		h.containerParent[u.ID] = u.ContainerID
 	}
 
-	folders, _ := b.ListFolders()
+	folders, _ := src.ListFolders()
 	for _, f := range folders {
 		h.folderNames[f.ID] = f.Name
 		h.containerParent[f.ID] = f.ContainerID

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package executor
+package mprbackend
 
 import (
 	"testing"
@@ -33,7 +33,6 @@ func TestDeepCloneWithNewIDs_RegeneratesAllIDs(t *testing.T) {
 
 	cloned := deepCloneWithNewIDs(doc)
 
-	// Verify structure is preserved
 	if dGetString(cloned, "$Type") != "Forms$TextBox" {
 		t.Error("$Type not preserved")
 	}
@@ -41,13 +40,11 @@ func TestDeepCloneWithNewIDs_RegeneratesAllIDs(t *testing.T) {
 		t.Error("Name not preserved")
 	}
 
-	// Verify top-level $ID was regenerated
 	clonedID1 := cloned[0].Value
 	if binaryEqual(clonedID1, origID1) {
 		t.Error("top-level $ID was not regenerated")
 	}
 
-	// Verify nested AttributeRef $ID was regenerated
 	attrRef := dGetDoc(cloned, "AttributeRef")
 	if attrRef == nil {
 		t.Fatal("AttributeRef missing")
@@ -60,7 +57,6 @@ func TestDeepCloneWithNewIDs_RegeneratesAllIDs(t *testing.T) {
 		t.Error("Attribute value not preserved")
 	}
 
-	// Verify deeply nested EntityRef $ID was regenerated
 	entityRef := dGetDoc(attrRef, "EntityRef")
 	if entityRef == nil {
 		t.Fatal("EntityRef missing")
@@ -92,7 +88,6 @@ func TestDeepCloneWithNewIDs_HandlesArrays(t *testing.T) {
 
 	cloned := deepCloneWithNewIDs(doc)
 
-	// Check array item's $ID was regenerated
 	items := cloned[1].Value.(bson.A)
 	if len(items) != 2 {
 		t.Fatalf("expected 2 items, got %d", len(items))
@@ -124,7 +119,8 @@ func TestDeepCloneWithNewIDs_PreservesNil(t *testing.T) {
 	}
 }
 
-// binaryEqual compares two BSON binary values.
+// Test helpers
+
 func binaryEqual(a, b any) bool {
 	ab, aOk := a.(primitive.Binary)
 	bb, bOk := b.(primitive.Binary)

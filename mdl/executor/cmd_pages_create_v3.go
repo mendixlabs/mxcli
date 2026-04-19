@@ -53,8 +53,7 @@ func execCreatePageV3(ctx *ExecContext, s *ast.CreatePageStmtV3) error {
 
 	// Build the page BEFORE deleting the old one (atomic: if build fails, old page is preserved)
 	pb := &pageBuilder{
-		writer:           e.writer,
-		reader:           e.reader,
+		backend:          ctx.Backend,
 		moduleID:         moduleID,
 		moduleName:       s.Name.Module,
 		widgetScope:      make(map[string]model.ID),
@@ -130,8 +129,7 @@ func execCreateSnippetV3(ctx *ExecContext, s *ast.CreateSnippetStmtV3) error {
 
 	// Build the snippet BEFORE deleting the old one (atomic: if build fails, old snippet is preserved)
 	pb := &pageBuilder{
-		writer:           e.writer,
-		reader:           e.reader,
+		backend:          ctx.Backend,
 		moduleID:         moduleID,
 		moduleName:       s.Name.Module,
 		widgetScope:      make(map[string]model.ID),

@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mendixlabs/mxcli/mdl/backend"
+	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
 	"github.com/mendixlabs/mxcli/mdl/diaglog"
 	"github.com/mendixlabs/mxcli/mdl/executor"
 	"github.com/mendixlabs/mxcli/mdl/repl"
@@ -194,6 +196,7 @@ func resolveFormat(cmd *cobra.Command, defaultFormat string) string {
 func newLoggedExecutor(mode string) (*executor.Executor, *diaglog.Logger) {
 	logger := diaglog.Init(version, mode)
 	exec := executor.New(os.Stdout)
+	exec.SetBackendFactory(func() backend.FullBackend { return mprbackend.New() })
 	exec.SetLogger(logger)
 	if globalJSONFlag {
 		exec.SetFormat(executor.FormatJSON)

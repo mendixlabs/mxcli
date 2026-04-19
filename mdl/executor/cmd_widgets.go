@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"go.mongodb.org/mongo-driver/bson"
-
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/model"
@@ -197,43 +195,27 @@ func groupWidgetsByContainer(widgets []widgetRef) map[string][]widgetRef {
 	return containers
 }
 
-// updateWidgetsInContainer updates widgets within a single page or snippet.
+// updateWidgetsInContainer updates widgets within a single page or snippet
+// using the PageMutator backend (no direct BSON manipulation).
 func updateWidgetsInContainer(ctx *ExecContext, containerID string, widgetRefs []widgetRef, assignments []ast.WidgetPropertyAssignment, dryRun bool) (int, error) {
 	if len(widgetRefs) == 0 {
 		return 0, nil
 	}
 
-	containerType := widgetRefs[0].ContainerType
 	containerName := widgetRefs[0].ContainerName
 
-	// Load the page or snippet
-	if strings.ToLower(containerType) == "page" {
-		return updateWidgetsInPage(ctx, containerID, containerName, widgetRefs, assignments, dryRun)
-	} else if strings.ToLower(containerType) == "snippet" {
-		return updateWidgetsInSnippet(ctx, containerID, containerName, widgetRefs, assignments, dryRun)
-	}
-
-	return 0, mdlerrors.NewUnsupported(fmt.Sprintf("unsupported container type: %s", containerType))
-}
-
-// updateWidgetsInPage updates widgets in a page using raw BSON.
-func updateWidgetsInPage(ctx *ExecContext, containerID, containerName string, widgetRefs []widgetRef, assignments []ast.WidgetPropertyAssignment, dryRun bool) (int, error) {
-
-	// Load raw BSON as ordered document (preserves field ordering)
-	rawBytes, err := ctx.Backend.GetRawUnitBytes(model.ID(containerID))
+	// Open the container (page, layout, or snippet) through the backend mutator.
+	mutator, err := ctx.Backend.OpenPageForMutation(model.ID(containerID))
 	if err != nil {
-		return 0, mdlerrors.NewBackend(fmt.Sprintf("load page %s", containerName), err)
-	}
-	var rawData bson.D
-	if err := bson.Unmarshal(rawBytes, &rawData); err != nil {
-		return 0, mdlerrors.NewBackend(fmt.Sprintf("unmarshal page %s", containerName), err)
+		return 0, mdlerrors.NewBackend(fmt.Sprintf("open %s for mutation", containerName), err)
 	}
 
 	updated := 0
 	for _, ref := range widgetRefs {
-		result := findBsonWidget(rawData, ref.Name)
-		if result == nil {
-			fmt.Fprintf(ctx.Output, "  Warning: Widget %q not found in page %s\n", ref.Name, containerName)
+		// Verify the widget exists before attempting assignments.
+		if !mutator.FindWidget(ref.Name) {
+			fmt.Fprintf(ctx.Output, "  Warning: Widget %q not found in %s %s\n",
+				ref.Name, mutator.ContainerType(), containerName)
 			continue
 		}
 		for _, assignment := range assignments {
@@ -241,7 +223,7 @@ func updateWidgetsInPage(ctx *ExecContext, containerID, containerName string, wi
 				fmt.Fprintf(ctx.Output, "  Would set '%s' = %v on %s (%s) in %s\n",
 					assignment.PropertyPath, assignment.Value, ref.Name, ref.WidgetType, containerName)
 			} else {
-				if err := setRawWidgetProperty(result.widget, assignment.PropertyPath, assignment.Value); err != nil {
+				if err := mutator.SetWidgetProperty(ref.Name, assignment.PropertyPath, assignment.Value); err != nil {
 					fmt.Fprintf(ctx.Output, "  Warning: Failed to set '%s' on %s: %v\n",
 						assignment.PropertyPath, ref.Name, err)
 				}
@@ -250,62 +232,10 @@ func updateWidgetsInPage(ctx *ExecContext, containerID, containerName string, wi
 		updated++
 	}
 
-	// Save back via raw BSON (bson.D preserves field ordering)
+	// Persist changes via the mutator.
 	if !dryRun && updated > 0 {
-		outBytes, err := bson.Marshal(rawData)
-		if err != nil {
-			return updated, mdlerrors.NewBackend(fmt.Sprintf("marshal page %s", containerName), err)
-		}
-		if err := ctx.Backend.UpdateRawUnit(containerID, outBytes); err != nil {
-			return updated, mdlerrors.NewBackend(fmt.Sprintf("save page %s", containerName), err)
-		}
-	}
-
-	return updated, nil
-}
-
-// updateWidgetsInSnippet updates widgets in a snippet using raw BSON.
-func updateWidgetsInSnippet(ctx *ExecContext, containerID, containerName string, widgetRefs []widgetRef, assignments []ast.WidgetPropertyAssignment, dryRun bool) (int, error) {
-
-	// Load raw BSON as ordered document (preserves field ordering)
-	rawBytes, err := ctx.Backend.GetRawUnitBytes(model.ID(containerID))
-	if err != nil {
-		return 0, mdlerrors.NewBackend(fmt.Sprintf("load snippet %s", containerName), err)
-	}
-	var rawData bson.D
-	if err := bson.Unmarshal(rawBytes, &rawData); err != nil {
-		return 0, mdlerrors.NewBackend(fmt.Sprintf("unmarshal snippet %s", containerName), err)
-	}
-
-	updated := 0
-	for _, ref := range widgetRefs {
-		result := findBsonWidgetInSnippet(rawData, ref.Name)
-		if result == nil {
-			fmt.Fprintf(ctx.Output, "  Warning: Widget %q not found in snippet %s\n", ref.Name, containerName)
-			continue
-		}
-		for _, assignment := range assignments {
-			if dryRun {
-				fmt.Fprintf(ctx.Output, "  Would set '%s' = %v on %s (%s) in %s\n",
-					assignment.PropertyPath, assignment.Value, ref.Name, ref.WidgetType, containerName)
-			} else {
-				if err := setRawWidgetProperty(result.widget, assignment.PropertyPath, assignment.Value); err != nil {
-					fmt.Fprintf(ctx.Output, "  Warning: Failed to set '%s' on %s: %v\n",
-						assignment.PropertyPath, ref.Name, err)
-				}
-			}
-		}
-		updated++
-	}
-
-	// Save back via raw BSON (bson.D preserves field ordering)
-	if !dryRun && updated > 0 {
-		outBytes, err := bson.Marshal(rawData)
-		if err != nil {
-			return updated, mdlerrors.NewBackend(fmt.Sprintf("marshal snippet %s", containerName), err)
-		}
-		if err := ctx.Backend.UpdateRawUnit(containerID, outBytes); err != nil {
-			return updated, mdlerrors.NewBackend(fmt.Sprintf("save snippet %s", containerName), err)
+		if err := mutator.Save(); err != nil {
+			return updated, mdlerrors.NewBackend(fmt.Sprintf("save %s", containerName), err)
 		}
 	}
 

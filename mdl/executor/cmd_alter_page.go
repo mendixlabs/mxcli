@@ -223,13 +223,11 @@ func applyReplaceWidgetMutator(ctx *ExecContext, mutator backend.PageMutator, op
 // buildWidgetsFromAST converts AST widgets to pages.Widget domain objects.
 // It uses the mutator for scope resolution (WidgetScope, ParamScope).
 func buildWidgetsFromAST(ctx *ExecContext, widgets []*ast.WidgetV3, moduleName string, moduleID model.ID, entityContext string, mutator backend.PageMutator) ([]pages.Widget, error) {
-	e := ctx.executor
 	paramScope, paramEntityNames := mutator.ParamScope()
 	widgetScope := mutator.WidgetScope()
 
 	pb := &pageBuilder{
-		writer:           e.writer,
-		reader:           e.reader,
+		backend:          ctx.Backend,
 		moduleID:         moduleID,
 		moduleName:       moduleName,
 		entityContext:    entityContext,

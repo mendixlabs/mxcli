@@ -249,6 +249,32 @@ type WidgetObjectBuilder interface {
 	Finalize(id model.ID, name string, label string, editable string) *pages.CustomWidget
 }
 
+// DataGridColumnSpec carries pre-resolved column data for DataGrid2 construction.
+// All attribute paths are fully qualified. Child widgets are already built as
+// domain objects; the backend serializes them to storage format internally.
+type DataGridColumnSpec struct {
+	Attribute     string         // Fully qualified attribute path (empty for action/custom-content columns)
+	Caption       string         // Column header caption
+	ChildWidgets  []pages.Widget // Pre-built child widgets (for custom-content columns)
+	Properties    map[string]any // Column properties (Sortable, Resizable, Visible, etc.)
+}
+
+// DataGridSpec carries all inputs needed to build a DataGrid2 widget object.
+type DataGridSpec struct {
+	DataSource    pages.DataSource
+	Columns       []DataGridColumnSpec
+	HeaderWidgets []pages.Widget // Pre-built CONTROLBAR widgets for filtersPlaceholder
+	// Paging overrides (empty string = use template default)
+	PagingOverrides map[string]string // camelCase widget key → string value
+	SelectionMode   string            // empty = no override
+}
+
+// FilterWidgetSpec carries inputs for building a filter widget.
+type FilterWidgetSpec struct {
+	WidgetID   string // e.g. pages.WidgetIDDataGridTextFilter
+	FilterName string // widget name
+}
+
 // WidgetBuilderBackend provides pluggable widget construction capabilities.
 type WidgetBuilderBackend interface {
 	// LoadWidgetTemplate loads a widget template by ID and returns a builder
@@ -268,4 +294,14 @@ type WidgetBuilderBackend interface {
 	// BuildCreateAttributeObject creates an attribute object for filter widgets.
 	// Returns an opaque value to be collected into attribute object lists.
 	BuildCreateAttributeObject(attributePath string, objectTypeID, propertyTypeID, valueTypeID string) (any, error)
+
+	// BuildDataGrid2Widget builds a complete DataGrid2 CustomWidget from domain-typed inputs.
+	// The backend loads the template, constructs the BSON object with columns,
+	// datasource, header widgets, paging, and selection, and returns a fully
+	// assembled CustomWidget. Returns the widget with an opaque RawType/RawObject.
+	BuildDataGrid2Widget(id model.ID, name string, spec DataGridSpec, projectPath string) (*pages.CustomWidget, error)
+
+	// BuildFilterWidget builds a filter widget (text, number, date, or dropdown filter)
+	// for use inside DataGrid2 filtersPlaceholder or CONTROLBAR sections.
+	BuildFilterWidget(spec FilterWidgetSpec, projectPath string) (pages.Widget, error)
 }
