@@ -11,7 +11,6 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/bsonutil"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"github.com/mendixlabs/mxcli/sdk/widgets"
 	"go.mongodb.org/mongo-driver/bson"
@@ -169,19 +168,6 @@ func setPrimitiveValue(val bson.D, value string) bson.D {
 	for _, elem := range val {
 		if elem.Key == "PrimitiveValue" {
 			result = append(result, bson.E{Key: "PrimitiveValue", Value: value})
-		} else {
-			result = append(result, elem)
-		}
-	}
-	return result
-}
-
-// setDataSource sets the DataSource field in a WidgetValue.
-func setDataSource(val bson.D, ds pages.DataSource) bson.D {
-	result := make(bson.D, 0, len(val))
-	for _, elem := range val {
-		if elem.Key == "DataSource" {
-			result = append(result, bson.E{Key: "DataSource", Value: mpr.SerializeCustomWidgetDataSource(ds)})
 		} else {
 			result = append(result, elem)
 		}

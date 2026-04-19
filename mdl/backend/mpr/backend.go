@@ -211,6 +211,9 @@ func (b *MprBackend) MoveMicroflow(mf *microflows.Microflow) error {
 func (b *MprBackend) ListNanoflows() ([]*microflows.Nanoflow, error) {
 	return b.reader.ListNanoflows()
 }
+func (b *MprBackend) ParseMicroflowFromRaw(raw map[string]any, unitID, containerID model.ID) *microflows.Microflow {
+	return mpr.ParseMicroflowFromRaw(raw, unitID, containerID)
+}
 func (b *MprBackend) GetNanoflow(id model.ID) (*microflows.Nanoflow, error) {
 	return b.reader.GetNanoflow(id)
 }
@@ -726,17 +729,17 @@ func (b *MprBackend) DeleteAgentEditorAgent(id string) error {
 }
 
 // ---------------------------------------------------------------------------
-// PageMutationBackend
+// PageMutationBackend — implemented in page_mutator.go
+// ---------------------------------------------------------------------------
 
-func (b *MprBackend) OpenPageForMutation(unitID model.ID) (backend.PageMutator, error) {
-	panic("MprBackend.OpenPageForMutation not yet implemented")
-}
+// OpenPageForMutation is implemented in page_mutator.go.
 
 // ---------------------------------------------------------------------------
 // WorkflowMutationBackend
 
+// OpenWorkflowForMutation is implemented in workflow_mutator.go.
 func (b *MprBackend) OpenWorkflowForMutation(unitID model.ID) (backend.WorkflowMutator, error) {
-	panic("MprBackend.OpenWorkflowForMutation not yet implemented")
+	return b.openWorkflowForMutation(unitID)
 }
 
 // ---------------------------------------------------------------------------
@@ -751,7 +754,7 @@ func (b *MprBackend) SerializeClientAction(a pages.ClientAction) (any, error) {
 }
 
 func (b *MprBackend) SerializeDataSource(ds pages.DataSource) (any, error) {
-	panic("MprBackend.SerializeDataSource not yet implemented")
+	return mpr.SerializeCustomWidgetDataSource(ds), nil
 }
 
 func (b *MprBackend) SerializeWorkflowActivity(a workflows.WorkflowActivity) (any, error) {

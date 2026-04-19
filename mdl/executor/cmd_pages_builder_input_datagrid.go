@@ -8,7 +8,6 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/bsonutil"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -85,7 +84,7 @@ func (pb *pageBuilder) buildDataGrid2Property(entry pages.PropertyTypeIDEntry, d
 	// Build the datasource BSON if provided
 	var datasourceBSON any
 	if datasource != nil {
-		datasourceBSON = mpr.SerializeCustomWidgetDataSource(datasource)
+		datasourceBSON = pb.widgetBackend.SerializeDataSourceToOpaque(datasource)
 	}
 
 	// Build attribute ref if provided

@@ -12,7 +12,6 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/bsonutil"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // =============================================================================
@@ -82,7 +81,7 @@ func (pb *pageBuilder) cloneActionWithNewID(actionMap bson.D) bson.D {
 	return result
 }
 
-// buildWidgetV3ToBSON builds a V3 widget and serializes it directly to BSON.
+// buildWidgetV3ToBSON builds a V3 widget and serializes it to an opaque storage form.
 func (pb *pageBuilder) buildWidgetV3ToBSON(w *ast.WidgetV3) (bson.D, error) {
 	widget, err := pb.buildWidgetV3(w)
 	if err != nil {
@@ -91,7 +90,15 @@ func (pb *pageBuilder) buildWidgetV3ToBSON(w *ast.WidgetV3) (bson.D, error) {
 	if widget == nil {
 		return nil, nil
 	}
-	return mpr.SerializeWidget(widget), nil
+	raw := pb.widgetBackend.SerializeWidgetToOpaque(widget)
+	if raw == nil {
+		return nil, nil
+	}
+	bsonD, ok := raw.(bson.D)
+	if !ok {
+		return nil, mdlerrors.NewValidationf("SerializeWidgetToOpaque returned unexpected type %T", raw)
+	}
+	return bsonD, nil
 }
 
 // createAttributeObject creates a single attribute object entry for filter widget Attributes.

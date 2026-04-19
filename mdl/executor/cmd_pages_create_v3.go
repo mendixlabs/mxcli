@@ -63,6 +63,7 @@ func execCreatePageV3(ctx *ExecContext, s *ast.CreatePageStmtV3) error {
 		execCache:        ctx.Cache,
 		fragments:        ctx.Fragments,
 		themeRegistry:    ctx.GetThemeRegistry(),
+		widgetBackend:    ctx.Backend,
 	}
 
 	page, err := pb.buildPageV3(s)
@@ -139,6 +140,7 @@ func execCreateSnippetV3(ctx *ExecContext, s *ast.CreateSnippetStmtV3) error {
 		execCache:        ctx.Cache,
 		fragments:        ctx.Fragments,
 		themeRegistry:    ctx.GetThemeRegistry(),
+		widgetBackend:    ctx.Backend,
 	}
 
 	snippet, err := pb.buildSnippetV3(s)

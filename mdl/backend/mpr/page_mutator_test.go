@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package executor
+package mprbackend
 
 import (
 	"testing"
@@ -8,7 +8,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/backend"
+	"github.com/mendixlabs/mxcli/model"
 )
 
 // Helper to build a minimal raw BSON page structure for testing.
@@ -89,15 +90,16 @@ func TestFindBsonWidget_NotFound(t *testing.T) {
 	}
 }
 
-func TestApplyDropWidget_Single(t *testing.T) {
+func TestDropWidget_Single(t *testing.T) {
 	w1 := makeWidget("txtName", "Pages$TextBox")
 	w2 := makeWidget("txtEmail", "Pages$TextBox")
 	w3 := makeWidget("txtPhone", "Pages$TextBox")
 	rawData := makeRawPage(w1, w2, w3)
 
-	op := &ast.DropWidgetOp{Targets: []ast.WidgetRef{{Widget: "txtEmail"}}}
-	if err := applyDropWidget(rawData, op); err != nil {
-		t.Fatalf("applyDropWidget failed: %v", err)
+	m := &mprPageMutator{rawData: rawData, widgetFinder: findBsonWidget}
+	refs := []backend.WidgetRef{{Widget: "txtEmail"}}
+	if err := m.DropWidget(refs); err != nil {
+		t.Fatalf("DropWidget failed: %v", err)
 	}
 
 	// Verify txtEmail was removed
@@ -120,15 +122,16 @@ func TestApplyDropWidget_Single(t *testing.T) {
 	}
 }
 
-func TestApplyDropWidget_Multiple(t *testing.T) {
+func TestDropWidget_Multiple(t *testing.T) {
 	w1 := makeWidget("a", "Pages$TextBox")
 	w2 := makeWidget("b", "Pages$TextBox")
 	w3 := makeWidget("c", "Pages$TextBox")
 	rawData := makeRawPage(w1, w2, w3)
 
-	op := &ast.DropWidgetOp{Targets: []ast.WidgetRef{{Widget: "a"}, {Widget: "c"}}}
-	if err := applyDropWidget(rawData, op); err != nil {
-		t.Fatalf("applyDropWidget failed: %v", err)
+	m := &mprPageMutator{rawData: rawData, widgetFinder: findBsonWidget}
+	refs := []backend.WidgetRef{{Widget: "a"}, {Widget: "c"}}
+	if err := m.DropWidget(refs); err != nil {
+		t.Fatalf("DropWidget failed: %v", err)
 	}
 
 	formCall := dGetDoc(rawData, "FormCall")
@@ -146,29 +149,31 @@ func TestApplyDropWidget_Multiple(t *testing.T) {
 	}
 }
 
-func TestApplyDropWidget_NotFound(t *testing.T) {
+func TestDropWidget_NotFound(t *testing.T) {
 	w1 := makeWidget("txtName", "Pages$TextBox")
 	rawData := makeRawPage(w1)
 
-	op := &ast.DropWidgetOp{Targets: []ast.WidgetRef{{Widget: "nonexistent"}}}
-	err := applyDropWidget(rawData, op)
+	m := &mprPageMutator{rawData: rawData, widgetFinder: findBsonWidget}
+	refs := []backend.WidgetRef{{Widget: "nonexistent"}}
+	err := m.DropWidget(refs)
 	if err == nil {
 		t.Fatal("Expected error for nonexistent widget")
 	}
 }
 
-func TestApplyDropWidget_Nested(t *testing.T) {
+func TestDropWidget_Nested(t *testing.T) {
 	inner1 := makeWidget("txtInner1", "Pages$TextBox")
 	inner2 := makeWidget("txtInner2", "Pages$TextBox")
 	container := makeContainerWidget("ctn1", inner1, inner2)
 	rawData := makeRawPage(container)
 
-	op := &ast.DropWidgetOp{Targets: []ast.WidgetRef{{Widget: "txtInner1"}}}
-	if err := applyDropWidget(rawData, op); err != nil {
-		t.Fatalf("applyDropWidget failed: %v", err)
+	m := &mprPageMutator{rawData: rawData, widgetFinder: findBsonWidget}
+	refs := []backend.WidgetRef{{Widget: "txtInner1"}}
+	if err := m.DropWidget(refs); err != nil {
+		t.Fatalf("DropWidget failed: %v", err)
 	}
 
-	// Verify txtInner1 was removed from container
+	// Verify txtInner1 was removed
 	result := findBsonWidget(rawData, "txtInner1")
 	if result != nil {
 		t.Error("txtInner1 should have been removed")
@@ -181,18 +186,13 @@ func TestApplyDropWidget_Nested(t *testing.T) {
 	}
 }
 
-func TestApplySetProperty_Name(t *testing.T) {
+func TestSetWidgetProperty_Name(t *testing.T) {
 	w1 := makeWidget("txtOld", "Pages$TextBox")
 	rawData := makeRawPage(w1)
 
-	op := &ast.SetPropertyOp{
-		Target: ast.WidgetRef{Widget: "txtOld"},
-		Properties: map[string]interface{}{
-			"Name": "txtNew",
-		},
-	}
-	if err := applySetProperty(rawData, op); err != nil {
-		t.Fatalf("applySetProperty failed: %v", err)
+	m := &mprPageMutator{rawData: rawData, widgetFinder: findBsonWidget}
+	if err := m.SetWidgetProperty("txtOld", "Name", "txtNew"); err != nil {
+		t.Fatalf("SetWidgetProperty failed: %v", err)
 	}
 
 	// Verify name was changed
@@ -202,7 +202,7 @@ func TestApplySetProperty_Name(t *testing.T) {
 	}
 }
 
-func TestApplySetProperty_ButtonStyle(t *testing.T) {
+func TestSetWidgetProperty_ButtonStyle(t *testing.T) {
 	w1 := bson.D{
 		{Key: "$Type", Value: "Pages$ActionButton"},
 		{Key: "Name", Value: "btnSave"},
@@ -210,14 +210,9 @@ func TestApplySetProperty_ButtonStyle(t *testing.T) {
 	}
 	rawData := makeRawPage(w1)
 
-	op := &ast.SetPropertyOp{
-		Target: ast.WidgetRef{Widget: "btnSave"},
-		Properties: map[string]interface{}{
-			"ButtonStyle": "Success",
-		},
-	}
-	if err := applySetProperty(rawData, op); err != nil {
-		t.Fatalf("applySetProperty failed: %v", err)
+	m := &mprPageMutator{rawData: rawData, widgetFinder: findBsonWidget}
+	if err := m.SetWidgetProperty("btnSave", "ButtonStyle", "Success"); err != nil {
+		t.Fatalf("SetWidgetProperty failed: %v", err)
 	}
 
 	result := findBsonWidget(rawData, "btnSave")
@@ -229,25 +224,18 @@ func TestApplySetProperty_ButtonStyle(t *testing.T) {
 	}
 }
 
-func TestApplySetProperty_WidgetNotFound(t *testing.T) {
+func TestSetWidgetProperty_WidgetNotFound(t *testing.T) {
 	w1 := makeWidget("txtName", "Pages$TextBox")
 	rawData := makeRawPage(w1)
 
-	op := &ast.SetPropertyOp{
-		Target: ast.WidgetRef{Widget: "nonexistent"},
-		Properties: map[string]interface{}{
-			"Name": "new",
-		},
-	}
-	err := applySetProperty(rawData, op)
+	m := &mprPageMutator{rawData: rawData, widgetFinder: findBsonWidget}
+	err := m.SetWidgetProperty("nonexistent", "Name", "new")
 	if err == nil {
 		t.Fatal("Expected error for nonexistent widget")
 	}
 }
 
-func TestApplySetProperty_PluggableWidget(t *testing.T) {
-	// Pluggable widget properties are identified by TypePointer referencing
-	// a PropertyType entry in Type.ObjectType.PropertyTypes, NOT by a "Key" field.
+func TestSetWidgetProperty_PluggableWidget(t *testing.T) {
 	propTypeID := primitive.Binary{Subtype: 0x04, Data: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}}
 	w1 := bson.D{
 		{Key: "$Type", Value: "CustomWidgets$CustomWidget"},
@@ -256,7 +244,7 @@ func TestApplySetProperty_PluggableWidget(t *testing.T) {
 			{Key: "$Type", Value: "CustomWidgets$CustomWidgetType"},
 			{Key: "ObjectType", Value: bson.D{
 				{Key: "PropertyTypes", Value: bson.A{
-					int32(2), // type marker
+					int32(2),
 					bson.D{
 						{Key: "$ID", Value: propTypeID},
 						{Key: "PropertyKey", Value: "showLabel"},
@@ -266,7 +254,7 @@ func TestApplySetProperty_PluggableWidget(t *testing.T) {
 		}},
 		{Key: "Object", Value: bson.D{
 			{Key: "Properties", Value: bson.A{
-				int32(2), // type marker
+				int32(2),
 				bson.D{
 					{Key: "TypePointer", Value: propTypeID},
 					{Key: "Value", Value: bson.D{
@@ -278,14 +266,9 @@ func TestApplySetProperty_PluggableWidget(t *testing.T) {
 	}
 	rawData := makeRawPage(w1)
 
-	op := &ast.SetPropertyOp{
-		Target: ast.WidgetRef{Widget: "cb1"},
-		Properties: map[string]interface{}{
-			"showLabel": false,
-		},
-	}
-	if err := applySetProperty(rawData, op); err != nil {
-		t.Fatalf("applySetProperty failed: %v", err)
+	m := &mprPageMutator{rawData: rawData, widgetFinder: findBsonWidget}
+	if err := m.SetWidgetProperty("cb1", "showLabel", false); err != nil {
+		t.Fatalf("SetWidgetProperty failed: %v", err)
 	}
 
 	result := findBsonWidget(rawData, "cb1")
@@ -374,9 +357,8 @@ func TestFindBsonWidget_LayoutGrid(t *testing.T) {
 // Snippet BSON tests
 // ============================================================================
 
-// Helper to build a minimal raw BSON snippet structure (Studio Pro format).
 func makeRawSnippet(widgets ...bson.D) bson.D {
-	widgetArr := bson.A{int32(2)} // type marker
+	widgetArr := bson.A{int32(2)}
 	for _, w := range widgets {
 		widgetArr = append(widgetArr, w)
 	}
@@ -385,9 +367,8 @@ func makeRawSnippet(widgets ...bson.D) bson.D {
 	}
 }
 
-// Helper to build a minimal raw BSON snippet structure (mxcli format).
 func makeRawSnippetMxcli(widgets ...bson.D) bson.D {
-	widgetArr := bson.A{int32(2)} // type marker
+	widgetArr := bson.A{int32(2)}
 	for _, w := range widgets {
 		widgetArr = append(widgetArr, w)
 	}
@@ -443,14 +424,15 @@ func TestFindBsonWidgetInSnippet_NotFound(t *testing.T) {
 	}
 }
 
-func TestApplyDropWidget_Snippet(t *testing.T) {
+func TestDropWidget_Snippet(t *testing.T) {
 	w1 := makeWidget("txtName", "Pages$TextBox")
 	w2 := makeWidget("txtEmail", "Pages$TextBox")
 	rawData := makeRawSnippet(w1, w2)
 
-	op := &ast.DropWidgetOp{Targets: []ast.WidgetRef{{Widget: "txtEmail"}}}
-	if err := applyDropWidgetWith(rawData, op, findBsonWidgetInSnippet); err != nil {
-		t.Fatalf("applyDropWidgetWith failed: %v", err)
+	m := &mprPageMutator{rawData: rawData, widgetFinder: findBsonWidgetInSnippet}
+	refs := []backend.WidgetRef{{Widget: "txtEmail"}}
+	if err := m.DropWidget(refs); err != nil {
+		t.Fatalf("DropWidget failed: %v", err)
 	}
 
 	// Verify txtEmail was removed
@@ -464,7 +446,7 @@ func TestApplyDropWidget_Snippet(t *testing.T) {
 	}
 }
 
-func TestApplySetProperty_Snippet(t *testing.T) {
+func TestSetWidgetProperty_Snippet(t *testing.T) {
 	w1 := bson.D{
 		{Key: "$Type", Value: "Pages$ActionButton"},
 		{Key: "Name", Value: "btnAction"},
@@ -472,14 +454,9 @@ func TestApplySetProperty_Snippet(t *testing.T) {
 	}
 	rawData := makeRawSnippet(w1)
 
-	op := &ast.SetPropertyOp{
-		Target: ast.WidgetRef{Widget: "btnAction"},
-		Properties: map[string]interface{}{
-			"ButtonStyle": "Danger",
-		},
-	}
-	if err := applySetPropertyWith(rawData, op, findBsonWidgetInSnippet); err != nil {
-		t.Fatalf("applySetPropertyWith failed: %v", err)
+	m := &mprPageMutator{rawData: rawData, widgetFinder: findBsonWidgetInSnippet}
+	if err := m.SetWidgetProperty("btnAction", "ButtonStyle", "Danger"); err != nil {
+		t.Fatalf("SetWidgetProperty failed: %v", err)
 	}
 
 	result := findBsonWidgetInSnippet(rawData, "btnAction")
@@ -519,7 +496,7 @@ func TestFindBsonWidget_DataViewFooter(t *testing.T) {
 }
 
 // ============================================================================
-// Page context tree tests (#157)
+// Page context tree tests
 // ============================================================================
 
 func makeWidgetWithID(name string, typeName string, id primitive.Binary) bson.D {
@@ -539,7 +516,7 @@ func makeBsonID(b byte) primitive.Binary {
 func TestExtractPageParamsFromBSON_EntityParams(t *testing.T) {
 	rawData := bson.D{
 		{Key: "Parameters", Value: bson.A{
-			int32(2), // type marker
+			int32(2),
 			bson.D{
 				{Key: "$ID", Value: makeBsonID(0x01)},
 				{Key: "$Type", Value: "Forms$PageParameter"},
@@ -698,5 +675,50 @@ func TestExtractWidgetScopeFromBSON_Nil(t *testing.T) {
 	scope := extractWidgetScopeFromBSON(nil)
 	if len(scope) != 0 {
 		t.Error("Expected empty scope for nil input")
+	}
+}
+
+func TestFindWidget(t *testing.T) {
+	w1 := makeWidget("txtName", "Pages$TextBox")
+	rawData := makeRawPage(w1)
+
+	m := &mprPageMutator{rawData: rawData, widgetFinder: findBsonWidget}
+	if !m.FindWidget("txtName") {
+		t.Error("Expected FindWidget to return true for existing widget")
+	}
+	if m.FindWidget("nonexistent") {
+		t.Error("Expected FindWidget to return false for nonexistent widget")
+	}
+}
+
+func TestParamScope(t *testing.T) {
+	rawData := bson.D{
+		{Key: "Parameters", Value: bson.A{
+			int32(2),
+			bson.D{
+				{Key: "$ID", Value: makeBsonID(0x01)},
+				{Key: "$Type", Value: "Forms$PageParameter"},
+				{Key: "Name", Value: "Customer"},
+				{Key: "ParameterType", Value: bson.D{
+					{Key: "$ID", Value: makeBsonID(0x02)},
+					{Key: "$Type", Value: "DataTypes$ObjectType"},
+					{Key: "Entity", Value: "MyModule.Customer"},
+				}},
+			},
+		}},
+	}
+
+	m := &mprPageMutator{rawData: rawData, widgetFinder: findBsonWidget}
+	ids, names := m.ParamScope()
+
+	if len(ids) != 1 {
+		t.Fatalf("Expected 1 param, got %d", len(ids))
+	}
+	if names["Customer"] != "MyModule.Customer" {
+		t.Errorf("Expected MyModule.Customer, got %q", names["Customer"])
+	}
+	// Verify ID is a valid model.ID (non-empty)
+	if ids["Customer"] == model.ID("") {
+		t.Error("Expected non-empty ID")
 	}
 }

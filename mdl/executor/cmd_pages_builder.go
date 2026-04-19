@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/backend"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
@@ -35,6 +36,7 @@ type pageBuilder struct {
 	isSnippet        bool                               // True if building a snippet (affects parameter datasource)
 	fragments        map[string]*ast.DefineFragmentStmt // Fragment registry from executor
 	themeRegistry    *ThemeRegistry                     // Theme design property definitions (may be nil)
+	widgetBackend    backend.WidgetBuilderBackend       // Backend for pluggable widget construction
 
 	// Pluggable widget engine (lazily initialized)
 	widgetRegistry     *WidgetRegistry
@@ -68,11 +70,19 @@ func (pb *pageBuilder) initPluggableEngine() {
 		}
 	}
 	pb.widgetRegistry = registry
-	pb.pluggableEngine = NewPluggableWidgetEngine(NewOperationRegistry(), pb)
+	pb.pluggableEngine = NewPluggableWidgetEngine(pb.widgetBackend, pb)
 }
 
 // registerWidgetName registers a widget name and returns an error if it's already used.
 // Widget names must be unique within a page/snippet.
+
+// getProjectPath returns the project directory path from the underlying reader.
+func (pb *pageBuilder) getProjectPath() string {
+	if pb.reader != nil {
+		return pb.reader.Path()
+	}
+	return ""
+}
 func (pb *pageBuilder) registerWidgetName(name string, id model.ID) error {
 	if name == "" {
 		return nil // Anonymous widgets are allowed

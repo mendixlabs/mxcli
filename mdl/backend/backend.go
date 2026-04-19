@@ -34,4 +34,5 @@ type FullBackend interface {
 	PageMutationBackend
 	WorkflowMutationBackend
 	WidgetSerializationBackend
+	WidgetBuilderBackend
 }

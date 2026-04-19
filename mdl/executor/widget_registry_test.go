@@ -190,8 +190,6 @@ func TestRegistryLoadUserDefinitions(t *testing.T) {
 }
 
 func TestValidateDefinitionOperations_MappingOrderDependency(t *testing.T) {
-	opReg := NewOperationRegistry()
-
 	// Association before DataSource should fail validation
 	badDef := &WidgetDefinition{
 		WidgetID: "com.example.Bad",
@@ -201,7 +199,7 @@ func TestValidateDefinitionOperations_MappingOrderDependency(t *testing.T) {
 			{PropertyKey: "dsProp", Source: "DataSource", Operation: "datasource"},
 		},
 	}
-	if err := validateDefinitionOperations(badDef, "bad.def.json", opReg); err == nil {
+	if err := validateDefinitionOperations(badDef, "bad.def.json"); err == nil {
 		t.Error("expected error for Association before DataSource, got nil")
 	}
 
@@ -214,7 +212,7 @@ func TestValidateDefinitionOperations_MappingOrderDependency(t *testing.T) {
 			{PropertyKey: "assocProp", Source: "Association", Operation: "association"},
 		},
 	}
-	if err := validateDefinitionOperations(goodDef, "good.def.json", opReg); err != nil {
+	if err := validateDefinitionOperations(goodDef, "good.def.json"); err != nil {
 		t.Errorf("unexpected error for DataSource before Association: %v", err)
 	}
 
@@ -232,14 +230,12 @@ func TestValidateDefinitionOperations_MappingOrderDependency(t *testing.T) {
 			},
 		},
 	}
-	if err := validateDefinitionOperations(modeDef, "mode.def.json", opReg); err == nil {
+	if err := validateDefinitionOperations(modeDef, "mode.def.json"); err == nil {
 		t.Error("expected error for Association before DataSource in mode, got nil")
 	}
 }
 
 func TestValidateDefinitionOperations_SourceOperationCompatibility(t *testing.T) {
-	opReg := NewOperationRegistry()
-
 	// Source "Attribute" with Operation "association" should fail
 	badDef := &WidgetDefinition{
 		WidgetID: "com.example.Bad",
@@ -248,7 +244,7 @@ func TestValidateDefinitionOperations_SourceOperationCompatibility(t *testing.T)
 			{PropertyKey: "prop", Source: "Attribute", Operation: "association"},
 		},
 	}
-	if err := validateDefinitionOperations(badDef, "bad.def.json", opReg); err == nil {
+	if err := validateDefinitionOperations(badDef, "bad.def.json"); err == nil {
 		t.Error("expected error for Source='Attribute' with Operation='association', got nil")
 	}
 
@@ -260,7 +256,7 @@ func TestValidateDefinitionOperations_SourceOperationCompatibility(t *testing.T)
 			{PropertyKey: "prop", Source: "Association", Operation: "attribute"},
 		},
 	}
-	if err := validateDefinitionOperations(badDef2, "bad2.def.json", opReg); err == nil {
+	if err := validateDefinitionOperations(badDef2, "bad2.def.json"); err == nil {
 		t.Error("expected error for Source='Association' with Operation='attribute', got nil")
 	}
 }

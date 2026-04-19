@@ -80,7 +80,8 @@ type MockBackend struct {
 	CreateMicroflowFunc func(mf *microflows.Microflow) error
 	UpdateMicroflowFunc func(mf *microflows.Microflow) error
 	DeleteMicroflowFunc func(id model.ID) error
-	MoveMicroflowFunc   func(mf *microflows.Microflow) error
+	MoveMicroflowFunc          func(mf *microflows.Microflow) error
+	ParseMicroflowFromRawFunc  func(raw map[string]any, unitID, containerID model.ID) *microflows.Microflow
 	ListNanoflowsFunc   func() ([]*microflows.Nanoflow, error)
 	GetNanoflowFunc     func(id model.ID) (*microflows.Nanoflow, error)
 	CreateNanoflowFunc  func(nf *microflows.Nanoflow) error
@@ -269,6 +270,12 @@ type MockBackend struct {
 	SerializeClientActionFunc     func(a pages.ClientAction) (any, error)
 	SerializeDataSourceFunc       func(ds pages.DataSource) (any, error)
 	SerializeWorkflowActivityFunc func(a workflows.WorkflowActivity) (any, error)
+
+	// WidgetBuilderBackend
+	LoadWidgetTemplateFunc          func(widgetID string, projectPath string) (backend.WidgetObjectBuilder, error)
+	SerializeWidgetToOpaqueFunc     func(w pages.Widget) any
+	SerializeDataSourceToOpaqueFunc func(ds pages.DataSource) any
+	BuildCreateAttributeObjectFunc  func(attributePath string, objectTypeID, propertyTypeID, valueTypeID string) (any, error)
 
 	// AgentEditorBackend
 	ListAgentEditorModelsFunc               func() ([]*agenteditor.Model, error)

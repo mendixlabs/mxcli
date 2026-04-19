@@ -14,7 +14,6 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -497,7 +496,7 @@ func attributeBsonToMDL(_ *ExecContext, raw map[string]any) string {
 // Falls back to a header-only stub if parsing fails.
 func microflowBsonToMDL(ctx *ExecContext, raw map[string]any, qualifiedName string) string {
 	qn := splitQualifiedName(qualifiedName)
-	mf := mpr.ParseMicroflowFromRaw(raw, model.ID(qn.Name), "")
+	mf := ctx.Backend.ParseMicroflowFromRaw(raw, model.ID(qn.Name), "")
 
 	entityNames, microflowNames := buildNameLookups(ctx)
 	return renderMicroflowMDL(ctx, mf, qn, entityNames, microflowNames, nil)

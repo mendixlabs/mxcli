@@ -8,6 +8,23 @@ import (
 	"github.com/mendixlabs/mxcli/sdk/workflows"
 )
 
+// WidgetRef identifies a widget or a column within a widget.
+type WidgetRef struct {
+	Widget string
+	Column string // empty for non-column targeting
+}
+
+// IsColumn returns true if this targets a column within a widget.
+func (r WidgetRef) IsColumn() bool { return r.Column != "" }
+
+// Name returns the full reference string for error messages.
+func (r WidgetRef) Name() string {
+	if r.Column != "" {
+		return r.Widget + "." + r.Column
+	}
+	return r.Widget
+}
+
 // PageMutator provides fine-grained mutation operations on a single
 // page, layout, or snippet unit. Obtain one via PageMutationBackend.OpenPageForMutation.
 // All methods operate on the in-memory representation; call Save to persist.
@@ -31,14 +48,19 @@ type PageMutator interface {
 	// --- Widget tree operations ---
 
 	// InsertWidget inserts serialized widgets at the given position
-	// relative to the target widget. Position is "before" or "after".
-	InsertWidget(targetWidget string, position string, widgets []pages.Widget) error
+	// relative to the target widget or column. Position is "before" or "after".
+	// columnRef is "" for widget targeting; non-empty for column targeting.
+	InsertWidget(widgetRef string, columnRef string, position string, widgets []pages.Widget) error
 
-	// DropWidget removes widgets by name from the tree.
-	DropWidget(widgetRefs []string) error
+	// DropWidget removes widgets by ref from the tree.
+	DropWidget(refs []WidgetRef) error
 
-	// ReplaceWidget replaces the target widget with the given widgets.
-	ReplaceWidget(targetWidget string, widgets []pages.Widget) error
+	// ReplaceWidget replaces the target widget or column with the given widgets.
+	// columnRef is "" for widget targeting.
+	ReplaceWidget(widgetRef string, columnRef string, widgets []pages.Widget) error
+
+	// FindWidget checks if a widget with the given name exists in the tree.
+	FindWidget(name string) bool
 
 	// --- Variable operations ---
 
@@ -70,6 +92,10 @@ type PageMutator interface {
 
 	// WidgetScope returns a map of widget name → unit ID for all widgets in the tree.
 	WidgetScope() map[string]model.ID
+
+	// ParamScope returns page/snippet parameter maps:
+	// paramIDs maps param name → entity ID, paramEntityNames maps param name → qualified entity name.
+	ParamScope() (paramIDs map[string]model.ID, paramEntityNames map[string]string)
 
 	// Save persists the mutations to the backend.
 	Save() error
@@ -178,4 +204,68 @@ type WidgetSerializationBackend interface {
 
 	// SerializeWorkflowActivity converts a domain WorkflowActivity to storage format.
 	SerializeWorkflowActivity(a workflows.WorkflowActivity) (any, error)
+}
+
+// WidgetObjectBuilder provides BSON-free operations on a loaded pluggable widget template.
+// The executor calls these methods with domain-typed values; the backend handles
+// all storage-specific manipulation internally.
+//
+// Workflow: LoadTemplate → apply operations → EnsureRequiredObjectLists → Finalize
+type WidgetObjectBuilder interface {
+	// --- Property operations ---
+	// Each operation finds the property by key (via TypePointer matching) and updates its value.
+
+	SetAttribute(propertyKey string, attributePath string)
+	SetAssociation(propertyKey string, assocPath string, entityName string)
+	SetPrimitive(propertyKey string, value string)
+	SetSelection(propertyKey string, value string)
+	SetExpression(propertyKey string, value string)
+	SetDataSource(propertyKey string, ds pages.DataSource)
+	SetChildWidgets(propertyKey string, children []pages.Widget)
+	SetTextTemplate(propertyKey string, text string)
+	SetTextTemplateWithParams(propertyKey string, text string, entityContext string)
+	SetAction(propertyKey string, action pages.ClientAction)
+	SetAttributeObjects(propertyKey string, attributePaths []string)
+
+	// --- Template metadata ---
+
+	// PropertyTypeIDs returns the property type metadata for the loaded template.
+	PropertyTypeIDs() map[string]pages.PropertyTypeIDEntry
+
+	// --- Object list defaults ---
+
+	// EnsureRequiredObjectLists auto-populates required empty object lists.
+	EnsureRequiredObjectLists()
+
+	// --- Gallery-specific ---
+
+	// CloneGallerySelectionProperty clones the itemSelection property with a new Selection value.
+	CloneGallerySelectionProperty(propertyKey string, selectionMode string)
+
+	// --- Finalize ---
+
+	// Finalize builds the CustomWidget from the mutated template.
+	// Returns the widget with RawType/RawObject set from the internal BSON state.
+	Finalize(id model.ID, name string, label string, editable string) *pages.CustomWidget
+}
+
+// WidgetBuilderBackend provides pluggable widget construction capabilities.
+type WidgetBuilderBackend interface {
+	// LoadWidgetTemplate loads a widget template by ID and returns a builder
+	// for applying property operations. projectPath is used for runtime template
+	// augmentation from .mpk files.
+	LoadWidgetTemplate(widgetID string, projectPath string) (WidgetObjectBuilder, error)
+
+	// SerializeWidgetToOpaque converts a domain Widget to an opaque form
+	// suitable for passing to WidgetObjectBuilder.SetChildWidgets.
+	// This replaces the direct mpr.SerializeWidget call.
+	SerializeWidgetToOpaque(w pages.Widget) any
+
+	// SerializeDataSourceToOpaque converts a domain DataSource to an opaque
+	// form suitable for embedding in widget property BSON.
+	SerializeDataSourceToOpaque(ds pages.DataSource) any
+
+	// BuildCreateAttributeObject creates an attribute object for filter widgets.
+	// Returns an opaque value to be collected into attribute object lists.
+	BuildCreateAttributeObject(attributePath string, objectTypeID, propertyTypeID, valueTypeID string) (any, error)
 }

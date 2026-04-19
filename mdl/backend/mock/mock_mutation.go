@@ -62,3 +62,35 @@ func (m *MockBackend) SerializeWorkflowActivity(a workflows.WorkflowActivity) (a
 	}
 	return nil, nil
 }
+
+// ---------------------------------------------------------------------------
+// WidgetBuilderBackend
+// ---------------------------------------------------------------------------
+
+func (m *MockBackend) LoadWidgetTemplate(widgetID string, projectPath string) (backend.WidgetObjectBuilder, error) {
+	if m.LoadWidgetTemplateFunc != nil {
+		return m.LoadWidgetTemplateFunc(widgetID, projectPath)
+	}
+	return nil, nil
+}
+
+func (m *MockBackend) SerializeWidgetToOpaque(w pages.Widget) any {
+	if m.SerializeWidgetToOpaqueFunc != nil {
+		return m.SerializeWidgetToOpaqueFunc(w)
+	}
+	return nil
+}
+
+func (m *MockBackend) SerializeDataSourceToOpaque(ds pages.DataSource) any {
+	if m.SerializeDataSourceToOpaqueFunc != nil {
+		return m.SerializeDataSourceToOpaqueFunc(ds)
+	}
+	return nil
+}
+
+func (m *MockBackend) BuildCreateAttributeObject(attributePath string, objectTypeID, propertyTypeID, valueTypeID string) (any, error) {
+	if m.BuildCreateAttributeObjectFunc != nil {
+		return m.BuildCreateAttributeObjectFunc(attributePath, objectTypeID, propertyTypeID, valueTypeID)
+	}
+	return nil, nil
+}
