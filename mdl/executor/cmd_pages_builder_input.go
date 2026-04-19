@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	"github.com/mendixlabs/mxcli/mdl/bsonutil"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/mendixlabs/mxcli/sdk/pages"
@@ -128,10 +130,10 @@ func matchesTypePointer(prop bson.D, propertyTypeID string) bool {
 			// Handle both primitive.Binary (from MPR) and []byte (from JSON templates)
 			switch v := elem.Value.(type) {
 			case primitive.Binary:
-				propID := strings.ReplaceAll(mpr.BlobToUUID(v.Data), "-", "")
+				propID := strings.ReplaceAll(types.BlobToUUID(v.Data), "-", "")
 				return propID == normalizedTarget
 			case []byte:
-				propID := strings.ReplaceAll(mpr.BlobToUUID(v), "-", "")
+				propID := strings.ReplaceAll(types.BlobToUUID(v), "-", "")
 				if propID == normalizedTarget {
 					return true
 				}
@@ -196,12 +198,12 @@ func setAssociationRef(val bson.D, assocPath string, entityName string) bson.D {
 	for _, elem := range val {
 		if elem.Key == "EntityRef" && entityName != "" {
 			result = append(result, bson.E{Key: "EntityRef", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "DomainModels$IndirectEntityRef"},
 				{Key: "Steps", Value: bson.A{
 					int32(2), // version marker
 					bson.D{
-						{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+						{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 						{Key: "$Type", Value: "DomainModels$EntityRefStep"},
 						{Key: "Association", Value: assocPath},
 						{Key: "DestinationEntity", Value: entityName},
@@ -224,7 +226,7 @@ func setAttributeRef(val bson.D, attrPath string) bson.D {
 		if elem.Key == "AttributeRef" {
 			if strings.Count(attrPath, ".") >= 2 {
 				result = append(result, bson.E{Key: "AttributeRef", Value: bson.D{
-					{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+					{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 					{Key: "$Type", Value: "DomainModels$AttributeRef"},
 					{Key: "Attribute", Value: attrPath},
 					{Key: "EntityRef", Value: nil},

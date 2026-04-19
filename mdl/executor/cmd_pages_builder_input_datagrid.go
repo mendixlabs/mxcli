@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/bsonutil"
 	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"go.mongodb.org/mongo-driver/bson"
@@ -91,7 +92,7 @@ func (pb *pageBuilder) buildDataGrid2Property(entry pages.PropertyTypeIDEntry, d
 	var attrRefBSON any
 	if attrRef != "" {
 		attrRefBSON = bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "DomainModels$AttributeRef"},
 			{Key: "Attribute", Value: attrRef},
 			{Key: "EntityRef", Value: nil},
@@ -99,14 +100,14 @@ func (pb *pageBuilder) buildDataGrid2Property(entry pages.PropertyTypeIDEntry, d
 	}
 
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
-		{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.PropertyTypeID)},
+		{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.PropertyTypeID)},
 		{Key: "Value", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 			{Key: "Action", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Forms$NoAction"},
 				{Key: "DisabledDuringExecution", Value: true},
 			}},
@@ -125,7 +126,7 @@ func (pb *pageBuilder) buildDataGrid2Property(entry pages.PropertyTypeIDEntry, d
 			{Key: "SourceVariable", Value: nil},
 			{Key: "TextTemplate", Value: nil},
 			{Key: "TranslatableValue", Value: nil},
-			{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.ValueTypeID)},
+			{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.ValueTypeID)},
 			{Key: "Widgets", Value: bson.A{int32(2)}},
 			{Key: "XPathConstraint", Value: ""},
 		}},
@@ -139,7 +140,7 @@ func (pb *pageBuilder) updateDataGrid2Object(templateObject bson.D, propertyType
 	for _, elem := range templateObject {
 		if elem.Key == "$ID" {
 			// Generate new ID for the object
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "Properties" {
 			// Update properties
 			if propsArr, ok := elem.Value.(bson.A); ok {
@@ -237,13 +238,13 @@ func (pb *pageBuilder) cloneAndUpdateColumnsProperty(templateProp bson.D, column
 	result := make(bson.D, 0, len(templateProp))
 	for _, elem := range templateProp {
 		if elem.Key == "$ID" {
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "Value" {
 			if valMap, ok := elem.Value.(bson.D); ok {
 				newVal := make(bson.D, 0, len(valMap))
 				for _, ve := range valMap {
 					if ve.Key == "$ID" {
-						newVal = append(newVal, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+						newVal = append(newVal, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 					} else if ve.Key == "Objects" {
 						newVal = append(newVal, bson.E{Key: "Objects", Value: columnObjects})
 					} else if ve.Key == "Action" {
@@ -292,7 +293,7 @@ func (pb *pageBuilder) cloneAndUpdateColumnObject(templateCol bson.D, col *ast.D
 	result := make(bson.D, 0, len(templateCol))
 	for _, elem := range templateCol {
 		if elem.Key == "$ID" {
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "Properties" {
 			// Update properties
 			if propsArr, ok := elem.Value.(bson.A); ok {
@@ -529,11 +530,11 @@ func (pb *pageBuilder) buildDataGrid2Object(propertyTypeIDs map[string]pages.Pro
 	// Build TypePointer - references the WidgetObjectType
 	var typePointer any
 	if objectTypeID != "" {
-		typePointer = mpr.IDToBsonBinary(objectTypeID)
+		typePointer = bsonutil.IDToBsonBinary(objectTypeID)
 	}
 
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$WidgetObject"},
 		{Key: "Properties", Value: properties},
 		{Key: "TypePointer", Value: typePointer},
@@ -556,14 +557,14 @@ func (pb *pageBuilder) buildDataGrid2DefaultProperty(entry pages.PropertyTypeIDE
 	}
 
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
-		{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.PropertyTypeID)},
+		{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.PropertyTypeID)},
 		{Key: "Value", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 			{Key: "Action", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Forms$NoAction"},
 				{Key: "DisabledDuringExecution", Value: true},
 			}},
@@ -582,7 +583,7 @@ func (pb *pageBuilder) buildDataGrid2DefaultProperty(entry pages.PropertyTypeIDE
 			{Key: "SourceVariable", Value: nil},
 			{Key: "TextTemplate", Value: textTemplate},
 			{Key: "TranslatableValue", Value: nil},
-			{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.ValueTypeID)},
+			{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.ValueTypeID)},
 			{Key: "Widgets", Value: bson.A{int32(2)}},
 			{Key: "XPathConstraint", Value: ""},
 		}},
@@ -591,16 +592,16 @@ func (pb *pageBuilder) buildDataGrid2DefaultProperty(entry pages.PropertyTypeIDE
 
 func (pb *pageBuilder) buildEmptyClientTemplate() bson.D {
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "Forms$ClientTemplate"},
 		{Key: "Fallback", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Texts$Text"},
 			{Key: "Items", Value: bson.A{int32(3)}}, // Empty items with version marker
 		}},
 		{Key: "Parameters", Value: bson.A{int32(2)}}, // Empty parameters
 		{Key: "Template", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Texts$Text"},
 			{Key: "Items", Value: bson.A{int32(3)}}, // Empty items with version marker
 		}},
@@ -609,21 +610,21 @@ func (pb *pageBuilder) buildEmptyClientTemplate() bson.D {
 
 func (pb *pageBuilder) buildClientTemplateWithText(text string) bson.D {
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "Forms$ClientTemplate"},
 		{Key: "Fallback", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Texts$Text"},
 			{Key: "Items", Value: bson.A{int32(3)}},
 		}},
 		{Key: "Parameters", Value: bson.A{int32(2)}},
 		{Key: "Template", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Texts$Text"},
 			{Key: "Items", Value: bson.A{
 				int32(3),
 				bson.D{
-					{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+					{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 					{Key: "$Type", Value: "Texts$Translation"},
 					{Key: "LanguageCode", Value: "en_US"},
 					{Key: "Text", Value: text},
@@ -641,14 +642,14 @@ func (pb *pageBuilder) buildFiltersPlaceholderProperty(entry pages.PropertyTypeI
 	}
 
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
-		{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.PropertyTypeID)},
+		{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.PropertyTypeID)},
 		{Key: "Value", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 			{Key: "Action", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Forms$NoAction"},
 				{Key: "DisabledDuringExecution", Value: true},
 			}},
@@ -667,7 +668,7 @@ func (pb *pageBuilder) buildFiltersPlaceholderProperty(entry pages.PropertyTypeI
 			{Key: "SourceVariable", Value: nil},
 			{Key: "TextTemplate", Value: nil},
 			{Key: "TranslatableValue", Value: nil},
-			{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.ValueTypeID)},
+			{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.ValueTypeID)},
 			{Key: "Widgets", Value: widgetsArray},
 			{Key: "XPathConstraint", Value: ""},
 		}},
@@ -682,14 +683,14 @@ func (pb *pageBuilder) buildDataGrid2ColumnsProperty(entry pages.PropertyTypeIDE
 	}
 
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
-		{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.PropertyTypeID)},
+		{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.PropertyTypeID)},
 		{Key: "Value", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 			{Key: "Action", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Forms$NoAction"},
 				{Key: "DisabledDuringExecution", Value: true},
 			}},
@@ -708,7 +709,7 @@ func (pb *pageBuilder) buildDataGrid2ColumnsProperty(entry pages.PropertyTypeIDE
 			{Key: "SourceVariable", Value: nil},
 			{Key: "TextTemplate", Value: nil},
 			{Key: "TranslatableValue", Value: nil},
-			{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.ValueTypeID)},
+			{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.ValueTypeID)},
 			{Key: "Widgets", Value: bson.A{int32(2)}},
 			{Key: "XPathConstraint", Value: ""},
 		}},
@@ -878,11 +879,11 @@ func (pb *pageBuilder) buildDataGrid2ColumnObject(col *ast.DataGridColumnDef, co
 	// Column ObjectType pointer
 	var typePointer any
 	if columnObjectTypeID != "" {
-		typePointer = mpr.IDToBsonBinary(columnObjectTypeID)
+		typePointer = bsonutil.IDToBsonBinary(columnObjectTypeID)
 	}
 
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$WidgetObject"},
 		{Key: "Properties", Value: properties},
 		{Key: "TypePointer", Value: typePointer},
@@ -897,14 +898,14 @@ func (pb *pageBuilder) buildColumnDefaultProperty(entry pages.PropertyTypeIDEntr
 	}
 
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
-		{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.PropertyTypeID)},
+		{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.PropertyTypeID)},
 		{Key: "Value", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 			{Key: "Action", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Forms$NoAction"},
 				{Key: "DisabledDuringExecution", Value: true},
 			}},
@@ -923,7 +924,7 @@ func (pb *pageBuilder) buildColumnDefaultProperty(entry pages.PropertyTypeIDEntr
 			{Key: "SourceVariable", Value: nil},
 			{Key: "TextTemplate", Value: textTemplate},
 			{Key: "TranslatableValue", Value: nil},
-			{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.ValueTypeID)},
+			{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.ValueTypeID)},
 			{Key: "Widgets", Value: bson.A{int32(2)}},
 			{Key: "XPathConstraint", Value: ""},
 		}},
@@ -932,14 +933,14 @@ func (pb *pageBuilder) buildColumnDefaultProperty(entry pages.PropertyTypeIDEntr
 
 func (pb *pageBuilder) buildColumnPrimitiveProperty(entry pages.PropertyTypeIDEntry, value string) bson.D {
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
-		{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.PropertyTypeID)},
+		{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.PropertyTypeID)},
 		{Key: "Value", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 			{Key: "Action", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Forms$NoAction"},
 				{Key: "DisabledDuringExecution", Value: true},
 			}},
@@ -958,7 +959,7 @@ func (pb *pageBuilder) buildColumnPrimitiveProperty(entry pages.PropertyTypeIDEn
 			{Key: "SourceVariable", Value: nil},
 			{Key: "TextTemplate", Value: nil},
 			{Key: "TranslatableValue", Value: nil},
-			{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.ValueTypeID)},
+			{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.ValueTypeID)},
 			{Key: "Widgets", Value: bson.A{int32(2)}},
 			{Key: "XPathConstraint", Value: ""},
 		}},
@@ -967,14 +968,14 @@ func (pb *pageBuilder) buildColumnPrimitiveProperty(entry pages.PropertyTypeIDEn
 
 func (pb *pageBuilder) buildColumnExpressionProperty(entry pages.PropertyTypeIDEntry, expression string) bson.D {
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
-		{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.PropertyTypeID)},
+		{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.PropertyTypeID)},
 		{Key: "Value", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 			{Key: "Action", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Forms$NoAction"},
 				{Key: "DisabledDuringExecution", Value: true},
 			}},
@@ -993,7 +994,7 @@ func (pb *pageBuilder) buildColumnExpressionProperty(entry pages.PropertyTypeIDE
 			{Key: "SourceVariable", Value: nil},
 			{Key: "TextTemplate", Value: nil},
 			{Key: "TranslatableValue", Value: nil},
-			{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.ValueTypeID)},
+			{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.ValueTypeID)},
 			{Key: "Widgets", Value: bson.A{int32(2)}},
 			{Key: "XPathConstraint", Value: ""},
 		}},
@@ -1006,21 +1007,21 @@ func (pb *pageBuilder) buildColumnAttributeProperty(entry pages.PropertyTypeIDEn
 	var attributeRef any
 	if strings.Count(attrPath, ".") >= 2 {
 		attributeRef = bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "DomainModels$AttributeRef"},
 			{Key: "Attribute", Value: attrPath},
 			{Key: "EntityRef", Value: nil},
 		}
 	}
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
-		{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.PropertyTypeID)},
+		{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.PropertyTypeID)},
 		{Key: "Value", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 			{Key: "Action", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Forms$NoAction"},
 				{Key: "DisabledDuringExecution", Value: true},
 			}},
@@ -1039,7 +1040,7 @@ func (pb *pageBuilder) buildColumnAttributeProperty(entry pages.PropertyTypeIDEn
 			{Key: "SourceVariable", Value: nil},
 			{Key: "TextTemplate", Value: nil},
 			{Key: "TranslatableValue", Value: nil},
-			{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.ValueTypeID)},
+			{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.ValueTypeID)},
 			{Key: "Widgets", Value: bson.A{int32(2)}},
 			{Key: "XPathConstraint", Value: ""},
 		}},
@@ -1051,14 +1052,14 @@ func (pb *pageBuilder) buildColumnHeaderProperty(entry pages.PropertyTypeIDEntry
 	textTemplate := pb.buildClientTemplateWithText(caption)
 
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
-		{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.PropertyTypeID)},
+		{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.PropertyTypeID)},
 		{Key: "Value", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 			{Key: "Action", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Forms$NoAction"},
 				{Key: "DisabledDuringExecution", Value: true},
 			}},
@@ -1077,7 +1078,7 @@ func (pb *pageBuilder) buildColumnHeaderProperty(entry pages.PropertyTypeIDEntry
 			{Key: "SourceVariable", Value: nil},
 			{Key: "TextTemplate", Value: textTemplate},
 			{Key: "TranslatableValue", Value: nil},
-			{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.ValueTypeID)},
+			{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.ValueTypeID)},
 			{Key: "Widgets", Value: bson.A{int32(2)}},
 			{Key: "XPathConstraint", Value: ""},
 		}},
@@ -1099,14 +1100,14 @@ func (pb *pageBuilder) buildColumnContentProperty(entry pages.PropertyTypeIDEntr
 	}
 
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
-		{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.PropertyTypeID)},
+		{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.PropertyTypeID)},
 		{Key: "Value", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 			{Key: "Action", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Forms$NoAction"},
 				{Key: "DisabledDuringExecution", Value: true},
 			}},
@@ -1125,7 +1126,7 @@ func (pb *pageBuilder) buildColumnContentProperty(entry pages.PropertyTypeIDEntr
 			{Key: "SourceVariable", Value: nil},
 			{Key: "TextTemplate", Value: nil},
 			{Key: "TranslatableValue", Value: nil},
-			{Key: "TypePointer", Value: mpr.IDToBsonBinary(entry.ValueTypeID)},
+			{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(entry.ValueTypeID)},
 			{Key: "Widgets", Value: widgetsArray},
 			{Key: "XPathConstraint", Value: ""},
 		}},

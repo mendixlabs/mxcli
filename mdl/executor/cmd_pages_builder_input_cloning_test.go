@@ -5,15 +5,15 @@ package executor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/mendixlabs/mxcli/mdl/bsonutil"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func TestDeepCloneWithNewIDs_RegeneratesAllIDs(t *testing.T) {
-	origID1 := mpr.IDToBsonBinary(mpr.GenerateID())
-	origID2 := mpr.IDToBsonBinary(mpr.GenerateID())
-	origID3 := mpr.IDToBsonBinary(mpr.GenerateID())
+	origID1 := bsonutil.NewIDBsonBinary()
+	origID2 := bsonutil.NewIDBsonBinary()
+	origID3 := bsonutil.NewIDBsonBinary()
 
 	doc := bson.D{
 		{Key: "$ID", Value: origID1},
@@ -75,8 +75,8 @@ func TestDeepCloneWithNewIDs_RegeneratesAllIDs(t *testing.T) {
 }
 
 func TestDeepCloneWithNewIDs_HandlesArrays(t *testing.T) {
-	origID := mpr.IDToBsonBinary(mpr.GenerateID())
-	innerID := mpr.IDToBsonBinary(mpr.GenerateID())
+	origID := bsonutil.NewIDBsonBinary()
+	innerID := bsonutil.NewIDBsonBinary()
 
 	doc := bson.D{
 		{Key: "$ID", Value: origID},
@@ -107,7 +107,7 @@ func TestDeepCloneWithNewIDs_HandlesArrays(t *testing.T) {
 }
 
 func TestDeepCloneWithNewIDs_PreservesNil(t *testing.T) {
-	origID := mpr.IDToBsonBinary(mpr.GenerateID())
+	origID := bsonutil.NewIDBsonBinary()
 
 	doc := bson.D{
 		{Key: "$ID", Value: origID},

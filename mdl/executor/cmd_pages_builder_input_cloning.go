@@ -3,7 +3,8 @@
 package executor
 
 import (
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/mendixlabs/mxcli/mdl/bsonutil"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -17,7 +18,7 @@ func (pb *pageBuilder) cloneDataGrid2ObjectWithDatasourceOnly(templateObject bso
 	for _, elem := range templateObject {
 		if elem.Key == "$ID" {
 			// Generate new ID for the object
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "Properties" {
 			// Update only datasource property
 			if propsArr, ok := elem.Value.(bson.A); ok {
@@ -67,10 +68,10 @@ func (pb *pageBuilder) getTypePointerFromProperty(prop bson.D) string {
 		if elem.Key == "TypePointer" {
 			switch v := elem.Value.(type) {
 			case primitive.Binary:
-				return mpr.BsonBinaryToID(v)
+				return bsonutil.BsonBinaryToID(v)
 			case []byte:
 				// When loaded from JSON template, binary is []byte instead of primitive.Binary
-				return mpr.BlobToUUID(v)
+				return types.BlobToUUID(v)
 			}
 		}
 	}
@@ -82,7 +83,7 @@ func (pb *pageBuilder) clonePropertyWithNewIDs(prop bson.D) bson.D {
 	result := make(bson.D, 0, len(prop))
 	for _, elem := range prop {
 		if elem.Key == "$ID" {
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "Value" {
 			if valMap, ok := elem.Value.(bson.D); ok {
 				result = append(result, bson.E{Key: "Value", Value: pb.cloneValueWithNewIDs(valMap)})
@@ -109,7 +110,7 @@ func (pb *pageBuilder) clonePropertyWithPrimitiveValue(prop bson.D, newValue str
 	result := make(bson.D, 0, len(prop))
 	for _, elem := range prop {
 		if elem.Key == "$ID" {
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "Value" {
 			if valMap, ok := elem.Value.(bson.D); ok {
 				result = append(result, bson.E{Key: "Value", Value: pb.cloneValueWithUpdatedPrimitive(valMap, newValue)})
@@ -128,7 +129,7 @@ func (pb *pageBuilder) cloneValueWithUpdatedPrimitive(val bson.D, newValue strin
 	result := make(bson.D, 0, len(val))
 	for _, elem := range val {
 		if elem.Key == "$ID" {
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "PrimitiveValue" {
 			result = append(result, bson.E{Key: "PrimitiveValue", Value: newValue})
 		} else {
@@ -144,7 +145,7 @@ func (pb *pageBuilder) clonePropertyClearingTextTemplate(prop bson.D) bson.D {
 	result := make(bson.D, 0, len(prop))
 	for _, elem := range prop {
 		if elem.Key == "$ID" {
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "Value" {
 			if valMap, ok := elem.Value.(bson.D); ok {
 				result = append(result, bson.E{Key: "Value", Value: pb.cloneValueClearingTextTemplate(valMap)})
@@ -163,7 +164,7 @@ func (pb *pageBuilder) cloneValueClearingTextTemplate(val bson.D) bson.D {
 	result := make(bson.D, 0, len(val))
 	for _, elem := range val {
 		if elem.Key == "$ID" {
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "TextTemplate" {
 			result = append(result, bson.E{Key: "TextTemplate", Value: nil})
 		} else {
@@ -189,7 +190,7 @@ func (pb *pageBuilder) clonePropertyWithExpression(prop bson.D, newExpr string) 
 	result := make(bson.D, 0, len(prop))
 	for _, elem := range prop {
 		if elem.Key == "$ID" {
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "Value" {
 			if valMap, ok := elem.Value.(bson.D); ok {
 				result = append(result, bson.E{Key: "Value", Value: pb.cloneValueWithUpdatedExpression(valMap, newExpr)})
@@ -208,7 +209,7 @@ func (pb *pageBuilder) cloneValueWithUpdatedExpression(val bson.D, newExpr strin
 	result := make(bson.D, 0, len(val))
 	for _, elem := range val {
 		if elem.Key == "$ID" {
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "Expression" {
 			result = append(result, bson.E{Key: "Expression", Value: newExpr})
 		} else {
@@ -229,7 +230,7 @@ func deepCloneWithNewIDs(doc bson.D) bson.D {
 	result := make(bson.D, 0, len(doc))
 	for _, elem := range doc {
 		if elem.Key == "$ID" {
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else {
 			result = append(result, bson.E{Key: elem.Key, Value: deepCloneValue(elem.Value)})
 		}

@@ -5,8 +5,8 @@ package executor
 import (
 	"log"
 
+	"github.com/mendixlabs/mxcli/mdl/bsonutil"
 	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -218,7 +218,7 @@ func updateTemplateText(tmpl bson.D, text string) bson.D {
 						updated = append(updated, bson.E{Key: "Items", Value: bson.A{
 							int32(3),
 							bson.D{
-								{Key: "$ID", Value: mpr.IDToBsonBinary(types.GenerateID())},
+								{Key: "$ID", Value: bsonutil.IDToBsonBinary(types.GenerateID())},
 								{Key: "$Type", Value: "Texts$Translation"},
 								{Key: "LanguageCode", Value: "en_US"},
 								{Key: "Text", Value: text},

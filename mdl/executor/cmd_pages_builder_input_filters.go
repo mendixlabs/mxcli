@@ -5,8 +5,9 @@ package executor
 import (
 	"strings"
 
+	"github.com/mendixlabs/mxcli/mdl/bsonutil"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"github.com/mendixlabs/mxcli/sdk/widgets"
 	"go.mongodb.org/mongo-driver/bson"
@@ -106,7 +107,7 @@ func (pb *pageBuilder) findAttributeType(attrPath string) domainmodel.AttributeT
 
 func (pb *pageBuilder) buildFilterWidgetBSON(widgetID, filterName string) bson.D {
 	// Load the filter widget template
-	rawType, rawObject, propertyTypeIDs, objectTypeID, err := widgets.GetTemplateFullBSON(widgetID, mpr.GenerateID, pb.reader.Path())
+	rawType, rawObject, propertyTypeIDs, objectTypeID, err := widgets.GetTemplateFullBSON(widgetID, types.GenerateID, pb.reader.Path())
 	if err != nil || rawType == nil {
 		// Fallback: create minimal filter widget structure
 		return pb.buildMinimalFilterWidgetBSON(widgetID, filterName)
@@ -114,7 +115,7 @@ func (pb *pageBuilder) buildFilterWidgetBSON(widgetID, filterName string) bson.D
 
 	// The widget structure is: CustomWidgets$CustomWidget with Type and Object
 	widgetBSON := bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$CustomWidget"},
 		{Key: "Editable", Value: "Inherited"},
 		{Key: "Name", Value: filterName},
@@ -138,9 +139,9 @@ func (pb *pageBuilder) setFilterWidgetLinkedDsAuto(widget bson.D, propertyTypeID
 }
 
 func (pb *pageBuilder) buildMinimalFilterWidgetBSON(widgetID, filterName string) bson.D {
-	typeID := mpr.GenerateID()
-	objectTypeID := mpr.GenerateID()
-	objectID := mpr.GenerateID()
+	typeID := types.GenerateID()
+	objectTypeID := types.GenerateID()
+	objectID := types.GenerateID()
 
 	// Get widget type name based on ID
 	var widgetTypeName string
@@ -158,23 +159,23 @@ func (pb *pageBuilder) buildMinimalFilterWidgetBSON(widgetID, filterName string)
 	}
 
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "CustomWidgets$CustomWidget"},
 		{Key: "Editable", Value: "Inherited"},
 		{Key: "Name", Value: filterName},
 		{Key: "Object", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(objectID)},
+			{Key: "$ID", Value: bsonutil.IDToBsonBinary(objectID)},
 			{Key: "$Type", Value: "CustomWidgets$WidgetObject"},
 			{Key: "Properties", Value: bson.A{int32(2)}},
-			{Key: "TypePointer", Value: mpr.IDToBsonBinary(objectTypeID)},
+			{Key: "TypePointer", Value: bsonutil.IDToBsonBinary(objectTypeID)},
 		}},
 		{Key: "TabIndex", Value: int32(0)},
 		{Key: "Type", Value: bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(typeID)},
+			{Key: "$ID", Value: bsonutil.IDToBsonBinary(typeID)},
 			{Key: "$Type", Value: "CustomWidgets$CustomWidgetType"},
 			{Key: "HelpUrl", Value: ""},
 			{Key: "ObjectType", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(objectTypeID)},
+				{Key: "$ID", Value: bsonutil.IDToBsonBinary(objectTypeID)},
 				{Key: "$Type", Value: "CustomWidgets$WidgetObjectType"},
 				{Key: "PropertyTypes", Value: bson.A{int32(2)}},
 			}},

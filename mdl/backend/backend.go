@@ -31,4 +31,7 @@ type FullBackend interface {
 	MetadataBackend
 	WidgetBackend
 	AgentEditorBackend
+	PageMutationBackend
+	WorkflowMutationBackend
+	WidgetSerializationBackend
 }

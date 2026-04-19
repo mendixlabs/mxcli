@@ -724,3 +724,36 @@ func (b *MprBackend) CreateAgentEditorAgent(a *agenteditor.Agent) error {
 func (b *MprBackend) DeleteAgentEditorAgent(id string) error {
 	return b.writer.DeleteAgentEditorAgent(id)
 }
+
+// ---------------------------------------------------------------------------
+// PageMutationBackend
+
+func (b *MprBackend) OpenPageForMutation(unitID model.ID) (backend.PageMutator, error) {
+	panic("MprBackend.OpenPageForMutation not yet implemented")
+}
+
+// ---------------------------------------------------------------------------
+// WorkflowMutationBackend
+
+func (b *MprBackend) OpenWorkflowForMutation(unitID model.ID) (backend.WorkflowMutator, error) {
+	panic("MprBackend.OpenWorkflowForMutation not yet implemented")
+}
+
+// ---------------------------------------------------------------------------
+// WidgetSerializationBackend
+
+func (b *MprBackend) SerializeWidget(w pages.Widget) (any, error) {
+	panic("MprBackend.SerializeWidget not yet implemented")
+}
+
+func (b *MprBackend) SerializeClientAction(a pages.ClientAction) (any, error) {
+	panic("MprBackend.SerializeClientAction not yet implemented")
+}
+
+func (b *MprBackend) SerializeDataSource(ds pages.DataSource) (any, error) {
+	panic("MprBackend.SerializeDataSource not yet implemented")
+}
+
+func (b *MprBackend) SerializeWorkflowActivity(a workflows.WorkflowActivity) (any, error) {
+	panic("MprBackend.SerializeWorkflowActivity not yet implemented")
+}

@@ -8,7 +8,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -540,7 +540,7 @@ func TestSetChildWidgets(t *testing.T) {
 func TestOpSelection(t *testing.T) {
 	// Call the real opSelection function with a properly structured widget BSON.
 	typePointerBytes := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-	typePointerUUID := mpr.BlobToUUID(typePointerBytes)
+	typePointerUUID := types.BlobToUUID(typePointerBytes)
 
 	widgetObj := bson.D{
 		{Key: "Properties", Value: bson.A{

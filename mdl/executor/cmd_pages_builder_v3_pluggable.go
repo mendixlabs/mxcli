@@ -9,7 +9,9 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/bsonutil"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
@@ -24,7 +26,7 @@ func (pb *pageBuilder) buildGallerySelectionProperty(propMap bson.D, selectionMo
 	for _, elem := range propMap {
 		if elem.Key == "$ID" {
 			// Generate new ID
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "Value" {
 			// Clone Value and update Selection
 			if valueMap, ok := elem.Value.(bson.D); ok {
@@ -46,7 +48,7 @@ func (pb *pageBuilder) cloneGallerySelectionValue(valueMap bson.D, selectionMode
 
 	for _, elem := range valueMap {
 		if elem.Key == "$ID" {
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else if elem.Key == "Selection" {
 			// Update selection mode
 			result = append(result, bson.E{Key: "Selection", Value: selectionMode})
@@ -71,7 +73,7 @@ func (pb *pageBuilder) cloneActionWithNewID(actionMap bson.D) bson.D {
 
 	for _, elem := range actionMap {
 		if elem.Key == "$ID" {
-			result = append(result, bson.E{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+			result = append(result, bson.E{Key: "$ID", Value: bsonutil.NewIDBsonBinary()})
 		} else {
 			result = append(result, elem)
 		}
@@ -101,24 +103,24 @@ func (pb *pageBuilder) createAttributeObject(attributePath string, objectTypeID,
 		return nil, mdlerrors.NewValidationf("invalid attribute path %q: expected Module.Entity.Attribute format", attributePath)
 	}
 	return bson.D{
-		{Key: "$ID", Value: hexToBytes(mpr.GenerateID())},
+		{Key: "$ID", Value: hexToBytes(types.GenerateID())},
 		{Key: "$Type", Value: "CustomWidgets$WidgetObject"},
 		{Key: "Properties", Value: []any{
 			int32(2),
 			bson.D{
-				{Key: "$ID", Value: hexToBytes(mpr.GenerateID())},
+				{Key: "$ID", Value: hexToBytes(types.GenerateID())},
 				{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
 				{Key: "TypePointer", Value: hexToBytes(propertyTypeID)},
 				{Key: "Value", Value: bson.D{
-					{Key: "$ID", Value: hexToBytes(mpr.GenerateID())},
+					{Key: "$ID", Value: hexToBytes(types.GenerateID())},
 					{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
 					{Key: "Action", Value: bson.D{
-						{Key: "$ID", Value: hexToBytes(mpr.GenerateID())},
+						{Key: "$ID", Value: hexToBytes(types.GenerateID())},
 						{Key: "$Type", Value: "Forms$NoAction"},
 						{Key: "DisabledDuringExecution", Value: true},
 					}},
 					{Key: "AttributeRef", Value: bson.D{
-						{Key: "$ID", Value: hexToBytes(mpr.GenerateID())},
+						{Key: "$ID", Value: hexToBytes(types.GenerateID())},
 						{Key: "$Type", Value: "DomainModels$AttributeRef"},
 						{Key: "Attribute", Value: attributePath},
 						{Key: "EntityRef", Value: nil},

@@ -10,7 +10,9 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/bsonutil"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
@@ -357,7 +359,7 @@ func dSetArray(doc bson.D, key string, elements []any) {
 // extractBinaryIDFromDoc extracts a binary ID string from a bson.D field.
 func extractBinaryIDFromDoc(val any) string {
 	if bin, ok := val.(primitive.Binary); ok {
-		return mpr.BlobToUUID(bin.Data)
+		return types.BlobToUUID(bin.Data)
 	}
 	return ""
 }
@@ -936,7 +938,7 @@ func setWidgetAttributeRef(widget bson.D, value interface{}) error {
 	var attrRefValue interface{}
 	if strings.Count(attrPath, ".") >= 2 {
 		attrRefValue = bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "DomainModels$AttributeRef"},
 			{Key: "Attribute", Value: attrPath},
 			{Key: "EntityRef", Value: nil},
@@ -971,7 +973,7 @@ func setWidgetDataSource(widget bson.D, value interface{}) error {
 	case "selection":
 		// SELECTION widgetName → Forms$ListenTargetSource
 		serialized = bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Forms$ListenTargetSource"},
 			{Key: "ListenTarget", Value: ds.Reference},
 		}
@@ -980,13 +982,13 @@ func setWidgetDataSource(widget bson.D, value interface{}) error {
 		var entityRef interface{}
 		if ds.Reference != "" {
 			entityRef = bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "DomainModels$DirectEntityRef"},
 				{Key: "Entity", Value: ds.Reference},
 			}
 		}
 		serialized = bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Forms$DataViewSource"},
 			{Key: "EntityRef", Value: entityRef},
 			{Key: "ForceFullObjects", Value: false},
@@ -994,10 +996,10 @@ func setWidgetDataSource(widget bson.D, value interface{}) error {
 		}
 	case "microflow":
 		serialized = bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Forms$MicroflowSource"},
 			{Key: "MicroflowSettings", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Forms$MicroflowSettings"},
 				{Key: "Asynchronous", Value: false},
 				{Key: "ConfirmationInfo", Value: nil},
@@ -1010,10 +1012,10 @@ func setWidgetDataSource(widget bson.D, value interface{}) error {
 		}
 	case "nanoflow":
 		serialized = bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Forms$NanoflowSource"},
 			{Key: "NanoflowSettings", Value: bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Forms$NanoflowSettings"},
 				{Key: "Nanoflow", Value: ds.Reference},
 				{Key: "ParameterMappings", Value: bson.A{int32(3)}},
@@ -1462,10 +1464,10 @@ func applyAddVariable(rawData *bson.D, op *ast.AddVariableOp) error {
 	}
 
 	// Build VariableType BSON
-	varTypeID := mpr.GenerateID()
+	varTypeID := types.GenerateID()
 	bsonTypeName := mdlTypeToBsonType(op.Variable.DataType)
 	varType := bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(varTypeID)},
+		{Key: "$ID", Value: bsonutil.IDToBsonBinary(varTypeID)},
 		{Key: "$Type", Value: bsonTypeName},
 	}
 	if bsonTypeName == "DataTypes$ObjectType" {
@@ -1473,9 +1475,9 @@ func applyAddVariable(rawData *bson.D, op *ast.AddVariableOp) error {
 	}
 
 	// Build LocalVariable BSON document
-	varID := mpr.GenerateID()
+	varID := types.GenerateID()
 	varDoc := bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(varID)},
+		{Key: "$ID", Value: bsonutil.IDToBsonBinary(varID)},
 		{Key: "$Type", Value: "Forms$LocalVariable"},
 		{Key: "DefaultValue", Value: op.Variable.DefaultValue},
 		{Key: "Name", Value: op.Variable.Name},

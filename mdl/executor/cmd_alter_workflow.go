@@ -10,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/bsonutil"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/mpr"
@@ -155,7 +156,7 @@ func applySetWorkflowProperty(doc *bson.D, op *ast.SetWorkflowPropertyOp) error 
 		if wfName == nil {
 			// Auto-create the WorkflowName sub-document
 			newName := bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Texts$Text"},
 				{Key: "Text", Value: op.Value},
 			}
@@ -173,7 +174,7 @@ func applySetWorkflowProperty(doc *bson.D, op *ast.SetWorkflowPropertyOp) error 
 		if wfDesc == nil {
 			// Auto-create the WorkflowDescription sub-document
 			newDesc := bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Texts$Text"},
 				{Key: "Text", Value: op.Value},
 			}
@@ -198,7 +199,7 @@ func applySetWorkflowProperty(doc *bson.D, op *ast.SetWorkflowPropertyOp) error 
 			dSet(*doc, "AdminPage", nil)
 		} else {
 			pageRef := bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Workflows$PageReference"},
 				{Key: "Page", Value: qn},
 			}
@@ -225,7 +226,7 @@ func applySetWorkflowProperty(doc *bson.D, op *ast.SetWorkflowPropertyOp) error 
 		} else {
 			// Create new Parameter
 			newParam := bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Workflows$Parameter"},
 				{Key: "Entity", Value: qn},
 				{Key: "Name", Value: "WorkflowContext"},
@@ -264,7 +265,7 @@ func applySetActivityProperty(doc bson.D, op *ast.SetActivityPropertyOp) error {
 		} else {
 			// Create TaskPage
 			pageRef := bson.D{
-				{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 				{Key: "$Type", Value: "Workflows$PageReference"},
 				{Key: "Page", Value: qn},
 			}
@@ -283,7 +284,7 @@ func applySetActivityProperty(doc bson.D, op *ast.SetActivityPropertyOp) error {
 	case "TARGETING_MICROFLOW":
 		qn := op.Microflow.Module + "." + op.Microflow.Name
 		userTargeting := bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Workflows$MicroflowUserTargeting"},
 			{Key: "Microflow", Value: qn},
 		}
@@ -292,7 +293,7 @@ func applySetActivityProperty(doc bson.D, op *ast.SetActivityPropertyOp) error {
 
 	case "TARGETING_XPATH":
 		userTargeting := bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Workflows$XPathUserTargeting"},
 			{Key: "XPathConstraint", Value: op.Value},
 		}
@@ -500,7 +501,7 @@ func buildSubFlowBson(ctx *ExecContext, doc bson.D, activities []ast.WorkflowAct
 		}
 	}
 	return bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "Workflows$Flow"},
 		{Key: "Activities", Value: subActsBson},
 	}
@@ -602,7 +603,7 @@ func applyInsertOutcome(ctx *ExecContext, doc bson.D, op *ast.InsertOutcomeOp) e
 
 	// Build outcome BSON
 	outcomeDoc := bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "Workflows$UserTaskOutcome"},
 	}
 
@@ -612,7 +613,7 @@ func applyInsertOutcome(ctx *ExecContext, doc bson.D, op *ast.InsertOutcomeOp) e
 	}
 
 	outcomeDoc = append(outcomeDoc,
-		bson.E{Key: "PersistentId", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		bson.E{Key: "PersistentId", Value: bsonutil.NewIDBsonBinary()},
 		bson.E{Key: "Value", Value: op.OutcomeName},
 	)
 
@@ -667,7 +668,7 @@ func applyInsertPath(ctx *ExecContext, doc bson.D, op *ast.InsertPathOp) error {
 	}
 
 	pathDoc := bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "Workflows$ParallelSplitOutcome"},
 	}
 
@@ -675,7 +676,7 @@ func applyInsertPath(ctx *ExecContext, doc bson.D, op *ast.InsertPathOp) error {
 		pathDoc = append(pathDoc, bson.E{Key: "Flow", Value: buildSubFlowBson(ctx, doc, op.Activities)})
 	}
 
-	pathDoc = append(pathDoc, bson.E{Key: "PersistentId", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+	pathDoc = append(pathDoc, bson.E{Key: "PersistentId", Value: bsonutil.NewIDBsonBinary()})
 
 	outcomes := dGetArrayElements(dGet(actDoc, "Outcomes"))
 	outcomes = append(outcomes, pathDoc)
@@ -730,24 +731,24 @@ func applyInsertBranch(ctx *ExecContext, doc bson.D, op *ast.InsertBranchOp) err
 	switch strings.ToLower(op.Condition) {
 	case "true":
 		outcomeDoc = bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Workflows$BooleanConditionOutcome"},
 			{Key: "Value", Value: true},
 		}
 	case "false":
 		outcomeDoc = bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Workflows$BooleanConditionOutcome"},
 			{Key: "Value", Value: false},
 		}
 	case "default":
 		outcomeDoc = bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Workflows$VoidConditionOutcome"},
 		}
 	default:
 		outcomeDoc = bson.D{
-			{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "Workflows$EnumerationValueConditionOutcome"},
 			{Key: "Value", Value: op.Condition},
 		}
@@ -835,7 +836,7 @@ func applyInsertBoundaryEvent(ctx *ExecContext, doc bson.D, op *ast.InsertBounda
 	}
 
 	eventDoc := bson.D{
-		{Key: "$ID", Value: mpr.IDToBsonBinary(mpr.GenerateID())},
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: typeName},
 		{Key: "Caption", Value: ""},
 	}
@@ -848,7 +849,7 @@ func applyInsertBoundaryEvent(ctx *ExecContext, doc bson.D, op *ast.InsertBounda
 		eventDoc = append(eventDoc, bson.E{Key: "Flow", Value: buildSubFlowBson(ctx, doc, op.Activities)})
 	}
 
-	eventDoc = append(eventDoc, bson.E{Key: "PersistentId", Value: mpr.IDToBsonBinary(mpr.GenerateID())})
+	eventDoc = append(eventDoc, bson.E{Key: "PersistentId", Value: bsonutil.NewIDBsonBinary()})
 
 	if typeName == "Workflows$NonInterruptingTimerBoundaryEvent" {
 		eventDoc = append(eventDoc, bson.E{Key: "Recurrence", Value: nil})

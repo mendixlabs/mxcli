@@ -258,6 +258,18 @@ type MockBackend struct {
 	FindCustomWidgetTypeFunc     func(widgetID string) (*types.RawCustomWidgetType, error)
 	FindAllCustomWidgetTypesFunc func(widgetID string) ([]*types.RawCustomWidgetType, error)
 
+	// PageMutationBackend
+	OpenPageForMutationFunc func(unitID model.ID) (backend.PageMutator, error)
+
+	// WorkflowMutationBackend
+	OpenWorkflowForMutationFunc func(unitID model.ID) (backend.WorkflowMutator, error)
+
+	// WidgetSerializationBackend
+	SerializeWidgetFunc           func(w pages.Widget) (any, error)
+	SerializeClientActionFunc     func(a pages.ClientAction) (any, error)
+	SerializeDataSourceFunc       func(ds pages.DataSource) (any, error)
+	SerializeWorkflowActivityFunc func(a workflows.WorkflowActivity) (any, error)
+
 	// AgentEditorBackend
 	ListAgentEditorModelsFunc               func() ([]*agenteditor.Model, error)
 	ListAgentEditorKnowledgeBasesFunc       func() ([]*agenteditor.KnowledgeBase, error)
