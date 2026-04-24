@@ -540,6 +540,28 @@ After fixing templates:
 2. Run `mx check app.mpr` - should return 0 errors
 3. Open in Studio Pro - widget should load without "Update widget" prompt
 
+### Reading TextTemplate in executor code
+
+Part 10 above covers writing `Forms$ClientTemplate`. The same structure applies when **reading** it in executor code (e.g. `cmd_alter_page.go`, `cmd_pages_describe_output.go`).
+
+The correct traversal is:
+```
+TextTemplate (Forms$ClientTemplate) → Template (Texts$Text) → Items[] → Translation { Text }
+```
+
+**Do not** read `Items` directly off the `TextTemplate` document — that skips the intermediate `Template` node and silently returns an empty slice. Always traverse one level deeper:
+
+```go
+// WRONG — Items is always empty
+items := dGetArrayElements(dGet(tmplDoc, "Items"))
+
+// CORRECT — traverse Template first
+template := dGetDoc(tmplDoc, "Template")
+items := dGetArrayElements(dGet(template, "Items"))
+```
+
+This applies to any executor function that reads column headers, button captions, or any other translatable text stored as `Forms$ClientTemplate`.
+
 ## Related Documentation
 
 - [BSON Mapping Specification](../../docs/05-mdl-specification/10-bson-mapping.md)

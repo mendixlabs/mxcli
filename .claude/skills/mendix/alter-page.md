@@ -150,6 +150,14 @@ REPLACE dgProducts.Description WITH {
 
 To discover column names, run `DESCRIBE PAGE Module.PageName` and look at the COLUMN names inside the DATAGRID.
 
+**Troubleshooting: column operation succeeds but does nothing**
+If an ALTER targeting a DataGrid column completes without error but makes no change, the column name used in the statement didn't match any column. The most common cause is a mismatch between what DESCRIBE shows and what ALTER resolves internally. Derivation rules:
+- Attribute-bound column → short attribute name (last segment after `.`): `Module.Entity.Description` → `Description`
+- Caption-only column → sanitized caption (non-alphanumeric replaced with `_`, leading/trailing `_` trimmed): `"Order Status"` → `Order_Status`
+- Caption with only special chars (e.g. `"---"`) → falls back to `col1`, `col2`, … (1-based index)
+
+If the column name you copied from DESCRIBE still doesn't work, check whether the column has an attribute binding — attribute names take priority over captions.
+
 ### ADD Variables - Add a Page Variable
 
 ```sql
