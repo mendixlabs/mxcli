@@ -700,3 +700,138 @@ func TestExtractWidgetScopeFromBSON_Nil(t *testing.T) {
 		t.Error("Expected empty scope for nil input")
 	}
 }
+
+// ============================================================================
+// deriveColumnNameBson regression tests (issue #116)
+// ============================================================================
+
+// makePropTypeID builds a primitive.Binary suitable for use as a TypePointer.
+func makePropTypeID(b byte) primitive.Binary {
+	data := make([]byte, 16)
+	data[0] = b
+	return primitive.Binary{Subtype: 0x04, Data: data}
+}
+
+// propKey builds the map key used by deriveColumnNameBson — the UUID string
+// that extractBinaryIDFromDoc produces from a primitive.Binary TypePointer.
+func propKey(id primitive.Binary) string {
+	return extractBinaryIDFromDoc(id)
+}
+
+// TestDeriveColumnNameBson_AttributeBinding verifies attribute-bound columns
+// produce the short attribute name (last segment after dot).
+func TestDeriveColumnNameBson_AttributeBinding(t *testing.T) {
+	typeID := makePropTypeID(0x01)
+	propKeyMap := map[string]string{propKey(typeID): "attribute"}
+
+	colDoc := bson.D{
+		{Key: "Properties", Value: bson.A{
+			int32(2),
+			bson.D{
+				{Key: "TypePointer", Value: typeID},
+				{Key: "Value", Value: bson.D{
+					{Key: "AttributeRef", Value: "MyModule.Customer.Description"},
+				}},
+			},
+		}},
+	}
+
+	got := deriveColumnNameBson(colDoc, propKeyMap, 0)
+	if got != "Description" {
+		t.Errorf("expected 'Description', got %q", got)
+	}
+}
+
+// TestDeriveColumnNameBson_CaptionFallback verifies caption-only columns
+// produce the sanitized caption. This exercises the TextTemplate → Template →
+// Items[] path that was broken in issue #116.
+func TestDeriveColumnNameBson_CaptionFallback(t *testing.T) {
+	typeID := makePropTypeID(0x02)
+	propKeyMap := map[string]string{propKey(typeID): "header"}
+
+	colDoc := bson.D{
+		{Key: "Properties", Value: bson.A{
+			int32(2),
+			bson.D{
+				{Key: "TypePointer", Value: typeID},
+				{Key: "Value", Value: bson.D{
+					{Key: "TextTemplate", Value: bson.D{
+						{Key: "Template", Value: bson.D{
+							{Key: "Items", Value: bson.A{
+								int32(2),
+								bson.D{{Key: "Text", Value: "Order Status"}},
+							}},
+						}},
+					}},
+				}},
+			},
+		}},
+	}
+
+	got := deriveColumnNameBson(colDoc, propKeyMap, 0)
+	if got != "Order_Status" {
+		t.Errorf("expected 'Order_Status', got %q", got)
+	}
+}
+
+// TestDeriveColumnNameBson_IndexFallback verifies that a column with neither
+// attribute nor caption falls back to "col{N}" (1-based).
+func TestDeriveColumnNameBson_IndexFallback(t *testing.T) {
+	colDoc := bson.D{{Key: "Properties", Value: bson.A{int32(2)}}}
+	got := deriveColumnNameBson(colDoc, map[string]string{}, 2)
+	if got != "col3" {
+		t.Errorf("expected 'col3', got %q", got)
+	}
+}
+
+// TestSanitizeColumnName_TrimUnderscores verifies that leading/trailing
+// underscores are trimmed to match deriveColumnName() on the DESCRIBE side.
+func TestSanitizeColumnName_TrimUnderscores(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{" Description ", "Description"},
+		{"!Order Status!", "Order_Status"},
+		{"Hello World", "Hello_World"},
+		{"___", ""}, // all special chars → empty → caller falls through to col{N}
+	}
+	for _, c := range cases {
+		got := sanitizeColumnName(c.input)
+		if got != c.want {
+			t.Errorf("sanitizeColumnName(%q) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
+
+// TestDeriveColumnNameBson_AllSpecialCharCaption verifies that a caption
+// composed entirely of non-identifier characters falls back to col{N},
+// matching deriveColumnName() on the DESCRIBE side.
+func TestDeriveColumnNameBson_AllSpecialCharCaption(t *testing.T) {
+	typeID := makePropTypeID(0x03)
+	propKeyMap := map[string]string{propKey(typeID): "header"}
+
+	colDoc := bson.D{
+		{Key: "Properties", Value: bson.A{
+			int32(2),
+			bson.D{
+				{Key: "TypePointer", Value: typeID},
+				{Key: "Value", Value: bson.D{
+					{Key: "TextTemplate", Value: bson.D{
+						{Key: "Template", Value: bson.D{
+							{Key: "Items", Value: bson.A{
+								int32(2),
+								bson.D{{Key: "Text", Value: "---"}},
+							}},
+						}},
+					}},
+				}},
+			},
+		}},
+	}
+
+	got := deriveColumnNameBson(colDoc, propKeyMap, 0)
+	if got != "col1" {
+		t.Errorf("expected 'col1' for all-special-char caption, got %q", got)
+	}
+}

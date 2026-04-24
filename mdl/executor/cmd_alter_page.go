@@ -700,9 +700,15 @@ func deriveColumnNameBson(colDoc bson.D, propKeyMap map[string]string, index int
 				attribute = dGetString(attrDoc, "Attribute")
 			}
 		case "header":
-			// Extract caption from TextTemplate
+			// TextTemplate → Template (Forms$Text) → Items[] → Translation{Text}.
+			// Must traverse the intermediate Template document — same path as
+			// extractDataGrid2Column on the DESCRIBE side.
 			if tmpl := dGetDoc(valDoc, "TextTemplate"); tmpl != nil {
-				items := dGetArrayElements(dGet(tmpl, "Items"))
+				template := dGetDoc(tmpl, "Template")
+				if template == nil {
+					template = tmpl // fallback: some versions store Items directly
+				}
+				items := dGetArrayElements(dGet(template, "Items"))
 				for _, item := range items {
 					if itemDoc, ok := item.(bson.D); ok {
 						if text := dGetString(itemDoc, "Text"); text != "" {
@@ -720,22 +726,25 @@ func deriveColumnNameBson(colDoc bson.D, propKeyMap map[string]string, index int
 		return parts[len(parts)-1]
 	}
 	if caption != "" {
-		return sanitizeColumnName(caption)
+		if name := sanitizeColumnName(caption); name != "" {
+			return name
+		}
 	}
 	return fmt.Sprintf("col%d", index+1)
 }
 
-// sanitizeColumnName converts a caption string into a valid column identifier.
+// sanitizeColumnName converts a caption string into a valid column identifier,
+// matching deriveColumnName() in cmd_pages_describe_output.go exactly.
+// Returns "" when the result would be all underscores so the caller can fall
+// through to the col{N} index fallback.
 func sanitizeColumnName(caption string) string {
-	var result []rune
-	for _, r := range caption {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
-			result = append(result, r)
-		} else {
-			result = append(result, '_')
+	sanitized := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' {
+			return r
 		}
-	}
-	return string(result)
+		return '_'
+	}, caption)
+	return strings.TrimFunc(sanitized, func(r rune) bool { return r == '_' })
 }
 
 // columnPropertyAliases maps user-facing property names to internal column property keys.
