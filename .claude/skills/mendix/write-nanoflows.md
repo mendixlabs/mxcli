@@ -19,7 +19,7 @@ Use this skill when:
 | **Java actions** | Supported | Not supported |
 | **JavaScript actions** | Not supported | Supported |
 | **File downloads** | Supported | Not supported |
-| **Error handling** | Full `ON ERROR` blocks | Limited |
+| **Error handling** | Full `ON ERROR` blocks | Per-action `ON ERROR` supported; `ErrorEvent` (raise error) forbidden |
 | **Offline** | Not available | Available |
 
 ## Nanoflow Structure
@@ -31,7 +31,7 @@ Use this skill when:
  * @param $Parameter1 Description
  * @returns Description of return value
  */
-CREATE [OR REPLACE] NANOFLOW Module.NAV_Name (
+CREATE [OR MODIFY] NANOFLOW Module.NAV_Name (
   $Parameter1: type
 )
 RETURNS ReturnType AS $Result
@@ -91,18 +91,19 @@ END IF;
 
 ## Disallowed Activities
 
-These will produce validation errors:
-- `RETRIEVE ... FROM Module.Entity WHERE ...` (database retrieval)
-- `COMMIT`
-- `DELETE`
-- `ROLLBACK`
-- `CALL JAVA ACTION`
-- `EXECUTE DATABASE QUERY`
-- `DOWNLOAD FILE`
-- REST calls (`CALL REST SERVICE`, `SEND REST REQUEST`)
-- Import/export mapping
-- JSON transformation
-- All workflow actions
+These will produce validation errors (12 case branches covering 22 action types in `nanoflow_validation.go`):
+- `ErrorEvent` / `RAISE ERROR` — not available in nanoflows
+- `CALL JAVA ACTION` — Java actions cannot run client-side
+- `EXECUTE DATABASE QUERY` — direct SQL requires server
+- `CALL EXTERNAL ACTION` — external actions are server-side
+- `SHOW HOME PAGE` — home page navigation is server-side
+- `CALL REST SERVICE` / `SEND REST REQUEST` — REST calls are server-side
+- `IMPORT FROM MAPPING` / `EXPORT TO MAPPING` — mapping operations are server-side
+- `TRANSFORM JSON` — JSON transformations are server-side
+- `DOWNLOAD FILE` — file downloads require server-side processing
+- All **workflow actions** (11 types: CallWorkflow, OpenWorkflow, SetTaskOutcome, OpenUserTask, etc.)
+
+**Note:** Object operations (CREATE, CHANGE, COMMIT, DELETE, RETRIEVE) ARE allowed in nanoflows — they operate in-memory on the client.
 
 ## Return Type Restrictions
 
@@ -127,20 +128,22 @@ MOVE NANOFLOW Sales.NAV_OpenCart TO FOLDER 'UI/Navigation';
 
 ## Common Mistakes
 
-1. **Using database operations** — Nanoflows cannot access the database directly. Use CALL MICROFLOW for server operations.
-2. **Using Java actions** — Use CALL JAVASCRIPT ACTION instead.
+1. **Using Java actions** — Use CALL JAVASCRIPT ACTION instead.
+2. **Using ErrorEvent** — Nanoflows cannot raise errors directly. Handle errors per-action with ON ERROR.
 3. **Expecting transactions** — Nanoflows have no rollback. Design for idempotency.
 4. **File operations** — DOWNLOAD FILE is server-only.
 5. **Binary return types** — Not supported in nanoflows.
-6. **Full error handling** — `ON ERROR { ... }` blocks are limited in nanoflows.
+6. **REST/external calls** — REST calls and external actions are server-only.
 
 ## Validation Checklist
 
-- [ ] No database operations (RETRIEVE with WHERE, COMMIT, DELETE, ROLLBACK)
+- [ ] No ErrorEvent / raise error
 - [ ] No Java action calls
-- [ ] No REST calls or external action calls
+- [ ] No REST calls, external action calls, or database queries
 - [ ] No file download operations
+- [ ] No import/export mapping or JSON transformation
 - [ ] No workflow actions
+- [ ] No show home page
 - [ ] No binary return type
 - [ ] Parameters and return types are nanoflow-compatible
 - [ ] JavaDoc documentation present

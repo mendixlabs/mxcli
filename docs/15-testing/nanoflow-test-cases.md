@@ -1,7 +1,7 @@
 # Nanoflow Test Cases — Manual Testing
 
 **Updated:** 2026-04-28
-**PR:** [retran/mxcli#10](https://github.com/retran/mxcli/pull/10)
+**PR:** [mendixlabs/mxcli#301](https://github.com/mendixlabs/mxcli/pull/301)
 
 ## Test Projects
 
@@ -269,7 +269,7 @@ create nanoflow NewModule.TestNano () begin end;
 
 ### 3.10 Folder placement
 ```
-create nanoflow MyModule.TestNano () in folder 'SubFolder/Nested' begin end;
+create nanoflow MyModule.TestNano () folder 'SubFolder/Nested' begin end;
 ```
 **Expected:** Nanoflow placed in correct folder.
 
@@ -295,22 +295,23 @@ Attempt CREATE without opening a project for writing.
 ### 4.1 Disallowed actions
 Each must be rejected with clear error:
 
-| # | Disallowed action |
-|---|-------------------|
-| 1 | ErrorEvent |
-| 2 | Java action call |
-| 3 | Database query |
-| 4 | REST call |
-| 5 | Web service call |
-| 6 | Import mapping |
-| 7 | Export mapping |
-| 8 | Generate document |
-| 9 | Show home page |
-| 10 | Download file |
-| 11 | External action |
-| 12 | Send external object |
-| 13 | Delete external object |
-| 14 | All workflow actions (9 types) |
+| # | Disallowed action | Notes |
+|---|-------------------|-------|
+| 1 | ErrorEvent | |
+| 2 | Java action call | |
+| 3 | Database query | |
+| 4 | REST call | |
+| 5 | Web service call | No MDL AST type — cannot be written in MDL |
+| 6 | Import mapping | |
+| 7 | Export mapping | |
+| 8 | Generate document | No MDL AST type — cannot be written in MDL |
+| 9 | Show home page | |
+| 10 | Download file | |
+| 11 | External action | |
+| 12 | Send external object | No MDL AST type — cannot be written in MDL |
+| 13 | Delete external object | No MDL AST type — cannot be written in MDL |
+| 14 | Transform JSON | |
+| 15 | All workflow actions (11 types) | |
 
 ### 4.2 Binary return type rejected
 ```

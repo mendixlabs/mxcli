@@ -465,7 +465,7 @@ Full syntax tables for all MDL statements (microflows, pages, security, navigati
 - MPR v1/v2 reading and writing
 - Domain model (entities, attributes, associations)
 - ALTER ENTITY (add/rename/modify/drop attributes, indexes, documentation)
-- Microflows/Nanoflows with 60+ activity types
+- Microflows/Nanoflows with 60+ activity types, JavaScript action calls, nanoflow validation parity
 - Pages with 50+ widget types
 - ALTER PAGE/SNIPPET (SET, INSERT, DROP, REPLACE operations on widget trees)
 - Image widgets (IMAGE, STATICIMAGE, DYNAMICIMAGE) with Width/Height properties

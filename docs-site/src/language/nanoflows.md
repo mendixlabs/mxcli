@@ -15,7 +15,7 @@ Nanoflows are client-side logic flows that execute in the user's browser or on m
 | **Close page** | Supported | Supported |
 | **Network** | Requires server round-trip | No network call (fast) |
 | **Offline** | Not available offline | Available offline |
-| **Error handling** | `ON ERROR` blocks | Limited error handling |
+| **Error handling** | `ON ERROR` blocks | Per-action `ON ERROR` (no `ErrorEvent`) |
 
 ## When to Use Which
 
@@ -36,7 +36,7 @@ Nanoflows are client-side logic flows that execute in the user's browser or on m
 ## CREATE NANOFLOW Syntax
 
 ```sql
-CREATE [OR REPLACE] NANOFLOW <Module.Name>
+CREATE [OR MODIFY] NANOFLOW <Module.Name>
   [FOLDER '<path>']
 BEGIN
   [<declarations>]
@@ -70,6 +70,9 @@ $Result = CALL NANOFLOW Sales.NAV_ValidateCart (Cart = $Cart);
 
 -- Call a microflow (triggers server round-trip)
 $ServerResult = CALL MICROFLOW Sales.ACT_SubmitOrder (Order = $Order);
+
+-- Call a JavaScript action
+$HasNetwork = CALL JAVASCRIPT ACTION NanoflowCommons.HasConnectivity();
 ```
 
 ### UI Activities
@@ -110,13 +113,18 @@ END IF;
 
 The following activities are server-only and cannot be used in nanoflows:
 
-- `RETRIEVE ... FROM Module.Entity WHERE ...` (database retrieval)
-- `COMMIT`
-- `DELETE`
-- `ROLLBACK`
-- `CALL JAVA ACTION`
-- `EXECUTE DATABASE QUERY`
-- `ON ERROR { ... }` (full error handler blocks)
+- `CALL JAVA ACTION` — Java actions cannot run client-side
+- `ErrorEvent` / `RAISE ERROR` — error events are not available in nanoflows
+- `DOWNLOAD FILE` — file downloads require server-side processing
+- `CALL REST SERVICE` / `SEND REST REQUEST` — REST calls are server-side
+- `IMPORT FROM MAPPING` / `EXPORT TO MAPPING` — mapping operations are server-side
+- `EXECUTE DATABASE QUERY` — direct SQL requires server
+- `TRANSFORM JSON` — JSON transformations are server-side
+- `SHOW HOME PAGE` — home page navigation is server-side
+- `CALL EXTERNAL ACTION` — external actions are server-side
+- All **workflow actions** (call/open workflow, set task outcome, user task, etc.)
+
+> **Note:** Per-action error handling (`on error continue`) IS supported in nanoflows. Only `ErrorEvent` (raise error as a standalone flow action) is forbidden. Note that `on error rollback` is syntactically valid but only rolls back in-memory changes — nanoflows have no database transactions.
 
 ## SHOW and DESCRIBE
 

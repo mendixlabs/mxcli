@@ -44,10 +44,12 @@ func validateNanoflowStatements(stmts []ast.MicroflowStatement, errors *[]string
 // checkDisallowedNanoflowAction returns a human-readable error message if the
 // statement is not allowed in nanoflows, or empty string if allowed.
 //
-// MAINTENANCE: This uses a denylist approach — any action type NOT listed here
-// is implicitly allowed. When adding new action AST types, check whether they
-// are available in nanoflows (see Mendix docs "Nanoflows" > "Activities") and
-// add a case here if they are server-side only.
+// MAINTENANCE: This uses a denylist approach (12 case branches, 22 action types) —
+// any action type NOT listed here is implicitly allowed. When adding new action
+// AST types, check whether they are available in nanoflows (see Mendix docs
+// "Nanoflows" > "Activities") and add a case here if they are server-side only.
+// The manual QA test plan (docs/15-testing/nanoflow-test-cases.md §4.1) lists
+// all disallowed actions and should be updated in parallel.
 func checkDisallowedNanoflowAction(stmt ast.MicroflowStatement) string {
 	switch stmt.(type) {
 	case *ast.RaiseErrorStmt:

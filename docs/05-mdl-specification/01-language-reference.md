@@ -629,7 +629,7 @@ Creates a microflow with activities, parameters, return type, and control flow.
 
 **Syntax:**
 ```sql
-create [or replace] microflow <qualified-name>
+create [or modify] microflow <qualified-name>
   [folder '<path>']
 begin
   [<statements>]
@@ -723,7 +723,7 @@ end;
 **Restrictions:**
 - No `ErrorEvent`, Java action calls, REST/web service calls, workflow actions, import/export mapping actions, or database queries
 - Return type cannot be `Binary`
-- Activities are the same as microflows minus server-side-only actions (see `PROPOSAL_nanoflow_support.md` for the full list of 20 disallowed action types)
+- Activities are the same as microflows minus server-side-only actions (see `PROPOSAL_nanoflow_support.md` for the full list of 22 disallowed action types)
 
 **Example:**
 ```sql
@@ -1538,6 +1538,7 @@ statement       = connect_stmt | disconnect_stmt | status_stmt
                 | create_entity_stmt | alter_entity_stmt | drop_entity_stmt
                 | create_assoc_stmt | drop_assoc_stmt
                 | create_microflow_stmt | drop_microflow_stmt
+                | create_nanoflow_stmt | drop_nanoflow_stmt
                 | create_page_stmt | alter_page_stmt | drop_page_stmt
                 | move_stmt
                 | security_stmt | grant_stmt | revoke_stmt

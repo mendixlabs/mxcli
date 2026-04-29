@@ -207,6 +207,7 @@ authentication basic, session
 | Drop nanoflow | `drop nanoflow Module.Name;` | |
 | Create nanoflow | `create [or modify] nanoflow Module.Name (params) returns type [folder 'path'] begin ... end;` | Same body syntax as microflows |
 | Move nanoflow | `move nanoflow Module.Name to folder 'path';` | |
+| Nanoflow restrictions | N/A | No Java actions, ErrorEvent, REST calls, database queries, external actions, download file, workflow actions, import/export mappings, JSON transformation, show home page |
 
 ## Microflows - Supported Statements
 
@@ -225,6 +226,8 @@ authentication basic, session
 | Retrieve (Assoc) | `retrieve $list from $Parent/Module.AssocName;` | Retrieve by association |
 | Call microflow | `$Result = call microflow Module.Name (Param = $value);` | |
 | Call nanoflow | `$Result = call nanoflow Module.Name (Param = $value);` | |
+| Call JS action | `$Result = call javascript action Module.Name (Param = $value);` | JavaScript action (nanoflow/microflow) |
+| Call Java action | `$Result = call java action Module.Name (Param = $value);` | Java action (microflow only) |
 | Show page | `show page Module.PageName ($Param = $value);` | Also accepts `(Param: $value)` |
 | Close page | `close page;` | |
 | Download file | `download file $FileDocument [show in browser];` | Streams a `System.FileDocument` |

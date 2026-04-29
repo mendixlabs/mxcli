@@ -13,7 +13,7 @@ When adding a new MDL feature, use this matrix as a checklist to ensure complete
 | **Associations** | Y | Y | Y | N | Y | Y | 01 | Y | N | Y | Y | Y | Y | Y | Y | Y | N |
 | **Enumerations** | Y | Y | Y | Y | Y | Y | 01 | Y | Y | N | Y | Y | Y | N | Y | Y | Y |
 | **Microflows** | Y | Y | Y | Y | Y | N | 02 | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y |
-| **Nanoflows** | Y | Y | Y | Y | Y | N | N | N | Y | Y | Y | Y | Y | Y | P | N | N |
+| **Nanoflows** | Y | Y | Y | Y | Y | N | Y | Y | Y | Y | Y | Y | Y | Y | P | N | N |
 | **Pages** | Y | Y | Y | N | Y | Y | 03 | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y |
 | **Snippets** | Y | Y | Y | N | Y | Y | 03 | Y | Y | Y | Y | Y | Y | N | Y | Y | Y |
 | **Layouts** | Y | Y | N | N | N | N | N | N | Y | Y | Y | N | Y | N | Y | N | N |
@@ -37,7 +37,7 @@ When adding a new MDL feature, use this matrix as a checklist to ensure complete
 | **Project Security** | Y | - | - | - | - | Y | 08 | Y | Y | Y | Y | Y | Y | N | N | Y | Y |
 | **Entity Access** | P | N | Y | P | Y | P | 08 | Y | N | Y | Y | Y | Y | N | N | Y | Y |
 | **Microflow Access** | Y | N | Y | P | Y | P | 08 | Y | N | Y | Y | Y | Y | N | N | Y | Y |
-| **Nanoflow Access** | Y | N | Y | P | Y | P | N | N | N | Y | Y | N | Y | N | N | N | N |
+| **Nanoflow Access** | Y | N | Y | P | Y | P | N | Y | N | Y | Y | Y | Y | N | N | N | N |
 | **Page Access** | Y | N | Y | P | Y | P | 08 | Y | N | Y | Y | Y | Y | N | N | Y | Y |
 
 ## Project Organization
@@ -124,7 +124,6 @@ These types are not covered in `help.go` output:
 
 ### Missing Skills
 
-- **Nanoflows** — Dedicated skill exists (`write-nanoflows.md`); also partially covered by microflow skill
 - **Layouts** — Read-only, no skill needed
 - **Constants** — No dedicated skill
 
@@ -134,7 +133,6 @@ These types are not covered in `help.go` output:
 
 ### Missing Examples
 
-- **Nanoflows** — No dedicated example file
 - **Layouts** — Read-only, no example needed
 - **Folders / MOVE** — No dedicated example file
 

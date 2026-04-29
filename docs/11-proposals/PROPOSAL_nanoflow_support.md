@@ -31,9 +31,9 @@ Nanoflows execute client-side (browser or native app). In the Mendix metamodel, 
 
 ### Action Restrictions
 
-**Allowed in nanoflows** (25 actions): ChangeVariable, AggregateList, CreateVariable, Rollback, Retrieve, Delete, CreateChange, Commit, Cast, Change, LogMessage, ListOperation, CreateList, ChangeList, MicroflowCall, ValidationFeedback, ShowPage, ShowMessage, CloseForm, **NanoflowCall**, **JavaScriptActionCall**, **Synchronize**, **CancelSynchronization**, **ClearFromClient**.
+**Allowed in nanoflows**: ChangeVariable, AggregateList, CreateVariable, Rollback, Retrieve, Delete, CreateChange, Commit, Cast, Change, LogMessage, ListOperation, CreateList, ChangeList, MicroflowCall, ValidationFeedback, ShowPage, ShowMessage, CloseForm, NanoflowCall, JavaScriptActionCall, Synchronize, CancelSynchronization, ClearFromClient, and others not explicitly denied.
 
-**Disallowed** (32+ actions): All Java actions, REST calls, workflow actions, import/export, external object ops, download file, push to client, show home page, email, document generation, metrics, ML model calls.
+**Disallowed** (enforced by `checkDisallowedNanoflowAction` in `nanoflow_validation.go`, 12 case branches covering 22 action types): RaiseError/ErrorEvent, JavaActionCall, RestCall, SendRestRequest, ImportFromMapping, ExportToMapping, CallExternalAction, DownloadFile, ShowHomePage, TransformJson, ExecuteDatabaseQuery, and 11 workflow action types (CallWorkflow, GetWorkflowData, GetWorkflows, GetWorkflowActivityRecords, WorkflowOperation, SetTaskOutcome, OpenUserTask, NotifyWorkflow, OpenWorkflow, LockWorkflow, UnlockWorkflow).
 
 ## Supported Commands
 
@@ -87,7 +87,7 @@ revokeNanoflowAccessStatement
 
 ## Validation Rules
 
-1. **Disallowed actions** — Type-switch rejects 21 microflow-only action types with descriptive error messages
+1. **Disallowed actions** — Type-switch rejects 12 case branches covering 22 microflow-only action types with descriptive error messages (11 workflow actions collapsed into multi-type case)
 2. **ErrorEvent forbidden** — `ErrorEvent is not allowed in nanoflows`
 3. **Binary return type rejected** — `Binary return type is not allowed in nanoflows`
 4. **Recursive validation** — Checks compound statements (IF/LOOP/WHILE bodies) and error handling blocks
@@ -118,10 +118,15 @@ revokeNanoflowAccessStatement
 | Feature | Priority | Notes |
 |---------|----------|-------|
 | Roundtrip tests with real `.mpr` baselines | P2 | CREATE → DESCRIBE → re-CREATE verification against App Gallery demos |
-| JavaScriptActionCall syntax | P2 | `call javascript action` in nanoflows |
 | SynchronizeAction | P3 | `synchronize` action for offline nanoflows |
-| ELK layout | P3 | Visual layout (low priority) |
 | Web/Native platform mixing check | P3 | CE6051 validation |
+
+### Completed (formerly Future Work)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| JavaScriptActionCall syntax | Done | `call javascript action Module.ActionName(params)` fully supported in grammar, parser, builder, serializer, and roundtrip |
+| ELK layout | Done | `describe nanoflow --format elk` produces valid JSON layout |
 
 ## Testing
 

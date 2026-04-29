@@ -515,11 +515,11 @@ The `microflowValidator` struct walks the body and checks:
 4. **Variable scope** — Variables declared inside IF/ELSE branches or ON ERROR bodies cannot be referenced after the branch ends. The `checkBranchScoping()` method collects variables declared inside branches and checks if subsequent statements reference them.
 5. **Validation feedback** — VALIDATION FEEDBACK must have a non-empty message template (CE0091).
 
-This is separate from `ValidateMicroflowBody()` (in `cmd_microflows_builder.go`), which checks undeclared variable usage and runs during `--references` validation.
+This is separate from `ValidateMicroflowBody()` and `ValidateNanoflowBody()` (in `cmd_microflows_builder_validate.go`), which check undeclared variable usage and run during `--references` validation. Both delegate to the shared `validateFlowBody()` helper that accepts `[]ast.MicroflowParam` and `[]ast.MicroflowStatement`.
 
 ## Microflow Builder Architecture
 
-The microflow builder (`cmd_microflows_builder.go`) converts MDL microflow AST nodes into Mendix microflow objects. A key aspect is **variable type tracking**.
+The microflow builder (`cmd_microflows_builder.go`) converts MDL microflow AST nodes into Mendix microflow objects. A key aspect is **variable type tracking**. The `flowBuilder` also maintains `microflowsCache`/`nanoflowsCache` (with `Loaded` bool flags) for lazy-cached return type lookups, and `allNames()` includes nanoflows for forward-reference detection in multi-statement scripts.
 
 ### Variable Type Tracking (`varTypes`)
 
