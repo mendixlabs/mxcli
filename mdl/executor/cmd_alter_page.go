@@ -702,17 +702,16 @@ func deriveColumnNameBson(colDoc bson.D, propKeyMap map[string]string, index int
 		case "header":
 			// TextTemplate → Template (Forms$Text) → Items[] → Translation{Text}.
 			// Must traverse the intermediate Template document — same path as
-			// extractDataGrid2Column on the DESCRIBE side.
+			// deriveColumnName on the DESCRIBE side. No Template → no caption,
+			// matching DESCRIBE's extractTextContent behaviour exactly.
 			if tmpl := dGetDoc(valDoc, "TextTemplate"); tmpl != nil {
-				template := dGetDoc(tmpl, "Template")
-				if template == nil {
-					template = tmpl // fallback: some versions store Items directly
-				}
-				items := dGetArrayElements(dGet(template, "Items"))
-				for _, item := range items {
-					if itemDoc, ok := item.(bson.D); ok {
-						if text := dGetString(itemDoc, "Text"); text != "" {
-							caption = text
+				if template := dGetDoc(tmpl, "Template"); template != nil {
+					items := dGetArrayElements(dGet(template, "Items"))
+					for _, item := range items {
+						if itemDoc, ok := item.(bson.D); ok {
+							if text := dGetString(itemDoc, "Text"); text != "" {
+								caption = text
+							}
 						}
 					}
 				}

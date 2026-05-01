@@ -1,0 +1,72 @@
+-- ============================================================================
+-- Bug test: issue #116 — DESCRIBE PAGE / ALTER PAGE DataGrid2 column name mismatch
+-- ============================================================================
+--
+-- Verifies that ALTER PAGE can address DataGrid2 columns using the names that
+-- DESCRIBE PAGE produces — for both attribute-bound columns and caption-only
+-- columns (the previously broken case).
+--
+-- Affected functions (fixed in PR #298):
+--   deriveColumnNameBson  — now traverses TextTemplate → Template → Items
+--   sanitizeColumnName    — now matches deriveColumnName exactly
+--
+-- To verify in Studio Pro:
+--   1. Run this script against a project.
+--   2. DESCRIBE PAGE Bug116.OrderList — column names in output should match
+--      what ALTER PAGE uses below (Name, Order_Status, col3).
+--   3. Confirm no errors.
+-- ============================================================================
+
+-- ############################################################################
+-- PREREQUISITES
+-- ############################################################################
+
+CREATE MODULE Bug116;
+
+CREATE PERSISTENT ENTITY Bug116.Order (
+  Name: String(200),
+  Status: String(50)
+);
+
+-- ############################################################################
+-- PAGE WITH THREE COLUMN TYPES
+--
+-- colAttr     — attribute-bound: DESCRIBE yields "Name"
+-- colCaption  — caption-only (the previously broken case): DESCRIBE yields "Order_Status"
+-- colNoName   — no attribute, special-char caption only: DESCRIBE yields "col3"
+-- ############################################################################
+
+CREATE PAGE Bug116.OrderList (
+  Title: 'Order List',
+  Layout: Atlas_Core.Atlas_Default
+) {
+  DATAGRID dgOrders (DataSource: DATABASE Bug116.Order) {
+    COLUMN colAttr    (Attribute: Name,   Caption: 'Name')
+    COLUMN colCaption (                   Caption: 'Order Status')
+    COLUMN colNoName  (                   Caption: '---')
+  }
+};
+
+-- ############################################################################
+-- ALTER PAGE USING DESCRIBE-DERIVED COLUMN NAMES
+--
+-- H1 fix: colCaption uses TextTemplate → Template → Items path;
+--         previously always fell back to col2 because Template was skipped.
+-- H2 fix: sanitizeColumnName now trims underscores and falls through to col{N}
+--         for all-special-char captions like '---'.
+-- ############################################################################
+
+-- Attribute-bound column — always worked; regression guard
+ALTER PAGE Bug116.OrderList {
+  SET WIDGET dgOrders.Name (Visible: true)
+};
+
+-- Caption-only column — previously broken (derived col2 instead of Order_Status)
+ALTER PAGE Bug116.OrderList {
+  SET WIDGET dgOrders.Order_Status (Visible: true)
+};
+
+-- All-special-char caption → falls back to col3 on both sides
+ALTER PAGE Bug116.OrderList {
+  SET WIDGET dgOrders.col3 (Visible: true)
+};
