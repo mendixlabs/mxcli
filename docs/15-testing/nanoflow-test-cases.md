@@ -1,74 +1,11 @@
 # Nanoflow Test Cases — Manual Testing
 
 **Updated:** 2026-04-28
-**PR:** [mendixlabs/mxcli#301](https://github.com/mendixlabs/mxcli/pull/301)
-
-## Test Projects
-
-Demo apps from [Mendix App Gallery](https://appgallery.mendixcloud.com/):
-
-| App | Studio Pro | Nanoflows |
-|-----|-----------|-----------|
-| Lato Enquiry Management | 11.4.0 | 79 |
-| Evora - Factory Management | 10.24.15 | 93 |
-| Lato Product Inventory | 11.2.0 | 51 |
-
-Total: 223 nanoflows across 3 projects.
-
----
+**PR:** [mendixlabs/mxcli#301](https://github.com/mendixlabs/mxcli/pull/386)
 
 ## Setup
 
-### 1. Download test apps
-
-1. Go to [Mendix App Gallery](https://appgallery.mendixcloud.com/)
-2. Download each demo app listed above
-3. Open each `.mpk` in Studio Pro to extract the `.mpr` file
-
-### 2. Build mxcli
-
-```bash
-git checkout pr4-nanoflows-all
-make build && make test && make lint-go
-```
-
-### 3. Smoke test
-
-```bash
-APPS_DIR=<path-to-extracted-apps>
-for mpr in "$APPS_DIR"/*/*.mpr; do
-  echo "=== $(basename $(dirname $mpr)) ==="
-  echo "show nanoflows;" > /tmp/show-nf.mdl
-  mxcli exec /tmp/show-nf.mdl -p "$mpr" 2>&1 | tail -1
-done
-```
-
-Expected: 79, 93, 51 nanoflows respectively.
-
-### 4. Interactive testing
-
-```bash
-mxcli repl -p <path-to-app>/EnquiriesManagement.mpr
-```
-
-### 5. Script-based testing
-
-```bash
-mxcli exec test-sequence.mdl -p <mpr>
-```
-
-Write operations (CREATE, DROP, GRANT/REVOKE) modify the `.mpr` file **in place**.
-
-> **IMPORTANT:** Always run destructive tests against a **copy** of the project folder,
-> never the original. The `.mpr` file references other files in the project directory,
-> and nanoflows that are DROPped cannot be recovered — there is no undo, no git history,
-> and no Studio Pro autosave for `.mpr` files.
->
-> ```bash
-> # Before each destructive test session
-> cp -r MyProject MyProject-test
-> mxcli repl -p MyProject-test/MyProject.mpr
-> ```
+> See [AGENT-TESTING.md](./AGENT-TESTING.md) for build, execution methods, and verification patterns.
 
 ---
 
@@ -339,7 +276,7 @@ create nanoflow MyModule.BadRef () begin
   call nanoflow NonExistent.Flow ();
 end;
 ```
-**Expected:** Error — target nanoflow not found.
+**Expected:** Nanoflow created (call target references not validated at CREATE time). This is a known design gap.
 
 ### 4.6 Non-existent page target
 ```
@@ -347,7 +284,7 @@ create nanoflow MyModule.BadPage () begin
   show page NonExistent.Page ();
 end;
 ```
-**Expected:** Error — target page not found.
+**Expected:** Nanoflow created (call target references not validated at CREATE time). This is a known design gap.
 
 ### 4.7 Non-existent microflow target
 ```
@@ -355,7 +292,7 @@ create nanoflow MyModule.BadMF () begin
   call microflow NonExistent.Flow ();
 end;
 ```
-**Expected:** Error — target microflow not found.
+**Expected:** Nanoflow created (call target references not validated at CREATE time). This is a known design gap.
 
 ---
 
@@ -544,7 +481,7 @@ rename nanoflow MyModule.OldName to NewName;
 Rename nanoflow called by another flow. Verify caller's reference updated.
 
 ### 9.3 Rename to existing name
-**Expected:** Error — name collision.
+**Expected:** ~~Error — name collision.~~ Rename collision detection is not implemented. The rename succeeds, resulting in duplicate names. **Known gap.**
 
 ---
 
