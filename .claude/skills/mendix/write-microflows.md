@@ -526,6 +526,35 @@ retrieve $Product from Test.Product
   where Code = $ProductCode;
 ```
 
+### RETRIEVE from Association (Non-Persistent Entities)
+
+**CRITICAL**: Non-persistent entities (NPE) exist only in memory — they have no database rows. Using `retrieve from Entity where Association = $obj` issues a database query and will always return empty for NPEs.
+
+**Always use association traversal syntax for NPEs:**
+
+```mdl
+-- ✅ CORRECT: traverse association from object (in-memory)
+retrieve $Results from $Root/Module.Results_Root limit 1;
+retrieve $ItemList from $Results/Module.BindingsItem_Results;
+
+-- Inside a loop, traverse from the loop variable:
+loop $Binding in $ItemList begin
+  retrieve $FieldObj from $Binding/Module.Field_BindingsItem limit 1;
+end loop;
+
+-- ❌ WRONG: database query — always returns empty for NPEs
+retrieve $ItemList from Module.BindingsItem
+  where Module.BindingsItem_Results/Module.Results_Root = $Root;
+
+retrieve $FieldObj from Module.Field
+  where Module.Field_BindingsItem = $Binding
+  limit 1;
+```
+
+**Rule of thumb**: If the entity is `Non-Persistent`, always use `retrieve from $object/Association`. Reserve `retrieve from Module.Entity where ...` for persistent entities only.
+
+This pattern applies wherever NPEs are produced by Import Mappings (e.g. SPARQL JSON responses parsed into an NPE object tree).
+
 **Important**:
 - Use `from Module.Entity` (fully qualified)
 - RETRIEVE with `limit 1` returns a **single entity**
@@ -699,6 +728,34 @@ commit $Product;
 - Escape single quotes by doubling: `@annotation 'Don''t forget'`
 - `@position` always appears in DESCRIBE output; `@caption` only when custom; `@color` only when not Default
 - DESCRIBE MICROFLOW shows `@` annotations before their activities
+
+## Type Conversion Functions
+
+**CRITICAL**: Use the correct parse/convert functions — wrong names cause runtime errors.
+
+```mdl
+-- String → number
+parseInteger($str)         -- ✅ String to Integer (e.g. '42' → 42)
+parseDecimal($str)         -- ✅ String to Decimal (e.g. '99.5' → 99.5)
+parseDateTime($str, 'yyyy-MM-dd')  -- ✅ String to DateTime
+
+-- Any → String
+toString($value)           -- ✅ Any type to String
+
+-- ❌ WRONG — these do NOT exist in Mendix expressions:
+-- toInteger($str)         -- does not exist, use parseInteger()
+-- toDecimal($str)         -- does not exist, use parseDecimal()
+```
+
+Common pattern when reading string values from NPE fields (e.g. SPARQL Import Mapping results):
+
+```mdl
+$NewBatch = create Module.MaterialBatch (
+  QuantityKg = parseInteger($QuantityKgObj/Value),   -- ✅
+  PurityLevel = parseDecimal($PurityLevelObj/Value), -- ✅
+  ProductionDate = parseDateTime($DateObj/Value, 'yyyy-MM-dd')  -- ✅
+);
+```
 
 ## Special Values
 
