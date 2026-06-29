@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `GetRawUnit` on v1 MPR files (Mendix < 10.18) — UUID string was passed directly to SQLite instead of being converted to a GUID blob, causing every lookup to fail with "no rows in result set" (#705)
+
 ## [0.14.0] - 2026-06-21
 
 Headline: **JavaScript actions, clickable containers, and the v0.13.0 enum-visibility regression fixed.** This release adds `CREATE JAVASCRIPT ACTION` authoring and clickable-container support, a new `check` heuristic for `System.owner` XPath constraints, and fixes a v0.13.0 regression that mangled enum literals in conditional-visibility expressions (a release blocker for status-pill authoring).

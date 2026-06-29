@@ -462,8 +462,9 @@ func (r *Reader) GetRawUnit(id model.ID) (map[string]any, error) {
 			return nil, fmt.Errorf("failed to read unit contents: %w", err)
 		}
 	} else {
-		// V1: Read from database
-		row := r.db.QueryRow("SELECT Contents FROM Unit WHERE UnitID = ?", string(id))
+		// V1: Read from database — convert UUID to GUID blob for the query
+		unitIDBlob := types.UUIDToBlob(string(id))
+		row := r.db.QueryRow("SELECT Contents FROM Unit WHERE UnitID = ?", unitIDBlob)
 		err = row.Scan(&contents)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read unit from database: %w", err)
