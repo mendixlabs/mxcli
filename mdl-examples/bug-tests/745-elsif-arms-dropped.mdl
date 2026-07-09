@@ -1,0 +1,50 @@
+-- ============================================================================
+-- Bug #745: IF/ELSIF/ELSE silently drops every ELSIF arm on write (both engines)
+-- ============================================================================
+--
+-- Symptom (before fix):
+--   A microflow authored with IF … ELSIF … ELSE … END IF lost every ELSIF
+--   arm when written to the .mpr. Only the first IF condition/body and the
+--   trailing ELSE body reached the model — no error, no warning. DESCRIBE
+--   round-tripped `if … else …` with the elsif arm gone. The read path was
+--   untouched by the fix, so the missing arm was absent from the stored
+--   model itself (dropped on write).
+--
+-- Root cause:
+--   buildIfStatement (mdl/visitor/visitor_microflow_statements.go) read only
+--   exprs[0]/bodies[0] and the trailing ELSE body; the grammar's
+--   (ELSIF expression THEN microflowBody)* pairs were never visited.
+--
+-- After fix:
+--   Each ELSIF arm is lowered into a nested IfStmt in the ELSE branch of the
+--   arm before it (Mendix has no native elsif; nested exclusive splits are
+--   the canonical shape). DESCRIBE now round-trips the chain as nested
+--   if/else, and every arm's content is present in the model.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/745-elsif-arms-dropped.mdl -p app.mpr
+--   mxcli -p app.mpr -c "DESCRIBE MICROFLOW BugTestElsif.MF_Grade"
+--   Expect: the 'two' and 'three' branches are present (nested if/else).
+-- ============================================================================
+
+create module BugTestElsif;
+
+create microflow BugTestElsif.MF_Grade (
+  $In: integer
+)
+returns string as $Out
+begin
+  declare $Out string = 'none';
+
+  if $In = 1 then
+    set $Out = 'one';
+  elsif $In = 2 then
+    set $Out = 'two';
+  elsif $In = 3 then
+    set $Out = 'three';
+  else
+    set $Out = 'other';
+  end if;
+
+  return $Out;
+end;

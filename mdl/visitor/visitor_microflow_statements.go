@@ -1288,25 +1288,47 @@ func buildIfStatement(ctx parser.IIfStatementContext) *ast.IfStmt {
 	}
 	ifCtx := ctx.(*parser.IfStatementContext)
 
-	stmt := &ast.IfStmt{}
-
-	// Get all expressions (condition for IF and ELSIFs)
+	// Grammar: IF expression THEN microflowBody
+	//          (ELSIF expression THEN microflowBody)*
+	//          (ELSE microflowBody)? END IF
+	// exprs[i] pairs with bodies[i]; one trailing extra body is the ELSE branch.
 	exprs := ifCtx.AllExpression()
-	if len(exprs) > 0 {
-		stmt.Condition = buildSourceExpression(exprs[0])
+	bodies := ifCtx.AllMicroflowBody()
+
+	if len(exprs) == 0 {
+		// Defensive only — the grammar guarantees at least one condition.
+		stmt := &ast.IfStmt{}
+		if len(bodies) > 0 {
+			stmt.ThenBody = buildMicroflowBody(bodies[0])
+		}
+		return stmt
 	}
 
-	// Get all microflow bodies (THEN, ELSIF THENs, ELSE)
-	bodies := ifCtx.AllMicroflowBody()
-	if len(bodies) > 0 {
-		stmt.ThenBody = buildMicroflowBody(bodies[0])
-	}
-	// Last body is ELSE if there's no ELSIF or if there are more bodies than expressions
+	hasElse := len(bodies) > len(exprs) || ifCtx.ELSE() != nil
+	var elseBody []ast.MicroflowStatement
 	if len(bodies) > len(exprs) {
-		stmt.HasElse = true
-		stmt.ElseBody = buildMicroflowBody(bodies[len(bodies)-1])
-	} else if ifCtx.ELSE() != nil {
-		stmt.HasElse = true
+		elseBody = buildMicroflowBody(bodies[len(bodies)-1])
+	}
+
+	// Mendix has no native elsif construct, so lower each ELSIF arm into a
+	// nested IfStmt in the ELSE branch of the arm before it (built innermost
+	// first). Previously only exprs[0]/bodies[0] and the trailing ELSE were
+	// read, silently dropping every ELSIF arm from the written model.
+	var stmt *ast.IfStmt
+	for i := len(exprs) - 1; i >= 0; i-- {
+		s := &ast.IfStmt{}
+		s.Condition = buildSourceExpression(exprs[i])
+		if i < len(bodies) {
+			s.ThenBody = buildMicroflowBody(bodies[i])
+		}
+		if stmt != nil {
+			s.HasElse = true
+			s.ElseBody = []ast.MicroflowStatement{stmt}
+		} else {
+			s.HasElse = hasElse
+			s.ElseBody = elseBody
+		}
+		stmt = s
 	}
 
 	return stmt
