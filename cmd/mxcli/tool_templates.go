@@ -312,7 +312,7 @@ func generateDevcontainerJSON(projectName, mprPath, containerRuntime string) str
   "containerEnv": {
     %s
   },
-  "postCreateCommand": "curl -fsSL https://claude.ai/install.sh | bash && if [ -f ./mxcli ] && file ./mxcli | grep -q Linux; then echo 'mxcli binary OK'; else ./mxcli setup mxcli --output ./mxcli 2>/dev/null || { ARCH=$(uname -m); [ \"$ARCH\" = x86_64 ] && ARCH=amd64; [ \"$ARCH\" = aarch64 ] && ARCH=arm64; curl -fsSL https://github.com/mendixlabs/mxcli/releases/latest/download/mxcli-linux-${ARCH} -o ./mxcli && chmod +x ./mxcli; }; fi",
+  "postCreateCommand": "curl -fsSL https://claude.ai/install.sh | bash && if [ -f ./mxcli ] && file ./mxcli | grep -q Linux; then echo 'mxcli binary OK'; else ./mxcli setup mxcli --output ./mxcli 2>/dev/null || { ARCH=$(uname -m); [ \"$ARCH\" = x86_64 ] && ARCH=amd64; [ \"$ARCH\" = aarch64 ] && ARCH=arm64; curl -fsSL https://github.com/mendixlabs/mxcli/releases/latest/download/mxcli-linux-${ARCH} -o ./mxcli && { chmod +x ./mxcli 2>/dev/null || true; }; }; fi",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -362,6 +362,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends wget apt-transp
        temurin-21-jdk \
        nodejs \
        postgresql-client \
+       file \
        kafkacat \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
