@@ -3,14 +3,14 @@
 package modelsdkbackend
 
 import (
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genDT "github.com/mendixlabs/mxcli/modelsdk/gen/datatypes"
-	genPg "github.com/mendixlabs/mxcli/modelsdk/gen/pages"
-	_ "github.com/mendixlabs/mxcli/modelsdk/gen/texts" // register Texts$Text so page titles decode concretely
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genDT "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/datatypes"
+	genPg "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/pages"
+	_ "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/texts" // register Texts$Text so page titles decode concretely
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // gen→pages read adapter. SHOW PAGES needs only the page header — name, module,

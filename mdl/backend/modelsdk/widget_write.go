@@ -8,16 +8,16 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genCw "github.com/mendixlabs/mxcli/modelsdk/gen/customwidgets"
-	genDm "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
-	genMf "github.com/mendixlabs/mxcli/modelsdk/gen/microflows"
-	genPg "github.com/mendixlabs/mxcli/modelsdk/gen/pages"
-	genTexts "github.com/mendixlabs/mxcli/modelsdk/gen/texts"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genCw "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/customwidgets"
+	genDm "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/domainmodels"
+	genMf "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/microflows"
+	genPg "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/pages"
+	genTexts "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/texts"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 func init() {

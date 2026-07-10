@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
 )
 
 // wfOutcomeIdentRe matches a valid Mendix EnumerationValueIdentifier: a bare

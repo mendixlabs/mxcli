@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr"
-	"github.com/mendixlabs/mxcli/sdk/mpr/version"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr/version"
 )
 
 // BuildOptions configures the docker build command.

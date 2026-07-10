@@ -5,7 +5,7 @@ package rules
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
 )
 
 // MissingTranslationsRule checks for elements that have translations in some

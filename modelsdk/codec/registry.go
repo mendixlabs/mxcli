@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/mendixlabs/mxcli/modelsdk/element"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
 )
 
 // TypeRegistry maps BSON $Type strings to element factory functions, and

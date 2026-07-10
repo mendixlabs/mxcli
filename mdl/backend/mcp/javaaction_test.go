@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/javaactions"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/javaactions"
 )
 
 func TestJavaActionAuthoringRejected(t *testing.T) {

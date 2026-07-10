@@ -9,9 +9,9 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	"github.com/mendixlabs/mxcli/mdl/backend/bsonnav"
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/bsonnav"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // Helper to build a minimal raw BSON page structure for testing.

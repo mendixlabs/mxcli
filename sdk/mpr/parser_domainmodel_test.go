@@ -5,7 +5,7 @@ package mpr
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 // Issue #583: parseAttributeType silently dropped the Length value for

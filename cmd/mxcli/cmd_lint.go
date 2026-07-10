@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
-	"github.com/mendixlabs/mxcli/mdl/linter/rules"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter/rules"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 	"github.com/spf13/cobra"
 )
 

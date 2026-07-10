@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 // objectTypeToDescribeKind maps a catalog `objects` view ObjectType to the

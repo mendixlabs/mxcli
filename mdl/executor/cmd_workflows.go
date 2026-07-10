@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 // listWorkflows handles SHOW WORKFLOWS command.

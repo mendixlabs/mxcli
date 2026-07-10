@@ -3,8 +3,8 @@ package modelsdk
 import (
 	"sync"
 
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
 )
 
 // UnitCache caches decoded elements and provides name-based lookup.

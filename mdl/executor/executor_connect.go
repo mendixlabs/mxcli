@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
 )
 
 func execConnect(ctx *ExecContext, s *ast.ConnectStmt) error {

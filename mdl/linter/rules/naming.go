@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
 )
 
 // DefaultEntityPattern matches PascalCase entity names.
@@ -55,7 +55,7 @@ func NewNamingConventionRule() *NamingConventionRule {
 
 func (r *NamingConventionRule) ID() string                       { return "MPR001" }
 func (r *NamingConventionRule) Name() string                     { return "NamingConvention" }
-func (r *NamingConventionRule) Category() string                 { return "style" }
+func (r *NamingConventionRule) Category() string                 { return "naming" }
 func (r *NamingConventionRule) DefaultSeverity() linter.Severity { return linter.SeverityWarning }
 
 func (r *NamingConventionRule) Description() string {

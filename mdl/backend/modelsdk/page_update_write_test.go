@@ -5,7 +5,7 @@ package modelsdkbackend
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // TestUpdatePage_RoundTrip creates a page, rewrites it in place via UpdatePage

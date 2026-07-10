@@ -10,10 +10,10 @@ import (
 	"sort"
 	"strings"
 
-	mdltypes "github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	mdltypes "github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 	"go.mongodb.org/mongo-driver/bson"
 )
 

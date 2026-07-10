@@ -7,7 +7,7 @@ import (
 
 	"go.starlark.net/starlarkstruct"
 
-	"github.com/mendixlabs/mxcli/mdl/exprcheck"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/exprcheck"
 )
 
 func TestRobustExprToStarlark_nil(t *testing.T) {

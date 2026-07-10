@@ -6,7 +6,7 @@
 package metamodel
 
 import (
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 	"time"
 )
 

@@ -5,7 +5,7 @@ package mpr
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/javaactions"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/javaactions"
 )
 
 func TestBuildSystemJavaActions_VerifyPassword(t *testing.T) {

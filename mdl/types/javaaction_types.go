@@ -4,7 +4,7 @@
 // Canonical home for all CodeAction* types; sdk/javaactions re-exports these as type aliases.
 package types
 
-import "github.com/mendixlabs/mxcli/model"
+import "github.com/JordtenBulte-OLC/mxcli/model"
 
 // CodeActionReturnType is the interface for Java/JavaScript action return types.
 type CodeActionReturnType interface {

@@ -3,7 +3,7 @@
 package mcp
 
 import (
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // CreateViewEntitySourceDocument is gated on the capability model

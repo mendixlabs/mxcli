@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
 )
 
 func TestDomainModelSizeRule_NoViolation(t *testing.T) {

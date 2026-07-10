@@ -3,12 +3,12 @@
 package modelsdkbackend
 
 import (
-	genConst "github.com/mendixlabs/mxcli/modelsdk/gen/constants"
-	genDT "github.com/mendixlabs/mxcli/modelsdk/gen/datatypes"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	genConst "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/constants"
+	genDT "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/datatypes"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // gen→model constant adapter (ported from engalar's convert_reader.go).

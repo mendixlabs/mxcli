@@ -3,16 +3,16 @@
 package mcp
 
 import (
-	backend "github.com/mendixlabs/mxcli/mdl/backend"
-	types "github.com/mendixlabs/mxcli/mdl/types"
-	model "github.com/mendixlabs/mxcli/model"
-	agenteditor "github.com/mendixlabs/mxcli/sdk/agenteditor"
-	domainmodel "github.com/mendixlabs/mxcli/sdk/domainmodel"
-	javaactions "github.com/mendixlabs/mxcli/sdk/javaactions"
-	microflows "github.com/mendixlabs/mxcli/sdk/microflows"
-	pages "github.com/mendixlabs/mxcli/sdk/pages"
-	security "github.com/mendixlabs/mxcli/sdk/security"
-	workflows "github.com/mendixlabs/mxcli/sdk/workflows"
+	backend "github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	types "github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	model "github.com/JordtenBulte-OLC/mxcli/model"
+	agenteditor "github.com/JordtenBulte-OLC/mxcli/sdk/agenteditor"
+	domainmodel "github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
+	javaactions "github.com/JordtenBulte-OLC/mxcli/sdk/javaactions"
+	microflows "github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
+	pages "github.com/JordtenBulte-OLC/mxcli/sdk/pages"
+	security "github.com/JordtenBulte-OLC/mxcli/sdk/security"
+	workflows "github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 // unsupportedBackend implements backend.FullBackend with every method

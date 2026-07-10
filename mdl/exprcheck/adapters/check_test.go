@@ -5,9 +5,9 @@ package adapters
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/exprcheck"
-	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/exprcheck"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
 )
 
 func TestCheckAdapter_ConvertsHintsToViolations(t *testing.T) {

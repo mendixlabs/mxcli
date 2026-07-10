@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/internal/auth"
+	"github.com/JordtenBulte-OLC/mxcli/internal/auth"
 )
 
 func TestClient_Search(t *testing.T) {

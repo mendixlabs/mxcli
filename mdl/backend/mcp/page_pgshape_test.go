@@ -5,7 +5,7 @@ package mcp
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // These tests pin the pg_patch_page (LightPage) payload shapes to what Studio Pro actually

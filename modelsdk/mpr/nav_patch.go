@@ -8,7 +8,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
 )
 
 // PatchNavigationProfile applies a navigation profile patch to raw BSON bytes,

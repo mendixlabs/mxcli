@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk/widgets/mpk"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/widgets/mpk"
 )
 
 func TestGenerateFromMPK_BasicTypes(t *testing.T) {

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 // ExclusiveSplitCaptionRule flags exclusive splits without meaningful captions.

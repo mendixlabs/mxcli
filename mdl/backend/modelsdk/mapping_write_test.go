@@ -5,7 +5,7 @@ package modelsdkbackend
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // TestCreateImportMapping_RoundTrip creates an import mapping with a root object

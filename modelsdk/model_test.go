@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
 
-	_ "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
-	_ "github.com/mendixlabs/mxcli/modelsdk/gen/enumerations"
+	_ "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/domainmodels"
+	_ "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/enumerations"
 )
 
 // copyMPRForWrite copies an MPR (and mprcontents/ for v2 format) to a temp

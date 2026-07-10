@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 
 	"go.mongodb.org/mongo-driver/bson"
 )

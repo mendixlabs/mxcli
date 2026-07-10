@@ -5,7 +5,7 @@ package api
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 func TestParseQualifiedName(t *testing.T) {

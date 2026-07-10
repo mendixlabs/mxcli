@@ -23,8 +23,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/sdk/widgets/mpk"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/widgets/mpk"
 )
 
 // WidgetDefRefreshStats reports the outcome of a RefreshWidgetDefinitions

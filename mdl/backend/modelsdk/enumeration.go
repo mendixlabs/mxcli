@@ -3,10 +3,10 @@
 package modelsdkbackend
 
 import (
-	genEnum "github.com/mendixlabs/mxcli/modelsdk/gen/enumerations"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	genEnum "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/enumerations"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // gen→model enumeration adapter (ported from engalar's convert_reader.go).

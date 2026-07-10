@@ -5,7 +5,7 @@ package visitor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 func TestMovePage_ToFolder(t *testing.T) {

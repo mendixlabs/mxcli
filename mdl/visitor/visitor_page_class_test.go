@@ -5,7 +5,7 @@ package visitor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 // Issue #714 — CREATE PAGE header carries a page-level CSS Class and Style.

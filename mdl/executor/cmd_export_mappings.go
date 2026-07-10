@@ -8,11 +8,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // listExportMappings prints a table of all export mapping documents.

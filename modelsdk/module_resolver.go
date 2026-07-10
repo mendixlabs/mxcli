@@ -1,8 +1,8 @@
 package modelsdk
 
 import (
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 

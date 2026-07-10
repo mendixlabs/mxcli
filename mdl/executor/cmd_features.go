@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/sdk/versions"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/versions"
 )
 
 // checkFeature verifies that a feature is available in the connected project's

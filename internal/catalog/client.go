@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/mendixlabs/mxcli/internal/auth"
+	"github.com/JordtenBulte-OLC/mxcli/internal/auth"
 )
 
 const baseURL = "https://catalog.mendix.com/rest/search/v5"

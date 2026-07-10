@@ -5,8 +5,8 @@ package rules
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
-	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
 )
 
 func TestCollectMenuPages_Flat(t *testing.T) {

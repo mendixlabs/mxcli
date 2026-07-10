@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 // contactAlterPED scripts a live entity "Contact" (index 0) with two attributes,

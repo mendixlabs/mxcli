@@ -1,6 +1,6 @@
 package property
 
-import "github.com/mendixlabs/mxcli/modelsdk/element"
+import "github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
 
 // ByNameRef is a property that references another element by qualified name.
 type ByNameRef[T element.Element] struct {

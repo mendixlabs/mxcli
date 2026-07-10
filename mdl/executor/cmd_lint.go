@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/mdl/linter"
-	"github.com/mendixlabs/mxcli/mdl/linter/rules"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter/rules"
 )
 
 // execLint executes a LINT statement.

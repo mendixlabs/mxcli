@@ -10,8 +10,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/docker"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
 	"github.com/spf13/cobra"
 )
 

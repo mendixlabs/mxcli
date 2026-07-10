@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/grammar/parser"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/grammar/parser"
 )
 
 // ExitCreateModelStatement bridges the createModelStatement parse tree to

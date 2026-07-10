@@ -9,9 +9,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
 )
 
 // listJsonStructures handles SHOW JSON STRUCTURES [IN module].

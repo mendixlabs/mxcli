@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
+	"github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/docker"
 )
 
 func TestNewestVersionedPath_PicksNewestNumericVersion(t *testing.T) {

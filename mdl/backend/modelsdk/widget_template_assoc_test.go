@@ -7,8 +7,8 @@ import (
 
 	bsonv1 "go.mongodb.org/mongo-driver/bson"
 
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // Bug 3 — a DynamicText contentparam that navigates an association must serialize

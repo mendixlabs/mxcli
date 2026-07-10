@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // Folders over MCP work the way PED allows: a document created with a folderPath

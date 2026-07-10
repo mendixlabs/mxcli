@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
 )
 
 // CheckOptions configures the mx check command.

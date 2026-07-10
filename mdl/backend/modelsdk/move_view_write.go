@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genDm "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
-	"github.com/mendixlabs/mxcli/modelsdk/meta"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genDm "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/domainmodels"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/meta"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 )
 
 // MoveEnumeration reparents an enumeration unit to its (already-updated) target

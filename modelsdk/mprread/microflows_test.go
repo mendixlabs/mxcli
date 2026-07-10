@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 )
 
 // fixturePath is the canonical Stage 4 read fixture: a v2 MPR with

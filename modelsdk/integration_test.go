@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/domainmodels"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	_ "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
+	_ "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/domainmodels"
 )
 
 // findTestMPR searches well-known locations for a test .mpr file.

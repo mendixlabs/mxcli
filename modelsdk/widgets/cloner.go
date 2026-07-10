@@ -5,7 +5,7 @@ package widgets
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/modelsdk/widgets/mpk"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/widgets/mpk"
 )
 
 // PropertyCloner handles deep cloning of widget property+propertyType pairs

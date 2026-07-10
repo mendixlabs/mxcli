@@ -5,7 +5,7 @@ package catalog
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
 )
 
 func TestCountMenuItems(t *testing.T) {

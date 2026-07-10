@@ -5,12 +5,12 @@ package modelsdkbackend
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genJson "github.com/mendixlabs/mxcli/modelsdk/gen/jsonstructures"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genJson "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/jsonstructures"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
 )
 
 func init() {

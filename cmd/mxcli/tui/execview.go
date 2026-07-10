@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mendixlabs/mxcli/mdl/formatter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/formatter"
 )
 
 // ExecDoneMsg carries the result of MDL execution.

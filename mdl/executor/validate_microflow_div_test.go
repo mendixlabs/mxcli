@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 )
 
 // TestValidateMicroflow_DivIntoInteger covers MDL041: integer division ('div')

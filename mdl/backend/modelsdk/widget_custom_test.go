@@ -8,10 +8,10 @@ import (
 	bsonv1 "go.mongodb.org/mongo-driver/bson"
 	bsonv2 "go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
-	mwidgets "github.com/mendixlabs/mxcli/modelsdk/widgets"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
+	mwidgets "github.com/JordtenBulte-OLC/mxcli/modelsdk/widgets"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // v2ToV1 bridges a modelsdk/widgets template (bson v2) into the v1 bson.D that

@@ -3,7 +3,7 @@
 package api
 
 import (
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // ModulesAPI provides methods for working with modules.

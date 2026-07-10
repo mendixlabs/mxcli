@@ -9,14 +9,14 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	"github.com/mendixlabs/mxcli/mdl/backend/bsonnav"
-	"github.com/mendixlabs/mxcli/mdl/bsonutil"
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/bsonnav"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/bsonutil"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // Compile-time check.

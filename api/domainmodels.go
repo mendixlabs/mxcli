@@ -5,8 +5,8 @@ package api
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 // DomainModelsAPI provides methods for working with domain models.

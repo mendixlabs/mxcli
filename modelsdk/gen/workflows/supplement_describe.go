@@ -12,7 +12,7 @@
 
 package workflows
 
-import "github.com/mendixlabs/mxcli/modelsdk/codec"
+import "github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
 
 func readField(raw []byte, key string) string {
 	v, _ := codec.ReadBSONFieldString(raw, key)

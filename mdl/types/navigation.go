@@ -2,7 +2,7 @@
 
 package types
 
-import "github.com/mendixlabs/mxcli/model"
+import "github.com/JordtenBulte-OLC/mxcli/model"
 
 // NavigationDocument represents a parsed navigation document.
 type NavigationDocument struct {

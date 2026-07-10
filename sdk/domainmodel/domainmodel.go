@@ -4,7 +4,7 @@
 package domainmodel
 
 import (
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // DomainModel represents a module's domain model containing entities and associations.

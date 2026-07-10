@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mendixlabs/mxcli"
+	"github.com/JordtenBulte-OLC/mxcli"
 )
 
 // redactSensitiveFields recursively walks a JSON map and replaces values

@@ -5,7 +5,7 @@ package modelsdkbackend
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 // TestCreateWorkflow_RoundTrip creates a workflow with a user task (one outcome)

@@ -3,8 +3,8 @@
 package mprbackend
 
 import (
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
 )
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 // validatePageContextTree checks that page-internal references are consistent:

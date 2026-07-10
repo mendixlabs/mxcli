@@ -3,8 +3,8 @@
 package mprread
 
 import (
-	genMf "github.com/mendixlabs/mxcli/modelsdk/gen/microflows"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
+	genMf "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/microflows"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
 )
 
 // ListMicroflows decodes every Microflows$Microflow unit in the project

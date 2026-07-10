@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genDt "github.com/mendixlabs/mxcli/modelsdk/gen/datatransformers"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
-	"github.com/mendixlabs/mxcli/modelsdk/property"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genDt "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/datatransformers"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/property"
 )
 
 // ListDataTransformers reads every DataTransformers$DataTransformer unit (identity

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/backend/unitstore"
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/unitstore"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 type stubPersistence struct {

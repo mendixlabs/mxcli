@@ -3,7 +3,7 @@
 package pages
 
 import (
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // LayoutCall represents a call to a layout with argument bindings.

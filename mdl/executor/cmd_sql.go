@@ -8,10 +8,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
-	sqllib "github.com/mendixlabs/mxcli/sql"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
+	sqllib "github.com/JordtenBulte-OLC/mxcli/sql"
 )
 
 // ensureSQLManager lazily initializes the SQL connection manager.

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 // buildExternalEntities populates the external_entities catalog table

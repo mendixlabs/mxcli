@@ -10,9 +10,9 @@ package mprbackend_test
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
 )
 
 // TestTypeAliasesAreIdentical proves that sdk/mpr type aliases resolve to the

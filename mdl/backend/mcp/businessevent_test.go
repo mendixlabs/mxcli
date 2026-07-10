@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 func TestBusinessEventServiceAuthoringRejected(t *testing.T) {

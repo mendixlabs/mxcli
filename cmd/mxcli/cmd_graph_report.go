@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 	"github.com/spf13/cobra"
 )
 

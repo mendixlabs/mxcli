@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 // outputEntityAccessGrants outputs GRANT statements for entity access rules.

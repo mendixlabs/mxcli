@@ -5,11 +5,11 @@ package modelsdkbackend
 import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genMf "github.com/mendixlabs/mxcli/modelsdk/gen/microflows"
-	genTexts "github.com/mendixlabs/mxcli/modelsdk/gen/texts"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genMf "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/microflows"
+	genTexts "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/texts"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 // actionFromGen reconstructs the semantic microflow action from an ActionActivity's

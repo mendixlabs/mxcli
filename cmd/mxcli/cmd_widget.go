@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/executor"
-	"github.com/mendixlabs/mxcli/sdk/widgets/mpk"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/executor"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/widgets/mpk"
 	"github.com/spf13/cobra"
 )
 

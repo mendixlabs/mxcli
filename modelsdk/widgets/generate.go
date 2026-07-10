@@ -2,7 +2,7 @@
 
 package widgets
 
-import "github.com/mendixlabs/mxcli/modelsdk/widgets/mpk"
+import "github.com/JordtenBulte-OLC/mxcli/modelsdk/widgets/mpk"
 
 // GenerateFromMPK builds a complete WidgetTemplate from a parsed MPK WidgetDefinition.
 // All $IDs are placeholder IDs (aa000000... prefix). loader.go's collectIDs remaps them

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 // validateNanoflowBody checks that a nanoflow body does not contain disallowed

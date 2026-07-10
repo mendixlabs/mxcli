@@ -3,13 +3,13 @@
 package modelsdkbackend
 
 import (
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genBe "github.com/mendixlabs/mxcli/modelsdk/gen/businessevents"
-	genDb "github.com/mendixlabs/mxcli/modelsdk/gen/databaseconnector"
-	genOp "github.com/mendixlabs/mxcli/modelsdk/gen/odatapublish"
-	genRest "github.com/mendixlabs/mxcli/modelsdk/gen/rest"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genBe "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/businessevents"
+	genDb "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/databaseconnector"
+	genOp "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/odatapublish"
+	genRest "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/rest"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 )
 
 // ListConsumedODataServices reads every Rest$ConsumedODataService unit and

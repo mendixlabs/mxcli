@@ -5,8 +5,8 @@ package modelsdkbackend
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // TestCreateImageCollection_RoundTrip creates a collection with one embedded

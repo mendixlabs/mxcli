@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
-	"github.com/mendixlabs/mxcli/sdk/mpr/version"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr/version"
 
 	"go.mongodb.org/mongo-driver/bson"
 )

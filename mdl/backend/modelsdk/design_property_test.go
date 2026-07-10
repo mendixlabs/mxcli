@@ -6,8 +6,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // TestAppearanceDesignProperties verifies the codec emits flat and compound

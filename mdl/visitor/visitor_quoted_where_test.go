@@ -5,7 +5,7 @@ package visitor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 // Issue #642 — `where '<xpath>'` (quoted, with '' escapes) must un-escape to the

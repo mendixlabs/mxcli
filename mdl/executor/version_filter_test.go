@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr/version"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr/version"
 )
 
 func TestParseVersionDirective(t *testing.T) {

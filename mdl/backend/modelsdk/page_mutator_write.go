@@ -7,11 +7,11 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	"github.com/mendixlabs/mxcli/mdl/backend/pagemutator"
-	"github.com/mendixlabs/mxcli/mdl/backend/widgetobj"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/pagemutator"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/widgetobj"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // OpenPageForMutation loads a page/snippet/layout unit and returns a PageMutator

@@ -5,7 +5,7 @@ package executor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 func TestValidateMicroflow_InheritanceSplitAllBranchesReturn(t *testing.T) {

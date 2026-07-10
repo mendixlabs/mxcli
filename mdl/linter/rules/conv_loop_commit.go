@@ -5,9 +5,9 @@ package rules
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 // NoCommitInLoopRule flags commit actions inside loops, which cause N+1 database operations.

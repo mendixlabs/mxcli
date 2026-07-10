@@ -5,7 +5,7 @@ package pages
 import (
 	"strings"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // Widget is the base interface for all page widgets.

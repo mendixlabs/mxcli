@@ -5,9 +5,9 @@ package executor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/backend/mock"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/mock"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // TestResolveSnippetRef_FromCache verifies that resolveSnippetRef finds snippets

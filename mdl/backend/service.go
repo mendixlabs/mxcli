@@ -3,7 +3,7 @@
 package backend
 
 import (
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // ServiceBackend provides operations for OData, REST, business event,

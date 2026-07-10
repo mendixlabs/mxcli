@@ -4,7 +4,7 @@
 package microflows
 
 import (
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // MicroflowAction is the base interface for all microflow actions.

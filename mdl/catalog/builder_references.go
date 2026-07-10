@@ -6,11 +6,11 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/sdk/pages"
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 // Reference kinds for the refs table

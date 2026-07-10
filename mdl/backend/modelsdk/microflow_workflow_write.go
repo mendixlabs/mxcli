@@ -3,8 +3,8 @@
 package modelsdkbackend
 
 import (
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 // workflowMicroflowActionToGen builds the workflow-related microflow action

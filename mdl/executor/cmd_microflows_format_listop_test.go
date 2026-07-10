@@ -5,7 +5,7 @@ package executor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 // =============================================================================

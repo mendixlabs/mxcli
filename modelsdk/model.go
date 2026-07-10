@@ -2,7 +2,7 @@
 //
 // Usage:
 //
-//	import _ "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
+//	import _ "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/domainmodels"
 //
 //	m, err := modelsdk.Open("app.mpr")
 //	defer m.Close()
@@ -21,8 +21,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 

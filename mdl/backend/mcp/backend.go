@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
-	"github.com/mendixlabs/mxcli/sdk/pages"
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 // Backend executes domain-model writes against a live Studio Pro via its MCP

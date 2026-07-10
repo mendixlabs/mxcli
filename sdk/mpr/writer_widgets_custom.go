@@ -3,7 +3,7 @@
 package mpr
 
 import (
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 
 	"go.mongodb.org/mongo-driver/bson"
 )

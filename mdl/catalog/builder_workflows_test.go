@@ -5,7 +5,7 @@ package catalog
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 func TestCountWorkflowActivityTypes(t *testing.T) {

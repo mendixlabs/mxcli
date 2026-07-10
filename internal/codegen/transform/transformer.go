@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/internal/codegen/schema"
+	"github.com/JordtenBulte-OLC/mxcli/internal/codegen/schema"
 )
 
 // GoPackage represents a generated Go package.
@@ -101,7 +101,7 @@ func (t *Transformer) TransformNamespace(namespace string) *GoPackage {
 	}
 
 	// Always import model package
-	pkg.Imports["github.com/mendixlabs/mxcli/model"] = true
+	pkg.Imports["github.com/JordtenBulte-OLC/mxcli/model"] = true
 
 	types := t.data.GetTypesByNamespace(namespace)
 

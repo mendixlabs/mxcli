@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/internal/marketplace"
+	"github.com/JordtenBulte-OLC/mxcli/internal/marketplace"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

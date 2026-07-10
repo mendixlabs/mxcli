@@ -12,15 +12,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	"github.com/mendixlabs/mxcli/mdl/catalog"
-	"github.com/mendixlabs/mxcli/mdl/diaglog"
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
-	sqllib "github.com/mendixlabs/mxcli/sql"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/catalog"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/diaglog"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
+	sqllib "github.com/JordtenBulte-OLC/mxcli/sql"
 )
 
 // executorCache holds cached data for performance across multiple operations.

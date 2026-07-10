@@ -3,7 +3,7 @@
 package types
 
 import (
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // JavaAction is a lightweight Java action descriptor.

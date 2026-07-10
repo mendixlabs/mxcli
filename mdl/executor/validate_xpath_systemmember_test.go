@@ -5,7 +5,7 @@ package executor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 // Issue #641 — a System.owner/changedBy/... reference on the retrieve's own entity

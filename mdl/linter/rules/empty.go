@@ -5,7 +5,7 @@ package rules
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
 )
 
 // EmptyMicroflowRule checks for microflows with no activities.

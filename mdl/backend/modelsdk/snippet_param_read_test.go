@@ -5,7 +5,7 @@ package modelsdkbackend
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // TestListSnippets_PopulatesParameters guards CE1571: the page builder reads a

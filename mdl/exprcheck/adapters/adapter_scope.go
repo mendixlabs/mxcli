@@ -2,7 +2,7 @@
 
 package adapters
 
-import "github.com/mendixlabs/mxcli/mdl/ast"
+import "github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 
 // buildVarEntityScope walks a microflow body and records every variable
 // known to hold an entity instance, mapping varName → entity QN.

@@ -5,10 +5,10 @@ package modelsdkbackend
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/model"
-	genSec "github.com/mendixlabs/mxcli/modelsdk/gen/security"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
-	"github.com/mendixlabs/mxcli/sdk/security"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	genSec "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/security"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/security"
 )
 
 // ListModuleSecurity reads every module's security document (its module roles)

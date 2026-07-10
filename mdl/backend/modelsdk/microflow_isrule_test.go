@@ -5,9 +5,9 @@ package modelsdkbackend
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genMf "github.com/mendixlabs/mxcli/modelsdk/gen/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genMf "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/microflows"
 )
 
 // TestIsRule guards issue #723 §A (A4 / CE0117). The modelsdk backend never

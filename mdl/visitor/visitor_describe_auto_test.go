@@ -5,7 +5,7 @@ package visitor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 // TestDescribeAuto_BareName parses to DescribeAuto so the executor can detect the

@@ -5,7 +5,7 @@ package modelsdkbackend
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk/meta"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/meta"
 )
 
 // TestGetDomainModel_VirtualSystemModule guards DESCRIBE System.*: the System

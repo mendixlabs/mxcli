@@ -3,9 +3,9 @@
 package modelsdkbackend
 
 import (
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/meta"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/meta"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 // buildSystemDomainModel builds the virtual System-module domain model from the

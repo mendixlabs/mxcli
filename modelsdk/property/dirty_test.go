@@ -3,7 +3,7 @@ package property
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk/element"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
 )
 
 func TestPrimitiveBindPropagates(t *testing.T) {

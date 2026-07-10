@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 func enumVal(name, caption string) model.EnumerationValue {

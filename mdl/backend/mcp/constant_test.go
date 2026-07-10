@@ -5,7 +5,7 @@ package mcp
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 func TestBuildConstantContent(t *testing.T) {

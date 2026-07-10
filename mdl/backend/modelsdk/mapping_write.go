@@ -5,10 +5,10 @@ package modelsdkbackend
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
 )
 
 func init() {

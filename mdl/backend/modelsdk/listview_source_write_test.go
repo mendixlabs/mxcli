@@ -5,8 +5,8 @@ package modelsdkbackend
 import (
 	"testing"
 
-	genPg "github.com/mendixlabs/mxcli/modelsdk/gen/pages"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	genPg "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/pages"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // A ListView database source must serialize as Forms$ListViewXPathSource on the

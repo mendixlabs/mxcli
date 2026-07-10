@@ -5,7 +5,7 @@ package modelsdkbackend
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 // TestUpdateDomainModel_PreservesAssociationType guards the CREATE OR MODIFY

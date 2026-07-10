@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mendixlabs/mxcli/modelsdk/mpr/version"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr/version"
 
 	_ "modernc.org/sqlite"
 )

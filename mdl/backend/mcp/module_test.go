@@ -5,7 +5,7 @@ package mcp
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // TestSessionModuleResolution verifies that a module registered this session is

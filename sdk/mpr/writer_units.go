@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 // isContentsHashSchemaError returns true when the error looks like SQLite complaining

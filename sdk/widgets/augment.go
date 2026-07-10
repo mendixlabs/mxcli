@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/mendixlabs/mxcli/sdk/widgets/mpk"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/widgets/mpk"
 )
 
 // AugmentTemplate modifies a template's Type and Object in-place to match an .mpk definition.

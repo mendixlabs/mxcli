@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 func TestTraverseFlow_LoopEmitsBegin(t *testing.T) {

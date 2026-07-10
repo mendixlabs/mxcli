@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
 )
 
 func TestIDToBsonBinary_ValidUUID(t *testing.T) {

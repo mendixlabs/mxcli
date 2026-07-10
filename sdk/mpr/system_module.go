@@ -3,8 +3,8 @@
 package mpr
 
 import (
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 // System module constants — deterministic IDs for the virtual System module.

@@ -20,7 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/sdk/widgets/mpk"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/widgets/mpk"
 )
 
 // WidgetDefinitionMeta is the catalog-level shape of a widget definition.

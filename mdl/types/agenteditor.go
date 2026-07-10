@@ -13,7 +13,7 @@
 // observed BSON and JSON schemas.
 package types
 
-import "github.com/mendixlabs/mxcli/model"
+import "github.com/JordtenBulte-OLC/mxcli/model"
 
 // CustomDocumentType values observed in test3 project.
 const (

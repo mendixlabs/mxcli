@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 // Issue #619 — DESCRIBE emitters must quote element names that collide with a

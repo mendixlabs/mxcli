@@ -5,8 +5,8 @@ package rules
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
-	"github.com/mendixlabs/mxcli/sdk/security"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/security"
 )
 
 // --- SEC001: NoEntityAccessRules ---

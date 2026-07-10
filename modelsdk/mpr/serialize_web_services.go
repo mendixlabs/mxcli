@@ -5,7 +5,7 @@ package mpr
 import (
 	"strings"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 )

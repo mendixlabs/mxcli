@@ -17,10 +17,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
-	"github.com/mendixlabs/mxcli/mdl/executor"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	mprbackend "github.com/JordtenBulte-OLC/mxcli/mdl/backend/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/executor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 )
 
 func main() {

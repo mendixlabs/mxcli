@@ -5,12 +5,12 @@ package modelsdkbackend
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genMf "github.com/mendixlabs/mxcli/modelsdk/gen/microflows"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genMf "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/microflows"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 // CreateNanoflow inserts a new Microflows$Nanoflow document unit. A nanoflow

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr/version"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr/version"
 )
 
 // newTestZipWriter wraps zip.NewWriter for test helpers.

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
 )
 
 // ThemeProperty represents a single design property definition from design-properties.json.

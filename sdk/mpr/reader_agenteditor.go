@@ -12,7 +12,7 @@ package mpr
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/sdk/agenteditor"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/agenteditor"
 )
 
 // ListAgentEditorModels returns all agent-editor Model documents in the

@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mendixlabs/mxcli"
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 func main() {

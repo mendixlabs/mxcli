@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 // formatSingleActivity is a test helper that wraps a single activity in a Flow

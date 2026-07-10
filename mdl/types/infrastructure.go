@@ -2,7 +2,7 @@
 
 package types
 
-import "github.com/mendixlabs/mxcli/model"
+import "github.com/JordtenBulte-OLC/mxcli/model"
 
 // MPRVersion identifies the MPR file format version.
 type MPRVersion int

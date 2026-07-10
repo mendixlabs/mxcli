@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr/version"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr/version"
 )
 
 // PatchResult describes the outcome of applying a single patch.

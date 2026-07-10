@@ -5,7 +5,7 @@ package visitor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 // Bug 1 — quoted attribute names must be stripped in expression contexts, the

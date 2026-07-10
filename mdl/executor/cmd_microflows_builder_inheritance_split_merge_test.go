@@ -5,8 +5,8 @@ package executor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 // TestInheritanceSplitAlwaysEmitsMergeWhenBranchContinues guards against a

@@ -2,7 +2,7 @@
 
 package catalog
 
-import "github.com/mendixlabs/mxcli/model"
+import "github.com/JordtenBulte-OLC/mxcli/model"
 
 func (b *Builder) buildAssociations() error {
 	domainModels, err := b.cachedDomainModels()

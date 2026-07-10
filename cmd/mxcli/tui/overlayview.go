@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mendixlabs/mxcli/mdl/formatter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/formatter"
 )
 
 // overlayContentMsg carries reloaded content for an OverlayView after Tab switch.

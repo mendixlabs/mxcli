@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mendixlabs/mxcli/internal/codegen/transform"
+	"github.com/JordtenBulte-OLC/mxcli/internal/codegen/transform"
 )
 
 // Emitter generates Go source files from transformed types.

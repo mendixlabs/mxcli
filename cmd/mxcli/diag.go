@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mendixlabs/mxcli/mdl/diaglog"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/diaglog"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
 	"github.com/spf13/cobra"
 )
 

@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/cmd/mxcli/syntax"
+	"github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/syntax"
 	"github.com/spf13/cobra"
 )
 

@@ -5,7 +5,7 @@ package modelsdkbackend
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // TestPageFromGen_ReadsAllowedRoles guards SHOW ACCESS ON PAGE and the Page

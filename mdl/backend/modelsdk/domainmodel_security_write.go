@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
-	genDm "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	genDm "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/domainmodels"
 )
 
 // AddEntityAccessRule adds (or upserts by matching module-role set) an entity

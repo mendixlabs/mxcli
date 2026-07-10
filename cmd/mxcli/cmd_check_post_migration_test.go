@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/executor"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/executor"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // TestWalkForLegacyWidgets verifies the reflection-based walker finds a

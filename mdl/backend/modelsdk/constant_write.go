@@ -5,12 +5,12 @@ package modelsdkbackend
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genConst "github.com/mendixlabs/mxcli/modelsdk/gen/constants"
-	genDT "github.com/mendixlabs/mxcli/modelsdk/gen/datatypes"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genConst "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/constants"
+	genDT "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/datatypes"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
 )
 
 // CreateConstant adds a new constant document (a top-level unit, like an

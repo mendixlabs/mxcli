@@ -5,8 +5,8 @@ package rules
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // DataViewLayoutGridRule (MPR010) flags a form — a DataView that contains input

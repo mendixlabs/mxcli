@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/internal/pathutil"
+	"github.com/JordtenBulte-OLC/mxcli/internal/pathutil"
 )
 
 func TestFetchODataMetadata_LocalFile(t *testing.T) {

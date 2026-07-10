@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	bsondebug "github.com/mendixlabs/mxcli/cmd/mxcli/bson"
+	bsondebug "github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/bson"
 	"go.mongodb.org/mongo-driver/bson"
 )
 

@@ -9,9 +9,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
-	"github.com/mendixlabs/mxcli/mdl/linter/rules"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/catalog"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter/rules"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 	"github.com/spf13/cobra"
 )
 
@@ -127,11 +128,17 @@ Examples:
 		projectName := filepath.Base(projectPath)
 		projectName = projectName[:len(projectName)-len(filepath.Ext(projectName))]
 
-		// Build report
+		// Build report. Categories are auto-detected from the rules that actually
+		// ran (see linter.CategoriesFromRules); elementCounts sums COUNT(*) over
+		// each category's "checkable universe" of catalog tables, so violation
+		// density is normalized against project size instead of raw counts.
+		elementCounts := categoryElementCounts(cat)
 		report := linter.BuildReport(
 			projectName,
 			time.Now().Format("2006-01-02 15:04:05"),
 			violations,
+			lint.Rules(),
+			elementCounts,
 		)
 
 		// Format and output
@@ -159,4 +166,46 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Report written to %s\n", outputPath)
 		}
 	},
+}
+
+// categoryElementTables maps a report category (title-cased, matching
+// linter.CategoriesFromRules output) to the catalog tables that represent its
+// "checkable universe" — the elements its rules actually inspect. Used to
+// normalize violation density (see normalizationBaseline in mdl/linter/report.go).
+//
+// This list is a best-effort approximation of what each category's rules look
+// at (mdl/linter/rules/*.go and .claude/lint-rules/*.star); a category with no
+// entry here (e.g. a custom Starlark CATEGORY) gets an elementsChecked of 0 and
+// falls back to the flat, unnormalized penalty.
+var categoryElementTables = map[string][]string{
+	"Naming":       {"entities_data", "attributes_data", "associations_data", "microflows_data", "pages_data", "enumerations_data", "snippets_data"},
+	"Security":     {"entities_data", "pages_data", "permissions", "role_mappings"},
+	"Quality":      {"microflows_data", "activities_data", "entities_data", "attributes_data"},
+	"Design":       {"entities_data", "pages_data", "widgets_data", "attributes_data"},
+	"Correctness":  {"pages_data", "widgets_data", "microflows_data", "activities_data"},
+	"Performance":  {"activities_data", "attributes_data", "entities_data"},
+	"Architecture": {"modules_data", "entities_data", "microflows_data", "associations_data"},
+	"Complexity":   {"microflows_data", "activities_data"},
+}
+
+// categoryElementCounts sums COUNT(*) over each category's checkable-universe
+// tables in the catalog, so report.go can normalize each category's penalty by
+// project size rather than scoring a 5-entity app and a 500-entity app the same
+// way for an identical violation count.
+func categoryElementCounts(cat *catalog.Catalog) map[string]int {
+	counts := make(map[string]int, len(categoryElementTables))
+	for category, tables := range categoryElementTables {
+		total := 0
+		for _, table := range tables {
+			res, err := cat.Query(fmt.Sprintf("SELECT COUNT(*) FROM %s", table))
+			if err != nil || len(res.Rows) == 0 {
+				continue
+			}
+			if n, ok := res.Rows[0][0].(int64); ok {
+				total += int(n)
+			}
+		}
+		counts[category] = total
+	}
+	return counts
 }

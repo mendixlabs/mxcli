@@ -5,7 +5,7 @@ package executor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 func transItem(lang, text string) map[string]any {

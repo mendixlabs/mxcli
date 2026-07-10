@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk/widgets/mpk"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/widgets/mpk"
 )
 
 func TestAugmentTemplate_AddMissing(t *testing.T) {

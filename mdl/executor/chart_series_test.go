@@ -5,7 +5,7 @@ package executor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 func TestSeriesDataSourceMatchesMode(t *testing.T) {

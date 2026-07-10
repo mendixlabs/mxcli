@@ -5,9 +5,9 @@ package adapters
 import (
 	"io"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/exprcheck"
-	exprhints "github.com/mendixlabs/mxcli/mdl/exprcheck/hints"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/exprcheck"
+	exprhints "github.com/JordtenBulte-OLC/mxcli/mdl/exprcheck/hints"
 )
 
 type ExecAdapter struct {

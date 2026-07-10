@@ -5,7 +5,7 @@ package pages
 import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
 )
 
 // BSONArrayItems 将 raw BSON 字段统一转换为 []any。

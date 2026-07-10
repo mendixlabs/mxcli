@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
 )
 
 // moduleOverviewData is the JSON output schema for the module overview ELK diagram.

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
 )
 
 // Issue #650 — MDL-WIDGET04 flags a dynamictext whose template references a {N}

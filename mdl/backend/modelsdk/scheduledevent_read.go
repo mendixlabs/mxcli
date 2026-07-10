@@ -5,10 +5,10 @@ package modelsdkbackend
 import (
 	"fmt"
 
-	genSched "github.com/mendixlabs/mxcli/modelsdk/gen/scheduledevents"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	genSched "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/scheduledevents"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // Codec-native scheduled-event read. Used by SHOW STRUCTURE (per-module counts)

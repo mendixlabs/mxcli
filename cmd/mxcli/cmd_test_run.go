@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/mendixlabs/mxcli/cmd/mxcli/testrunner"
+	"github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/testrunner"
 	"github.com/spf13/cobra"
 )
 

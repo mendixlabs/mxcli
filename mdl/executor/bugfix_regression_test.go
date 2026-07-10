@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/backend/mock"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/mock"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 // =============================================================================
@@ -550,7 +550,7 @@ func TestDeriveColumnName_CaptionSpecialChars(t *testing.T) {
 
 // TestResolveMemberChange_FallbackWithoutReader verifies that resolveMemberChange
 // falls back to the member-name shape heuristic when no metadata is available.
-// Regression: https://github.com/mendixlabs/mxcli/issues/50
+// Regression: https://github.com/JordtenBulte-OLC/mxcli/issues/50
 func TestResolveMemberChange_FallbackWithoutReader(t *testing.T) {
 	fb := &flowBuilder{
 		// reader is nil — simulates no project context

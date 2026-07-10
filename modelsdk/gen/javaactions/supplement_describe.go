@@ -3,8 +3,8 @@
 package javaactions
 
 import (
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
 )
 
 // ReadBSONString reads a string field from elem's raw BSON without

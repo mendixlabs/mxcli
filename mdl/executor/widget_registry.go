@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/sdk/widgets/definitions"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/widgets/definitions"
 )
 
 // WidgetRegistry holds loaded widget definitions keyed by uppercase MDL name.

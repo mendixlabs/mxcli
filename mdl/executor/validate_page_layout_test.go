@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 )
 
 // violationsFor parses MDL and runs the layout-grid check, returning the messages.

@@ -27,8 +27,8 @@
 package api
 
 import (
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
 )
 
 // ModelAPI is the main entry point for the high-level API.

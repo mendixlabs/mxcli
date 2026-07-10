@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 func TestRoundtripExportMapping_NoSchema(t *testing.T) {

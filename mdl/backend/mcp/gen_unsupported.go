@@ -22,7 +22,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
 )
 
 func main() {

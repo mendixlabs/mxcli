@@ -5,11 +5,11 @@ package modelsdkbackend
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genPr "github.com/mendixlabs/mxcli/modelsdk/gen/projects"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genPr "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/projects"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
 )
 
 // CreateFolder inserts a new Projects$Folder unit under its container (module or

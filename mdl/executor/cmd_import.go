@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
-	sqllib "github.com/mendixlabs/mxcli/sql"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
+	sqllib "github.com/JordtenBulte-OLC/mxcli/sql"
 )
 
 // execImport handles IMPORT FROM <alias> QUERY '<sql>' INTO Module.Entity MAP (...) [LINK (...)] [BATCH n] [LIMIT n]

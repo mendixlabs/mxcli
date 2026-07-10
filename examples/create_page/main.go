@@ -11,10 +11,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mendixlabs/mxcli/mdl/executor"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/executor"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 func main() {

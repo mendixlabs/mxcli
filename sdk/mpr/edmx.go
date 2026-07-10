@@ -3,7 +3,7 @@
 package mpr
 
 import (
-	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
 )
 
 // Type aliases — all EDMX types now live in mdl/types.

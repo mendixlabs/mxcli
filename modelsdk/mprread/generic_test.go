@@ -5,9 +5,9 @@ package mprread_test
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genMf "github.com/mendixlabs/mxcli/modelsdk/gen/microflows"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genMf "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 )
 
 // TestListUnitsByType_Microflows verifies the generic helper returns non-empty

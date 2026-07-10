@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 

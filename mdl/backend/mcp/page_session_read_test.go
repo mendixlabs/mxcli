@@ -5,7 +5,7 @@ package mcp
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // TestGetPage_SessionVisible: a page created this session is resolvable by ID

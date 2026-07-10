@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/widgets/definitions"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/widgets/definitions"
 )
 
 func TestRegistryLoadsAllEmbeddedDefinitions(t *testing.T) {

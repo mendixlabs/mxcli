@@ -8,8 +8,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/mendixlabs/mxcli/internal/auth"
-	"github.com/mendixlabs/mxcli/internal/catalog"
+	"github.com/JordtenBulte-OLC/mxcli/internal/auth"
+	"github.com/JordtenBulte-OLC/mxcli/internal/catalog"
 	"github.com/spf13/cobra"
 )
 

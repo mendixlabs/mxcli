@@ -4,7 +4,7 @@
 
 package mappings
 
-import "github.com/mendixlabs/mxcli/modelsdk/codec"
+import "github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
 
 func init() {
 	codec.DefaultRefRegistry.RegisterRefs("Mappings$MappingDocument", []codec.RefMeta{

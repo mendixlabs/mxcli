@@ -3,8 +3,8 @@
 package mock
 
 import (
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 var _ backend.WorkflowMutator = (*MockWorkflowMutator)(nil)

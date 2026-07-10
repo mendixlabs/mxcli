@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/backend/mock"
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/mock"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 func TestShowModules_Mock(t *testing.T) {

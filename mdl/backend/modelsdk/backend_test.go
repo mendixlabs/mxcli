@@ -5,7 +5,7 @@ package modelsdkbackend
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
 )
 
 const fixture = "../../../testdata/expr-checker/minimal.mpr"

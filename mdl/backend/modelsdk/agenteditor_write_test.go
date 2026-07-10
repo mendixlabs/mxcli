@@ -5,7 +5,7 @@ package modelsdkbackend
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/agenteditor"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/agenteditor"
 )
 
 // TestCreateAgentEditor_RoundTrip creates one of each agent-editor document type

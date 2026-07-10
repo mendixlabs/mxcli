@@ -5,8 +5,8 @@ package mpr
 import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
-	"github.com/mendixlabs/mxcli/mdl/bsonutil"
-	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/bsonutil"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
 )
 
 // GenerateID generates a new unique ID for model elements.

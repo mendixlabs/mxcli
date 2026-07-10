@@ -5,7 +5,7 @@ package executor
 import (
 	"fmt"
 
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
 )
 
 // listLanguages lists all languages found in the project's translatable strings.

@@ -6,7 +6,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 func TestExecAdapter_PrintsHintAndReturnsSerialised(t *testing.T) {

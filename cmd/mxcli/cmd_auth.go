@@ -14,7 +14,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/mendixlabs/mxcli/internal/auth"
+	"github.com/JordtenBulte-OLC/mxcli/internal/auth"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

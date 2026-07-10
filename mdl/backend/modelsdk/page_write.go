@@ -5,13 +5,13 @@ package modelsdkbackend
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genDT "github.com/mendixlabs/mxcli/modelsdk/gen/datatypes"
-	genPg "github.com/mendixlabs/mxcli/modelsdk/gen/pages"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genDT "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/datatypes"
+	genPg "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/pages"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 func init() {

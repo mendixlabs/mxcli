@@ -5,7 +5,15 @@ package linter
 import (
 	"math"
 	"sort"
+	"unicode"
 )
+
+// normalizationBaseline is the reference "checkable universe" size a category's
+// penalty is scaled against. A category with exactly this many catalog elements
+// scores as if unnormalized; fewer elements amplify the penalty per violation,
+// more elements dilute it — so the same violation count doesn't punish a small
+// project as hard as it rewards a large one.
+const normalizationBaseline = 50
 
 // Report represents a complete lint report with scoring.
 type Report struct {
@@ -19,85 +27,68 @@ type Report struct {
 
 // CategoryScore tracks the score for a lint category.
 type CategoryScore struct {
-	Name       string   `json:"name"`
-	Score      float64  `json:"score"`      // 0-100
-	Total      int      `json:"total"`      // elements checked
-	Errors     int      `json:"errors"`     // error-severity violations
-	Warnings   int      `json:"warnings"`   // warning-severity violations
-	Infos      int      `json:"infos"`      // info-severity violations
-	TopActions []string `json:"topActions"` // top recommendations
-}
-
-// categoryMapping maps rule IDs to category names.
-var categoryMapping = map[string]string{
-	// Naming
-	"MPR001":  "Naming",
-	"CONV001": "Naming",
-	"CONV002": "Naming",
-	"CONV003": "Naming",
-	"CONV004": "Naming",
-	"CONV005": "Naming",
-
-	// Security
-	"SEC001":  "Security",
-	"SEC002":  "Security",
-	"SEC003":  "Security",
-	"SEC004":  "Security",
-	"SEC005":  "Security",
-	"SEC006":  "Security",
-	"SEC007":  "Security",
-	"SEC008":  "Security",
-	"SEC009":  "Security",
-	"CONV006": "Security",
-	"CONV007": "Security",
-	"CONV008": "Security",
-
-	// Quality
-	"MPR002":  "Quality",
-	"MPR003":  "Quality",
-	"MPR004":  "Quality",
-	"MPR005":  "Quality",
-	"MPR006":  "Quality",
-	"QUAL001": "Quality",
-	"QUAL002": "Quality",
-	"QUAL003": "Quality",
-	"QUAL004": "Quality",
-	"QUAL005": "Quality",
-	"CONV009": "Quality",
-	"CONV012": "Quality",
-	"CONV014": "Quality",
-	"CONV015": "Quality",
-
-	// Architecture
-	"ARCH001": "Architecture",
-	"ARCH002": "Architecture",
-	"ARCH003": "Architecture",
-	"CONV010": "Architecture",
-
-	// Performance
-	"CONV011": "Performance",
-	"CONV016": "Performance",
-	"CONV017": "Performance",
-
-	// Design
-	"DESIGN001": "Design",
-	"MPR007":    "Design",
-	"CONV013":   "Design",
+	Name            string   `json:"name"`
+	Score           float64  `json:"score"`           // 0-100
+	Total           int      `json:"total"`           // violations found (errors+warnings+infos)
+	ElementsChecked int      `json:"elementsChecked"` // catalog elements this category evaluates
+	Errors          int      `json:"errors"`
+	Warnings        int      `json:"warnings"`
+	Infos           int      `json:"infos"`
+	TopActions      []string `json:"topActions"`
 }
 
 // categoryWeight defines the weight for each category in overall score.
+// Categories are discovered dynamically from registered rules' Category()
+// (see CategoriesFromRules); this table only supplies the relative importance
+// of the categories mxcli's built-in and Starlark rules currently use. An
+// unlisted category (e.g. a custom Starlark rule with a novel CATEGORY)
+// falls back to the default weight applied below.
 var categoryWeight = map[string]float64{
 	"Security":     0.25,
+	"Correctness":  0.20,
 	"Quality":      0.20,
 	"Architecture": 0.15,
 	"Performance":  0.15,
 	"Naming":       0.10,
 	"Design":       0.10,
+	"Complexity":   0.10,
 	"Other":        0.05,
 }
 
-// BuildReport creates a Report from a list of violations.
-func BuildReport(projectName, date string, violations []Violation) *Report {
+// defaultCategoryWeight is used for any category not listed in categoryWeight.
+const defaultCategoryWeight = 0.05
+
+// CategoriesFromRules derives a rule ID → category name mapping from a set of
+// registered lint rules, so the report's category breakdown always reflects
+// whatever rules actually ran instead of a hand-maintained list that can
+// drift out of sync (see rules.Rule.Category()).
+func CategoriesFromRules(rules []Rule) map[string]string {
+	m := make(map[string]string, len(rules))
+	for _, r := range rules {
+		m[r.ID()] = titleCaseCategory(r.Category())
+	}
+	return m
+}
+
+// titleCaseCategory upper-cases the first rune of a rule's lowercase
+// Category() (e.g. "security" -> "Security") for display. An empty category
+// maps to "Other".
+func titleCaseCategory(cat string) string {
+	if cat == "" {
+		return "Other"
+	}
+	r := []rune(cat)
+	r[0] = unicode.ToUpper(r[0])
+	return string(r)
+}
+
+// BuildReport creates a Report from a list of violations. rules is the set of
+// lint rules that were run — used to discover categories (via Category()) and
+// group violations, so the report reflects exactly the rules that executed.
+// elementCounts maps each category name to the number of catalog elements
+// that make up its "checkable universe", used to normalize violation density
+// into a score (see normalizationBaseline).
+func BuildReport(projectName, date string, violations []Violation, rules []Rule, elementCounts map[string]int) *Report {
 	report := &Report{
 		ProjectName: projectName,
 		Date:        date,
@@ -105,25 +96,34 @@ func BuildReport(projectName, date string, violations []Violation) *Report {
 		Summary:     Summarize(violations),
 	}
 
+	ruleCategories := CategoriesFromRules(rules)
+
+	// Every category with a registered rule is reported, even with zero
+	// violations, so the score breakdown doesn't silently omit a clean area.
+	catSet := make(map[string]bool)
+	for _, cat := range ruleCategories {
+		catSet[cat] = true
+	}
+
 	// Group violations by category
 	catViolations := make(map[string][]Violation)
 	for _, v := range violations {
-		cat := resolveCategory(v.RuleID)
+		cat := resolveCategory(v.RuleID, ruleCategories)
 		catViolations[cat] = append(catViolations[cat], v)
+		catSet[cat] = true
 	}
+
+	var allCats []string
+	for cat := range catSet {
+		allCats = append(allCats, cat)
+	}
+	sort.Strings(allCats)
 
 	// Build category scores
 	var categories []CategoryScore
-	allCats := []string{"Security", "Quality", "Architecture", "Performance", "Naming", "Design"}
 	for _, catName := range allCats {
 		vols := catViolations[catName]
-		cs := buildCategoryScore(catName, vols)
-		categories = append(categories, cs)
-	}
-
-	// Add "Other" category for unmapped rules
-	if otherVols := catViolations["Other"]; len(otherVols) > 0 {
-		cs := buildCategoryScore("Other", otherVols)
+		cs := buildCategoryScore(catName, vols, elementCounts[catName])
 		categories = append(categories, cs)
 	}
 
@@ -135,7 +135,7 @@ func BuildReport(projectName, date string, violations []Violation) *Report {
 	for _, cs := range categories {
 		w := categoryWeight[cs.Name]
 		if w == 0 {
-			w = 0.05
+			w = defaultCategoryWeight
 		}
 		totalWeight += w
 		weightedScore += cs.Score * w
@@ -149,15 +149,15 @@ func BuildReport(projectName, date string, violations []Violation) *Report {
 	return report
 }
 
-func resolveCategory(ruleID string) string {
-	if cat, ok := categoryMapping[ruleID]; ok {
+func resolveCategory(ruleID string, ruleCategories map[string]string) string {
+	if cat, ok := ruleCategories[ruleID]; ok {
 		return cat
 	}
 	return "Other"
 }
 
-func buildCategoryScore(name string, violations []Violation) CategoryScore {
-	cs := CategoryScore{Name: name}
+func buildCategoryScore(name string, violations []Violation, elementsChecked int) CategoryScore {
+	cs := CategoryScore{Name: name, ElementsChecked: elementsChecked}
 
 	for _, v := range violations {
 		switch v.Severity {
@@ -172,8 +172,13 @@ func buildCategoryScore(name string, violations []Violation) CategoryScore {
 
 	cs.Total = cs.Errors + cs.Warnings + cs.Infos
 
-	// Scoring: Error=-10, Warning=-3, Info=-1
-	penalty := float64(cs.Errors)*10 + float64(cs.Warnings)*3 + float64(cs.Infos)*1
+	// Scoring: Error=-5, Warning=-1, Info=-0.2 //adjusted from original: Error=-10, Warning=-3, Info=-1
+	penalty := float64(cs.Errors)*5 + float64(cs.Warnings)*1 + float64(cs.Infos)*0.2
+	if elementsChecked > 0 {
+		penalty = penalty / float64(elementsChecked) * normalizationBaseline
+	}
+	// if elementsChecked == 0, fall back to the flat penalty (nothing to normalize against)
+	
 	cs.Score = math.Max(0, 100-penalty)
 
 	// Build top actions from most frequent violation messages (deduplicated by rule)

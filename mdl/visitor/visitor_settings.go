@@ -5,8 +5,8 @@ package visitor
 import (
 	"strconv"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/grammar/parser"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/grammar/parser"
 )
 
 // ExitAlterSettingsClause handles ALTER SETTINGS ... clauses.

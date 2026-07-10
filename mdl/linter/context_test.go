@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/catalog"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/catalog"
 
 	_ "modernc.org/sqlite"
 )

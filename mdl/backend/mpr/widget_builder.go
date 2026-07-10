@@ -5,12 +5,12 @@ package mprbackend
 import (
 	"go.mongodb.org/mongo-driver/bson"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	"github.com/mendixlabs/mxcli/mdl/backend/widgetobj"
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
-	"github.com/mendixlabs/mxcli/sdk/pages"
-	"github.com/mendixlabs/mxcli/sdk/widgets"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/widgetobj"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/widgets"
 )
 
 // The pluggable-widget object builder now lives in the engine-agnostic

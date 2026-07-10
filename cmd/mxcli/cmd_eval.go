@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mendixlabs/mxcli/cmd/mxcli/evalrunner"
+	"github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/evalrunner"
 	"github.com/spf13/cobra"
 )
 

@@ -11,7 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/mendixlabs/mxcli/mdl/formatter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/formatter"
 )
 
 // AgentListener accepts agent connections on a Unix socket and converts

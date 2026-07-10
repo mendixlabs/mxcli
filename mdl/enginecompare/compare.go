@@ -16,11 +16,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
-	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
-	"github.com/mendixlabs/mxcli/mdl/executor"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	modelsdkbackend "github.com/JordtenBulte-OLC/mxcli/mdl/backend/modelsdk"
+	mprbackend "github.com/JordtenBulte-OLC/mxcli/mdl/backend/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/executor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 )
 
 // Engine selects which backend implementation to run a query against.

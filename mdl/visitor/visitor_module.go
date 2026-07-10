@@ -3,8 +3,8 @@
 package visitor
 
 import (
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/grammar/parser"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/grammar/parser"
 )
 
 func (b *Builder) ExitCreateModuleStatement(ctx *parser.CreateModuleStatementContext) {

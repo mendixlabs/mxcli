@@ -2,7 +2,7 @@
 
 package types
 
-import "github.com/mendixlabs/mxcli/model"
+import "github.com/JordtenBulte-OLC/mxcli/model"
 
 // JsonStructure represents a JSON structure document.
 type JsonStructure struct {

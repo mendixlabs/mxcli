@@ -5,8 +5,8 @@ package executor
 import (
 	"strings"
 
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 func (pb *pageBuilder) getFilterWidgetIDForAttribute(attrPath string) string {

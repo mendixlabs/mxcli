@@ -4,7 +4,7 @@
 package microflows
 
 import (
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // Microflow represents a microflow in the Mendix model.

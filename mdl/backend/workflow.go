@@ -3,8 +3,8 @@
 package backend
 
 import (
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 // WorkflowBackend provides workflow operations.

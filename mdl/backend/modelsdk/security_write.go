@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genSec "github.com/mendixlabs/mxcli/modelsdk/gen/security"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genSec "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/security"
 )
 
 // loadModuleSecurityGen decodes a Security$ModuleSecurity unit by ID.

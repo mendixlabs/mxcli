@@ -4,7 +4,7 @@
 
 package customblobdocuments
 
-import "github.com/mendixlabs/mxcli/modelsdk/version"
+import "github.com/JordtenBulte-OLC/mxcli/modelsdk/version"
 
 // VersionInfos maps structure-type names to their TypeVersionInfo.
 var VersionInfos = map[string]version.TypeVersionInfo{

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/catalog"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/catalog"
 )
 
 // TestAssembleEntityContext_Issue396_DefinitionNotEmpty verifies that the

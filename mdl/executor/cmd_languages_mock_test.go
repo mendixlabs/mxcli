@@ -5,7 +5,7 @@ package executor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/catalog"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/catalog"
 )
 
 func TestListLanguages_NilCatalog(t *testing.T) {

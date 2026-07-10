@@ -8,7 +8,7 @@
 // e.g. the Dutch default "Tekst").
 package executor
 
-import "github.com/mendixlabs/mxcli/model"
+import "github.com/JordtenBulte-OLC/mxcli/model"
 
 const fallbackLanguageCode = "en_US"
 

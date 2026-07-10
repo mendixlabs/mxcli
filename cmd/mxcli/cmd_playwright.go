@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mendixlabs/mxcli/cmd/mxcli/playwright"
+	"github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/playwright"
 	"github.com/spf13/cobra"
 )
 

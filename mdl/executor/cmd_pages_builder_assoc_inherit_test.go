@@ -5,8 +5,8 @@ package executor
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 // Bug 3 (unsolved case): a template-parameter / column attribute that navigates

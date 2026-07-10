@@ -3,8 +3,8 @@
 package backend
 
 import (
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // MappingBackend provides import/export mapping and JSON structure operations.

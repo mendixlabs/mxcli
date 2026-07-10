@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
 )
 
 // listLayouts handles SHOW LAYOUTS command.

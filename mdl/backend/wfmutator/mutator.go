@@ -16,10 +16,10 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 
-	"github.com/mendixlabs/mxcli/mdl/backend/bsonnav"
-	"github.com/mendixlabs/mxcli/mdl/bsonutil"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/bsonnav"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/bsonutil"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 // bsonArrayMarker is the Mendix BSON array type marker (storageListType 3 =

@@ -2,7 +2,7 @@
 
 package widgets
 
-import "github.com/mendixlabs/mxcli/modelsdk/widgets/mpk"
+import "github.com/JordtenBulte-OLC/mxcli/modelsdk/widgets/mpk"
 
 // findPropertyType finds a PropertyType map by PropertyKey in a PropertyTypes array.
 func findPropertyType(propTypes []any, key string) (ptMap map[string]any, ptID string) {

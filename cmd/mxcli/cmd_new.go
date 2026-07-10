@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
+	"github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/docker"
 	"github.com/spf13/cobra"
 )
 

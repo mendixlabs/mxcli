@@ -3,7 +3,7 @@ package codec_test
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 

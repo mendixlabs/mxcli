@@ -1,6 +1,6 @@
 package property
 
-import "github.com/mendixlabs/mxcli/modelsdk/element"
+import "github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
 
 // Part[T] holds a single contained child element.
 type Part[T element.Element] struct {

@@ -6,8 +6,8 @@ import (
 	"sort"
 	"unsafe"
 
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	"github.com/mendixlabs/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore"
 )

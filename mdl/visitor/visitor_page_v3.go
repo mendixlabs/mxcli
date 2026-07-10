@@ -11,8 +11,8 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/grammar/parser"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/grammar/parser"
 )
 
 // parseQualifiedName converts a string like "Module.Name" to ast.QualifiedName.

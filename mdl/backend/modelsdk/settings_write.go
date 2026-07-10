@@ -7,8 +7,8 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 
-	"github.com/mendixlabs/mxcli/mdl/bsonutil"
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/bsonutil"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // safeInt64 converts an int to int64 with a guard against the float64 safe-integer

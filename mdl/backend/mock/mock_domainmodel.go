@@ -3,8 +3,8 @@
 package mock
 
 import (
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 func (m *MockBackend) ListDomainModels() ([]*domainmodel.DomainModel, error) {

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	mcpbackend "github.com/mendixlabs/mxcli/mdl/backend/mcp"
+	mcpbackend "github.com/JordtenBulte-OLC/mxcli/mdl/backend/mcp"
 	"github.com/spf13/cobra"
 )
 

@@ -16,12 +16,12 @@ import (
 	"regexp"
 
 	"github.com/chzyer/readline"
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
-	"github.com/mendixlabs/mxcli/mdl/diaglog"
-	"github.com/mendixlabs/mxcli/mdl/executor"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	mprbackend "github.com/JordtenBulte-OLC/mxcli/mdl/backend/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/diaglog"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/executor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 )
 
 // REPL is an interactive read-eval-print loop for MDL commands.

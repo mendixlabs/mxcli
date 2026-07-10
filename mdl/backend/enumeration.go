@@ -3,7 +3,7 @@
 package backend
 
 import (
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // EnumerationBackend provides enumeration operations.

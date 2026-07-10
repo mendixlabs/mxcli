@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mendixlabs/mxcli/mdl/executor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/executor"
 	"github.com/spf13/cobra"
 
 	"go.lsp.dev/jsonrpc2"

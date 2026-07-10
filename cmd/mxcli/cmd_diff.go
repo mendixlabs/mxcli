@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mendixlabs/mxcli/mdl/executor"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/executor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 	"github.com/spf13/cobra"
 )
 

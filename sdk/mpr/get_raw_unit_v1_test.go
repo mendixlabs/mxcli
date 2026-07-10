@@ -5,12 +5,12 @@ package mpr
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // TestGetRawUnit_V1 verifies that GetRawUnit works on v1 MPR files (Mendix < 10.18)
 // where UnitID is stored as a 16-byte GUID blob in SQLite.
-// Regression test for https://github.com/mendixlabs/mxcli/issues/705
+// Regression test for https://github.com/JordtenBulte-OLC/mxcli/issues/705
 func TestGetRawUnit_V1(t *testing.T) {
 	mprPath := "testdata/v1-project/App.mpr"
 

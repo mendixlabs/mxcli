@@ -14,11 +14,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
-	"github.com/mendixlabs/mxcli/mdl/executor"
-	"github.com/mendixlabs/mxcli/mdl/exprcheck"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	mprbackend "github.com/JordtenBulte-OLC/mxcli/mdl/backend/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/executor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/exprcheck"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 )
 
 // TestRoundTrip_DescribeProducesZeroHints walks every microflow in the

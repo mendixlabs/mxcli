@@ -7,7 +7,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/executor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/executor"
 	"go.lsp.dev/protocol"
 	"go.lsp.dev/uri"
 )

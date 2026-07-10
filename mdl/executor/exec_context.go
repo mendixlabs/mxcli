@@ -7,12 +7,12 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	"github.com/mendixlabs/mxcli/mdl/catalog"
-	"github.com/mendixlabs/mxcli/mdl/diaglog"
-	"github.com/mendixlabs/mxcli/model"
-	sqllib "github.com/mendixlabs/mxcli/sql"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/catalog"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/diaglog"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	sqllib "github.com/JordtenBulte-OLC/mxcli/sql"
 )
 
 // ExecContext carries all dependencies a statement handler needs.

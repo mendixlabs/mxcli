@@ -2,7 +2,7 @@
 
 package executor
 
-import "github.com/mendixlabs/mxcli/mdl/ast"
+import "github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 
 // Handler registration functions — each registers handlers for its domain.
 // Handlers are thin wrappers around existing Executor methods. Once handlers

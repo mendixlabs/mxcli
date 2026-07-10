@@ -6,13 +6,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genDT "github.com/mendixlabs/mxcli/modelsdk/gen/datatypes"
-	genMf "github.com/mendixlabs/mxcli/modelsdk/gen/microflows"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genDT "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/datatypes"
+	genMf "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 // gen→microflows read adapter. Covers the breadth SHOW MICROFLOWS needs: name,

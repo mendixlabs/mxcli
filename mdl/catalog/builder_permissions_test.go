@@ -5,7 +5,7 @@ package catalog
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 func TestEntityAccessFromMemberRights(t *testing.T) {

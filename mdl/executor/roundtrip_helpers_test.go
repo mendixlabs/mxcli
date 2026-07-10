@@ -23,11 +23,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/docker"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	mprbackend "github.com/JordtenBulte-OLC/mxcli/mdl/backend/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 	"github.com/pmezard/go-difflib/difflib"
 )
 

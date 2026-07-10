@@ -16,9 +16,9 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/mendixlabs/mxcli/mdl/executor"
-	"github.com/mendixlabs/mxcli/mdl/linter"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/executor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
 )
 
 // legacyHit records one legacy widget occurrence with enough context to

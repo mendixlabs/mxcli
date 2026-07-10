@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/generated/metamodel"
+	"github.com/JordtenBulte-OLC/mxcli/generated/metamodel"
 )
 
 // TypeRegistry maps BSON $Type strings to Go reflect.Type for all Workflows$ structs.

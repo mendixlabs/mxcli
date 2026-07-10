@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mendixlabs/mxcli/internal/pathutil"
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/mdl/openapi"
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/internal/pathutil"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/openapi"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // safeIdent returns an identifier safe for MDL output. Always double-quotes

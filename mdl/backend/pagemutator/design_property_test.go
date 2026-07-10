@@ -7,7 +7,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 
-	"github.com/mendixlabs/mxcli/mdl/backend/bsonnav"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/bsonnav"
 )
 
 // makeStyleableWidget builds a widget with a Forms$Appearance sub-document and

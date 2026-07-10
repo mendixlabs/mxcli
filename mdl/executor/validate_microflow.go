@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/exprcheck"
-	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/exprcheck"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
 )
 
 // ValidateMicroflow checks a microflow for common issues that don't require a project connection.

@@ -2,6 +2,6 @@
 
 package exprcheck
 
-import "github.com/mendixlabs/mxcli/mdl/exprcheck/hints"
+import "github.com/JordtenBulte-OLC/mxcli/mdl/exprcheck/hints"
 
 type Hint = hints.Hint

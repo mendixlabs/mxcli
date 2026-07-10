@@ -121,8 +121,8 @@ func TestNamingConventionRule_Metadata(t *testing.T) {
 	if r.ID() != "MPR001" {
 		t.Errorf("ID = %q, want MPR001", r.ID())
 	}
-	if r.Category() != "style" {
-		t.Errorf("Category = %q, want style", r.Category())
+	if r.Category() != "naming" {
+		t.Errorf("Category = %q, want naming", r.Category())
 	}
 	if r.Name() != "NamingConvention" {
 		t.Errorf("Name = %q, want NamingConvention", r.Name())

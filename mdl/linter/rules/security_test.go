@@ -5,7 +5,7 @@ package rules
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
 )
 
 func TestNoEntityAccessRulesRule_NoViolation(t *testing.T) {

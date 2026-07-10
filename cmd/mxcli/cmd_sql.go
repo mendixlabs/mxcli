@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	sqllib "github.com/mendixlabs/mxcli/sql"
+	sqllib "github.com/JordtenBulte-OLC/mxcli/sql"
 	"github.com/spf13/cobra"
 )
 

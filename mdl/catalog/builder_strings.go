@@ -3,8 +3,8 @@
 package catalog
 
 import (
-	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 // buildStrings extracts string literals from documents into the FTS5 strings table.

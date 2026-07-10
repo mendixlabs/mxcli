@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
+	"github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/docker"
 )
 
 // CheckError represents a single mx check diagnostic.

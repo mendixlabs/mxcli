@@ -5,11 +5,11 @@ package modelsdkbackend
 import (
 	"go.mongodb.org/mongo-driver/bson"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genSet "github.com/mendixlabs/mxcli/modelsdk/gen/settings"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genSet "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/settings"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 )
 
 func init() {

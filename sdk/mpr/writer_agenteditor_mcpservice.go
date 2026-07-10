@@ -6,8 +6,8 @@ package mpr
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/agenteditor"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/agenteditor"
 )
 
 // CreateAgentEditorConsumedMCPService writes a Consumed MCP Service document.

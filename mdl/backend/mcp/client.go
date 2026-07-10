@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
 )
 
 // Client is a minimal MCP "streamable HTTP" client for Studio Pro's PED server.

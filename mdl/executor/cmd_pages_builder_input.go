@@ -5,8 +5,8 @@ package executor
 import (
 	"strings"
 
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
-	"github.com/mendixlabs/mxcli/model"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // unquoteIdentifier strips surrounding double-quotes or backticks from a quoted identifier.

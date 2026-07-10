@@ -5,8 +5,8 @@ package api
 import (
 	"strings"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
 )
 
 // generateID creates a new unique ID for a model element.

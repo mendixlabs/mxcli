@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genDm "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
-	genProj "github.com/mendixlabs/mxcli/modelsdk/gen/projects"
-	genSec "github.com/mendixlabs/mxcli/modelsdk/gen/security"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genDm "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/domainmodels"
+	genProj "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/projects"
+	genSec "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/security"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
 )
 
 func init() {

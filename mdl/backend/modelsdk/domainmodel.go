@@ -5,13 +5,13 @@ package modelsdkbackend
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genDm "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
-	genTexts "github.com/mendixlabs/mxcli/modelsdk/gen/texts"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genDm "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/domainmodels"
+	genTexts "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/texts"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 // This file is the gen→domainmodel READ adapter. engalar's fork changed the

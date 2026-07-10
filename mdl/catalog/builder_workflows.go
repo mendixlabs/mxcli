@@ -3,7 +3,7 @@
 package catalog
 
 import (
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 func (b *Builder) buildWorkflows() error {

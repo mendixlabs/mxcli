@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mendixlabs/mxcli/internal/pathutil"
+	"github.com/JordtenBulte-OLC/mxcli/internal/pathutil"
 	"go.lsp.dev/protocol"
 )
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 func TestConfiguredExecuteTimeoutUsesDurationEnv(t *testing.T) {

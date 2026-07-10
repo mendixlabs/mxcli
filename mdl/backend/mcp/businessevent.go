@@ -5,7 +5,7 @@ package mcp
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // Business event SERVICES cannot be created over MCP: ped_create_document rejects

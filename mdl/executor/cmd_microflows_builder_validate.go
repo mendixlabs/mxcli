@@ -6,7 +6,7 @@ package executor
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
 )
 
 // ValidateMicroflowBody validates the microflow body for semantic errors without building objects.

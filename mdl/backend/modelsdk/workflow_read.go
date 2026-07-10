@@ -3,12 +3,12 @@
 package modelsdkbackend
 
 import (
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genMf "github.com/mendixlabs/mxcli/modelsdk/gen/microflows"
-	genWf "github.com/mendixlabs/mxcli/modelsdk/gen/workflows"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genMf "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/microflows"
+	genWf "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 )
 
 // ListWorkflows reads every Workflows$Workflow unit and converts it to the

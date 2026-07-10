@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genDT "github.com/mendixlabs/mxcli/modelsdk/gen/datatypes"
-	genDom "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
-	genMf "github.com/mendixlabs/mxcli/modelsdk/gen/microflows"
-	genTexts "github.com/mendixlabs/mxcli/modelsdk/gen/texts"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
-	"github.com/mendixlabs/mxcli/modelsdk/property"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genDT "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/datatypes"
+	genDom "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/domainmodels"
+	genMf "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/microflows"
+	genTexts "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/texts"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/property"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 func init() {

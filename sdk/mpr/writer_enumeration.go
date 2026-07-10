@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 
 	"go.mongodb.org/mongo-driver/bson"
 )

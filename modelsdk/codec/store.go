@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	"github.com/mendixlabs/mxcli/modelsdk/mpr"
-	"github.com/mendixlabs/mxcli/modelsdk/mpr/version"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr/version"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 

@@ -3,7 +3,7 @@
 package mpr
 
 import (
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 
 	"go.mongodb.org/mongo-driver/bson"
 )

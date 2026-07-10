@@ -7,8 +7,8 @@ import (
 
 	bsonv1 "go.mongodb.org/mongo-driver/bson"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // Bug 4 — the modelsdk engine refused *pages.AssociationSource for DataView and

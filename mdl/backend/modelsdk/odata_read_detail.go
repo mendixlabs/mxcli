@@ -3,7 +3,7 @@
 package modelsdkbackend
 
 import (
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // The gen ConsumedODataService / PublishedODataService2 accessors don't surface

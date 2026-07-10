@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
+	"github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/docker"
 )
 
 // RunOptions configures the test runner.

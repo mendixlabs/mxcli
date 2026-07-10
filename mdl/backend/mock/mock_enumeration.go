@@ -2,7 +2,7 @@
 
 package mock
 
-import "github.com/mendixlabs/mxcli/model"
+import "github.com/JordtenBulte-OLC/mxcli/model"
 
 // ---------------------------------------------------------------------------
 // EnumerationBackend

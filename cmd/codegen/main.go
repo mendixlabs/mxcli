@@ -22,9 +22,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/internal/codegen/emit"
-	"github.com/mendixlabs/mxcli/internal/codegen/schema"
-	"github.com/mendixlabs/mxcli/internal/codegen/transform"
+	"github.com/JordtenBulte-OLC/mxcli/internal/codegen/emit"
+	"github.com/JordtenBulte-OLC/mxcli/internal/codegen/schema"
+	"github.com/JordtenBulte-OLC/mxcli/internal/codegen/transform"
 )
 
 func main() {
@@ -91,7 +91,7 @@ func runSinglePackage(version, outputDir string, namespaces []string, transforme
 		Namespace: "Metamodel",
 		Imports:   make(map[string]bool),
 	}
-	merged.Imports["github.com/mendixlabs/mxcli/model"] = true
+	merged.Imports["github.com/JordtenBulte-OLC/mxcli/model"] = true
 	merged.Imports["time"] = true // Always include time for DateTime fields
 
 	var totalTypes, totalInterfaces, totalEnums int

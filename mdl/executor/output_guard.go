@@ -7,7 +7,7 @@ import (
 	"io"
 	"sync"
 
-	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	mdlerrors "github.com/JordtenBulte-OLC/mxcli/mdl/errors"
 )
 
 // outputGuard wraps an io.Writer with a per-statement line limit.

@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/workflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/workflows"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
-	"github.com/mendixlabs/mxcli/mdl/backend/bsonnav"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/bsonnav"
 )
 
 // testWfDeps is a minimal Deps for unit tests: it serializes an activity to a

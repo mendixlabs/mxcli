@@ -5,7 +5,7 @@ package widgets
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk/widgets/mpk"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/widgets/mpk"
 )
 
 // TestReconcileEnumValues verifies that augment rebuilds an enum property's

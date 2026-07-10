@@ -3,14 +3,14 @@
 package modelsdkbackend
 
 import (
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genExp "github.com/mendixlabs/mxcli/modelsdk/gen/exportmappings"
-	genImp "github.com/mendixlabs/mxcli/modelsdk/gen/importmappings"
-	genJson "github.com/mendixlabs/mxcli/modelsdk/gen/jsonstructures"
-	genPrj "github.com/mendixlabs/mxcli/modelsdk/gen/projects"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genExp "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/exportmappings"
+	genImp "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/importmappings"
+	genJson "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/jsonstructures"
+	genPrj "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/projects"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 )
 
 // ListImportMappings reads every ImportMappings$ImportMapping unit and converts

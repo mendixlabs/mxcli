@@ -3,8 +3,8 @@ package modelsdk_test
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	"github.com/mendixlabs/mxcli/modelsdk/property"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/property"
 )
 
 // TestDirtyChainPropagation verifies the full 3-layer dirty propagation:

@@ -5,7 +5,7 @@ package mpr
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 func TestParseListOperation_FindByAttribute(t *testing.T) {

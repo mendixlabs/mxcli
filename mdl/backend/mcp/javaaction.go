@@ -3,7 +3,7 @@
 package mcp
 
 import (
-	"github.com/mendixlabs/mxcli/sdk/javaactions"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/javaactions"
 )
 
 // Java actions cannot be authored over MCP. PED refuses to create the

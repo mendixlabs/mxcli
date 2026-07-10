@@ -2,7 +2,7 @@
 
 package types
 
-import "github.com/mendixlabs/mxcli/model"
+import "github.com/JordtenBulte-OLC/mxcli/model"
 
 // ModuleSettings holds the Projects$ModuleSettings document for a module.
 type ModuleSettings struct {

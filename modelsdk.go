@@ -21,8 +21,8 @@
 //
 //	import (
 //	    "fmt"
-//	    "github.com/mendixlabs/mxcli"
-//	    "github.com/mendixlabs/mxcli/sdk/mpr"
+//	    "github.com/JordtenBulte-OLC/mxcli"
+//	    "github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
 //	)
 //
 //	func main() {
@@ -116,11 +116,11 @@
 package modelsdk
 
 import (
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // Version is the library version.

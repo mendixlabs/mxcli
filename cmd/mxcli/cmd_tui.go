@@ -7,7 +7,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/mendixlabs/mxcli/cmd/mxcli/tui"
+	"github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/tui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

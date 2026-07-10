@@ -7,9 +7,9 @@ import (
 
 	bsonv1 "go.mongodb.org/mongo-driver/bson"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 func encodeWidget(t *testing.T, w pages.Widget) bsonv1.D {

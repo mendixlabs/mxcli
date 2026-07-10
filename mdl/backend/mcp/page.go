@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // Pages use a SEPARATE write protocol (pg_patch_page), not PED — the PED tools

@@ -4,7 +4,7 @@ package executor
 
 import (
 	antlr "github.com/antlr4-go/antlr/v4"
-	"github.com/mendixlabs/mxcli/mdl/grammar/parser"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/grammar/parser"
 )
 
 // mdlIdent renders name as an MDL identifier suitable for DESCRIBE output,

@@ -5,7 +5,7 @@ package catalog
 import (
 	"database/sql"
 
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 // buildPermissions extracts security permissions from all documents.

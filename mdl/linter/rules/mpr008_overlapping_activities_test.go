@@ -5,7 +5,7 @@ package rules
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
 )
 
 // NOTE: The full Check() logic requires ctx.Reader().GetMicroflow() to read microflow

@@ -5,8 +5,8 @@ package modelsdkbackend
 import (
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
-	genSched "github.com/mendixlabs/mxcli/modelsdk/gen/scheduledevents"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	genSched "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/scheduledevents"
 )
 
 // TestScheduledEventFromGen guards the gen→semantic mapping the modelsdk read

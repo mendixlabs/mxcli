@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/sdk/agenteditor"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/agenteditor"
 
 	"go.mongodb.org/mongo-driver/bson"
 )

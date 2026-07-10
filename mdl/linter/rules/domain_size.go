@@ -5,7 +5,7 @@ package rules
 import (
 	"fmt"
 
-	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/linter"
 )
 
 // DefaultMaxPersistentEntities is the default maximum number of persistent entities per module.

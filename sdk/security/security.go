@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"unicode"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // ProjectSecurity represents the project-level security configuration.

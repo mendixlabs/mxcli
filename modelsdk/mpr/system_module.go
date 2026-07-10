@@ -2,7 +2,7 @@
 
 package mpr
 
-import "github.com/mendixlabs/mxcli/modelsdk/meta"
+import "github.com/JordtenBulte-OLC/mxcli/modelsdk/meta"
 
 // buildSystemModuleInfo returns a ModuleInfo for the virtual System module.
 func buildSystemModuleInfo() *ModuleInfo {

@@ -13,7 +13,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
-	"github.com/mendixlabs/mxcli/mdl/exprcheck"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/exprcheck"
 )
 
 // StarlarkRule is a lint rule implemented in Starlark.

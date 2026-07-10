@@ -18,8 +18,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/microflows"
 )
 
 func TestFormatMicroflowActivities_Concurrent_NoRace(t *testing.T) {

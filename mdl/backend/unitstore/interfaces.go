@@ -6,7 +6,7 @@
 // SQLite transactions and fsync overhead.
 package unitstore
 
-import "github.com/mendixlabs/mxcli/model"
+import "github.com/JordtenBulte-OLC/mxcli/model"
 
 // UnitReader is the read-only face of the unit buffer.
 // Reads check the in-memory pending/loaded maps before going to disk.

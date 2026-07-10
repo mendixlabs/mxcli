@@ -7,10 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	mcpbackend "github.com/mendixlabs/mxcli/mdl/backend/mcp"
-	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
-	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	mcpbackend "github.com/JordtenBulte-OLC/mxcli/mdl/backend/mcp"
+	modelsdkbackend "github.com/JordtenBulte-OLC/mxcli/mdl/backend/modelsdk"
+	mprbackend "github.com/JordtenBulte-OLC/mxcli/mdl/backend/mpr"
 )
 
 // engineKind selects which model engine backs the local FullBackend.

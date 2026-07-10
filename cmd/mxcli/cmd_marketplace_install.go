@@ -13,9 +13,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	modelsdk "github.com/mendixlabs/mxcli"
-	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
-	"github.com/mendixlabs/mxcli/internal/marketplace"
+	modelsdk "github.com/JordtenBulte-OLC/mxcli"
+	"github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/docker"
+	"github.com/JordtenBulte-OLC/mxcli/internal/marketplace"
 	"github.com/spf13/cobra"
 )
 

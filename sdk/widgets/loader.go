@@ -17,7 +17,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 
-	"github.com/mendixlabs/mxcli/sdk/widgets/mpk"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/widgets/mpk"
 )
 
 // placeholderBinaryPrefix is the GUID-swapped byte pattern for placeholder IDs.

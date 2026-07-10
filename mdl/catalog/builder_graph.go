@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/catalog/graph"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/catalog/graph"
 )
 
 // graphRefKinds are the structural reference kinds used to build the analysis

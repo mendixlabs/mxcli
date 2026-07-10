@@ -14,7 +14,7 @@ package exprcheck
 import (
 	"strings"
 
-	"github.com/mendixlabs/mxcli/mdl/exprcheck/hints"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/exprcheck/hints"
 )
 
 type parserImpl struct{}

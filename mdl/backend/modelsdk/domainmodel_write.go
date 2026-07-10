@@ -7,15 +7,15 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genDm "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
-	genRest "github.com/mendixlabs/mxcli/modelsdk/gen/rest"
-	genTexts "github.com/mendixlabs/mxcli/modelsdk/gen/texts"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genDm "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/domainmodels"
+	genRest "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/rest"
+	genTexts "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/texts"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/domainmodel"
 )
 
 func init() {

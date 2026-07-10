@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	bsondebug "github.com/mendixlabs/mxcli/cmd/mxcli/bson"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	bsondebug "github.com/JordtenBulte-OLC/mxcli/cmd/mxcli/bson"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/mpr"
 	"github.com/spf13/cobra"
 	"go.mongodb.org/mongo-driver/bson"
 )

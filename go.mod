@@ -1,4 +1,4 @@
-module github.com/mendixlabs/mxcli
+module github.com/JordtenBulte-OLC/mxcli
 
 go 1.26.0
 

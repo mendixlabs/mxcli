@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	modelsdk "github.com/mendixlabs/mxcli"
-	"github.com/mendixlabs/mxcli/mdl/catalog"
-	"github.com/mendixlabs/mxcli/mdl/executor"
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	modelsdk "github.com/JordtenBulte-OLC/mxcli"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/catalog"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/executor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 	"github.com/spf13/cobra"
 )
 

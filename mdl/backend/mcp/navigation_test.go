@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
 )
 
 func TestNavMenuAction(t *testing.T) {

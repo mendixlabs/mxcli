@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/visitor"
 )
 
 func TestRewriteWithErrorHandling_OnlyWrapsCalls(t *testing.T) {

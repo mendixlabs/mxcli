@@ -6,7 +6,7 @@ package workflows
 import (
 	"strings"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // Workflow represents a workflow in the Mendix model.

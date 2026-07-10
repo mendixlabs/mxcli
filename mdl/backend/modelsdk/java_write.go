@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	genCa "github.com/mendixlabs/mxcli/modelsdk/gen/codeactions"
-	genJa "github.com/mendixlabs/mxcli/modelsdk/gen/javaactions"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
-	"github.com/mendixlabs/mxcli/sdk/javaactions"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	genCa "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/codeactions"
+	genJa "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/javaactions"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/javaactions"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 

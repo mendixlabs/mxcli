@@ -9,15 +9,15 @@ import (
 	bsonv1 "go.mongodb.org/mongo-driver/bson"
 	bsonv2 "go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/mendixlabs/mxcli/mdl/backend"
-	"github.com/mendixlabs/mxcli/mdl/backend/widgetobj"
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
-	"github.com/mendixlabs/mxcli/modelsdk/element"
-	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
-	mwidgets "github.com/mendixlabs/mxcli/modelsdk/widgets"
-	"github.com/mendixlabs/mxcli/sdk/pages"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/backend/widgetobj"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/codec"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/element"
+	mmpr "github.com/JordtenBulte-OLC/mxcli/modelsdk/mpr"
+	mwidgets "github.com/JordtenBulte-OLC/mxcli/modelsdk/widgets"
+	"github.com/JordtenBulte-OLC/mxcli/sdk/pages"
 )
 
 // LoadWidgetTemplate loads a pluggable widget template from the modelsdk/widgets

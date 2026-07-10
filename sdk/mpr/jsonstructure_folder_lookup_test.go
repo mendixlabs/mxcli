@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 	"go.mongodb.org/mongo-driver/bson"
 	_ "modernc.org/sqlite"
 )

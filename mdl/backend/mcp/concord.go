@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // Concord is a Studio Pro extension whose MCP server provides capabilities the

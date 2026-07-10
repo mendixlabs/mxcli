@@ -3,11 +3,11 @@
 package modelsdkbackend
 
 import (
-	genJA "github.com/mendixlabs/mxcli/modelsdk/gen/javaactions"
-	"github.com/mendixlabs/mxcli/modelsdk/mprread"
+	genJA "github.com/JordtenBulte-OLC/mxcli/modelsdk/gen/javaactions"
+	"github.com/JordtenBulte-OLC/mxcli/modelsdk/mprread"
 
-	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/model"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/types"
+	"github.com/JordtenBulte-OLC/mxcli/model"
 )
 
 // ListJavaActions reads Java action units into the lightweight types.JavaAction

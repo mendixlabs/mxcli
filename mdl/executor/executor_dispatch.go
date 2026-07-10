@@ -5,8 +5,8 @@ package executor
 import (
 	"context"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
-	"github.com/mendixlabs/mxcli/mdl/catalog"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/ast"
+	"github.com/JordtenBulte-OLC/mxcli/mdl/catalog"
 )
 
 // executeInner dispatches a statement to its registered handler.
