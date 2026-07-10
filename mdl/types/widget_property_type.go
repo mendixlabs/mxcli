@@ -14,4 +14,9 @@ type PropertyTypeIDEntry struct {
 	// For object list properties (IsList=true with ObjectType), these hold nested IDs
 	ObjectTypeID      string                         // ID of the nested ObjectType (for object lists like columns)
 	NestedPropertyIDs map[string]PropertyTypeIDEntry // Property IDs within the nested ObjectType
+	// NestedKeyOrder lists NestedPropertyIDs keys in template PropertyTypes order.
+	// Studio Pro requires a WidgetObject's Properties to mirror the WidgetType's
+	// PropertyTypes order or it raises CE0463 ("widget definition changed"); the
+	// object-list item builder uses this instead of alphabetical map iteration.
+	NestedKeyOrder []string
 }

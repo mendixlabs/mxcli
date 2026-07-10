@@ -577,7 +577,12 @@ func extractDataViewDataSource(ctx *ExecContext, w map[string]any) *rawDataSourc
 			}
 		}
 	case "Forms$DataViewSource":
-		// Page parameter source - extract from SourceVariable
+		// "Data from context over an association" — the DataViewSource carries an
+		// IndirectEntityRef navigating the association. Reconstruct $ctx/Assoc.
+		if path, ctx := associationSourcePath(ds); path != "" {
+			return &rawDataSource{Type: "association", Reference: path, ContextVariable: ctx}
+		}
+		// Plain context source — extract the page parameter from SourceVariable.
 		if srcVar, ok := ds["SourceVariable"].(map[string]any); ok {
 			if paramName, ok := srcVar["PageParameter"].(string); ok && paramName != "" {
 				return &rawDataSource{Type: "parameter", Reference: paramName}
@@ -765,7 +770,7 @@ func extractListViewDataSource(ctx *ExecContext, w map[string]any) *rawDataSourc
 				if attrRef, ok := sortItem["AttributeRef"].(map[string]any); ok {
 					col.Attribute = shortAttributeName(extractString(attrRef["Attribute"]))
 				}
-				sortOrder := extractString(sortItem["SortOrder"])
+				sortOrder := gridSortDirection(sortItem)
 				if sortOrder == "Descending" {
 					col.Order = "desc"
 				}

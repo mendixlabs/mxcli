@@ -407,12 +407,21 @@ func overlayItemValue(value bson.D, entry pages.PropertyTypeIDEntry, spec backen
 		value = setBSONField(value, "PrimitiveValue", spec.PrimitiveVal)
 	case "attribute":
 		if spec.AttributePath != "" {
-			value = setAttributeRefField(value, spec.AttributePath)
+			value = setAttributeRefField(value, spec.AttributePath, spec.AttributeRefSteps)
 		}
 	case "expression":
 		value = setBSONField(value, "Expression", spec.Expression)
 		value = setBSONField(value, "PrimitiveValue", "")
 	case "texttemplate":
+		// A VISIBLE-but-unset texttemplate sub-property must serialize as an
+		// empty Forms$ClientTemplate, not null, or Studio Pro flags CE0463
+		// (e.g. a chart series' staticName, or a static·/dynamic· name whose
+		// datasource is configured). EmptyTemplate is set by the executor from
+		// the widget.xml dataSource-binding visibility rule. Chart series (9a).
+		if spec.TextTemplate == "" && spec.EmptyTemplate {
+			value = setBSONField(value, "TextTemplate", BuildEmptyClientTemplate())
+			break
+		}
 		// Skip when the spec carries no text — leave the value's existing
 		// TextTemplate untouched (null, set by createDefaultWidgetValue).
 		// Inserting a placeholder ClientTemplate here causes Studio Pro
@@ -481,7 +490,7 @@ func setBSONField(doc bson.D, key string, val any) bson.D {
 // The BSON $Type is DomainModels$AttributeRef — CustomWidgets$AttributeRef
 // is not a registered Mendix type and triggers TypeCacheUnknownTypeException
 // when Studio Pro or mx update-widgets loads the project (issue #64).
-func setAttributeRefField(value bson.D, attributePath string) bson.D {
+func setAttributeRefField(value bson.D, attributePath string, steps []pages.AttributeRefStep) bson.D {
 	if strings.Count(attributePath, ".") < 2 {
 		return setBSONField(value, "AttributeRef", nil)
 	}
@@ -489,9 +498,33 @@ func setAttributeRefField(value bson.D, attributePath string) bson.D {
 		{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
 		{Key: "$Type", Value: "DomainModels$AttributeRef"},
 		{Key: "Attribute", Value: attributePath},
-		{Key: "EntityRef", Value: nil},
+		{Key: "EntityRef", Value: attributeEntityRefBSON(steps)},
 	}
 	return setBSONField(value, "AttributeRef", attrRef)
+}
+
+// attributeEntityRefBSON builds the DomainModels$IndirectEntityRef that navigates
+// an attribute over associations (one EntityRefStep per hop), or nil for an
+// own-entity attribute. Mirrors the codec-form attributeRefWithStepsToGen and the
+// legacy serializeAssociationSource EntityRef structure.
+func attributeEntityRefBSON(steps []pages.AttributeRefStep) any {
+	if len(steps) == 0 {
+		return nil
+	}
+	stepArr := bson.A{int32(2)}
+	for _, s := range steps {
+		stepArr = append(stepArr, bson.D{
+			{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
+			{Key: "$Type", Value: "DomainModels$EntityRefStep"},
+			{Key: "Association", Value: s.Association},
+			{Key: "DestinationEntity", Value: s.DestinationEntity},
+		})
+	}
+	return bson.D{
+		{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
+		{Key: "$Type", Value: "DomainModels$IndirectEntityRef"},
+		{Key: "Steps", Value: stepArr},
+	}
 }
 
 func (ob *Builder) SetAttributeObjects(propertyKey string, attributePaths []string) {

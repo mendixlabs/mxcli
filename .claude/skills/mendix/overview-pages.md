@@ -156,14 +156,15 @@ datagrid GridName (
 - `designproperties: ['Compact': on, 'Hover': on, 'Striped': on]` - Atlas design tokens
 
 **Column Types:**
-- `column colName (attribute: attribute, caption: 'label')` - Attribute column with binding
+- `column colName (attribute: attribute, caption: 'label')` - Attribute column (own-entity attribute)
+- `column colName (attribute: Assoc/Attr, caption: 'label')` - Associated-attribute column (attribute over a reference; bare association name, e.g. `attribute: Order_Customer/Name`; multi-hop `A/B/Attr` supported)
 - `column colName (caption: 'label') { ... }` - Custom content column (nested widgets)
 
-> **Custom-content action columns are experimental.** A `column (caption: …) { actionbutton … }`
-> (buttons nested in a column) can trigger CE0463 in Studio Pro and may render `btn-default`
-> regardless of `buttonstyle`. Prefer a row-level `onclick` (open the NewEdit page on row click)
-> for a reliable Edit affordance, or accept the limitation. See create-page.md "Custom Content
-> Columns (EXPERIMENTAL)".
+> **Custom-content columns build correctly** on the default engine (a nested
+> `actionbutton`/`dynamictext` in `column (caption: …) { … }` — mxbuild-verified,
+> 0 errors). An earlier CE0463 (column property ordering) was fixed. A row-level
+> `onclick` (open the NewEdit page on row click) is still a fine alternative for a
+> row-open affordance.
 
 > **Reserved keyword column names:** If the attribute name is a reserved MDL keyword (e.g. `Status`, `Type`), you must quote it and use a distinct column widget name:
 > ```sql

@@ -1,0 +1,63 @@
+-- ============================================================================
+-- Bug 9a — Chart (Charts.mpk) `series` datasource/attribute config via MDL
+-- ============================================================================
+--
+-- Before the fix, a chart `series`' datasource and attribute sub-properties did
+-- not parse:
+--
+--     staticDataSource: database from "X"."Y"
+--     Parse error: line ...: extraneous input 'from' expecting { ... IDENTIFIER }
+--
+-- Two layers were missing: (1) the generic widget-property grammar only accepted
+-- scalar values, not a datasource expression or a double-quoted attribute value;
+-- (2) the executor's object-list builder skipped datasource-typed sub-properties
+-- (`default: continue`). Now a ColumnChart (and Bar/Area/Pie — same `series`
+-- object-list) binds an OQL view or database entity per series, and its X/Y
+-- attributes resolve against that datasource.
+--
+-- VISIBILITY / CE0463 NOTE: a chart series' texttemplate sub-properties that are
+-- VISIBLE for the current dataSet mode (e.g. staticName; staticTooltipHoverText
+-- once staticDataSource is set) now serialize an empty Forms$ClientTemplate
+-- rather than a null — a null there trips CE0463 "widget definition changed".
+-- The residual CE0463 from chart WIDGET-TYPE version drift (embedded template vs
+-- installed Charts.mpk, #529/#600 class) is orthogonal and is fixed by the
+-- `mx update-widgets` step that `mxcli docker check`/`build` run automatically.
+--
+-- To verify in Studio Pro (or `mxcli docker check`, which runs update-widgets):
+--   1. Run this script against a project with Charts.mpk installed.
+--   2. Open Bug9.Dashboard → the Column chart's series is bound to
+--      Bug9.StatusDistribution with X = StatusValue, Y = StatusCount.
+--   3. mx check should report 0 errors (after update-widgets).
+
+create module Bug9;
+
+create persistent entity Bug9.Expense (
+  Status: string(50),
+  Amount: decimal
+);
+
+-- Aggregated OQL view — the natural per-category feed for a chart.
+create view entity Bug9.StatusDistribution (
+  StatusValue: string(50),
+  StatusCount: integer
+) as
+  select
+    e.Status as StatusValue,
+    count(e.ID) as StatusCount
+  from Bug9.Expense as e
+  group by e.Status;
+/
+
+create page Bug9.Dashboard (
+  Title: 'Status Dashboard', Layout: Atlas_Core.Atlas_Default
+) {
+  pluggablewidget 'com.mendix.widget.web.columnchart.ColumnChart' statusChart {
+    series s1 (
+      dataSet: static,
+      staticDataSource: database from Bug9.StatusDistribution,
+      staticXAttribute: "StatusValue",
+      staticYAttribute: "StatusCount",
+      staticName: 'Status counts'
+    )
+  }
+}

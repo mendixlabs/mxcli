@@ -86,7 +86,9 @@ listview widgetName (datasource: database Module.Entity, PageSize: 10) {
 
 Used inside the detail form to show related/associated data.
 
-**Nested list by association:** Use `datasource: $currentObject/Module.Assoc` (or the explicit `datasource: association path` form) inside a parent DATAVIEW. Both forms produce the same BSON (ByAssociation data source). Example: `datagrid lines (datasource: $currentObject/Order_OrderLine)` inside a `dataview dv (datasource: database Order)`.
+**Nested list by association (to-many):** Use `datasource: $currentObject/Module.Assoc` (or the explicit `datasource: association path` form) on a **list** widget inside a parent DATAVIEW. Example: `datagrid lines (datasource: $currentObject/Order_OrderLine)` inside a `dataview dv (datasource: database Order)`.
+
+**Referenced object by association (to-one) — "data from context":** To show a single *referenced* object's attributes, use the same `datasource: $currentObject/Module.Assoc` on a nested **DATAVIEW**. Its children bind to the referenced (destination) entity. Example: an inner `dataview dvEmployee (datasource: $currentObject/Expense_Employee) { textbox (attribute: Name) }` inside a `dataview dvExpense (datasource: $Expense)` shows the Expense's Employee. (A DataView association source is stored as a `Forms$DataViewSource` with an association-navigating EntityRef — do **not** confuse it with the list-widget `Forms$AssociationSource`; that one is invalid on a DataView.)
 
 ## Complete Example
 

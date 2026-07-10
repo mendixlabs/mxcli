@@ -1,0 +1,50 @@
+-- ============================================================================
+-- Bug 3 (unsolved case) — contentparam over an association declared on a BASE
+-- entity, from a widget bound to a SUBCLASS, silently persisted no value.
+-- ============================================================================
+--
+-- Symptom (before fix): a DynamicText template parameter navigating an
+-- association resolved fine when the widget context was EXACTLY the association's
+-- endpoint (e.g. a grid over Expense), but was silently dropped — describe showed
+-- `[{1} = <unbound>]`, and mxbuild failed CE0402 "No value specified" — when the
+-- context was a SPECIALIZATION of the endpoint (a grid over SpecialExpense, where
+-- the Expense_Employee association is declared on the base Expense). This is very
+-- common in real apps (entities inheriting from a base, associations on the base),
+-- which is why the earlier fixes appeared incomplete.
+--
+-- Root cause: resolveAssociationAttributePath → associationDestination required
+-- currentEntityQN to be EXACTLY the association's FROM/TO entity. A subclass
+-- context matched neither, so the resolver returned ok=false and the caller fell
+-- back to the flat, unresolvable path.
+--
+-- Fix: associationDestination now accepts a context that IS or DESCENDS FROM an
+-- endpoint (walking the generalization chain via entityIsOrDescendsFrom). Shared
+-- by DynamicText template params and DataGrid2 columns.
+--
+-- Verify: exec then `describe page`, and mxbuild — 0 errors.
+--   the SpecialExpense grid column keeps `[{1} = M.Expense_Employee/Name]`.
+-- ============================================================================
+
+create persistent entity MyFirstModule.Employee ( Name: String );
+create persistent entity MyFirstModule.Expense ( Amount: Decimal );
+create persistent entity MyFirstModule.SpecialExpense extends MyFirstModule.Expense ( Note: String );
+create association MyFirstModule.Expense_Employee
+  from MyFirstModule.Expense to MyFirstModule.Employee;
+
+create or replace page MyFirstModule.InheritedAssocPage
+( Title: 'Inherited Assoc', Layout: Atlas_Core.Atlas_Default )
+{
+  layoutgrid lg1 {
+    row row1 {
+      column col1 (DesktopWidth: 12) {
+        -- grid over the SUBCLASS; association is on the base Expense
+        datagrid dg (DataSource: database from MyFirstModule.SpecialExpense, Selection: Single) {
+          column colEmp (Caption: 'Employee') {
+            dynamictext dEmp (content: 'Submitted by {1}',
+              contentparams: [{1} = MyFirstModule.Expense_Employee/Name])
+          }
+        }
+      }
+    }
+  }
+}

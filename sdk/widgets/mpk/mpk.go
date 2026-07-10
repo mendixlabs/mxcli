@@ -27,6 +27,7 @@ type PropertyDef struct {
 	IsList       bool
 	IsSystem     bool          // true for <systemProperty> elements
 	DataSource   string        // dataSource attribute reference
+	EnumValues   []string      // enumeration member keys (for type="enumeration")
 	Children     []PropertyDef // nested properties for object-type properties
 }
 
@@ -85,11 +86,30 @@ type xmlProperty struct {
 	DataSource   string `xml:"dataSource,attr"`
 	Caption      string `xml:"caption"`
 	Description  string `xml:"description"`
+	// Enumeration member keys for type="enumeration" properties.
+	EnumValues []xmlEnumValue `xml:"enumerationValues>enumerationValue"`
 	// Nested properties for object type — two XML shapes:
 	// (a) <properties><propertyGroup><property>...</property></propertyGroup></properties>
 	// (b) <properties><property>...</property></properties>  (no group wrapper)
 	NestedProps       []xmlPropGroup `xml:"properties>propertyGroup"`
 	NestedDirectProps []xmlProperty  `xml:"properties>property"`
+}
+
+// xmlEnumValue represents <enumerationValue key="...">Caption</enumerationValue>.
+type xmlEnumValue struct {
+	Key string `xml:"key,attr"`
+}
+
+// enumValueKeys extracts the enumeration member keys from an XML property.
+func enumValueKeys(vals []xmlEnumValue) []string {
+	if len(vals) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(vals))
+	for _, v := range vals {
+		keys = append(keys, v.Key)
+	}
+	return keys
 }
 
 // xmlSystemProp represents <systemProperty key="..."/> element.
@@ -257,6 +277,7 @@ func walkPropertyGroup(pg xmlPropGroup, parentCategory string, def *WidgetDefini
 			DefaultValue: p.DefaultValue,
 			IsList:       p.IsList == "true",
 			DataSource:   p.DataSource,
+			EnumValues:   enumValueKeys(p.EnumValues),
 		}
 
 		// Parse nested properties for object-type properties.
@@ -279,6 +300,7 @@ func walkPropertyGroup(pg xmlPropGroup, parentCategory string, def *WidgetDefini
 					DefaultValue: np.DefaultValue,
 					IsList:       np.IsList == "true",
 					DataSource:   np.DataSource,
+					EnumValues:   enumValueKeys(np.EnumValues),
 				})
 			}
 		}
@@ -314,6 +336,7 @@ func collectNestedProperties(pg xmlPropGroup, parent *PropertyDef) {
 			DefaultValue: p.DefaultValue,
 			IsList:       p.IsList == "true",
 			DataSource:   p.DataSource,
+			EnumValues:   enumValueKeys(p.EnumValues),
 		}
 		parent.Children = append(parent.Children, child)
 	}

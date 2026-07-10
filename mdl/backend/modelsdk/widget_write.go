@@ -1024,11 +1024,50 @@ func dataViewSourceToGen(ds pages.DataSource) (element.Element, error) {
 		return ms, nil
 
 	case *pages.AssociationSource:
-		return associationSourceToGen(d), nil
+		// A DataView showing a to-one referenced object ("data from context over
+		// an association") is a Forms$DataViewSource whose EntityRef is an
+		// IndirectEntityRef navigating the association — NOT a Forms$AssociationSource
+		// (which MxBuild rejects on a plain DataView: CE6705). Only list-producing
+		// widgets use AssociationSource.
+		return dataViewContextAssociationSourceToGen(d), nil
 
 	default:
 		return nil, fmt.Errorf("CreatePage: DataView source %T not yet supported by the modelsdk engine — rerun with MXCLI_ENGINE=legacy", ds)
 	}
+}
+
+// dataViewContextAssociationSourceToGen builds a Forms$DataViewSource for a
+// DataView bound to a to-one referenced object over an association (Studio Pro's
+// "Data from context"). The association navigation rides in the DataViewSource's
+// EntityRef as a DomainModels$IndirectEntityRef of EntityRefStep hops; the
+// optional page-parameter SourceVariable provides the context object
+// ($currentObject → none). Mirrors associationSourceToGen but wraps the same
+// IndirectEntityRef in a DataViewSource instead of an AssociationSource.
+func dataViewContextAssociationSourceToGen(d *pages.AssociationSource) element.Element {
+	src := genPg.NewDataViewSource()
+	if d.ID != "" {
+		src.SetID(element.ID(d.ID))
+	}
+	assignID(src)
+	src.SetForceFullObjects(false)
+	parts := strings.SplitN(d.EntityPath, "/", 2)
+	step := genDm.NewEntityRefStep()
+	assignID(step)
+	step.SetAssociationQualifiedName(parts[0])
+	if len(parts) == 2 {
+		step.SetDestinationEntityQualifiedName(parts[1])
+	}
+	ref := genDm.NewIndirectEntityRef()
+	assignID(ref)
+	ref.AddSteps(step)
+	src.SetEntityRef(ref)
+	if d.ContextVariable != "" {
+		pv := genPg.NewPageVariable()
+		assignID(pv)
+		pv.SetPageParameterQualifiedName(d.ContextVariable)
+		src.SetSourceVariable(pv)
+	}
+	return src
 }
 
 // listViewSourceToGen builds a ListView data source. A database source becomes a

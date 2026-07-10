@@ -308,6 +308,56 @@ CSS in `main.scss` (step ②) — you do **not** model the sidebar's chrome as w
 > Rule of thumb: if a design element is **the same on every screen**, it belongs to the shell
 > (navigation + layout + CSS), not to a page. Only the content region is built per-page in ③.
 
+### Restructuring the shell to match the prototype (full-height sidebar, fixed topbar)
+
+Recolouring is rarely enough — most prototypes put a **full-height sidebar** (brand block at the
+very top) with the topbar **only over the content**, whereas `Atlas_Default` renders the topbar
+full-width *above* a sidebar+content row. Reproduce the prototype layout with CSS, no custom
+layout document needed:
+
+- **Full-height sidebar:** pin it out of the flex flow and offset the rest.
+  ```scss
+  .mx-scrollcontainer-left.region-sidebar { position: fixed; top: 0; left: 0; height: 100vh; z-index: 100; }
+  .region-topbar, .mx-scrollcontainer-top,
+  .region-content, .mx-scrollcontainer-center { margin-left: 256px !important; }  /* = sidebar width */
+  ```
+- **Force region sizes with `flex-basis`, not `width`/`height`.** Atlas sizes the topbar and
+  sidebar as **flex items**, so plain `width`/`height` is ignored — use
+  `flex: 0 0 256px !important` (sidebar) and `flex: 0 0 62px !important` (topbar).
+- **Hide the collapse toggle** when the design has no collapse: `.toggle-btn { display: none !important; }`.
+- The sidebar's inner scroll area (`.mx-scrollcontainer-wrapper`) should be `flex: 1 1 auto` so a
+  `::after` footer tag pins to the bottom.
+
+### Pixel-exact multi-part chrome via inline-SVG backgrounds
+
+A `::before`/`::after` pseudo-element is a **single box with one text style** — it cannot render a
+brand block (logo square + title + differently-styled subtitle) or a user chip (avatar circle +
+two text lines) faithfully. For those, render the whole element as an **inline-SVG `background`
+image**, which gives you exact sub-shapes, fonts, and colours:
+
+```scss
+.region-sidebar::before {
+  content: ''; height: 80px; border-bottom: 1px solid rgba(255,255,255,.07);
+  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='80'>\
+<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%233a6fd6'/>\
+<stop offset='1' stop-color='%231d3f86'/></linearGradient></defs>\
+<rect x='22' y='21' width='38' height='38' rx='10' fill='url(%23g)'/>\
+<text x='41' y='45' fill='%23fff' font-family='Public Sans' font-size='15' font-weight='800' text-anchor='middle'>EA</text>\
+<text x='72' y='37' fill='%23fff' font-family='Public Sans' font-size='15' font-weight='700'>Expense Approval</text>\
+<text x='72' y='55' fill='%237d8ba4' font-family='IBM Plex Mono' font-size='11'>Finance workflow</text></svg>") no-repeat;
+}
+```
+
+Encode `#` as `%23` in the data URI. Use the same trick for the topbar's decorative search field
+(a `::before` box with a magnifier-icon SVG background) and the user chip (`::after`). Simpler
+single-style chrome — the `WORKSPACE` label, the `PROTOTYPE · DEMO` footer, per-item nav **dots**
+(`.mx-navigationtree a::before { content:''; width:9px; height:9px; border-radius:3px; background: … }`,
+coloured per item by its `.mx-name-*` anchor class) — stay as plain pseudo-elements.
+
+> Decorative-only: an injected search box / avatar / "New" button is **not interactive** (it's
+> CSS). The prototype's are usually mockups too; if the design needs a *working* search or profile
+> menu, that's a real widget in a custom layout (Studio Pro), not CSS on the Atlas shell.
+
 ---
 
 ## ③ Apply Classes in Pages (MDL)
@@ -413,6 +463,55 @@ for screenshotting the running app. Iterate ②–④ per screen until it matche
 - **`alter styling` can't find widgets in MDL-builder-created pages** — apply classes via
   `Class:`/`DynamicClasses:` in `create page` / `alter page` instead.
 
+## MDL gotchas that block a faithful build
+
+Distilled from a full prototype build. Some are covered in depth by the linked skills — this is
+the fast index so a design migration doesn't rediscover them.
+
+- **A real `docker build` is the only trustworthy check.** `mxcli check --references` passes MDL
+  that `mxbuild` rejects. Build after every slice before you screenshot.
+- **Quote to escape keywords in bindings; the unquoted form is cleaner in expressions.** Quote
+  identifiers in `create entity`, `attribute:` bindings, and `create`/`change` targets when they
+  collide with an MDL keyword. Inside expressions — microflow `if`/decisions, `contentparams`,
+  `visible`, `dynamicclasses`, and inline-bracket XPath `where` — mxcli now **strips** stray
+  identifier quotes, so a quoted attribute no longer breaks the build or makes an XPath `where`
+  silently return 0 rows; still prefer the unquoted form there for readability. See
+  `write-microflows.md`.
+- **Show a related (to-one) object's attributes** — two ways, both persist now:
+  - A nested **"data from context" DataView** for a full read view of the referenced object; its
+    children bind to the related entity:
+    ```
+    dataview dvEmp (datasource: $currentObject/Module.Entity_Related) {
+      dynamictext n (content: 'By {1}', contentparams: [{1} = Name])   -- own attr of the related entity
+    }
+    ```
+  - An **association path** for a single inline value: `contentparams: [{1} = Entity_Related/Name]`
+    in a `dynamictext`, or `attribute: Entity_Related/Name` on a DataGrid2 column — both persist as
+    an AttributeRef over the association (use a **bare** association name; a module-qualified one is
+    rejected on a column).
+- **Status chips = one `dynamictext` + a `DynamicClasses:` expression** mapping the enum/value to
+  a colour modifier (`ea-chip--ok/--warn/--danger`). Base `.ea-chip` + modifiers; `white-space: nowrap`.
+- **Charts:** `ProgressCircle` / `ProgressBar` build and work (donut, meters). **Mendix Charts
+  (`Charts.mpk`: column/bar/line/area/pie)** now author via MDL — each `series` (an object-list
+  item inside the chart) binds a datasource plus X/Y attributes:
+  `series s1 (staticDataSource: database from Module.View, staticXAttribute: "X", staticYAttribute: "Y")`
+  (a per-series OQL view works too). `mxcli docker check`/`build` run `mx update-widgets`, which
+  clears the widget-version-drift CE0463. Still lighter when the design allows: a **CSS-background
+  SVG** container (or `HTMLElement`) for sparklines/trends — no datasource — and `ProgressCircle`
+  (`type: expression`, `expressionCurrentValue: '$currentObject/Rate'`, min `'0'` / max `'100'`,
+  `labelType: percentage`) for a single-value gauge.
+- **Dashboard aggregates → OQL view entities** (`write-oql-queries.md`). A grouped enum column in
+  the view must be typed `enumeration(Module.Enum)`, not `string`, or you get CE6770. Test with
+  `mxcli oql` first.
+- **Seed demo data via an after-startup microflow** guarded to run once (skip if data exists); it
+  must `return true`. Direct-SQL seeding doesn't apply to the default **HSQLDB**. See `demo-data.md`.
+- **New entities / view entities need a runtime restart** (`docker up --detach --wait`) to
+  register — a hot `reload` won't see them. Hot `reload` also occasionally crashes the runtime; if
+  the app stops responding, `docker up --detach --wait` recovers it with data intact.
+- **mxcli behaviour shifts between versions** — the chart-build and a few persistence quirks are
+  version-dependent. If a documented property silently vanishes on write, check `mxcli version`
+  and confirm with `describe page`.
+
 ---
 
 ## Checklist
@@ -423,6 +522,10 @@ for screenshotting the running app. Iterate ②–④ per screen until it matche
 - [ ] Non-Atlas fonts `@import`ed and set via `--font-family-base`
 - [ ] Components are base classes + `--variant` modifiers, all using the project prefix
 - [ ] Persistent sidebar/topbar built as **navigation profile + layout + CSS**, not per-page widgets; new screens added via `CREATE OR REPLACE NAVIGATION`
+- [ ] Shell **restructured** to the design (full-height sidebar via `position:fixed` + `margin-left` offset; region sizes forced with `flex-basis`; collapse toggle hidden if unused)
+- [ ] Multi-part chrome (brand block, user chip) rendered as **inline-SVG backgrounds**; single-style chrome (labels, dots, footer) as plain `::before`/`::after`
+- [ ] Related (to-one) object attributes shown via a **nested "data from context" DataView** (full read view) or an **association path** (`contentparams: [{1} = Assoc/Attr]` / column `attribute: Assoc/Attr`) for a single inline value — both persist
+- [ ] A real **`docker build`** run after each slice (not just `mxcli check`) before screenshotting
 - [ ] Widgets styled with `Class:`; data-driven state via `DynamicClasses:`
 - [ ] No inline `Style:` on any DYNAMICTEXT
 - [ ] Grids/tables built as styled `listview`s, not custom Datagrid widgets

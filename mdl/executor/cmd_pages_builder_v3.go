@@ -1467,56 +1467,125 @@ func (pb *pageBuilder) resolveTemplateAttributePathFull(attrRef string, param *p
 // value is not an association path or cannot be resolved, so the caller falls
 // back to the previous behavior.
 func (pb *pageBuilder) resolveTemplateAssociationPath(attrRef string, param *pages.ClientTemplateParameter) bool {
+	finalQN, steps, ok := pb.resolveAssociationAttributePath(attrRef)
+	if !ok {
+		return false
+	}
+	param.AttributeRef = finalQN
+	param.AttributeRefSteps = steps
+	return true
+}
+
+// resolveAssociationAttributePath resolves a context-relative attribute path that
+// navigates one or more associations (e.g. "Order_Customer/Name" or
+// "$currentObject/Sales.Order_Customer/Name") into the fully-qualified FINAL
+// attribute and the association hops (one per `/` segment). Returns ok=false when
+// the value is not an association path or cannot be resolved, so callers fall back
+// to their own-attribute handling. Shared by DynamicText template parameters and
+// DataGrid2 columns — both store the binding as a DomainModels$AttributeRef whose
+// EntityRef is an IndirectEntityRef of these steps.
+func (pb *pageBuilder) resolveAssociationAttributePath(attrRef string) (finalQN string, steps []pages.AttributeRefStep, ok bool) {
 	path := strings.TrimPrefix(attrRef, "$currentObject/")
 	// Only context-relative association paths are handled here; a $param- or
 	// $widget-rooted navigation is a different (unsupported) shape.
 	if strings.HasPrefix(path, "$") || !strings.Contains(path, "/") {
-		return false
+		return "", nil, false
 	}
 	segs := strings.Split(path, "/")
 	if len(segs) < 2 {
-		return false
+		return "", nil, false
 	}
 	attrName := segs[len(segs)-1]
 	current := pb.entityContext
 	if current == "" {
-		return false
+		return "", nil, false
 	}
 
-	steps := make([]pages.AttributeRefStep, 0, len(segs)-1)
+	steps = make([]pages.AttributeRefStep, 0, len(segs)-1)
 	for _, seg := range segs[:len(segs)-1] {
 		assocQN := pb.resolveAssociationPath(seg)
 		dest, ok := pb.associationDestination(assocQN, current)
 		if !ok {
-			return false
+			return "", nil, false
 		}
 		steps = append(steps, pages.AttributeRefStep{Association: assocQN, DestinationEntity: dest})
 		current = dest
 	}
 
-	param.AttributeRef = current + "." + attrName
-	param.AttributeRefSteps = steps
-	return true
+	return current + "." + attrName, steps, true
 }
 
 // associationDestination returns the entity reached by navigating assocQN from
 // currentEntityQN. Uses the FROM/TO endpoints (ParentID = FROM, ChildID = TO);
 // forward navigation from the FROM entity yields the TO entity and vice versa.
+//
+// The context may be a **specialization** of an endpoint: associations are often
+// declared on a base entity while the widget is bound to a subclass (e.g. an
+// association on Expense, a grid over SpecialExpense extends Expense). Match the
+// endpoint the context *is or descends from* — an exact-equality check would
+// drop the binding and MxBuild would fail CE0402 "No value specified" (Bug 3).
 func (pb *pageBuilder) associationDestination(assocQN, currentEntityQN string) (string, bool) {
 	from, to, ok := pb.associationEndpoints(assocQN)
 	if !ok {
 		return "", false
 	}
-	switch currentEntityQN {
-	case from:
+	switch {
+	case pb.entityIsOrDescendsFrom(currentEntityQN, from):
 		return to, true
-	case to:
+	case pb.entityIsOrDescendsFrom(currentEntityQN, to):
 		return from, true
 	default:
-		// Context is neither endpoint exactly (e.g. a specialization). We can't
-		// pick the direction reliably — refuse rather than emit a wrong ref.
+		// Context is related to neither endpoint — can't pick a direction reliably;
+		// refuse rather than emit a wrong ref.
 		return "", false
 	}
+}
+
+// entityIsOrDescendsFrom reports whether entityQN equals baseQN or is a
+// specialization of it (following the generalization chain transitively). Used
+// so an association declared on a base entity resolves from a subclass context.
+func (pb *pageBuilder) entityIsOrDescendsFrom(entityQN, baseQN string) bool {
+	if entityQN == "" || baseQN == "" {
+		return false
+	}
+	if entityQN == baseQN {
+		return true
+	}
+	parents, err := pb.entityGeneralizations()
+	if err != nil {
+		return false
+	}
+	seen := map[string]bool{}
+	for cur := entityQN; cur != "" && !seen[cur]; cur = parents[cur] {
+		seen[cur] = true
+		if parents[cur] == baseQN {
+			return true
+		}
+	}
+	return false
+}
+
+// entityGeneralizations builds a map of entity qualified name → its direct
+// parent (generalization) qualified name, across all domain models.
+func (pb *pageBuilder) entityGeneralizations() (map[string]string, error) {
+	dms, err := pb.getDomainModels()
+	if err != nil {
+		return nil, err
+	}
+	h, err := pb.getHierarchy()
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]string)
+	for _, dm := range dms {
+		mod := h.GetModuleName(dm.ContainerID)
+		for _, e := range dm.Entities {
+			if e.GeneralizationRef != "" {
+				m[mod+"."+e.Name] = e.GeneralizationRef
+			}
+		}
+	}
+	return m, nil
 }
 
 // associationEndpoints resolves a qualified association name to its FROM

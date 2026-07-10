@@ -2628,3 +2628,26 @@ create page PgTest.UserTaskPage (
     buttonstyle: danger
   )
 }
+
+-- ============================================================================
+-- Association data source ("data from context") — to-one referenced object
+-- ============================================================================
+-- A nested DATAVIEW can bind over an association to show the to-one REFERENCED
+-- object's attributes. Order_Customer is `from Order to Customer`, so from an
+-- Order it navigates to the one Customer; the inner DataView's children bind to
+-- Customer. (A to-many collection uses a list widget over the association — see
+-- master-detail-pages.md.)
+create page PgTest.P_OrderWithCustomer (
+  Title: 'Order + Customer',
+  Layout: Atlas_Core.Atlas_Default,
+  Params: { $Order: PgTest.Order }
+)
+{
+  dataview dvOrder (DataSource: $Order) {
+    textbox tbNumber (Label: 'Order #', Attribute: OrderNumber)
+    dataview dvCustomer (DataSource: $currentObject/PgTest.Order_Customer) {
+      textbox tbCustName (Label: 'Customer', Attribute: Name)
+      textbox tbCustEmail (Label: 'Email', Attribute: Email)
+    }
+  }
+}

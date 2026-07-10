@@ -1,0 +1,58 @@
+-- ============================================================================
+-- Bug 10 — DynamicCellClass and dynamicclasses silently dropped on write
+-- ============================================================================
+--
+-- Symptom (before fix): two data-driven CSS-class properties parsed, passed
+-- `check` and `mxbuild`, but were never persisted — no error, the property just
+-- vanished from the .mpr and the runtime showed an unstyled widget.
+--
+--   10a — DataGrid2 column `DynamicCellClass`: written to the column's
+--         `columnClass` slot as an EMPTY expression.
+--   10b — widget `dynamicclasses` (lowercase): dropped entirely.
+--
+-- Root causes:
+--   10a — the DataGrid `columns` object-list mapping had aliases for
+--         header←Caption, dynamicText←Content, width←ColumnWidth but NONE for
+--         columnClass, so `DynamicCellClass` was never matched to the schema
+--         property. Added the alias (widget_defs.go `itemPropertyAliases`) and
+--         bumped WidgetDefGeneratorVersion so cached def.json files regenerate.
+--   10b — generic widget properties are stored under the user's original casing
+--         (`dynamicclasses`), but the builder reads GetStringProp("DynamicClasses")
+--         (canonical case). MDL property names are case-insensitive, so
+--         GetStringProp now falls back to a case-insensitive scan.
+--
+-- Verify:
+--   mxcli exec bug10-dynamic-css-classes.mdl -p <app.mpr>
+--   mxcli -p <app.mpr> -c "describe page BugTests.Bug10"
+--     → dynamictext keeps `DynamicClasses: ...`
+--     → column keeps `DynamicCellClass: ...`
+-- ============================================================================
+
+create page BugTests.Bug10 (
+  Title: 'Bug 10',
+  Layout: Atlas_Core.Atlas_Default
+) {
+  layoutgrid lg1 {
+    row row1 {
+      column col1 (DesktopWidth: 12) {
+        -- 10b: lowercase `dynamicclasses` must survive (case-insensitive)
+        dynamictext t1 (
+          content: 'hi',
+          class: 'base',
+          dynamicclasses: 'if 1 = 1 then ''mod-a'' else ''mod-b'''
+        )
+        -- 10a: DataGrid2 column DynamicCellClass must persist as an expression
+        datagrid dg1 (
+          DataSource: database from Administration.Account,
+          Selection: Single
+        ) {
+          column colStatus (
+            Attribute: FullName,
+            Caption: 'Name',
+            DynamicCellClass: 'if $currentObject/FullName = ''x'' then ''ea-ok'' else ''ea-draft'''
+          )
+        }
+      }
+    }
+  }
+}

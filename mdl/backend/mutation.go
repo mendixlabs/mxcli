@@ -363,31 +363,39 @@ type ObjectListItemSpec struct {
 // ObjectListItemSpec. Mirrors the engine's PluggablePropertyContext but
 // scoped to a list item's sub-properties.
 type ObjectListItemProperty struct {
-	PropertyKey   string
-	Operation     string // primitive | attribute | datasource | texttemplate | expression | action
-	PrimitiveVal  string
-	AttributePath string
-	DataSource    pages.DataSource
-	TextTemplate  string
-	Expression    string
-	Action        pages.ClientAction
-	EntityContext string                           // for texttemplate operations needing param resolution
-	Parameters    []*pages.ClientTemplateParameter // resolved CaptionParams / ContentParams for texttemplate operations
+	PropertyKey       string
+	Operation         string // primitive | attribute | datasource | texttemplate | expression | action
+	PrimitiveVal      string
+	AttributePath     string
+	AttributeRefSteps []pages.AttributeRefStep // association hops when AttributePath navigates associations (AttributeRef.EntityRef)
+	DataSource        pages.DataSource
+	TextTemplate      string
+	Expression        string
+	Action            pages.ClientAction
+	EntityContext     string                           // for texttemplate operations needing param resolution
+	Parameters        []*pages.ClientTemplateParameter // resolved CaptionParams / ContentParams for texttemplate operations
+	// EmptyTemplate, on a texttemplate operation with an empty TextTemplate,
+	// forces an empty Forms$ClientTemplate value instead of leaving the field
+	// null. A VISIBLE-but-unset texttemplate sub-property (e.g. a chart series'
+	// staticName) must serialize as an empty ClientTemplate or Studio Pro flags
+	// CE0463 "widget definition changed". Chart series (9a).
+	EmptyTemplate bool
 }
 
 // DataGridColumnSpec carries pre-resolved column data for DataGrid2 construction.
 // All attribute paths are fully qualified. Child widgets are already built as
 // domain objects; the backend serializes them to storage format internally.
 type DataGridColumnSpec struct {
-	Attribute     string                           // Fully qualified attribute path (empty for action/custom-content columns)
-	Caption       string                           // Column header caption (may be a template like "{1}")
-	CaptionParams []*pages.ClientTemplateParameter // Header TextTemplate parameters (populated when Caption uses placeholders)
-	ShowContentAs string                           // "", "attribute" (default), "dynamicText", or "customContent" (auto-inferred when ChildWidgets is non-empty)
-	Content       string                           // Cell body template for ShowContentAs: dynamicText
-	ContentParams []*pages.ClientTemplateParameter // dynamicText TextTemplate parameters
-	ChildWidgets  []pages.Widget                   // Pre-built child widgets (for custom-content columns)
-	FilterWidget  pages.Widget                     // Pre-built filter widget for the column's filter slot (optional)
-	Properties    map[string]any                   // Column properties (Sortable, Resizable, Visible, etc.)
+	Attribute         string                           // Fully qualified attribute path (empty for action/custom-content columns)
+	AttributeRefSteps []pages.AttributeRefStep         // association hops when Attribute navigates associations (AttributeRef.EntityRef)
+	Caption           string                           // Column header caption (may be a template like "{1}")
+	CaptionParams     []*pages.ClientTemplateParameter // Header TextTemplate parameters (populated when Caption uses placeholders)
+	ShowContentAs     string                           // "", "attribute" (default), "dynamicText", or "customContent" (auto-inferred when ChildWidgets is non-empty)
+	Content           string                           // Cell body template for ShowContentAs: dynamicText
+	ContentParams     []*pages.ClientTemplateParameter // dynamicText TextTemplate parameters
+	ChildWidgets      []pages.Widget                   // Pre-built child widgets (for custom-content columns)
+	FilterWidget      pages.Widget                     // Pre-built filter widget for the column's filter slot (optional)
+	Properties        map[string]any                   // Column properties (Sortable, Resizable, Visible, etc.)
 }
 
 // FilterWidgetSpec carries inputs for building a filter widget.

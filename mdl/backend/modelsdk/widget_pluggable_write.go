@@ -144,8 +144,9 @@ func v2ToV1BSON(d bsonv2.D) bsonv1.D {
 }
 
 // convertPropTypeIDs maps the registry's PropertyTypeIDEntry (types form) to the
-// pages form the builder uses. NestedKeyOrder has no source in types and stays
-// empty (only object-list widgets like DataGrid2 need it — deferred).
+// pages form the builder uses. NestedKeyOrder carries the template PropertyTypes
+// order for object-list widgets (DataGrid2 columns); without it the builder falls
+// back to alphabetical order and Studio Pro raises CE0463.
 func convertPropTypeIDs(src map[string]types.PropertyTypeIDEntry) map[string]pages.PropertyTypeIDEntry {
 	out := make(map[string]pages.PropertyTypeIDEntry, len(src))
 	for k, v := range src {
@@ -159,6 +160,7 @@ func convertPropTypeIDs(src map[string]types.PropertyTypeIDEntry) map[string]pag
 		}
 		if len(v.NestedPropertyIDs) > 0 {
 			entry.NestedPropertyIDs = convertPropTypeIDs(v.NestedPropertyIDs)
+			entry.NestedKeyOrder = append([]string(nil), v.NestedKeyOrder...)
 		}
 		out[k] = entry
 	}

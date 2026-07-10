@@ -78,3 +78,40 @@ func TestFindMPK_RegistersAllBundledWidgets(t *testing.T) {
 		t.Error("FindMPK did not find BarChart (bundled in Charts.mpk past WidgetFiles[0])")
 	}
 }
+
+// TestParseMPK_CapturesEnumValues verifies enumeration member keys are captured
+// for object-list sub-properties (Maps dynamicMarkers.locationType → address,
+// latlng). Powers the MDL-WIDGET08 invalid-enum-value check.
+func TestParseMPK_CapturesEnumValues(t *testing.T) {
+	p := filepath.Join("..", "..", "..", "testdata", "expr-checker", "widgets", "Maps.mpk")
+	defs, err := ParseMPKAll(p)
+	if err != nil {
+		t.Fatalf("ParseMPKAll: %v", err)
+	}
+	var found bool
+	for _, d := range defs {
+		for _, prop := range d.Properties {
+			if prop.Key != "dynamicMarkers" {
+				continue
+			}
+			for _, child := range prop.Children {
+				if child.Key != "locationType" {
+					continue
+				}
+				found = true
+				got := map[string]bool{}
+				for _, v := range child.EnumValues {
+					got[v] = true
+				}
+				for _, want := range []string{"address", "latlng"} {
+					if !got[want] {
+						t.Errorf("locationType EnumValues missing %q; got %v", want, child.EnumValues)
+					}
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatal("dynamicMarkers.locationType not found in Maps.mpk")
+	}
+}

@@ -60,7 +60,7 @@ func BuildDataGrid2Column(childSer ChildSerializer, col *backend.DataGridColumnS
 
 		case "attribute":
 			if attrPath != "" {
-				properties = append(properties, buildColumnAttributeProperty(entry, attrPath))
+				properties = append(properties, buildColumnAttributeProperty(entry, attrPath, col.AttributeRefSteps))
 			} else {
 				properties = append(properties, buildColumnDefaultProperty(entry))
 			}
@@ -260,14 +260,14 @@ func buildColumnExpressionProperty(entry pages.PropertyTypeIDEntry, expression s
 	}
 }
 
-func buildColumnAttributeProperty(entry pages.PropertyTypeIDEntry, attrPath string) bson.D {
+func buildColumnAttributeProperty(entry pages.PropertyTypeIDEntry, attrPath string, steps []pages.AttributeRefStep) bson.D {
 	var attributeRef any
 	if strings.Count(attrPath, ".") >= 2 {
 		attributeRef = bson.D{
 			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 			{Key: "$Type", Value: "DomainModels$AttributeRef"},
 			{Key: "Attribute", Value: attrPath},
-			{Key: "EntityRef", Value: nil},
+			{Key: "EntityRef", Value: attributeEntityRefBSON(steps)},
 		}
 	}
 	return bson.D{

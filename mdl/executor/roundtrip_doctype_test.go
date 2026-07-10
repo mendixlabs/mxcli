@@ -50,6 +50,12 @@ var engineScriptSkip = map[string]string{
 	// The legacy widget builder has no `barchart` pluggable-widget template, so
 	// page build fails ("template not found: barchart"). Passes on modelsdk.
 	"legacy/34-chart-widget-examples.mdl": "legacy widget builder lacks the barchart template (works on modelsdk); tracked",
+	// The "data from context" association DataView (P_OrderWithCustomer, added in
+	// 7b9c251b) serializes correctly on modelsdk (Forms$DataViewSource) but the
+	// legacy widget builder writes an association source → CE6705 "Data view
+	// cannot have a data source of type association". Legacy known issue L1;
+	// do not fix legacy. See docs/03-development/LEGACY_ENGINE_KNOWN_ISSUES.md.
+	"legacy/03-page-examples.mdl": "legacy can't serialize the association DataView source → CE6705 (works on modelsdk); known issue L1, tracked",
 }
 
 // moduleDep is one marketplace-module MPK a script requires, optionally gated to

@@ -121,31 +121,77 @@ func TestStaticWidgetKnownPropsCoverDescribe(t *testing.T) {
 	}
 }
 
-// Bug 4 follow-up — MDL-WIDGET08: a DataView cannot use an association data
-// source (Studio Pro rejects it). List widgets may.
-func TestValidateStaticWidget_DataViewAssociationSource(t *testing.T) {
-	assocDS := &ast.DataSourceV3{Type: "association", Reference: "M.Order_Customer", ContextVariable: ""}
-	paramDS := &ast.DataSourceV3{Type: "parameter", Reference: "$Order"}
+// Bug 3 — MDL-WIDGET09: a DataView cannot use a database data source either
+// (a data view shows one object; database sources belong to list widgets).
+// mxbuild rejects the legacy fallback with CE7007.
+func TestValidateStaticWidget_DataViewDatabaseSource(t *testing.T) {
+	dbDS := &ast.DataSourceV3{Type: "database", Reference: "M.Expense"}
+	mfDS := &ast.DataSourceV3{Type: "microflow", Reference: "M.GetExpense"}
 
 	cases := []struct {
 		name   string
 		widget *ast.WidgetV3
-		want   bool // expect an MDL-WIDGET08 violation
+		want   bool // expect an MDL-WIDGET09 violation
 	}{
-		{"dataview + association → rejected", &ast.WidgetV3{Type: "dataview", Name: "dv", Properties: map[string]any{"DataSource": assocDS}}, true},
-		{"dataview + parameter → ok", &ast.WidgetV3{Type: "dataview", Name: "dv", Properties: map[string]any{"DataSource": paramDS}}, false},
-		{"listview + association → ok", &ast.WidgetV3{Type: "listview", Name: "lv", Properties: map[string]any{"DataSource": assocDS}}, false},
+		{"dataview + database → rejected", &ast.WidgetV3{Type: "dataview", Name: "dv", Properties: map[string]any{"DataSource": dbDS}}, true},
+		{"dataview + microflow → ok", &ast.WidgetV3{Type: "dataview", Name: "dv", Properties: map[string]any{"DataSource": mfDS}}, false},
+		{"listview + database → ok", &ast.WidgetV3{Type: "listview", Name: "lv", Properties: map[string]any{"DataSource": dbDS}}, false},
+		{"datagrid + database → ok", &ast.WidgetV3{Type: "datagrid", Name: "dg", Properties: map[string]any{"DataSource": dbDS}}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got := false
 			for _, v := range validateStaticWidget(c.widget, "page X") {
-				if v.RuleID == "MDL-WIDGET08" {
+				if v.RuleID == "MDL-WIDGET09" {
 					got = true
 				}
 			}
 			if got != c.want {
-				t.Errorf("MDL-WIDGET08 present = %v, want %v", got, c.want)
+				t.Errorf("MDL-WIDGET09 present = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestValidateObjectListItemEnums — MDL-WIDGET08 flags an object-list item's
+// enumeration sub-property whose value isn't a declared member key (e.g. a Maps
+// marker LocationType outside {address, latlng}). Studio Pro silently defaults
+// an invalid value, so this class of typo otherwise fails quietly at build.
+func TestValidateObjectListItemEnums(t *testing.T) {
+	mapping := &ObjectListMapping{
+		MDLContainer: "DYNAMICMARKER",
+		ItemProperties: []ItemPropertyMapping{
+			{PropertyKey: "locationType", Operation: "primitive", EnumValues: []string{"address", "latlng"}},
+			{PropertyKey: "markerStyleDynamic", Operation: "primitive", EnumValues: []string{"default", "custom"}},
+			{PropertyKey: "title", Operation: "attribute"}, // no enum → never flagged
+		},
+	}
+	marker := func(props map[string]any) *ast.WidgetV3 {
+		return &ast.WidgetV3{Type: "dynamicmarker", Name: "m1", Properties: props}
+	}
+	cases := []struct {
+		name    string
+		widget  *ast.WidgetV3
+		wantBad bool
+	}{
+		{"invalid locationType", marker(map[string]any{"LocationType": "coordinates"}), true},
+		{"valid latlng", marker(map[string]any{"LocationType": "latlng"}), false},
+		{"valid address (case-insensitive key match)", marker(map[string]any{"locationType": "address"}), false},
+		{"unset enum is fine", marker(map[string]any{"Title": "Name"}), false},
+		{"non-string value ignored", marker(map[string]any{"LocationType": 3}), false},
+		{"second enum prop invalid", marker(map[string]any{"MarkerStyleDynamic": "sparkly"}), true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			vs := validateObjectListItemEnums(c.widget, mapping, "page X")
+			got := len(vs) > 0
+			if got != c.wantBad {
+				t.Errorf("got %d violations (bad=%v), want bad=%v: %+v", len(vs), got, c.wantBad, vs)
+			}
+			for _, v := range vs {
+				if v.RuleID != "MDL-WIDGET08" {
+					t.Errorf("expected MDL-WIDGET08, got %s", v.RuleID)
+				}
 			}
 		})
 	}

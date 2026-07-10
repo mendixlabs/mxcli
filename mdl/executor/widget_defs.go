@@ -403,6 +403,12 @@ var itemPropertyAliases = map[string]map[string]map[string][]string{
 			// default, so a `Size:` value becomes invalid (size only applies
 			// when width=manual) and Studio Pro flags CE0463.
 			"width": {"ColumnWidth"},
+			// MDL `DynamicCellClass: '<expr>'` fills the schema's `columnClass`
+			// expression (a per-cell dynamic CSS class). Without the alias the
+			// engine looks up `columnClass` in the AST property bag, finds
+			// nothing, and writes an empty expression — the class is silently
+			// dropped. Bug 10a.
+			"columnClass": {"DynamicCellClass"},
 		},
 	},
 }
@@ -437,6 +443,8 @@ func makeObjectListMapping(widgetID string, p mpk.PropertyDef) ObjectListMapping
 			Operation:   op,
 			Description: child.Description,
 			MdlAliases:  aliases[child.Key],
+			DataSource:  child.DataSource,
+			EnumValues:  child.EnumValues,
 		}
 		switch op {
 		case "attribute":
@@ -531,40 +539,45 @@ func RegenerateWidgetDocs(projectPath string) (int, error) {
 	var indexEntries []string
 
 	for _, mpkPath := range matches {
-		mpkDef, err := mpk.ParseMPK(mpkPath)
+		// A bundled .mpk (e.g. Charts.mpk) contains many widgetFiles; ParseMPK
+		// returns only the first, so docs previously omitted all but one chart
+		// widget. ParseMPKAll documents every widget in the bundle (issue #679
+		// applied the same fix to the def-generation loop above; bug 9a).
+		mpkDefs, err := mpk.ParseMPKAll(mpkPath)
 		if err != nil {
 			continue
 		}
+		for _, mpkDef := range mpkDefs {
+			mdlName := DeriveMDLName(mpkDef.ID)
+			filename := strings.ToLower(mdlName) + ".md"
+			outPath := filepath.Join(docsDir, filename)
 
-		mdlName := DeriveMDLName(mpkDef.ID)
-		filename := strings.ToLower(mdlName) + ".md"
-		outPath := filepath.Join(docsDir, filename)
-
-		// Load the matching .def.json (may not exist for built-in widgets like
-		// COMBOBOX / GALLERY — those have hand-crafted definitions in
-		// sdk/widgets/definitions/ that we don't extract per-project).
-		var def *WidgetDefinition
-		defPath := filepath.Join(defsDir, strings.ToLower(mdlName)+".def.json")
-		if data, err := os.ReadFile(defPath); err == nil {
-			def = &WidgetDefinition{}
-			if jsonErr := json.Unmarshal(data, def); jsonErr != nil {
-				def = nil
+			// Load the matching .def.json (may not exist for built-in widgets like
+			// COMBOBOX / GALLERY — those have hand-crafted definitions in
+			// sdk/widgets/definitions/ that we don't extract per-project).
+			var def *WidgetDefinition
+			defPath := filepath.Join(defsDir, strings.ToLower(mdlName)+".def.json")
+			if data, err := os.ReadFile(defPath); err == nil {
+				def = &WidgetDefinition{}
+				if jsonErr := json.Unmarshal(data, def); jsonErr != nil {
+					def = nil
+				}
 			}
-		}
 
-		doc := widgetDocMarkdown(mpkDef, def, mdlName)
-		if err := os.WriteFile(outPath, []byte(doc), 0644); err != nil {
-			log.Printf("warning: failed to write %s: %v", filename, err)
-			continue
-		}
+			doc := widgetDocMarkdown(mpkDef, def, mdlName)
+			if err := os.WriteFile(outPath, []byte(doc), 0644); err != nil {
+				log.Printf("warning: failed to write %s: %v", filename, err)
+				continue
+			}
 
-		kind := "CUSTOMWIDGET"
-		if mpkDef.IsPluggable {
-			kind = "PLUGGABLEWIDGET"
+			kind := "CUSTOMWIDGET"
+			if mpkDef.IsPluggable {
+				kind = "PLUGGABLEWIDGET"
+			}
+			indexEntries = append(indexEntries, fmt.Sprintf("| `%s` | %s | `%s` | %s | %d |",
+				kind, mdlName, mpkDef.ID, mpkDef.Name, len(mpkDef.Properties)))
+			generated++
 		}
-		indexEntries = append(indexEntries, fmt.Sprintf("| `%s` | %s | `%s` | %s | %d |",
-			kind, mdlName, mpkDef.ID, mpkDef.Name, len(mpkDef.Properties)))
-		generated++
 	}
 
 	var indexBuf strings.Builder

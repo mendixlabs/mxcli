@@ -128,7 +128,7 @@ DATAGRID dgOrders (DataSource: DATABASE Sales.Order, PageSize: 20) {
 
 | Property | Values | Default | Description |
 |----------|--------|---------|-------------|
-| `Attribute` | attribute name | (required) | The attribute to display |
+| `Attribute` | attribute name, or association path `Assoc/Attr` | (required) | The attribute to display. Use an association path to show an attribute over a reference — e.g. `Attribute: Order_Customer/Name` shows the associated Customer's Name. Association names are bare (resolved against the grid's entity module); multi-hop paths (`A/B/Attr`) are supported. |
 | `Caption` | string | attribute name | Column header text |
 | `Alignment` | `left`, `center`, `right` | `left` | Text alignment |
 | `WrapText` | `true`, `false` | `false` | Allow text wrapping |

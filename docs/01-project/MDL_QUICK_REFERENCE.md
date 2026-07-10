@@ -888,6 +888,7 @@ MDL uses explicit property declarations for pages:
 | Clickable container | `onclick: action` (alias of `action:`) | `container card (onclick: microflow Mod.ACT_Open) { ... }` |
 | Database source | `datasource: database entity` | `datagrid dg (datasource: database Module.Entity)` |
 | Selection binding | `datasource: selection widget` | `dataview dv (datasource: selection galleryList)` |
+| Association source ("data from context") | `datasource: $currentObject/Module.Assoc` | nested `dataview dvCust (datasource: $currentObject/Order_Customer)` shows the to-one referenced object; a list widget shows the to-many collection |
 | CSS class | `class: 'classes'` | `container c (class: 'card mx-spacing-top-large')` |
 | Inline style | `style: 'css'` | `container c (style: 'padding: 16px;')` |
 | Design properties | `designproperties: [...]` | `container c (designproperties: ['Spacing top': 'Large', 'full width': on])` |
@@ -902,7 +903,7 @@ MDL uses explicit property declarations for pages:
 
 | Property | Values | Default | Example |
 |----------|--------|---------|---------|
-| `attribute` | attribute name | (required) | `attribute: Price` |
+| `attribute` | attribute name, or association path `Assoc/Attr` | (required) | `attribute: Price` · `attribute: Order_Customer/Name` (associated attr; bare association name, multi-hop OK) |
 | `caption` | string | attribute name | `caption: 'Unit Price'` |
 | `Alignment` | `left`, `center`, `right` | `left` | `Alignment: right` |
 | `WrapText` | `true`, `false` | `false` | `WrapText: true` |

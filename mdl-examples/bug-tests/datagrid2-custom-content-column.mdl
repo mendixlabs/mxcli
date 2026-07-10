@@ -1,0 +1,52 @@
+-- ============================================================================
+-- DataGrid2 columns failed MxBuild CE0463 on the default (modelsdk) engine
+-- ============================================================================
+--
+-- Symptom (before fix):
+--   A DataGrid2 (`datagrid`) column with custom content (nested widgets — a
+--   dynamictext or actionbutton) failed MxBuild with CE0463 "The definition of
+--   this widget has changed." Reported for custom-content columns, but it hit
+--   EVERY column (attribute columns too) on the default engine. `mxcli check`
+--   passed. Legacy engine was fine.
+--
+-- Root cause:
+--   The column WidgetObject's Properties were serialized in ALPHABETICAL order
+--   instead of the template's PropertyTypes order. Studio Pro hashes a pluggable
+--   widget's object structure against its type and flags any order mismatch as
+--   CE0463. The modelsdk registry loader dropped the template order
+--   (NestedKeyOrder); the object-list builder then fell back to alphabetical.
+--   (The MPR/legacy loader captured the order, so legacy was correct.)
+--
+-- After fix (modelsdk engine):
+--   NestedKeyOrder is threaded through the modelsdk/widgets loader (mirroring the
+--   sdk/widgets loader) so column properties emit in template order. Verified with
+--   `mxcli docker check --no-update-widgets` (raw output, no widget normalization)
+--   = 0 errors for both attribute and custom-content columns.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/datagrid2-custom-content-column.mdl -p app.mpr
+-- ============================================================================
+
+create entity MyFirstModule.Employee ( Name: String );
+create entity MyFirstModule.Expense ( Description: String );
+create association MyFirstModule.Expense_Employee
+  from MyFirstModule.Expense to MyFirstModule.Employee;
+
+create or replace page MyFirstModule.DGOverview
+( Title: 'DG Overview', Layout: Atlas_Core.Atlas_Default )
+{
+  datagrid dgExp (datasource: database from MyFirstModule.Expense) {
+    -- plain attribute column
+    column colDesc (caption: 'Description', attribute: Description)
+    -- custom content: a dynamictext binding an attribute over an association
+    column colEmployee (caption: 'Submitted by') {
+      dynamictext dtEmp (content: '{1}', contentparams: [{1} = MyFirstModule.Expense_Employee/Name])
+    }
+    -- custom content: an action button
+    column colOpen (caption: 'Actions') {
+      actionbutton btnOpen (caption: 'Open', action: nothing)
+    }
+  }
+}
+
+describe page MyFirstModule.DGOverview;

@@ -9,14 +9,19 @@
 -- engine-routed widgets; mx check now reports zero CE0463 across
 -- Accordion / Maps / PopupMenu / AreaChart instances.
 --
--- TODO(grammar): two slot/sub-property forms are not yet expressible:
---   1. PopupMenu's `MENUTRIGGER` child slot (required) — keyword missing
---      from MDLPage.g4 widgetTypeV3. OL03 + OL04 popupmenu widgets are
---      commented out below; ITEM / CUSTOMITEM keyword syntax is shown.
---   2. Datasource sub-properties inside object-list items
---      (Maps `dynamicMarkers[].markersDS`, AreaChart `series[].staticDataSource`).
---      OL07 is commented out; OL05 demonstrates SERIES with primitives only.
--- Track under v0.11+ pluggable-widget grammar work.
+-- Datasource + attribute sub-properties inside object-list items now work
+-- (Bug 9a): OL05 binds an AreaChart series to an entity via `DataSource:` +
+-- `StaticXAttribute:`/`StaticYAttribute:`, and OL07 binds Maps
+-- `dynamicMarkers[].markersDS`. Both parse, persist, and (after
+-- `mx update-widgets`, which `mxcli docker check`/`build` run) pass mx check.
+-- Invalid enumeration values on object-list sub-properties (e.g. a Maps marker
+-- `LocationType` outside {address, latlng}) are now caught at `check` time
+-- (MDL-WIDGET08) instead of silently defaulting.
+--
+-- TODO(grammar): one child-slot form is still not expressible:
+--   * PopupMenu's `MENUTRIGGER` child slot (required) — keyword missing from
+--     MDLPage.g4 widgetTypeV3. OL03 + OL04 popupmenu widgets are commented out
+--     below; ITEM / CUSTOMITEM keyword syntax is shown.
 --
 -- This file scopes the Phase 1 deliverable from issue #529: support for
 -- `Type: "Object" + IsList: true` properties in pluggable widget templates,
@@ -165,7 +170,7 @@ create page ObjListV10.P_OL03_PopupMenuBasic (
 ) {
   layoutgrid lg1 {
     row r1 {
-      column c1 (DesktopWidth: 6) {
+      column c1 (DesktopWidth: 12) {
         -- TODO(grammar): PopupMenu requires its MENUTRIGGER child slot
         -- (CE0642). Slot keyword not in MDLPage.g4 widgetTypeV3 yet.
         -- ITEM keyword syntax (object list) is shown in the comment.
@@ -198,7 +203,7 @@ create page ObjListV10.P_OL04_PopupMenuCustom (
 ) {
   layoutgrid lg1 {
     row r1 {
-      column c1 (DesktopWidth: 6) {
+      column c1 (DesktopWidth: 12) {
         -- TODO(grammar): Same MENUTRIGGER blocker as OL03. CUSTOMITEM
         -- keyword syntax (object list with widget content) is shown below.
         --
@@ -231,11 +236,11 @@ create page ObjListV10.P_OL04_PopupMenuCustom (
 -- MARK: OL05 — AreaChart with multiple series (simplified)
 -- ============================================================================
 --
--- NOTE: The full series syntax with `StaticDataSource: database from ...`
--- requires grammar work beyond Layer 3 (datasource expressions in sub-property
--- positions). For now, this test only exercises the SERIES keyword with
--- primitive sub-properties; full datasource sub-properties land in a later
--- iteration.
+-- Each series binds its own datasource (an entity or OQL view) and picks the
+-- X/Y attributes on it. `DataSource:` is a friendly alias for the mode-specific
+-- `StaticDataSource:` / `DynamicDataSource:`; the X/Y attributes resolve against
+-- the series' OWN datasource, not the page. (Bug 9a — datasource + attribute
+-- sub-properties inside object-list items.)
 
 create page ObjListV10.P_OL05_AreaChartSeries (
   Title: 'Sales Trends',
@@ -246,15 +251,13 @@ create page ObjListV10.P_OL05_AreaChartSeries (
     row r1 {
       column c1 (DesktopWidth: 12) {
         pluggablewidget 'com.mendix.widget.web.areachart.AreaChart' chart1 {
-          series seriesNorth (
+          series seriesRevenue (
             DataSet: 'static',
-            StaticName: 'North Region',
+            DataSource: database from ObjListV10.SalesData,
+            StaticXAttribute: PeriodLabel,
+            StaticYAttribute: RevenueValue,
+            StaticName: 'Revenue',
             Interpolation: 'linear'
-          )
-          series seriesSouth (
-            DataSet: 'static',
-            StaticName: 'South Region',
-            Interpolation: 'smooth'
           )
         }
       }
@@ -282,14 +285,14 @@ create page ObjListV10.P_OL06_MapsStatic (
           googleMapId: 'default'
         ) {
           marker hqMarker (
-            LocationType: 'coordinates',
+            LocationType: 'latlng',
             Latitude: '52.3676',
             Longitude: '4.9041',
             Title: 'Amsterdam HQ',
             MarkerStyle: 'default'
           )
           marker bostonMarker (
-            LocationType: 'coordinates',
+            LocationType: 'latlng',
             Latitude: '42.3601',
             Longitude: '-71.0589',
             Title: 'Boston Office',
@@ -311,11 +314,11 @@ create page ObjListV10.P_OL06_MapsStatic (
 -- MARK: OL07 — Maps with dynamicMarkers (datasource-driven)
 -- ============================================================================
 
--- TODO(grammar): dynamicmarker `markersDS: database from ...` requires grammar
--- support for datasource expressions inside object-list sub-properties. Without
--- the datasource, mx check fails with "A data source should be selected in
--- order to retrieve a list of markers". The body is left as a comment so the
--- DYNAMICMARKER keyword form is still documented in this fixture.
+-- The dynamicmarker `markersDS: database from ...` datasource sub-property
+-- binds a datasource (Bug 9a); the marker's Latitude/Longitude/Title attributes
+-- resolve against that datasource entity. `LocationType: 'latlng'` selects the
+-- coordinate-based mode (valid enum values are address / latlng — `check` now
+-- flags an invalid value via MDL-WIDGET08).
 
 create page ObjListV10.P_OL07_MapsDynamic (
   Title: 'Customer Locations',
@@ -325,21 +328,20 @@ create page ObjListV10.P_OL07_MapsDynamic (
   layoutgrid lg1 {
     row r1 {
       column c1 (DesktopWidth: 12) {
-        -- pluggablewidget 'com.mendix.widget.custom.Maps.Maps' map2 (
-        --   apiKey: 'demo-key',
-        --   geodecodeApiKey: 'demo-key',
-        --   googleMapId: 'default'
-        -- ) {
-        --   dynamicmarker locMarkers (
-        --     markersDS: database from ObjListV10.Location,
-        --     LocationType: 'coordinates',
-        --     Latitude: Latitude,
-        --     Longitude: Longitude,
-        --     Title: Name,
-        --     MarkerStyleDynamic: 'default'
-        --   )
-        -- }
-        dynamictext placeholderOL07 (Content: 'Dynamic markers pending datasource sub-property syntax')
+        pluggablewidget 'com.mendix.widget.custom.Maps.Maps' map2 (
+          apiKey: 'demo-key',
+          geodecodeApiKey: 'demo-key',
+          googleMapId: 'default'
+        ) {
+          dynamicmarker locMarkers (
+            markersDS: database from ObjListV10.Location,
+            LocationType: 'latlng',
+            Latitude: Latitude,
+            Longitude: Longitude,
+            Title: Name,
+            MarkerStyleDynamic: 'default'
+          )
+        }
       }
     }
   }

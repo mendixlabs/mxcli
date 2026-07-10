@@ -1,0 +1,51 @@
+-- ============================================================================
+-- DataView "data from context over an association" (to-one referenced object)
+-- ============================================================================
+--
+-- Symptom (before fix):
+--   Showing a to-one referenced object's attributes uses a nested DataView whose
+--   data source navigates the association (Studio Pro's "Data from context").
+--   mxcli could not express it:
+--     - dataview dvEmp (datasource: $currentObject/Module.Assoc) was REJECTED
+--       (MDL-WIDGET08) — mxcli generated a Forms$AssociationSource, which MxBuild
+--       rejects on a DataView (CE6705), so the whole case was refused;
+--     - a bare nested dataview (no source) bound children to the PARENT entity
+--       → CE1613 "attribute … no longer exists";
+--     - describe dropped the source, corrupting the page on describe→exec.
+--
+-- Root cause:
+--   A DataView over an association is NOT a Forms$AssociationSource (that's for
+--   list widgets). It is a Forms$DataViewSource whose EntityRef is a
+--   DomainModels$IndirectEntityRef navigating the association. mxcli generated
+--   the wrong source type.
+--
+-- After fix (modelsdk engine):
+--   A DataView association datasource emits Forms$DataViewSource + IndirectEntityRef
+--   (EntityRefStep{Association, DestinationEntity}); children bind to the
+--   destination entity. DESCRIBE reconstructs $currentObject/Module.Assoc.
+--   mxbuild-validated (mxcli docker check --no-update-widgets = 0 errors) + a full
+--   describe→re-exec round-trip.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/dataview-context-association-source.mdl -p app.mpr
+-- ============================================================================
+
+create entity MyFirstModule.Employee ( Name: String, Email: String );
+create entity MyFirstModule.Expense ( Description: String );
+create association MyFirstModule.Expense_Employee
+  from MyFirstModule.Expense to MyFirstModule.Employee;
+
+create or replace page MyFirstModule.Expense_NewEdit
+( Title: 'Expense', Layout: Atlas_Core.Atlas_Default, Params: { $Expense: MyFirstModule.Expense } )
+{
+  dataview dvExpense (datasource: $Expense) {
+    textbox tbDesc (label: 'Description', attribute: Description)
+    -- the referenced Employee's attributes via "data from context over association"
+    dataview dvEmployee (datasource: $currentObject/MyFirstModule.Expense_Employee) {
+      textbox tbName (label: 'Name', attribute: Name)
+      textbox tbEmail (label: 'Email', attribute: Email)
+    }
+  }
+}
+
+describe page MyFirstModule.Expense_NewEdit;

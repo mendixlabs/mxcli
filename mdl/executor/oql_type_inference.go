@@ -333,8 +333,9 @@ func extractSelectClause(oql string) string {
 	oql = strings.TrimSpace(oql)
 	upperOql := strings.ToUpper(oql)
 
-	// Find SELECT keyword
-	selectIdx := strings.Index(upperOql, "select")
+	// Find SELECT keyword. Compare uppercase-to-uppercase: upperOql is already
+	// upper-cased, so the needle must be too (a lowercase needle never matches).
+	selectIdx := strings.Index(upperOql, "SELECT")
 	if selectIdx == -1 {
 		return ""
 	}
@@ -342,7 +343,10 @@ func extractSelectClause(oql string) string {
 	// Start after SELECT keyword
 	startIdx := selectIdx + 6 // len("SELECT")
 
-	// Find the main FROM clause or UNION (not inside subqueries)
+	// Find the main FROM clause or UNION (not inside subqueries). Slice from
+	// upperOql (same byte offsets as oql for ASCII) so keyword comparisons are
+	// case-consistent — comparing strings.ToUpper(...) to a lowercase literal
+	// could never match and made this function always return "" (bug 9b).
 	depth := 0
 	for i := startIdx; i < len(oql); i++ {
 		ch := oql[i]
@@ -355,8 +359,8 @@ func extractSelectClause(oql string) string {
 			if depth == 0 {
 				// Check for FROM keyword at depth 0
 				if i+4 <= len(oql) {
-					word := strings.ToUpper(oql[i : i+4])
-					if word == "from" {
+					word := upperOql[i : i+4]
+					if word == "FROM" {
 						// Make sure it's a word boundary (not part of another identifier)
 						prevOk := i == startIdx || !isIdentChar(oql[i-1])
 						nextOk := i+4 >= len(oql) || !isIdentChar(oql[i+4])
@@ -367,8 +371,8 @@ func extractSelectClause(oql string) string {
 				}
 				// Check for UNION keyword at depth 0 (ends current query term)
 				if i+5 <= len(oql) {
-					word := strings.ToUpper(oql[i : i+5])
-					if word == "union" {
+					word := upperOql[i : i+5]
+					if word == "UNION" {
 						prevOk := i == startIdx || !isIdentChar(oql[i-1])
 						nextOk := i+5 >= len(oql) || !isIdentChar(oql[i+5])
 						if prevOk && nextOk {

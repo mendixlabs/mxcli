@@ -18,8 +18,16 @@ import (
 
 func assertAssociationSource(t *testing.T, src bsonv1.D, wantAssoc, wantDest string, wantSourceVar bool) {
 	t.Helper()
-	if got := docGet(src, "$Type"); got != "Forms$AssociationSource" {
-		t.Fatalf("$Type = %v, want Forms$AssociationSource", got)
+	assertAssociationSourceTyped(t, src, "Forms$AssociationSource", wantAssoc, wantDest, wantSourceVar)
+}
+
+// assertAssociationSourceTyped checks the shared IndirectEntityRef structure under
+// a given wrapper $Type — Forms$AssociationSource (list widgets) or
+// Forms$DataViewSource (a DataView's "data from context over association").
+func assertAssociationSourceTyped(t *testing.T, src bsonv1.D, wantType, wantAssoc, wantDest string, wantSourceVar bool) {
+	t.Helper()
+	if got := docGet(src, "$Type"); got != wantType {
+		t.Fatalf("$Type = %v, want %v", got, wantType)
 	}
 	if got := docGet(src, "ForceFullObjects"); got != false {
 		t.Errorf("ForceFullObjects = %v, want false", got)
@@ -47,6 +55,9 @@ func assertAssociationSource(t *testing.T, src bsonv1.D, wantAssoc, wantDest str
 	}
 }
 
+// Bug 5 (reclassified) — a DataView over a to-one association is "data from
+// context": a Forms$DataViewSource whose EntityRef is an IndirectEntityRef, NOT a
+// Forms$AssociationSource (which MxBuild rejects on a DataView: CE6705).
 func TestDataViewAssociationSource_Serialized(t *testing.T) {
 	dv := &pages.DataView{
 		DataSource: &pages.AssociationSource{
@@ -61,7 +72,7 @@ func TestDataViewAssociationSource_Serialized(t *testing.T) {
 	if !ok {
 		t.Fatalf("DataSource not serialized (got %T)", docGet(doc, "DataSource"))
 	}
-	assertAssociationSource(t, src, "Sales.Order_Customer", "Sales.Customer", false)
+	assertAssociationSourceTyped(t, src, "Forms$DataViewSource", "Sales.Order_Customer", "Sales.Customer", false)
 }
 
 func TestListViewAssociationSource_Serialized(t *testing.T) {

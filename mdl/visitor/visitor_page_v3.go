@@ -670,6 +670,13 @@ func parseWidgetPropertyV3(ctx parser.IWidgetPropertyV3Context, widget *ast.Widg
 
 	// Generic property: Identifier: value
 	if id := propCtx.IDENTIFIER(); id != nil {
+		// Generic datasource-typed property (e.g. chart series `staticDataSource:
+		// database Module.View`). The executor's object-list builder resolves the
+		// *ast.DataSourceV3 into a widget datasource + entity context. Chart 9a.
+		if dsCtx := propCtx.DataSourceExprV3(); dsCtx != nil {
+			widget.Properties[id.GetText()] = buildDataSourceV3(dsCtx)
+			return
+		}
 		if valCtx := propCtx.PropertyValueV3(); valCtx != nil {
 			widget.Properties[id.GetText()] = buildPropertyValueV3(valCtx)
 		}
@@ -679,6 +686,10 @@ func parseWidgetPropertyV3(ctx parser.IWidgetPropertyV3Context, widget *ast.Widg
 	// Generic property with keyword name: keyword: value (for pluggable widget property keys
 	// that happen to be MDL keywords, e.g., type, datasource, content)
 	if kw := propCtx.Keyword(); kw != nil {
+		if dsCtx := propCtx.DataSourceExprV3(); dsCtx != nil {
+			widget.Properties[kw.GetText()] = buildDataSourceV3(dsCtx)
+			return
+		}
 		if valCtx := propCtx.PropertyValueV3(); valCtx != nil {
 			widget.Properties[kw.GetText()] = buildPropertyValueV3(valCtx)
 		}
@@ -1229,6 +1240,12 @@ func buildPropertyValueV3(ctx parser.IPropertyValueV3Context) any {
 
 	if str := pvCtx.STRING_LITERAL(); str != nil {
 		return unquoteString(str.GetText())
+	}
+	// "AttrName" — a double-quoted value, used for pluggable-widget attribute
+	// sub-properties like chart series `staticXAttribute: "StatusValue"`. Strip
+	// the quotes; the executor resolves it against the item's datasource entity.
+	if q := pvCtx.QUOTED_IDENTIFIER(); q != nil {
+		return unquoteIdentifier(q.GetText())
 	}
 	if num := pvCtx.NUMBER_LITERAL(); num != nil {
 		text := num.GetText()

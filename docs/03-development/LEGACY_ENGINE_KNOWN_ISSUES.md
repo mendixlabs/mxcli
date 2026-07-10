@@ -34,7 +34,12 @@ When a legacy issue is encountered:
   as `Forms$AssociationSource{ EntityRef: nil }` — the association is dropped, so
   the page loads but the widget has no data source. Legacy does not error at exec
   (that is why it was the "escape hatch" for the modelsdk Bug 4), but the result
-  is broken.
+  is broken. On a **DataView** the same wrong source type is rejected harder — `mx
+  check` fails with **CE6705** "Data view cannot have a data source of type
+  association" (a DataView requires `Forms$DataViewSource`, not
+  `Forms$AssociationSource`). This is why the `legacy/03-page-examples.mdl` doctype
+  variant is in `engineScriptSkip` (the `P_OrderWithCustomer` example uses a
+  "data from context" association DataView).
 - **Legacy code path:** `sdk/mpr/writer_widgets_display.go` — the
   `*pages.AssociationSource` cases in `serializeListViewDataSource` (and the sibling
   DataView path) return a stub with `{Key: "EntityRef", Value: nil}` instead of

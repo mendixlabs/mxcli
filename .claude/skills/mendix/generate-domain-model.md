@@ -384,6 +384,16 @@ comment 'Additional documentation';
 - `Parent` - Only parent (TO) entity owns
 - `Child` - Only child (FROM) entity owns
 
+> **Use `default` ownership for a normal to-one reference.** Reserve `owner both`
+> for a `ReferenceSet` (many-to-many). On a plain `type reference`, `owner both`
+> makes the association navigable **to-one from *both* sides** — so the reverse
+> direction is a single object, not a collection. A **list** widget (listview/
+> datagrid/gallery) over the reverse then fails MxBuild **CE8812** "A grid
+> association path must result in a list." (a DataView over the reverse is fine —
+> it's a single object). With `default` ownership, the reverse is the expected
+> to-many collection and a list widget works. See master-detail-pages.md for the
+> widget patterns.
+
 **Delete Behaviors**:
 - `DELETE_AND_REFERENCES` - Delete object and all referencing objects
 - `DELETE_BUT_KEEP_REFERENCES` - Delete object, keep references (nullify)

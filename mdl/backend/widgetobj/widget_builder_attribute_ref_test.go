@@ -26,7 +26,7 @@ func TestSetAttributeRefField(t *testing.T) {
 			{Key: "AttributeRef", Value: nil},
 			{Key: "PrimitiveValue", Value: ""},
 		}
-		got := setAttributeRefField(value, "ReproUoM.UoM.NId")
+		got := setAttributeRefField(value, "ReproUoM.UoM.NId", nil)
 
 		ref := findField(t, got, "AttributeRef")
 		refDoc, ok := ref.(bson.D)
@@ -52,7 +52,7 @@ func TestSetAttributeRefField(t *testing.T) {
 
 	t.Run("unqualified path -> AttributeRef nil", func(t *testing.T) {
 		value := bson.D{{Key: "AttributeRef", Value: bson.D{{Key: "stale", Value: 1}}}}
-		got := setAttributeRefField(value, "NId")
+		got := setAttributeRefField(value, "NId", nil)
 		if findField(t, got, "AttributeRef") != nil {
 			t.Errorf("AttributeRef must be nil for unqualified path; got %v", findField(t, got, "AttributeRef"))
 		}
@@ -165,3 +165,44 @@ func TestShouldEmitEmptyClientTemplate(t *testing.T) {
 
 // (TestApplyColumnHeaderFallback covers the helper in widget_engine.go; the
 // unit test lives in the executor package — see widget_defs_test.go.)
+
+// Bug 7 — a column bound to an ASSOCIATED attribute (Assoc/Attr) must serialize
+// its AttributeRef with an EntityRef (IndirectEntityRef of association steps),
+// matching the DynamicText contentparam / Studio Pro structure. Without it the
+// column has a flat attribute path and mxbuild fails CE1613.
+func TestSetAttributeRefField_AssociationSteps(t *testing.T) {
+	value := bson.D{{Key: "AttributeRef", Value: nil}}
+	steps := []pages.AttributeRefStep{
+		{Association: "Sales.Order_Customer", DestinationEntity: "Sales.Customer"},
+	}
+	got := setAttributeRefField(value, "Sales.Customer.Name", steps)
+
+	refDoc, ok := findField(t, got, "AttributeRef").(bson.D)
+	if !ok {
+		t.Fatalf("AttributeRef not a document")
+	}
+	if a := findField(t, refDoc, "Attribute"); a != "Sales.Customer.Name" {
+		t.Errorf("Attribute = %q, want Sales.Customer.Name", a)
+	}
+	entityRef, ok := findField(t, refDoc, "EntityRef").(bson.D)
+	if !ok {
+		t.Fatalf("EntityRef not a document (got %T) — association steps dropped", findField(t, refDoc, "EntityRef"))
+	}
+	if tp := findField(t, entityRef, "$Type"); tp != "DomainModels$IndirectEntityRef" {
+		t.Errorf("EntityRef.$Type = %q, want DomainModels$IndirectEntityRef", tp)
+	}
+	stepsArr, ok := findField(t, entityRef, "Steps").(bson.A)
+	if !ok || len(stepsArr) < 2 {
+		t.Fatalf("Steps not a marker-prefixed array: %#v", findField(t, entityRef, "Steps"))
+	}
+	step, ok := stepsArr[1].(bson.D)
+	if !ok {
+		t.Fatalf("step[0] not a document")
+	}
+	if a := findField(t, step, "Association"); a != "Sales.Order_Customer" {
+		t.Errorf("step.Association = %q, want Sales.Order_Customer", a)
+	}
+	if de := findField(t, step, "DestinationEntity"); de != "Sales.Customer" {
+		t.Errorf("step.DestinationEntity = %q, want Sales.Customer", de)
+	}
+}

@@ -252,7 +252,11 @@ func SerializeCustomWidgetDataSource(ds pages.DataSource) bson.D {
 					{Key: "Attribute", Value: sort.AttributePath},
 					{Key: "EntityRef", Value: nil},
 				}},
-				{Key: "SortOrder", Value: string(sort.Direction)},
+				// Forms$GridSortItem stores its direction under SortDirection, NOT
+				// SortOrder (that key belongs to Microflows$SortItem / document
+				// templates). Studio Pro ignores the misnamed field → sort silently
+				// reverts to ascending. Bug 8.
+				{Key: "SortDirection", Value: string(sort.Direction)},
 			}
 			sortItems = append(sortItems, sortItem)
 		}

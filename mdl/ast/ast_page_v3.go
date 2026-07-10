@@ -2,6 +2,8 @@
 
 package ast
 
+import "strings"
+
 // =============================================================================
 // V3 Page AST Types
 // =============================================================================
@@ -130,9 +132,21 @@ type DesignPropertyEntryV3 struct {
 // Helper functions to extract typed properties from WidgetV3
 
 // GetStringProp returns a string property or empty string if not found.
+// MDL property names are case-insensitive, so a generic property stored under
+// the user's original casing (e.g. `dynamicclasses`) still resolves for a
+// canonical-case lookup (`DynamicClasses`). Exact match is tried first; the
+// case-insensitive scan mirrors lookupProperty in the widget engine. Bug 10b.
 func (w *WidgetV3) GetStringProp(key string) string {
 	if v, ok := w.Properties[key].(string); ok {
 		return v
+	}
+	lower := strings.ToLower(key)
+	for k, v := range w.Properties {
+		if strings.ToLower(k) == lower {
+			if s, ok := v.(string); ok {
+				return s
+			}
+		}
 	}
 	return ""
 }

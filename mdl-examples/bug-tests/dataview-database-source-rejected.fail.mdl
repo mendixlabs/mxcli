@@ -1,0 +1,27 @@
+-- Bug 3 — MDL-WIDGET09 negative test: a plain DataView cannot use a database
+-- data source. A data view shows a single object, so Mendix offers only
+-- Context / Microflow / Nanoflow / Listen sources — never Database (that
+-- belongs to list widgets). `check` must reject this, and the executor refuses
+-- it on both engines.
+--
+-- Background (Bug 3 re-report): the contentparam-over-association it was paired
+-- with is already correct on the modelsdk engine in every VALID container
+-- (datagrid column, listview+database, dataview over a page parameter). The
+-- only "failure" was this invalid container, which forced the deprecated legacy
+-- engine (modelsdk refuses the DataView database source) — and legacy silently
+-- wrote a Forms$DataViewSource that MxBuild rejects with CE7007. Rejecting at
+-- check time closes that trap. See dynamictext-contentparam-association.mdl for
+-- the valid form.
+
+create entity MyFirstModule.Employee ( Name: String );
+create entity MyFirstModule.Expense ( Description: String );
+create association MyFirstModule.Expense_Employee
+  from MyFirstModule.Expense to MyFirstModule.Employee;
+
+create or replace page MyFirstModule.BadDatabaseDataView
+( Title: 'Bad', Layout: Atlas_Core.Atlas_Default )
+{
+  dataview dvBad (datasource: database from MyFirstModule.Expense) {
+    dynamictext t (content: 'by {1}', contentparams: [{1} = MyFirstModule.Expense_Employee/Name])
+  }
+}

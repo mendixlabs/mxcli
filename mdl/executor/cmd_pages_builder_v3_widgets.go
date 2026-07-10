@@ -46,6 +46,19 @@ func (pb *pageBuilder) buildDataViewV3(w *ast.WidgetV3) (*pages.DataView, error)
 
 	// Handle DataSource
 	if ds := w.GetDataSource(); ds != nil {
+		// A DataView shows a single object; Mendix offers only Context / Microflow /
+		// Nanoflow / Listen sources — never Database (that belongs to list widgets).
+		// The legacy writer emits a best-effort Forms$DataViewSource that MxBuild
+		// rejects with CE7007; modelsdk refuses the DatabaseSource downstream. Refuse
+		// early with an actionable message so neither engine produces a broken page,
+		// and mirror the check-time MDL-WIDGET09.
+		// (An *association* DataView source IS valid — "data from context over an
+		// association" — and is handled downstream, so it is not refused here.)
+		if ds.Type == "database" {
+			return nil, mdlerrors.NewValidationf(
+				"dataview %q cannot use a database data source (from %s) — a data view shows one object; use a microflow/nanoflow source (or a page parameter), or a list widget (listview/datagrid/gallery) for a collection [MDL-WIDGET09]",
+				w.Name, ds.Reference)
+		}
 		dataSource, entityName, err := pb.buildDataSourceV3(ds)
 		if err != nil {
 			return nil, mdlerrors.NewBackend("build datasource", err)
@@ -145,14 +158,23 @@ func (pb *pageBuilder) buildColumnSpecFromAST(child *ast.WidgetV3) (*backend.Dat
 	if attr == "" && child.Name != "" && len(child.Children) == 0 {
 		attr = child.Name
 	}
+	// An attribute over associations (Assoc/Attr) resolves to a final attribute +
+	// association steps (AttributeRef.EntityRef); a flat path is resolved as-is.
+	resolvedAttr := pb.resolveAttributePath(attr)
+	var attrSteps []pages.AttributeRefStep
+	if finalQN, steps, ok := pb.resolveAssociationAttributePath(attr); ok {
+		resolvedAttr = finalQN
+		attrSteps = steps
+	}
 	col := backend.DataGridColumnSpec{
-		Attribute:     pb.resolveAttributePath(attr),
-		Caption:       child.GetCaption(),
-		CaptionParams: pb.buildClientTemplateParams(child.GetCaptionParams()),
-		ShowContentAs: child.GetStringProp("ShowContentAs"),
-		Content:       child.GetContent(),
-		ContentParams: pb.buildClientTemplateParams(child.GetContentParams()),
-		Properties:    child.Properties,
+		Attribute:         resolvedAttr,
+		AttributeRefSteps: attrSteps,
+		Caption:           child.GetCaption(),
+		CaptionParams:     pb.buildClientTemplateParams(child.GetCaptionParams()),
+		ShowContentAs:     child.GetStringProp("ShowContentAs"),
+		Content:           child.GetContent(),
+		ContentParams:     pb.buildClientTemplateParams(child.GetContentParams()),
+		Properties:        child.Properties,
 	}
 	for _, grandchild := range child.Children {
 		if filterWidgetID := dataGridFilterWidgetID(grandchild.Type); filterWidgetID != "" {

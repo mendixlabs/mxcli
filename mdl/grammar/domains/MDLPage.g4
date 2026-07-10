@@ -303,6 +303,12 @@ widgetPropertyV3
     | EDITABLE COLON xpathConstraint                  // Editable: [Status != 'Closed']
     | EDITABLE COLON propertyValueV3                  // Editable: Never | Always
     | TOOLTIP COLON propertyValueV3                   // Tooltip: 'text'
+    // Generic datasource-typed property (e.g. chart series `staticDataSource:
+    // database Module.View`, `dynamicDataSource: $var`). Placed before the
+    // scalar generic branches; the token after COLON (DATABASE/MICROFLOW/
+    // NANOFLOW/ASSOCIATION/VARIABLE/SELECTION) disambiguates it from
+    // propertyValueV3, which can never start with those. Issue: chart series (9a).
+    | (IDENTIFIER | keyword) COLON dataSourceExprV3
     | IDENTIFIER COLON propertyValueV3                // Generic: any other property
     | keyword COLON propertyValueV3                  // Generic: keyword as property name (for pluggable widgets)
     ;
@@ -416,6 +422,7 @@ selectionModeV3
 // V3 Generic property value
 propertyValueV3
     : STRING_LITERAL
+    | QUOTED_IDENTIFIER              // "AttrName" — quoted attribute value for pluggable sub-props (chart series staticXAttribute)
     | NUMBER_LITERAL
     | booleanLiteral
     | qualifiedName

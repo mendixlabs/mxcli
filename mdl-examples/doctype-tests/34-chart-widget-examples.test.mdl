@@ -7,19 +7,29 @@
 -- so the not-yet-implemented syntax below does not break the build. It captures
 -- exactly what "option B" (runtime-complete charts bound to data) must deliver.
 --
--- WHAT WORKS TODAY (after the #679 multi-widget .mpk fix):
+-- WHAT WORKS TODAY (after the #679 multi-widget .mpk fix + bug 9a):
 --   * Every chart type is REGISTERED and authorable (BarChart/ColumnChart/
 --     PieChart/LineChart/etc. no longer fail "no definition for widget").
---   * SERIES object-list items (Bar/Column/Area) with PRIMITIVE sub-properties
+--   * SERIES object-list items (Bar/Column/Area/Pie) with PRIMITIVE sub-properties
 --     and X/Y ATTRIBUTES (the `attribute` operation in buildObjectListItem).
+--   * [bug 9a] Per-SERIES DATASOURCE binding — both the direct schema name
+--     (`staticDataSource: database from View`) and the friendly `DataSource:`
+--     alias (dataSet-aware) parse, persist, and bind X/Y attributes to the
+--     series' own datasource entity. Verified CE0463-clean via mx check 11.6.6
+--     (the series WidgetObject is byte-identical to update-widgets' canonical).
+--   * [bug 9a] VISIBLE texttemplate series sub-props (staticName; static·/dynamic·
+--     names once their datasource is set) serialize an empty Forms$ClientTemplate
+--     instead of a null (a null there trips CE0463).
 --
 -- WHAT'S STILL MISSING (the option-B implementation checklist at the bottom):
---   1. Per-series / per-widget DATASOURCE binding (OQL view or database). This
---      is the whole point of a chart and is what the OQL views below feed.
---   2. LINE and SCALECOLOR object-list keywords (LineChart/BubbleChart/
---      TimeSeries use `line`; HeatMap uses `scalecolor`).
---   3. CE0463 "Update widget" version-drift fix (BarChart/ColumnChart already
---      hit it even without data; #600 class).
+--   1. LINE and SCALECOLOR object-list keywords (LineChart/BubbleChart/
+--      TimeSeries use `line`; HeatMap uses `scalecolor`) — not yet grammar tokens.
+--   2. CE0463 "Update widget" WIDGET-TYPE version-drift on charts (embedded
+--      template vs installed Charts.mpk; #529/#600 class). This is ORTHOGONAL to
+--      series authoring and is remediated by the `mx update-widgets` step that
+--      `mxcli docker check`/`build` run before `mx check`. A bare chart (no
+--      series) hits it too on a version-mismatched mxbuild; faithful multi-version
+--      WidgetType emission is the larger fix (#529).
 --
 -- ENGALAR FORK: checked — no ready solution. Engalar has NO object-list support
 -- at all (no SERIES/LINE keywords; 0 references to objectLists/ObjectListMapping;

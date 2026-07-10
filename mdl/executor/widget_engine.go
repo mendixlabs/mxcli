@@ -44,7 +44,18 @@ const defaultSlotContainer = "template"
 //	    widget in a package (e.g. Charts.mpk → BarChart/PieChart/…), not just
 //	    the first. Bump forces existing projects to regenerate and pick up the
 //	    previously-missing widgets (#679).
-const WidgetDefGeneratorVersion = 5
+//	6 — DataGrid column `columnClass` ← `DynamicCellClass` alias. Bump forces
+//	    existing projects to regenerate so the per-cell dynamic class is no
+//	    longer silently dropped on write (Bug 10a).
+//	7 — object-list ItemProperties now record their widget.xml `dataSource`
+//	    binding, so the engine can emit an empty Forms$ClientTemplate for a
+//	    VISIBLE texttemplate sub-property (chart series staticName / active
+//	    static·/dynamic· names) instead of a null that trips CE0463 (Bug 9a).
+//	8 — object-list ItemProperties record their enumeration member keys
+//	    (enumValues), so `check` can flag an invalid enum value (MDL-WIDGET08)
+//	    instead of Studio Pro silently defaulting it (e.g. a Maps marker
+//	    locationType outside {address, latlng}).
+const WidgetDefGeneratorVersion = 8
 
 // WidgetDefinition describes how to construct a pluggable widget from MDL syntax.
 // Loaded from embedded JSON definition files (*.def.json).
@@ -134,6 +145,18 @@ type ItemPropertyMapping struct {
 	Default     string   `json:"default,omitempty"`
 	Description string   `json:"description,omitempty"`
 	MdlAliases  []string `json:"mdlAliases,omitempty"`
+	// EnumValues lists the valid member keys for an enumeration sub-property
+	// (e.g. a Maps marker `locationType` accepts address/latlng). `check` flags
+	// a value outside this set (MDL-WIDGET08) — Studio Pro silently defaults an
+	// invalid enum value, which is why chart/Maps sub-properties fail quietly.
+	EnumValues []string `json:"enumValues,omitempty"`
+	// DataSource is the widget.xml `dataSource="..."` binding, if any (e.g. a
+	// chart series `staticTooltipHoverText` is bound to `staticDataSource`). It
+	// drives object-list-item visibility: a texttemplate sub-property is
+	// "visible" — and must serialize an empty Forms$ClientTemplate rather than a
+	// null (else CE0463) — when it has no dataSource binding OR its bound
+	// datasource is configured on the item. Chart series (9a).
+	DataSource string `json:"dataSource,omitempty"`
 }
 
 // ItemSlotMapping maps a widget child slot inside one object-list item
@@ -667,12 +690,126 @@ func (e *PluggableWidgetEngine) applyObjectLists(builder backend.WidgetObjectBui
 // { ... }`) into an ObjectListItemSpec by:
 //   - matching widget properties against ItemProperties (scalar dispatch)
 //   - matching nested AST children against ItemSlots (widgets-typed slots)
+//
+// isChartSeriesContainer reports whether an object-list container keyword is a
+// Mendix Charts series (SERIES for Bar/Column/Area/Pie; LINE for Line/Bubble/
+// TimeSeries). Only these carry the static·/dynamic· dataSet-gated texttemplate
+// sub-properties whose empty-ClientTemplate-when-visible rule differs from other
+// object lists (Accordion groups, DataGrid columns). Chart series (9a).
+func isChartSeriesContainer(container string) bool {
+	switch strings.ToUpper(container) {
+	case "SERIES", "LINE":
+		return true
+	}
+	return false
+}
+
+// chartSeriesTextTemplateVisible reports whether a chart series' texttemplate
+// sub-property is visible for the item's current dataSet mode + configured
+// datasources, mirroring the widget's editorConfig `hideNestedPropertiesIn`
+// gate. A visible-but-unset texttemplate must serialize an empty ClientTemplate
+// (not null) or Studio Pro flags CE0463:
+//   - the property's mode (static·/dynamic· name prefix) must match dataSet;
+//   - a datasource-bound property (e.g. staticTooltipHoverText → staticDataSource)
+//     is visible only when that datasource is configured on the item.
+//
+// An unbound property (e.g. staticName) is visible whenever its mode matches.
+func chartSeriesTextTemplateVisible(ip ItemPropertyMapping, dataSetMode string, configuredDataSources map[string]pages.DataSource) bool {
+	mode := "static"
+	if strings.HasPrefix(strings.ToLower(ip.PropertyKey), "dynamic") {
+		mode = "dynamic"
+	}
+	if dataSetMode == "" {
+		dataSetMode = "static"
+	}
+	if !strings.EqualFold(dataSetMode, mode) {
+		return false // hidden by the dataSet gate
+	}
+	if ip.DataSource != "" {
+		_, configured := configuredDataSources[ip.DataSource]
+		return configured
+	}
+	return true
+}
+
+// seriesDataSourceMatchesMode reports whether a chart-series datasource property
+// key (staticDataSource / dynamicDataSource) is the one active for the given
+// dataSet mode — used to route the friendly `DataSource:` alias. Chart series (9a).
+func seriesDataSourceMatchesMode(propertyKey, dataSetMode string) bool {
+	if dataSetMode == "" {
+		dataSetMode = "static"
+	}
+	mode := "static"
+	if strings.HasPrefix(strings.ToLower(propertyKey), "dynamic") {
+		mode = "dynamic"
+	}
+	return strings.EqualFold(dataSetMode, mode)
+}
+
 func (e *PluggableWidgetEngine) buildObjectListItem(mapping *ObjectListMapping, child *ast.WidgetV3) (backend.ObjectListItemSpec, error) {
 	spec := backend.ObjectListItemSpec{}
 	// Track whether the user explicitly set Sortable / ShowContentAs in MDL —
 	// drives the attribute-less and custom-content fallbacks below.
 	_, sortableExplicit := lookupProperty(child.Properties, "Sortable")
 	_, showContentAsExplicit := lookupProperty(child.Properties, "ShowContentAs")
+
+	// Save/restore the page builder's entity context: an object-list item may
+	// bring its OWN datasource (e.g. a chart `series`' staticDataSource), against
+	// which the item's attribute sub-properties (staticXAttribute / staticY…)
+	// must resolve — not the parent widget's context. Chart series (9a).
+	savedEntityContext := e.pageBuilder.entityContext
+	defer func() { e.pageBuilder.entityContext = savedEntityContext }()
+
+	// A chart series' texttemplate visibility (and the DataSource: alias below)
+	// depend on its dataSet mode (static/dynamic); default to static when unset,
+	// matching the schema.
+	itemDataSetMode := "static"
+	if v, ok := lookupProperty(child.Properties, "dataSet"); ok {
+		if s := stringifyAny(v); s != "" {
+			itemDataSetMode = s
+		}
+	}
+
+	// Pre-resolve any datasource-typed sub-property the MDL set, so attribute
+	// sub-properties later in the loop resolve against the item's own entity
+	// regardless of schema property order. The built DataSource is emitted in
+	// the main loop's "datasource" case.
+	prebuiltDataSources := make(map[string]pages.DataSource)
+	for _, ip := range mapping.ItemProperties {
+		if ip.Operation != "datasource" {
+			continue
+		}
+		raw, ok := lookupProperty(child.Properties, ip.PropertyKey)
+		if !ok {
+			for _, alias := range ip.MdlAliases {
+				if raw, ok = lookupProperty(child.Properties, alias); ok {
+					break
+				}
+			}
+		}
+		// Friendly `DataSource:` alias inside a chart series routes to the
+		// mode-appropriate datasource property (staticDataSource when
+		// dataSet=static, dynamicDataSource when dynamic) — matching how the
+		// top-level widget datasource is written. Chart series (9a).
+		if !ok && isChartSeriesContainer(mapping.MDLContainer) && seriesDataSourceMatchesMode(ip.PropertyKey, itemDataSetMode) {
+			raw, ok = lookupProperty(child.Properties, "DataSource")
+		}
+		if !ok {
+			continue
+		}
+		ds, ok := raw.(*ast.DataSourceV3)
+		if !ok {
+			continue
+		}
+		dataSource, entityName, err := e.pageBuilder.buildDataSourceV3(ds)
+		if err != nil {
+			return spec, mdlerrors.NewBackend("datasource for object-list item property "+ip.PropertyKey, err)
+		}
+		prebuiltDataSources[ip.PropertyKey] = dataSource
+		if entityName != "" {
+			e.pageBuilder.entityContext = entityName
+		}
+	}
 
 	// Scalar item properties: ItemProperties carries the operation kind per
 	// sub-property key. Look up the value in the AST child's properties bag.
@@ -705,6 +842,29 @@ func (e *PluggableWidgetEngine) buildObjectListItem(mapping *ObjectListMapping, 
 					PrimitiveVal: ip.Value,
 				})
 			}
+			// A datasource resolved in the pre-pass via the friendly `DataSource:`
+			// alias has no direct child.Properties[<schemaKey>] entry, so emit it
+			// here from the pre-built map. Chart series (9a).
+			if ds, dsOK := prebuiltDataSources[ip.PropertyKey]; dsOK && ds != nil {
+				spec.Properties = append(spec.Properties, backend.ObjectListItemProperty{
+					PropertyKey: ip.PropertyKey,
+					Operation:   "datasource",
+					DataSource:  ds,
+				})
+			}
+			// A VISIBLE-but-unset texttemplate sub-property of a chart series must
+			// serialize as an empty Forms$ClientTemplate, not null, or Studio Pro
+			// flags CE0463. Visibility follows the widget's editorConfig dataSet
+			// gate + dataSource binding. Scoped to chart series so non-chart
+			// object lists (Accordion groups, DataGrid columns) are untouched. (9a)
+			if ip.Operation == "texttemplate" && isChartSeriesContainer(mapping.MDLContainer) &&
+				chartSeriesTextTemplateVisible(ip, itemDataSetMode, prebuiltDataSources) {
+				spec.Properties = append(spec.Properties, backend.ObjectListItemProperty{
+					PropertyKey:   ip.PropertyKey,
+					Operation:     "texttemplate",
+					EmptyTemplate: true,
+				})
+			}
 			continue
 		}
 		strVal := stringifyAny(raw)
@@ -730,16 +890,30 @@ func (e *PluggableWidgetEngine) buildObjectListItem(mapping *ObjectListMapping, 
 				}
 			}
 		case "attribute":
-			if e.pageBuilder.entityContext != "" {
+			// An attribute navigated over associations (e.g. Order_Customer/Name)
+			// resolves to a final attribute + association steps (AttributeRef.EntityRef);
+			// a flat path is left as-is. Mirrors the DynamicText contentparam path.
+			if finalQN, steps, ok := e.pageBuilder.resolveAssociationAttributePath(strVal); ok {
+				prop.AttributePath = finalQN
+				prop.AttributeRefSteps = steps
+			} else if e.pageBuilder.entityContext != "" {
 				prop.AttributePath = e.pageBuilder.resolveAttributePath(strVal)
 			} else {
 				prop.AttributePath = strVal
 			}
+		case "datasource":
+			// Emit the datasource pre-resolved above (which also set the item's
+			// entity context for the attribute sub-props). Chart series (9a).
+			ds, ok := prebuiltDataSources[ip.PropertyKey]
+			if !ok || ds == nil {
+				continue
+			}
+			prop.DataSource = ds
 		default:
-			// Unsupported sub-property kinds (datasource, action) — skipped here
-			// because they need richer AST context than the child's property bag.
-			// TODO(#538 follow-up): grammar + visitor support for datasource and
-			// action expressions inside object-list item property positions.
+			// Remaining unsupported sub-property kinds (action) still need richer
+			// AST context than the child's property bag.
+			// TODO(#538 follow-up): action expressions inside object-list item
+			// property positions (e.g. chart series staticOnClickAction).
 			continue
 		}
 		spec.Properties = append(spec.Properties, prop)

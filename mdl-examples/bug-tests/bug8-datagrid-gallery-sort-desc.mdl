@@ -1,0 +1,54 @@
+-- ============================================================================
+-- Bug 8 — Datasource `sort by … desc` silently persisted/described as `asc`
+-- ============================================================================
+--
+-- Symptom (before fix):
+--   A pluggable-widget datasource `sort by <attr> desc` (DataGrid2 and Gallery,
+--   quoted or unquoted attribute) round-tripped as `asc`. `describe page` showed
+--   the direction flipped to ascending; at runtime the grid rendered oldest-first.
+--   No error anywhere — a silent wrong-data-order failure.
+--
+-- Root cause:
+--   A Pages/Forms$GridSortItem stores its direction under the BSON key
+--   SortDirection (confirmed by the reflection-data-generated codec type
+--   modelsdk/gen/pages GridSortItem). The default (modelsdk) engine wrote it
+--   correctly, but:
+--     * the DESCRIBE readers looked up the wrong key SortOrder (that key belongs
+--       to Microflows$SortItem / DocumentTemplates$GridSortItem) → always "asc";
+--     * the legacy sdk/mpr writer also emitted the wrong SortOrder key → Studio
+--       Pro ignored it and reverted to ascending under `--engine legacy`.
+--
+-- After fix:
+--   Readers read SortDirection (falling back to SortOrder for pre-fix files);
+--   the legacy writer emits SortDirection. `desc` survives on both engines.
+--
+-- Verify:
+--   mxcli exec bug8-datagrid-gallery-sort-desc.mdl -p <app.mpr>
+--   mxcli -p <app.mpr> -c "describe page BugTests.Bug8Sort"
+--     → both grids show `sort by … desc`
+-- ============================================================================
+
+create page BugTests.Bug8Sort (
+  Title: 'Bug 8 Sort',
+  Layout: Atlas_Core.Atlas_Default
+) {
+  layoutgrid lg1 {
+    row row1 {
+      column col1 (DesktopWidth: 12) {
+        datagrid dgDesc (
+          DataSource: database from Administration.Account sort by FullName desc,
+          Selection: Single
+        ) {
+          column c1 (Attribute: FullName, Caption: 'Name')
+        }
+        gallery galDesc (
+          DataSource: database from Administration.Account sort by "Email" desc
+        ) {
+          template tpl1 {
+            dynamictext t1 (Content: '{1}', ContentParams: [{1} = Email])
+          }
+        }
+      }
+    }
+  }
+}

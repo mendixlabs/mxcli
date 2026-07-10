@@ -1,0 +1,44 @@
+-- ============================================================================
+-- DataGrid2 column bound to an ASSOCIATED attribute (Assoc/Attr)
+-- ============================================================================
+--
+-- Feature gap (before fix):
+--   A DataGrid2 column could only bind an own-entity attribute (`attribute: Name`).
+--   Writing an associated attribute (`attribute: Order_Customer/Name`) parsed and
+--   exec'd, but was stored as a flat attribute path with a null EntityRef, so
+--   mxbuild rejected it with CE1613 "The selected attribute '…/…' no longer
+--   exists." Studio Pro supports this column source; mxcli did not.
+--
+-- Root cause:
+--   The column attribute reader flattened the `/` (resolveAttributePath) and the
+--   serializer hardcoded EntityRef: nil — nothing built the association-step
+--   structure Mendix needs.
+--
+-- After fix:
+--   The column attribute path is resolved into a final attribute + association
+--   hops (reusing the DynamicText contentparam resolver), and the serializer
+--   emits a DomainModels$AttributeRef whose EntityRef is a
+--   DomainModels$IndirectEntityRef of EntityRefStep{Association, DestinationEntity}
+--   hops. mxbuild-validated (mxcli docker check --no-update-widgets = 0 errors);
+--   DESCRIBE round-trips the short `Assoc/Attr` form.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/datagrid2-associated-attribute-column.mdl -p app.mpr
+-- ============================================================================
+
+create entity MyFirstModule.Employee ( Name: String );
+create entity MyFirstModule.Expense ( Description: String );
+create association MyFirstModule.Expense_Employee
+  from MyFirstModule.Expense to MyFirstModule.Employee;
+
+create or replace page MyFirstModule.DGAssocCol
+( Title: 'DG Assoc Column', Layout: Atlas_Core.Atlas_Default )
+{
+  datagrid dg (datasource: database from MyFirstModule.Expense) {
+    column colDesc (caption: 'Description', attribute: Description)
+    -- associated attribute: the Employee's Name via the Expense_Employee association
+    column colEmployee (caption: 'Submitted by', attribute: Expense_Employee/Name)
+  }
+}
+
+describe page MyFirstModule.DGAssocCol;

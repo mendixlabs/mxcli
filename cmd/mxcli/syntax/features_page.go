@@ -46,13 +46,13 @@ func init() {
 
 	Register(SyntaxFeature{
 		Path:    "page.datasource",
-		Summary: "Datasource bindings: variable, database, microflow, selection",
+		Summary: "Datasource bindings: variable, database, microflow, selection, association",
 		Keywords: []string{
 			"datasource", "data source", "database", "microflow",
-			"selection", "variable", "binding", "binds",
+			"selection", "variable", "binding", "binds", "association", "data from context",
 		},
-		Syntax:  "DataSource: $Variable              -- Parameter/variable binding\nDataSource: DATABASE Module.Entity  -- Database query\nDataSource: MICROFLOW Module.MF()   -- Microflow datasource\nDataSource: SELECTION widgetName    -- Selection from another widget\nBinds: AttributeName                -- Attribute binding (inputs)",
-		Example: "-- Database datasource with grid\nDATAGRID grid (DataSource: DATABASE Module.Customer) {\n  COLUMN colName (Attribute: Name, Caption: 'Name')\n}\n\n-- Microflow datasource\nDATAVIEW dv (DataSource: MICROFLOW Module.GetData()) { ... }\n\n-- Selection-based datasource\nDATAVIEW dvDetail (DataSource: SELECTION gridCustomers) { ... }",
+		Syntax:  "DataSource: $Variable                    -- Parameter/variable binding\nDataSource: DATABASE Module.Entity        -- Database query\nDataSource: MICROFLOW Module.MF()         -- Microflow datasource\nDataSource: SELECTION widgetName          -- Selection from another widget\nDataSource: $currentObject/Module.Assoc   -- Over an association (\"data from context\")\n                                          --   list widget → to-many collection\n                                          --   nested DATAVIEW → the to-one referenced object\nBinds: AttributeName                      -- Attribute binding (inputs)",
+		Example: "-- Database datasource with grid\nDATAGRID grid (DataSource: DATABASE Module.Customer) {\n  COLUMN colName (Attribute: Name, Caption: 'Name')\n}\n\n-- Microflow datasource\nDATAVIEW dv (DataSource: MICROFLOW Module.GetData()) { ... }\n\n-- Over an association: a nested DataView shows the referenced (to-one) object\nDATAVIEW dvOrder (DataSource: $Order) {\n  DATAVIEW dvCustomer (DataSource: $currentObject/Order_Customer) {\n    TEXTBOX (Label: 'Name', Attribute: Name)\n  }\n}\n\n-- Over an association: a list widget shows the (to-many) collection\nLISTVIEW lvLines (DataSource: $currentObject/Order_OrderLine) { ... }",
 		SeeAlso: []string{"page.widgets", "page.create"},
 	})
 
@@ -111,10 +111,10 @@ func init() {
 		Keywords: []string{
 			"column", "sortable", "resizable", "draggable", "hidable",
 			"column width", "alignment", "wrap text", "visible",
-			"dynamic cell class", "tooltip",
+			"dynamic cell class", "tooltip", "associated attribute", "association column",
 		},
-		Syntax:  "COLUMN name (\n  Attribute: AttrName,\n  Caption: 'Header'\n  [, Sortable: true|false]\n  [, Resizable: true|false]\n  [, Draggable: true|false]\n  [, Hidable: yes|hidden|no]\n  [, ColumnWidth: autoFill|autoFit|manual]\n  [, Size: integer]\n  [, Alignment: left|center|right]\n  [, WrapText: true|false]\n  [, Visible: 'expression']\n  [, DynamicCellClass: 'expression']\n  [, Tooltip: 'text']\n)",
-		Example: "COLUMN colPrice (\n  Attribute: Price, Caption: 'Price',\n  Alignment: right, Sortable: false,\n  ColumnWidth: manual, Size: 150,\n  Tooltip: 'Price in USD'\n)",
+		Syntax:  "COLUMN name (\n  Attribute: AttrName,          -- own attribute\n  -- or an attribute over an association (bare association name):\n  -- Attribute: Assoc/Attr     e.g. Order_Customer/Name\n  Caption: 'Header'\n  [, Sortable: true|false]\n  [, Resizable: true|false]\n  [, Draggable: true|false]\n  [, Hidable: yes|hidden|no]\n  [, ColumnWidth: autoFill|autoFit|manual]\n  [, Size: integer]\n  [, Alignment: left|center|right]\n  [, WrapText: true|false]\n  [, Visible: 'expression']\n  [, DynamicCellClass: 'expression']\n  [, Tooltip: 'text']\n)",
+		Example: "COLUMN colPrice (\n  Attribute: Price, Caption: 'Price',\n  Alignment: right, Sortable: false,\n  ColumnWidth: manual, Size: 150,\n  Tooltip: 'Price in USD'\n)\n\n-- Associated attribute (attribute over a reference association):\nCOLUMN colCustomer (Attribute: Order_Customer/Name, Caption: 'Customer')",
 		SeeAlso: []string{"page.widgets"},
 	})
 

@@ -95,23 +95,122 @@ func ValidateWidgetPropertiesForStatement(stmt ast.Statement, registry *WidgetRe
 // validateWidgetTree recursively walks the AST widget tree and validates
 // pluggable widgets it encounters.
 func validateWidgetTree(widgets []*ast.WidgetV3, registry *WidgetRegistry, locationPrefix string) []linter.Violation {
+	return validateWidgetTreeIn(widgets, registry, locationPrefix, nil)
+}
+
+// validateWidgetTreeIn is validateWidgetTree with the *parent* widget's
+// object-list mappings keyed by container keyword (e.g. a chart's SERIES / LINE,
+// a Maps DYNAMICMARKER). A child whose Type is one of those is an object-list
+// item, not a built-in widget — its sub-properties (staticDataSource,
+// staticXAttribute, …) are resolved by the object-list engine and written, so it
+// must be exempt from the MDL-WIDGET07 "unrecognized property, silently dropped"
+// warning. When the parent mapping is known, the child's enumeration
+// sub-properties are validated against their member keys (MDL-WIDGET08). (9a)
+func validateWidgetTreeIn(widgets []*ast.WidgetV3, registry *WidgetRegistry, locationPrefix string, parentObjectLists map[string]*ObjectListMapping) []linter.Violation {
 	var out []linter.Violation
 	for _, w := range widgets {
 		if w == nil {
 			continue
 		}
+		mapping := parentObjectLists[strings.ToUpper(w.Type)]
+		isObjectListItem := mapping != nil || isUniversalObjectListKeyword(w.Type)
 		out = append(out, validatePluggableWidgetProperties(w, registry, locationPrefix)...)
 		out = append(out, validateStaticWidget(w, locationPrefix)...)
 		// Unknown-property warning applies only to built-in widgets; pluggable
-		// widgets get the stricter def.json check (MDL-WIDGET01) above.
-		if lookupWidgetDef(w, registry) == nil {
+		// widgets get the stricter def.json check (MDL-WIDGET01) above, and
+		// object-list items are validated by the object-list engine.
+		def := lookupWidgetDef(w, registry)
+		if def == nil && !isObjectListItem {
 			out = append(out, validateStaticWidgetUnknownProps(w, locationPrefix)...)
 		}
+		if mapping != nil {
+			out = append(out, validateObjectListItemEnums(w, mapping, locationPrefix)...)
+		}
 		if len(w.Children) > 0 {
-			out = append(out, validateWidgetTree(w.Children, registry, locationPrefix)...)
+			out = append(out, validateWidgetTreeIn(w.Children, registry, locationPrefix, objectListMappingSet(def))...)
 		}
 	}
 	return out
+}
+
+// validateObjectListItemEnums flags an enumeration sub-property of an object-list
+// item (e.g. a Maps marker `LocationType`, a chart series `Interpolation`) whose
+// value isn't one of the widget's declared member keys. Studio Pro silently
+// defaults an invalid enum value, so this class of typo otherwise fails quietly
+// at build (e.g. CE "a dynamic marker requires an address"). MDL-WIDGET08.
+func validateObjectListItemEnums(w *ast.WidgetV3, mapping *ObjectListMapping, locationPrefix string) []linter.Violation {
+	var out []linter.Violation
+	for _, ip := range mapping.ItemProperties {
+		if len(ip.EnumValues) == 0 {
+			continue
+		}
+		raw, ok := w.Properties[ip.PropertyKey]
+		if !ok {
+			// case-insensitive fallback (MDL keys keep the author's casing)
+			for k, v := range w.Properties {
+				if strings.EqualFold(k, ip.PropertyKey) {
+					raw, ok = v, true
+					break
+				}
+			}
+		}
+		if !ok {
+			continue
+		}
+		val, isStr := raw.(string)
+		if !isStr || val == "" {
+			continue
+		}
+		if enumValuesContain(ip.EnumValues, val) {
+			continue
+		}
+		out = append(out, linter.Violation{
+			RuleID:   "MDL-WIDGET08",
+			Severity: linter.SeverityError,
+			Message: fmt.Sprintf(
+				"%s: widget `%s` (%s) property `%s` has invalid value `%s` — valid values are %s",
+				locationPrefix, w.Name, w.Type, ip.PropertyKey, val, strings.Join(ip.EnumValues, ", "),
+			),
+		})
+	}
+	return out
+}
+
+// enumValuesContain reports whether val matches any member key case-insensitively.
+func enumValuesContain(members []string, val string) bool {
+	for _, m := range members {
+		if strings.EqualFold(m, val) {
+			return true
+		}
+	}
+	return false
+}
+
+// isUniversalObjectListKeyword reports whether a widget Type is one of the
+// grammar's object-list container keywords (the singular forms routed via a
+// parent's def.json `objectLists`). These are never built-in widgets, so their
+// sub-properties must be exempt from the MDL-WIDGET07 static-widget check even
+// when no project def is loaded (syntax-only `check`). Mirrors the object-list
+// keywords in MDLPage.g4 `widgetTypeV3`. Chart series (9a).
+func isUniversalObjectListKeyword(widgetType string) bool {
+	switch strings.ToUpper(widgetType) {
+	case "SERIES", "LINE", "GROUP", "CUSTOMITEM", "ITEM", "MARKER", "DYNAMICMARKER":
+		return true
+	}
+	return false
+}
+
+// objectListMappingSet returns a widget definition's object-list mappings keyed
+// by uppercase container keyword (nil when def is nil or has none).
+func objectListMappingSet(def *WidgetDefinition) map[string]*ObjectListMapping {
+	if def == nil || len(def.ObjectLists) == 0 {
+		return nil
+	}
+	set := make(map[string]*ObjectListMapping, len(def.ObjectLists))
+	for i := range def.ObjectLists {
+		set[strings.ToUpper(def.ObjectLists[i].MDLContainer)] = &def.ObjectLists[i]
+	}
+	return set
 }
 
 // staticWidgetKnownProps is the lowercase vocabulary of properties a built-in
@@ -252,34 +351,28 @@ func validateStaticWidget(w *ast.WidgetV3, locationPrefix string) []linter.Viola
 		out = append(out, *v)
 	}
 
-	// A plain DataView cannot use an association data source — Studio Pro rejects
-	// it ("data view 'X' cannot have a data source of type association"). Only
-	// list-producing widgets (listview, datagrid, gallery, templategrid) may.
-	// The widget still exec-creates (the BSON is valid), so only Studio Pro
-	// catches it — flag it here.
+	// A DataView cannot use a database data source — a data view shows one object,
+	// so Mendix offers only Context / Microflow / Nanoflow / Listen sources.
+	// mxcli used to accept it: the modelsdk engine then errors "not yet supported —
+	// rerun with legacy", and the legacy engine silently writes a Forms$DataViewSource
+	// that MxBuild rejects with CE7007 "Selected value is not valid for entity". Flag
+	// it here so the user gets an actionable message.
+	// (An *association* DataView source IS valid — "data from context over an
+	// association" — so it is deliberately NOT flagged here.)
 	if strings.EqualFold(w.Type, "dataview") {
-		if ds := w.GetDataSource(); ds != nil && ds.Type == "association" {
+		if ds := w.GetDataSource(); ds != nil && ds.Type == "database" {
 			out = append(out, linter.Violation{
-				RuleID:   "MDL-WIDGET08",
+				RuleID:   "MDL-WIDGET09",
 				Severity: linter.SeverityError,
 				Message: fmt.Sprintf(
-					"%s: dataview `%s` cannot use an association data source (`$%s/%s`) — Studio Pro rejects it; use a list widget (listview/datagrid/gallery) for a related collection",
-					locationPrefix, w.Name, dataSourceContextVar(ds), ds.Reference,
+					"%s: dataview `%s` cannot use a database data source (`from %s`) — a data view shows one object; use a microflow/nanoflow source (or a page parameter), or a list widget (listview/datagrid/gallery) for a collection",
+					locationPrefix, w.Name, ds.Reference,
 				),
 			})
 		}
 	}
 
 	return out
-}
-
-// dataSourceContextVar returns the context variable of an association data
-// source for messages ("currentObject" when implicit).
-func dataSourceContextVar(ds *ast.DataSourceV3) string {
-	if ds.ContextVariable == "" {
-		return "currentObject"
-	}
-	return ds.ContextVariable
 }
 
 var templatePlaceholderRe = regexp.MustCompile(`\{(\d+)\}`)
