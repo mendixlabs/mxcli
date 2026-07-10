@@ -23,7 +23,7 @@ var (
 	BuildTime = ""
 )
 
-const warningBanner = "WARNING: This is a vibe-coded PoC, alpha quality, use with caution.\n"
+const warningBanner = "WARNING: This is a vibe-coded PoC, alpha quality, use with caution. This was originally created by Mendix Labs and altered by Jord ten Bulte - Orangeleaf Consulting\n"
 
 func main() {
 	// Show warning banner unless --quiet, -q, --help, -h, or --version is passed
@@ -358,6 +358,7 @@ func init() {
 	reportCmd.Flags().StringP("format", "f", "markdown", "Output format: markdown, json, html")
 	reportCmd.Flags().StringP("output", "o", "", "Output file path (default: stdout)")
 	reportCmd.Flags().StringSliceP("exclude", "e", nil, "Modules to exclude from report")
+	reportCmd.Flags().Bool("raw", false, "Output unscored per-category penalty/rate stats (for calibrating normalization), instead of a scored report")
 
 	// Graph-report command flags
 	graphReportCmd.Flags().StringP("format", "f", "markdown", "Output format: markdown, json")

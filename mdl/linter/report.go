@@ -149,6 +149,72 @@ func BuildReport(projectName, date string, violations []Violation, rules []Rule,
 	return report
 }
 
+// RawCategoryStat holds unscored metrics for calibration purposes --
+// no scoring formula applied, just the ingredients that feed it.
+type RawCategoryStat struct {
+	Name            string  `json:"name"`
+	ElementsChecked int     `json:"elementsChecked"`
+	Errors          int     `json:"errors"`
+	Warnings        int     `json:"warnings"`
+	Infos           int     `json:"infos"`
+	Penalty         float64 `json:"penalty"`
+	Rate            float64 `json:"rate"` // penalty / elementsChecked, 0 if elementsChecked == 0
+}
+
+// BuildRawStats computes unscored penalty/rate data per category, for
+// calibrating a normalization threshold against a fleet of real projects.
+// Mirrors BuildReport's category-detection logic exactly, minus scoring.
+func BuildRawStats(violations []Violation, rules []Rule, elementCounts map[string]int) []RawCategoryStat {
+	ruleCategories := CategoriesFromRules(rules)
+
+	catSet := make(map[string]bool)
+	for _, cat := range ruleCategories {
+		catSet[cat] = true
+	}
+
+	catViolations := make(map[string][]Violation)
+	for _, v := range violations {
+		cat := resolveCategory(v.RuleID, ruleCategories)
+		catViolations[cat] = append(catViolations[cat], v)
+		catSet[cat] = true
+	}
+
+	var allCats []string
+	for cat := range catSet {
+		allCats = append(allCats, cat)
+	}
+	sort.Strings(allCats)
+
+	var stats []RawCategoryStat
+	for _, catName := range allCats {
+		var errs, warns, infos int
+		for _, v := range catViolations[catName] {
+			switch v.Severity {
+			case SeverityError:
+				errs++
+			case SeverityWarning:
+				warns++
+			case SeverityInfo:
+				infos++
+			}
+		}
+		// Matches your adjusted weights (Error=5, Warning=1, Info=0.2) --
+		// keep this in sync if you tune buildCategoryScore's weights again.
+		penalty := float64(errs)*5 + float64(warns)*1 + float64(infos)*0.2
+		elementsChecked := elementCounts[catName]
+		rate := 0.0
+		if elementsChecked > 0 {
+			rate = penalty / float64(elementsChecked)
+		}
+		stats = append(stats, RawCategoryStat{
+			Name: catName, ElementsChecked: elementsChecked,
+			Errors: errs, Warnings: warns, Infos: infos,
+			Penalty: penalty, Rate: rate,
+		})
+	}
+	return stats
+}
+
 func resolveCategory(ruleID string, ruleCategories map[string]string) string {
 	if cat, ok := ruleCategories[ruleID]; ok {
 		return cat
@@ -178,7 +244,7 @@ func buildCategoryScore(name string, violations []Violation, elementsChecked int
 		penalty = penalty / float64(elementsChecked) * normalizationBaseline
 	}
 	// if elementsChecked == 0, fall back to the flat penalty (nothing to normalize against)
-	
+
 	cs.Score = math.Max(0, 100-penalty)
 
 	// Build top actions from most frequent violation messages (deduplicated by rule)

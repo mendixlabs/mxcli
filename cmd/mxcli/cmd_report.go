@@ -4,7 +4,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -133,6 +135,33 @@ Examples:
 		// each category's "checkable universe" of catalog tables, so violation
 		// density is normalized against project size instead of raw counts.
 		elementCounts := categoryElementCounts(cat)
+
+		if raw, _ := cmd.Flags().GetBool("raw"); raw {
+			stats := linter.BuildRawStats(violations, lint.Rules(), elementCounts)
+			payload := struct {
+				Project    string                   `json:"project"`
+				Categories []linter.RawCategoryStat `json:"categories"`
+			}{Project: projectName, Categories: stats}
+
+			var w io.Writer = os.Stdout
+			if outputPath != "" {
+				f, err := os.Create(outputPath)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error creating output file: %v\n", err)
+					os.Exit(1)
+				}
+				defer f.Close()
+				w = f
+			}
+			enc := json.NewEncoder(w)
+			enc.SetIndent("", "  ")
+			if err := enc.Encode(payload); err != nil {
+				fmt.Fprintf(os.Stderr, "Error writing raw stats: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+
 		report := linter.BuildReport(
 			projectName,
 			time.Now().Format("2006-01-02 15:04:05"),
@@ -184,7 +213,7 @@ var categoryElementTables = map[string][]string{
 	"Design":       {"entities_data", "pages_data", "widgets_data", "attributes_data"},
 	"Correctness":  {"pages_data", "widgets_data", "microflows_data", "activities_data"},
 	"Performance":  {"activities_data", "attributes_data", "entities_data"},
-	"Architecture": {"modules_data", "entities_data", "microflows_data", "associations_data"},
+	"Architecture": {"modules_data", "entities_data", "microflows_data", "associations_data", "pages_data"},
 	"Complexity":   {"microflows_data", "activities_data"},
 }
 
