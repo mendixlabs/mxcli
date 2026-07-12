@@ -13,7 +13,28 @@ import (
 // scores as if unnormalized; fewer elements amplify the penalty per violation,
 // more elements dilute it — so the same violation count doesn't punish a small
 // project as hard as it rewards a large one.
-const normalizationBaseline = 50
+//
+// Calibrated per category against real project data (see compute_baseline.py
+// and normalization-baseline-plan.md's "How to recalibrate" section) rather
+// than a single shared magic number, because categories' natural violation
+// rates differ by orders of magnitude.
+var normalizationBaseline = map[string]float64{
+	"Architecture": 55.27,
+	"Complexity":   36471.63,
+	"Correctness":  2087.73,
+	"Design":       4255.50,
+	"Naming":       676.39,
+	"Performance":  114384.76,
+	"Quality":      1368.90,
+	"Security":     822.88,
+}
+
+// defaultNormalizationBaseline is used for any category not present in the
+// map above -- e.g. a brand-new category introduced by a new rule, before
+// it's been through a calibration pass. Deliberately conservative (a
+// middling value) rather than either extreme, so an uncalibrated category
+// neither clips to 0 nor sits stuck near 100 by default.
+const defaultNormalizationBaseline = 1000.0
 
 // Report represents a complete lint report with scoring.
 type Report struct {
@@ -241,7 +262,11 @@ func buildCategoryScore(name string, violations []Violation, elementsChecked int
 	// Scoring: Error=-5, Warning=-1, Info=-0.2 //adjusted from original: Error=-10, Warning=-3, Info=-1
 	penalty := float64(cs.Errors)*5 + float64(cs.Warnings)*1 + float64(cs.Infos)*0.2
 	if elementsChecked > 0 {
-		penalty = penalty / float64(elementsChecked) * normalizationBaseline
+		baseline, ok := normalizationBaseline[name]
+		if !ok {
+			baseline = defaultNormalizationBaseline
+		}
+		penalty = penalty / float64(elementsChecked) * baseline
 	}
 	// if elementsChecked == 0, fall back to the flat penalty (nothing to normalize against)
 

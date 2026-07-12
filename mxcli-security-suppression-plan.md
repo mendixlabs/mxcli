@@ -208,3 +208,4 @@ sed -n '52,75p' mdl/linter/config.go
    Security's rate spread widens — i.e. projects that have gone through
    review now score meaningfully differently from ones that haven't,
    rather than all clustering in the same narrow band as before.
+    - ./calibrate.sh ./bin/mxcli "/mnt/c/Mendix/Toll/MAIN" calibration.json

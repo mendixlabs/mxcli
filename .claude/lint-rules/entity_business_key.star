@@ -22,10 +22,10 @@ RULE_ID = "ARCH003"
 RULE_NAME = "Entity Business Key"
 DESCRIPTION = "Persistent entities should have a unique, not-null attribute as a business key"
 CATEGORY = "architecture"
-SEVERITY = "warning"
+SEVERITY = "info"
 
 # Attribute names that commonly indicate a business key
-BUSINESS_KEY_PATTERNS = ["Code", "ExternalId", "ExternalID", "UUID", "Key", "Identifier", "Reference"]
+BUSINESS_KEY_PATTERNS = ["Code", "ExternalId", "ExternalID", "UUID", "Key", "Identifier", "Reference", "_Id"]
 
 def has_business_key(entity):
     """Check if entity has at least one attribute that is both unique and required."""

@@ -14,7 +14,7 @@ def check():
     violations = []
 
     for entity in entities():
-        if entity.is_external:
+        if entity.entity_type != "Persistent" or entity.is_external:
             continue
 
         for attr in attributes_for(entity.qualified_name):

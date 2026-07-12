@@ -27,7 +27,8 @@ CATEGORY = "design"
 SEVERITY = "warning"
 
 # Maximum allowed attributes per entity - customize as needed
-MAX_ATTRIBUTES = 10
+MIN_ATTRIBUTES = 10
+MAX_ATTRIBUTES = 20
 
 def check():
     """
@@ -37,16 +38,17 @@ def check():
     violations = []
 
     for entity in entities():
-        if entity.attribute_count > MAX_ATTRIBUTES:
+        if (entity.attribute_count > MIN_ATTRIBUTES and entity.attribute_count <= MAX_ATTRIBUTES):
             loc = location(
                 module=entity.module_name,
                 document_type="Entity",
                 document_name=entity.qualified_name
             )
             v = violation(
-                message="Entity '{}' has {} attributes (max: {}). Consider splitting into smaller entities.".format(
+                message="Entity '{}' has {} attributes (min {}, max: {}). Consider splitting into smaller entities.".format(
                     entity.name,
                     entity.attribute_count,
+                    MIN_ATTRIBUTES, 
                     MAX_ATTRIBUTES
                 ),
                 location=loc,

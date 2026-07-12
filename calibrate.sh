@@ -24,6 +24,28 @@ OUT_NAME="${3:-calibration.json}"
 PROJECTS_DIR="${PROJECTS_DIR%/}"
 OUT_FILE="$PROJECTS_DIR/$OUT_NAME"
 
+# Validate arguments up front -- fail fast, before running `mxcli report`
+# across the whole fleet, rather than discovering a bad path only at the
+# very last step (after all the expensive work is already done).
+if [ ! -d "$PROJECTS_DIR" ]; then
+	echo "Error: projects-dir '$PROJECTS_DIR' is not a directory." >&2
+	exit 1
+fi
+
+case "$OUT_NAME" in
+*/*)
+	echo "Error: output filename '$OUT_NAME' contains a '/', so it looks like a path rather than a plain filename." >&2
+	echo "  (a common cause: two separate example command lines pasted with no space/newline between them," >&2
+	echo "  so the end of one line ran straight into the start of the next -- got OUT_FILE='$OUT_FILE')" >&2
+	exit 1
+	;;
+esac
+
+if ! touch "$OUT_FILE" 2>/dev/null; then
+	echo "Error: cannot write to '$OUT_FILE' -- check the path and permissions." >&2
+	exit 1
+fi
+
 # Entries that mxcli init (and mxcli itself, during report/lint runs) can
 # scaffold into a project directory. These are calibration/AI-tooling
 # artifacts, not part of the Mendix app -- make sure they never get

@@ -16,7 +16,7 @@ RULE_ID = "CONV010"
 RULE_NAME = "ACTMicroflowContent"
 DESCRIPTION = "ACT_ microflows should only contain UI actions and sub-microflow calls"
 CATEGORY = "architecture"
-SEVERITY = "warning"
+SEVERITY = "info"
 
 # Allowed action types in ACT_ microflows
 ALLOWED_ACTIONS = (

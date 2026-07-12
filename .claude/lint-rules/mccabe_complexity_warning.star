@@ -27,12 +27,12 @@
 
 RULE_ID = "QUAL001"
 RULE_NAME = "McCabe Complexity"
-DESCRIPTION = "Microflows should not exceed McCabe cyclomatic complexity of 10"
+DESCRIPTION = "Microflows should not exceed McCabe cyclomatic complexity of 20"
 CATEGORY = "complexity"
 SEVERITY = "warning"
 
 # Maximum allowed complexity - customize as needed
-MAX_COMPLEXITY = 10
+MAX_COMPLEXITY = 20
 
 def check():
     """

@@ -8,11 +8,10 @@
 
 RULE_ID = "CONV003"
 RULE_NAME = "PageNamingSuffix"
-DESCRIPTION = "Page names should end with a type suffix (_NewEdit, _View, _Overview, _Select, _Details, _Dashboard)"
+VALID_SUFFIXES = ("_NewEdit", "_View", "_Overview", "_Select", "_Details", "_Dashboard", "_Edit", "_New")
+DESCRIPTION = "Page names should end with a type suffix ({})".format(", ".join(VALID_SUFFIXES))
 CATEGORY = "naming"
 SEVERITY = "info"
-
-VALID_SUFFIXES = ("_NewEdit", "_View", "_Overview", "_Select", "_Details", "_Dashboard")
 
 def check():
     violations = []
@@ -27,7 +26,7 @@ def check():
 
         if not has_suffix:
             violations.append(violation(
-                message="Page '{}' does not end with a recognized suffix (_NewEdit, _View, _Overview, _Select, _Details, _Dashboard)".format(name),
+message="Page '{}' does not end with a recognized suffix ({})".format(name, ", ".join(VALID_SUFFIXES)),
                 location=location(
                     module=page.module_name,
                     document_type="Page",

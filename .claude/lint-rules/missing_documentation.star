@@ -27,6 +27,9 @@ def check():
 
     # Check entities
     for entity in entities():
+        if entity.entity_type != "Persistent" or entity.is_external:
+            continue
+            
         if not entity.description or entity.description.strip() == "":
             loc = location(
                 module=entity.module_name,
@@ -46,8 +49,8 @@ def check():
         if mf.microflow_type != "MICROFLOW":
             continue
 
-        # Skip very simple microflows (1-2 activities)
-        if mf.activity_count <= 2:
+        # Skip simple microflows (1-4 activities)
+        if mf.activity_count <= 4:
             continue
 
         if not mf.description or mf.description.strip() == "":

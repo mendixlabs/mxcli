@@ -10,7 +10,7 @@ RULE_ID = "SEC005"
 RULE_NAME = "StrictModeDisabled"
 DESCRIPTION = "Strict security mode is disabled - enables additional XPath constraint enforcement"
 CATEGORY = "security"
-SEVERITY = "warning"
+SEVERITY = "info"
 
 def check():
     sec = project_security()
