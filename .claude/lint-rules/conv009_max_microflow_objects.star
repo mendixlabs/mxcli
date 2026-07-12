@@ -17,7 +17,7 @@ def check():
     violations = []
 
     for mf in microflows():
-        if (mf.activity_count > MIN_ACTIVITIES and mf.activity_count <= MAX_ACTIVITIES:
+        if (mf.activity_count > MIN_ACTIVITIES and mf.activity_count <= MAX_ACTIVITIES):
             violations.append(violation(
                 message="Microflow '{}' has {} activities (convention max: {}). Split into sub-microflows.".format(
                     mf.name, mf.activity_count, MIN_ACTIVITIES

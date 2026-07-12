@@ -43,7 +43,7 @@ def check():
     violations = []
 
     for mf in microflows():
-        if (mf.complexity > MIN_COMPLEXITY and mf.complexity <= MAX_COMPLEXITY:
+        if (mf.complexity > MIN_COMPLEXITY and mf.complexity <= MAX_COMPLEXITY):
             loc = location(
                 module=mf.module_name,
                 document_type="Microflow",

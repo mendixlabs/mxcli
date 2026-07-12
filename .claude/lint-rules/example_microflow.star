@@ -25,7 +25,7 @@
 VALID_PREFIXES = ["ACT_", "SUB_", "DS_", "VAL_", "SCH_", "IVK_", "OCH_", "BCO_", "ACO_", "BCR_", "ACR_", "BDE_", "ADE_", "BRO_", "ARO_", "SCE_", "SE_", "DL_", "PWS_", "PRS_", "ASU_", "NAV_", "CRS_", "POST_", "GET_", "PATCH_", "PUT_", "DELETE_", "TEST_"]
 RULE_ID = "CUSTOM002"
 RULE_NAME = "Microflow Prefix Convention"
-DESCRIPTION = "Microflows should have standard naming prefixes ({}})".format(", ".join(VALID_PREFIXES))
+DESCRIPTION = "Microflows should have standard naming prefixes ({})".format(", ".join(VALID_PREFIXES))
 CATEGORY = "naming"
 SEVERITY = "info"
 
