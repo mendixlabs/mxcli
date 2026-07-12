@@ -18,15 +18,16 @@ import (
 // and normalization-baseline-plan.md's "How to recalibrate" section) rather
 // than a single shared magic number, because categories' natural violation
 // rates differ by orders of magnitude.
+
 var normalizationBaseline = map[string]float64{
-	"Architecture": 55.27,
-	"Complexity":   36471.63,
-	"Correctness":  2087.73,
-	"Design":       4255.50,
-	"Naming":       676.39,
-	"Performance":  114384.76,
-	"Quality":      1368.90,
-	"Security":     822.88,
+        "Architecture": 257.83,
+        "Complexity": 149406.9,
+        "Correctness": 2087.73,
+        "Design": 4947.25,
+        "Naming": 696.72,
+        "Performance": 114384.76,
+        "Quality": 1555.29,
+        "Security": 939.67,
 }
 
 // defaultNormalizationBaseline is used for any category not present in the

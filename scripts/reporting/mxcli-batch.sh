@@ -27,7 +27,7 @@
 #     TOPS-main/SomeApp.mpr
 #     ...
 #
-# Usage: ./mxcli-batch.sh <calibrate|summary|full> <mxcli-binary> <projects-dir> [output-name] [--force-init]
+# Usage: ./mxcli-batch.sh <calibrate|summary|full> <mxcli-binary> <projects-dir> [output-name] [--force-init] [--exclude-marketplace] [-e MODULE ...]
 #
 # --force-init: by default, a project's .claude/lint-rules/ is only
 # (re)created via `mxcli init` if it's missing or empty -- an already-
@@ -36,14 +36,38 @@
 # rebuilding). Pass --force-init to always wipe and re-run `mxcli init`
 # for every project, guaranteeing everyone is on the latest rules
 # currently embedded in $MXCLI.
+#
+# --exclude-marketplace: forwarded to every `mxcli report` call, excluding
+# all Marketplace-sourced modules (and System) from calibration/summary/full
+# output alike.
+#
+# -e/--exclude MODULE: forwarded to every `mxcli report` call, may be
+# repeated. Combine with --exclude-marketplace to also drop specific local
+# modules (e.g. internal shared libraries) from the score.
 set -euo pipefail
 
 FORCE_INIT=false
+EXCLUDE_MARKETPLACE=false
+EXCLUDE_MODULES=()
 POSITIONAL=()
-for arg in "$@"; do
-	case "$arg" in
-		--force-init) FORCE_INIT=true ;;
-		*) POSITIONAL+=("$arg") ;;
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--force-init)
+			FORCE_INIT=true
+			shift
+			;;
+		--exclude-marketplace)
+			EXCLUDE_MARKETPLACE=true
+			shift
+			;;
+		-e|--exclude)
+			EXCLUDE_MODULES+=("$2")
+			shift 2
+			;;
+		*)
+			POSITIONAL+=("$1")
+			shift
+			;;
 	esac
 done
 set -- "${POSITIONAL[@]+"${POSITIONAL[@]}"}"
@@ -63,6 +87,14 @@ case "$MODE" in
 		;;
 esac
 OUT_NAME="${4:-$DEFAULT_OUT}"
+
+EXCLUDE_FLAGS=()
+if [ "$EXCLUDE_MARKETPLACE" = true ]; then
+	EXCLUDE_FLAGS+=(--exclude-marketplace)
+fi
+for m in "${EXCLUDE_MODULES[@]:-}"; do
+	[ -n "$m" ] && EXCLUDE_FLAGS+=(--exclude "$m")
+done
 
 # calibrate/summary write a single file directly into PROJECTS_DIR.
 # full writes a whole folder of files into PROJECTS_DIR.
@@ -180,6 +212,7 @@ for project_dir in "$PROJECTS_DIR"/*/; do
 		# summary/full: the ACTUAL scored report, not raw calibration data.
 		REPORT_FLAGS=(--format json)
 	fi
+	REPORT_FLAGS+=("${EXCLUDE_FLAGS[@]}")
 
 	if ! "$MXCLI" report -p "$mpr_file" "${REPORT_FLAGS[@]}" -o "$out_json" 2>"$TMP_DIR/$safe_name.err"; then
 		echo "  skipped '$project_name' (report failed -- see below)" >&2

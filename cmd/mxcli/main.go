@@ -358,6 +358,7 @@ func init() {
 	reportCmd.Flags().StringP("format", "f", "markdown", "Output format: markdown, json, html")
 	reportCmd.Flags().StringP("output", "o", "", "Output file path (default: stdout)")
 	reportCmd.Flags().StringSliceP("exclude", "e", nil, "Modules to exclude from report")
+	reportCmd.Flags().Bool("exclude-marketplace", false, "Exclude Marketplace-sourced modules (and System) from the report")
 	reportCmd.Flags().Bool("raw", false, "Output unscored per-category penalty/rate stats (for calibrating normalization), instead of a scored report")
 
 	// Graph-report command flags

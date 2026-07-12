@@ -33,17 +33,23 @@ Output formats:
 The report runs a FULL catalog refresh (required for comprehensive analysis)
 and executes all built-in and Starlark lint rules.
 
+Use --exclude-marketplace to score only core application modules, excluding
+Marketplace-sourced modules and System.
+
 Examples:
   mxcli report -p app.mpr
   mxcli report -p app.mpr --format json
   mxcli report -p app.mpr --format html --output report.html
   mxcli report -p app.mpr --format markdown --output report.md
+  mxcli report -p app.mpr --exclude-marketplace
+  mxcli report -p app.mpr --exclude-marketplace --format html --output report.html
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		projectPath, _ := cmd.Flags().GetString("project")
 		format := resolveFormat(cmd, "markdown")
 		outputPath, _ := cmd.Flags().GetString("output")
 		excludeModules, _ := cmd.Flags().GetStringSlice("exclude")
+		excludeMarketplace, _ := cmd.Flags().GetBool("exclude-marketplace")
 
 		if projectPath == "" {
 			fmt.Fprintln(os.Stderr, "Error: --project (-p) is required")
@@ -78,6 +84,22 @@ Examples:
 		if cat == nil {
 			fmt.Fprintln(os.Stderr, "Error: catalog not built")
 			os.Exit(1)
+		}
+
+		if excludeMarketplace {
+			result, err := cat.Query(`SELECT Name FROM modules WHERE Source LIKE 'Marketplace%'`)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error querying marketplace modules: %v\n", err)
+				os.Exit(1)
+			}
+			for _, row := range result.Rows {
+				if name, ok := row[0].(string); ok {
+					excludeModules = append(excludeModules, name)
+				}
+			}
+			// System is not FromAppStore, but isn't core app code either — always
+			// drop it when filtering out non-core content.
+			excludeModules = append(excludeModules, "System")
 		}
 
 		// Create lint context

@@ -63,3 +63,6 @@ grammardoc
 snap-bson
 .playwright-cli/
 .claude/worktrees/
+
+# temp implementation helper
+implementation-helpers/
