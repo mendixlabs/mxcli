@@ -27,12 +27,30 @@
 #     TOPS-main/SomeApp.mpr
 #     ...
 #
-# Usage: ./mxcli-batch.sh <calibrate|summary|full> <mxcli-binary> <projects-dir> [output-name]
+# Usage: ./mxcli-batch.sh <calibrate|summary|full> <mxcli-binary> <projects-dir> [output-name] [--force-init]
+#
+# --force-init: by default, a project's .claude/lint-rules/ is only
+# (re)created via `mxcli init` if it's missing or empty -- an already-
+# initialized project is left alone, even if the rules embedded in the
+# mxcli binary have since changed (e.g. after editing a .star rule and
+# rebuilding). Pass --force-init to always wipe and re-run `mxcli init`
+# for every project, guaranteeing everyone is on the latest rules
+# currently embedded in $MXCLI.
 set -euo pipefail
 
-MODE="${1:?Usage: mxcli-batch.sh <calibrate|summary|full> <mxcli-binary> <projects-dir> [output-name]}"
-MXCLI="${2:?Usage: mxcli-batch.sh <calibrate|summary|full> <mxcli-binary> <projects-dir> [output-name]}"
-PROJECTS_DIR="${3:?Usage: mxcli-batch.sh <calibrate|summary|full> <mxcli-binary> <projects-dir> [output-name]}"
+FORCE_INIT=false
+POSITIONAL=()
+for arg in "$@"; do
+	case "$arg" in
+		--force-init) FORCE_INIT=true ;;
+		*) POSITIONAL+=("$arg") ;;
+	esac
+done
+set -- "${POSITIONAL[@]+"${POSITIONAL[@]}"}"
+
+MODE="${1:?Usage: mxcli-batch.sh <calibrate|summary|full> <mxcli-binary> <projects-dir> [output-name] [--force-init]}"
+MXCLI="${2:?Usage: mxcli-batch.sh <calibrate|summary|full> <mxcli-binary> <projects-dir> [output-name] [--force-init]}"
+PROJECTS_DIR="${3:?Usage: mxcli-batch.sh <calibrate|summary|full> <mxcli-binary> <projects-dir> [output-name] [--force-init]}"
 PROJECTS_DIR="${PROJECTS_DIR%/}"
 
 case "$MODE" in
@@ -128,9 +146,21 @@ for project_dir in "$PROJECTS_DIR"/*/; do
 
 	# Auto-initialize any project missing Starlark lint rules, so every
 	# project contributes the same rule coverage regardless of mode.
+	# --force-init bypasses the "already has rules" check entirely and
+	# wipes the directory first, so a stale copy of an old .star rule
+	# can never survive a forced re-init.
 	lint_rules_dir="${project_dir}.claude/lint-rules"
-	if [ ! -d "$lint_rules_dir" ] || [ -z "$(ls -A "$lint_rules_dir" 2>/dev/null)" ]; then
+	run_init=false
+	if [ "$FORCE_INIT" = true ]; then
+		run_init=true
+		echo "  '$project_name': --force-init set, refreshing lint rules..." >&2
+		rm -rf "$lint_rules_dir"
+	elif [ ! -d "$lint_rules_dir" ] || [ -z "$(ls -A "$lint_rules_dir" 2>/dev/null)" ]; then
+		run_init=true
 		echo "  '$project_name' has no .claude/lint-rules -- running mxcli init..." >&2
+	fi
+
+	if [ "$run_init" = true ]; then
 		if ! "$MXCLI" init "$project_dir" >"$TMP_DIR/${project_name}_init.log" 2>&1; then
 			echo "  skipped '$project_name' (mxcli init failed -- see below)" >&2
 			sed 's/^/    /' "$TMP_DIR/${project_name}_init.log" >&2 || true
