@@ -31,6 +31,104 @@ func TestCheck_SkipUpdateWidgets(t *testing.T) {
 	}
 }
 
+// TestSnapshotStorageFormat_RestoresV2AfterConversion guards the fix for the bug
+// where `mxcli docker check` silently converted an MPRv2 project to MPRv1. The
+// `mx update-widgets` step that docker check runs before `mx check` inlines every
+// unit into the .mpr and deletes mprcontents/. snapshotStorageFormat backs up the
+// v2 storage files first, and the restore func it returns must put the project
+// back byte-for-byte, undoing the conversion. See mendixlabs/mxcli#763.
+func TestSnapshotStorageFormat_RestoresV2AfterConversion(t *testing.T) {
+	dir := t.TempDir()
+	mprPath := filepath.Join(dir, "App.mpr")
+	contentsDir := filepath.Join(dir, "mprcontents")
+
+	// Seed a fake MPRv2 project: an .mpr index plus a nested mprcontents/ tree
+	// mirroring the real XX/YY/UUID.mxunit layout. The .mpr uses mode 0600 so the
+	// restore's mode preservation is observable (the simulated conversion below
+	// rewrites it as 0644).
+	mprV2 := []byte("MPRv2-index-bytes")
+	if err := os.WriteFile(mprPath, mprV2, 0600); err != nil {
+		t.Fatal(err)
+	}
+	units := map[string][]byte{
+		"ab/cd/unit-1.mxunit": []byte("unit-1"),
+		"ab/cd/unit-2.mxunit": []byte("unit-2"),
+		"ef/01/unit-3.mxunit": []byte("unit-3-contents"),
+	}
+	for rel, content := range units {
+		p := filepath.Join(contentsDir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, content, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	snapshotGlob := filepath.Join(os.TempDir(), "mxcli-mpr-snapshot-*")
+	leakBefore, _ := filepath.Glob(snapshotGlob)
+
+	restore, err := snapshotStorageFormat(mprPath, contentsDir)
+	if err != nil {
+		t.Fatalf("snapshotStorageFormat: %v", err)
+	}
+
+	// Simulate `mx update-widgets`: rewrite the .mpr as a v1 self-contained file
+	// (different bytes, different mode) and delete the whole mprcontents/ tree.
+	if err := os.WriteFile(mprPath, []byte("MPRv1-self-contained-inlined-and-larger"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(contentsDir); err != nil {
+		t.Fatal(err)
+	}
+
+	restore()
+
+	// The .mpr index must be restored byte-identically to the original v2 file...
+	got, err := os.ReadFile(mprPath)
+	if err != nil {
+		t.Fatalf("read restored .mpr: %v", err)
+	}
+	if !bytes.Equal(got, mprV2) {
+		t.Errorf(".mpr not restored to v2 form:\n got %q\nwant %q", got, mprV2)
+	}
+	// ...and with its original file mode, not the mode from the conversion write.
+	if info, err := os.Stat(mprPath); err != nil {
+		t.Fatalf("stat restored .mpr: %v", err)
+	} else if perm := info.Mode().Perm(); perm != 0600 {
+		t.Errorf("restored .mpr mode = %o, want 0600", perm)
+	}
+
+	// Every unit file must be back with its original content, and nothing extra.
+	for rel, want := range units {
+		p := filepath.Join(contentsDir, filepath.FromSlash(rel))
+		got, err := os.ReadFile(p)
+		if err != nil {
+			t.Errorf("unit %s not restored: %v", rel, err)
+			continue
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("unit %s content mismatch: got %q want %q", rel, got, want)
+		}
+	}
+	var restoredUnits int
+	_ = filepath.Walk(contentsDir, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			restoredUnits++
+		}
+		return nil
+	})
+	if restoredUnits != len(units) {
+		t.Errorf("restored %d unit files, want %d", restoredUnits, len(units))
+	}
+
+	// The snapshot's temp directory must be cleaned up by restore().
+	leakAfter, _ := filepath.Glob(snapshotGlob)
+	if len(leakAfter) > len(leakBefore) {
+		t.Errorf("snapshot temp dir leaked: %d before, %d after restore", len(leakBefore), len(leakAfter))
+	}
+}
+
 // createFakeMxDir creates a temp directory with fake mx and mxbuild scripts
 // that log their first argument to a file.
 func createFakeMxDir(t *testing.T) (dir, logFile string) {

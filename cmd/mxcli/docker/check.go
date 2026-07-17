@@ -50,6 +50,66 @@ func updateWidgetsPathArg(p string) string {
 	return p
 }
 
+// snapshotStorageFormat backs up the MPRv2 storage files (.mpr index + mprcontents/)
+// to a temp directory and returns a restore function that puts them back, undoing
+// any v2 -> v1 conversion performed by an intervening `mx update-widgets`. The
+// restore function removes the temp directory and is safe to defer; it best-effort
+// restores and never panics. mprPath and contentsDir come from an mpr.Reader on a
+// project already known to be MPRv2.
+func snapshotStorageFormat(mprPath, contentsDir string) (restore func(), err error) {
+	tmp, err := os.MkdirTemp("", "mxcli-mpr-snapshot-*")
+	if err != nil {
+		return nil, err
+	}
+
+	mprBackup := filepath.Join(tmp, filepath.Base(mprPath))
+	if err := copyFile(mprPath, mprBackup); err != nil {
+		os.RemoveAll(tmp)
+		return nil, err
+	}
+
+	contentsBackup := filepath.Join(tmp, "mprcontents")
+	if err := copyDir(contentsDir, contentsBackup); err != nil {
+		os.RemoveAll(tmp)
+		return nil, err
+	}
+
+	restore = func() {
+		defer os.RemoveAll(tmp)
+		// Restore the v2 index file.
+		_ = copyFile(mprBackup, mprPath)
+		// update-widgets deletes mprcontents/; drop whatever is there now (nothing,
+		// after a conversion) and restore the backed-up tree.
+		_ = os.RemoveAll(contentsDir)
+		_ = copyDir(contentsBackup, contentsDir)
+	}
+	return restore, nil
+}
+
+// copyFile copies a single file from src to dst, preserving the source file mode.
+func copyFile(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
+}
+
 // Check runs 'mx check' on the project to validate it before building.
 func Check(opts CheckOptions) error {
 	w := opts.Stdout
@@ -75,6 +135,35 @@ func Check(opts CheckOptions) error {
 		return err
 	}
 	fmt.Fprintf(w, "Using mx: %s\n", mxPath)
+
+	// `mx update-widgets` rewrites an MPRv2 project into the self-contained MPRv1
+	// storage format: it inlines every unit into the .mpr and deletes mprcontents/.
+	// A `check` must not mutate the on-disk storage format — silently doing so
+	// desyncs the working tree from a Git repository that tracks the mprcontents/
+	// files and can leave Studio Pro unable to open the project. So when the project
+	// is MPRv2, snapshot the .mpr + mprcontents/ before update-widgets and restore
+	// them after the check. The check still runs against the widget-normalized model
+	// (so CE0463 false positives are still suppressed); only the on-disk format is
+	// preserved. MPRv1 projects are already single-file and need no protection.
+	if !opts.SkipUpdateWidgets && opts.ProjectPath != "" {
+		if reader, err := mpr.Open(opts.ProjectPath); err == nil {
+			isV2 := reader.Version() == mpr.MPRVersionV2
+			contentsDir := reader.ContentsDir()
+			reader.Close()
+			if isV2 {
+				restore, snapErr := snapshotStorageFormat(opts.ProjectPath, contentsDir)
+				if snapErr != nil {
+					// Can't protect the format — skip update-widgets rather than risk
+					// an unrecoverable v2 -> v1 conversion. A CE0463 false positive is
+					// the lesser evil than a silent, unrestorable format change.
+					fmt.Fprintf(w, "Warning: could not snapshot MPRv2 storage (skipping update-widgets to avoid a v2->v1 conversion): %v\n", snapErr)
+					opts.SkipUpdateWidgets = true
+				} else {
+					defer restore()
+				}
+			}
+		}
+	}
 
 	// Run mx update-widgets to normalize pluggable widget definitions.
 	// This prevents false CE0463 ("widget definition changed") errors caused
