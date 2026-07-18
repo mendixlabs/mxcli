@@ -26,19 +26,25 @@ When you're ready to work on your own Mendix project, use one of the installatio
 
 ## Binary download
 
-Pre-built binaries are available for Linux, macOS, and Windows on both amd64 and arm64 architectures.
+Pre-built binaries are published for Linux, macOS, and Windows on both amd64 and arm64. Release assets are **raw binaries** named `mxcli-<os>-<arch>` (Windows: `.exe`) — there is nothing to extract.
 
-1. Go to the [GitHub Releases page](https://github.com/mendixlabs/mxcli/releases).
-2. Download the archive for your platform (e.g., `mxcli_linux_amd64.tar.gz` or `mxcli_darwin_arm64.tar.gz`).
-3. Extract the binary and move it somewhere on your `PATH`:
+While mxcli is fast-moving alpha, use the rolling **`nightly`** build (new features land there before a tagged release); pin a `vX.Y.Z` release for reproducibility.
 
 ```bash
-# Example for Linux/macOS
-tar xzf mxcli_linux_amd64.tar.gz
-sudo mv mxcli /usr/local/bin/
+# Linux/macOS — nightly (recommended for now)
+curl -fsSL -o mxcli \
+  https://github.com/mendixlabs/mxcli/releases/download/nightly/mxcli-linux-amd64
+chmod +x mxcli && sudo mv mxcli /usr/local/bin/
+
+# ...or pin a specific release
+curl -fsSL -o mxcli \
+  https://github.com/mendixlabs/mxcli/releases/download/v0.16.0/mxcli-darwin-arm64
+chmod +x mxcli && sudo mv mxcli /usr/local/bin/
 ```
 
-On Windows, extract the `.zip` and add the folder containing `mxcli.exe` to your system PATH.
+Assets: `mxcli-linux-amd64`, `mxcli-linux-arm64`, `mxcli-darwin-amd64`, `mxcli-darwin-arm64`, `mxcli-windows-amd64.exe`, `mxcli-windows-arm64.exe`. On Windows, download the `.exe` and add its folder to your PATH. You can browse them on the [GitHub Releases page](https://github.com/mendixlabs/mxcli/releases).
+
+> `go install github.com/mendixlabs/mxcli/cmd/mxcli@latest` does **not** work: the ANTLR parser is generated at build time and isn't committed, so a `go install` from the module source fails. Use a pre-built binary, or **Build from source** below (which runs `make grammar`).
 
 ## Build from source
 

@@ -126,6 +126,20 @@ mxcli new MyApp --version 11.8.0
 
 This downloads MxBuild, creates a blank Mendix project, sets up AI tooling and a Dev Container, and installs the correct mxcli binary. Open the resulting folder in VS Code and reopen in the Dev Container — you're ready to go.
 
+### From the web or an iPad (empty repo, no local install)
+
+No machine with a CLI? Open an **empty repo** in [Claude Code on the web](https://claude.ai/code) (works on an iPad) and paste the **bootstrap prompt** — the agent provisions the whole project (creates the app, wires the Dev Container + AI tooling, provisions the database) and commits it so future sessions self-bootstrap. This is the recommended web/iPad path; you don't need to pick a GitHub template.
+
+> See **[Bootstrap Prompt](https://mendixlabs.github.io/mxcli/tools/bootstrap-prompt.html)** for the exact copy-paste text. In short: it runs `mxcli new` → `mxcli init` → commits the config → `mxcli run --local --setup --ensure-db` so the app comes up testable.
+
+Then iterate with the **warm local dev loop** — a Docker-free ~1-second edit→test cycle:
+
+```bash
+mxcli run --local -p app.mpr --watch --screenshot   # hot-reload + auto screenshots
+```
+
+`mxcli run --local` keeps `mxbuild --serve` and a standalone runtime hot: a page/microflow edit is hot-applied in seconds (a hot `reload_model`, or a restart + DDL for entity changes), and `--screenshot` captures each page with Playwright. See **[Local Dev Loop](https://mendixlabs.github.io/mxcli/tools/run-local.html)**.
+
 ### Existing project
 
 For an existing Mendix project, use `mxcli init` to add AI tooling and a Dev Container:
@@ -166,7 +180,16 @@ mxcli add-tool cursor
 
 ## Installation
 
-Download the latest release for your platform from the [releases page](https://github.com/mendixlabs/mxcli/releases), or build from source:
+Download a pre-built binary from the [releases page](https://github.com/mendixlabs/mxcli/releases) — the assets are raw binaries named `mxcli-<os>-<arch>` (nothing to extract). While mxcli is fast-moving alpha, the rolling `nightly` build is recommended (new features land there first); pin a `vX.Y.Z` release for reproducibility:
+
+```bash
+# Linux/macOS — nightly
+curl -fsSL -o mxcli \
+  https://github.com/mendixlabs/mxcli/releases/download/nightly/mxcli-linux-amd64
+chmod +x mxcli && sudo mv mxcli /usr/local/bin/
+```
+
+Or build from source (Go + Make — `make build` runs the ANTLR parser generation that `go install` can't):
 
 ```bash
 git clone https://github.com/mendixlabs/mxcli.git
@@ -174,6 +197,8 @@ cd mxcli
 make build
 # binary is at ./bin/mxcli
 ```
+
+> `go install …@latest` is not supported: the generated ANTLR parser isn't committed, so a module-source build fails. Use a pre-built binary or `make build`.
 
 ## Core Features
 

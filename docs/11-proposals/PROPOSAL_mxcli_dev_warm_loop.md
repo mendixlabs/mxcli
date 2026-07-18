@@ -154,7 +154,75 @@ catalog evidence, which agree. Enabling the dev-preview flag on the standalone b
 (so the agent can verify via OQL) is itself a small item worth doing — see Open
 Questions.
 
+## Implementation status (slice 1 — `mxcli run --local`)
+
+Shipped and verified end to end against a blank Mendix 11.12.1 app on a clean
+Postgres: boot → HTTP 200; a microflow edit applies via `reload_model` in ~1.1 s (no
+restart); an entity add applies via restart in ~9 s, runs `execute_ddl_commands`, and
+returns HTTP 200 with the table present in Postgres. Pieces:
+`docker.RuntimeController` (reload-vs-restart + DDL-aware start), `docker.LocalRuntime`
+(standalone boot; constants lifted from `deployment/model/config.json`),
+`docker.RunLocal` (+ `--watch`), and the `run --local` command.
+
+**Browser client bundle — closed.** Initially a blocker: a browser loaded blank
+because `index.html` requests `web/dist/index.js`, which neither the serve `Deploy`
+target nor a one-shot `mxbuild` produces. The client bundle is built by a **rollup**
+step (`web/rollup.config.mjs`, using mxbuild's bundled `modeler/tools/node` tooling)
+that the serve/standalone path doesn't run — `web/index.js` (the rollup *input*) is
+written but `web/dist/index.js` is not. Fixed by `docker.BuildWebClient`, which runs
+mxbuild's `rollup-runner.mjs` (production, one-shot) over `deployment/web` after the
+deploy build. Verified: driving the devcontainer's Chromium with Playwright renders
+the Mendix homepage fully. `web/dist/index.js` now serves HTTP 200 out of the box.
+
+**Incremental client bundler + screenshots — done.** `--watch` now keeps a
+long-lived incremental bundler hot (`docker.WebClientWatcher`) — the client-side
+mirror of `mxbuild --serve`, running the runner's watch branch and parsing its
+`modern-web-bundler-protocol` stdout to count successful bundles. A page/widget edit
+re-bundles in ~3–4 s (vs ~7 s cold); the loop re-bundles **only when the edit touched
+web/ client source** (mtime gate), so a microflow/entity edit skips it and just
+hot-reloads. `WaitForRebuild` settles out cleanly if the touched file isn't a rollup
+input, so it never hangs.
+
+Two findings from implementation:
+- **inotify is silent on container overlay filesystems** — the rollup watcher's
+  chokidar detected changes only after tens of seconds until `CHOKIDAR_USEPOLLING`
+  (+`CHOKIDAR_INTERVAL`) was set, which drops detection to ~1 s. (Thanks to the polling
+  tip.)
+- **The change signal must watch model source, not the project dir.** The build
+  rewrites `theme-cache/`, `.mendix-cache/`, and `deployment/` every run, and
+  screenshots land in `.mxcli/`; an initial whole-dir watcher self-triggered an
+  infinite rebuild loop. `projectSourceMTime` watches only `.mpr` + `mprcontents/`.
+
+`--screenshot` captures a PNG after boot and each applied change via Playwright's
+built-in `screenshot` command (Chromium from `PLAYWRIGHT_BROWSERS_PATH`; no
+`playwright-cli` dependency), completing the pixel-perfect page loop.
+
+**Deep-link + authenticated screenshots — done.** `--screenshot-url` accepts a page
+path (resolved against the app root) or a full URL, so a specific page under edit is
+shot rather than the app root. `--screenshot-user`/`--screenshot-password` log in
+once through the Mendix login form (a headless Playwright script driving
+`#usernameInput`/`#passwordInput`/`#loginButton`, run via the same Playwright install
+resolved from the CLI's package dir — no hardcoded paths), save the session as a
+Playwright storage state, and reuse it for every screenshot via
+`screenshot --load-storage`. Login is best-effort: an anonymous app with no form
+proceeds unauthenticated. Verified E2E: the saved storage state carries the Mendix
+session cookies and the screenshot renders the authenticated page.
+
+**Multi-page screenshot sets — done.** `--screenshot-url` is repeatable; more than one
+target produces a screenshot *set* — one PNG per page, named from the page slug
+(`run-local-p-customers.png`, `run-local-home.png`) — so every change yields a
+visual-regression sheet across the key pages. Verified E2E: two targets produced two
+distinct PNGs in one change cycle.
+
 ## Proposed CLI
+
+> **Shipped name (slice 1):** the warm loop shipped as **`mxcli run --local`**, not
+> `mxcli dev`. The separate `dev reload`/`dev exec`/`dev status`/`dev stop`
+> subcommands envisioned below were folded into a single long-lived
+> `mxcli run --local --watch` (it watches the model source and hot-applies each
+> change itself), so no `reload`/`exec` subcommands were needed. The `mxcli dev …`
+> names in the rest of this proposal refer to that command (and the not-yet-built
+> `dev up`/`dev serve` bootstrap + preview pieces of slices 2–3).
 
 ### Scenario A: `mxcli dev` — Docker-free warm run loop
 
@@ -292,18 +360,26 @@ Two rules make this robust:
 Codespaces and local dev containers, but Claude Code Web needs one more piece: a
 **SessionStart hook** (or devcontainer `postStart`) that idempotently brings the runtime
 up on **every** session, because background processes (Postgres, the JVM) are **reaped
-on idle** — observed repeatedly during this investigation. Proposed: `mxcli init` also
-emits an `mxcli dev up` bootstrap, wired to SessionStart, that idempotently:
+on idle** — observed repeatedly during this investigation.
+
+**Shipped:** `mxcli init` now emits a Claude Code **SessionStart hook** into
+`.claude/settings.json` (merged idempotently, preserving existing settings) that runs
+`./mxcli run --local --setup --ensure-db -p <app.mpr>`. That `--setup` mode is the
+non-blocking bring-up — it does steps 1–3 below and **returns** (a SessionStart hook
+must not block), leaving the session ready to `mxcli run --local` on demand:
 
 1. **Ensure mxcli** — prefer a prebuilt binary via `mxcli setup mxcli` (fast) over a
-   from-source build (needs antlr4 + Go, ~70 s).
-2. **Ensure MxBuild + runtime cached** — `mxcli setup mxbuild -p app.mpr` and
-   `mxcli setup mxruntime -p app.mpr` (both already exist). One-time ~700 MB / ~30–40 s;
-   **bake into the devcontainer image** so the first session is instant.
-3. **Start Postgres + create the app DB** — re-run every session (survives reaping).
-4. **Boot the runtime + `mxbuild --serve`** — the standalone-boot recipe
-   (BasePath / RuntimePath / MicroflowConstants / data-dirs → `start` → DDL if needed),
-   leaving a warm serve daemon.
+   from-source build (needs antlr4 + Go, ~70 s). *(mxcli delivery is the environment's
+   job; the hook guards on `test -x ./mxcli`.)*
+2. **Ensure MxBuild + runtime cached** — `run --local --setup` runs DownloadMxBuild +
+   the runtime resolve. One-time ~700 MB / ~30–40 s; **bake into the devcontainer
+   image** so the first session is instant.
+3. **Start Postgres + create the app DB** — `--ensure-db`, re-run every session
+   (survives reaping).
+
+Step 4 — **booting the runtime + `mxbuild --serve`** — is deliberately *not* in the
+hook (it is long-lived and would block session start). The agent runs the full
+`mxcli run --local` when it wants to test; the heavy prerequisites are already warm.
 
 End state: the session comes up **ready to prompt → build → test**. Then:
 
@@ -425,7 +501,7 @@ downloads/caches mxbuild + runtime and speaks the M2EE admin API.
 | `cmd/mxcli/init.go` | Emit a **SessionStart hook** (Claude Code Web) and/or devcontainer `postStart` that runs `mxcli dev up`; keep the existing devcontainer + `.claude/` scaffolding. |
 | `cmd/mxcli/new.go` | Add `--emit-template`: write a GitHub-template-ready repo (config + starter `.mpr`), for CI-per-version publishing of `mendix-mxcli-starter`. |
 | `docs-site/.../bootstrap-prompt.md` | Ship the canonical **prompt template** (the web/iPad seed prompt) as documented, copy-pasteable text. |
-| release / go.mod | Ensure mxcli is deliverable into a gated web session — **public Go module** (`go install`) and/or an **environment setup-script** that pre-installs it; do not rely on a GitHub release `curl` (may be gate-blocked). |
+| release / go.mod | Ensure mxcli is deliverable into a gated web session. **Status:** the module is public (tags to v0.16.0) but **`go install` does not build** — the generated ANTLR parser (`mdl/grammar/parser/`) is gitignored/uncommitted, so the tagged source is missing the package. Working paths today: prebuilt release binaries (`mxcli-<os>-<arch>`, incl. a rolling `nightly`) via `mxcli setup mxcli` / direct download, or an **environment setup-script** pre-install. Enabling `go install` needs the parser committed (or generated during module build) — open decision. |
 | `cmd/mxcli/tunnelhub/*_test.go` | Tests: slot allocation/isolation, authfile + vhost reload, register/heartbeat/deregister lifecycle, admin-page rendering. |
 | `cmd/mxcli/dev_test.go` | Tests for the serve client and the `restartRequired` branch logic (mock the serve/admin HTTP endpoints). |
 
@@ -459,8 +535,8 @@ builds on the previous.
 
 | # | Slice | Delivers | Depends on | Size / risk |
 |---|-------|----------|------------|-------------|
-| 1 | **Warm local loop** — `mxcli dev` (serve daemon + M2EE admin client + `restartRequired` × `get_ddl_commands` branching) | Docker-free ~1 s edit→test loop, locally | nothing new | medium / low — highest bang-for-buck |
-| 2 | **Provisioning** — `mxcli dev up` bootstrap + `mxcli init` SessionStart hook + prompt template | a fresh Claude Code Web session comes up testable; iPad-native start | slice 1 | small / low |
+| 1 | **Warm local loop** — shipped as `mxcli run --local [--watch]` (serve daemon + M2EE admin client + `restartRequired` branching; + client bundling & Playwright screenshots) | Docker-free ~1 s edit→test loop, locally | nothing new | ✅ **shipped** |
+| 2 | **Provisioning** — `run --local --ensure-db` (DB) + `run --local --setup` (non-blocking bring-up) + `mxcli init` SessionStart hook + bootstrap prompt template | a fresh Claude Code Web session comes up testable; iPad-native start | slice 1 | ✅ **shipped** |
 | 3 | **Single-app external preview** — `mxcli dev serve` + chisel client → one static relay + `ApplicationRootUrl` wiring | a shareable live preview URL (the iPad two-container flow) | slice 1 | medium / medium — the `app.github.dev` WebSocket hop is unverified (a VPS relay avoids it) |
 | 4 | **Tunnel hub** — `mxcli tunnel-hub` + `mxcli dev --hub` + registration API + admin overview | many dev containers behind one ingress; fleet overview + per-container change lists | slice 3 | large / higher — a product in its own right, with a multi-tenant auth surface |
 

@@ -505,6 +505,16 @@ Container Runtime:
 			}
 		}
 
+		// Emit a Claude Code SessionStart hook so a fresh/reaped web session
+		// self-bootstraps (cache MxBuild+runtime, provision the DB) before use.
+		if slices.Contains(tools, "claude") && claudeDir != "" {
+			if changed, err := ensureSessionStartHook(claudeDir, mprFile); err != nil {
+				fmt.Fprintf(os.Stderr, "  Warning: SessionStart hook: %v\n", err)
+			} else if changed {
+				fmt.Println("\nAdded SessionStart hook to .claude/settings.json (self-bootstrap on session start)")
+			}
+		}
+
 		// Create .gitignore if it doesn't exist
 		gitignorePath := filepath.Join(absDir, ".gitignore")
 		if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {

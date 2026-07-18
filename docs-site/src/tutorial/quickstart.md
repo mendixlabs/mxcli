@@ -12,18 +12,20 @@ Open the [mxcli Playground](https://github.com/mendixlabs/mxcli-playground) in a
 
 **Option B: Binary download**
 
-Download from the [GitHub Releases page](https://github.com/mendixlabs/mxcli/releases) and extract:
+Release assets are raw binaries named `mxcli-<os>-<arch>` (nothing to extract). Use the rolling `nightly` build while mxcli is alpha:
 
 ```bash
 # macOS / Linux
-tar xzf mxcli_<platform>.tar.gz
-sudo mv mxcli /usr/local/bin/
+curl -fsSL -o mxcli \
+  https://github.com/mendixlabs/mxcli/releases/download/nightly/mxcli-linux-amd64
+chmod +x mxcli && sudo mv mxcli /usr/local/bin/
 ```
 
-**Option C: Build from source**
+**Option C: Build from source** (Go + Make)
 
 ```bash
-go install github.com/mendixlabs/mxcli/cmd/mxcli@latest
+git clone https://github.com/mendixlabs/mxcli.git && cd mxcli && make build
+# binary at ./bin/mxcli  (go install @latest doesn't work — see Installation)
 ```
 
 Verify: `mxcli --version` should print the version number.
@@ -132,6 +134,6 @@ No errors? You're done. Open in Studio Pro and everything is there.
 mxcli setup mxbuild -p your-app.mpr
 ```
 
-**"CGO not available"** -- mxcli uses pure Go SQLite. No C compiler needed. If you see CGO errors, ensure you're using the official binary or `go install`.
+**"CGO not available"** -- mxcli uses pure Go SQLite. No C compiler needed. If you see CGO errors, ensure you're using the official pre-built binary or a `make build` from source.
 
 **Project won't open in Studio Pro after changes** -- Close Studio Pro before running mxcli write commands, then reopen. See [F4 sync support](../appendixes/version-compatibility.md) for details.
