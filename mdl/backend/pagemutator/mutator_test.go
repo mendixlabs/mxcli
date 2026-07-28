@@ -1301,3 +1301,230 @@ func TestSetWidgetProperty_EditableIf_Unsupported(t *testing.T) {
 		t.Fatal("expected error setting EditableIf on a container, got nil")
 	}
 }
+
+// --- preserveStoredWidgetPropertyMetadata ---
+
+func makeCustomWidgetWithType(name, widgetID string, propTypes ...bson.D) bson.D {
+	ptArr := bson.A{int32(2)} // type marker
+	for _, pt := range propTypes {
+		ptArr = append(ptArr, pt)
+	}
+	return bson.D{
+		{Key: "$Type", Value: "CustomWidgets$CustomWidget"},
+		{Key: "Name", Value: name},
+		{Key: "Type", Value: bson.D{
+			{Key: "$Type", Value: "CustomWidgets$WidgetType"},
+			{Key: "WidgetId", Value: widgetID},
+			{Key: "ObjectType", Value: bson.D{
+				{Key: "$Type", Value: "CustomWidgets$WidgetObjectType"},
+				{Key: "PropertyTypes", Value: ptArr},
+			}},
+		}},
+	}
+}
+
+func makePropertyType(key, caption, category string) bson.D {
+	return bson.D{
+		{Key: "$Type", Value: "CustomWidgets$WidgetPropertyType"},
+		{Key: "PropertyKey", Value: key},
+		{Key: "Caption", Value: caption},
+		{Key: "Category", Value: category},
+	}
+}
+
+func propTypeByKey(t *testing.T, w bson.D, key string) bson.D {
+	t.Helper()
+	found := bson.D{}
+	var walk func(node any)
+	walk = func(node any) {
+		switch v := node.(type) {
+		case bson.D:
+			if bsonnav.DGetString(v, "$Type") == widgetPropertyTypeName &&
+				bsonnav.DGetString(v, "PropertyKey") == key {
+				found = v
+				return
+			}
+			for _, elem := range v {
+				walk(elem.Value)
+			}
+		default:
+			for _, item := range bsonnav.ToBsonA(v) {
+				walk(item)
+			}
+		}
+	}
+	walk(w)
+	if len(found) == 0 {
+		t.Fatalf("property type %q not found", key)
+	}
+	return found
+}
+
+func TestPreserveStoredWidgetPropertyMetadata_SameWidget(t *testing.T) {
+	// Stored widget: authored by an older widget version (different Caption/Category).
+	oldWidget := makeCustomWidgetWithType("comboBox1", "com.mendix.widget.web.Combobox",
+		makePropertyType("onChangeEvent", "On selection", "Events"),
+		makePropertyType("filterInputDebounceInterval", "Debounce", "Advanced::Filter"),
+	)
+	// Replacement: freshly generated from the current template/.mpk.
+	newWidget := makeCustomWidgetWithType("comboBox1", "com.mendix.widget.web.Combobox",
+		makePropertyType("onChangeEvent", "On change", "Events"),
+		makePropertyType("filterInputDebounceInterval", "Debounce", "Events"),
+		makePropertyType("newInThisVersion", "Shiny", "General"),
+	)
+
+	preserveStoredWidgetPropertyMetadata(oldWidget, []any{newWidget})
+
+	pt := propTypeByKey(t, newWidget, "onChangeEvent")
+	if got := bsonnav.DGetString(pt, "Caption"); got != "On selection" {
+		t.Errorf("onChangeEvent Caption = %q, want stored %q", got, "On selection")
+	}
+	pt = propTypeByKey(t, newWidget, "filterInputDebounceInterval")
+	if got := bsonnav.DGetString(pt, "Category"); got != "Advanced::Filter" {
+		t.Errorf("filterInputDebounceInterval Category = %q, want stored %q", got, "Advanced::Filter")
+	}
+	// Properties the stored widget does not define keep generated metadata.
+	pt = propTypeByKey(t, newWidget, "newInThisVersion")
+	if got := bsonnav.DGetString(pt, "Caption"); got != "Shiny" {
+		t.Errorf("newInThisVersion Caption = %q, want generated %q", got, "Shiny")
+	}
+}
+
+func TestPreserveStoredWidgetPropertyMetadata_DifferentWidgetID(t *testing.T) {
+	oldWidget := makeCustomWidgetWithType("w1", "com.mendix.widget.web.Combobox",
+		makePropertyType("onChangeEvent", "On selection", "Events"),
+	)
+	newWidget := makeCustomWidgetWithType("w1", "com.mendix.widget.web.Gallery",
+		makePropertyType("onChangeEvent", "On change", "Events"),
+	)
+
+	preserveStoredWidgetPropertyMetadata(oldWidget, []any{newWidget})
+
+	pt := propTypeByKey(t, newWidget, "onChangeEvent")
+	if got := bsonnav.DGetString(pt, "Caption"); got != "On change" {
+		t.Errorf("Caption = %q, want untouched %q (different widget package)", got, "On change")
+	}
+}
+
+func TestPreserveStoredWidgetPropertyMetadata_NonPluggableOld(t *testing.T) {
+	oldWidget := makeWidget("txtName", "Pages$TextBox") // no Type block
+	newWidget := makeCustomWidgetWithType("txtName", "com.mendix.widget.web.Combobox",
+		makePropertyType("onChangeEvent", "On change", "Events"),
+	)
+
+	preserveStoredWidgetPropertyMetadata(oldWidget, []any{newWidget}) // must not panic
+
+	pt := propTypeByKey(t, newWidget, "onChangeEvent")
+	if got := bsonnav.DGetString(pt, "Caption"); got != "On change" {
+		t.Errorf("Caption = %q, want untouched %q", got, "On change")
+	}
+}
+
+func TestPreserveStoredWidgetPropertyMetadata_NestedObjectType(t *testing.T) {
+	// Stored metadata for a property nested inside an object-list ValueType.
+	nestedStored := bson.D{
+		{Key: "$Type", Value: "CustomWidgets$WidgetPropertyType"},
+		{Key: "PropertyKey", Value: "optionCaption"},
+		{Key: "Caption", Value: "Stored caption"},
+		{Key: "Category", Value: "General"},
+	}
+	oldWidget := makeCustomWidgetWithType("w1", "com.mendix.widget.web.Combobox",
+		bson.D{
+			{Key: "$Type", Value: "CustomWidgets$WidgetPropertyType"},
+			{Key: "PropertyKey", Value: "options"},
+			{Key: "Caption", Value: "Options"},
+			{Key: "Category", Value: "General"},
+			{Key: "ValueType", Value: bson.D{
+				{Key: "ObjectType", Value: bson.D{
+					{Key: "PropertyTypes", Value: bson.A{int32(2), nestedStored}},
+				}},
+			}},
+		},
+	)
+	nestedNew := bson.D{
+		{Key: "$Type", Value: "CustomWidgets$WidgetPropertyType"},
+		{Key: "PropertyKey", Value: "optionCaption"},
+		{Key: "Caption", Value: "Template caption"},
+		{Key: "Category", Value: "General"},
+	}
+	newWidget := makeCustomWidgetWithType("w1", "com.mendix.widget.web.Combobox",
+		bson.D{
+			{Key: "$Type", Value: "CustomWidgets$WidgetPropertyType"},
+			{Key: "PropertyKey", Value: "options"},
+			{Key: "Caption", Value: "Options"},
+			{Key: "Category", Value: "General"},
+			{Key: "ValueType", Value: bson.D{
+				{Key: "ObjectType", Value: bson.D{
+					{Key: "PropertyTypes", Value: bson.A{int32(2), nestedNew}},
+				}},
+			}},
+		},
+	)
+
+	preserveStoredWidgetPropertyMetadata(oldWidget, []any{newWidget})
+
+	pt := propTypeByKey(t, newWidget, "optionCaption")
+	if got := bsonnav.DGetString(pt, "Caption"); got != "Stored caption" {
+		t.Errorf("nested Caption = %q, want stored %q", got, "Stored caption")
+	}
+}
+
+func TestPreserveStoredWidgetPropertyMetadata_DuplicateKeysScopedByPath(t *testing.T) {
+	makeObjectListProp := func(key string, nested ...bson.D) bson.D {
+		ptArr := bson.A{int32(2)}
+		for _, pt := range nested {
+			ptArr = append(ptArr, pt)
+		}
+		return bson.D{
+			{Key: "$Type", Value: "CustomWidgets$WidgetPropertyType"},
+			{Key: "PropertyKey", Value: key},
+			{Key: "Caption", Value: key},
+			{Key: "Category", Value: "General"},
+			{Key: "ValueType", Value: bson.D{
+				{Key: "ObjectType", Value: bson.D{
+					{Key: "PropertyTypes", Value: ptArr},
+				}},
+			}},
+		}
+	}
+	// Two nested object types both define "latitude" with different stored captions.
+	oldWidget := makeCustomWidgetWithType("maps1", "com.mendix.widget.custom.Maps",
+		makeObjectListProp("markers", makePropertyType("latitude", "Marker latitude", "Data")),
+		makeObjectListProp("dynamicMarkers", makePropertyType("latitude", "Dynamic latitude", "Data")),
+	)
+	newWidget := makeCustomWidgetWithType("maps1", "com.mendix.widget.custom.Maps",
+		makeObjectListProp("markers", makePropertyType("latitude", "Latitude", "Data")),
+		makeObjectListProp("dynamicMarkers", makePropertyType("latitude", "Latitude", "Data")),
+	)
+
+	preserveStoredWidgetPropertyMetadata(oldWidget, []any{newWidget})
+
+	markers := propTypeByKey(t, newWidget, "markers")
+	lat := propTypeByKey(t, markers, "latitude")
+	if got := bsonnav.DGetString(lat, "Caption"); got != "Marker latitude" {
+		t.Errorf("markers/latitude Caption = %q, want %q", got, "Marker latitude")
+	}
+	dynamic := propTypeByKey(t, newWidget, "dynamicMarkers")
+	lat = propTypeByKey(t, dynamic, "latitude")
+	if got := bsonnav.DGetString(lat, "Caption"); got != "Dynamic latitude" {
+		t.Errorf("dynamicMarkers/latitude Caption = %q, want %q", got, "Dynamic latitude")
+	}
+}
+
+func TestPreserveStoredWidgetPropertyMetadata_NestedInContainer(t *testing.T) {
+	oldWidget := makeCustomWidgetWithType("comboBox1", "com.mendix.widget.web.Combobox",
+		makePropertyType("onChangeEvent", "On selection", "Events"),
+	)
+	// Replacement is a container wrapping a freshly generated combobox.
+	nestedCombo := makeCustomWidgetWithType("comboBox1", "com.mendix.widget.web.Combobox",
+		makePropertyType("onChangeEvent", "On change", "Events"),
+	)
+	container := makeContainerWidget("wrapper", nestedCombo)
+
+	preserveStoredWidgetPropertyMetadata(oldWidget, []any{container})
+
+	pt := propTypeByKey(t, nestedCombo, "onChangeEvent")
+	if got := bsonnav.DGetString(pt, "Caption"); got != "On selection" {
+		t.Errorf("nested combobox Caption = %q, want stored %q", got, "On selection")
+	}
+}

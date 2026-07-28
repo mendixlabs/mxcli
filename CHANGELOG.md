@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`ALTER PAGE … REPLACE` of a pluggable widget no longer triggers CE0463 (#112)** — replacing a pluggable widget (e.g. a combobox) emitted `Type` metadata (per-property `Caption`/`Category`) generated from the embedded template and installed `.mpk`, while untouched sibling widgets in the same page unit still carried metadata from the (older) widget version that authored them in Studio Pro. MxBuild flagged the mixed vintages as CE0463 ("The definition of this widget has changed") on the rebuilt widget — even for an identity rebuild that changed nothing. The replacement now grafts the stored widget's per-property display metadata (`Caption`, `Category`, `Description`) onto the freshly generated `Type` block, matched by property-key *path* (so nested object types that reuse a key, like a Maps widget's `markers/latitude` vs `dynamicMarkers/latitude`, stay independent) and only when the `WidgetId` matches — including pluggable widgets nested inside container replacements. Structural fields (`$ID`s, `ValueType`s) are never copied, so the new widget's `Object`↔`Type` cross-references stay intact. Verified against a Mendix 11.12.2 project: identity rebuild and datasource-XPath replace of a Combobox v2.8.1 both now pass `docker check` with zero errors (previously CE0463).
+
 ## [0.16.0] - 2026-07-12
 
 Headline: **Pluggable chart authoring reaches round-trip fidelity**, plus in-place enum-caption editing, named layout placeholders, and a batch of new pre-build `check` heuristics. Charts gain widget-level datasource attributes, the `LINE`/`SCALECOLOR` object-list keywords, and a `DESCRIBE` that reconstructs them as executable MDL; workflows and widget-less pages now describe cleanly; view-entity OQL is validated before build; and several authoring mistakes are caught at `mxcli check` time instead of only by MxBuild.

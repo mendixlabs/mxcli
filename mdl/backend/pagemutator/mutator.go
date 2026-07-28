@@ -324,6 +324,8 @@ func (m *Mutator) ReplaceWidget(widgetRef string, columnRef string, widgets []pa
 		return fmt.Errorf("serialize widgets: %w", err)
 	}
 
+	preserveStoredWidgetPropertyMetadata(result.widget, newBsonWidgets)
+
 	newArr := make([]any, 0, len(result.parentArr)-1+len(newBsonWidgets))
 	newArr = append(newArr, result.parentArr[:result.index]...)
 	newArr = append(newArr, newBsonWidgets...)
@@ -331,6 +333,125 @@ func (m *Mutator) ReplaceWidget(widgetRef string, columnRef string, widgets []pa
 
 	bsonnav.DSetArray(result.parentDoc, result.parentKey, newArr)
 	return nil
+}
+
+const widgetPropertyTypeName = "CustomWidgets$WidgetPropertyType"
+
+// preservedPropertyMetadataFields are the per-property display fields grafted from
+// the stored widget onto its replacement. Structural fields ($ID, ValueType, Key)
+// are never copied — the replacement's Object block cross-references its own
+// freshly generated PropertyType IDs.
+var preservedPropertyMetadataFields = []string{"Caption", "Category", "Description"}
+
+// preserveStoredWidgetPropertyMetadata grafts the per-property display metadata
+// (Caption, Category, Description) of the stored pluggable widget being replaced
+// onto any replacement of the same widget package, matched by PropertyKey.
+//
+// A freshly built pluggable widget carries Type metadata derived from the embedded
+// template and the installed .mpk. The stored model may hold different metadata for
+// the same properties — whichever widget version authored the page in Studio Pro.
+// Mixing the two vintages in one unit makes mxbuild flag the rebuilt widget with
+// CE0463 ("The definition of this widget has changed"), so the replacement must
+// stay consistent with the stored model rather than with the toolchain's template.
+func preserveStoredWidgetPropertyMetadata(oldWidget bson.D, newWidgets []any) {
+	oldType := bsonnav.DGetDoc(oldWidget, "Type")
+	if oldType == nil {
+		return // not a pluggable widget (or a grid column) — nothing to preserve
+	}
+	oldWidgetID := bsonnav.DGetString(oldType, "WidgetId")
+	if oldWidgetID == "" {
+		return
+	}
+	storedMeta := map[string]bson.D{}
+	collectWidgetPropertyMetadata(oldType, "", storedMeta)
+	if len(storedMeta) == 0 {
+		return
+	}
+	for _, w := range newWidgets {
+		graftOntoMatchingWidgetTypes(w, oldWidgetID, storedMeta)
+	}
+}
+
+// graftOntoMatchingWidgetTypes walks a serialized replacement widget tree and
+// grafts the stored metadata onto every embedded widget Type of the same widget
+// package — including pluggable widgets nested inside container replacements.
+func graftOntoMatchingWidgetTypes(node any, widgetID string, storedMeta map[string]bson.D) {
+	switch v := node.(type) {
+	case bson.D:
+		if t := bsonnav.DGetDoc(v, "Type"); t != nil && bsonnav.DGetString(t, "WidgetId") == widgetID {
+			applyWidgetPropertyMetadata(t, "", storedMeta)
+		}
+		for _, elem := range v {
+			graftOntoMatchingWidgetTypes(elem.Value, widgetID, storedMeta)
+		}
+	default:
+		for _, item := range bsonnav.ToBsonA(v) {
+			graftOntoMatchingWidgetTypes(item, widgetID, storedMeta)
+		}
+	}
+}
+
+// collectWidgetPropertyMetadata walks a widget Type tree and indexes every
+// CustomWidgets$WidgetPropertyType doc by its slash-joined PropertyKey path
+// (e.g. "/markers/latitude"). Paths — not flat keys — scope the match, because
+// distinct nested object types may reuse the same property key with different
+// metadata. First occurrence wins for a duplicate path.
+func collectWidgetPropertyMetadata(node any, path string, out map[string]bson.D) {
+	switch v := node.(type) {
+	case bson.D:
+		if bsonnav.DGetString(v, "$Type") == widgetPropertyTypeName {
+			if key := bsonnav.DGetString(v, "PropertyKey"); key != "" {
+				childPath := path + "/" + key
+				if _, seen := out[childPath]; !seen {
+					out[childPath] = v
+				}
+				for _, elem := range v {
+					collectWidgetPropertyMetadata(elem.Value, childPath, out)
+				}
+				return
+			}
+		}
+		for _, elem := range v {
+			collectWidgetPropertyMetadata(elem.Value, path, out)
+		}
+	default:
+		for _, item := range bsonnav.ToBsonA(v) {
+			collectWidgetPropertyMetadata(item, path, out)
+		}
+	}
+}
+
+// applyWidgetPropertyMetadata overwrites the display metadata of every
+// CustomWidgets$WidgetPropertyType doc in a widget Type tree with the stored
+// values collected from the widget being replaced, matched by PropertyKey path.
+// Properties the stored widget does not define keep their generated metadata.
+func applyWidgetPropertyMetadata(node any, path string, storedMeta map[string]bson.D) {
+	switch v := node.(type) {
+	case bson.D:
+		if bsonnav.DGetString(v, "$Type") == widgetPropertyTypeName {
+			if key := bsonnav.DGetString(v, "PropertyKey"); key != "" {
+				childPath := path + "/" + key
+				if stored, ok := storedMeta[childPath]; ok {
+					for _, field := range preservedPropertyMetadataFields {
+						if s, isString := bsonnav.DGet(stored, field).(string); isString {
+							bsonnav.DSet(v, field, s)
+						}
+					}
+				}
+				for _, elem := range v {
+					applyWidgetPropertyMetadata(elem.Value, childPath, storedMeta)
+				}
+				return
+			}
+		}
+		for _, elem := range v {
+			applyWidgetPropertyMetadata(elem.Value, path, storedMeta)
+		}
+	default:
+		for _, item := range bsonnav.ToBsonA(v) {
+			applyWidgetPropertyMetadata(item, path, storedMeta)
+		}
+	}
 }
 
 // InsertColumns inserts new DataGrid2 columns before/after an existing column.
