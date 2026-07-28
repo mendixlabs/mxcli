@@ -109,6 +109,8 @@ grant execute on microflow MyModule.ACT_Customer_Create to MyModule.User, MyModu
 revoke execute on microflow MyModule.ACT_Customer_Create from MyModule.User;
 ```
 
+> **`grant execute` also sets a microflow's "Allowed roles" property.** After a `CREATE OR MODIFY MICROFLOW` round-trip, the Allowed roles are reset to empty (MDL can't carry them) → **CE0106** for any page/button/nanoflow/nav/published-service-triggered microflow. Re-run `grant execute ... to <original roles>` to restore them. `SHOW ACCESS ON MICROFLOW` does NOT display this property — verify by reading `AllowedModuleRoles` in the model `.mxunit`. See `write-microflows` Pitfall #8.
+
 ### Nanoflow Access
 
 ```sql

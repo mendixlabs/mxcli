@@ -355,6 +355,34 @@ end;
 
 **Note**: Parameters are automatically declared by the parameter list. The `returns type as $Var` syntax names the return variable but does NOT declare it - you must still use `declare $Var type = value;` if you want to use SET on it.
 
+### 8. `create or modify` DROPS Allowed Roles and Other Non-MDL Properties (CE0106)
+
+**Error**: After editing an existing microflow with `CREATE OR MODIFY MICROFLOW`, Studio Pro reports **`CE0106` — "At least one allowed role must be selected if the microflow is used from navigation, a page, a nanoflow or a published service."**
+
+**Why**: MDL text has **no syntax** for a microflow's **Allowed roles** (the `AllowedModuleRoles` security property). A `create or modify` round-trip rebuilds the microflow from the MDL, so any property that MDL cannot express is **reset to its default**:
+
+- **Allowed roles** → reset to **empty** (breaks any MF triggered from a page/button/nanoflow/nav/published service when security is Production/Prototype with Check Security on).
+- Also at risk: **"Apply entity access"** and **"Exposed as / API" flags** — verify these too if the MF had them.
+
+`describe microflow` does **not** show allowed roles, and `SHOW ACCESS ON MICROFLOW` reports a *different* grant type — so neither reveals this loss. Read the model unit (`grep AllowedModuleRoles` in the `.mxunit`) to see the real list.
+
+✅ **ALWAYS, when you `create or modify` an EXISTING microflow that is (or might be) triggered from a page/button/nanoflow/navigation/published service:**
+
+1. **Before editing**, capture the current allowed roles. They are not in MDL — read them from the committed model unit:
+   ```bash
+   # find the MF's .mxunit (from git status after your edit, or by module folder), then:
+   grep -a -o 'AllowedModuleRoles[^§]*' mprcontents/xx/yy/<uuid>.mxunit | head -c 400
+   # role names appear as plain text, e.g. MyModule.Administrator, MyModule.User, ...
+   ```
+2. **After editing**, re-grant them with `grant execute` (this sets the allowed-roles property):
+   ```mdl
+   grant execute on microflow MyModule.ACT_Customer_Create to
+     MyModule.Administrator, MyModule.User;
+   ```
+3. **Verify** the property is set by reading the unit back (`grep AllowedModuleRoles`), NOT via `SHOW ACCESS` (which won't show it).
+
+**Internal helper microflows** (called only from other microflows, never from a page/nanoflow/nav) have **no** allowed roles and are unaffected — no action needed. The hazard only applies to entry-point/action microflows.
+
 ## Control Flow
 
 ### IF Statements
@@ -1382,6 +1410,7 @@ Before executing a microflow script, verify:
 - [ ] Microflow ends with `/` separator
 - [ ] Parameters start with `$` prefix
 - [ ] Proper closing for control structures (`end if`, `end loop`)
+- [ ] **When `create or modify`-ing an EXISTING page/button/nanoflow-triggered microflow: re-grant its Allowed roles afterward** (MDL round-trip drops them → CE0106). See Common Pitfall #8.
 
 ## Common Studio Pro Errors
 
@@ -1391,6 +1420,7 @@ Before executing a microflow script, verify:
 | CE0117 | Error in expression | Use qualified association names; use `not(expr)` not bare `not expr` |
 | CE0104 | Action activity is unreachable | Remove code after RETURN |
 | CE0105 | Must end with end event | Add RETURN statement |
+| CE0106 | At least one allowed role must be selected... | `create or modify` dropped Allowed roles — re-add with `grant execute on microflow Mod.MF to <roles>;`. See Pitfall #8 |
 | CE0008 | No action defined | Define action for activity |
 | CW0094 | Variable never used | Remove unused variables or use them |
 | MDL | Variable not declared | Use `declare $var type = value;` before SET |
