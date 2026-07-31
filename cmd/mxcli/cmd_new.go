@@ -35,6 +35,7 @@ Examples:
 		mendixVersion, _ := cmd.Flags().GetString("version")
 		outputDir, _ := cmd.Flags().GetString("output-dir")
 		skipInit, _ := cmd.Flags().GetBool("skip-init")
+		containerRuntime, _ := cmd.Flags().GetString("container-runtime")
 
 		if mendixVersion == "" {
 			fmt.Fprintln(os.Stderr, "Error: --version is required (e.g., --version 11.8.0)")
@@ -118,6 +119,7 @@ Examples:
 		// Step 3: Initialize tooling
 		if !skipInit {
 			fmt.Printf("\nStep 3/4: Initializing AI tooling...\n")
+			initContainerRuntime = containerRuntime
 			initCmd.Run(initCmd, []string{absDir})
 		} else {
 			fmt.Printf("\nStep 3/4: Skipped (--skip-init)\n")
@@ -221,6 +223,7 @@ func init() {
 	newCmd.Flags().String("version", "", "Mendix version (e.g., 11.8.0) — required")
 	newCmd.Flags().String("output-dir", "", "Output directory (default: ./<app-name>)")
 	newCmd.Flags().Bool("skip-init", false, "Skip AI tooling initialization (mxcli init)")
+	newCmd.Flags().String("container-runtime", "docker", "Container runtime for devcontainer (docker or podman)")
 
 	rootCmd.AddCommand(newCmd)
 }
