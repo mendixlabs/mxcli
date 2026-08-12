@@ -11,7 +11,6 @@ import (
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
 	"github.com/mendixlabs/mxcli/cmd/mxcli/theme"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/spf13/cobra"
 )
 
@@ -67,9 +66,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		// Check if directory already exists and has content
-		if entries, err := os.ReadDir(absDir); err == nil && len(entries) > 0 {
-			fmt.Fprintf(os.Stderr, "Error: directory %s already exists and is not empty\n", absDir)
+		// Reject an unusable output before resolving or downloading MxBuild.
+		if _, err := inspectNewProjectOutput(absDir); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -86,71 +85,33 @@ Examples:
 			}
 			os.Exit(1)
 		}
+		if err := validateNewProjectOutputPath(absDir, appName, mendixVersion, mxPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Step 2: Create project
 		fmt.Printf("\nStep 2/6: Creating Mendix project '%s'...\n", appName)
-		if err := os.MkdirAll(absDir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", err)
+		created, err := createMendixProjectWithRollback(absDir, appName, mendixVersion, mxPath,
+			func(projectDir string) error {
+				mxCmd := exec.Command(mxPath, "create-project", "--app-name", appName)
+				mxCmd.Dir = projectDir
+				mxCmd.Stdout = os.Stdout
+				mxCmd.Stderr = os.Stderr
+				docker.PrepareMxCommand(mxCmd)
+				return mxCmd.Run()
+			})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-
-		mxCmd := exec.Command(mxPath, "create-project", "--app-name", appName)
-		mxCmd.Dir = absDir
-		mxCmd.Stdout = os.Stdout
-		mxCmd.Stderr = os.Stderr
-		docker.PrepareMxCommand(mxCmd)
-		if err := mxCmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating project: %v\n", err)
-			os.Exit(1)
+		if created.removedLocales > 0 {
+			fmt.Printf("  Cleaned %d duplicate locale file(s)\n", created.removedLocales)
 		}
-
-		// Clean up duplicate locale files that mx create-project generates.
-		// MxBuild's AtlasPlugin.LoadTranslations crashes with "An item with the same
-		// key has already been added" when duplicate translation.json files exist.
-		if removed := cleanupDuplicateLocaleFiles(absDir); removed > 0 {
-			fmt.Printf("  Cleaned %d duplicate locale file(s)\n", removed)
-		}
-
-		// Verify .mpr was created — mx create-project names the file after --app-name
-		mprPath := filepath.Join(absDir, appName+".mpr")
-		if _, err := os.Stat(mprPath); os.IsNotExist(err) {
-			// Fallback: check for App.mpr (default when --app-name is not used)
-			fallback := filepath.Join(absDir, "App.mpr")
-			if _, err := os.Stat(fallback); err == nil {
-				mprPath = fallback
-			} else {
-				// Last resort: find any .mpr file
-				matches, _ := filepath.Glob(filepath.Join(absDir, "*.mpr"))
-				if len(matches) > 0 {
-					mprPath = matches[0]
-				} else {
-					fmt.Fprintf(os.Stderr, "Error: mx create-project did not produce an .mpr file in %s\n", absDir)
-					os.Exit(1)
-				}
-			}
-		}
+		mprPath := created.mprPath
 		fmt.Printf("  Created %s\n", mprPath)
-
-		// The project is stamped with the version of the binary that created it, not
-		// with --version. Resolving the wrong binary therefore yields a project at a
-		// version the user never asked for, and every later step (init, mxbuild,
-		// runtime) silently follows it. Check the postcondition rather than trusting
-		// the resolution: a mismatch here means the model is wrong, so fail loudly
-		// instead of handing back something that merely looks finished.
-		if reader, err := mpr.Open(mprPath); err == nil {
-			created := reader.ProjectVersion().ProductVersion
-			reader.Close()
-			if created != "" && created != mendixVersion {
-				fmt.Fprintf(os.Stderr,
-					"Error: requested Mendix %s but the created project is %s.\n",
-					mendixVersion, created)
-				fmt.Fprintf(os.Stderr,
-					"  mx create-project stamps the project with the version of the binary that ran it (%s).\n", mxPath)
-				fmt.Fprintf(os.Stderr,
-					"  Run 'mxcli setup mxbuild --version %s' and try again.\n", mendixVersion)
-				os.Exit(1)
-			}
-			fmt.Printf("  Mendix version: %s\n", created)
+		if created.version != "" {
+			fmt.Printf("  Mendix version: %s\n", created.version)
 		}
 
 		// Step 3: Default styling. A blank Atlas app is unmistakably a blank Atlas
