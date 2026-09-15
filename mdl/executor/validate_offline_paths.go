@@ -10,7 +10,6 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/linter"
 	"github.com/mendixlabs/mxcli/mdl/types"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // CE6206: "Attribute paths with multiple steps cannot be used on pages that are
@@ -154,11 +153,11 @@ func ValidateOfflineAttributePaths(prog *ast.Program, projectPath string) []lint
 // that cannot be opened reports none, so an unreadable model silences the rule
 // instead of failing the check on something it could not inspect.
 func offlineProfilesIn(projectPath string) []string {
-	reader, err := mpr.Open(projectPath)
-	if err != nil {
+	reader := openProjectForValidation(projectPath)
+	if reader == nil {
 		return nil
 	}
-	defer func() { _ = reader.Close() }()
+	defer func() { _ = reader.Disconnect() }()
 	nav, err := reader.GetNavigation()
 	if err != nil {
 		return nil

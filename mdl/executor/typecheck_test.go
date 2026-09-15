@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/mendixlabs/mxcli/mdl/backend"
-	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/mdl/linter"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 )
@@ -34,7 +34,7 @@ func typeCheckFixture(t *testing.T) *Executor {
 
 	exec := New(&bytes.Buffer{})
 	exec.SetQuiet(true)
-	exec.SetBackendFactory(func() backend.FullBackend { return mprbackend.New() })
+	exec.SetBackendFactory(func() backend.FullBackend { return modelsdkbackend.New() })
 	t.Cleanup(func() { exec.Close() })
 
 	run(t, exec, "CONNECT LOCAL '"+visitor.QuoteString(proj)+"'")

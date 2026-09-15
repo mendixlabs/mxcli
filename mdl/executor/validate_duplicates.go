@@ -177,6 +177,8 @@ func stmtDropInfo(stmt ast.Statement) (docType, name string) {
 		return "rule", s.Name.String()
 	case *ast.DropPageStmt:
 		return "page", s.Name.String()
+	case *ast.DropLayoutStmt:
+		return "layout", s.Name.String()
 	case *ast.DropSnippetStmt:
 		return "snippet", s.Name.String()
 	case *ast.DropJavaActionStmt:

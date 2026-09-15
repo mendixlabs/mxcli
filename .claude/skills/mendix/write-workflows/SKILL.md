@@ -25,8 +25,8 @@ the `LeaveRequest` being reviewed). User tasks render a page bound to
 ## Syntax — CREATE WORKFLOW
 
 The header options are **order-sensitive** (parameter → display → description →
-export level → overview page → due date), and the body **must** close with
-`END WORKFLOW`.
+export level → overview page → due date → event handlers), and the body **must**
+close with `END WORKFLOW`.
 
 ```sql
 create workflow Module.ApprovalFlow
@@ -35,6 +35,9 @@ create workflow Module.ApprovalFlow
   description 'Approves incoming requests'   -- optional
   export level Hidden                        -- optional: Hidden | API (default Hidden)
   overview page Module.WF_Overview           -- optional admin overview page
+  on workflow events (UserTaskStarted, UserTaskEnded)   -- optional, repeatable
+    microflow Module.ACT_AuditTask as 'Task audit'
+  on any workflow event microflow Module.ACT_LogEvent   -- every type this Mendix version has
 begin
   -- activities here, each terminated with ;
 end workflow;
@@ -71,6 +74,7 @@ begin
   user task Review 'Review the request'
     page Module.ReviewPage
     targeting users microflow Module.ACT_Reviewers   -- or: targeting users xpath '[Active = true()]'
+    on created microflow Module.ACT_AssignReviewer   -- optional: runs when the task is created
     description 'Please review'
     outcomes
       'Approve' { call microflow Module.ACT_Process; }
@@ -110,6 +114,10 @@ begin
 
   -- Wait for an external notification (e.g. an event)
   wait for notification waitForNotification1;
+
+  -- An intermediate notification event (Mendix 11.11+): what `notify workflow`
+  -- targets by name
+  notification DocumentsReceived comment 'Documents received';
 
   -- Loop back, or stop the whole workflow, from inside an outcome. A `jump to`
   -- and an `end workflow` must each END their path, so neither can close the
@@ -162,6 +170,48 @@ end workflow;
   an interrupting path is **CE0105** at build, and a non-interrupting one builds
   cleanly and then stops the runtime from starting ("Expected the flow to end with
   an end event"). Use `jump to <task>` when the path should return to the task.
+- **A notification boundary event** (Mendix 11.11+) fires when `notify workflow`
+  targets it, so it takes a **name** instead of a delay:
+  `boundary event interrupting notification Withdrawn 'Request withdrawn' { end workflow; }`.
+  The name is unique in the workflow. Only one interrupting boundary event per
+  activity, of either kind (CE6697, MDL-WF15). `alter workflow … insert boundary
+  event` cannot add one yet — restate the workflow.
+- **Over MCP (`--mcp`), Studio Pro dictates how a notification path ends**, which
+  mxbuild does not: an interrupting one ends in `end workflow;` (in `jump to` inside
+  a parallel split), a non-interrupting one runs to its end. mxcli refuses the
+  other shapes with that remedy, because Studio Pro's constructor would rewrite or
+  reject them.
+
+**Event sub-processes** are flows outside the main flow, written after the main body.
+A notification (11.8+) or a timer (11.13+) starts one while the workflow runs;
+`interrupting` cancels every active path first, `non interrupting` runs alongside:
+
+```sql
+create or modify workflow HR.Leave
+  parameter $Context: HR.Request
+begin
+  user task Review 'Review' page HR.ReviewPage outcomes 'Approve' { } 'Reject' { };
+
+  event subprocess ESP_Cancel 'Cancel request'
+    on interrupting notification espCancelStart 'Cancel received' {
+    call microflow HR.ACT_LogCancel;
+  };
+  event subprocess ESP_Reminder 'Daily reminder'
+    on non interrupting timer 'addDays([%CurrentDateTime%], 1)' as espReminderStart {
+    call microflow HR.ACT_Remind;
+  };
+end workflow;
+```
+
+- **The End is implicit**, as in the main flow: mxcli appends one unless the body
+  already ends (`end workflow`, a `jump to`, or branches that all end). A body with
+  no end is CE0105.
+- **`jump to` stays inside its sub-process** — a jump to its own activities or its
+  start event builds; into another sub-process, or between one and the main flow,
+  is CE6682 (MDL-WF05).
+- **A timer start needs its expression** (CE0126, MDL-WF14).
+- **Names are shared with the main flow**: a start event named like an activity is
+  CE0495, so mxcli makes it unique.
 
 ## DROP WORKFLOW
 
@@ -219,10 +269,8 @@ describing a Studio-Pro-authored workflow, and `describe → drop → exec`
 reproduces a workflow that builds. (The implicit start/end activities are
 omitted, as they are re-synthesised on create.)
 
-**What DESCRIBE still cannot see: event sub-processes.** mxcli has no model for
-them at all, so they do not appear in the output and cannot be written from MDL.
-A workflow that has one can only be edited in Studio Pro or through
-`ALTER WORKFLOW` (below) — never with `CREATE OR REPLACE`.
+Event sub-processes come back as `event subprocess … on …` blocks after the main
+body, and notification activities and notification boundary events as statements.
 
 ## Activity names, and why `jump to` depends on them
 
@@ -255,10 +303,13 @@ workflow that simply no longer does what it did.
 
 mxcli refuses the two cases where that would lose something:
 
-- a stored **event sub-process** — MDL cannot express one, so the rewrite is
-  refused outright;
+- **more stored event sub-processes or notification activities than the statement
+  declares** — restate them; a sub-process with no start event, which MDL cannot
+  state, is refused outright;
 - **more stored boundary events than the statement declares** — restate them and
-  the rewrite proceeds, which is what `describe workflow` now emits for you.
+  the rewrite proceeds, which is what `describe workflow` now emits for you;
+- **more stored workflow event handlers, or user tasks with an on-created
+  microflow, than the statement declares** — the same: restate them.
 
 The safe way to change one activity in a workflow carrying hand-placed structure
 is `ALTER WORKFLOW`, which mutates in place and touches nothing else.
@@ -271,7 +322,13 @@ workflow / its tasks. They are easy to miss — there is no `complete task`:
 - `set task outcome $Task 'Approve';` — completes a `System.WorkflowUserTask` with a
   named outcome. This is how a microflow (e.g. a task page's button) finishes a task
   and does the domain work; the outcome branches still record which one was chosen.
-- `open user task $Task`, `notify workflow $Wf`, `lock workflow $Wf`, and
+- `$Notified = notify workflow $Wf target Module.Workflow.Name;` resumes the element
+  it names — a notification-started event sub-process, a notification activity, a
+  notification boundary event or a wait for notification. **The target is
+  required**: a notify without one fails the build (CE0166, MDL-WF16). Name the
+  element as `Module.Workflow.ElementName`; mxcli works out which kind it is and
+  refuses one a notification cannot reach (a timer start, a user task).
+- `open user task $Task`, `lock workflow $Wf`, and
   `workflow operation abort|pause|restart|retry|continue $Wf` are also statements.
 
 A common shape: the task page's buttons call a microflow that does the change and
@@ -323,9 +380,8 @@ documented in `system-module`.
 ## Platform rules
 
 - **Some workflow state has no MDL spelling, and a rewrite refuses rather than
-  reset it.** An event sub-process, a workflow event handler, an AI agent task, a
-  user task's on-created microflow, and a multi-user task's completion rule other
-  than consensus falling back to its first outcome are set in Studio Pro.
+  reset it.** An event sub-process and a workflow event handler subscribed to no
+  event types are set in Studio Pro.
   `create or modify` on a workflow that holds any of them is refused with the
   list, and so is `alter workflow … replace activity` on an activity that holds
   one. Change such a workflow with `alter workflow … set activity …` (it edits
@@ -350,6 +406,46 @@ documented in `system-module`.
   An outcome left **empty** does not stop anything — it rejoins the main flow.
   `comment '…'` sets the End's caption, as on every workflow activity.
 
+- **A multi-user task says who must respond and how their outcomes decide**,
+  in this clause order before `outcomes`:
+  `participants all | <n> | <n> percent`, then `decide by …`, then
+  `await all users`. The rules (`decide by`):
+  `consensus fallback '<outcome>'`, `majority more than half fallback '…'`,
+  `majority most chosen fallback '…'`, `threshold <n> percent|votes fallback '…'`,
+  `veto '<outcome>'`, `microflow Module.Decide`. Omitted means all participants,
+  consensus falling back to the first outcome, and not waiting. Measured on
+  mxbuild 11.13:
+  - consensus, majority and threshold **need a fallback** (`CE1866`) and a veto
+    needs its outcome (`CE1867`); `check` refuses a missing one, and a name
+    that is not one of the task's outcomes (`MDL-WF13`);
+  - the decision microflow must **return String** (`CE5012`); its parameters
+    are free;
+  - thresholds and participant counts are **not range-checked** by the build
+    (0, 101 percent, more votes than users all build), so check them yourself.
+  A rewrite that does not restate a stored rule, participant count or `await all
+  users` is refused — each omitted clause would reset it.
+- **An AI agent task is `call agent microflow`** (Mendix 11.9+) — the call
+  microflow statement stored as `Workflows$AIAgentTaskActivity`, with the same
+  `as`, `comment`, `with (…)`, `outcomes` and boundary events. The microflow is
+  where the agent is invoked. Measured on mxbuild 11.13 against the identical
+  call microflow, one rule differs: **its microflow must take a parameter**
+  (`CE1590 "Missing parameter"`), usually the context object mapped with
+  `with (Param = '$WorkflowContext')`. Return Boolean or an enumeration to
+  branch on the answer.
+- **Handler microflows have fixed signatures** (measured, mxbuild 11.13):
+  - `on created microflow` takes exactly `System.WorkflowUserTask` and the context
+    entity, in either order — anything else is `CE6683` — and returns nothing
+    (`CE5012`).
+  - A workflow event handler takes exactly `System.WorkflowEvent`,
+    `System.WorkflowRecord` and `System.WorkflowActivityRecord`, in any order
+    (`CE6691`).
+  - **Event type names are not checked by the build** — an invented one builds at
+    0 errors and never fires. mxcli refuses an unknown name (`MDL-WF12`) and a type
+    the project's version does not have. The list is in `mxcli syntax
+    workflow.event-handlers`.
+  - `on any workflow event` stores the full list for the project's version (Studio
+    Pro stores a list, not a flag), so it needs Mendix 11.6+; name the types on
+    older projects.
 - A user task needs a **task page** to be useful; without one Mendix flags the
   task (`CE1834`). Bind the page to `System.WorkflowUserTask`.
 - **The task page takes the TASK, not the workflow's context object.** It must

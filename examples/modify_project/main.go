@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/mendixlabs/mxcli"
+	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/mendixlabs/mxcli/model"
 )
 
@@ -30,14 +31,12 @@ func main() {
 		fmt.Printf("Error opening MPR file: %v\n", err)
 		os.Exit(1)
 	}
-	defer writer.Close()
+	defer writer.Disconnect()
 
-	reader := writer.Reader()
-
-	fmt.Printf("Opened: %s\n", reader.Path())
+	fmt.Printf("Opened: %s\n", writer.Path())
 
 	// Get the first module's domain model
-	modules, err := reader.ListModules()
+	modules, err := writer.ListModules()
 	if err != nil || len(modules) == 0 {
 		fmt.Println("No modules found")
 		os.Exit(1)
@@ -46,7 +45,7 @@ func main() {
 	targetModule := modules[0]
 	fmt.Printf("Working with module: %s\n", targetModule.Name)
 
-	dm, err := reader.GetDomainModel(targetModule.ID)
+	dm, err := writer.GetDomainModel(targetModule.ID)
 	if err != nil {
 		fmt.Printf("Error getting domain model: %v\n", err)
 		os.Exit(1)
@@ -215,7 +214,7 @@ func main() {
 }
 
 // ExampleBuildComplexDomainModel demonstrates building a more complex domain model
-func ExampleBuildComplexDomainModel(writer *modelsdk.Writer, domainModelID modelsdk.ID) {
+func ExampleBuildComplexDomainModel(writer backend.FullBackend, domainModelID modelsdk.ID) {
 	// Create Product entity
 	product := modelsdk.NewEntity("Product")
 	product.Attributes = []*modelsdk.Attribute{
@@ -260,7 +259,7 @@ func ExampleBuildComplexDomainModel(writer *modelsdk.Writer, domainModelID model
 }
 
 // ExampleCreateEnumeration demonstrates creating an enumeration
-func ExampleCreateEnumeration(writer *modelsdk.Writer, moduleID modelsdk.ID) {
+func ExampleCreateEnumeration(writer backend.FullBackend, moduleID modelsdk.ID) {
 	orderStatus := &modelsdk.Enumeration{
 		Name:          "OrderStatus",
 		Documentation: "Possible statuses for an order",
@@ -279,7 +278,7 @@ func ExampleCreateEnumeration(writer *modelsdk.Writer, moduleID modelsdk.ID) {
 }
 
 // ExampleCreateConstant demonstrates creating a constant
-func ExampleCreateConstant(writer *modelsdk.Writer, moduleID modelsdk.ID) {
+func ExampleCreateConstant(writer backend.FullBackend, moduleID modelsdk.ID) {
 	maxOrdersPerDay := &modelsdk.Constant{
 		Name:            "MaxOrdersPerDay",
 		Documentation:   "Maximum number of orders a customer can place per day",

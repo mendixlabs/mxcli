@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/mendixlabs/mxcli/mdl/diaglog"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	mpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
 	"github.com/spf13/cobra"
 )
 

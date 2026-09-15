@@ -23,8 +23,37 @@ type CreateWorkflowStmt struct {
 	OverviewPage QualifiedName // qualified name of overview page
 	DueDate      string        // due date expression
 
+	// Workflow event handlers, in statement order.
+	EventHandlers []WorkflowEventHandlerNode
+
 	// Activities
 	Activities []WorkflowActivityNode
+
+	// Event sub-processes, written after the main body.
+	EventSubProcesses []WorkflowEventSubProcessNode
+}
+
+// WorkflowEventSubProcessNode is `event subprocess <name> ['<caption>'] on
+// [non] interrupting notification|timer … { … };`.
+type WorkflowEventSubProcessNode struct {
+	Name         string
+	Caption      string
+	Interrupting bool
+	Timer        bool   // a timer start; otherwise a notification start
+	StartName    string // the start event's name; "" = derived from Name
+	StartCaption string
+	// FirstExecutionTime is a timer start's expression.
+	FirstExecutionTime string
+	Activities         []WorkflowActivityNode
+}
+
+// WorkflowEventHandlerNode is one `on workflow events (…) microflow M as '…'` or
+// `on any workflow event microflow M as '…'` header clause.
+type WorkflowEventHandlerNode struct {
+	AnyEvent    bool          // `on any workflow event`: every type the project version knows
+	EventTypes  []string      // the named types, as written; empty when AnyEvent
+	Microflow   QualifiedName // the handler microflow
+	Description string        // from AS 'text'
 }
 
 func (s *CreateWorkflowStmt) isStatement() {}
@@ -47,12 +76,36 @@ type WorkflowUserTaskNode struct {
 	Caption         string // display caption
 	Page            QualifiedName
 	Targeting       WorkflowTargetingNode
+	OnCreated       QualifiedName // ON CREATED MICROFLOW: runs when the task is created
 	Entity          QualifiedName // user task entity
 	DueDate         string        // DUE DATE expression
 	Outcomes        []WorkflowUserTaskOutcomeNode
 	IsMultiUser     bool                        // Issue #8: true if MULTI USER TASK
 	BoundaryEvents  []WorkflowBoundaryEventNode // Issue #7
 	TaskDescription string                      // from DESCRIPTION 'text'
+
+	// Multi-user task only.
+	Participants  *WorkflowParticipantsNode   // `participants …`; nil = all
+	Completion    *WorkflowCompletionRuleNode // `decide by …`; nil = consensus on the first outcome
+	AwaitAllUsers bool                        // `await all users`
+}
+
+// WorkflowParticipantsNode is `participants all | N | N percent`.
+type WorkflowParticipantsNode struct {
+	Kind  string // "all", "number" or "percent"
+	Value int
+}
+
+// WorkflowCompletionRuleNode is `decide by …` on a multi-user task.
+type WorkflowCompletionRuleNode struct {
+	Rule          string // "consensus", "majority", "threshold", "veto" or "microflow"
+	Majority      string // "more than half" or "most chosen"
+	Threshold     int
+	ThresholdUnit string // "percent" or "votes"
+	Fallback      string // outcome named by `fallback '…'`; "" when absent
+	HasFallback   bool
+	Veto          string // outcome named by `veto '…'`
+	Microflow     QualifiedName
 }
 
 func (n *WorkflowUserTaskNode) workflowActivityNode() {}
@@ -74,6 +127,7 @@ type WorkflowUserTaskOutcomeNode struct {
 // WorkflowCallMicroflowNode represents a CALL MICROFLOW activity.
 type WorkflowCallMicroflowNode struct {
 	Name              string // explicit activity name (`as <name>`); see ako/mxcli#408
+	Agent             bool   // `call agent microflow`: an AI agent task (Workflows$AIAgentTaskActivity)
 	Microflow         QualifiedName
 	Caption           string
 	Outcomes          []WorkflowConditionOutcomeNode
@@ -150,6 +204,15 @@ type WorkflowWaitForNotificationNode struct {
 
 func (n *WorkflowWaitForNotificationNode) workflowActivityNode() {}
 
+// WorkflowNotificationNode is `notification [<name>] [comment '<caption>']`, an
+// intermediate notification event.
+type WorkflowNotificationNode struct {
+	Name    string
+	Caption string
+}
+
+func (n *WorkflowNotificationNode) workflowActivityNode() {}
+
 // WorkflowEndNode is `end workflow [comment '<caption>']` inside a branch: it
 // ends the whole workflow there. The main flow's End is not a node — the body's
 // closing `end workflow` is it.
@@ -170,8 +233,12 @@ func (n *WorkflowReturnNode) workflowActivityNode() {}
 // WorkflowBoundaryEventNode represents a BOUNDARY EVENT clause on a user task.
 // Issue #7
 type WorkflowBoundaryEventNode struct {
-	EventType  string                 // "InterruptingTimer", "NonInterruptingTimer", "Timer"
+	// EventType is "InterruptingTimer", "NonInterruptingTimer", "Timer",
+	// "InterruptingNotification" or "NonInterruptingNotification".
+	EventType  string
 	Delay      string                 // ISO duration expression e.g. "${PT1H}"
+	Name       string                 // notification events: what `notify workflow … target` names
+	Caption    string                 // notification events
 	Activities []WorkflowActivityNode // Sub-flow activities inside the boundary event
 }
 

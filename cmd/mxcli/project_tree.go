@@ -8,10 +8,10 @@ import (
 	"os"
 	"sort"
 
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/mdl/executor"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/spf13/cobra"
 )
 
@@ -68,13 +68,19 @@ Example:
 }
 
 func buildProjectTree(projectPath string) ([]*TreeNode, error) {
-	reader, err := mpr.Open(projectPath)
-	if err != nil {
+	// Through the backend, not a concrete reader: every call below is a semantic
+	// read (ListModules, ListMicroflows, ListWorkflows, …) already on
+	// FullBackend. This was never a raw-unit tool — the Phase 3 write-up in
+	// docs/plans/2026-09-14-retire-legacy-engine.md lumped it in with the bson
+	// dumpers, which was wrong, and the census could not catch the mistake
+	// because it only records bypasses that reach an UNIMPLEMENTED method.
+	reader := modelsdkbackend.New()
+	if err := reader.ConnectReadOnly(projectPath); err != nil {
 		return nil, fmt.Errorf("failed to open project: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Disconnect() }()
 
-	h, err := executor.NewContainerHierarchy(reader)
+	h, err := executor.NewContainerHierarchyFromBackend(reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build hierarchy: %w", err)
 	}

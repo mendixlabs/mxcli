@@ -17,6 +17,7 @@ import (
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
 	mp "github.com/mendixlabs/mxcli/cmd/mxcli/marketplace"
 	"github.com/mendixlabs/mxcli/internal/marketplace"
+	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/spf13/cobra"
 )
 
@@ -169,7 +170,7 @@ func installModule(ctx context.Context, client *marketplace.Client, v *marketpla
 	}
 	existing, installedVer := findModule(reader, moduleName)
 	mendixVer, _ := reader.GetMendixVersion()
-	_ = reader.Close()
+	_ = reader.Disconnect()
 
 	if existing {
 		// Postponed: do NOT auto-update modules — see the module-update memory.
@@ -297,7 +298,7 @@ func reportFormatChange(mprPath string, out io.Writer) {
 
 // findModule reports whether a marketplace-sourced module of the given name is
 // present, and its installed AppStore version.
-func findModule(reader *modelsdk.Reader, name string) (found bool, appStoreVersion string) {
+func findModule(reader backend.FullBackend, name string) (found bool, appStoreVersion string) {
 	mods, err := reader.ListModules()
 	if err != nil {
 		return false, ""

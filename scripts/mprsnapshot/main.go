@@ -36,7 +36,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -72,11 +73,12 @@ type unit struct {
 }
 
 func run(projectPath, moduleFilter string, includeUnnamed, showRefs, canon bool) error {
-	reader, err := mpr.Open(projectPath)
+	reader := modelsdkbackend.New()
+	err := reader.ConnectReadOnly(projectPath)
 	if err != nil {
 		return fmt.Errorf("opening project: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Disconnect() }()
 
 	infos, err := reader.ListUnits()
 	if err != nil {
@@ -284,7 +286,7 @@ func elementID(m map[string]any) (string, bool) {
 		if len(t.Data) != 16 {
 			return "", false
 		}
-		return mpr.BlobToUUID(t.Data), true
+		return types.BlobToUUID(t.Data), true
 	case string:
 		return t, true
 	}
@@ -299,7 +301,7 @@ func elementID(m map[string]any) (string, bool) {
 // renumbering the other has very different consequences depending on which.
 func binaryUUID(v any) string {
 	if b, ok := v.(primitive.Binary); ok && len(b.Data) == 16 {
-		return mpr.BlobToUUID(b.Data)
+		return types.BlobToUUID(b.Data)
 	}
 	return ""
 }
@@ -401,7 +403,7 @@ func collectRefs(v any, path string, depth int, out *[]string) {
 				continue
 			}
 			if b, ok := m[k].(primitive.Binary); ok && len(b.Data) == 16 {
-				*out = append(*out, fmt.Sprintf("%s/%s=%s", path, k, mpr.BlobToUUID(b.Data)))
+				*out = append(*out, fmt.Sprintf("%s/%s=%s", path, k, types.BlobToUUID(b.Data)))
 				continue
 			}
 			collectRefs(m[k], path+"/"+k, depth+1, out)

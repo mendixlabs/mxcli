@@ -302,25 +302,6 @@ type WorkflowMutationBackend interface {
 	OpenWorkflowForMutation(unitID model.ID) (WorkflowMutator, error)
 }
 
-// WidgetSerializationBackend provides widget and activity serialization
-// for CREATE paths where the executor builds domain objects that need
-// to be converted to the storage format.
-type WidgetSerializationBackend interface {
-	// SerializeWidget converts a domain Widget to its storage representation.
-	// The returned value is opaque to the caller; it is only used as input
-	// to mutation operations or passed to the backend for persistence.
-	SerializeWidget(w pages.Widget) (any, error)
-
-	// SerializeClientAction converts a domain ClientAction to storage format.
-	SerializeClientAction(a pages.ClientAction) (any, error)
-
-	// SerializeDataSource converts a domain DataSource to storage format.
-	SerializeDataSource(ds pages.DataSource) (any, error)
-
-	// SerializeWorkflowActivity converts a domain WorkflowActivity to storage format.
-	SerializeWorkflowActivity(a workflows.WorkflowActivity) (any, error)
-}
-
 // WidgetObjectBuilder provides storage-agnostic operations on a loaded pluggable widget template.
 // The executor calls these methods with domain-typed values; the backend handles
 // all storage-specific manipulation internally.

@@ -52,8 +52,12 @@ end;
 
 func newCustomHandlerEnv(t *testing.T) *testEnv {
 	t.Helper()
-	// modelsdk: the legacy serializers write CustomHandlerCall as nil, and the
-	// legacy backend refuses rather than dropping it (see TestCustomHandlerLegacyRefuses).
+	// Named explicitly rather than via setupTestEnv, because this construct is
+	// the reason the engine mattered: the legacy serializers wrote
+	// CustomHandlerCall as nil, so that backend refused the statement instead of
+	// dropping the microflow silently. That engine is gone
+	// (docs/plans/2026-09-14-retire-legacy-engine.md) and the refusal test with
+	// it; the naming stays because it says which writer these assertions pin.
 	env := setupTestEnvWithBackend(t, func() backend.FullBackend { return modelsdkbackend.New() })
 	if err := env.executeMDL(customHandlerSetup); err != nil {
 		t.Fatalf("setup failed: %v", err)
@@ -180,28 +184,5 @@ func TestCustomHandlerRefusals(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("error %q does not say the microflow was not found", err)
-	}
-}
-
-// TestCustomHandlerLegacyRefuses: the legacy serializers hardcode
-// CustomHandlerCall to nil, so writing there would drop the microflow silently —
-// the exact failure this issue is about. The backend refuses instead.
-func TestCustomHandlerLegacyRefuses(t *testing.T) {
-	env := setupTestEnv(t) // legacy backend
-	defer env.teardown()
-
-	if err := env.executeMDL(customHandlerSetup); err != nil {
-		t.Fatalf("setup failed: %v", err)
-	}
-	err := env.executeMDL(`create import mapping ` + testModule + `.IM_CHLegacy
-  with json structure ` + testModule + `.JSON_CH
-{
-  find ` + testModule + `.CHRoot by ` + testModule + `.CH_Resolve ( Obj: parent ) { Name = name }
-};`)
-	if err == nil {
-		t.Fatal("legacy engine accepted a custom handler it cannot serialize")
-	}
-	if !strings.Contains(err.Error(), "modelsdk") {
-		t.Errorf("error %q does not point at the modelsdk engine", err)
 	}
 }

@@ -35,13 +35,13 @@ func (e *EnumerationsAPI) GetEnumeration(qualifiedName string) (*model.Enumerati
 	qn := ParseQualifiedName(qualifiedName)
 
 	// List all enumerations and find by module/name
-	enums, err := e.api.reader.ListEnumerations()
+	enums, err := e.api.backend.ListEnumerations()
 	if err != nil {
 		return nil, err
 	}
 
 	// Get the module to match container ID
-	module, err := e.api.reader.GetModuleByName(qn.ModuleName)
+	module, err := e.api.backend.GetModuleByName(qn.ModuleName)
 	if err != nil {
 		return nil, fmt.Errorf("module not found: %s", qn.ModuleName)
 	}
@@ -77,7 +77,7 @@ func (e *EnumerationsAPI) RemoveValue(enum *model.Enumeration, valueName string)
 			// Remove from slice
 			enum.Values = append(enum.Values[:i], enum.Values[i+1:]...)
 			// Update the enumeration
-			return e.api.writer.UpdateEnumeration(enum)
+			return e.api.backend.UpdateEnumeration(enum)
 		}
 	}
 	return fmt.Errorf("value not found: %s", valueName)
@@ -108,7 +108,7 @@ func (e *EnumerationsAPI) ReorderValues(enum *model.Enumeration, order []string)
 	}
 
 	enum.Values = newValues
-	return e.api.writer.UpdateEnumeration(enum)
+	return e.api.backend.UpdateEnumeration(enum)
 }
 
 // EnumerationBuilder builds a new enumeration with fluent API.
@@ -175,7 +175,7 @@ func (b *EnumerationBuilder) Build() (*model.Enumeration, error) {
 	b.enum.ContainerID = module.ID
 
 	// Create the enumeration
-	err := b.api.api.writer.CreateEnumeration(b.enum)
+	err := b.api.api.backend.CreateEnumeration(b.enum)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create enumeration: %w", err)
 	}
@@ -225,7 +225,7 @@ func (b *EnumValueBuilder) Build() (*model.EnumerationValue, error) {
 	b.enum.Values = append(b.enum.Values, b.value)
 
 	// Update the enumeration
-	err := b.api.api.writer.UpdateEnumeration(b.enum)
+	err := b.api.api.backend.UpdateEnumeration(b.enum)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update enumeration: %w", err)
 	}
@@ -256,5 +256,5 @@ func (m *EnumValueModifier) WithCaption(caption string) *EnumValueModifier {
 
 // Apply saves the modifications.
 func (m *EnumValueModifier) Apply() error {
-	return m.api.api.writer.UpdateEnumeration(m.enum)
+	return m.api.api.backend.UpdateEnumeration(m.enum)
 }

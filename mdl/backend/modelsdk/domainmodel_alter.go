@@ -399,3 +399,106 @@ func (b *Backend) SetDomainModelAnnotations(domainModelID model.ID, annotations 
 	}
 	return b.persistDM(domainModelID, gdm)
 }
+
+// entityIsExternal reports whether a stored entity is an external (OData) one,
+// whose attributes carry mapped remote values rather than plain Mendix types.
+//
+// CreateEntity derives this from the semantic model it is given; here the entity
+// already exists, so it is read back off the stored document. Getting it wrong
+// would write a plain attribute into an external entity, which mxbuild accepts
+// and Studio Pro then shows with an empty remote mapping.
+func entityIsExternal(ent *genDm.Entity) bool {
+	src := ent.Source()
+	if src == nil {
+		return false
+	}
+	return src.TypeName() == "Rest$ODataRemoteEntitySource" ||
+		src.TypeName() == "DatabaseConnector$DatabaseRemoteEntitySource"
+}
+
+// AddAttribute appends an attribute to an existing entity.
+//
+// Implemented for the api/ package, which is its only caller: ALTER ENTITY
+// reaches the same result through the mutator. Until api/ was routed through the
+// backend abstraction this method was on FullBackend with no caller that used a
+// backend value, which is why it sat unimplemented here (see
+// unimplemented_reachability_test.go).
+func (b *Backend) AddAttribute(domainModelID, entityID model.ID, attr *domainmodel.Attribute) error {
+	if b.writer == nil {
+		return fmt.Errorf("AddAttribute: not connected for writing")
+	}
+	if attr == nil {
+		return fmt.Errorf("AddAttribute: nil attribute")
+	}
+	dm, err := b.loadDomainModelGen(domainModelID)
+	if err != nil {
+		return err
+	}
+	ent := findGenEntity(dm, entityID)
+	if ent == nil {
+		return fmt.Errorf("entity not found: %s", entityID)
+	}
+	for _, el := range ent.AttributesItems() {
+		if a, ok := el.(*genDm.Attribute); ok && a.Name() == attr.Name {
+			return fmt.Errorf("attribute %q already exists on entity %s", attr.Name, entityID)
+		}
+	}
+	ent.AddAttributes(attributeToGen(attr, entityIsExternal(ent)))
+	return b.persistDM(domainModelID, dm)
+}
+
+// UpdateAttribute replaces an existing attribute in place.
+//
+// Replaces rather than merges: the caller hands a whole Attribute, so a field it
+// leaves zero is a field it means to clear. Merging would make "set no
+// documentation" indistinguishable from "leave the documentation alone", and the
+// legacy writer this replaces did not merge either.
+//
+// The attribute keeps its stored $ID. Minting a fresh one would make the runtime
+// treat it as a different attribute — see CLAUDE.md on GUIDs and identity — and
+// would churn every reference to it in the same document.
+func (b *Backend) UpdateAttribute(domainModelID, entityID model.ID, attr *domainmodel.Attribute) error {
+	if b.writer == nil {
+		return fmt.Errorf("UpdateAttribute: not connected for writing")
+	}
+	if attr == nil {
+		return fmt.Errorf("UpdateAttribute: nil attribute")
+	}
+	dm, err := b.loadDomainModelGen(domainModelID)
+	if err != nil {
+		return err
+	}
+	ent := findGenEntity(dm, entityID)
+	if ent == nil {
+		return fmt.Errorf("entity not found: %s", entityID)
+	}
+	items := ent.AttributesItems()
+	idx := -1
+	for i, el := range items {
+		if string(el.ID()) == string(attr.ID) {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return fmt.Errorf("attribute not found: %s", attr.ID)
+	}
+
+	next := attributeToGen(attr, entityIsExternal(ent))
+	next.SetID(items[idx].ID())
+
+	// The generated list offers only Append and Remove, so an in-place replace
+	// means rebuilding it. Order is worth the rebuild: it is the order Studio
+	// Pro shows the attributes in, and appending instead would move the edited
+	// one to the bottom of every entity anyone touches.
+	replacement := make([]element.Element, len(items))
+	copy(replacement, items)
+	replacement[idx] = next
+	for i := len(items) - 1; i >= 0; i-- {
+		ent.RemoveAttributes(i)
+	}
+	for _, el := range replacement {
+		ent.AddAttributes(el)
+	}
+	return b.persistDM(domainModelID, dm)
+}

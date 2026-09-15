@@ -3,6 +3,8 @@
 package modelsdkbackend
 
 import (
+	"fmt"
+
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 )
@@ -21,10 +23,10 @@ func (b *Backend) GetRawUnit(id model.ID) (map[string]any, error) {
 }
 
 // GetRawUnitBytes returns a unit's raw BSON. Both this and UpdateRawUnit already
-// existed on the reader/writer and are used throughout this package; they were simply
-// never exposed as Backend methods, so the embedded `unimplemented` stub answered and
-// every caller going through the interface got "not implemented yet — rerun with
-// MXCLI_ENGINE=legacy". That is what gated `mxcli widget sync --apply` to the legacy
+// existed on the reader/writer and are used throughout this package; they were
+// simply never exposed as Backend methods, so the embedded `unimplemented` stub
+// answered and every caller going through the interface was told to fall back to
+// the legacy engine. That is what gated `mxcli widget sync --apply` to that
 // engine while its read-only plan ran on both.
 func (b *Backend) GetRawUnitBytes(id model.ID) ([]byte, error) {
 	return b.reader.GetRawUnitBytes(string(id))
@@ -82,4 +84,18 @@ func (b *Backend) ListFolders() ([]*types.FolderInfo, error) {
 		})
 	}
 	return out, nil
+}
+
+// AddRawUnit inserts a new unit verbatim.
+//
+// Exposed on the backend because the marketplace transplant copies a module's
+// units between projects without decoding them, and had been reaching a
+// concrete sdk/mpr writer to do it. Copying verbatim is deliberate rather than
+// lazy: decoding and re-encoding would mint fresh identities, and an entity's
+// GUID is what the runtime keys the database on (CLAUDE.md).
+func (b *Backend) AddRawUnit(unitID, containerID, containmentName, unitType string, contents []byte) error {
+	if b.writer == nil {
+		return fmt.Errorf("AddRawUnit: not connected for writing")
+	}
+	return b.writer.InsertUnit(unitID, containerID, containmentName, unitType, contents)
 }

@@ -1,7 +1,12 @@
 ---
 title: Backend Strategy — adopt engalar's modelsdk base + multi-backend (MCP first)
-status: draft
+status: implemented
 date: 2026-05-31
+status-note: >
+  The modelsdk codec was adopted and is now the only local engine; the legacy sdk/mpr
+  backend this proposal treats as one of several was deleted by
+  docs/plans/2026-09-14-retire-legacy-engine.md. The multi-backend framing still holds —
+  MCP/PED is a live second backend — but read "legacy" here as history.
 author: Generated with Claude Code
 related:
   - PROPOSAL_mcp_backend

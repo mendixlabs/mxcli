@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 func main() {
@@ -18,14 +18,15 @@ func main() {
 
 	mprPath := os.Args[1]
 
-	writer, err := mpr.NewWriter(mprPath)
+	writer := modelsdkbackend.New()
+	err := writer.Connect(mprPath)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
-	defer writer.Close()
+	defer func() { _ = writer.Disconnect() }()
 
-	reader := writer.Reader()
+	reader := writer
 
 	// Find MyFirstModule
 	modules, err := reader.ListModules()

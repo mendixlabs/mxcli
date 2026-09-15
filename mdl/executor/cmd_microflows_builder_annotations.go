@@ -13,93 +13,12 @@ import (
 )
 
 // getStatementAnnotations extracts the annotations field from any microflow statement.
+//
+// Reflective (ast.StatementAnnotations), not a type switch: the switch this
+// replaced had no case for any workflow or mapping statement, so the builder
+// never saw their @position and auto-placed them instead.
 func getStatementAnnotations(stmt ast.MicroflowStatement) *ast.ActivityAnnotations {
-	switch s := stmt.(type) {
-	case *ast.DeclareStmt:
-		return s.Annotations
-	case *ast.InheritanceSplitStmt:
-		return s.Annotations
-	case *ast.CastObjectStmt:
-		return s.Annotations
-	case *ast.MfSetStmt:
-		return s.Annotations
-	case *ast.ReturnStmt:
-		return s.Annotations
-	case *ast.RaiseErrorStmt:
-		return s.Annotations
-	case *ast.CreateObjectStmt:
-		return s.Annotations
-	case *ast.ChangeObjectStmt:
-		return s.Annotations
-	case *ast.MfCommitStmt:
-		return s.Annotations
-	case *ast.DeleteObjectStmt:
-		return s.Annotations
-	case *ast.RollbackStmt:
-		return s.Annotations
-	case *ast.RetrieveStmt:
-		return s.Annotations
-	case *ast.IfStmt:
-		return s.Annotations
-	case *ast.EnumSplitStmt:
-		return s.Annotations
-	case *ast.LoopStmt:
-		return s.Annotations
-	case *ast.WhileStmt:
-		return s.Annotations
-	case *ast.LogStmt:
-		return s.Annotations
-	case *ast.CallMicroflowStmt:
-		return s.Annotations
-	case *ast.CallNanoflowStmt:
-		return s.Annotations
-	case *ast.CallJavaActionStmt:
-		return s.Annotations
-	case *ast.CallJavaScriptActionStmt:
-		return s.Annotations
-	case *ast.CallWebServiceStmt:
-		return s.Annotations
-	case *ast.ExecuteDatabaseQueryStmt:
-		return s.Annotations
-	case *ast.CallExternalActionStmt:
-		return s.Annotations
-	case *ast.BreakStmt:
-		return s.Annotations
-	case *ast.ContinueStmt:
-		return s.Annotations
-	case *ast.MergeStmt:
-		return s.Annotations
-	case *ast.JoinStmt:
-		return s.Annotations
-	case *ast.ListOperationStmt:
-		return s.Annotations
-	case *ast.AggregateListStmt:
-		return s.Annotations
-	case *ast.CreateListStmt:
-		return s.Annotations
-	case *ast.AddToListStmt:
-		return s.Annotations
-	case *ast.RemoveFromListStmt:
-		return s.Annotations
-	case *ast.ShowPageStmt:
-		return s.Annotations
-	case *ast.ClosePageStmt:
-		return s.Annotations
-	case *ast.ShowHomePageStmt:
-		return s.Annotations
-	case *ast.ShowMessageStmt:
-		return s.Annotations
-	case *ast.DownloadFileStmt:
-		return s.Annotations
-	case *ast.SynchronizeStmt:
-		return s.Annotations
-	case *ast.ValidationFeedbackStmt:
-		return s.Annotations
-	case *ast.RestCallStmt:
-		return s.Annotations
-	default:
-		return nil
-	}
+	return ast.StatementAnnotations(stmt)
 }
 
 // stmtOwnAnchor returns the primary FlowAnchors declared on this statement's

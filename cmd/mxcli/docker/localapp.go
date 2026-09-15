@@ -8,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // LocalAppOptions configures StartLocalApp.
@@ -158,12 +156,12 @@ func StartLocalApp(opts LocalAppOptions) (*LocalApp, error) {
 	}
 
 	// 1. Project version → which mxbuild and runtime to use.
-	reader, err := mpr.Open(opts.ProjectPath)
+	reader, err := openReadOnly(opts.ProjectPath)
 	if err != nil {
 		return nil, fmt.Errorf("opening project: %w", err)
 	}
 	version := reader.ProjectVersion().ProductVersion
-	reader.Close()
+	reader.Disconnect()
 
 	// 2. Cache mxbuild + runtime (no-ops when already present).
 	if _, err := DownloadMxBuild(version, w); err != nil {

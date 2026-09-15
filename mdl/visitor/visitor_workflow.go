@@ -3,6 +3,7 @@
 package visitor
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -76,6 +77,23 @@ func (b *Builder) ExitCreateWorkflowStatement(ctx *parser.CreateWorkflowStatemen
 		stmt.DueDate = unquoteString(tok.GetText())
 	}
 
+	// Workflow event handlers: each clause carries its own qualified name, so
+	// they do not shift the header's name indices above.
+	for _, hc := range ctx.AllWorkflowEventHandlerClause() {
+		h := hc.(*parser.WorkflowEventHandlerClauseContext)
+		node := ast.WorkflowEventHandlerNode{AnyEvent: h.ANY() != nil}
+		if qn := h.QualifiedName(); qn != nil {
+			node.Microflow = buildQualifiedName(qn)
+		}
+		for _, id := range h.AllIDENTIFIER() {
+			node.EventTypes = append(node.EventTypes, id.GetText())
+		}
+		if s := h.STRING_LITERAL(); s != nil {
+			node.Description = unquoteString(s.GetText())
+		}
+		stmt.EventHandlers = append(stmt.EventHandlers, node)
+	}
+
 	// Parse CREATE OR MODIFY
 	createStmt := findParentCreateStatement(ctx)
 	if createStmt != nil {
@@ -88,6 +106,9 @@ func (b *Builder) ExitCreateWorkflowStatement(ctx *parser.CreateWorkflowStatemen
 	// Parse body
 	if body := ctx.WorkflowMainBody(); body != nil {
 		stmt.Activities = buildWorkflowMainBody(body)
+	}
+	for _, espCtx := range ctx.AllWorkflowEventSubProcess() {
+		stmt.EventSubProcesses = append(stmt.EventSubProcesses, buildWorkflowEventSubProcess(espCtx))
 	}
 
 	b.statements = append(b.statements, stmt)
@@ -473,6 +494,9 @@ func buildWorkflowActivityStmt(ctx parser.IWorkflowActivityStmtContext) ast.Work
 	if wn := actCtx.WorkflowWaitForNotificationStmt(); wn != nil {
 		return buildWorkflowWaitForNotification(wn)
 	}
+	if n := actCtx.WorkflowNotificationStmt(); n != nil {
+		return buildWorkflowNotification(n)
+	}
 	if ann := actCtx.WorkflowAnnotationStmt(); ann != nil {
 		return buildWorkflowAnnotation(ann)
 	}
@@ -493,8 +517,15 @@ func buildWorkflowUserTask(ctx parser.IWorkflowUserTaskStmtContext) *ast.Workflo
 	}
 
 	node := &ast.WorkflowUserTaskNode{
-		Name:        taskName,
-		IsMultiUser: utCtx.MULTI() != nil,
+		Name:          taskName,
+		IsMultiUser:   utCtx.MULTI() != nil,
+		AwaitAllUsers: utCtx.AWAIT() != nil,
+	}
+	if pc, ok := utCtx.WorkflowParticipantsClause().(*parser.WorkflowParticipantsClauseContext); ok && pc != nil {
+		node.Participants = buildWorkflowParticipants(pc)
+	}
+	if cc, ok := utCtx.WorkflowCompletionClause().(*parser.WorkflowCompletionClauseContext); ok && cc != nil {
+		node.Completion = buildWorkflowCompletionRule(cc)
 	}
 
 	// Caption is the first STRING_LITERAL
@@ -515,7 +546,17 @@ func buildWorkflowUserTask(ctx parser.IWorkflowUserTaskStmtContext) *ast.Workflo
 	// Determine if group targeting (TARGETING GROUPS vs TARGETING [USERS])
 	isGroupTargeting := len(utCtx.AllGROUPS()) > 0
 
-	if utCtx.MICROFLOW() != nil && nameIdx < len(names) {
+	// MICROFLOW appears in both TARGETING … MICROFLOW and ON CREATED MICROFLOW,
+	// so targeting is present when a MICROFLOW token is left over after the
+	// on-created one. Qualified names come in clause order: page, targeting,
+	// on-created, entity.
+	onCreated := utCtx.CREATED() != nil
+	targetingMicroflows := len(utCtx.AllMICROFLOW())
+	if onCreated {
+		targetingMicroflows--
+	}
+
+	if targetingMicroflows > 0 && nameIdx < len(names) {
 		if isGroupTargeting {
 			node.Targeting.Kind = "group_microflow"
 		} else {
@@ -534,6 +575,11 @@ func buildWorkflowUserTask(ctx parser.IWorkflowUserTaskStmtContext) *ast.Workflo
 		}
 		node.Targeting.XPath = unquoteString(allStrings[stringIdx].GetText())
 		stringIdx++
+	}
+
+	if onCreated && nameIdx < len(names) {
+		node.OnCreated = buildQualifiedName(names[nameIdx])
+		nameIdx++
 	}
 
 	if utCtx.ENTITY() != nil && nameIdx < len(names) {
@@ -597,6 +643,7 @@ func buildWorkflowCallMicroflow(ctx parser.IWorkflowCallMicroflowStmtContext) *a
 	cmCtx := ctx.(*parser.WorkflowCallMicroflowStmtContext)
 	node := &ast.WorkflowCallMicroflowNode{
 		Name:      workflowActivityNameText(cmCtx.WorkflowActivityName()),
+		Agent:     cmCtx.AGENT() != nil,
 		Microflow: buildQualifiedName(cmCtx.QualifiedName()),
 	}
 
@@ -839,20 +886,78 @@ func buildWorkflowWaitForNotification(ctx parser.IWorkflowWaitForNotificationStm
 func buildBoundaryEventNode(beCtx parser.IWorkflowBoundaryEventClauseContext) ast.WorkflowBoundaryEventNode {
 	beCtx2 := beCtx.(*parser.WorkflowBoundaryEventClauseContext)
 	be := ast.WorkflowBoundaryEventNode{}
-	if beCtx2.NON() != nil {
+	notification := beCtx2.NOTIFICATION() != nil
+	switch {
+	case notification && beCtx2.NON() != nil:
+		be.EventType = "NonInterruptingNotification"
+	case notification:
+		be.EventType = "InterruptingNotification"
+	case beCtx2.NON() != nil:
 		be.EventType = "NonInterruptingTimer"
-	} else if beCtx2.INTERRUPTING() != nil {
+	case beCtx2.INTERRUPTING() != nil:
 		be.EventType = "InterruptingTimer"
-	} else {
+	default:
 		be.EventType = "Timer"
 	}
-	if beCtx2.STRING_LITERAL() != nil {
-		be.Delay = unquoteString(beCtx2.STRING_LITERAL().GetText())
+	// A timer's string is its delay; a notification event's is its caption.
+	if s := beCtx2.STRING_LITERAL(); s != nil {
+		if notification {
+			be.Caption = unquoteString(s.GetText())
+		} else {
+			be.Delay = unquoteString(s.GetText())
+		}
+	}
+	if notification {
+		be.Name = workflowActivityNameText(beCtx2.WorkflowActivityName())
 	}
 	if body := beCtx2.WorkflowBody(); body != nil {
 		be.Activities = buildWorkflowBody(body)
 	}
 	return be
+}
+
+// buildWorkflowNotification builds `notification [<name>] [comment '<caption>']`.
+func buildWorkflowNotification(ctx parser.IWorkflowNotificationStmtContext) *ast.WorkflowNotificationNode {
+	c := ctx.(*parser.WorkflowNotificationStmtContext)
+	node := &ast.WorkflowNotificationNode{Name: workflowActivityNameText(c.WorkflowActivityName())}
+	if c.COMMENT() != nil && c.STRING_LITERAL() != nil {
+		node.Caption = unquoteString(c.STRING_LITERAL().GetText())
+	}
+	return node
+}
+
+// buildWorkflowEventSubProcess builds `event subprocess <name> ['<caption>'] on
+// [non] interrupting notification [<start>] ['<caption>'] { … }` and its timer
+// form, `… timer '<first execution time>' [as <start>] [comment '<caption>']`.
+func buildWorkflowEventSubProcess(ctx parser.IWorkflowEventSubProcessContext) ast.WorkflowEventSubProcessNode {
+	c := ctx.(*parser.WorkflowEventSubProcessContext)
+	node := ast.WorkflowEventSubProcessNode{
+		Name:         workflowActivityNameText(c.WorkflowActivityName()),
+		Interrupting: c.NON() == nil,
+	}
+	if s := c.STRING_LITERAL(); s != nil {
+		node.Caption = unquoteString(s.GetText())
+	}
+	if t, ok := c.WorkflowEventSubProcessTrigger().(*parser.WorkflowEventSubProcessTriggerContext); ok && t != nil {
+		node.Timer = t.TIMER() != nil
+		node.StartName = workflowActivityNameText(t.WorkflowActivityName())
+		strs := t.AllSTRING_LITERAL()
+		switch {
+		case node.Timer:
+			if len(strs) > 0 {
+				node.FirstExecutionTime = unquoteString(strs[0].GetText())
+			}
+			if t.COMMENT() != nil && len(strs) > 1 {
+				node.StartCaption = unquoteString(strs[1].GetText())
+			}
+		case len(strs) > 0:
+			node.StartCaption = unquoteString(strs[0].GetText())
+		}
+	}
+	if body := c.WorkflowBody(); body != nil {
+		node.Activities = buildWorkflowBody(body)
+	}
+	return node
 }
 
 // buildWorkflowAnnotation builds a WorkflowAnnotationActivityNode from the grammar context.
@@ -874,4 +979,58 @@ func parseInt(s string) int {
 		}
 	}
 	return n
+}
+
+// buildWorkflowParticipants reads `participants all | N | N percent`.
+func buildWorkflowParticipants(ctx *parser.WorkflowParticipantsClauseContext) *ast.WorkflowParticipantsNode {
+	if ctx.ALL() != nil {
+		return &ast.WorkflowParticipantsNode{Kind: "all"}
+	}
+	n := &ast.WorkflowParticipantsNode{Kind: "number"}
+	if ctx.PERCENT_KW() != nil {
+		n.Kind = "percent"
+	}
+	if num := ctx.NUMBER_LITERAL(); num != nil {
+		n.Value, _ = strconv.Atoi(num.GetText())
+	}
+	return n
+}
+
+// buildWorkflowCompletionRule reads `decide by …`.
+func buildWorkflowCompletionRule(ctx *parser.WorkflowCompletionClauseContext) *ast.WorkflowCompletionRuleNode {
+	r := &ast.WorkflowCompletionRuleNode{}
+	switch {
+	case ctx.CONSENSUS() != nil:
+		r.Rule = "consensus"
+	case ctx.MAJORITY() != nil:
+		r.Rule = "majority"
+		r.Majority = "most chosen"
+		if ctx.MORE_KW() != nil {
+			r.Majority = "more than half"
+		}
+	case ctx.THRESHOLD() != nil:
+		r.Rule = "threshold"
+		r.ThresholdUnit = "votes"
+		if ctx.PERCENT_KW() != nil {
+			r.ThresholdUnit = "percent"
+		}
+		if num := ctx.NUMBER_LITERAL(); num != nil {
+			r.Threshold, _ = strconv.Atoi(num.GetText())
+		}
+	case ctx.VETO() != nil:
+		r.Rule = "veto"
+		if s := ctx.STRING_LITERAL(); s != nil {
+			r.Veto = unquoteString(s.GetText())
+		}
+	case ctx.MICROFLOW() != nil:
+		r.Rule = "microflow"
+		if qn := ctx.QualifiedName(); qn != nil {
+			r.Microflow = buildQualifiedName(qn)
+		}
+	}
+	if fb, ok := ctx.WorkflowFallbackClause().(*parser.WorkflowFallbackClauseContext); ok && fb != nil && fb.STRING_LITERAL() != nil {
+		r.Fallback = unquoteString(fb.STRING_LITERAL().GetText())
+		r.HasFallback = true
+	}
+	return r
 }

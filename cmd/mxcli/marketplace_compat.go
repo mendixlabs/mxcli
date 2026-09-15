@@ -17,7 +17,7 @@ func mendixVersionOf(mprPath string) string {
 	if err != nil {
 		return ""
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 	v, _ := reader.GetMendixVersion()
 	return v
 }

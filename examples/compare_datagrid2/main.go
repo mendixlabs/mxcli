@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -22,12 +22,13 @@ func main() {
 	page1Name := "PgTest.P008_Product_Overview"   // Programmatically created
 	page2Name := "PgTest.P008_Product_Overview_2" // Studio Pro fixed
 
-	reader, err := mpr.Open(mprPath)
+	reader := modelsdkbackend.New()
+	err := reader.ConnectReadOnly(mprPath)
 	if err != nil {
 		fmt.Printf("Error opening MPR: %v\n", err)
 		os.Exit(1)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Disconnect() }()
 
 	// Get raw BSON for both pages
 	page1, err := reader.GetRawUnitByName("page", page1Name)

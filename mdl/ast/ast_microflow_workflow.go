@@ -78,10 +78,11 @@ type OpenUserTaskStmt struct {
 
 func (*OpenUserTaskStmt) isMicroflowStatement() {}
 
-// NotifyWorkflowStmt represents: [$Result =] NOTIFY WORKFLOW $WorkflowVar
+// NotifyWorkflowStmt represents: [$Result =] NOTIFY WORKFLOW $WorkflowVar [TARGET Module.Workflow.Name]
 type NotifyWorkflowStmt struct {
 	OutputVariable   string
 	WorkflowVariable string
+	Target           string // Module.Workflow.ElementName; "" when the clause is absent
 	ErrorHandling    *ErrorHandlingClause
 	Annotations      *ActivityAnnotations
 }

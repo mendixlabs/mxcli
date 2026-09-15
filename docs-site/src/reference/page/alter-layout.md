@@ -163,8 +163,6 @@ ALTER PAGE MyModule.Split {
 
 ## Notes
 
-- Layout authoring requires the default `modelsdk` engine; `--engine legacy`
-  refuses it.
 - `DESCRIBE LAYOUT` emits re-executable MDL, so it is the way to see what a
   layout currently contains before altering it.
 

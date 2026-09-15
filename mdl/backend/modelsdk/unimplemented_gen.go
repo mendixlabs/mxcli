@@ -41,6 +41,10 @@ func (unimplemented) AddNavigationProfile(_ model.ID, _ string) error {
 	return errUnimplemented("AddNavigationProfile")
 }
 
+func (unimplemented) AddRawUnit(_ string, _ string, _ string, _ string, _ []uint8) error {
+	return errUnimplemented("AddRawUnit")
+}
+
 func (unimplemented) AddUserRole(_ model.ID, _ string, _ []string, _ bool) error {
 	return errUnimplemented("AddUserRole")
 }
@@ -558,11 +562,6 @@ func (unimplemented) GetScheduledEvent(_ model.ID) (*model.ScheduledEvent, error
 	return r0, errUnimplemented("GetScheduledEvent")
 }
 
-func (unimplemented) GetUnitTypes() (map[string]int, error) {
-	var r0 map[string]int
-	return r0, errUnimplemented("GetUnitTypes")
-}
-
 func (unimplemented) GetWorkflow(_ model.ID) (*workflows.Workflow, error) {
 	var r0 *workflows.Workflow
 	return r0, errUnimplemented("GetWorkflow")
@@ -1001,34 +1000,14 @@ func (unimplemented) RevokeEntityMemberAccess(_ model.ID, _ string, _ []string, 
 	return r0, errUnimplemented("RevokeEntityMemberAccess")
 }
 
-func (unimplemented) SerializeClientAction(_ pages.ClientAction) (interface{}, error) {
-	var r0 interface{}
-	return r0, errUnimplemented("SerializeClientAction")
-}
-
-func (unimplemented) SerializeDataSource(_ pages.DataSource) (interface{}, error) {
-	var r0 interface{}
-	return r0, errUnimplemented("SerializeDataSource")
-}
-
 func (unimplemented) SerializeDataSourceToOpaque(_ pages.DataSource) interface{} {
 	var r0 interface{}
 	return r0
 }
 
-func (unimplemented) SerializeWidget(_ pages.Widget) (interface{}, error) {
-	var r0 interface{}
-	return r0, errUnimplemented("SerializeWidget")
-}
-
 func (unimplemented) SerializeWidgetToOpaque(_ pages.Widget) interface{} {
 	var r0 interface{}
 	return r0
-}
-
-func (unimplemented) SerializeWorkflowActivity(_ workflows.WorkflowActivity) (interface{}, error) {
-	var r0 interface{}
-	return r0, errUnimplemented("SerializeWorkflowActivity")
 }
 
 func (unimplemented) SetDomainModelAnnotations(_ model.ID, _ []*domainmodel.Annotation) error {
@@ -1133,10 +1112,6 @@ func (unimplemented) UpdateJavaScriptAction(_ *types.JavaScriptAction) error {
 
 func (unimplemented) UpdateJsonStructure(_ *types.JsonStructure) error {
 	return errUnimplemented("UpdateJsonStructure")
-}
-
-func (unimplemented) UpdateLayout(_ *pages.Layout) error {
-	return errUnimplemented("UpdateLayout")
 }
 
 func (unimplemented) UpdateMenuDocument(_ *types.MenuDocument) error {

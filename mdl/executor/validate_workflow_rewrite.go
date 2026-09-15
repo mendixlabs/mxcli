@@ -11,6 +11,9 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/sdk/workflows"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // checkNoDroppedWorkflowConstructs refuses a CREATE OR REPLACE/MODIFY WORKFLOW
@@ -25,8 +28,9 @@ import (
 //
 // Boundary events ARE authorable (`boundary event interrupting timer '…' { … }`),
 // so a script that restates them is allowed straight through — that is the normal
-// way to edit a workflow that has one. Event sub-processes are not authorable in
-// MDL at all, so any stored one refuses the rewrite outright.
+// way to edit a workflow that has one. So are event sub-processes and
+// notification activities now; only a sub-process with no start event, which MDL
+// has no way to state, refuses the rewrite outright.
 //
 // The stored side is read from the raw unit rather than through the semantic
 // model deliberately: the reader is what was blind here in the first place, and a
@@ -42,16 +46,13 @@ func checkNoDroppedWorkflowConstructs(ctx *ExecContext, workflowID model.ID, qua
 		// path reports its own errors.
 		return nil
 	}
+	raw = plainRawUnit(raw)
 
-	// Constructs MDL cannot express at all. A rebuild writes the default for
-	// each — measured on ako/TestApp (11.14.0): an on-created microflow becomes
-	// NoEvent, workflow event handlers an empty list, a completion rule
-	// Consensus on the first outcome, and describe shows an AI agent task only as
-	// a comment — so a rewrite loses them without a word. Refused outright, like
-	// an event sub-process, and every reason is listed at once.
+	// Constructs MDL cannot express at all — a rewrite would lose them without a
+	// word. Refused outright, and every reason is listed at once.
 	var cannotExpress []string
-	if n := countEventSubProcesses(raw); n > 0 {
-		cannotExpress = append(cannotExpress, fmt.Sprintf("%d event sub-process(es), which it would delete", n))
+	if n := rawEventSubProcessesWithoutStart(raw); n > 0 {
+		cannotExpress = append(cannotExpress, fmt.Sprintf("%d event sub-process(es) with no start event, which it would delete", n))
 	}
 	cannotExpress = append(cannotExpress, studioProOnlyWorkflowState(raw)...)
 	if len(cannotExpress) > 0 {
@@ -62,13 +63,95 @@ func checkNoDroppedWorkflowConstructs(ctx *ExecContext, workflowID model.ID, qua
 			qualifiedName, strings.Join(cannotExpress, "\n  - ")))
 	}
 
+	// Every counter below walks the event sub-process bodies as well as the main
+	// body: the raw side counts the whole document.
+	authoredActs := workflowStatementActivities(stmt)
+
+	// Event sub-processes and notification activities MDL can now state. Before
+	// it could, describe printed a notification activity as a comment and left
+	// the sub-processes out, so a rewrite from that output would delete them.
+	if stored := countEventSubProcesses(raw); stored > len(stmt.EventSubProcesses) {
+		return mdlerrors.NewUnsupported(fmt.Sprintf(
+			"workflow %s has %d stored event sub-process(es) but this statement declares %d — rewriting it would "+
+				"delete the difference, along with each one's flow.\n"+
+				"  Restate them (`event subprocess <name> on interrupting notification <start> { … };`), which "+
+				"`describe workflow %s` now emits, or use ALTER WORKFLOW to change one activity at a time.",
+			qualifiedName, stored, len(stmt.EventSubProcesses), qualifiedName))
+	}
+	if stored, authored := countRawWorkflowNodesExact(raw, "Workflows$NotificationActivity"), countAuthoredNotificationActivities(authoredActs); stored > authored {
+		return mdlerrors.NewUnsupported(fmt.Sprintf(
+			"workflow %s has %d stored notification activit(ies) but this statement declares %d — rewriting it would "+
+				"delete the difference, and a notify action targeting one would target nothing.\n"+
+				"  Restate them (`notification <name> comment '…';`), which `describe workflow %s` now emits, or use "+
+				"ALTER WORKFLOW to change one activity at a time.",
+			qualifiedName, stored, authored, qualifiedName))
+	}
+
+	// Handlers MDL can now state, but a statement written before it could (or
+	// from an older describe) does not: the rewrite writes what the statement
+	// says, so an unstated handler is deleted and an unstated on-created
+	// microflow reset to none. Counted, like boundary events below, because a
+	// handler has no name to match on and a task may be renamed.
+	if stored := rawEventHandlers(raw); len(stored) > len(stmt.EventHandlers) {
+		return mdlerrors.NewUnsupported(fmt.Sprintf(
+			"workflow %s has %d stored workflow event handler(s) but this statement declares %d — rewriting it would "+
+				"delete the difference:\n  - %s\n"+
+				"  Restate them (`on workflow events (…) microflow … as '…'`), which `describe workflow %s` now emits, "+
+				"or use ALTER WORKFLOW to change one activity at a time.",
+			qualifiedName, len(stored), len(stmt.EventHandlers), strings.Join(stored, "\n  - "), qualifiedName))
+	}
+	if stored, authored := rawOnCreatedMicroflows(raw), countAuthoredOnCreated(authoredActs); len(stored) > authored {
+		return mdlerrors.NewUnsupported(fmt.Sprintf(
+			"workflow %s has %d user task(s) with an on-created microflow but this statement declares %d — rewriting "+
+				"it would reset the difference to none:\n  - %s\n"+
+				"  Restate them (`on created microflow …`), which `describe workflow %s` now emits, or use ALTER "+
+				"WORKFLOW to change one activity at a time.",
+			qualifiedName, len(stored), authored, strings.Join(stored, "\n  - "), qualifiedName))
+	}
+
+	if stored, authored := rawAgentTasks(raw), countAuthoredAgentTasks(authoredActs); len(stored) > authored {
+		return mdlerrors.NewUnsupported(fmt.Sprintf(
+			"workflow %s has %d AI agent task(s) but this statement declares %d — rewriting it would delete the "+
+				"difference, along with each one's outcome flows:\n  - %s\n"+
+				"  Restate them (`call agent microflow …`), which `describe workflow %s` now emits, or use ALTER "+
+				"WORKFLOW to change one activity at a time.",
+			qualifiedName, len(stored), authored, strings.Join(stored, "\n  - "), qualifiedName))
+	}
+
+	// A multi-user task's completion rule, participant count and "wait for all
+	// users" are expressible now (`decide by`, `participants`, `await all users`).
+	// A rewrite writes what the statement says, and each omitted clause means the
+	// default — consensus on the first outcome, all participants, not waiting — so
+	// a statement that does not restate stored values resets them. Participants
+	// and await were not guarded at all before; a rewrite reset both silently.
+	storedRules, storedParticipants, storedAwait := rawMultiUserTaskSettings(raw)
+	authoredRules, authoredParticipants, authoredAwait := countAuthoredMultiUserSettings(authoredActs)
+	for _, g := range []struct {
+		stored   []string
+		authored int
+		what     string
+		restate  string
+	}{
+		{storedRules, authoredRules, "multi-user task(s) with a completion rule other than consensus on the first outcome", "`decide by …`"},
+		{storedParticipants, authoredParticipants, "multi-user task(s) that need only some participants to respond", "`participants …`"},
+		{storedAwait, authoredAwait, "multi-user task(s) that wait for all users", "`await all users`"},
+	} {
+		if len(g.stored) > g.authored {
+			return mdlerrors.NewUnsupported(fmt.Sprintf(
+				"workflow %s has %d %s but this statement declares %d — rewriting it would reset the difference to the default:\n  - %s\n"+
+					"  Restate them (%s), which `describe workflow %s` now emits, or use ALTER WORKFLOW to change one activity at a time.",
+				qualifiedName, len(g.stored), g.what, g.authored, strings.Join(g.stored, "\n  - "), g.restate, qualifiedName))
+		}
+	}
+
 	// Ends inside branches. MDL could not state one until `end workflow`, and
 	// describe dropped them, so a rewrite from an older describe output would
 	// delete every one — and a branch that ended the workflow would silently
 	// fall through into the main flow instead. The main flow's own End is not
 	// counted: the builder always writes it.
-	if storedEnds := countRawWorkflowNodesExact(raw, "Workflows$EndWorkflowActivity") - 1; storedEnds > 0 {
-		if authored := countAuthoredEnds(stmt.Activities); authored < storedEnds {
+	// An event sub-process's closing End is implicit too, like the main flow's.
+	if storedEnds := countRawWorkflowNodesExact(raw, "Workflows$EndWorkflowActivity") - 1 - rawImplicitSubProcessEnds(raw); storedEnds > 0 {
+		if authored := countAuthoredEnds(authoredActs); authored < storedEnds {
 			return mdlerrors.NewUnsupported(fmt.Sprintf(
 				"workflow %s has %d stored `end workflow` inside its branches but this statement declares %d — "+
 					"rewriting it would delete the difference, and each branch that ended the workflow would fall "+
@@ -83,7 +166,7 @@ func checkNoDroppedWorkflowConstructs(ctx *ExecContext, workflowID model.ID, qua
 	if storedBE == 0 {
 		return nil
 	}
-	authored := countAuthoredBoundaryEvents(stmt.Activities)
+	authored := countAuthoredBoundaryEvents(authoredActs)
 	if authored >= storedBE {
 		return nil
 	}
@@ -176,44 +259,36 @@ func countAuthoredBoundaryEvents(activities []ast.WorkflowActivityNode) int {
 }
 
 // studioProOnlyWorkflowState lists what a stored workflow holds that a rebuild
-// from MDL would reset: workflow event handlers, AI agent tasks, and per activity
-// an on-created microflow or a completion rule other than the one mxcli writes.
+// from MDL would reset: a workflow event handler subscribed to no event types
+// (the grammar has no empty list).
 func studioProOnlyWorkflowState(raw map[string]any) []string {
 	var out []string
 	for _, h := range rawList(raw["OnWorkflowEvent"]) {
-		if hm, ok := h.(map[string]any); ok {
-			microflow := ""
-			if mh, ok := hm["MicroflowEventHandler"].(map[string]any); ok {
-				microflow, _ = mh["Microflow"].(string)
+		hm, ok := h.(map[string]any)
+		if !ok {
+			continue
+		}
+		types := 0
+		for _, t := range rawList(hm["EventTypes"]) {
+			if _, ok := t.(string); ok {
+				types++
 			}
-			out = append(out, fmt.Sprintf("a workflow event handler running %s, which it would delete", orUnnamed(microflow)))
+		}
+		if types == 0 {
+			out = append(out, fmt.Sprintf("workflow event handler %s subscribes to no event types, which MDL cannot state", rawHandlerLabel(hm)))
 		}
 	}
-	walkRawDocs(raw, func(d map[string]any) {
-		if t, _ := d["$Type"].(string); t == "Workflows$AIAgentTaskActivity" {
-			name, _ := d["Name"].(string)
-			out = append(out, fmt.Sprintf("AI agent task '%s', which describe shows only as a comment and it would delete", name))
-			return
-		}
-		out = append(out, rawActivityState(d)...)
-	})
 	return out
 }
 
-// rawActivityState lists what one stored activity holds that rebuilding it would
-// reset. Both the workflow rewrite and REPLACE ACTIVITY ask.
-func rawActivityState(d map[string]any) []string {
-	var out []string
+// rawCompletionRule describes a stored multi-user task's completion rule when it
+// is not what an omitted `decide by` writes (consensus falling back to the first
+// outcome); "" otherwise.
+func rawCompletionRule(d map[string]any) string {
 	name, _ := d["Name"].(string)
-	if ev, ok := d["OnCreatedEvent"].(map[string]any); ok {
-		if t, _ := ev["$Type"].(string); t == "Workflows$MicroflowBasedEvent" {
-			microflow, _ := ev["Microflow"].(string)
-			out = append(out, fmt.Sprintf("user task '%s' runs on-created microflow %s, which it would reset to none", name, orUnnamed(microflow)))
-		}
-	}
 	cc, ok := d["CompletionCriteria"].(map[string]any)
 	if !ok {
-		return out
+		return ""
 	}
 	kind, _ := cc["$Type"].(string)
 	var outcomes []map[string]any
@@ -224,20 +299,98 @@ func rawActivityState(d map[string]any) []string {
 	}
 	switch kind {
 	case "Workflows$ConsensusCompletionCriteria":
-		// What mxcli writes: Consensus falling back to the first outcome.
 		if len(outcomes) > 0 && reflect.DeepEqual(cc["FallbackOutcomePointer"], outcomes[0]["$ID"]) {
-			return out
+			return ""
 		}
-		fallback := "another outcome"
+		fallback := "no outcome"
 		for _, o := range outcomes {
 			if reflect.DeepEqual(cc["FallbackOutcomePointer"], o["$ID"]) {
 				fallback = "outcome '" + rawOutcomeLabel(o) + "'"
 			}
 		}
-		out = append(out, fmt.Sprintf("multi user task '%s' falls back to %s when consensus fails, which it would move to the first outcome", name, fallback))
+		return fmt.Sprintf("multi user task '%s' falls back to %s when consensus fails", name, fallback)
 	default:
 		rule := strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(kind, "Workflows$"), "CompletionCriteria"))
-		out = append(out, fmt.Sprintf("multi user task '%s' decides by %s, which it would reset to consensus", name, rule))
+		return fmt.Sprintf("multi user task '%s' decides by %s", name, rule)
+	}
+}
+
+// rawParticipants describes a stored multi-user task that needs only some of its
+// targeted users to respond; "" when it needs all of them.
+func rawParticipants(d map[string]any) string {
+	t, ok := d["TargetUserInput"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	name, _ := d["Name"].(string)
+	switch t["$Type"] {
+	case "Workflows$AbsoluteAmountUserInput":
+		return fmt.Sprintf("multi user task '%s' needs %v participants", name, t["Amount"])
+	case "Workflows$PercentageAmountUserInput":
+		return fmt.Sprintf("multi user task '%s' needs %v percent of participants", name, t["Percentage"])
+	}
+	return ""
+}
+
+func rawAwaitsAllUsers(d map[string]any) bool {
+	await, _ := d["AwaitAllUsers"].(bool)
+	return await
+}
+
+// rawMultiUserTaskSettings labels every stored multi-user task setting a rewrite
+// resets when the statement omits it.
+func rawMultiUserTaskSettings(raw map[string]any) (rules, participants, await []string) {
+	walkRawDocs(raw, func(d map[string]any) {
+		if t, _ := d["$Type"].(string); t != "Workflows$MultiUserTaskActivity" {
+			return
+		}
+		if r := rawCompletionRule(d); r != "" {
+			rules = append(rules, r)
+		}
+		if p := rawParticipants(d); p != "" {
+			participants = append(participants, p)
+		}
+		if rawAwaitsAllUsers(d) {
+			name, _ := d["Name"].(string)
+			await = append(await, fmt.Sprintf("multi user task '%s' waits for all users", name))
+		}
+	})
+	return rules, participants, await
+}
+
+func countAuthoredMultiUserSettings(activities []ast.WorkflowActivityNode) (rules, participants, await int) {
+	walkWorkflowActivities(activities, func(a ast.WorkflowActivityNode) {
+		n, ok := a.(*ast.WorkflowUserTaskNode)
+		if !ok || !n.IsMultiUser {
+			return
+		}
+		if n.Completion != nil {
+			rules++
+		}
+		if n.Participants != nil && n.Participants.Kind != "all" {
+			participants++
+		}
+		if n.AwaitAllUsers {
+			await++
+		}
+	})
+	return rules, participants, await
+}
+
+// rawReplaceLosses lists what a stored activity holds that its replacement does
+// not restate, so REPLACE ACTIVITY would reset it.
+func rawReplaceLosses(d map[string]any, replacement ast.WorkflowActivityNode) []string {
+	var out []string
+	mut, _ := replacement.(*ast.WorkflowUserTaskNode)
+	isMulti := mut != nil && mut.IsMultiUser
+	if r := rawCompletionRule(d); r != "" && (!isMulti || mut.Completion == nil) {
+		out = append(out, r+", which the replacement does not restate (add `decide by …`)")
+	}
+	if p := rawParticipants(d); p != "" && (!isMulti || mut.Participants == nil || mut.Participants.Kind == "all") {
+		out = append(out, p+", which the replacement does not restate (add `participants …`)")
+	}
+	if rawAwaitsAllUsers(d) && (!isMulti || !mut.AwaitAllUsers) {
+		out = append(out, "it waits for all users, which the replacement does not restate (add `await all users`)")
 	}
 	return out
 }
@@ -265,6 +418,7 @@ func validateAlterReplaceKeepsStudioProState(ctx *ExecContext, s *ast.AlterWorkf
 	if err != nil || raw == nil {
 		return nil
 	}
+	raw = plainRawUnit(raw)
 	var errs []string
 	for _, o := range replaces {
 		act := resolveStoredActivity(wf.Flow, o.ActivityRef, o.AtPosition)
@@ -274,17 +428,143 @@ func validateAlterReplaceKeepsStudioProState(ctx *ExecContext, s *ast.AlterWorkf
 		var reasons []string
 		walkRawDocs(raw, func(d map[string]any) {
 			if n, _ := d["Name"].(string); n != "" && n == act.GetName() {
-				reasons = append(reasons, rawActivityState(d)...)
+				reasons = append(reasons, rawReplaceLosses(d, o.NewActivity)...)
+				if mf := rawOnCreatedMicroflow(d); mf != "" && !restatesOnCreated(o.NewActivity) {
+					reasons = append(reasons, fmt.Sprintf(
+						"it runs on-created microflow %s, which the replacement does not restate (add `on created microflow %s`)", mf, mf))
+				}
 			}
 		})
 		if len(reasons) > 0 {
 			errs = append(errs, fmt.Sprintf(
-				"replace activity '%s' is refused: the activity is rebuilt from the statement, and MDL cannot express what it "+
+				"replace activity '%s' is refused: the activity is rebuilt from the statement, and the statement does not carry what it "+
 					"holds — %s. Change it with SET ACTIVITY, which edits it in place, or in Studio Pro.",
 				o.ActivityRef, strings.Join(reasons, "; ")))
 		}
 	}
 	return errs
+}
+
+// rawEventHandlers labels each stored workflow event handler.
+func rawEventHandlers(raw map[string]any) []string {
+	var out []string
+	for _, h := range rawList(raw["OnWorkflowEvent"]) {
+		if hm, ok := h.(map[string]any); ok {
+			out = append(out, rawHandlerLabel(hm))
+		}
+	}
+	return out
+}
+
+func rawHandlerLabel(h map[string]any) string {
+	microflow := ""
+	if mh, ok := h["MicroflowEventHandler"].(map[string]any); ok {
+		microflow, _ = mh["Microflow"].(string)
+	}
+	if d, _ := h["Description"].(string); d != "" {
+		return fmt.Sprintf("'%s' (microflow %s)", d, orUnnamed(microflow))
+	}
+	return "running microflow " + orUnnamed(microflow)
+}
+
+// rawAgentTasks labels each stored AI agent task.
+func rawAgentTasks(raw map[string]any) []string {
+	var out []string
+	walkRawDocs(raw, func(d map[string]any) {
+		if t, _ := d["$Type"].(string); t == "Workflows$AIAgentTaskActivity" {
+			name, _ := d["Name"].(string)
+			mf, _ := d["Microflow"].(string)
+			out = append(out, fmt.Sprintf("AI agent task '%s' (microflow %s)", name, orUnnamed(mf)))
+		}
+	})
+	return out
+}
+
+// rawOnCreatedMicroflows labels each stored user task that runs an on-created
+// microflow.
+func rawOnCreatedMicroflows(raw map[string]any) []string {
+	var out []string
+	walkRawDocs(raw, func(d map[string]any) {
+		if mf := rawOnCreatedMicroflow(d); mf != "" {
+			name, _ := d["Name"].(string)
+			out = append(out, fmt.Sprintf("user task '%s' runs %s", name, mf))
+		}
+	})
+	return out
+}
+
+// rawOnCreatedMicroflow returns the microflow a stored activity's OnCreatedEvent
+// runs, "" for NoEvent or none.
+func rawOnCreatedMicroflow(d map[string]any) string {
+	ev, ok := d["OnCreatedEvent"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if t, _ := ev["$Type"].(string); t != "Workflows$MicroflowBasedEvent" {
+		return ""
+	}
+	mf, _ := ev["Microflow"].(string)
+	return orUnnamed(mf)
+}
+
+func countAuthoredOnCreated(activities []ast.WorkflowActivityNode) int {
+	n := 0
+	walkWorkflowActivities(activities, func(act ast.WorkflowActivityNode) {
+		if restatesOnCreated(act) {
+			n++
+		}
+	})
+	return n
+}
+
+func restatesOnCreated(act ast.WorkflowActivityNode) bool {
+	t, ok := act.(*ast.WorkflowUserTaskNode)
+	return ok && t.OnCreated.Module != ""
+}
+
+// plainRawUnit returns a copy of a stored unit with every array and document in
+// the plain []any / map[string]any shape the guards in this file walk.
+//
+// The legacy engine decodes a unit's arrays as primitive.A — measured on a
+// workflow it wrote: OnWorkflowEvent and Flow.Activities both — and a type switch
+// on []any does not match that named type. So on the legacy engine every guard
+// here saw no list at all, and allowed each rewrite it exists to refuse (stored
+// handlers, on-created microflows, boundary events, nested Ends, AI agent tasks,
+// completion rules), while the modelsdk engine, which already returns plain
+// slices, refused them. Normalised here rather than in the backend, because
+// other raw consumers (catalog, linter) assert the primitive types.
+func plainRawUnit(raw map[string]any) map[string]any {
+	out, _ := plainRawValue(raw).(map[string]any)
+	return out
+}
+
+func plainRawValue(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		m := make(map[string]any, len(t))
+		for k, e := range t {
+			m[k] = plainRawValue(e)
+		}
+		return m
+	case primitive.M:
+		return plainRawValue(map[string]any(t))
+	case primitive.D:
+		m := make(map[string]any, len(t))
+		for _, e := range t {
+			m[e.Key] = plainRawValue(e.Value)
+		}
+		return m
+	case []any:
+		l := make([]any, len(t))
+		for i, e := range t {
+			l[i] = plainRawValue(e)
+		}
+		return l
+	case primitive.A:
+		return plainRawValue([]any(t))
+	default:
+		return v
+	}
 }
 
 // walkRawDocs visits every sub-document of a raw unit, keys in sorted order so
@@ -331,6 +611,71 @@ func orUnnamed(s string) string {
 		return "(unnamed)"
 	}
 	return s
+}
+
+// countAuthoredNotificationActivities counts the `notification` statements.
+func countAuthoredNotificationActivities(activities []ast.WorkflowActivityNode) int {
+	n := 0
+	walkWorkflowActivities(activities, func(act ast.WorkflowActivityNode) {
+		if _, ok := act.(*ast.WorkflowNotificationNode); ok {
+			n++
+		}
+	})
+	return n
+}
+
+// rawSubProcessActivities returns the top-level activities of each stored event
+// sub-process, in stored order.
+func rawSubProcessActivities(raw map[string]any) [][]map[string]any {
+	var out [][]map[string]any
+	for _, e := range rawList(raw["EventSubProcesses"]) {
+		esp, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		flow, _ := esp["Flow"].(map[string]any)
+		var acts []map[string]any
+		for _, a := range rawList(flow["Activities"]) {
+			if am, ok := a.(map[string]any); ok {
+				acts = append(acts, am)
+			}
+		}
+		out = append(out, acts)
+	}
+	return out
+}
+
+// rawEventSubProcessesWithoutStart counts stored event sub-processes whose flow
+// does not begin with a start event: MDL states a sub-process by its start, so
+// one without cannot be restated.
+func rawEventSubProcessesWithoutStart(raw map[string]any) int {
+	n := 0
+	for _, acts := range rawSubProcessActivities(raw) {
+		if len(acts) == 0 {
+			n++
+			continue
+		}
+		t, _ := acts[0]["$Type"].(string)
+		if _, _, ok := workflows.EventSubProcessStartFromStorageType(t); !ok {
+			n++
+		}
+	}
+	return n
+}
+
+// rawImplicitSubProcessEnds counts stored event sub-processes whose flow closes
+// with an End — the End a statement does not write, because the builder adds it.
+func rawImplicitSubProcessEnds(raw map[string]any) int {
+	n := 0
+	for _, acts := range rawSubProcessActivities(raw) {
+		if len(acts) == 0 {
+			continue
+		}
+		if t, _ := acts[len(acts)-1]["$Type"].(string); t == "Workflows$EndWorkflowActivity" {
+			n++
+		}
+	}
+	return n
 }
 
 // countEventSubProcesses counts a workflow's event sub-processes. The substring

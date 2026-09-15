@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // debug_resolve.go turns a microflow name + activity selector into the model GUID
@@ -44,14 +44,17 @@ const (
 // objects, auto-detecting which it is (microflow first, then nanoflow). The
 // object-collection format is identical, so extractActivities handles both.
 func resolveFlowActivities(projectPath, qualifiedName string) ([]activityInfo, flowKind, error) {
-	r, err := mpr.Open(projectPath)
-	if err != nil {
+	// Through the backend rather than a concrete reader: this needs
+	// ParseMicroflowBSON, which is a backend method, so the raw reads come from
+	// the same place instead of straddling two readers.
+	r := modelsdkbackend.New()
+	if err := r.ConnectReadOnly(projectPath); err != nil {
 		return nil, "", err
 	}
-	defer r.Close()
+	defer func() { _ = r.Disconnect() }()
 
 	if contents, err := r.GetRawMicroflowByName(qualifiedName); err == nil {
-		mf, err := mpr.ParseMicroflowBSON(contents, "", "")
+		mf, err := r.ParseMicroflowBSON(contents, "", "")
 		if err != nil {
 			return nil, "", fmt.Errorf("parsing microflow %s: %w", qualifiedName, err)
 		}
@@ -59,7 +62,7 @@ func resolveFlowActivities(projectPath, qualifiedName string) ([]activityInfo, f
 	}
 	// Not a microflow — try a nanoflow (same ObjectCollection shape).
 	if u, err := r.GetRawUnitByName("nanoflow", qualifiedName); err == nil && u != nil {
-		nf, err := mpr.ParseMicroflowBSON(u.Contents, "", "")
+		nf, err := r.ParseMicroflowBSON(u.Contents, "", "")
 		if err != nil {
 			return nil, "", fmt.Errorf("parsing nanoflow %s: %w", qualifiedName, err)
 		}

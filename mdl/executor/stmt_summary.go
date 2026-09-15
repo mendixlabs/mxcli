@@ -75,6 +75,8 @@ func stmtSummary(stmt ast.Statement) string {
 		return fmt.Sprintf("create snippet %s", s.Name)
 	case *ast.CreateLayoutStmt:
 		return fmt.Sprintf("create layout %s", s.Name)
+	case *ast.DropLayoutStmt:
+		return fmt.Sprintf("drop layout %s", s.Name)
 	case *ast.DropSnippetStmt:
 		return fmt.Sprintf("drop snippet %s", s.Name)
 

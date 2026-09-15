@@ -202,3 +202,41 @@ func TestStatementAnnotations_NilSafety(t *testing.T) {
 		t.Fatal("ActivityAnnotations is no longer a struct")
 	}
 }
+
+// SetStatementAnnotations is the write side. The field shape it depends on is
+// pinned for every statement type by TestEveryAnnotatedStatementIsReachable;
+// this pins the reflection itself — including the workflow statements, which
+// the type switch it replaced skipped.
+func TestSetStatementAnnotations(t *testing.T) {
+	ann := &ActivityAnnotations{Position: &Position{X: 740, Y: 320}}
+	for _, s := range []MicroflowStatement{
+		&LogStmt{},
+		&EnumSplitStmt{},
+		&OpenWorkflowStmt{},
+		&NotifyWorkflowStmt{},
+		&CallWorkflowStmt{},
+		&ImportFromMappingStmt{},
+	} {
+		if !SetStatementAnnotations(s, ann) {
+			t.Errorf("%T: SetStatementAnnotations reported no Annotations field", s)
+			continue
+		}
+		if got := StatementAnnotations(s); got != ann {
+			t.Errorf("%T: read back %v, want the annotations just set", s, got)
+		}
+	}
+
+	// A nil annotation clears, and nil / non-pointer / field-less statements are
+	// refused rather than panicking.
+	log := &LogStmt{Annotations: ann}
+	if !SetStatementAnnotations(log, nil) || log.Annotations != nil {
+		t.Errorf("setting nil did not clear: %v", log.Annotations)
+	}
+	if SetStatementAnnotations(nil, ann) {
+		t.Error("nil statement: reported success")
+	}
+	var typed *LogStmt
+	if SetStatementAnnotations(typed, ann) {
+		t.Error("typed nil: reported success")
+	}
+}

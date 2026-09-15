@@ -1,0 +1,53 @@
+-- CREATE OR MODIFY WORKFLOW and ALTER WORKFLOW over MCP scrambled the flow.
+--
+-- Symptom (mxcli exec --mcp …, Studio Pro 11.14; read back with ped_read_document):
+--   * `create or modify` of a workflow stored its activities reversed, with an
+--     activity of the old flow left in and one of the new ones missing:
+--     [Start, a, b, End] rewritten as A, B, C came back Start, B, A, a, End;
+--     a larger one also lost its parallel split and held a name twice;
+--   * `alter workflow … replace activity X with …` changed nothing — X stayed;
+--   * inserting several activities at once interleaved them with the ones after
+--     the anchor (not reachable from MDL, whose INSERT AFTER takes one activity).
+-- No error was reported by the update itself.
+--
+-- Cause: one ped_update_document batch does not apply its ops in the order sent.
+-- Measured with raw PED calls: the ops run highest index first, and at one index
+-- the adds go in as a block, in op order, before the removes — so a remove where
+-- something was just added takes the added element. mxcli sent removes and adds
+-- for the same list in one batch, and its adds in reverse or at incrementing
+-- indices.
+--
+-- Fix (mdl/backend/mcp/workflow.go): a list's new elements go in at one index in
+-- the statement's order, and the elements they replace are removed in a second
+-- update — for the flow, the event sub-processes and the event handlers, and for
+-- ALTER's replace.
+--
+-- Needs a project with module `workflow` and entity `workflow.workfow1context`
+-- (ako/TestApp). Both statements run in one exec: the second sees the workflow the
+-- first created, so it is an update.
+--
+-- Verify:
+--   mxcli exec mdl-examples/bug-tests/mcp-workflow-update-order.mdl -p app.mpr --mcp <url>
+--   ped_read_document /flow/activities on workflow.ZzMxcliBug_UpdateOrder
+--   → Start, updA, updB, updInserted, updReplaced, End ; ped_check_errors → "No errors found."
+
+create workflow workflow.ZzMxcliBug_UpdateOrder
+  parameter $WorkflowContext: workflow.workfow1context
+begin
+  wait for notification oldA comment 'Old A';
+  wait for notification oldB comment 'Old B';
+end workflow;
+
+create or modify workflow workflow.ZzMxcliBug_UpdateOrder
+  parameter $WorkflowContext: workflow.workfow1context
+begin
+  wait for notification updA comment 'A';
+  wait for notification updB comment 'B';
+  wait for notification updC comment 'C';
+end workflow;
+
+alter workflow workflow.ZzMxcliBug_UpdateOrder
+  insert after updB wait for notification updInserted comment 'Inserted after B';
+
+alter workflow workflow.ZzMxcliBug_UpdateOrder
+  replace activity updC with wait for notification updReplaced comment 'Replaced C';

@@ -468,7 +468,7 @@ func resolveViaReader(projectPath, name string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 
 	var out []string
 	// Top-level documents (microflow, page, snippet, enumeration, ...).

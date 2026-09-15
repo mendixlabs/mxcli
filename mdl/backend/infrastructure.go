@@ -24,6 +24,18 @@ type RawUnitBackend interface {
 	ListRawUnits(objectType string) ([]*types.RawUnitInfo, error)
 	GetRawUnitByName(objectType, qualifiedName string) (*types.RawUnitInfo, error)
 	GetRawMicroflowByName(qualifiedName string) ([]byte, error)
+	// AddRawUnit inserts a new unit with the given contents.
+	//
+	// The raw counterpart to the typed Create* methods, for a caller copying
+	// units it does not decode — the marketplace module transplant moves a
+	// whole module's units between projects verbatim, which is the point: a
+	// decode and re-encode would rewrite identities the runtime keys on (see
+	// CLAUDE.md on GUIDs).
+	//
+	// Takes strings (not model.ID) to match the writer layer convention, as
+	// UpdateRawUnit does.
+	AddRawUnit(unitID, containerID, containmentName, unitType string, contents []byte) error
+
 	// UpdateRawUnit replaces the contents of a unit by ID.
 	// Takes string (not model.ID) to match the SDK writer layer convention.
 	UpdateRawUnit(unitID string, contents []byte) error
@@ -42,7 +54,6 @@ type RawUnitBackend interface {
 type MetadataBackend interface {
 	ListAllUnitIDs() ([]string, error)
 	ListUnits() ([]*types.UnitInfo, error)
-	GetUnitTypes() (map[string]int, error)
 	GetProjectRootID() (string, error)
 	ContentsDir() string
 	ExportJSON() ([]byte, error)

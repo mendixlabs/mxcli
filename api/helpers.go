@@ -5,13 +5,13 @@ package api
 import (
 	"strings"
 
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // generateID creates a new unique ID for a model element.
 func generateID() model.ID {
-	return model.ID(mpr.GenerateID())
+	return model.ID(types.GenerateID())
 }
 
 // QualifiedName represents a fully qualified name (Module.Element).

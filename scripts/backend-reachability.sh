@@ -2,11 +2,18 @@
 # Which backend.FullBackend methods does anything actually CALL through a
 # backend value?
 #
-# The modelsdk engine answers unported methods with errUnimplemented ("rerun
-# with MXCLI_ENGINE=legacy"), which is a reason the legacy engine has to stay
-# shipped and tested. Counting the unimplemented ones overstates the problem
-# badly: most are interface surface that only the MPR implementation and its own
-# reader ever touch, so no engine can reach them and the stub can never fire.
+# The engine answers unported methods with errUnimplemented. Counting the
+# unimplemented ones overstates the problem badly: most are interface surface
+# that only an implementation and its own reader ever touch, so nothing can
+# reach them and the stub can never fire.
+#
+# WHAT THIS SCRIPT CANNOT TELL YOU. DEAD has three causes that want opposite
+# fixes — a caller that bypasses the abstraction (port it), no caller anywhere
+# (delete the method), or callers using a narrower interface with a different
+# signature (also delete). All three report DEAD, because all three mean
+# "nothing calls it through a backend value". Separate them by grepping for
+# callers under ANY type; see the header of
+# mdl/backend/modelsdk/unimplemented_reachability_test.go.
 #
 # Grep cannot tell the difference — `b.reader.GetRawUnitByName(...)` inside the
 # MPR backend and `ctx.Backend.GetRawUnitByName(...)` in the executor look the
@@ -16,7 +23,9 @@
 #
 # Measured on 2026-09-12 over the 19 methods *Backend did not declare: 17 DEAD,
 # 2 LIVE (GetRawUnitByName, ParseMicroflowBSON — four call sites, all in
-# mdl/executor/cmd_microflows_builder.go). Both are now implemented;
+# mdl/executor/cmd_microflows_builder.go). Both are now implemented.
+# Re-measured 2026-09-15: six more DEAD entries turned out to be orphans or
+# duplicates rather than bypasses and were deleted from the interface.
 # TestNoReachableUnimplementedBackendMethods in mdl/backend/modelsdk holds the
 # list this script produced.
 #

@@ -11,7 +11,6 @@ import (
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
 	"github.com/mendixlabs/mxcli/cmd/mxcli/theme"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/spf13/cobra"
 )
 
@@ -175,9 +174,9 @@ Examples:
 		// runtime) silently follows it. Check the postcondition rather than trusting
 		// the resolution: a mismatch here means the model is wrong, so fail loudly
 		// instead of handing back something that merely looks finished.
-		if reader, err := mpr.Open(mprPath); err == nil {
+		if reader, err := openProjectReadOnly(mprPath); err == nil {
 			created := reader.ProjectVersion().ProductVersion
-			reader.Close()
+			_ = reader.Disconnect()
 			if created != "" && created != mendixVersion {
 				fmt.Fprintf(os.Stderr,
 					"Error: requested Mendix %s but the created project is %s.\n",

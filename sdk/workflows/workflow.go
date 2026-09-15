@@ -29,8 +29,14 @@ type Workflow struct {
 	// Context parameter
 	Parameter *WorkflowParameter `json:"parameter,omitempty"`
 
+	// EventHandlers are the workflow's OnWorkflowEvent handlers, in stored order.
+	EventHandlers []*WorkflowEventHandler `json:"eventHandlers,omitempty"`
+
 	// Flow contains the workflow activities
 	Flow *Flow `json:"flow,omitempty"`
+
+	// EventSubProcesses are the flows outside the main flow, in stored order.
+	EventSubProcesses []*EventSubProcess `json:"eventSubProcesses,omitempty"`
 }
 
 // GetName returns the workflow's name.
@@ -41,6 +47,16 @@ func (w *Workflow) GetName() string {
 // GetContainerID returns the ID of the containing folder/module.
 func (w *Workflow) GetContainerID() model.ID {
 	return w.ContainerID
+}
+
+// WorkflowEventHandler is a Workflows$WorkflowEventHandler: a microflow the
+// runtime calls for each of the listed workflow event types.
+type WorkflowEventHandler struct {
+	model.BaseElement
+	Description   string   `json:"description,omitempty"`   // how Studio Pro names the handler
+	Documentation string   `json:"documentation,omitempty"` // not authorable from MDL; carried
+	EventTypes    []string `json:"eventTypes,omitempty"`    // WorkflowEventType values, stored order
+	Microflow     string   `json:"microflow,omitempty"`     // qualified name of the handler microflow
 }
 
 // WorkflowParameter represents the context parameter of a workflow.
@@ -121,6 +137,29 @@ type UserTask struct {
 	UserTaskEntity  string             `json:"userTaskEntity,omitempty"`  // Qualified name of user task entity
 	OnCreated       string             `json:"onCreated,omitempty"`       // Microflow called on task creation
 	BoundaryEvents  []*BoundaryEvent   `json:"boundaryEvents,omitempty"`  // Boundary events (e.g., timers)
+
+	// Multi-user task only.
+	CompletionCriteria *CompletionCriteria `json:"completionCriteria,omitempty"` // nil = consensus on the first outcome
+	TargetUserInput    *TargetUserInput    `json:"targetUserInput,omitempty"`    // nil = all targeted users
+	AwaitAllUsers      bool                `json:"awaitAllUsers,omitempty"`
+}
+
+// CompletionCriteria is how a multi-user task turns its participants' outcomes
+// into one outcome. Outcomes are named by value; storage points at their $ID.
+type CompletionCriteria struct {
+	Kind            string `json:"kind"`                     // Consensus, Majority, Threshold, Veto or Microflow
+	CompletionType  string `json:"completionType,omitempty"` // Absolute or Relative (Majority, Threshold)
+	Threshold       int    `json:"threshold,omitempty"`      // percent (Relative) or votes (Absolute)
+	FallbackOutcome string `json:"fallbackOutcome,omitempty"`
+	VetoOutcome     string `json:"vetoOutcome,omitempty"`
+	Microflow       string `json:"microflow,omitempty"` // must return String (CE5012)
+}
+
+// TargetUserInput is how many of a multi-user task's targeted users must respond.
+type TargetUserInput struct {
+	Kind       string `json:"kind"` // All, Absolute or Percentage
+	Amount     int    `json:"amount,omitempty"`
+	Percentage int    `json:"percentage,omitempty"`
 }
 
 // ActivityType returns the type name.
@@ -140,6 +179,11 @@ func (a *SystemTask) ActivityType() string { return "SystemTask" }
 // CallMicroflowTask represents a call-microflow activity in a workflow.
 type CallMicroflowTask struct {
 	BaseWorkflowActivity
+	// IsAgent marks an AI agent task (Workflows$AIAgentTaskActivity, Mendix
+	// 11.9+). It stores exactly the call-microflow shape under a different
+	// $Type, so it is this type with a flag rather than a type of its own —
+	// every walker, validator and catalog edge applies to it unchanged.
+	IsAgent           bool                `json:"isAgent,omitempty"`
 	Microflow         string              `json:"microflow,omitempty"` // Qualified name of the microflow to call
 	Outcomes          []ConditionOutcome  `json:"outcomes,omitempty"`  // Condition-based outcomes
 	ParameterMappings []*ParameterMapping `json:"parameterMappings,omitempty"`
@@ -206,6 +250,78 @@ type WaitForNotificationActivity struct {
 
 // ActivityType returns the type name.
 func (a *WaitForNotificationActivity) ActivityType() string { return "WaitForNotification" }
+
+// NotificationActivity is an intermediate notification event on a flow — the
+// point a `notify workflow … target` reaches.
+type NotificationActivity struct {
+	BaseWorkflowActivity
+}
+
+// ActivityType returns the type name.
+func (a *NotificationActivity) ActivityType() string { return "Notification" }
+
+// EventSubProcess is a flow outside the main flow, started by its own start event
+// while the workflow runs. Its flow's first activity is the
+// EventSubProcessStartActivity.
+type EventSubProcess struct {
+	model.BaseElement
+	Name       string `json:"name,omitempty"`
+	Caption    string `json:"caption,omitempty"`
+	Annotation string `json:"annotation,omitempty"`
+	Flow       *Flow  `json:"flow,omitempty"`
+}
+
+// Start returns the sub-process's start event, nil when its flow has none.
+func (e *EventSubProcess) Start() *EventSubProcessStartActivity {
+	if e == nil || e.Flow == nil || len(e.Flow.Activities) == 0 {
+		return nil
+	}
+	s, _ := e.Flow.Activities[0].(*EventSubProcessStartActivity)
+	return s
+}
+
+// EventSubProcessStartActivity is one of Mendix's four event sub-process start
+// types: interrupting or not, triggered by a notification or a timer.
+type EventSubProcessStartActivity struct {
+	BaseWorkflowActivity
+	Interrupting       bool   `json:"interrupting"`
+	Timer              bool   `json:"timer"`
+	FirstExecutionTime string `json:"firstExecutionTime,omitempty"` // timer starts only
+}
+
+// ActivityType returns the type name, e.g. "InterruptingNotificationEventSubProcessStart".
+func (a *EventSubProcessStartActivity) ActivityType() string {
+	return strings.TrimSuffix(strings.TrimPrefix(a.StorageType(), "Workflows$"), "Activity")
+}
+
+// StorageType returns the $Type the start event is stored under.
+func (a *EventSubProcessStartActivity) StorageType() string {
+	kind := "Notification"
+	if a.Timer {
+		kind = "Timer"
+	}
+	prefix := "NonInterrupting"
+	if a.Interrupting {
+		prefix = "Interrupting"
+	}
+	return "Workflows$" + prefix + kind + "EventSubProcessStartActivity"
+}
+
+// EventSubProcessStartFromStorageType is StorageType's inverse; ok is false for
+// any other $Type.
+func EventSubProcessStartFromStorageType(typeName string) (interrupting, timer, ok bool) {
+	switch typeName {
+	case "Workflows$InterruptingNotificationEventSubProcessStartActivity":
+		return true, false, true
+	case "Workflows$NonInterruptingNotificationEventSubProcessStartActivity":
+		return false, false, true
+	case "Workflows$InterruptingTimerEventSubProcessStartActivity":
+		return true, true, true
+	case "Workflows$NonInterruptingTimerEventSubProcessStartActivity":
+		return false, true, true
+	}
+	return false, false, false
+}
 
 // EndOfParallelSplitPathActivity marks the end of a parallel split path (auto-generated by Mendix).
 type EndOfParallelSplitPathActivity struct {
@@ -388,10 +504,55 @@ type ParallelSplitOutcome struct {
 // BoundaryEvent represents a boundary event attached to a workflow activity.
 type BoundaryEvent struct {
 	model.BaseElement
+	Name       string `json:"name,omitempty"` // notification events: what `notify workflow … target` names
 	Caption    string `json:"caption,omitempty"`
 	Flow       *Flow  `json:"flow,omitempty"`       // Activities triggered by the boundary event
 	TimerDelay string `json:"timerDelay,omitempty"` // Timer delay expression (for timer boundary events)
-	EventType  string `json:"eventType,omitempty"`  // e.g. "InterruptingTimer", "NonInterruptingTimer"
+	// EventType is "InterruptingTimer", "NonInterruptingTimer", "Timer",
+	// "InterruptingNotification" or "NonInterruptingNotification".
+	EventType string `json:"eventType,omitempty"`
+}
+
+// boundaryEventStorageTypes maps EventType to the stored $Type. Every writer
+// reads it from here: three copies of this switch defaulted an unknown kind to
+// an interrupting TIMER, so a notification event would have been written as one.
+var boundaryEventStorageTypes = map[string]string{
+	"InterruptingTimer":           "Workflows$InterruptingTimerBoundaryEvent",
+	"NonInterruptingTimer":        "Workflows$NonInterruptingTimerBoundaryEvent",
+	"Timer":                       "Workflows$TimerBoundaryEvent",
+	"InterruptingNotification":    "Workflows$InterruptingNotificationBoundaryEvent",
+	"NonInterruptingNotification": "Workflows$NonInterruptingNotificationBoundaryEvent",
+}
+
+// BoundaryEventStorageType returns the $Type for an EventType. An empty
+// EventType is an interrupting timer, which is what the writers always assumed;
+// ok is false for anything else unknown.
+func BoundaryEventStorageType(eventType string) (typeName string, ok bool) {
+	if eventType == "" {
+		eventType = "InterruptingTimer"
+	}
+	typeName, ok = boundaryEventStorageTypes[eventType]
+	return typeName, ok
+}
+
+// BoundaryEventTypeFromStorage is BoundaryEventStorageType's inverse.
+func BoundaryEventTypeFromStorage(typeName string) (eventType string, ok bool) {
+	for k, v := range boundaryEventStorageTypes {
+		if v == typeName {
+			return k, true
+		}
+	}
+	return "", false
+}
+
+// IsNotification reports whether the event is triggered by a notification.
+func (b *BoundaryEvent) IsNotification() bool {
+	return strings.HasSuffix(b.EventType, "Notification")
+}
+
+// IsNonInterrupting reports whether the event runs alongside its activity.
+func (b *BoundaryEvent) IsNonInterrupting() bool {
+	return strings.HasPrefix(b.EventType, "NonInterrupting")
 }
 
 // ============================================================================

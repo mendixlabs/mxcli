@@ -220,6 +220,7 @@ func studioProWorkflow(onCreated, handler, agentTask bool, criteria string, fall
 		events = append(events, map[string]any{
 			"$Type":                 "Workflows$WorkflowEventHandler",
 			"Description":           "OnAnyEvent",
+			"EventTypes":            []any{1, "WorkflowCompleted", "UserTaskStarted"},
 			"MicroflowEventHandler": map[string]any{"$Type": "Workflows$MicroflowEventHandler", "Microflow": "workflow.WorkflowEventHandle"},
 		})
 	}
@@ -236,11 +237,12 @@ begin
   multi user task userTask2 'Multi' page M.P outcomes 'Fast' { } 'Furious' { };
 end workflow;`
 
-// Measured on ako/TestApp: every rebuild writes a user task's OnCreatedEvent as
-// NoEvent, a multi-user task's completion criteria as Consensus on its first
-// outcome, OnWorkflowEvent as an empty list, and describe prints an AI agent task
-// only as a comment. MDL can express none of them, so a rewrite that would lose
-// one is refused — the event sub-process rule, applied to the rest.
+// Measured on ako/TestApp: a rebuild writes what the statement says — a user
+// task's OnCreatedEvent as NoEvent unless it states `on created microflow`,
+// OnWorkflowEvent as only the handlers it states, a multi-user task's completion
+// criteria as Consensus on its first outcome — and describe prints an AI agent
+// task only as a comment. A rewrite that would lose one of these is refused. The
+// statement here restates none of them.
 func TestWorkflowRewrite_RefusesDroppingStudioProOnlyState(t *testing.T) {
 	cases := []struct {
 		name string
@@ -276,6 +278,41 @@ func TestWorkflowRewrite_AllowsWhatARebuildReproduces(t *testing.T) {
 	}
 }
 
+// On-created microflows and event handlers are expressible now, so a statement
+// that restates them — the shape `describe workflow` emits — is a rewrite that
+// loses nothing, and the guard must let it through. Without this the guard would
+// block every rewrite of every workflow that uses them.
+func TestWorkflowRewrite_AllowsRestatedHandlers(t *testing.T) {
+	stmt := parseWorkflowStmt(t, `create or modify workflow M.W parameter $C: M.Ctx
+  on workflow events (WorkflowCompleted, UserTaskStarted) microflow workflow.WorkflowEventHandle as 'OnAnyEvent'
+begin
+  user task userTask1 'User Task' page M.P on created microflow workflow.UserTaskEventHandle outcomes 'Good' { } 'Bad' { };
+  multi user task userTask2 'Multi' page M.P outcomes 'Fast' { } 'Furious' { };
+end workflow;`)
+	raw := studioProWorkflow(true, true, false, "ConsensusCompletionCriteria", true)
+	if err := checkNoDroppedWorkflowConstructs(rawWorkflowCtx(t, raw), "wf1", "M.W", stmt); err != nil {
+		t.Fatalf("a rewrite that restates its handlers must be allowed, got %v", err)
+	}
+}
+
+// A handler subscribed to no event types builds (measured, 11.13.0) but has no
+// MDL spelling — the grammar requires at least one type — so restating it is not
+// possible and the rewrite is refused however many handlers the statement has.
+func TestWorkflowRewrite_RefusesHandlerWithNoEventTypes(t *testing.T) {
+	stmt := parseWorkflowStmt(t, `create or modify workflow M.W parameter $C: M.Ctx
+  on workflow events (WorkflowCompleted) microflow workflow.WorkflowEventHandle as 'OnAnyEvent'
+begin
+  user task userTask1 'User Task' page M.P outcomes 'Good' { } 'Bad' { };
+end workflow;`)
+	raw := studioProWorkflow(false, true, false, "ConsensusCompletionCriteria", true)
+	handler := raw["OnWorkflowEvent"].([]any)[1].(map[string]any)
+	handler["EventTypes"] = []any{1}
+	err := checkNoDroppedWorkflowConstructs(rawWorkflowCtx(t, raw), "wf1", "M.W", stmt)
+	if err == nil || !strings.Contains(err.Error(), "no event types") {
+		t.Fatalf("a handler with no event types must be refused, got %v", err)
+	}
+}
+
 // storedReplaceCtx is a project holding M.W: the semantic workflow ALTER resolves
 // its target against, and the raw unit the REPLACE refusal reads.
 func storedReplaceCtx(t *testing.T, raw map[string]any) *ExecContext {
@@ -303,7 +340,12 @@ func storedReplaceCtx(t *testing.T, raw map[string]any) *ExecContext {
 // on-created microflow to NoEvent while exec reported "Altered workflow".
 func TestAlterWorkflow_ReplaceRefusesToResetStudioProState(t *testing.T) {
 	replaceTask := func(name string) *ast.AlterWorkflowStmt {
-		prog, errs := visitor.Build(`alter workflow M.W replace activity ` + name + ` with user task ` + name + ` 'Task' page M.P outcomes 'Fast' { } 'Furious' { };`)
+		clause := ""
+		if strings.HasSuffix(name, "+oncreated") {
+			name = strings.TrimSuffix(name, "+oncreated")
+			clause = ` on created microflow workflow.UserTaskEventHandle`
+		}
+		prog, errs := visitor.Build(`alter workflow M.W replace activity ` + name + ` with user task ` + name + ` 'Task' page M.P` + clause + ` outcomes 'Fast' { } 'Furious' { };`)
 		if len(errs) > 0 {
 			t.Fatalf("parse errors: %v", errs)
 		}
@@ -315,6 +357,8 @@ func TestAlterWorkflow_ReplaceRefusesToResetStudioProState(t *testing.T) {
 		want         string // "" = allowed
 	}{
 		{"on-created microflow", "userTask1", studioProWorkflow(true, false, false, "ConsensusCompletionCriteria", true), "workflow.UserTaskEventHandle"},
+		// The replacement restates it, so nothing is lost.
+		{"on-created microflow, restated", "userTask1+oncreated", studioProWorkflow(true, false, false, "ConsensusCompletionCriteria", true), ""},
 		{"majority rule", "userTask2", studioProWorkflow(false, false, false, "MajorityCompletionCriteria", true), "majority"},
 		// Controls: the same replacements where the stored activity holds only
 		// what a rebuild writes anyway.
@@ -352,7 +396,7 @@ func TestWorkflowRewrite_CountsAnEventSubProcessOnce(t *testing.T) {
 		}},
 	}
 	err := checkNoDroppedWorkflowConstructs(rawWorkflowCtx(t, raw), "wf1", "M.W", parseWorkflowStmt(t, wfRewriteTwoTasks))
-	if err == nil || !strings.Contains(err.Error(), "1 event sub-process") {
+	if err == nil || !strings.Contains(err.Error(), "has 1 stored event sub-process") {
 		t.Fatalf("expected one event sub-process to be reported, got %v", err)
 	}
 }

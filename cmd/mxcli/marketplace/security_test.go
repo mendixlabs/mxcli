@@ -11,21 +11,21 @@ import (
 
 	modelsdk "github.com/mendixlabs/mxcli"
 	"github.com/mendixlabs/mxcli/mdl/backend"
-	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-// Both engines, because the reconcile they call is a separate implementation in
-// each (mdl/backend/modelsdk and sdk/mpr) and a marketplace update runs under
-// whichever --engine selects. A defect fixed in one of those parallel writers
-// stays latent in the other until something switches engines — which is how
-// mendixlabs/mxcli#1047 reached two engines at once.
+// This ran over both engines while the legacy sdk/mpr writer existed, because
+// the reconcile below was a separate implementation in each and a defect fixed
+// in one stayed latent in the other until something switched engines — which is
+// how mendixlabs/mxcli#1047 reached two engines at once. Legacy is gone
+// (docs/plans/2026-09-14-retire-legacy-engine.md), so that class of divergence
+// is gone with it and one entry remains. The loop is kept because these tests
+// read as a matrix and a second backend would otherwise have to reintroduce it.
 var engines = []struct {
 	name    string
 	backend func() backend.FullBackend
 }{
 	{"modelsdk", testBackend},
-	{"legacy", func() backend.FullBackend { return mprbackend.New() }},
 }
 
 // A marketplace update copies the incoming module's units in verbatim, so an
@@ -172,7 +172,7 @@ func stripLastMemberAccess(t *testing.T, mprPath, moduleName, entityName string)
 	}
 	units, err := reader.ListRawUnitsByType("DomainModels$DomainModel")
 	if err != nil {
-		reader.Close()
+		reader.Disconnect()
 		t.Fatalf("list domain models: %v", err)
 	}
 
@@ -209,13 +209,13 @@ func stripLastMemberAccess(t *testing.T, mprPath, moduleName, entityName string)
 		}
 		enc, merr := bson.Marshal(doc)
 		if merr != nil {
-			reader.Close()
+			reader.Disconnect()
 			t.Fatalf("re-encode domain model: %v", merr)
 		}
 		unitID, contents = string(u.ID), enc
 		break
 	}
-	reader.Close()
+	reader.Disconnect()
 
 	if unitID == "" || removed == "" {
 		t.Fatalf("no populated access rule found on %s.%s to strip", moduleName, entityName)
@@ -224,7 +224,7 @@ func stripLastMemberAccess(t *testing.T, mprPath, moduleName, entityName string)
 	if err != nil {
 		t.Fatalf("open %s for writing: %v", mprPath, err)
 	}
-	defer writer.Close()
+	defer writer.Disconnect()
 	if err := writer.UpdateRawUnit(unitID, contents); err != nil {
 		t.Fatalf("write domain model: %v", err)
 	}
@@ -240,7 +240,7 @@ func memberRefs(t *testing.T, mprPath, moduleName, entityName string) []string {
 	if err != nil {
 		t.Fatalf("open %s: %v", mprPath, err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 	units, err := reader.ListRawUnitsByType("DomainModels$DomainModel")
 	if err != nil {
 		t.Fatalf("list domain models: %v", err)

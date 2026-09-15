@@ -629,93 +629,13 @@ func extractAnnotationValueIdentifier(ctx parser.IAnnotationValueContext) string
 	return ""
 }
 
-// setStatementAnnotations sets the Annotations field on a microflow statement via type switch.
+// setStatementAnnotations sets the Annotations field on a microflow statement.
+//
+// Reflective (ast.SetStatementAnnotations), not a type switch: the switch this
+// replaced had no case for any workflow or mapping statement, so their
+// @position was parsed and silently dropped.
 func setStatementAnnotations(stmt ast.MicroflowStatement, ann *ast.ActivityAnnotations) {
-	switch s := stmt.(type) {
-	case *ast.DeclareStmt:
-		s.Annotations = ann
-	case *ast.EnumSplitStmt:
-	case *ast.InheritanceSplitStmt:
-		s.Annotations = ann
-	case *ast.CastObjectStmt:
-		s.Annotations = ann
-	case *ast.MfSetStmt:
-		s.Annotations = ann
-	case *ast.ReturnStmt:
-		s.Annotations = ann
-	case *ast.RaiseErrorStmt:
-		s.Annotations = ann
-	case *ast.CreateObjectStmt:
-		s.Annotations = ann
-	case *ast.ChangeObjectStmt:
-		s.Annotations = ann
-	case *ast.MfCommitStmt:
-		s.Annotations = ann
-	case *ast.DeleteObjectStmt:
-		s.Annotations = ann
-	case *ast.RollbackStmt:
-		s.Annotations = ann
-	case *ast.RetrieveStmt:
-		s.Annotations = ann
-	case *ast.IfStmt:
-		s.Annotations = ann
-	case *ast.LoopStmt:
-		s.Annotations = ann
-	case *ast.WhileStmt:
-		s.Annotations = ann
-	case *ast.LogStmt:
-		s.Annotations = ann
-	case *ast.CallMicroflowStmt:
-		s.Annotations = ann
-	case *ast.CallNanoflowStmt:
-		s.Annotations = ann
-	case *ast.CallJavaActionStmt:
-		s.Annotations = ann
-	case *ast.CallJavaScriptActionStmt:
-		s.Annotations = ann
-	case *ast.CallWebServiceStmt:
-		s.Annotations = ann
-	case *ast.ExecuteDatabaseQueryStmt:
-		s.Annotations = ann
-	case *ast.CallExternalActionStmt:
-		s.Annotations = ann
-	case *ast.BreakStmt:
-		s.Annotations = ann
-	case *ast.ContinueStmt:
-		s.Annotations = ann
-	case *ast.MergeStmt:
-		s.Annotations = ann
-	case *ast.JoinStmt:
-		s.Annotations = ann
-	case *ast.ListOperationStmt:
-		s.Annotations = ann
-	case *ast.AggregateListStmt:
-		s.Annotations = ann
-	case *ast.CreateListStmt:
-		s.Annotations = ann
-	case *ast.AddToListStmt:
-		s.Annotations = ann
-	case *ast.RemoveFromListStmt:
-		s.Annotations = ann
-	case *ast.ShowPageStmt:
-		s.Annotations = ann
-	case *ast.ClosePageStmt:
-		s.Annotations = ann
-	case *ast.ShowHomePageStmt:
-		s.Annotations = ann
-	case *ast.ShowMessageStmt:
-		s.Annotations = ann
-	case *ast.DownloadFileStmt:
-		s.Annotations = ann
-	case *ast.SynchronizeStmt:
-		s.Annotations = ann
-	case *ast.ValidationFeedbackStmt:
-		s.Annotations = ann
-	case *ast.RestCallStmt:
-		s.Annotations = ann
-	case *ast.SendRestRequestStmt:
-		s.Annotations = ann
-	}
+	ast.SetStatementAnnotations(stmt, ann)
 }
 
 // buildOnErrorClause converts an OnErrorClauseContext to an ErrorHandlingClause.

@@ -1,0 +1,58 @@
+-- mendixlabs/mxcli#1063 — layout placeholder rules, and DROP LAYOUT
+--
+-- Three defects, all of which let a broken layout through to the builder:
+--
+--   1. A layout whose placeholder is not named `Main` passed `mxcli check` AND
+--      `mxcli exec`, then failed `mx check` with CE0848. mxcli's docs called the
+--      name a convention; mxbuild validates it as a rule.
+--   2. `placeholder Main { … }` (the page-side spelling) passed check, then
+--      failed exec AFTER creating the module — with a message contradicting the
+--      script.
+--   3. There was no DROP LAYOUT, so neither mistake could be undone headlessly.
+--
+-- The rule, measured on Mendix 11.12.1 against a layout NO PAGE USES:
+--
+--   placeholder Main               → 0 errors
+--   placeholder Main + Content     → 0 errors  (extra names are fine)
+--   placeholder Content            → CE0848
+--   placeholder Main + Main        → CE0849 + CE0495
+--   placeholder Main + Side + Side → CE0495
+--
+-- Run: mxcli check mdl-examples/bug-tests/1063-layout-placeholder-rules.mdl
+--      (this file is the PASSING shape; the failing ones are commented below)
+
+CREATE OR REPLACE LAYOUT MyFirstModule.App_Probe1063 (
+  layouttype: 'Responsive',
+  class: 'layout-atlas'
+) {
+  SCROLLCONTAINER layoutContainer {
+    REGION center (Class: 'region-content') {
+      -- Declared, not filled: no body. Exactly one, named Main.
+      PLACEHOLDER Main
+      -- Extra placeholders under other names are fine.
+      PLACEHOLDER Side
+    }
+  }
+}
+
+-- Layouts are now removable. Pages still bound to one are named in a warning
+-- and the drop proceeds; left dropped they fail CE1613, which names the PAGE.
+DROP LAYOUT MyFirstModule.App_Probe1063;
+
+-- The three shapes mxcli now refuses, each with the CE number it would have hit:
+--
+-- MDL081 (CE0848) — no placeholder named Main:
+--   CREATE OR REPLACE LAYOUT M.A (layouttype: 'Responsive') {
+--     SCROLLCONTAINER sc { REGION center { PLACEHOLDER Content } } }
+--
+-- MDL081 (CE0849) — two of them:
+--   CREATE OR REPLACE LAYOUT M.B (layouttype: 'Responsive') {
+--     SCROLLCONTAINER sc { REGION center { PLACEHOLDER Main PLACEHOLDER Main } } }
+--
+-- MDL082 (CE0495) — a repeated name, Main or not:
+--   CREATE OR REPLACE LAYOUT M.C (layouttype: 'Responsive') {
+--     SCROLLCONTAINER sc { REGION center { PLACEHOLDER Main PLACEHOLDER Side PLACEHOLDER Side } } }
+--
+-- MDL083 — the page-side braced form, which declares nothing:
+--   CREATE OR REPLACE LAYOUT M.D (layouttype: 'Responsive') {
+--     SCROLLCONTAINER sc { REGION center { PLACEHOLDER Main { } } } }

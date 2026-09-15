@@ -12,6 +12,7 @@ import (
 	"github.com/mendixlabs/mxcli/modelsdk/element"
 	genCa "github.com/mendixlabs/mxcli/modelsdk/gen/codeactions"
 	genJa "github.com/mendixlabs/mxcli/modelsdk/gen/javaactions"
+	"github.com/mendixlabs/mxcli/modelsdk/meta"
 	"github.com/mendixlabs/mxcli/modelsdk/mprread"
 	"github.com/mendixlabs/mxcli/sdk/javaactions"
 )
@@ -57,6 +58,9 @@ func (b *Backend) ListJavaActionsFull() ([]*javaactions.JavaAction, error) {
 	for _, u := range units {
 		out = append(out, javaActionFromGen(u.Element, u.ContainerID))
 	}
+	// Same reason as ListJavaActions: the System module's are platform built-ins
+	// with no stored unit, so they have to be synthesized or they vanish.
+	out = append(out, meta.BuildSystemJavaActionsFull()...)
 	return out, nil
 }
 

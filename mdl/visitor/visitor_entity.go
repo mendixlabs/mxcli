@@ -860,6 +860,10 @@ func (b *Builder) ExitDropStatement(ctx *parser.DropStatementContext) {
 		b.statements = append(b.statements, &ast.DropPageStmt{
 			Name: buildQualifiedName(names[0]),
 		})
+	} else if ctx.LAYOUT() != nil {
+		b.statements = append(b.statements, &ast.DropLayoutStmt{
+			Name: buildQualifiedName(names[0]),
+		})
 	} else if ctx.SNIPPET() != nil {
 		b.statements = append(b.statements, &ast.DropSnippetStmt{
 			Name: buildQualifiedName(names[0]),

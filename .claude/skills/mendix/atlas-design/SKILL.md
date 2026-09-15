@@ -185,14 +185,11 @@ alter page Sales.CustomerOverview set cust_text22 (content: 'Customers');
 > `CATALOG.building_blocks`) **and** instantiation (`USE BUILDING BLOCK`) both work
 > today. `use building block` v1 is **deep-copy + optional `as <prefix>`**; configure
 > the copy afterwards with `alter page` (an inline override block is a proposed v1.1).
-> It runs on `MXCLI_ENGINE=legacy` today; modelsdk-engine support lands with that
-> engine's `ListBuildingBlocks`.
 
 **When to *mirror* instead.** *Mirroring* — reproducing a block's tree by hand with
 `create page`/`alter page` + the same classes and design properties (see below) — is
-the fallback: reach for it only to hand-tune a shape Atlas doesn't quite give you, or
-on the modelsdk engine before its building-block support lands. Otherwise prefer the
-one-line `use building block`.
+the fallback: reach for it only to hand-tune a shape Atlas doesn't quite give you.
+Otherwise prefer the one-line `use building block`.
 
 ---
 

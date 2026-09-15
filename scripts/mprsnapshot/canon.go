@@ -36,7 +36,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -132,7 +132,7 @@ func renderScalar(v any, ids map[string]int) string {
 	switch t := v.(type) {
 	case primitive.Binary:
 		if len(t.Data) == 16 {
-			if n, ok := ids[mpr.BlobToUUID(t.Data)]; ok {
+			if n, ok := ids[types.BlobToUUID(t.Data)]; ok {
 				return fmt.Sprintf("#%d", n)
 			}
 		}

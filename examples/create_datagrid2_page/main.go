@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/backend"
-	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/mdl/executor"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 )
@@ -53,7 +53,7 @@ func main() {
 
 	// Create the MDL executor with stdout for output
 	exec := executor.New(os.Stdout)
-	exec.SetBackendFactory(func() backend.FullBackend { return mprbackend.New() })
+	exec.SetBackendFactory(func() backend.FullBackend { return modelsdkbackend.New() })
 
 	// Define the MDL script to create a page with DataGrid2
 	// Note: Adjust module name, entity name, and attributes to match your project

@@ -220,6 +220,8 @@ func describeWorkflowToString(ctx *ExecContext, name ast.QualifiedName) (string,
 		lines = append(lines, fmt.Sprintf("  due date %s", mdlQuoted(targetWf.DueDate)))
 	}
 
+	lines = append(lines, formatWorkflowEventHandlers(ctx, targetWf.EventHandlers)...)
+
 	lines = append(lines, "")
 
 	lines = append(lines, "begin")
@@ -228,6 +230,7 @@ func describeWorkflowToString(ctx *ExecContext, name ast.QualifiedName) (string,
 		actLines := formatMainFlowActivities(targetWf.Flow, "  ")
 		lines = append(lines, actLines...)
 	}
+	lines = append(lines, formatEventSubProcesses(targetWf.EventSubProcesses, "  ")...)
 
 	lines = append(lines, "end workflow")
 	lines = append(lines, "/")
@@ -288,6 +291,10 @@ func boundaryEventKeyword(eventType string) string {
 		return "boundary event interrupting timer"
 	case "NonInterruptingTimer":
 		return "boundary event non interrupting timer"
+	case "InterruptingNotification":
+		return "boundary event interrupting notification"
+	case "NonInterruptingNotification":
+		return "boundary event non interrupting notification"
 	default:
 		return "boundary event timer"
 	}
@@ -302,7 +309,18 @@ func formatBoundaryEvents(events []*workflows.BoundaryEvent, indent string) []st
 	var lines []string
 	for _, event := range events {
 		keyword := boundaryEventKeyword(event.EventType)
-		if event.TimerDelay != "" {
+		if event.IsNotification() {
+			// Its name is what `notify workflow … target` names, so it is always
+			// emitted; the string is the caption.
+			header := indent + keyword
+			if event.Name != "" {
+				header += " " + mdlIdent(event.Name)
+			}
+			if event.Caption != "" {
+				header += " " + mdlQuoted(event.Caption)
+			}
+			lines = append(lines, header)
+		} else if event.TimerDelay != "" {
 			lines = append(lines, fmt.Sprintf("%s%s %s", indent, keyword, mdlQuoted(event.TimerDelay)))
 		} else {
 			lines = append(lines, fmt.Sprintf("%s%s", indent, keyword))
@@ -315,6 +333,53 @@ func formatBoundaryEvents(events []*workflows.BoundaryEvent, indent string) []st
 		}
 	}
 
+	return lines
+}
+
+// formatEventSubProcesses emits each event sub-process as a block after the main
+// body. Its flow's End is implicit, like the main flow's — the builder appends
+// one when the body does not already end — so it is formatted as a main flow.
+func formatEventSubProcesses(esps []*workflows.EventSubProcess, indent string) []string {
+	var lines []string
+	for _, esp := range esps {
+		start := esp.Start()
+		if start == nil {
+			// Nothing MDL can state starts it; the rewrite guard refuses to drop it.
+			lines = append(lines, fmt.Sprintf("%s-- event subprocess %s has no start event, which MDL cannot state", indent, esp.Name), "")
+			continue
+		}
+		header := indent + "event subprocess " + mdlIdent(esp.Name)
+		if esp.Caption != "" {
+			header += " " + mdlQuoted(esp.Caption)
+		}
+		trigger := "non interrupting"
+		if start.Interrupting {
+			trigger = "interrupting"
+		}
+		if start.Timer {
+			header += fmt.Sprintf(" on %s timer %s", trigger, mdlQuoted(start.FirstExecutionTime))
+			if start.Name != "" {
+				header += " as " + mdlIdent(start.Name)
+			}
+			if start.Caption != "" {
+				header += " comment " + mdlQuoted(start.Caption)
+			}
+		} else {
+			header += fmt.Sprintf(" on %s notification", trigger)
+			if start.Name != "" {
+				header += " " + mdlIdent(start.Name)
+			}
+			if start.Caption != "" {
+				header += " " + mdlQuoted(start.Caption)
+			}
+		}
+		if esp.Annotation != "" {
+			lines = append(lines, formatAnnotation(esp.Annotation, indent))
+		}
+		lines = append(lines, header+" {")
+		lines = append(lines, formatMainFlowActivities(esp.Flow, indent+"  ")...)
+		lines = append(lines, indent+"};", "")
+	}
 	return lines
 }
 
@@ -398,8 +463,23 @@ func formatFlowActivities(flow *workflows.Flow, indent string, mainFlow bool) []
 				workflowActivityNameClause(a.Name, caption), caption))
 			// BoundaryEvents
 			actLines = append(actLines, formatBoundaryEvents(a.BoundaryEvents, indent+"  ")...)
+		case *workflows.NotificationActivity:
+			if a.Annotation != "" {
+				actLines = append(actLines, formatAnnotation(a.Annotation, indent))
+			}
+			line := indent + "notification"
+			if a.Name != "" {
+				line += " " + mdlIdent(a.Name)
+			}
+			if a.Caption != "" {
+				line += " comment " + mdlQuoted(a.Caption)
+			}
+			actLines = append(actLines, line)
 		case *workflows.StartWorkflowActivity:
 			// Skip start activities - they are implicit
+			continue
+		case *workflows.EventSubProcessStartActivity:
+			// Stated in the `event subprocess … on …` header.
 			continue
 		case *workflows.EndWorkflowActivity:
 			if mainFlow {
@@ -508,6 +588,10 @@ func formatUserTask(a *workflows.UserTask, indent string) []string {
 		}
 	}
 
+	if a.OnCreated != "" {
+		lines = append(lines, fmt.Sprintf("%s  on created microflow %s", indent, a.OnCreated))
+	}
+
 	if a.UserTaskEntity != "" {
 		lines = append(lines, fmt.Sprintf("%s  entity %s", indent, a.UserTaskEntity))
 	}
@@ -520,6 +604,10 @@ func formatUserTask(a *workflows.UserTask, indent string) []string {
 	// Task description
 	if a.TaskDescription != "" {
 		lines = append(lines, fmt.Sprintf("%s  description %s", indent, mdlQuoted(a.TaskDescription)))
+	}
+
+	if a.IsMulti {
+		lines = append(lines, formatMultiUserTaskCompletion(a, indent)...)
 	}
 
 	// Outcomes
@@ -550,6 +638,120 @@ func formatUserTask(a *workflows.UserTask, indent string) []string {
 	return lines
 }
 
+// formatWorkflowEventHandlers emits the header's handler clauses. A handler
+// subscribed to exactly the types the project version knows is written as
+// `on any workflow event`, which is what re-executing it would store again; any
+// other list is written out, one type per line when it is long.
+func formatWorkflowEventHandlers(ctx *ExecContext, handlers []*workflows.WorkflowEventHandler) []string {
+	var all []string
+	if pv := ctx.Backend.ProjectVersion(); pv != nil {
+		all, _, _ = allWorkflowEventTypes(pv.MajorVersion, pv.MinorVersion, pv.PatchVersion)
+	}
+	var lines []string
+	for _, h := range handlers {
+		if h == nil {
+			continue
+		}
+		as := ""
+		if h.Description != "" {
+			as = " as " + mdlQuoted(h.Description)
+		}
+		switch {
+		case len(h.EventTypes) == 0:
+			// The grammar has no spelling for an empty list; say so rather than
+			// emit a clause that means something else. Rewrites refuse it.
+			lines = append(lines, fmt.Sprintf("  -- workflow event handler %s (microflow %s) subscribes to no event types, which MDL cannot state",
+				mdlQuoted(h.Description), h.Microflow))
+		case len(all) > 0 && sameStringSet(h.EventTypes, all):
+			lines = append(lines, fmt.Sprintf("  on any workflow event microflow %s%s", h.Microflow, as))
+		case len(h.EventTypes) <= 3:
+			lines = append(lines, fmt.Sprintf("  on workflow events (%s) microflow %s%s", strings.Join(h.EventTypes, ", "), h.Microflow, as))
+		default:
+			lines = append(lines, "  on workflow events (")
+			for i, t := range h.EventTypes {
+				sep := ","
+				if i == len(h.EventTypes)-1 {
+					sep = ""
+				}
+				lines = append(lines, "    "+t+sep)
+			}
+			lines = append(lines, fmt.Sprintf("  ) microflow %s%s", h.Microflow, as))
+		}
+	}
+	return lines
+}
+
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := make(map[string]bool, len(a))
+	for _, s := range a {
+		set[s] = true
+	}
+	for _, s := range b {
+		if !set[s] {
+			return false
+		}
+	}
+	return len(set) == len(b)
+}
+
+// formatMultiUserTaskCompletion emits a multi-user task's `participants`,
+// `decide by` and `await all users` clauses, in grammar order. What a rebuild
+// writes anyway — all participants, consensus falling back to the first outcome,
+// not waiting — is omitted, so a task that never had them describes as before.
+func formatMultiUserTaskCompletion(a *workflows.UserTask, indent string) []string {
+	var lines []string
+	if t := a.TargetUserInput; t != nil {
+		switch t.Kind {
+		case "Absolute":
+			lines = append(lines, fmt.Sprintf("%s  participants %d", indent, t.Amount))
+		case "Percentage":
+			lines = append(lines, fmt.Sprintf("%s  participants %d percent", indent, t.Percentage))
+		}
+	}
+	if cc := a.CompletionCriteria; cc != nil {
+		fallback := ""
+		if cc.FallbackOutcome != "" {
+			fallback = " fallback " + mdlQuoted(cc.FallbackOutcome)
+		}
+		firstOutcome := ""
+		if len(a.Outcomes) > 0 {
+			firstOutcome = a.Outcomes[0].Value
+			if firstOutcome == "" {
+				firstOutcome = a.Outcomes[0].Caption
+			}
+		}
+		switch cc.Kind {
+		case "Consensus":
+			if cc.FallbackOutcome != firstOutcome || firstOutcome == "" {
+				lines = append(lines, fmt.Sprintf("%s  decide by consensus%s", indent, fallback))
+			}
+		case "Majority":
+			rule := "most chosen"
+			if cc.CompletionType == "Absolute" {
+				rule = "more than half"
+			}
+			lines = append(lines, fmt.Sprintf("%s  decide by majority %s%s", indent, rule, fallback))
+		case "Threshold":
+			unit := "votes"
+			if cc.CompletionType == "Relative" {
+				unit = "percent"
+			}
+			lines = append(lines, fmt.Sprintf("%s  decide by threshold %d %s%s", indent, cc.Threshold, unit, fallback))
+		case "Veto":
+			lines = append(lines, fmt.Sprintf("%s  decide by veto %s", indent, mdlQuoted(cc.VetoOutcome)))
+		case "Microflow":
+			lines = append(lines, fmt.Sprintf("%s  decide by microflow %s", indent, cc.Microflow))
+		}
+	}
+	if a.AwaitAllUsers {
+		lines = append(lines, indent+"  await all users")
+	}
+	return lines
+}
+
 // formatCallMicroflowTask formats a call microflow task for describe output.
 func formatCallMicroflowTask(a *workflows.CallMicroflowTask, indent string) []string {
 	var lines []string
@@ -568,6 +770,21 @@ func formatCallMicroflowTask(a *workflows.CallMicroflowTask, indent string) []st
 		mf = "?"
 	}
 
+	verb := "call microflow"
+	if a.IsAgent {
+		verb = "call agent microflow"
+	}
+	// A caption the author set is emitted as `comment '…'`, which the grammar
+	// reads back into the caption. It used to be emitted only as a trailing
+	// `-- caption` comment, so describe → exec replaced it with the microflow's
+	// name. The derived default (the microflow's short name) carries nothing and
+	// stays a plain comment, as for jump and wait activities.
+	asAndComment := workflowActivityAsClause(a.Name, shortDocName(mf))
+	trailing := " -- " + caption
+	if a.Caption != "" && a.Caption != shortDocName(mf) {
+		asAndComment += " comment " + mdlQuoted(a.Caption)
+		trailing = ""
+	}
 	if len(a.ParameterMappings) > 0 {
 		var params []string
 		for _, pm := range a.ParameterMappings {
@@ -577,11 +794,10 @@ func formatCallMicroflowTask(a *workflows.CallMicroflowTask, indent string) []st
 			}
 			params = append(params, fmt.Sprintf("%s = %s", paramName, mdlQuoted(pm.Expression)))
 		}
-		lines = append(lines, fmt.Sprintf("%scall microflow %s%s with (%s) -- %s", indent, mf,
-			workflowActivityAsClause(a.Name, shortDocName(mf)), strings.Join(params, ", "), caption))
+		lines = append(lines, fmt.Sprintf("%s%s %s%s with (%s)%s", indent, verb, mf,
+			asAndComment, strings.Join(params, ", "), trailing))
 	} else {
-		lines = append(lines, fmt.Sprintf("%scall microflow %s%s -- %s", indent, mf,
-			workflowActivityAsClause(a.Name, shortDocName(mf)), caption))
+		lines = append(lines, fmt.Sprintf("%s%s %s%s%s", indent, verb, mf, asAndComment, trailing))
 	}
 
 	// Outcomes, then boundary events — the order the grammar requires

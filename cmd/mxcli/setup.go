@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/spf13/cobra"
 )
 
@@ -68,13 +67,13 @@ Examples:
 
 		if versionStr == "" {
 			// Detect from project
-			reader, err := mpr.Open(projectPath)
+			reader, err := openProjectReadOnly(projectPath)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error opening project: %v\n", err)
 				os.Exit(1)
 			}
 			pv := reader.ProjectVersion()
-			reader.Close()
+			_ = reader.Disconnect()
 			versionStr = pv.ProductVersion
 			fmt.Fprintf(os.Stdout, "Detected Mendix version: %s\n", versionStr)
 		}
@@ -151,13 +150,13 @@ Examples:
 
 		if versionStr == "" {
 			// Detect from project
-			reader, err := mpr.Open(projectPath)
+			reader, err := openProjectReadOnly(projectPath)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error opening project: %v\n", err)
 				os.Exit(1)
 			}
 			pv := reader.ProjectVersion()
-			reader.Close()
+			_ = reader.Disconnect()
 			versionStr = pv.ProductVersion
 			fmt.Fprintf(os.Stdout, "Detected Mendix version: %s\n", versionStr)
 		}

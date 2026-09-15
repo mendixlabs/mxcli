@@ -34,13 +34,13 @@ func (p *PagesAPI) GetPage(qualifiedName string) (*pages.Page, error) {
 	qn := ParseQualifiedName(qualifiedName)
 
 	// List all pages and find by module/name
-	allPages, err := p.api.reader.ListPages()
+	allPages, err := p.api.backend.ListPages()
 	if err != nil {
 		return nil, err
 	}
 
 	// Get the module to match container ID
-	module, err := p.api.reader.GetModuleByName(qn.ModuleName)
+	module, err := p.api.backend.GetModuleByName(qn.ModuleName)
 	if err != nil {
 		return nil, fmt.Errorf("module not found: %s", qn.ModuleName)
 	}
@@ -59,13 +59,13 @@ func (p *PagesAPI) GetLayout(qualifiedName string) (*pages.Layout, error) {
 	qn := ParseQualifiedName(qualifiedName)
 
 	// List all layouts and find by module/name
-	layouts, err := p.api.reader.ListLayouts()
+	layouts, err := p.api.backend.ListLayouts()
 	if err != nil {
 		return nil, err
 	}
 
 	// Get the module to match container ID
-	module, err := p.api.reader.GetModuleByName(qn.ModuleName)
+	module, err := p.api.backend.GetModuleByName(qn.ModuleName)
 	if err != nil {
 		return nil, fmt.Errorf("module not found: %s", qn.ModuleName)
 	}
@@ -81,7 +81,7 @@ func (p *PagesAPI) GetLayout(qualifiedName string) (*pages.Layout, error) {
 
 // FindPagesWithEntity finds all pages that reference a given entity.
 func (p *PagesAPI) FindPagesWithEntity(entityName string) ([]*pages.Page, error) {
-	allPages, err := p.api.reader.ListPages()
+	allPages, err := p.api.backend.ListPages()
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +351,7 @@ func (b *PageBuilder) Build() (*pages.Page, error) {
 	}
 
 	// Create the page
-	err := b.api.api.writer.CreatePage(b.page)
+	err := b.api.api.backend.CreatePage(b.page)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create page: %w", err)
 	}

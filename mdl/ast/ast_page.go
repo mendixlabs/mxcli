@@ -42,6 +42,17 @@ type DropPageStmt struct {
 
 func (s *DropPageStmt) isStatement() {}
 
+// DropLayoutStmt represents: DROP LAYOUT Module.Name
+//
+// Layouts were the only document mxcli could create and alter but not delete, so
+// a layout written by mistake — the CE0848 shape in mendixlabs/mxcli#1063 was
+// exactly that — had no headless remedy at all.
+type DropLayoutStmt struct {
+	Name QualifiedName
+}
+
+func (s *DropLayoutStmt) isStatement() {}
+
 // DropSnippetStmt represents: DROP SNIPPET Module.Name
 type DropSnippetStmt struct {
 	Name QualifiedName

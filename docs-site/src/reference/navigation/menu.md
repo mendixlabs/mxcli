@@ -124,10 +124,6 @@ line rather than dropping them silently:
 
 Re-running such output therefore loses that icon — visibly, not silently.
 
-**Authoring requires the default engine.** Under `MXCLI_ENGINE=legacy`,
-create/modify/drop refuse rather than writing a differently-shaped document. Reading
-(`DESCRIBE MENU`) works on both engines.
-
 ## See Also
 
 - [ALTER NAVIGATION](alter-navigation.md) — the menu inside a navigation profile

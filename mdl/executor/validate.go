@@ -1289,6 +1289,9 @@ var execEnforcedMicroflowRules = map[string]bool{
 	// otherwise `check` catches the typo and the write that follows does not.
 	"MDL059": true,
 	"MDL060": true,
+	// MDL-WF16: a notify workflow with no target is CE0166 at build time,
+	// measured on the 11.6, 11.10 and 11.13 mxbuilds.
+	"MDL-WF16": true,
 }
 
 // validateMicroflowRules runs the MDL0xx microflow rule set (ValidateMicroflow)

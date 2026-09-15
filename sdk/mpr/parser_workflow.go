@@ -82,7 +82,35 @@ func (r *Reader) parseWorkflow(unitID, containerID string, contents []byte) (*wo
 		w.Flow = parseWorkflowFlow(toMap(flowRaw))
 	}
 
+	w.EventHandlers = parseWorkflowEventHandlers(raw["OnWorkflowEvent"])
+
 	return w, nil
+}
+
+// parseWorkflowEventHandlers reads a workflow's OnWorkflowEvent list.
+func parseWorkflowEventHandlers(v any) []*workflows.WorkflowEventHandler {
+	var out []*workflows.WorkflowEventHandler
+	for _, item := range extractBsonArray(v) {
+		m := toMap(item)
+		if m == nil || extractString(m["$Type"]) != "Workflows$WorkflowEventHandler" {
+			continue
+		}
+		h := &workflows.WorkflowEventHandler{
+			Description:   extractString(m["Description"]),
+			Documentation: extractString(m["Documentation"]),
+		}
+		h.ID = model.ID(extractBsonID(m["$ID"]))
+		for _, t := range extractBsonArray(m["EventTypes"]) {
+			if s, ok := t.(string); ok {
+				h.EventTypes = append(h.EventTypes, s)
+			}
+		}
+		if mh := toMap(m["MicroflowEventHandler"]); mh != nil {
+			h.Microflow = extractString(mh["Microflow"])
+		}
+		out = append(out, h)
+	}
+	return out
 }
 
 // extractStringTemplate extracts the text from a Mendix StringTemplate BSON structure.
@@ -178,12 +206,17 @@ var workflowActivityParsers map[string]func(map[string]any) workflows.WorkflowAc
 
 func init() {
 	workflowActivityParsers = map[string]func(map[string]any) workflows.WorkflowActivity{
-		"Workflows$EndWorkflowActivity":         func(r map[string]any) workflows.WorkflowActivity { return parseEndWorkflowActivity(r) },
-		"Workflows$UserTask":                    func(r map[string]any) workflows.WorkflowActivity { return parseUserTask(r) },
-		"Workflows$SingleUserTaskActivity":      func(r map[string]any) workflows.WorkflowActivity { return parseUserTask(r) },
-		"Workflows$MultiUserTaskActivity":       func(r map[string]any) workflows.WorkflowActivity { return parseMultiUserTask(r) },
-		"Workflows$CallMicroflowTask":           func(r map[string]any) workflows.WorkflowActivity { return parseCallMicroflowTask(r) },
-		"Workflows$CallMicroflowActivity":       func(r map[string]any) workflows.WorkflowActivity { return parseCallMicroflowTask(r) },
+		"Workflows$EndWorkflowActivity":    func(r map[string]any) workflows.WorkflowActivity { return parseEndWorkflowActivity(r) },
+		"Workflows$UserTask":               func(r map[string]any) workflows.WorkflowActivity { return parseUserTask(r) },
+		"Workflows$SingleUserTaskActivity": func(r map[string]any) workflows.WorkflowActivity { return parseUserTask(r) },
+		"Workflows$MultiUserTaskActivity":  func(r map[string]any) workflows.WorkflowActivity { return parseMultiUserTask(r) },
+		"Workflows$CallMicroflowTask":      func(r map[string]any) workflows.WorkflowActivity { return parseCallMicroflowTask(r) },
+		"Workflows$CallMicroflowActivity":  func(r map[string]any) workflows.WorkflowActivity { return parseCallMicroflowTask(r) },
+		"Workflows$AIAgentTaskActivity": func(r map[string]any) workflows.WorkflowActivity {
+			t := parseCallMicroflowTask(r)
+			t.IsAgent = true
+			return t
+		},
 		"Workflows$CallWorkflowActivity":        func(r map[string]any) workflows.WorkflowActivity { return parseCallWorkflowActivity(r) },
 		"Workflows$ExclusiveSplitActivity":      func(r map[string]any) workflows.WorkflowActivity { return parseExclusiveSplitActivity(r) },
 		"Workflows$ParallelSplitActivity":       func(r map[string]any) workflows.WorkflowActivity { return parseParallelSplitActivity(r) },
@@ -274,9 +307,11 @@ func parseUserTask(raw map[string]any) *workflows.UserTask {
 		a.UserTaskEntity = ute
 	}
 
-	// OnCreated (BY_NAME reference to microflow)
-	if onCreated, ok := raw["OnCreatedEvent"].(string); ok {
-		a.OnCreated = onCreated
+	// OnCreatedEvent is a part — Workflows$MicroflowBasedEvent carrying the
+	// microflow, or Workflows$NoEvent. Reading it as a string, as this did, never
+	// matched a stored document, so every on-created microflow read as none.
+	if ev := toMap(raw["OnCreatedEvent"]); ev != nil && extractString(ev["$Type"]) == "Workflows$MicroflowBasedEvent" {
+		a.OnCreated = extractString(ev["Microflow"])
 	}
 
 	// UserSource (PART) — legacy field name

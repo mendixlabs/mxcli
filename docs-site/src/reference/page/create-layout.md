@@ -192,8 +192,6 @@ CREATE PAGE MyModule.Dashboard
 - **A placeholder's name is API.** Pages bind to it as `Module.Layout.Name`.
   Renaming one unbinds every page that used it — those pages still build, and
   their content vanishes.
-- Layout authoring requires the default `modelsdk` engine; `--engine legacy`
-  refuses it.
 
 ## See Also
 

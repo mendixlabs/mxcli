@@ -1301,9 +1301,35 @@ type NotifyWorkflowAction struct {
 	ErrorHandlingType  ErrorHandlingType `json:"errorHandlingType,omitempty"`
 	OutputVariableName string            `json:"outputVariableName,omitempty"`
 	WorkflowVariable   string            `json:"workflowVariable,omitempty"`
+	// Target is what the action notifies, Mendix 11.7+. nil when none is stored —
+	// which the build refuses (CE0166).
+	Target *NotifyTarget `json:"target,omitempty"`
+	// Activity is the target before Mendix 11.7: a wait-for-notification activity
+	// by qualified name (Module.Workflow.Name).
+	Activity string `json:"activity,omitempty"`
 }
 
 func (NotifyWorkflowAction) isMicroflowAction() {}
+
+// NotifyTarget is a notify action's NotifyTarget: the workflow element it reaches.
+type NotifyTarget struct {
+	// TypeName is the stored $Type, e.g. "Workflows$NotifyNotificationActivityTarget".
+	TypeName string `json:"typeName"`
+	// Name is the element's qualified name, Module.Workflow.ElementName.
+	Name string `json:"name"`
+}
+
+// NotifyBoundaryEventTargetType is the one target type that names its element
+// under BoundaryEvent rather than Activity.
+const NotifyBoundaryEventTargetType = "Workflows$NotifyNotificationBoundaryEventTarget"
+
+// Key returns the stored key that holds the element's name.
+func (t *NotifyTarget) Key() string {
+	if t.TypeName == NotifyBoundaryEventTargetType {
+		return "BoundaryEvent"
+	}
+	return "Activity"
+}
 
 // OpenWorkflowAction opens the workflow admin page.
 type OpenWorkflowAction struct {

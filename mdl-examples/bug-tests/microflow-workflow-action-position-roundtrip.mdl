@@ -1,0 +1,46 @@
+-- ============================================================================
+-- Workflow and mapping actions drifted on a describe → rewrite round trip
+-- ============================================================================
+--
+-- `@position` was parsed and dropped for every workflow action statement and
+-- for import/export mapping and transform json: the two type switches that
+-- carry a statement's annotations had no case for them. The builder then
+-- auto-placed each action after the start event, so re-executing a
+-- microflow's own DESCRIBE output moved them all ~800px right, the first one
+-- onto the end event. LOG statements were unaffected.
+--
+-- To verify:
+--   1. mxcli exec this script -p app.mpr
+--   2. mxcli -p app.mpr -c "describe microflow BugWfPos.OpenAll" > d1.mdl
+--   3. replace `create microflow` with `create or modify microflow` in d1.mdl,
+--      exec it, and describe again into d2.mdl
+--   4. d1.mdl and d2.mdl must be identical (before the fix every @position
+--      of an `open workflow` line changed). Repeat for BugWfPos.Mixed.
+--
+-- `notify workflow` drifted the same way but is not in this script: it needs a
+-- `target` naming a notification element of a real workflow (MDL-WF16), which
+-- a standalone repro cannot provide. Its position is covered by
+-- TestPositionAnnotationPlacesEveryActionStatement.
+-- ============================================================================
+
+create module BugWfPos;
+
+create microflow BugWfPos.OpenAll ( $Workflow: System.Workflow ) returns boolean as $Ok
+begin
+  open workflow $Workflow;
+  open workflow $Workflow;
+  open workflow $Workflow;
+  open workflow $Workflow;
+  open workflow $Workflow;
+  return true;
+end;
+/
+
+create microflow BugWfPos.Mixed ( $Workflow: System.Workflow ) returns boolean as $Ok
+begin
+  lock workflow $Workflow;
+  unlock workflow all;
+  workflow operation pause $Workflow;
+  return true;
+end;
+/

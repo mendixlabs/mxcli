@@ -29,9 +29,9 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/mendixlabs/mxcli/mdl/linter"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // ValidateImportMappingFind reports MDL-MAP02 (no key) and MDL-MAP03 (entity not
@@ -243,7 +243,7 @@ func qualifyEntity(entity, module string) string {
 type persistabilityResolver struct {
 	script  map[string]entityFacts
 	project map[string]entityFacts
-	reader  *mpr.Reader
+	reader  backend.FullBackend
 }
 
 // entityFacts is what deciding persistability needs: the entity's own flag and
@@ -274,7 +274,7 @@ func newPersistabilityResolver(prog *ast.Program, projectPath string) *persistab
 
 func (r *persistabilityResolver) close() {
 	if r.reader != nil {
-		_ = r.reader.Close()
+		_ = r.reader.Disconnect()
 	}
 }
 
@@ -318,19 +318,19 @@ func (r *persistabilityResolver) lookup(entity string) (entityFacts, bool) {
 // project. A project that cannot be opened yields none, which silences MDL-MAP03
 // rather than failing the check on something it could not inspect — the same
 // fail-open as offlineProfilesIn.
-func projectEntityFacts(projectPath string) (map[string]entityFacts, *mpr.Reader) {
-	reader, err := mpr.Open(projectPath)
-	if err != nil {
+func projectEntityFacts(projectPath string) (map[string]entityFacts, backend.FullBackend) {
+	reader := openProjectForValidation(projectPath)
+	if reader == nil {
 		return nil, nil
 	}
 	dms, err := reader.ListDomainModels()
 	if err != nil {
-		_ = reader.Close()
+		_ = reader.Disconnect()
 		return nil, nil
 	}
 	modules, err := reader.ListModules()
 	if err != nil {
-		_ = reader.Close()
+		_ = reader.Disconnect()
 		return nil, nil
 	}
 	moduleName := map[string]string{}

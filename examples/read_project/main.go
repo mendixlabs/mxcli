@@ -53,7 +53,7 @@ func main() {
 		fmt.Printf("Error opening MPR file: %v\n", err)
 		os.Exit(1)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 
 	fmt.Printf("Opened: %s\n", reader.Path())
 	fmt.Printf("MPR Version: %d\n", reader.Version())

@@ -108,7 +108,7 @@ func runFixTool(cmd *cobra.Command, subcommand, what string) error {
 		return fmt.Errorf("open project: %w", err)
 	}
 	mendixVer, _ := reader.GetMendixVersion()
-	_ = reader.Close()
+	_ = reader.Disconnect()
 
 	mxPath, err := docker.ResolveMxForVersion(mxOverride, mendixVer)
 	if err != nil {

@@ -51,13 +51,13 @@ func (dm *DomainModelsAPI) GetEntity(qualifiedName string) (*domainmodel.Entity,
 	qn := ParseQualifiedName(qualifiedName)
 
 	// Get the module
-	module, err := dm.api.reader.GetModuleByName(qn.ModuleName)
+	module, err := dm.api.backend.GetModuleByName(qn.ModuleName)
 	if err != nil {
 		return nil, fmt.Errorf("module not found: %s", qn.ModuleName)
 	}
 
 	// Get the domain model
-	domainModel, err := dm.api.reader.GetDomainModel(module.ID)
+	domainModel, err := dm.api.backend.GetDomainModel(module.ID)
 	if err != nil {
 		return nil, fmt.Errorf("domain model not found for module: %s", qn.ModuleName)
 	}
@@ -77,13 +77,13 @@ func (dm *DomainModelsAPI) GetAssociation(qualifiedName string) (*domainmodel.As
 	qn := ParseQualifiedName(qualifiedName)
 
 	// Get the module
-	module, err := dm.api.reader.GetModuleByName(qn.ModuleName)
+	module, err := dm.api.backend.GetModuleByName(qn.ModuleName)
 	if err != nil {
 		return nil, fmt.Errorf("module not found: %s", qn.ModuleName)
 	}
 
 	// Get the domain model
-	domainModel, err := dm.api.reader.GetDomainModel(module.ID)
+	domainModel, err := dm.api.backend.GetDomainModel(module.ID)
 	if err != nil {
 		return nil, fmt.Errorf("domain model not found for module: %s", qn.ModuleName)
 	}
@@ -123,13 +123,13 @@ func (dm *DomainModelsAPI) ModifyAttribute(attr *domainmodel.Attribute) *Attribu
 // RemoveAttribute removes an attribute from an entity.
 func (dm *DomainModelsAPI) RemoveAttribute(entity *domainmodel.Entity, attrName string) error {
 	// Find the module containing this entity
-	modules, err := dm.api.reader.ListModules()
+	modules, err := dm.api.backend.ListModules()
 	if err != nil {
 		return err
 	}
 
 	for _, module := range modules {
-		domainModel, err := dm.api.reader.GetDomainModel(module.ID)
+		domainModel, err := dm.api.backend.GetDomainModel(module.ID)
 		if err != nil {
 			continue
 		}
@@ -139,7 +139,7 @@ func (dm *DomainModelsAPI) RemoveAttribute(entity *domainmodel.Entity, attrName 
 				// Find and remove the attribute
 				for i, attr := range e.Attributes {
 					if attr.Name == attrName {
-						return dm.api.writer.DeleteAttribute(domainModel.ID, entity.ID, attr.ID)
+						return dm.api.backend.DeleteAttribute(domainModel.ID, entity.ID, attr.ID)
 					}
 					_ = i // unused but needed for iteration
 				}
@@ -404,7 +404,7 @@ func (b *EntityBuilder) Build() (*domainmodel.Entity, error) {
 	}
 
 	// Get domain model
-	domainModel, err := b.api.api.reader.GetDomainModel(module.ID)
+	domainModel, err := b.api.api.backend.GetDomainModel(module.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get domain model: %w", err)
 	}
@@ -438,7 +438,7 @@ func (b *EntityBuilder) Build() (*domainmodel.Entity, error) {
 	b.entity.Attributes = b.attributes
 
 	// Create the entity
-	err = b.api.api.writer.CreateEntity(domainModel.ID, b.entity)
+	err = b.api.api.backend.CreateEntity(domainModel.ID, b.entity)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create entity: %w", err)
 	}
@@ -560,7 +560,7 @@ func (b *AssociationBuilder) Build() (*domainmodel.Association, error) {
 	}
 
 	// Get domain model
-	domainModel, err := b.api.api.reader.GetDomainModel(module.ID)
+	domainModel, err := b.api.api.backend.GetDomainModel(module.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get domain model: %w", err)
 	}
@@ -589,7 +589,7 @@ func (b *AssociationBuilder) Build() (*domainmodel.Association, error) {
 	}
 
 	// Create the association
-	err = b.api.api.writer.CreateAssociation(domainModel.ID, b.association)
+	err = b.api.api.backend.CreateAssociation(domainModel.ID, b.association)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create association: %w", err)
 	}
@@ -705,13 +705,13 @@ func (b *AttributeBuilder) Build() (*domainmodel.Attribute, error) {
 	}
 
 	// Find the domain model containing this entity
-	modules, err := b.api.api.reader.ListModules()
+	modules, err := b.api.api.backend.ListModules()
 	if err != nil {
 		return nil, err
 	}
 
 	for _, module := range modules {
-		domainModel, err := b.api.api.reader.GetDomainModel(module.ID)
+		domainModel, err := b.api.api.backend.GetDomainModel(module.ID)
 		if err != nil {
 			continue
 		}
@@ -719,7 +719,7 @@ func (b *AttributeBuilder) Build() (*domainmodel.Attribute, error) {
 		for _, e := range domainModel.Entities {
 			if e.ID == b.entity.ID {
 				// Add the attribute
-				err = b.api.api.writer.AddAttribute(domainModel.ID, b.entity.ID, b.attr)
+				err = b.api.api.backend.AddAttribute(domainModel.ID, b.entity.ID, b.attr)
 				if err != nil {
 					return nil, fmt.Errorf("failed to add attribute: %w", err)
 				}
@@ -754,13 +754,13 @@ func (m *AttributeModifier) Required() *AttributeModifier {
 // Apply saves the modifications.
 func (m *AttributeModifier) Apply() error {
 	// Find the domain model and entity containing this attribute
-	modules, err := m.api.api.reader.ListModules()
+	modules, err := m.api.api.backend.ListModules()
 	if err != nil {
 		return err
 	}
 
 	for _, module := range modules {
-		domainModel, err := m.api.api.reader.GetDomainModel(module.ID)
+		domainModel, err := m.api.api.backend.GetDomainModel(module.ID)
 		if err != nil {
 			continue
 		}
@@ -768,7 +768,7 @@ func (m *AttributeModifier) Apply() error {
 		for _, entity := range domainModel.Entities {
 			for _, attr := range entity.Attributes {
 				if attr.ID == m.attr.ID {
-					return m.api.api.writer.UpdateAttribute(domainModel.ID, entity.ID, m.attr)
+					return m.api.api.backend.UpdateAttribute(domainModel.ID, entity.ID, m.attr)
 				}
 			}
 		}
@@ -819,13 +819,13 @@ func (m *EntityBatchModifier) RemoveAttribute(name string) *EntityBatchModifier 
 // Apply executes all batch operations.
 func (m *EntityBatchModifier) Apply() error {
 	// Find the domain model containing this entity
-	modules, err := m.api.api.reader.ListModules()
+	modules, err := m.api.api.backend.ListModules()
 	if err != nil {
 		return err
 	}
 
 	for _, module := range modules {
-		domainModel, err := m.api.api.reader.GetDomainModel(module.ID)
+		domainModel, err := m.api.api.backend.GetDomainModel(module.ID)
 		if err != nil {
 			continue
 		}
@@ -836,14 +836,14 @@ func (m *EntityBatchModifier) Apply() error {
 				for _, op := range m.ops {
 					switch op.opType {
 					case "add":
-						if err := m.api.api.writer.AddAttribute(domainModel.ID, entity.ID, op.attr); err != nil {
+						if err := m.api.api.backend.AddAttribute(domainModel.ID, entity.ID, op.attr); err != nil {
 							return fmt.Errorf("failed to add attribute %s: %w", op.name, err)
 						}
 					case "remove":
 						// Find attribute by name
 						for _, attr := range entity.Attributes {
 							if attr.Name == op.name {
-								if err := m.api.api.writer.DeleteAttribute(domainModel.ID, entity.ID, attr.ID); err != nil {
+								if err := m.api.api.backend.DeleteAttribute(domainModel.ID, entity.ID, attr.ID); err != nil {
 									return fmt.Errorf("failed to remove attribute %s: %w", op.name, err)
 								}
 								break

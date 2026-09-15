@@ -11,9 +11,10 @@ import (
 	"fmt"
 	"os"
 
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/mdl/executor"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 )
 
@@ -29,14 +30,15 @@ func main() {
 	mprPath := os.Args[1]
 
 	// Open the MPR file for writing
-	writer, err := mpr.NewWriter(mprPath)
+	writer := modelsdkbackend.New()
+	err := writer.Connect(mprPath)
 	if err != nil {
 		fmt.Printf("Error opening MPR file: %v\n", err)
 		os.Exit(1)
 	}
-	defer writer.Close()
+	defer func() { _ = writer.Disconnect() }()
 
-	reader := writer.Reader()
+	reader := writer
 	fmt.Printf("Opened: %s (Mendix %s)\n", reader.Path(), reader.ProjectVersion())
 
 	// Find the target module
@@ -91,7 +93,7 @@ func main() {
 	// Create the page
 	page := &pages.Page{
 		BaseElement: model.BaseElement{
-			ID:       model.ID(mpr.GenerateID()),
+			ID:       model.ID(types.GenerateID()),
 			TypeName: "Pages$Page",
 		},
 		Name:          "Customer_Edit",
@@ -100,7 +102,7 @@ func main() {
 		URL:           "customer-edit/{Customer}",
 		Title: &model.Text{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Texts$Text",
 			},
 			Translations: map[string]string{
@@ -113,7 +115,7 @@ func main() {
 	page.Parameters = []*pages.PageParameter{
 		{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$PageParameter",
 			},
 			Name:       "Customer",
@@ -125,7 +127,7 @@ func main() {
 	// Create the layout call (connects page to layout)
 	page.LayoutCall = &pages.LayoutCall{
 		BaseElement: model.BaseElement{
-			ID:       model.ID(mpr.GenerateID()),
+			ID:       model.ID(types.GenerateID()),
 			TypeName: "Forms$LayoutCall",
 		},
 		LayoutName: layoutQualifiedName,
@@ -139,7 +141,7 @@ func main() {
 	layoutGrid := &pages.LayoutGrid{
 		BaseWidget: pages.BaseWidget{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$LayoutGrid",
 			},
 			Name: "mainGrid",
@@ -149,14 +151,14 @@ func main() {
 	// Create a row with a single column
 	row := &pages.LayoutGridRow{
 		BaseElement: model.BaseElement{
-			ID:       model.ID(mpr.GenerateID()),
+			ID:       model.ID(types.GenerateID()),
 			TypeName: "Forms$LayoutGridRow",
 		},
 	}
 
 	column := &pages.LayoutGridColumn{
 		BaseElement: model.BaseElement{
-			ID:       model.ID(mpr.GenerateID()),
+			ID:       model.ID(types.GenerateID()),
 			TypeName: "Forms$LayoutGridColumn",
 		},
 		Weight: 12, // Full width
@@ -166,14 +168,14 @@ func main() {
 	dataView := &pages.DataView{
 		BaseWidget: pages.BaseWidget{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$DataView",
 			},
 			Name: "customerDataView",
 		},
 		DataSource: &pages.DataViewSource{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$DataViewSource",
 			},
 			EntityName:    targetModule.Name + ".Customer",
@@ -186,7 +188,7 @@ func main() {
 	nameTextBox := &pages.TextBox{
 		BaseWidget: pages.BaseWidget{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$TextBox",
 			},
 			Name: "nameTextBox",
@@ -199,7 +201,7 @@ func main() {
 	emailTextBox := &pages.TextBox{
 		BaseWidget: pages.BaseWidget{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$TextBox",
 			},
 			Name: "emailTextBox",
@@ -212,7 +214,7 @@ func main() {
 	birthDatePicker := &pages.DatePicker{
 		BaseWidget: pages.BaseWidget{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$DatePicker",
 			},
 			Name: "birthDatePicker",
@@ -225,7 +227,7 @@ func main() {
 	activeCheckBox := &pages.CheckBox{
 		BaseWidget: pages.BaseWidget{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$CheckBox",
 			},
 			Name: "activeCheckBox",
@@ -246,14 +248,14 @@ func main() {
 	saveButton := &pages.ActionButton{
 		BaseWidget: pages.BaseWidget{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$ActionButton",
 			},
 			Name: "saveButton",
 		},
 		Caption: &model.Text{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Texts$Text",
 			},
 			Translations: map[string]string{"en_US": "Save"},
@@ -261,7 +263,7 @@ func main() {
 		ButtonStyle: pages.ButtonStylePrimary,
 		Action: &pages.SaveChangesClientAction{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$SaveChangesClientAction",
 			},
 			ClosePage: true,
@@ -271,14 +273,14 @@ func main() {
 	cancelButton := &pages.ActionButton{
 		BaseWidget: pages.BaseWidget{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$ActionButton",
 			},
 			Name: "cancelButton",
 		},
 		Caption: &model.Text{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Texts$Text",
 			},
 			Translations: map[string]string{"en_US": "Cancel"},
@@ -286,7 +288,7 @@ func main() {
 		ButtonStyle: pages.ButtonStyleDefault,
 		Action: &pages.CancelChangesClientAction{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$CancelChangesClientAction",
 			},
 			ClosePage: true,
@@ -304,7 +306,7 @@ func main() {
 	wrapper := &pages.Container{
 		BaseWidget: pages.BaseWidget{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$DivContainer",
 			},
 			Name: "conditionalVisibilityWidget1",
@@ -316,7 +318,7 @@ func main() {
 	page.LayoutCall.Arguments = []*pages.LayoutCallArgument{
 		{
 			BaseElement: model.BaseElement{
-				ID:       model.ID(mpr.GenerateID()),
+				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$FormCallArgument",
 			},
 			ParameterID: model.ID(layoutQualifiedName + ".Main"),

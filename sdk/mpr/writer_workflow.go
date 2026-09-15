@@ -89,7 +89,7 @@ func (w *Writer) serializeWorkflow(wf *workflows.Workflow) ([]byte, error) {
 		{Key: "ExportLevel", Value: "Hidden"},
 		{Key: "Flow", Value: flowValue},
 		{Key: "Name", Value: wf.Name},
-		{Key: "OnWorkflowEvent", Value: bson.A{int32(2)}},
+		{Key: "OnWorkflowEvent", Value: serializeWorkflowEventHandlers(wf.EventHandlers)},
 	}
 
 	// Parameter
@@ -143,6 +143,52 @@ func renameCallMicroflowWalk(v any) {
 		for i := range t {
 			renameCallMicroflowWalk(t[i])
 		}
+	}
+}
+
+// serializeWorkflowEventHandlers writes OnWorkflowEvent: a marker-2 list of
+// Workflows$WorkflowEventHandler, each with its event types as a marker-1 string
+// list — the shape ako/TestApp (11.14.0) stores.
+func serializeWorkflowEventHandlers(handlers []*workflows.WorkflowEventHandler) bson.A {
+	out := bson.A{int32(2)}
+	for _, h := range handlers {
+		types := bson.A{int32(1)}
+		for _, t := range h.EventTypes {
+			types = append(types, t)
+		}
+		id := string(h.ID)
+		if id == "" {
+			id = generateUUID()
+		}
+		out = append(out, bson.D{
+			{Key: "$ID", Value: idToBsonBinary(id)},
+			{Key: "$Type", Value: "Workflows$WorkflowEventHandler"},
+			{Key: "Description", Value: h.Description},
+			{Key: "Documentation", Value: h.Documentation},
+			{Key: "EventTypes", Value: types},
+			{Key: "MicroflowEventHandler", Value: bson.D{
+				{Key: "$ID", Value: idToBsonBinary(generateUUID())},
+				{Key: "$Type", Value: "Workflows$MicroflowEventHandler"},
+				{Key: "Microflow", Value: h.Microflow},
+			}},
+		})
+	}
+	return out
+}
+
+// serializeOnCreatedEvent writes a user task's OnCreatedEvent part: the microflow
+// when there is one, the NoEvent marker otherwise.
+func serializeOnCreatedEvent(microflow string) bson.D {
+	if microflow == "" {
+		return bson.D{
+			{Key: "$ID", Value: idToBsonBinary(generateUUID())},
+			{Key: "$Type", Value: "Workflows$NoEvent"},
+		}
+	}
+	return bson.D{
+		{Key: "$ID", Value: idToBsonBinary(generateUUID())},
+		{Key: "$Type", Value: "Workflows$MicroflowBasedEvent"},
+		{Key: "Microflow", Value: microflow},
 	}
 }
 
@@ -376,11 +422,7 @@ func serializeUserTask(a *workflows.UserTask) bson.D {
 		bson.E{Key: "Name", Value: a.Name},
 	)
 
-	// OnCreatedEvent (NoEvent)
-	doc = append(doc, bson.E{Key: "OnCreatedEvent", Value: bson.D{
-		{Key: "$ID", Value: idToBsonBinary(generateUUID())},
-		{Key: "$Type", Value: "Workflows$NoEvent"},
-	}})
+	doc = append(doc, bson.E{Key: "OnCreatedEvent", Value: serializeOnCreatedEvent(a.OnCreated)})
 
 	// Outcomes
 	outcomes := bson.A{int32(3)}
@@ -491,9 +533,13 @@ func serializeUserTaskOutcome(outcome *workflows.UserTaskOutcome) bson.D {
 }
 
 func serializeCallMicroflowTask(a *workflows.CallMicroflowTask) bson.D {
+	typeName := "Workflows$CallMicroflowTask"
+	if a.IsAgent {
+		typeName = "Workflows$AIAgentTaskActivity" // same shape, 11.9+
+	}
 	doc := bson.D{
 		{Key: "$ID", Value: idToBsonBinary(activityID(&a.BaseWorkflowActivity))},
-		{Key: "$Type", Value: "Workflows$CallMicroflowTask"},
+		{Key: "$Type", Value: typeName},
 	}
 
 	// Annotation

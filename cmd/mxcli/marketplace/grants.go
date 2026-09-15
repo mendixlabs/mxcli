@@ -47,7 +47,7 @@ func CaptureRoleGrants(mprPath, moduleName string) (RoleGrants, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", mprPath, err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 
 	sec, err := reader.GetProjectSecurity()
 	if err != nil {
@@ -126,7 +126,7 @@ func moduleRoleNames(mprPath, moduleName string) (map[string]bool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", mprPath, err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 
 	mods, err := reader.ListModules()
 	if err != nil {

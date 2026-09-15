@@ -21,12 +21,20 @@ import (
 // memberFixture builds Shop.Order (OrderNo, Status) extending Shop.Base (Code),
 // plus an association, plus a second module whose domain model CANNOT be read —
 // the backend-cannot-answer case the three-valued resolver exists for.
+//
+// Two shapes exist for the association resolver specifically, because a fixture
+// of flat single-module entities cannot tell a correct resolver from one that
+// compares two names: Shop.Base_Region is declared on the GENERALIZATION (so
+// Shop.Order has it only by inheritance) and Shop.Order_Bin is CROSS-MODULE (so
+// it lives in Shop's CrossAssociations with its far end held by name).
 func memberFixture(t *testing.T) *ExecContext {
 	t.Helper()
 	shop := &model.Module{Name: "Shop"}
 	shop.ID = nextID("shop")
 	opaque := &model.Module{Name: "Opaque"}
 	opaque.ID = nextID("opaque")
+	warehouse := &model.Module{Name: "Warehouse"}
+	warehouse.ID = nextID("warehouse")
 
 	mkAttr := func(name string) *domainmodel.Attribute {
 		a := &domainmodel.Attribute{Name: name, Type: &domainmodel.StringAttributeType{}}
@@ -49,6 +57,25 @@ func memberFixture(t *testing.T) *ExecContext {
 	assoc := &domainmodel.Association{Name: "Order_Customer", ParentID: order.ID, ChildID: customer.ID}
 	assoc.ID = nextID("assoc")
 
+	// Declared on the GENERALIZATION. Shop.Order has it, and only through the
+	// chain — exactly the shape that made `check` reject every page constraining
+	// an Administration.Account on System.UserRoles.
+	region := &domainmodel.Entity{Name: "Region", Persistable: true}
+	region.ID = nextID("region")
+	region.Attributes = []*domainmodel.Attribute{mkAttr("RegionName")}
+
+	inherited := &domainmodel.Association{Name: "Base_Region", ParentID: base.ID, ChildID: region.ID}
+	inherited.ID = nextID("inherited")
+
+	// Cross-module: stored in the FROM entity's module, far end BY NAME.
+	bin := &domainmodel.Entity{Name: "Bin", Persistable: true}
+	bin.ID = nextID("bin")
+	bin.Attributes = []*domainmodel.Attribute{mkAttr("BinCode")}
+
+	cross := &domainmodel.CrossModuleAssociation{
+		Name: "Order_Bin", ParentID: order.ID, ChildRef: "Warehouse.Bin"}
+	cross.ID = nextID("cross")
+
 	// An entity whose generalization lives in a module the backend refuses to
 	// answer for. Its own attributes resolve; anything else is unknowable.
 	imported := &domainmodel.Entity{Name: "Imported", Persistable: true, GeneralizationRef: "Opaque.Thing"}
@@ -56,32 +83,46 @@ func memberFixture(t *testing.T) *ExecContext {
 	imported.Attributes = []*domainmodel.Attribute{mkAttr("LocalOnly")}
 
 	dm := &domainmodel.DomainModel{ContainerID: shop.ID,
-		Entities:     []*domainmodel.Entity{base, order, customer, imported},
-		Associations: []*domainmodel.Association{assoc},
+		Entities:          []*domainmodel.Entity{base, order, customer, imported, region},
+		Associations:      []*domainmodel.Association{assoc, inherited},
+		CrossAssociations: []*domainmodel.CrossModuleAssociation{cross},
 	}
 	dm.ID = nextID("dm")
 
-	h := mkHierarchy(shop)
+	wdm := &domainmodel.DomainModel{ContainerID: warehouse.ID,
+		Entities: []*domainmodel.Entity{bin},
+	}
+	wdm.ID = nextID("wdm")
+
+	h := mkHierarchy(shop, warehouse)
 	withContainer(h, dm.ID, shop.ID)
+	withContainer(h, wdm.ID, warehouse.ID)
 
 	mb := &mock.MockBackend{
 		IsConnectedFunc: func() bool { return true },
-		ListModulesFunc: func() ([]*model.Module, error) { return []*model.Module{shop, opaque}, nil },
+		ListModulesFunc: func() ([]*model.Module, error) {
+			return []*model.Module{shop, opaque, warehouse}, nil
+		},
 		GetModuleByNameFunc: func(name string) (*model.Module, error) {
 			switch name {
 			case "Shop":
 				return shop, nil
 			case "Opaque":
 				return opaque, nil
+			case "Warehouse":
+				return warehouse, nil
 			}
 			return nil, fmt.Errorf("no module %q", name)
 		},
 		ListDomainModelsFunc: func() ([]*domainmodel.DomainModel, error) {
-			return []*domainmodel.DomainModel{dm}, nil
+			return []*domainmodel.DomainModel{dm, wdm}, nil
 		},
 		GetDomainModelFunc: func(id model.ID) (*domainmodel.DomainModel, error) {
-			if id == shop.ID {
+			switch id {
+			case shop.ID:
 				return dm, nil
+			case warehouse.ID:
+				return wdm, nil
 			}
 			return nil, fmt.Errorf("domain model %s cannot be read", id)
 		},

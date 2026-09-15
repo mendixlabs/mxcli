@@ -265,6 +265,7 @@ func allKnownStatements() []ast.Statement {
 		&ast.DropODataClientStmt{},
 		&ast.DropODataServiceStmt{},
 		&ast.DropPageStmt{},
+		&ast.DropLayoutStmt{},
 		&ast.DropPublishedRestServiceStmt{},
 		&ast.DropQueueStmt{},
 		&ast.DropRegularExpressionStmt{},

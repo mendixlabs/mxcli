@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/catalog"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/spf13/cobra"
 )
 
@@ -73,11 +72,11 @@ Examples:
 }
 
 func buildCatalog(projectPath string) (*catalog.Catalog, error) {
-	reader, err := mpr.Open(projectPath)
+	reader, err := openProjectReadOnly(projectPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open project: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Disconnect() }()
 
 	cat, err := catalog.New()
 	if err != nil {

@@ -4,6 +4,8 @@ package mcp
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
@@ -19,6 +21,11 @@ const microflowDocType = "Microflows$Microflow"
 // new activity is one case in mapMicroflowAction. Object and action types that
 // are not mapped yet are rejected with a clear error (the 130+ Microflows$*
 // types are an iterative follow-on). See docs/03-development/PED_MCP_CAPABILITIES.md.
+//
+// Against a skeleton constructor (Studio Pro 11.14) the create carries only the
+// canvas — positions, captions, flows, parameters, return type — and each
+// object's behaviour (action, return value, split condition, loop source) is set
+// by one ped_update_document right after; see adaptMicroflowSkeleton.
 func (b *Backend) CreateMicroflow(mf *microflows.Microflow) error {
 	moduleName, folderPath, err := b.resolveDocContainer(mf.ContainerID)
 	if err != nil {
@@ -29,6 +36,10 @@ func (b *Backend) CreateMicroflow(mf *microflows.Microflow) error {
 		return err
 	}
 	content["returnVariableName"] = mf.ReturnVariableName
+	var ops []pedOpEntry
+	if b.microflowConstructorTakesSkeleton() {
+		ops = adaptMicroflowSkeleton(content)
+	}
 	if err := b.ensureSchema(microflowDocType); err != nil {
 		return err
 	}
@@ -39,7 +50,191 @@ func (b *Backend) CreateMicroflow(mf *microflows.Microflow) error {
 		mf.ID = model.ID("mcp~mf~" + moduleName + "~" + mf.Name)
 	}
 	b.sessionMicroflows = append(b.sessionMicroflows, mf)
-	return b.pedCheckDocument(microflowDocType, moduleName+"."+mf.Name)
+	qn := moduleName + "." + mf.Name
+	if len(ops) > 0 {
+		if err := b.pedUpdateDoc(microflowDocType, qn, ops...); err != nil {
+			return fmt.Errorf("microflow %s was created, but setting its activities failed (the document is left in Studio Pro): %w", qn, err)
+		}
+	}
+	return b.pedCheckDocument(microflowDocType, qn)
+}
+
+// microflowConstructorTakesSkeleton reports whether the connected server's
+// Microflows$Microflow constructor is the skeleton shape. Studio Pro 11.14's is,
+// and rejects the older shape outright — measured live: `"/flows/0/$Type":"Expected
+// an element with $Type property."` and `"/returnType":"Expected one of [Void, …],
+// got {"type":"Void"}"`, so every microflow create over MCP failed.
+//
+// The same constructor also stopped taking anything but the canvas: its object
+// constructors declare only x/y (and a caption or loopType), and a create that
+// still sends relativeMiddlePoint, action or returnValue is ACCEPTED with those
+// silently dropped — measured: positions read back 0,0, `"action":null` ("No action
+// defined"), empty return value. So the flag selects the whole two-phase write, not
+// just the two rejected keys. Which release changed it is not established, and
+// serverInfo.version is frozen at 1.0.0, so the shape is read off the live
+// constructor schema (returnTypeEntity appears with it); the probe doubles as the
+// schema fetch PED asks for before a create.
+func (b *Backend) microflowConstructorTakesSkeleton() bool {
+	if b.microflowCtorSkeleton != nil {
+		return *b.microflowCtorSkeleton
+	}
+	takes := false
+	if b.client != nil {
+		res, err := b.client.CallTool("ped_get_schema", map[string]any{"elementTypes": []string{microflowDocType}})
+		if err == nil && res != nil && !res.IsError {
+			takes = strings.Contains(res.Text, "returnTypeEntity?: Reference<'DomainModels$Entity'")
+			if b.schemaFetched == nil {
+				b.schemaFetched = map[string]bool{}
+			}
+			b.schemaFetched[microflowDocType] = true
+		}
+	}
+	b.microflowCtorSkeleton = &takes
+	return takes
+}
+
+// adaptMicroflowSkeleton rewrites content built by buildFlowDocContent into the
+// skeleton constructor's shape, in place, and returns the ped_update_document
+// operations that set what the constructor no longer takes:
+//
+//   - leading parameter objects move to `parameters` (they still occupy the first
+//     stored object slots), so flow references $id(/objects/N) shift down by the
+//     parameter count while stored paths keep N;
+//   - relativeMiddlePoint becomes x/y;
+//   - action, returnValue, the split condition and the loop source become `set`
+//     operations on the stored document (/objectCollection/objects/N/…, nesting
+//     through a loop's objectCollection);
+//   - each flow gets its $Type, the return type flattens to an enum plus
+//     returnTypeEntity/returnTypeEnumeration, and returnVariableName becomes an
+//     operation.
+func adaptMicroflowSkeleton(content map[string]any) []pedOpEntry {
+	var ops []pedOpEntry
+	set := func(path string, v any) {
+		ops = append(ops, pedOpEntry{Path: path, Operation: pedOperation{Type: "set", Value: v}})
+	}
+
+	objects, _ := content["objects"].([]any)
+	params := make([]any, 0)
+	for len(objects) > 0 {
+		po, _ := objects[0].(map[string]any)
+		if po["$Type"] != "Microflows$MicroflowParameterObject" {
+			break
+		}
+		skeletonPosition(po)
+		params = append(params, po)
+		objects = objects[1:]
+	}
+	for i, o := range objects {
+		if m, ok := o.(map[string]any); ok {
+			skeletonObject(m, fmt.Sprintf("/objectCollection/objects/%d", len(params)+i), set)
+		}
+	}
+	content["objects"] = objects
+	if len(params) > 0 {
+		content["parameters"] = params
+	}
+
+	flows, _ := content["flows"].([]any)
+	for _, f := range flows {
+		fm, ok := f.(map[string]any)
+		if !ok {
+			continue
+		}
+		fm["$Type"] = "Microflows$SequenceFlow"
+		for _, k := range []string{"originId", "destinationId"} {
+			if ref, ok := fm[k].(string); ok {
+				fm[k] = shiftObjectRef(ref, len(params))
+			}
+		}
+	}
+
+	if rt, ok := content["returnType"].(map[string]any); ok {
+		content["returnType"] = rt["type"]
+		if e, ok := rt["entity"]; ok {
+			content["returnTypeEntity"] = e
+		}
+		if e, ok := rt["enumeration"]; ok {
+			content["returnTypeEnumeration"] = e
+		}
+	}
+	if rvn, ok := content["returnVariableName"]; ok {
+		delete(content, "returnVariableName")
+		if s, _ := rvn.(string); s != "" {
+			set("/returnVariableName", s)
+		}
+	}
+	return ops
+}
+
+// skeletonObject strips one mapped canvas object (and its loop body) down to the
+// skeleton constructor's properties, emitting a set operation at docPath for each
+// behavioural property it removes.
+func skeletonObject(m map[string]any, docPath string, set func(string, any)) {
+	skeletonPosition(m)
+	if a, ok := m["action"]; ok {
+		delete(m, "action")
+		set(docPath+"/action", a)
+	}
+	if rv, ok := m["returnValue"]; ok {
+		delete(m, "returnValue")
+		set(docPath+"/returnValue", rv)
+	}
+	if c, ok := m["expressionSplitCondition"]; ok {
+		delete(m, "expressionSplitCondition")
+		set(docPath+"/splitCondition", map[string]any{"$Type": "Microflows$ExpressionSplitCondition", "expression": c})
+	}
+	if src, ok := m["iterableListSource"].(map[string]any); ok {
+		delete(m, "iterableListSource")
+		m["loopType"] = "ForEach"
+		set(docPath+"/loopSource", map[string]any{
+			"$Type":            "Microflows$IterableList",
+			"listVariableName": src["listVariableName"],
+			"variableName":     src["iteratorVariableName"],
+		})
+	}
+	if src, ok := m["whileLoopSource"].(map[string]any); ok {
+		delete(m, "whileLoopSource")
+		m["loopType"] = "While"
+		set(docPath+"/loopSource", map[string]any{
+			"$Type":           "Microflows$WhileLoopCondition",
+			"whileExpression": src["condition"],
+			"caption":         "",
+		})
+	}
+	if body, ok := m["objects"].([]any); ok {
+		for j, bo := range body {
+			if bm, ok := bo.(map[string]any); ok {
+				skeletonObject(bm, fmt.Sprintf("%s/objectCollection/objects/%d", docPath, j), set)
+			}
+		}
+	}
+}
+
+// skeletonPosition replaces relativeMiddlePoint with the constructor's x/y.
+func skeletonPosition(m map[string]any) {
+	if p, ok := m["relativeMiddlePoint"].(map[string]int); ok {
+		delete(m, "relativeMiddlePoint")
+		m["x"], m["y"] = p["x"], p["y"]
+	}
+}
+
+// shiftObjectRef lowers the top-level index of a $id(/objects/N…) reference by
+// shift — the parameter objects that moved out of `objects`.
+func shiftObjectRef(ref string, shift int) string {
+	const prefix = "$id(/objects/"
+	if shift == 0 || !strings.HasPrefix(ref, prefix) {
+		return ref
+	}
+	rest := ref[len(prefix):]
+	end := strings.IndexFunc(rest, func(r rune) bool { return r < '0' || r > '9' })
+	if end <= 0 {
+		return ref
+	}
+	n, err := strconv.Atoi(rest[:end])
+	if err != nil || n < shift {
+		return ref
+	}
+	return prefix + strconv.Itoa(n-shift) + rest[end:]
 }
 
 // buildFlowDocContent maps a microflow body — parameters as the leading canvas
@@ -630,6 +825,26 @@ func mapMicroflowAction(a microflows.MicroflowAction) (map[string]any, error) {
 		}
 		if act.LogNodeName != "" {
 			m["node"] = act.LogNodeName
+		}
+		return m, nil
+	case *microflows.NotifyWorkflowAction:
+		// ped_get_schema, Studio Pro 11.14: workflowVariable, outputVariableName and
+		// notifyTarget, whose reference is a qualified name under `activity` — or
+		// `boundaryEvent` for a boundary-event target.
+		m := map[string]any{
+			"$Type":              "Microflows$NotifyWorkflowAction",
+			"workflowVariable":   act.WorkflowVariable,
+			"outputVariableName": act.OutputVariableName,
+		}
+		if act.ErrorHandlingType != "" {
+			m["errorHandlingType"] = string(act.ErrorHandlingType)
+		}
+		if t := act.Target; t != nil {
+			key := "activity"
+			if t.Key() == "BoundaryEvent" {
+				key = "boundaryEvent"
+			}
+			m["notifyTarget"] = map[string]any{"$Type": t.TypeName, key: t.Name}
 		}
 		return m, nil
 	default:

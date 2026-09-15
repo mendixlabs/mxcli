@@ -120,7 +120,6 @@ type MockBackend struct {
 	PageLayoutNameFunc     func(id model.ID) (string, error)
 	GetLayoutFunc          func(id model.ID) (*pages.Layout, error)
 	CreateLayoutFunc       func(layout *pages.Layout) error
-	UpdateLayoutFunc       func(layout *pages.Layout) error
 	DeleteLayoutFunc       func(id model.ID) error
 	ListSnippetsFunc       func() ([]*pages.Snippet, error)
 	CreateSnippetFunc      func(snippet *pages.Snippet) error
@@ -308,6 +307,7 @@ type MockBackend struct {
 	ListRawUnitsFunc          func(objectType string) ([]*types.RawUnitInfo, error)
 	GetRawUnitByNameFunc      func(objectType, qualifiedName string) (*types.RawUnitInfo, error)
 	GetRawMicroflowByNameFunc func(qualifiedName string) ([]byte, error)
+	AddRawUnitFunc            func(unitID, containerID, containmentName, unitType string, contents []byte) error
 	UpdateRawUnitFunc         func(unitID string, contents []byte) error
 	// UpdateRawUnitOwningTranslationsFunc stubs the write path that is
 	// authoritative about a unit's translations. Falls back to UpdateRawUnitFunc
@@ -317,7 +317,6 @@ type MockBackend struct {
 	// MetadataBackend
 	ListAllUnitIDsFunc   func() ([]string, error)
 	ListUnitsFunc        func() ([]*types.UnitInfo, error)
-	GetUnitTypesFunc     func() (map[string]int, error)
 	GetProjectRootIDFunc func() (string, error)
 	ContentsDirFunc      func() string
 	ExportJSONFunc       func() ([]byte, error)
@@ -334,10 +333,6 @@ type MockBackend struct {
 	OpenWorkflowForMutationFunc func(unitID model.ID) (backend.WorkflowMutator, error)
 
 	// WidgetSerializationBackend
-	SerializeWidgetFunc           func(w pages.Widget) (any, error)
-	SerializeClientActionFunc     func(a pages.ClientAction) (any, error)
-	SerializeDataSourceFunc       func(ds pages.DataSource) (any, error)
-	SerializeWorkflowActivityFunc func(a workflows.WorkflowActivity) (any, error)
 
 	// WidgetBuilderBackend
 	LoadWidgetTemplateFunc          func(widgetID string, projectPath string) (backend.WidgetObjectBuilder, error)

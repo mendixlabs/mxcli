@@ -66,7 +66,7 @@ func ValidateWorkflow(stmt *ast.CreateWorkflowStmt) []linter.Violation {
 		DocumentType: "workflow",
 		DocumentName: stmt.Name.Name,
 	}
-	walkWorkflowActivities(stmt.Activities, func(a ast.WorkflowActivityNode) {
+	walkWorkflowActivities(workflowStatementActivities(stmt), func(a ast.WorkflowActivityNode) {
 		switch n := a.(type) {
 		case *ast.WorkflowUserTaskNode:
 			label := workflowUserTaskLabel(n)
@@ -122,6 +122,9 @@ func ValidateWorkflow(stmt *ast.CreateWorkflowStmt) []linter.Violation {
 	})
 	out = append(out, ValidateWorkflowJumpTargets(stmt)...)
 	out = append(out, ValidateWorkflowEnds(stmt)...)
+	out = append(out, ValidateWorkflowEventTypes(stmt)...)
+	out = append(out, ValidateWorkflowCompletionRules(stmt)...)
+	out = append(out, ValidateWorkflowEventSubProcesses(stmt)...)
 	return out
 }
 

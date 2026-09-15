@@ -163,11 +163,10 @@ Examples:
 			defer logger.Close()
 
 			r := repl.New(os.Stdin, os.Stdout)
-			// Honor MXCLI_ENGINE/--engine AND --mcp in interactive mode (the REPL
-			// defaulted to the legacy local .mpr backend and ignored both). The
-			// unified factory routes writes to the modelsdk engine or a live Studio
-			// Pro as configured. Must precede the auto-connect below, since CONNECT
-			// consumes the factory.
+			// Honor --mcp in interactive mode; the REPL ignored it and used its
+			// own local backend. The unified factory routes writes to the model
+			// engine or to a live Studio Pro as configured. Must precede the
+			// auto-connect below, since CONNECT consumes the factory.
 			r.SetBackendFactory(newBackendFactory())
 			r.SetTracer(mcpTracer())
 			r.SetLogger(logger)
@@ -317,7 +316,7 @@ func init() {
 	rootCmd.PersistentFlags().Bool("mcp-run", false, "After the command, start the app in Studio Pro via Concord (run_app) and print its URL (requires --mcp-concord)")
 	rootCmd.PersistentFlags().Bool("mcp-verbose", false, "Print each PED tool call the MCP backend makes (requires --mcp)")
 	rootCmd.PersistentFlags().Bool("mcp-trace", false, "Print each MDL command with the PED tool calls it makes (implies --mcp-verbose; requires --mcp)")
-	rootCmd.PersistentFlags().String("engine", "", "Model engine: modelsdk (default), legacy (fallback for unsupported writes). Overrides MXCLI_ENGINE.")
+	rootCmd.PersistentFlags().String("engine", "", "Deprecated and ignored: there is one model engine. Kept so scripts pinning the old one keep running.")
 	rootCmd.Flags().StringP("command", "c", "", "Execute MDL command(s) and exit")
 
 	// Check command flags

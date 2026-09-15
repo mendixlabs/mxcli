@@ -34,13 +34,13 @@ func (m *MicroflowsAPI) GetMicroflow(qualifiedName string) (*microflows.Microflo
 	qn := ParseQualifiedName(qualifiedName)
 
 	// List all microflows and find by module/name
-	allMicroflows, err := m.api.reader.ListMicroflows()
+	allMicroflows, err := m.api.backend.ListMicroflows()
 	if err != nil {
 		return nil, err
 	}
 
 	// Get the module to match container ID
-	module, err := m.api.reader.GetModuleByName(qn.ModuleName)
+	module, err := m.api.backend.GetModuleByName(qn.ModuleName)
 	if err != nil {
 		return nil, fmt.Errorf("module not found: %s", qn.ModuleName)
 	}
@@ -56,7 +56,7 @@ func (m *MicroflowsAPI) GetMicroflow(qualifiedName string) (*microflows.Microflo
 
 // FindMicroflowsWithEntity finds all microflows that have parameters of a given entity type.
 func (m *MicroflowsAPI) FindMicroflowsWithEntity(entityName string) ([]*microflows.Microflow, error) {
-	allMicroflows, err := m.api.reader.ListMicroflows()
+	allMicroflows, err := m.api.backend.ListMicroflows()
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +264,7 @@ func (b *MicroflowBuilder) Build() (*microflows.Microflow, error) {
 	}
 
 	// Create the microflow
-	err := b.api.api.writer.CreateMicroflow(b.microflow)
+	err := b.api.api.backend.CreateMicroflow(b.microflow)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create microflow: %w", err)
 	}

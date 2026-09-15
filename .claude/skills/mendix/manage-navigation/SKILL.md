@@ -442,8 +442,6 @@ export level are preserved, so menu widgets pointing at it keep working.
   image icon cannot be written by MDL; `describe` flags those on their own
   comment line rather than dropping them silently, so re-running the output
   loses that icon visibly.
-- **Authoring needs the default engine.** Under `MXCLI_ENGINE=legacy`,
-  create/modify/drop refuse rather than writing a differently-shaped document.
 
 ## Offline Profiles
 

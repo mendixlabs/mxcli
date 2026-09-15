@@ -57,6 +57,12 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 		// menu items, which share one AST node so they cannot diverge.
 		violations = append(violations, validateMenuItemIcons(stmt)...)
 		violations = append(violations, validateGlyphCodes(stmt)...)
+		// A layout must declare exactly one placeholder named `Main`, with unique
+		// names (MDL081/MDL082). mxbuild validates this — CE0848/CE0849/CE0495 —
+		// and nothing before it resolves a placeholder name, so the reported
+		// script passed check AND exec and failed a build later
+		// (mendixlabs/mxcli#1063).
+		violations = append(violations, validateLayoutPlaceholders(stmt)...)
 		// A page with parameters and a Url must name each parameter in it (CE5601).
 		if pageStmt, ok := stmt.(*ast.CreatePageStmtV3); ok {
 			violations = append(violations, ValidatePageURLParameters(pageStmt)...)

@@ -116,13 +116,6 @@ func (m *MockBackend) ListUnits() ([]*types.UnitInfo, error) {
 	return nil, nil
 }
 
-func (m *MockBackend) GetUnitTypes() (map[string]int, error) {
-	if m.GetUnitTypesFunc != nil {
-		return m.GetUnitTypesFunc()
-	}
-	return nil, nil
-}
-
 func (m *MockBackend) GetProjectRootID() (string, error) {
 	if m.GetProjectRootIDFunc != nil {
 		return m.GetProjectRootIDFunc()
@@ -282,4 +275,11 @@ func (m *MockBackend) DeleteAgentEditorAgent(id string) error {
 		return m.DeleteAgentEditorAgentFunc(id)
 	}
 	return fmt.Errorf("MockBackend.DeleteAgentEditorAgent not configured")
+}
+
+func (m *MockBackend) AddRawUnit(unitID, containerID, containmentName, unitType string, contents []byte) error {
+	if m.AddRawUnitFunc != nil {
+		return m.AddRawUnitFunc(unitID, containerID, containmentName, unitType, contents)
+	}
+	return fmt.Errorf("MockBackend.AddRawUnit not configured")
 }

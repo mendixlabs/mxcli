@@ -572,3 +572,245 @@ alter workflow WFTest.EndInBranches
   insert outcome 'Withdraw' on FinalCheck {
     end workflow comment 'Withdrawn';
   };
+
+-- ############################################################################
+-- PART F: HANDLERS — on-created microflows and workflow event handlers
+-- ############################################################################
+--
+-- `on created microflow` runs when a user task is created; it takes the task
+-- and the context object, in either order, and returns nothing (CE6683,
+-- CE5012). A header `on workflow events (…) microflow …` handler runs for each
+-- listed event and takes System.WorkflowEvent, System.WorkflowRecord and
+-- System.WorkflowActivityRecord, in any order (CE6691). `on any workflow event`
+-- stores every event type the project's Mendix version has, which is what
+-- Studio Pro stores when every box is ticked. Measured on mxbuild 11.13.0;
+-- see docs/11-proposals/PROPOSAL_workflow_studio_pro_constructs.md.
+
+create microflow WFTest.ACT_TaskCreated (
+  $OrderContext: WFTest.OrderContext,
+  $WorkflowUserTask: System.WorkflowUserTask
+)
+begin
+end;
+/
+
+create microflow WFTest.ACT_AuditWorkflowEvent (
+  $WorkflowEvent: System.WorkflowEvent,
+  $WorkflowRecord: System.WorkflowRecord,
+  $WorkflowActivityRecord: System.WorkflowActivityRecord
+)
+begin
+end;
+/
+
+create workflow WFTest.WithHandlers
+  parameter $OrderContext: WFTest.OrderContext
+  on workflow events (UserTaskStarted, UserTaskEnded) microflow WFTest.ACT_AuditWorkflowEvent as 'Task audit'
+  on any workflow event microflow WFTest.ACT_AuditWorkflowEvent as 'OnAnyEvent'
+begin
+  user task Review 'Review the order'
+    page WFTest.TaskPage
+    on created microflow WFTest.ACT_TaskCreated
+    outcomes 'Approve' { } 'Reject' { };
+
+  multi user task Vote 'Vote on the order'
+    page WFTest.TaskPage
+    on created microflow WFTest.ACT_TaskCreated
+    outcomes 'Yes' { } 'No' { };
+end workflow;
+/
+
+-- @version: 11.9+
+-- ############################################################################
+-- PART G: AI AGENT TASK — call agent microflow (Mendix 11.9+)
+-- ############################################################################
+--
+-- `call agent microflow` is the call-microflow statement stored as an AI agent
+-- task. Its microflow must take at least one parameter (CE1590); return Boolean
+-- or an enumeration to branch on the agent's answer.
+
+create microflow WFTest.ACT_SummariseOrder (
+  $OrderContext: WFTest.OrderContext
+)
+begin
+end;
+/
+
+create microflow WFTest.ACT_ClassifyOrder (
+  $OrderContext: WFTest.OrderContext
+)
+returns boolean as $Urgent
+begin
+  return false;
+end;
+/
+
+create workflow WFTest.WithAgentTasks
+  parameter $OrderContext: WFTest.OrderContext
+begin
+  call agent microflow WFTest.ACT_SummariseOrder as aiAgentTask1 comment 'Summarise the order'
+    with (OrderContext = '$WorkflowContext');
+
+  call agent microflow WFTest.ACT_ClassifyOrder as aiAgentTask2 comment 'Classify the order'
+    with (OrderContext = '$WorkflowContext')
+    outcomes
+      true -> {
+        user task Expedite 'Expedite the order'
+          page WFTest.TaskPage
+          outcomes 'Done' { };
+      }
+      false -> { };
+end workflow;
+/
+
+-- @version: any
+-- ############################################################################
+-- PART H: MULTI-USER TASK COMPLETION — participants, decide by, await all users
+-- ############################################################################
+--
+-- A fallback is required for consensus, majority and threshold (CE1866), a veto
+-- needs its outcome (CE1867), and a decision microflow returns String (CE5012).
+-- Omitted clauses mean all participants, consensus on the first outcome, and not
+-- waiting for everyone.
+
+create microflow WFTest.ACT_DecideOrder (
+  $OrderContext: WFTest.OrderContext
+)
+returns string as $Outcome
+begin
+  return 'Approve';
+end;
+/
+
+create workflow WFTest.CompletionRules
+  parameter $OrderContext: WFTest.OrderContext
+begin
+  multi user task ConsensusVote 'Consensus'
+    page WFTest.TaskPage
+    decide by consensus fallback 'Reject'
+    outcomes 'Approve' { } 'Reject' { };
+
+  multi user task MajorityVote 'Majority'
+    page WFTest.TaskPage
+    decide by majority more than half fallback 'Approve'
+    outcomes 'Approve' { } 'Reject' { };
+
+  multi user task MostChosenVote 'Most chosen'
+    page WFTest.TaskPage
+    decide by majority most chosen fallback 'Reject'
+    outcomes 'Approve' { } 'Reject' { };
+
+  multi user task ThresholdVote 'Threshold'
+    page WFTest.TaskPage
+    participants 80 percent
+    decide by threshold 60 percent fallback 'Reject'
+    outcomes 'Approve' { } 'Reject' { };
+
+  multi user task VotesVote 'Votes'
+    page WFTest.TaskPage
+    participants 3
+    decide by threshold 2 votes fallback 'Reject'
+    await all users
+    outcomes 'Approve' { } 'Reject' { };
+
+  multi user task VetoVote 'Veto'
+    page WFTest.TaskPage
+    decide by veto 'Reject'
+    outcomes 'Approve' { } 'Reject' { };
+
+  multi user task MicroflowVote 'Microflow'
+    page WFTest.TaskPage
+    decide by microflow WFTest.ACT_DecideOrder
+    outcomes 'Approve' { } 'Reject' { };
+end workflow;
+/
+
+-- @version: 11.11+
+-- ############################################################################
+-- PART I: NOTIFICATION EVENTS AND EVENT SUB-PROCESSES (Mendix 11.11+)
+-- ############################################################################
+--
+-- A notification activity and a notification boundary event are what `notify
+-- workflow` targets, by name. An event sub-process runs outside the main flow
+-- when its start event fires: interrupting cancels every active path first,
+-- non-interrupting runs alongside. Its End is implicit, like the main flow's.
+
+create microflow WFTest.ACT_LogCancel (
+  $OrderContext: WFTest.OrderContext
+)
+begin
+end;
+/
+
+create workflow WFTest.WithNotifications
+  parameter $OrderContext: WFTest.OrderContext
+begin
+  notification DocumentsReceived comment 'Documents received';
+
+  user task Review 'Review the order'
+    page WFTest.TaskPage
+    outcomes 'Approve' { } 'Reject' { }
+    boundary event interrupting notification Withdrawn 'Order withdrawn' {
+      end workflow;
+    }
+    boundary event non interrupting notification Nudge 'Reminder requested' {
+      call microflow WFTest.ACT_LogCancel with (OrderContext = '$WorkflowContext');
+    };
+
+  event subprocess ESP_Cancel 'Cancel order'
+    on interrupting notification CancelStart 'Cancel received' {
+    call microflow WFTest.ACT_LogCancel with (OrderContext = '$WorkflowContext');
+  };
+
+  event subprocess ESP_Audit 'Audit'
+    on non interrupting notification AuditStart {
+  };
+end workflow;
+/
+
+-- @version: 11.13+
+-- ############################################################################
+-- PART J: TIMER-STARTED EVENT SUB-PROCESSES (Mendix 11.13+)
+-- ############################################################################
+--
+-- A timer start takes its first execution time, which Mendix requires (CE0126).
+
+create workflow WFTest.WithTimerSubProcesses
+  parameter $OrderContext: WFTest.OrderContext
+begin
+  user task Review 'Review the order'
+    page WFTest.TaskPage
+    outcomes 'Approve' { } 'Reject' { };
+
+  event subprocess ESP_Expire 'Expire'
+    on interrupting timer 'addDays([%CurrentDateTime%], 30)' as ExpireStart comment 'After 30 days' {
+  };
+
+  event subprocess ESP_Remind 'Daily reminder'
+    on non interrupting timer 'addDays([%CurrentDateTime%], 1)' as RemindStart {
+    call microflow WFTest.ACT_LogCancel with (OrderContext = '$WorkflowContext');
+  };
+end workflow;
+/
+
+-- @version: 11.11+
+-- ############################################################################
+-- PART K: NOTIFY WORKFLOW — targets (Mendix 11.11+ for these elements)
+-- ############################################################################
+--
+-- A notify names the element it resumes: a notification-started event
+-- sub-process's start, a notification activity, a notification boundary event or
+-- a wait for notification. Without a target the build fails (CE0166).
+
+create microflow WFTest.ACT_NotifyOrder (
+  $Workflow: System.Workflow
+)
+returns boolean as $Cancelled
+begin
+  $Cancelled = notify workflow $Workflow target WFTest.WithNotifications.CancelStart;
+  $Audited = notify workflow $Workflow target WFTest.WithNotifications.AuditStart;
+  $Received = notify workflow $Workflow target WFTest.WithNotifications.DocumentsReceived;
+  $Withdrawn = notify workflow $Workflow target WFTest.WithNotifications.Withdrawn;
+  return $Cancelled and $Audited and $Received and $Withdrawn;
+end;
+/

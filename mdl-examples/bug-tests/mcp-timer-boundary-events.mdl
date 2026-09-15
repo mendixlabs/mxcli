@@ -1,0 +1,60 @@
+-- Timer boundary events written over MCP were stored wrongly by Studio Pro 11.14.
+--
+-- Symptom (mxcli exec --mcp …, then ped_check_errors / ped_read_document):
+--   1. every timer boundary event, interrupting or not, reported "Missing value
+--      for parameter 'Timer'" (CE0126): neither PED constructor has a
+--      firstExecutionTime, so the delay mxcli sent was ignored;
+--   2. an interrupting timer's `jump to X` outside a parallel split was stored as
+--      an End, and inside a split a path ending in End got a target-less jump
+--      (mxcli never told the constructor it was inside a split);
+--   3. the timer events of a single user task were not stored at all.
+-- mxbuild 11.13 builds every one of these, so the rules are Studio Pro's.
+--
+-- Fix (mdl/backend/mcp/workflow.go): the delay is set after the write, a jump
+-- outside a split is put back, a single user task's timer events are re-added,
+-- and the interrupting constructor is told whether the event is in a split.
+--
+-- Refused over MCP before anything is sent (Studio Pro rejects them, and one such
+-- path makes every later update of the workflow fail):
+--   * an interrupting timer whose path runs to its end — `{ }`, which gets the
+--     end-of-path marker; Studio Pro appends an End after it, and refuses the
+--     marker as the last activity (CE0105);
+--   * an interrupting timer inside a parallel split not ending in `jump to`;
+--   * a non-interrupting timer path ending in `jump to` ("It is not possible to
+--     jump into or out of a Non interrupting timer boundary event path").
+--
+-- Needs a project with module `workflow`, entity `workflow.workfow1context` and
+-- page `workflow.UserTaskPage` whose task outcomes are Good/Bad/Ugly (ako/TestApp).
+--
+-- Verify:
+--   mxcli exec mdl-examples/bug-tests/mcp-timer-boundary-events.mdl -p app.mpr --mcp <url>
+--   ped_check_errors on workflow.ZzMxcliBug_TimerBoundaryEvents → "No errors found."
+--   ped_read_document /flow/activities/1/boundaryEvents/0/firstExecutionTime → the delay
+--   ped_read_document /flow/activities/2/boundaryEvents/0/flow/activities → the jump
+--   ped_read_document /flow/activities/4/boundaryEvents → both timer events
+
+create workflow workflow.ZzMxcliBug_TimerBoundaryEvents
+  parameter $WorkflowContext: workflow.workfow1context
+begin
+  wait for notification bugEnd comment 'Interrupting, ends the workflow'
+    boundary event interrupting timer 'addDays([%CurrentDateTime%], 1)' { end workflow; };
+
+  wait for notification bugJump comment 'Interrupting, jumps back'
+    boundary event interrupting timer 'addDays([%CurrentDateTime%], 2)' { jump to bugJump; };
+
+  wait for notification bugNonInterrupting comment 'Non-interrupting'
+    boundary event non interrupting timer 'addDays([%CurrentDateTime%], 3)' { };
+
+  user task bugTask 'Single user task with timers'
+    page workflow.UserTaskPage
+    outcomes 'Good' { } 'Bad' { } 'Ugly' { }
+    boundary event interrupting timer 'addDays([%CurrentDateTime%], 4)' { end workflow; }
+    boundary event non interrupting timer 'addDays([%CurrentDateTime%], 5)' { };
+
+  parallel split bugSplit
+    path 1 {
+      wait for notification bugSplitJump comment 'Interrupting, in a split'
+        boundary event interrupting timer 'addDays([%CurrentDateTime%], 6)' { jump to bugSplitJump; };
+    }
+    path 2 { };
+end workflow;

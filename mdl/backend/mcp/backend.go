@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/mendixlabs/mxcli/mdl/backend"
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"github.com/mendixlabs/mxcli/sdk/workflows"
 )
@@ -41,7 +41,7 @@ type Backend struct {
 	tracer *backend.Tracer
 
 	client *Client
-	reader *mpr.Reader
+	reader backend.FullBackend
 	path   string
 	server ServerInfo
 
@@ -63,6 +63,22 @@ type Backend struct {
 	// schemaFetched records element types already fetched via ped_get_schema
 	// this session (the contract asks for a schema fetch before create/add).
 	schemaFetched map[string]bool
+
+	// workflowCtorContext caches whether the server's Workflows$Workflow
+	// constructor takes the context entity as `context` (Studio Pro 11.14) rather
+	// than a `parameter` element; nil until probed. See
+	// workflowConstructorTakesContext.
+	workflowCtorContext *bool
+
+	// microflowCtorSkeleton caches whether the server's Microflows$Microflow
+	// constructor takes only the canvas (Studio Pro 11.14), with behaviour set by a
+	// follow-up update; nil until probed. See microflowConstructorTakesSkeleton.
+	microflowCtorSkeleton *bool
+
+	// multiTaskPageCtor caches whether the server's MultiUserTaskActivity
+	// constructor takes the page as a `taskPage` element (Studio Pro 11.14)
+	// rather than a bare `pageReference`; nil until probed.
+	multiTaskPageCtor *bool
 
 	// capsCache memoizes the session's resolved capability set. Every authoring
 	// gate consults it and resolution costs a tools/list round-trip, so it is
@@ -185,19 +201,24 @@ func (b *Backend) WithConcord(cfg ConcordConfig) *Backend {
 // Connect opens the local .mpr read-only (for reads/enumeration) and completes
 // the MCP handshake with Studio Pro (for writes).
 func (b *Backend) Connect(path string) error {
-	r, err := mpr.Open(path) // read-only: never lock the file Studio Pro owns
-	if err != nil {
+	// Read-only: never lock the file Studio Pro owns. This is the codec engine
+	// rather than a concrete sdk/mpr reader — MCP holding one of those was the
+	// reason GetDomainModelByID, GetWorkflow and ListNavigationDocuments sat on
+	// FullBackend with no caller through a backend value. See Phase 3 of
+	// docs/plans/2026-09-14-retire-legacy-engine.md.
+	r := modelsdkbackend.New()
+	if err := r.ConnectReadOnly(path); err != nil {
 		return fmt.Errorf("open local project %q: %w", path, err)
 	}
 	c, err := NewClient(ClientOptions{URL: b.mcpURL, Dial: b.dial})
 	if err != nil {
-		r.Close()
+		_ = r.Disconnect()
 		return err
 	}
 	c.trace = b.tracer
 	si, err := c.Initialize()
 	if err != nil {
-		r.Close()
+		_ = r.Disconnect()
 		return fmt.Errorf("connect to MCP server %q: %w", b.mcpURL, err)
 	}
 	b.reader = r
@@ -256,7 +277,7 @@ func (b *Backend) Disconnect() error {
 		}
 	}
 	if b.reader != nil {
-		err := b.reader.Close()
+		err := b.reader.Disconnect()
 		b.reader = nil
 		b.client = nil
 		b.concord = nil

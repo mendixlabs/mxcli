@@ -10,8 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
-
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // The end-to-end guard two projects independently asked for after
@@ -84,12 +82,12 @@ func TestLocalApp_BuildPopulatesTheDirectoryTheRuntimeBootsAgainst(t *testing.T)
 		t.Fatalf("the default options are not buildable: %v", err)
 	}
 
-	reader, err := mpr.Open(mprPath)
+	reader, err := openReadOnly(mprPath)
 	if err != nil {
 		t.Skipf("cannot open project: %v", err)
 	}
 	version := reader.ProjectVersion().ProductVersion
-	reader.Close()
+	reader.Disconnect()
 
 	serveJavaMajor, _ := ProjectJavaMajor(mprPath)
 	serve, err := StartServe(ServeOptions{

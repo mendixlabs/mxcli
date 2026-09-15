@@ -199,6 +199,22 @@ func (v *microflowValidator) walkBody(body []ast.MicroflowStatement) {
 		v.checkErrorHandlingContinueSupported(s)
 		v.checkErrorHandlingSupported(s)
 		switch stmt := s.(type) {
+		case *ast.NotifyWorkflowStmt:
+			// MDL-WF16. A notify reaches one named element of the workflow, and the
+			// build refuses one that names none: CE0166 "The 'Target' property is
+			// required" on the 11.10 and 11.13 mxbuilds ("'Activity'" on 11.6). The
+			// target used to be neither writable nor described, so every notify
+			// mxcli wrote failed the build.
+			switch {
+			case stmt.Target == "":
+				v.addViolation("MDL-WF16", linter.SeverityError,
+					fmt.Sprintf("notify workflow $%s names no target — Mendix needs the element it notifies; the build fails CE0166", stmt.WorkflowVariable),
+					"Add `target Module.Workflow.Name`, naming a notification start, notification activity, notification boundary event or wait for notification.")
+			case strings.Count(stmt.Target, ".") < 2:
+				v.addViolation("MDL-WF16", linter.SeverityError,
+					fmt.Sprintf("notify workflow target %q must name the element inside its workflow", stmt.Target),
+					"Write the target as Module.Workflow.Name.")
+			}
 		case *ast.ValidationFeedbackStmt:
 			if isEmptyMessage(stmt.Message) {
 				v.addViolation("MDL007", linter.SeverityWarning,

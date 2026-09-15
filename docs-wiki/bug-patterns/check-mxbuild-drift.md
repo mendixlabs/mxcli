@@ -1,7 +1,7 @@
 ---
 title: When `mxcli check` and mxbuild Disagree
 category: bug-pattern
-last-synced: 392cacd6
+last-synced: 038f810e
 sources:
   - .claude/skills/fix-issue/findings/mdl-executor.jsonl
   - .claude/skills/fix-issue/findings/mdl-backend.jsonl
@@ -46,6 +46,25 @@ construct it flagged — and the construct was not the cause. They shared a
 *different* hidden defect, in the write path. When a write-path fix lands,
 re-validate the checks derived from the same symptoms; a correlation-based rule
 outlives the correlation.
+
+**The hardest gap to find is a documented belief.** A layout guard asked only
+whether *some* placeholder existed, because mxcli's own documentation said naming it
+`Main` was a convention — and mxbuild validates it as a rule. Grepping the code for a
+missing check could never have found this: the check that existed matched the docs
+exactly. When a guard looks deliberate and cites a rationale, verify the *rationale*
+against the tool, not the guard against the rationale. The measurement that settles
+such a question has to isolate the rule from its neighbours — a layout no page uses
+separates a layout rule from a page-binding one.
+
+**Syntax that nobody ever built is a gap by default.** A microflow statement shipped
+for an action Mendix requires a target reference on, with no clause to supply one, so
+every instance mxcli wrote failed the build — for as long as the statement existed,
+because nothing in the example corpus or the skills used it and so nothing ever put it
+through `mx check`. A statement's existence in the grammar is not evidence it builds.
+For any statement that writes an action, compare a Studio Pro-saved instance against
+what the writer sets: a required property the grammar cannot express is a build
+failure waiting for its first user. Whether a property is required is cheap to settle
+across versions — write the action without it into a blank project per mxbuild.
 
 **Severity turns on what the builder's condition is actually about, and the
 intuitive reading is often the wrong one.** The empty-outcome rule looked like a
@@ -169,5 +188,7 @@ find false positives; assert on the AST to find misparses.
 - [[duplicate-resolver-drift]] — the general shape when the second answer is not
   mxbuild's
 - [[misleading-diagnostics]] — what a wrong message costs once it is believed
+- [[capability-gap-as-parse-error]] — the inverse: Mendix supports something MDL
+  cannot spell, where here MDL spells something Mendix cannot build
 - `PROPOSAL_check_mxbuild_gap_heuristics.md` — the design rationale for
   predicting mxbuild at all

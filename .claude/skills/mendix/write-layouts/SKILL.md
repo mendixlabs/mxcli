@@ -42,6 +42,26 @@ before running it** — the comments name exactly what will be lost. To change a
 layout without that risk, use `ALTER LAYOUT`, which edits the stored document in
 place and leaves everything it was not asked to touch alone.
 
+### Removing a layout
+
+```sql
+DROP LAYOUT MyModule.App_Old;
+```
+
+Pages still bound to it are **named in a warning and the drop proceeds** — it is
+not refused. Left dropped, each of those pages fails the build with **CE1613**
+("The selected layout … no longer exists"), which names the *page* and never the
+layout, so repoint them first:
+
+```sql
+ALTER PAGES SET LAYOUT = MyModule.App_New WHERE LAYOUT = MyModule.App_Old;
+DROP LAYOUT MyModule.App_Old;
+```
+
+To *correct* a layout rather than remove it, re-create it under the same name
+(`CREATE OR REPLACE LAYOUT`): the pages stay bound by qualified name and rebind
+to the new document — verified end to end, the pages go back to 0 errors.
+
 ### Repointing pages
 
 A new layout that no page uses changes nothing:
@@ -171,17 +191,36 @@ section.
 - **A placeholder's name is API.** A page binds to it as
   `Module.Layout.<Name>`, stored as a qualified name. Renaming one unbinds every
   page that used it — the page still builds, and its content vanishes.
-- **Name one placeholder `Main`.** `Forms$Layout` has no property saying which
-  placeholder is the main one; the convention is the mechanism, and 22 of 22
-  Atlas layouts follow it.
+- **Exactly one placeholder must be named `Main` — this is a rule, not a
+  convention.** `Forms$Layout` has no property saying which placeholder is the
+  main one, but mxbuild validates the NAME. Measured on 11.12.1 against a layout
+  **no page uses**, so none of it depends on a page binding:
+
+  | Declares | mxbuild |
+  |---|---|
+  | `Main` | 0 errors |
+  | `Main` + `Content` | 0 errors — extra names are fine |
+  | `Content` only | **CE0848** "No placeholder with the name 'Main' found. There should be exactly one." |
+  | `Main` + `Main` | **CE0849** + CE0495 |
+  | `Main` + `Side` + `Side` | **CE0495** "Duplicate name 'Side'." — uniqueness is general |
+
+  `mxcli check` reports these as **MDL081** (the Main rule) and **MDL082**
+  (duplicate names). Earlier versions said this was a convention and checked
+  only that *some* placeholder existed, so a layout naming it anything else
+  passed `check` and `exec` and failed the build (mendixlabs/mxcli#1063).
 - **There is no `mainplaceholder:` property, on purpose.** `modelsdk/gen`
   declares `MainPlaceholderName` on `Layout` so the setter compiles, and mxbuild
   accepts the result — measured 0 errors. But `generated/metamodel` does not
   declare it and no Studio Pro layout carries it, and Studio Pro resolves every
   stored property against the type's list. Writing it gives you a layout that
   builds and cannot be opened.
-- **A layout must declare at least one placeholder.** Otherwise no page can use
-  it. Refused at write time.
+- **A placeholder is declared with NO body.** `placeholder Main { … }` is the
+  page-side spelling — in a page it *fills* a layout's slot; in a layout it
+  declares nothing and is dropped, leaving the layout with no placeholder at all.
+  Reaching for it here is the natural mistake, since every other layout element
+  takes a body. Reported as **MDL083**.
+- **A layout that declares no placeholder is refused at write time** as well as
+  at check time — no page could use it.
 - **The sidebar toggle, the menu bar's logo and Atlas's `Forms$Header` are not
   authorable.** A topbar layout that needs a collapsible sidebar therefore has to
   keep Atlas's, or do without the toggle — which is why `mxcli new` scaffolds a

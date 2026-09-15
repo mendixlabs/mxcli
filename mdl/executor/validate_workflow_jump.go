@@ -38,9 +38,29 @@ func ValidateWorkflowJumpTargets(stmt *ast.CreateWorkflowStmt) []linter.Violatio
 	if stmt == nil {
 		return nil
 	}
-	built := buildWorkflowActivities(stmt.Activities)
-	targets := map[string]bool{}
-	collectJumpableNames(built, targets)
+
+	// Each flow is its own jump scope. Measured on mxbuild 11.13.0: a jump inside
+	// an event sub-process to an activity of the same sub-process, or to its start
+	// event, builds; a jump into another sub-process, or between one and the main
+	// flow, is CE6682 ("not possible to jump into or out of a Event sub-process
+	// path").
+	type jumpScope struct {
+		label      string
+		activities []ast.WorkflowActivityNode
+		targets    map[string]bool
+	}
+	mainTargets := map[string]bool{}
+	collectJumpableNames(buildWorkflowActivities(stmt.Activities), mainTargets)
+	scopes := []jumpScope{{label: "the main flow", activities: stmt.Activities, targets: mainTargets}}
+	for i, esp := range buildEventSubProcesses(stmt.EventSubProcesses) {
+		targets := map[string]bool{}
+		collectJumpableNames(esp.Flow.Activities, targets)
+		scopes = append(scopes, jumpScope{
+			label:      "event subprocess " + stmt.EventSubProcesses[i].Name,
+			activities: stmt.EventSubProcesses[i].Activities,
+			targets:    targets,
+		})
+	}
 
 	loc := linter.Location{
 		Module:       stmt.Name.Module,
@@ -49,25 +69,37 @@ func ValidateWorkflowJumpTargets(stmt *ast.CreateWorkflowStmt) []linter.Violatio
 	}
 
 	var out []linter.Violation
-	walkWorkflowActivities(stmt.Activities, func(a ast.WorkflowActivityNode) {
-		n, ok := a.(*ast.WorkflowJumpToNode)
-		if !ok || n.Target == "" {
-			return
-		}
-		if targets[n.Target] {
-			return
-		}
-		out = append(out, linter.Violation{
-			RuleID:   jumpTargetRule,
-			Severity: linter.SeverityError,
-			Location: loc,
-			Message: fmt.Sprintf("jump target %q does not match any activity in this workflow — "+
-				"Mendix resolves a jump by activity name, so this is written as a jump to itself and "+
-				"the build fails with CE6681 (\"not possible to jump to end activities or jump-to activities\")",
-				n.Target),
-			Suggestion: jumpTargetSuggestion(targets),
+	for _, sc := range scopes {
+		walkWorkflowActivities(sc.activities, func(a ast.WorkflowActivityNode) {
+			n, ok := a.(*ast.WorkflowJumpToNode)
+			if !ok || n.Target == "" || sc.targets[n.Target] {
+				return
+			}
+			for _, other := range scopes {
+				if other.targets[n.Target] {
+					out = append(out, linter.Violation{
+						RuleID:   jumpTargetRule,
+						Severity: linter.SeverityError,
+						Location: loc,
+						Message: fmt.Sprintf("jump target %q is in %s, but the jump is in %s — Mendix refuses a jump into or "+
+							"out of an event sub-process; the build fails CE6682", n.Target, other.label, sc.label),
+						Suggestion: "Jump only within the same flow. An event sub-process ends with `end workflow;`, and is started by notifying its start event.",
+					})
+					return
+				}
+			}
+			out = append(out, linter.Violation{
+				RuleID:   jumpTargetRule,
+				Severity: linter.SeverityError,
+				Location: loc,
+				Message: fmt.Sprintf("jump target %q does not match any activity in this workflow — "+
+					"Mendix resolves a jump by activity name, so this is written as a jump to itself and "+
+					"the build fails with CE6681 (\"not possible to jump to end activities or jump-to activities\")",
+					n.Target),
+				Suggestion: jumpTargetSuggestion(sc.targets),
+			})
 		})
-	})
+	}
 	return out
 }
 
@@ -131,6 +163,12 @@ func collectJumpableNames(acts []workflows.WorkflowActivity, out map[string]bool
 				}
 			}
 		case *workflows.WaitForTimerActivity:
+			add(a.Name)
+		case *workflows.NotificationActivity:
+			add(a.Name)
+		case *workflows.EventSubProcessStartActivity:
+			// Measured: a jump to its own start event builds (it resets the
+			// sub-process to waiting).
 			add(a.Name)
 		case *workflows.WaitForNotificationActivity:
 			add(a.Name)

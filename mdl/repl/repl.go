@@ -18,7 +18,7 @@ import (
 	"github.com/chzyer/readline"
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend"
-	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/mdl/diaglog"
 	"github.com/mendixlabs/mxcli/mdl/executor"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
@@ -42,10 +42,10 @@ func (r *REPL) SetLogger(l *diaglog.Logger) {
 }
 
 // SetBackendFactory overrides the backend factory used when the REPL connects to
-// a project. The default is the legacy local .mpr backend (see New); the CLI
-// passes the engine- and MCP-aware factory here so the interactive REPL honors
-// MXCLI_ENGINE/--engine and --mcp (it ignored both before). Call before the first
-// CONNECT (e.g. before auto-connect), since CONNECT consumes the factory.
+// a project. The default is a local codec backend (see New); the CLI passes its
+// MCP-aware factory here so the interactive REPL honors --mcp (it ignored it
+// before). Call before the first CONNECT (e.g. before auto-connect), since
+// CONNECT consumes the factory.
 func (r *REPL) SetBackendFactory(f executor.BackendFactory) {
 	r.executor.SetBackendFactory(f)
 }
@@ -59,7 +59,7 @@ func (r *REPL) SetTracer(t *backend.Tracer) {
 // New creates a new REPL with the given input and output.
 func New(input io.Reader, output io.Writer) *REPL {
 	exec := executor.New(output)
-	exec.SetBackendFactory(func() backend.FullBackend { return mprbackend.New() })
+	exec.SetBackendFactory(func() backend.FullBackend { return modelsdkbackend.New() })
 	c := newColorPalette()
 	return &REPL{
 		executor: exec,

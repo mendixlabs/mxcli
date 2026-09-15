@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 // updateWidgetsPathArg returns an absolute form of the .mpr path for the
@@ -69,10 +69,10 @@ func runUpdateWidgets(mxPath, projectPath string, w, stderr io.Writer) (restore 
 		return restore
 	}
 
-	if reader, err := mpr.Open(projectPath); err == nil {
-		isV2 := reader.Version() == mpr.MPRVersionV2
+	if reader, err := openReadOnly(projectPath); err == nil {
+		isV2 := reader.Version() == types.MPRVersionV2
 		contentsDir := reader.ContentsDir()
-		reader.Close()
+		reader.Disconnect()
 		if isV2 {
 			_, snapRestore, snapErr := snapshotStorageFormat(projectPath, contentsDir)
 			if snapErr != nil {
@@ -101,7 +101,7 @@ func runUpdateWidgets(mxPath, projectPath string, w, stderr io.Writer) (restore 
 // to a temp directory and returns a restore function that puts them back, undoing
 // any v2 -> v1 conversion performed by an intervening `mx update-widgets`. The
 // restore function removes the temp directory and is safe to defer; it best-effort
-// restores and never panics. mprPath and contentsDir come from an mpr.Reader on a
+// restores and never panics. mprPath and contentsDir come from a backend on a
 // project already known to be MPRv2.
 func snapshotStorageFormat(mprPath, contentsDir string) (dir string, restore func(), err error) {
 	tmp, err := os.MkdirTemp("", "mxcli-mpr-snapshot-*")

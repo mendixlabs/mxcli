@@ -138,52 +138,161 @@ func associationNamedInModule(dm *domainmodel.DomainModel, name string) bool {
 	return false
 }
 
+// assocResolution is the three-valued answer to "where does this association
+// lead from this entity", for the same reason memberResolution exists: a boolean
+// cannot carry "no" and "don't know" to two callers that must tell them apart.
+//
+// It used to be a boolean, and a second caller inverted its meaning. The
+// association lookup returned false for a start entity that is a SPECIALISATION
+// of an end — documented as deliberate, because the one caller then treated
+// false as silence. When the XPath constraint checker began calling it, false
+// became a REPORT, and the precise case the comment declined to chase turned
+// into a false error on every inherited association: `Administration.Account`
+// constrained on `System.UserRoles` (declared from `System.User`) was reported
+// against a project mxbuild builds at 0 errors.
+type assocResolution int
+
+const (
+	// assocResolved: the start entity, or one of its generalizations, is an end
+	// of the association. The target is known.
+	assocResolved assocResolution = iota
+	// assocMissing: the module named in the qualified name was read and has no
+	// association of that name. The name means nothing. Reported.
+	assocMissing
+	// assocNotAnEnd: the association exists, the start entity's generalization
+	// chain was walked to its root, and no link in it is an end. Reported —
+	// this is the real defect the check exists for.
+	assocNotAnEnd
+	// assocUnknown: a module, domain model or generalization could not be read,
+	// so the question was never answered. Silent.
+	assocUnknown
+)
+
 // associationTargetFrom returns the entity at the other end of an association
-// traversed from fromEntityQN.
+// traversed from fromEntityQN. It is the two-valued face of
+// resolveAssociationFrom, for callers that only act on a resolved target.
+func associationTargetFrom(ctx *ExecContext, assocQN, fromEntityQN string) (string, bool) {
+	to, res := resolveAssociationFrom(ctx, assocQN, fromEntityQN)
+	return to, res == assocResolved
+}
+
+// resolveAssociationFrom resolves an association hop, distinguishing the two
+// ways it can fail to produce a target.
 //
 // ParentID is the FROM entity (the foreign-key owner) and ChildID the TO entity
-// — Mendix's inverted naming, per CLAUDE.md — and a retrieve may traverse from
+// — Mendix's inverted naming, per CLAUDE.md — and a hop may be traversed from
 // either end, so both directions resolve.
 //
-// A start entity that matches neither end returns false rather than guessing.
-// That happens when the starting variable is a SPECIALISATION of the end, which
-// this deliberately does not chase: the cost of being wrong is a false error on
-// a working script, and the cost of being silent is one unchecked member.
-func associationTargetFrom(ctx *ExecContext, assocQN, fromEntityQN string) (string, bool) {
+// The start entity is matched against the ends through its GENERALIZATION CHAIN,
+// not by equality. An `Administration.Account` genuinely has `System.UserRoles`:
+// it extends `System.User`, and a specialization inherits its generalization's
+// associations. That is Mendix's semantics rather than a guess, which is why it
+// is chased here and reported honestly when the chain runs out.
+func resolveAssociationFrom(ctx *ExecContext, assocQN, fromEntityQN string) (string, assocResolution) {
 	if assocQN == "" || fromEntityQN == "" {
-		return "", false
+		return "", assocUnknown
 	}
 	b, ok := ctx.Backend.(entityLookupBackend)
 	if !ok {
-		return "", false
+		return "", assocUnknown
 	}
 	parts := strings.SplitN(assocQN, ".", 2)
 	if len(parts) != 2 {
-		return "", false
+		return "", assocUnknown
 	}
 	mod, err := b.GetModuleByName(parts[0])
 	if err != nil || mod == nil {
-		return "", false
+		// The module the name points at is not in the project, so no association
+		// of this name exists anywhere. That is the shape #1049 reported.
+		return "", assocMissing
 	}
 	dm, err := b.GetDomainModel(mod.ID)
 	if err != nil || dm == nil {
-		return "", false
+		return "", assocUnknown
 	}
-	for _, a := range dm.Associations {
-		if a == nil || a.Name != parts[1] {
-			continue
-		}
-		from := entityQNByID(ctx, a.ParentID)
-		to := entityQNByID(ctx, a.ChildID)
-		switch fromEntityQN {
+	from, to, found := associationEndsByName(ctx, dm, parts[1])
+	if !found {
+		return "", assocMissing
+	}
+	if from == "" || to == "" {
+		// An end that cannot be named (an external entity, a broken reference)
+		// leaves the hop unanswerable rather than half-answered.
+		return "", assocUnknown
+	}
+
+	chain, complete := generalizationChain(ctx, fromEntityQN)
+	for _, qn := range chain {
+		switch qn {
 		case from:
-			return to, to != ""
+			return to, assocResolved
 		case to:
-			return from, from != ""
+			return from, assocResolved
 		}
-		return "", false
 	}
-	return "", false
+	if !complete {
+		// The chain stopped at a link that could not be read, so an ancestor
+		// further up may well be an end. Not established, so not reported.
+		return "", assocUnknown
+	}
+	return "", assocNotAnEnd
+}
+
+// associationEndsByName names the two entities the association called name
+// connects, looking it up in one module's domain model.
+//
+// A CROSS-MODULE association is stored in the FROM entity's module under
+// CrossAssociations, with the far end held BY NAME rather than by element ID, so
+// a lookup that reads only dm.Associations misses every association that leaves
+// its module — and, at the reporting call site, calls each of them missing.
+func associationEndsByName(ctx *ExecContext, dm *domainmodel.DomainModel, name string) (from, to string, found bool) {
+	for _, a := range dm.Associations {
+		if a != nil && a.Name == name {
+			from, to = associationEnds(ctx, a)
+			return from, to, true
+		}
+	}
+	for _, a := range dm.CrossAssociations {
+		if a != nil && a.Name == name {
+			return entityQNByID(ctx, a.ParentID), a.ChildRef, true
+		}
+	}
+	return "", "", false
+}
+
+// generalizationChain returns entityQN followed by its generalizations, nearest
+// first.
+//
+// complete is false when a link could not be read — an unreadable module, an
+// entity the project does not have, a generalization cycle. The slice then holds
+// what was established before the walk stopped, which is enough to answer "yes"
+// and never enough to answer "no".
+//
+// This deliberately does not share resolveMemberOnEntity's walk. That one
+// answers at each level as it goes, so an attribute found on the entity itself
+// stays memberFound even when an ancestor is unreadable; pre-computing the whole
+// chain for it would turn that into memberUnknown and cost the check its reach.
+func generalizationChain(ctx *ExecContext, entityQN string) ([]string, bool) {
+	b, ok := ctx.Backend.(entityLookupBackend)
+	if !ok || entityQN == "" {
+		return nil, false
+	}
+	var chain []string
+	seen := map[string]bool{}
+	for currentQN := entityQN; currentQN != ""; {
+		if seen[currentQN] {
+			// A generalization cycle is not a model mxcli should reason about.
+			return chain, false
+		}
+		seen[currentQN] = true
+		chain = append(chain, currentQN)
+
+		entity, ok := findEntityByQN(b, currentQN)
+		if !ok {
+			return chain, false
+		}
+		currentQN = entity.GeneralizationRef
+	}
+	return chain, true
 }
 
 // validateMemberReferences reports CREATE / CHANGE member names that do not

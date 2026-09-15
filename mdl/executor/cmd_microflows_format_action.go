@@ -895,10 +895,18 @@ func formatAction(
 		return fmt.Sprintf("open user task $%s;", a.UserTaskVariable)
 
 	case *microflows.NotifyWorkflowAction:
-		if a.OutputVariableName != "" {
-			return fmt.Sprintf("$%s = notify workflow $%s;", a.OutputVariableName, a.WorkflowVariable)
+		// The target used to be left out, so a rewrite from describe output wrote a
+		// notify the build refuses (CE0166).
+		target := ""
+		if a.Target != nil && a.Target.Name != "" {
+			target = " target " + a.Target.Name
+		} else if a.Activity != "" {
+			target = " target " + a.Activity
 		}
-		return fmt.Sprintf("notify workflow $%s;", a.WorkflowVariable)
+		if a.OutputVariableName != "" {
+			return fmt.Sprintf("$%s = notify workflow $%s%s;", a.OutputVariableName, a.WorkflowVariable, target)
+		}
+		return fmt.Sprintf("notify workflow $%s%s;", a.WorkflowVariable, target)
 
 	case *microflows.OpenWorkflowAction:
 		return fmt.Sprintf("open workflow $%s;", a.WorkflowVariable)

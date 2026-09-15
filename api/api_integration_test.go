@@ -7,15 +7,22 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
-// sourceProject is the pristine source project directory.
-const sourceProject = "../mx-test-projects/test-source-app"
+// The fixture these tests run against.
+//
+// They used to point at `../mx-test-projects/test-source-app`, which is not in
+// the repository — so every one of them SKIPPED, on every machine and in CI,
+// and had done since they were written. A suite that has only ever skipped is
+// the #808 failure mode: it reports green and verifies nothing, which is how
+// the whole package went un-exercised while it was ported off sdk/mpr.
+//
+// testdata/expr-checker is committed and is what the codec backend's own tests
+// use (mdl/backend/modelsdk's copyFixture), so these now run everywhere those do.
+const sourceProject = "../testdata/expr-checker"
 
 // sourceProjectMPR is the MPR filename inside the source project.
-const sourceProjectMPR = "test-source.mpr"
+const sourceProjectMPR = "minimal.mpr"
 
 // copyTestProject copies the source project to a temp directory and returns the MPR path.
 func copyTestProject(t *testing.T) string {
@@ -26,7 +33,9 @@ func copyTestProject(t *testing.T) string {
 		t.Fatalf("Failed to resolve source project path: %v", err)
 	}
 	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
-		t.Skipf("Source project not found: %s", srcDir)
+		// Deliberately fatal, not a skip: this fixture is committed, so its
+		// absence is a broken checkout rather than an optional dependency.
+		t.Fatalf("Source project not found: %s", srcDir)
 	}
 
 	destDir := t.TempDir()
@@ -38,11 +47,14 @@ func copyTestProject(t *testing.T) string {
 		t.Fatalf("Failed to copy MPR file: %v", err)
 	}
 
-	// Copy the mprcontents directory tree
+	// Copy the mprcontents directory tree if the fixture is MPR v2. A v1
+	// project is a single file and has none.
 	srcContents := filepath.Join(srcDir, "mprcontents")
-	destContents := filepath.Join(destDir, "mprcontents")
-	if err := copyDir(srcContents, destContents); err != nil {
-		t.Fatalf("Failed to copy mprcontents: %v", err)
+	if _, err := os.Stat(srcContents); err == nil {
+		destContents := filepath.Join(destDir, "mprcontents")
+		if err := copyDir(srcContents, destContents); err != nil {
+			t.Fatalf("Failed to copy mprcontents: %v", err)
+		}
 	}
 
 	return destMPR
@@ -100,32 +112,24 @@ func copyDir(src, dst string) error {
 func TestIntegration_OpenProject(t *testing.T) {
 	projectPath := copyTestProject(t)
 
-	reader, err := mpr.Open(projectPath)
+	a, err := Open(projectPath)
 	if err != nil {
 		t.Fatalf("Failed to open project: %v", err)
 	}
-	defer reader.Close()
+	defer a.Close()
 
-	t.Logf("Opened project: %s (Mendix %s)", reader.Path(), reader.ProjectVersion())
+	t.Logf("Opened project (Mendix %s)", a.Backend().ProjectVersion())
 }
 
 // TestIntegration_ListModules tests listing modules from a real project
 func TestIntegration_ListModules(t *testing.T) {
 	projectPath := copyTestProject(t)
 
-	reader, err := mpr.Open(projectPath)
+	api, err := Open(projectPath)
 	if err != nil {
 		t.Fatalf("Failed to open project: %v", err)
 	}
-	defer reader.Close()
-
-	writer, err := mpr.NewWriter(projectPath)
-	if err != nil {
-		t.Fatalf("Failed to open project for writing: %v", err)
-	}
-	defer writer.Close()
-
-	api := New(writer)
+	defer api.Close()
 
 	modules, err := api.ListModules()
 	if err != nil {
@@ -146,13 +150,11 @@ func TestIntegration_ListModules(t *testing.T) {
 func TestIntegration_GetModule(t *testing.T) {
 	projectPath := copyTestProject(t)
 
-	writer, err := mpr.NewWriter(projectPath)
+	api, err := Open(projectPath)
 	if err != nil {
 		t.Fatalf("Failed to open project: %v", err)
 	}
-	defer writer.Close()
-
-	api := New(writer)
+	defer api.Close()
 
 	// First list modules to find one
 	modules, err := api.ListModules()
@@ -182,13 +184,11 @@ func TestIntegration_GetModule(t *testing.T) {
 func TestIntegration_DomainModels_GetEntity(t *testing.T) {
 	projectPath := copyTestProject(t)
 
-	writer, err := mpr.NewWriter(projectPath)
+	api, err := Open(projectPath)
 	if err != nil {
 		t.Fatalf("Failed to open project: %v", err)
 	}
-	defer writer.Close()
-
-	api := New(writer)
+	defer api.Close()
 
 	// List modules first
 	modules, err := api.ListModules()
@@ -198,7 +198,7 @@ func TestIntegration_DomainModels_GetEntity(t *testing.T) {
 
 	// Find entities in the domain model
 	for _, module := range modules {
-		dm, err := api.Reader().GetDomainModel(module.ID)
+		dm, err := api.Backend().GetDomainModel(module.ID)
 		if err != nil {
 			continue
 		}
@@ -229,16 +229,14 @@ func TestIntegration_DomainModels_GetEntity(t *testing.T) {
 func TestIntegration_Pages_GetPage(t *testing.T) {
 	projectPath := copyTestProject(t)
 
-	writer, err := mpr.NewWriter(projectPath)
+	api, err := Open(projectPath)
 	if err != nil {
 		t.Fatalf("Failed to open project: %v", err)
 	}
-	defer writer.Close()
-
-	api := New(writer)
+	defer api.Close()
 
 	// List all pages
-	pages, err := api.Reader().ListPages()
+	pages, err := api.Backend().ListPages()
 	if err != nil {
 		t.Fatalf("Failed to list pages: %v", err)
 	}
@@ -282,16 +280,14 @@ func TestIntegration_Pages_GetPage(t *testing.T) {
 func TestIntegration_Microflows_GetMicroflow(t *testing.T) {
 	projectPath := copyTestProject(t)
 
-	writer, err := mpr.NewWriter(projectPath)
+	api, err := Open(projectPath)
 	if err != nil {
 		t.Fatalf("Failed to open project: %v", err)
 	}
-	defer writer.Close()
-
-	api := New(writer)
+	defer api.Close()
 
 	// List all microflows
-	microflows, err := api.Reader().ListMicroflows()
+	microflows, err := api.Backend().ListMicroflows()
 	if err != nil {
 		t.Fatalf("Failed to list microflows: %v", err)
 	}
@@ -334,16 +330,14 @@ func TestIntegration_Microflows_GetMicroflow(t *testing.T) {
 func TestIntegration_Enumerations_GetEnumeration(t *testing.T) {
 	projectPath := copyTestProject(t)
 
-	writer, err := mpr.NewWriter(projectPath)
+	api, err := Open(projectPath)
 	if err != nil {
 		t.Fatalf("Failed to open project: %v", err)
 	}
-	defer writer.Close()
-
-	api := New(writer)
+	defer api.Close()
 
 	// List all enumerations
-	enums, err := api.Reader().ListEnumerations()
+	enums, err := api.Backend().ListEnumerations()
 	if err != nil {
 		t.Fatalf("Failed to list enumerations: %v", err)
 	}
@@ -390,13 +384,11 @@ func TestIntegration_Enumerations_GetEnumeration(t *testing.T) {
 func TestIntegration_CreateEntity(t *testing.T) {
 	projectPath := copyTestProject(t)
 
-	writer, err := mpr.NewWriter(projectPath)
+	api, err := Open(projectPath)
 	if err != nil {
-		t.Fatalf("Failed to open temp project: %v", err)
+		t.Fatalf("Failed to open project: %v", err)
 	}
-	defer writer.Close()
-
-	api := New(writer)
+	defer api.Close()
 
 	// Get the first module
 	modules, err := api.ListModules()
@@ -448,13 +440,11 @@ func TestIntegration_CreateEntity(t *testing.T) {
 func TestIntegration_CreateEnumeration(t *testing.T) {
 	projectPath := copyTestProject(t)
 
-	writer, err := mpr.NewWriter(projectPath)
+	api, err := Open(projectPath)
 	if err != nil {
-		t.Fatalf("Failed to open temp project: %v", err)
+		t.Fatalf("Failed to open project: %v", err)
 	}
-	defer writer.Close()
-
-	api := New(writer)
+	defer api.Close()
 
 	modules, err := api.ListModules()
 	if err != nil {
@@ -504,13 +494,11 @@ func TestIntegration_CreateEnumeration(t *testing.T) {
 func TestIntegration_CreateMicroflow(t *testing.T) {
 	projectPath := copyTestProject(t)
 
-	writer, err := mpr.NewWriter(projectPath)
+	api, err := Open(projectPath)
 	if err != nil {
-		t.Fatalf("Failed to open temp project: %v", err)
+		t.Fatalf("Failed to open project: %v", err)
 	}
-	defer writer.Close()
-
-	api := New(writer)
+	defer api.Close()
 
 	modules, err := api.ListModules()
 	if err != nil {
@@ -559,13 +547,11 @@ func TestIntegration_CreateMicroflow(t *testing.T) {
 func TestIntegration_EntityBuilder_WithModule(t *testing.T) {
 	projectPath := copyTestProject(t)
 
-	writer, err := mpr.NewWriter(projectPath)
+	api, err := Open(projectPath)
 	if err != nil {
-		t.Fatalf("Failed to open temp project: %v", err)
+		t.Fatalf("Failed to open project: %v", err)
 	}
-	defer writer.Close()
-
-	api := New(writer)
+	defer api.Close()
 
 	modules, err := api.ListModules()
 	if err != nil {

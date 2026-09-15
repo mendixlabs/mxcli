@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/modelsdk/canon"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // HarvestResult reports what a model-fixing mx tool changed.
@@ -89,13 +89,13 @@ func RunToolPreservingFormat(mxPath, projectPath, subcommand string, w, stderr i
 	}
 	args := []string{subcommand, abs}
 
-	reader, err := mpr.Open(projectPath)
+	reader, err := openReadOnly(projectPath)
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", projectPath, err)
 	}
-	isV2 := reader.Version() == mpr.MPRVersionV2
+	isV2 := reader.Version() == types.MPRVersionV2
 	contentsDir := reader.ContentsDir()
-	_ = reader.Close()
+	_ = reader.Disconnect()
 
 	if !isV2 {
 		// v1 is what these tools already produce; nothing to protect.
@@ -152,11 +152,11 @@ type harvestedUnit struct {
 // map order, which would make the write sequence (and any failure point)
 // unreproducible.
 func readAllUnits(projectPath string) (map[string]harvestedUnit, []string, error) {
-	reader, err := mpr.Open(projectPath)
+	reader, err := openReadOnly(projectPath)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 
 	units, err := reader.ListUnits()
 	if err != nil {
@@ -189,11 +189,11 @@ func readAllUnits(projectPath string) (map[string]harvestedUnit, []string, error
 func applyHarvest(projectPath string, fixed map[string]harvestedUnit, order []string) (*HarvestResult, error) {
 	res := &HarvestResult{Harvested: true}
 
-	writer, err := mpr.NewWriter(projectPath)
+	writer, err := openForWriting(projectPath)
 	if err != nil {
 		return nil, fmt.Errorf("open %s for writing: %w", projectPath, err)
 	}
-	defer writer.Close()
+	defer writer.Disconnect()
 
 	stored, _, err := readAllUnits(projectPath)
 	if err != nil {
@@ -232,12 +232,12 @@ func applyHarvest(projectPath string, fixed map[string]harvestedUnit, order []st
 // whole point is that the format survives, and an assertion is cheaper than a
 // bug report.
 func verifyStillV2(projectPath string) bool {
-	reader, err := mpr.Open(projectPath)
+	reader, err := openReadOnly(projectPath)
 	if err != nil {
 		return false
 	}
-	defer reader.Close()
-	return reader.Version() == mpr.MPRVersionV2
+	defer reader.Disconnect()
+	return reader.Version() == types.MPRVersionV2
 }
 
 // unitCount is used by the commands to report the storage size before and after,

@@ -118,6 +118,9 @@ func registerPageHandlers(r *Registry) {
 	r.Register(&ast.CreateSnippetStmtV3{}, func(ctx *ExecContext, stmt ast.Statement) error {
 		return execCreateSnippetV3(ctx, stmt.(*ast.CreateSnippetStmtV3))
 	})
+	r.Register(&ast.DropLayoutStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
+		return execDropLayout(ctx, stmt.(*ast.DropLayoutStmt))
+	})
 	r.Register(&ast.CreateLayoutStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
 		return execCreateLayout(ctx, stmt.(*ast.CreateLayoutStmt))
 	})

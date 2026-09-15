@@ -21,20 +21,19 @@
 //
 //	import (
 //	    "fmt"
-//	    "github.com/mendixlabs/mxcli"
-//	    "github.com/mendixlabs/mxcli/sdk/mpr"
+//	    modelsdk "github.com/mendixlabs/mxcli"
 //	)
 //
 //	func main() {
 //	    // Open a Mendix project
-//	    reader, err := mpr.Open("/path/to/MyApp.mpr")
+//	    project, err := modelsdk.Open("/path/to/MyApp.mpr")
 //	    if err != nil {
 //	        panic(err)
 //	    }
-//	    defer reader.Close()
+//	    defer project.Disconnect()
 //
 //	    // List all modules
-//	    modules, err := reader.ListModules()
+//	    modules, err := project.ListModules()
 //	    if err != nil {
 //	        panic(err)
 //	    }
@@ -116,10 +115,12 @@
 package modelsdk
 
 import (
+	"github.com/mendixlabs/mxcli/mdl/backend"
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/model"
+	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 )
 
@@ -175,22 +176,31 @@ type (
 
 	// Snippet represents a page snippet.
 	Snippet = pages.Snippet
-
-	// Reader provides methods to read Mendix project files.
-	Reader = mpr.Reader
-
-	// Writer provides methods to write Mendix project files.
-	Writer = mpr.Writer
 )
 
-// Open opens an MPR file for reading.
-func Open(path string) (*Reader, error) {
-	return mpr.Open(path)
+// Open opens a Mendix project for reading.
+//
+// The returned backend is the one every part of mxcli uses; call Disconnect
+// when done. It replaces a `*mpr.Reader` from the legacy serializer — see the
+// note on connections in this package's doc comment.
+func Open(path string) (backend.FullBackend, error) {
+	b := modelsdkbackend.New()
+	if err := b.ConnectReadOnly(path); err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
-// OpenForWriting opens an MPR file for reading and writing.
-func OpenForWriting(path string) (*Writer, error) {
-	return mpr.NewWriter(path)
+// OpenForWriting opens a Mendix project for reading and writing.
+//
+// Prefer the fluent builders in the api package for anything beyond a few
+// calls: api.Open(path) wraps this and adds the entity/microflow/page builders.
+func OpenForWriting(path string) (backend.FullBackend, error) {
+	b := modelsdkbackend.New()
+	if err := b.Connect(path); err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
 // NewStringAttribute creates a new string attribute.
@@ -302,5 +312,5 @@ func NewPage(name string) *Page {
 
 // GenerateID generates a new unique ID for model elements.
 func GenerateID() ID {
-	return ID(mpr.GenerateID())
+	return ID(mmpr.GenerateID())
 }

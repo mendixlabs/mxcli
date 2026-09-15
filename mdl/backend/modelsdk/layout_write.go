@@ -4,7 +4,9 @@ package modelsdkbackend
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/modelsdk/codec"
 	"github.com/mendixlabs/mxcli/modelsdk/element"
@@ -67,13 +69,13 @@ func layoutToGen(l *pages.Layout) (*genPg.Layout, error) {
 	// document carries the same ten keys Studio Pro writes.
 	out.SetExcluded(false)
 
-	// A layout with no placeholder can host no page: there is nowhere for the
-	// page's content to go, and the page's Forms$FormCallArgument has nothing to
-	// name. No Atlas layout is shaped that way and no page could use one, so it
-	// is refused rather than written and discovered later.
-	if !hasAnyPlaceholder(l.Widgets) {
-		return nil, fmt.Errorf("layout %q declares no placeholder: a page's content has nowhere to go. "+
-			"Add `placeholder Main` to the region that should hold page content", l.Name)
+	// mxbuild requires EXACTLY ONE placeholder named `Main`, and unique names
+	// besides. This guard used to ask only whether there was A placeholder under
+	// any name — which is what mxcli's docs claimed the rule was — so it wrote
+	// the very document that fails CE0848 (mendixlabs/mxcli#1063). The rule is
+	// shared with `mxcli check` rather than restated, so the two cannot drift.
+	if err := checkLayoutPlaceholders(l); err != nil {
+		return nil, err
 	}
 
 	content, err := layoutContentToGen(l)
@@ -114,31 +116,61 @@ func layoutContentToGen(l *pages.Layout) (element.Element, error) {
 }
 
 // hasAnyPlaceholder walks the tree for a Forms$Placeholder.
-func hasAnyPlaceholder(widgets []pages.Widget) bool {
+// checkLayoutPlaceholders applies the rule mxbuild enforces, citing the CE
+// number the author would otherwise meet a whole build later — and, until
+// DROP LAYOUT existed, with no way to undo the document mxcli had just written.
+func checkLayoutPlaceholders(l *pages.Layout) error {
+	names := layoutPlaceholderNames(l.Widgets, nil)
+	issue, mains, dups := types.CheckLayoutPlaceholderNames(names)
+	switch issue {
+	case types.LayoutPlaceholderNoMain:
+		have := "declares no placeholder at all"
+		if len(names) > 0 {
+			have = fmt.Sprintf("declares only %s", quoteNames(names))
+		}
+		return fmt.Errorf("layout %q %s: mxbuild fails this with CE0848 "+
+			"(\"No placeholder with the name 'Main' found. There should be exactly one.\"). "+
+			"Add `placeholder Main` to the region that should hold page content", l.Name, have)
+	case types.LayoutPlaceholderManyMains:
+		return fmt.Errorf("layout %q declares %d placeholders named %q: mxbuild fails this with "+
+			"CE0849 (\"Multiple placeholders with name 'Main' found. There can be only one.\")",
+			l.Name, mains, types.MainPlaceholderName)
+	case types.LayoutPlaceholderDuplicateName:
+		return fmt.Errorf("layout %q declares more than one placeholder named %s: mxbuild fails "+
+			"this with CE0495 (\"Duplicate name '%s'.\") — a page binds to a placeholder as "+
+			"Module.Layout.<Name>, which cannot pick between two that share it",
+			l.Name, quoteNames(dups), dups[0])
+	}
+	return nil
+}
+
+func quoteNames(names []string) string {
+	q := make([]string, len(names))
+	for i, n := range names {
+		q[i] = fmt.Sprintf("%q", n)
+	}
+	return strings.Join(q, ", ")
+}
+
+// layoutPlaceholderNames collects placeholder names anywhere in the tree, in
+// document order — a real layout nests them inside a scroll container's regions.
+func layoutPlaceholderNames(widgets []pages.Widget, acc []string) []string {
 	for _, w := range widgets {
 		switch x := w.(type) {
 		case *pages.LayoutPlaceholder:
-			return true
+			acc = append(acc, x.Name)
 		case *pages.ScrollContainer:
 			for _, r := range x.Regions {
-				if hasAnyPlaceholder(r.Widgets) {
-					return true
-				}
+				acc = layoutPlaceholderNames(r.Widgets, acc)
 			}
-			if hasAnyPlaceholder(x.Widgets) {
-				return true
-			}
+			acc = layoutPlaceholderNames(x.Widgets, acc)
 		case *pages.Container:
-			if hasAnyPlaceholder(x.Widgets) {
-				return true
-			}
+			acc = layoutPlaceholderNames(x.Widgets, acc)
 		case *pages.GroupBox:
-			if hasAnyPlaceholder(x.Widgets) {
-				return true
-			}
+			acc = layoutPlaceholderNames(x.Widgets, acc)
 		}
 	}
-	return false
+	return acc
 }
 
 func platformWord(native bool) string {

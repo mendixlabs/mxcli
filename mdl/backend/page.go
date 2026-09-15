@@ -21,7 +21,6 @@ type PageBackend interface {
 	ListLayouts() ([]*pages.Layout, error)
 	GetLayout(id model.ID) (*pages.Layout, error)
 	CreateLayout(layout *pages.Layout) error
-	UpdateLayout(layout *pages.Layout) error
 	DeleteLayout(id model.ID) error
 
 	// PageLayoutName returns the qualified name of the layout a page renders

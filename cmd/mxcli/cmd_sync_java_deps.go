@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/spf13/cobra"
 )
 
@@ -85,11 +84,11 @@ Examples:
 // declaredJarDependencies reads the model's managed Java dependencies and the
 // project's Mendix version.
 func declaredJarDependencies(projectPath string) ([]docker.JarDependencyRef, string, error) {
-	reader, err := mpr.Open(projectPath)
+	reader, err := openProjectReadOnly(projectPath)
 	if err != nil {
 		return nil, "", fmt.Errorf("opening project: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Disconnect() }()
 
 	version := reader.ProjectVersion().ProductVersion
 

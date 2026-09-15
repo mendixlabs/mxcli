@@ -39,7 +39,7 @@ func validateWorkflowParameterMappings(ctx *ExecContext, s *ast.CreateWorkflowSt
 	}
 
 	var errs []string
-	walkWorkflowActivities(s.Activities, func(act ast.WorkflowActivityNode) {
+	walkWorkflowActivities(workflowStatementActivities(s), func(act ast.WorkflowActivityNode) {
 		cm, ok := act.(*ast.WorkflowCallMicroflowNode)
 		if !ok {
 			return
@@ -142,6 +142,14 @@ func validateWorkflowReferences(ctx *ExecContext, activities []ast.WorkflowActiv
 			if qn := n.Targeting.Microflow.String(); qn != "." && qn != "" && !knownMicroflow(qn) {
 				report("microflow", qn, "user task targeting")
 			}
+			if qn := n.OnCreated.String(); qn != "." && qn != "" && !knownMicroflow(qn) {
+				report("microflow", qn, "user task on created")
+			}
+			if n.Completion != nil && n.Completion.Rule == "microflow" {
+				if qn := n.Completion.Microflow.String(); qn != "." && qn != "" && !knownMicroflow(qn) {
+					report("microflow", qn, "multi user task decide by microflow")
+				}
+			}
 		}
 	})
 	return errs
@@ -173,13 +181,16 @@ func validateWorkflowStatementRefs(ctx *ExecContext, s *ast.CreateWorkflowStmt, 
 			}
 		}
 	}
-	errs = append(errs, bareTimerBoundaryEventErrors(ctx, s.Activities, 0)...)
-	errs = append(errs, validateWorkflowReferences(ctx, s.Activities, sc)...)
+	// Event sub-process bodies reference microflows, pages and entities too.
+	activities := workflowStatementActivities(s)
+	errs = append(errs, bareTimerBoundaryEventErrors(ctx, activities, 0)...)
+	errs = append(errs, validateWorkflowReferences(ctx, activities, sc)...)
+	errs = append(errs, validateWorkflowEventHandlers(ctx, s, sc)...)
 	// Then the signatures of the page and targeting microflow each user task
 	// hands work to — names that resolve can still be the wrong shape (CE7410,
 	// CE7412, CE6677). A target that did not resolve is skipped there, so it is
 	// reported once, above.
-	return append(errs, validateWorkflowTaskSignatures(ctx, s.Activities, s.ParameterEntity.String(), sc)...)
+	return append(errs, validateWorkflowTaskSignatures(ctx, activities, s.ParameterEntity.String(), sc)...)
 }
 
 // bareTimerBoundaryEventErrors refuses `boundary event timer` without a kind

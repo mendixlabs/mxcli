@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 // TestCheck_PreservesMPRv2StorageFormat is the end-to-end guard for
@@ -46,7 +46,7 @@ func TestCheck_PreservesMPRv2StorageFormat(t *testing.T) {
 	}
 
 	// Precondition: the fixture must be MPRv2, or the test proves nothing.
-	if v := mprStorageVersion(t, mprPath); v != mpr.MPRVersionV2 {
+	if v := mprStorageVersion(t, mprPath); v != types.MPRVersionV2 {
 		t.Skipf("scaffolded project is %v, not MPRv2 — nothing to protect", v)
 	}
 
@@ -61,7 +61,7 @@ func TestCheck_PreservesMPRv2StorageFormat(t *testing.T) {
 
 	// Postcondition: still MPRv2. Without the fix, update-widgets would have left
 	// it MPRv1.
-	if v := mprStorageVersion(t, mprPath); v != mpr.MPRVersionV2 {
+	if v := mprStorageVersion(t, mprPath); v != types.MPRVersionV2 {
 		t.Errorf("Check converted the project to %v; the MPRv2 storage format must be preserved (#763)", v)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "mprcontents")); err != nil {
@@ -70,12 +70,12 @@ func TestCheck_PreservesMPRv2StorageFormat(t *testing.T) {
 }
 
 // mprStorageVersion opens the .mpr and returns its detected storage-format version.
-func mprStorageVersion(t *testing.T, mprPath string) mpr.MPRVersion {
+func mprStorageVersion(t *testing.T, mprPath string) types.MPRVersion {
 	t.Helper()
-	reader, err := mpr.Open(mprPath)
+	reader, err := openReadOnly(mprPath)
 	if err != nil {
-		t.Fatalf("mpr.Open(%s): %v", mprPath, err)
+		t.Fatalf("openReadOnly(%s): %v", mprPath, err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 	return reader.Version()
 }

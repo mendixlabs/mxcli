@@ -385,11 +385,37 @@ CREATE PAGE Sales.Detail (Title: 'Detail', Layout: Atlas_Core.Atlas_Default) {
 			"  TITLE t (Content: 'Welcome')\n" +
 			"}\n\n" +
 			"-- A placeholder's name is API: a page references it as Module.Layout.<Name>,\n" +
-			"-- so renaming one unbinds every page that used it. Name one Main — that\n" +
-			"-- convention is how Mendix picks the main placeholder (every Atlas layout\n" +
-			"-- does), because Forms$Layout has no property for it. A layout must declare\n" +
-			"-- at least one placeholder or no page can use it.",
-		SeeAlso: []string{"layout.show", "page.create", "snippet"},
+			"-- so renaming one unbinds every page that used it.\n" +
+			"--\n" +
+			"-- EXACTLY ONE placeholder must be named Main. This is a rule mxbuild\n" +
+			"-- enforces, not a convention: a layout with none fails CE0848 and one\n" +
+			"-- with two fails CE0849 — even if no page uses the layout. Placeholder\n" +
+			"-- names must also be unique (CE0495). Extra placeholders under other\n" +
+			"-- names are fine. mxcli reports all three as MDL081/MDL082.\n" +
+			"--\n" +
+			"-- A placeholder is DECLARED with no body. `PLACEHOLDER Main { … }` is the\n" +
+			"-- page-side spelling that FILLS a slot; in a layout it declares nothing\n" +
+			"-- and is reported as MDL083.",
+		SeeAlso: []string{"layout.show", "layout.drop", "page.create", "snippet"},
+	})
+
+	Register(SyntaxFeature{
+		Path:    "layout.drop",
+		Summary: "DROP LAYOUT — remove a layout (warns about pages still bound to it)",
+		Keywords: []string{
+			"drop layout", "delete layout", "remove layout",
+		},
+		Syntax: "DROP LAYOUT Module.Name",
+		Example: "DROP LAYOUT MyModule.App_Old;\n\n" +
+			"-- Pages still bound to it are named in a warning, and the drop proceeds.\n" +
+			"-- Left dropped, each of those pages fails the build with CE1613 — which\n" +
+			"-- names the PAGE and never the layout, so repoint them first:\n" +
+			"ALTER PAGES SET LAYOUT = MyModule.App_New WHERE LAYOUT = MyModule.App_Old;\n" +
+			"DROP LAYOUT MyModule.App_Old;\n\n" +
+			"-- Or correct a layout in place by re-creating it under the same name:\n" +
+			"-- the pages stay bound by qualified name and rebind to the new document.\n" +
+			"-- (CREATE OR REPLACE LAYOUT does this in one statement.)",
+		SeeAlso: []string{"layout", "layout.alter", "layout.show"},
 	})
 
 	Register(SyntaxFeature{

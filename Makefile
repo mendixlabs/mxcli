@@ -35,7 +35,7 @@ GO_BUILD_FLAGS = -trimpath
 # Clean version for VS Code extension (must be valid semver: major.minor.patch)
 VSCE_VERSION = $(shell echo "$(VERSION)" | sed 's/^v//; s/-.*//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$$' || echo "0.0.0")
 
-.PHONY: build build-debug size release clean test engine-diff test-mdl check-mdl check-skill-mdl check-findings check-wiki-pages digest-status check-tunnel-deps check-widget-versions grammar completions sync-skills sync-skill-packs sync-commands sync-lint-rules sync-changelog sync-all docs documentation docs-site docs-serve vscode-ext vscode-install source-tree sbom sbom-report lint lint-go lint-ts fmt fmt-check vet
+.PHONY: build build-debug size release clean test test-mdl check-mdl check-skill-mdl check-findings check-wiki-pages digest-status check-tunnel-deps check-widget-versions grammar completions sync-skills sync-skill-packs sync-commands sync-lint-rules sync-changelog sync-all docs documentation docs-site docs-serve vscode-ext vscode-install source-tree sbom sbom-report lint lint-go lint-ts fmt fmt-check vet
 
 # Helper: copy file only if content differs (avoids mtime updates that invalidate go build cache)
 # Usage: $(call copy-if-changed,src,dst)
@@ -167,12 +167,6 @@ release: clean grammar vscode-ext sync-all
 test: grammar sync-all
 	CGO_ENABLED=0 go test ./...
 
-# Dual-engine read-parity harness: run read queries through the legacy (sdk/mpr)
-# and modelsdk engines and diff the rendered output. The read-side of the
-# engine-adoption comparison gate (docs/plans/2026-06-05-adopt-modelsdk-engine.md).
-engine-diff: grammar
-	CGO_ENABLED=0 go test ./mdl/enginecompare/ -run TestReadParity -v
-
 # Check MDL syntax for all example scripts.
 #
 # Covers both doctype-tests/ (broad doctype demos) and bug-tests/ (per-PR
@@ -287,12 +281,10 @@ check-tunnel-deps:
 
 # Run integration tests (requires mx binary / mxbuild)
 #
-# The gate runs every doctype script through exec + mx check once PER ENGINE.
-# MXCLI_TEST_ENGINES narrows that matrix — `MXCLI_TEST_ENGINES=modelsdk make
-# test-integration` skips the legacy engine and takes roughly 60% off the
-# doctype gate (measured: 588s -> 232s). Unset means every engine, which is what
-# the nightly runs; the per-push CI job narrows it to modelsdk. An unrecognised
-# engine name is fatal rather than silently selecting nothing.
+# The gate runs every doctype script through exec + mx check once PER ENGINE,
+# and there is one engine since legacy was deleted. MXCLI_TEST_ENGINES is
+# therefore left unset everywhere; it survives only so that a stale
+# `MXCLI_TEST_ENGINES=legacy` is fatal rather than silently selecting nothing.
 test-integration:
 	CGO_ENABLED=0 go test -tags integration -count=1 -timeout 30m ./...
 

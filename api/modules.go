@@ -13,15 +13,15 @@ type ModulesAPI struct {
 
 // List returns all modules in the project.
 func (m *ModulesAPI) List() ([]*model.Module, error) {
-	return m.api.reader.ListModules()
+	return m.api.backend.ListModules()
 }
 
 // Get retrieves a module by name.
 func (m *ModulesAPI) Get(name string) (*model.Module, error) {
-	return m.api.reader.GetModuleByName(name)
+	return m.api.backend.GetModuleByName(name)
 }
 
 // GetByID retrieves a module by ID.
 func (m *ModulesAPI) GetByID(id model.ID) (*model.Module, error) {
-	return m.api.reader.GetModule(id)
+	return m.api.backend.GetModule(id)
 }

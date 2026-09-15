@@ -1,0 +1,149 @@
+-- ============================================================================
+-- The XPath constraint checker called two real associations missing
+-- (ako/mxcli-sudoku FINDINGS #57)
+-- ============================================================================
+--
+-- `check --references` rejected a page that mxbuild builds at 0 errors:
+--
+--   ✗ page Administration.Account_Overview: datagrid "dataGrid21": the
+--     constraint on Administration.Account names "System.UserRoles", which is
+--     neither an attribute nor an association of it — mxbuild reports this as
+--     CE1613 "The selected association 'System.UserRoles' no longer exists"
+--
+-- `Administration.Account extends System.User`, and `System.UserRoles` is
+-- declared `from System.User`. So it IS an association of it, by inheritance —
+-- and `mx check` on the rejected page says 0 errors, which settles it.
+--
+-- Two shapes were affected, both common enough to make `check` unusable as a
+-- gate on a normal app:
+--
+--   1. an association reached through the GENERALIZATION chain — the normal
+--      case for anything extending System.User / System.Image / FileDocument;
+--   2. a CROSS-MODULE association, which is stored in the FROM entity's module
+--      under `CrossAssociations` with its far end held by NAME rather than by
+--      element ID. The lookup read only `dm.Associations`.
+--
+-- Inherited ATTRIBUTES were fine throughout (`resolveMemberOnEntity` walks the
+-- chain), which is what made this look like one narrow bug rather than a whole
+-- axis of the resolver.
+--
+-- Cause: `associationTargetFrom` matched the start entity against the
+-- association's two ends by exact equality, and said so in its own comment —
+-- "a start entity that matches neither end returns false rather than guessing
+-- … the cost of being wrong is a false error on a working script". Sound while
+-- its only caller treated false as SILENCE. The constraint checker then called
+-- it and treated false as EVIDENCE, so the precise case the comment declined to
+-- chase became the finding. Fixed by making the resolver three-valued
+-- (resolved / missing / not-an-end / unknown) and matching through the chain.
+--
+-- Verify — EXEC FIRST. Members are resolved against the model, so against an
+-- app that has never seen these entities every step is unknowable and the file
+-- passes having checked nothing:
+--
+--   mxcli exec  widget-xpath-association-through-generalization.mdl -p app.mpr
+--   mxcli check widget-xpath-association-through-generalization.mdl -p app.mpr --references
+--   mx check -p app.mpr        -- 0 errors
+--
+-- Then the CONTROL, which is the half that matters: the rule must still catch
+-- an association the entity really does not have. Perturb and re-check:
+--
+--   [XPathGen.Base_Region/XPathGen.Region/Name != '']
+--     -> [XPathGen.Far_Nothing/XPathGen.Region/Name != '']
+--     ✗ the constraint on XPathGen.Special names "XPathGen.Far_Nothing", which
+--       is neither an attribute nor an association of it
+--
+-- and the other direction, which must stay reported too — generalization is
+-- one-way, so the PARENT does not get the child's associations:
+--
+--   datasource database from XPathGen.Special
+--     -> database from XPathGen.Base      (with the cross-module constraint)
+--     ✗ … names "XPathGen.Special_Bin" …
+
+create module XPathGen;
+/
+
+create module XPathGenFar;
+/
+
+create or modify persistent entity XPathGen.Region (
+  Name: String(200)
+);
+/
+
+-- The association below is declared on THIS entity. Everything that extends it
+-- inherits it, and that inheritance is the whole subject of the file.
+create or modify persistent entity XPathGen.Base (
+  Code: String(50)
+);
+/
+
+create or modify persistent entity XPathGen.Special extends XPathGen.Base (
+  Note: String(200)
+);
+/
+
+create or modify persistent entity XPathGenFar.Bin (
+  BinCode: String(50)
+);
+/
+
+-- Declared FROM the generalization. XPathGen.Special has it, and only through
+-- the chain — an exact-name comparison against the two ends does not find it.
+create or modify association XPathGen.Base_Region
+  from XPathGen.Base to XPathGen.Region type reference;
+/
+
+-- Leaves its module, so it is stored in XPathGen's CrossAssociations with
+-- `XPathGenFar.Bin` held by name. A lookup that reads only dm.Associations
+-- misses it, and at a reporting call site calls it missing.
+create or modify association XPathGen.Special_Bin
+  from XPathGen.Special to XPathGenFar.Bin type reference;
+/
+
+-- Every constraint here RESOLVES and builds. These are the shapes that must not
+-- be reported.
+create or replace page XPathGen.P_List
+(
+  Title: 'Specials',
+  Layout: Atlas_Core.Atlas_Default
+)
+{
+  -- An INHERITED attribute. This one always worked, and is here as the
+  -- discriminator: it is what made the association failure look narrow.
+  datagrid gridByCode (
+    datasource: database from XPathGen.Special where [Code != '']
+  ) {
+    column cNote (attribute: Note, caption: 'Note')
+  }
+
+  -- An INHERITED association inside not(), the shape the finding was reported
+  -- with. The entity step is not optional: `not(XPathGen.Base_Region)` alone is
+  -- CE0161 "Error(s) in XPath constraint" — measured on 11.13.0, and the reason
+  -- the build is run over this file rather than only `check`.
+  datagrid gridHasRegion (
+    datasource: database from XPathGen.Special
+      where [not(XPathGen.Base_Region/XPathGen.Region)]
+  ) {
+    column cNote2 (attribute: Note, caption: 'Note')
+  }
+
+  -- An INHERITED association, then an attribute of the entity it reaches.
+  -- Resolving the hop is not only about what is reported: it types the far end,
+  -- so the steps AFTER it are checked at all. Before the fix the hop yielded
+  -- nothing and `Name` here went unchecked.
+  datagrid gridByRegion (
+    datasource: database from XPathGen.Special
+      where [XPathGen.Base_Region/XPathGen.Region/Name = 'North']
+  ) {
+    column cNote3 (attribute: Note, caption: 'Note')
+  }
+
+  -- A CROSS-MODULE association, then an attribute of the entity it reaches.
+  datagrid gridByBin (
+    datasource: database from XPathGen.Special
+      where [XPathGen.Special_Bin/XPathGenFar.Bin/BinCode = 'A1']
+  ) {
+    column cNote4 (attribute: Note, caption: 'Note')
+  }
+}
+/

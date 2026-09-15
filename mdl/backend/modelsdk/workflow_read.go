@@ -4,6 +4,7 @@ package modelsdkbackend
 
 import (
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/modelsdk/codec"
 	"github.com/mendixlabs/mxcli/modelsdk/element"
 	genMf "github.com/mendixlabs/mxcli/modelsdk/gen/microflows"
 	genWf "github.com/mendixlabs/mxcli/modelsdk/gen/workflows"
@@ -31,32 +32,128 @@ func (b *Backend) ListWorkflows() ([]*workflows.Workflow, error) {
 	}
 	out := make([]*workflows.Workflow, 0, len(units))
 	for _, u := range units {
-		g := u.Element
-		w := &workflows.Workflow{
-			ContainerID:         model.ID(u.ContainerID),
-			Name:                g.Name(),
-			Documentation:       g.Documentation(),
-			ExportLevel:         g.ExportLevel(),
-			Excluded:            g.Excluded(),
-			OverviewPage:        g.OverviewPageQualifiedName(),
-			DueDate:             g.DueDate(),
-			WorkflowName:        workflowTemplateText(g.WorkflowName()),
-			WorkflowDescription: workflowTemplateText(g.WorkflowDescription()),
-		}
-		w.ID = model.ID(g.ID())
-		w.TypeName = "Workflows$Workflow"
-		w.Annotation = annotationText(g.Annotation())
-		if p, ok := g.Parameter().(*genWf.Parameter); ok && p != nil {
-			wp := &workflows.WorkflowParameter{EntityRef: p.EntityQualifiedName()}
-			wp.ID = model.ID(p.ID())
-			w.Parameter = wp
-		}
-		if f, ok := g.Flow().(*genWf.Flow); ok && f != nil {
-			w.Flow = workflowFlowFromGen(f)
-		}
-		out = append(out, w)
+		out = append(out, workflowFromGen(u.Element, model.ID(u.ContainerID)))
 	}
 	return out, nil
+}
+
+// workflowFromGen converts one gen workflow to the semantic type.
+//
+// Extracted from ListWorkflows so GetWorkflow can share it: a single-item read
+// that decodes separately from the listing is free to drift from it, and that
+// drift shows up as the same workflow looking different depending on which call
+// fetched it.
+func workflowFromGen(g *genWf.Workflow, containerID model.ID) *workflows.Workflow {
+	w := &workflows.Workflow{
+		ContainerID:         containerID,
+		Name:                g.Name(),
+		Documentation:       g.Documentation(),
+		ExportLevel:         g.ExportLevel(),
+		Excluded:            g.Excluded(),
+		OverviewPage:        g.OverviewPageQualifiedName(),
+		DueDate:             g.DueDate(),
+		WorkflowName:        workflowTemplateText(g.WorkflowName()),
+		WorkflowDescription: workflowTemplateText(g.WorkflowDescription()),
+	}
+	w.ID = model.ID(g.ID())
+	w.TypeName = "Workflows$Workflow"
+	w.Annotation = annotationText(g.Annotation())
+	if p, ok := g.Parameter().(*genWf.Parameter); ok && p != nil {
+		wp := &workflows.WorkflowParameter{EntityRef: p.EntityQualifiedName()}
+		wp.ID = model.ID(p.ID())
+		w.Parameter = wp
+	}
+	if f, ok := g.Flow().(*genWf.Flow); ok && f != nil {
+		w.Flow = workflowFlowFromGen(f)
+	}
+	w.EventHandlers = workflowEventHandlersFromGen(g.OnWorkflowEventItems())
+	w.EventSubProcesses = eventSubProcessesFromGen(g.EventSubProcessesItems())
+	return w
+}
+
+// eventSubProcessesFromGen converts a workflow's event sub-processes. Each flow
+// is read like any other, so its start event arrives as an
+// EventSubProcessStartActivity (workflowSimpleActivityFromGen) — read from the
+// raw document, since gen has no type for the two timer starts.
+func eventSubProcessesFromGen(items []element.Element) []*workflows.EventSubProcess {
+	var out []*workflows.EventSubProcess
+	for _, el := range items {
+		e, ok := el.(*genWf.EventSubProcess)
+		if !ok {
+			continue
+		}
+		esp := &workflows.EventSubProcess{Name: e.Name(), Caption: e.Caption(), Annotation: annotationText(e.Annotation())}
+		esp.ID = model.ID(e.ID())
+		if f, ok := e.Flow().(*genWf.Flow); ok && f != nil {
+			esp.Flow = workflowFlowFromGen(f)
+		}
+		out = append(out, esp)
+	}
+	return out
+}
+
+// workflowEventHandlersFromGen converts a workflow's OnWorkflowEvent handlers.
+func workflowEventHandlersFromGen(items []element.Element) []*workflows.WorkflowEventHandler {
+	var out []*workflows.WorkflowEventHandler
+	for _, el := range items {
+		h, ok := el.(*genWf.WorkflowEventHandler)
+		if !ok || h == nil {
+			continue
+		}
+		wh := &workflows.WorkflowEventHandler{
+			Description:   h.Description(),
+			Documentation: h.Documentation(),
+			EventTypes:    append([]string(nil), h.EventTypesItems()...),
+		}
+		wh.ID = model.ID(h.ID())
+		if mh, ok := h.MicroflowEventHandler().(*genWf.MicroflowEventHandler); ok && mh != nil {
+			wh.Microflow = mh.MicroflowQualifiedName()
+		}
+		out = append(out, wh)
+	}
+	return out
+}
+
+// completionCriteriaFromGen reads a multi-user task's CompletionCriteria, turning
+// its outcome pointers ($IDs) back into outcome values.
+func completionCriteriaFromGen(el element.Element, outcomes []*workflows.UserTaskOutcome) *workflows.CompletionCriteria {
+	value := func(id element.ID) string {
+		for _, o := range outcomes {
+			if string(o.ID) == string(id) {
+				if o.Value != "" {
+					return o.Value
+				}
+				return o.Caption
+			}
+		}
+		return ""
+	}
+	switch c := el.(type) {
+	case *genWf.ConsensusCompletionCriteria:
+		return &workflows.CompletionCriteria{Kind: "Consensus", FallbackOutcome: value(c.FallbackOutcomeRefID())}
+	case *genWf.MajorityCompletionCriteria:
+		return &workflows.CompletionCriteria{Kind: "Majority", CompletionType: c.CompletionType(), FallbackOutcome: value(c.FallbackOutcomeRefID())}
+	case *genWf.ThresholdCompletionCriteria:
+		return &workflows.CompletionCriteria{Kind: "Threshold", CompletionType: c.CompletionType(), Threshold: int(c.Threshold()), FallbackOutcome: value(c.FallbackOutcomeRefID())}
+	case *genWf.VetoCompletionCriteria:
+		return &workflows.CompletionCriteria{Kind: "Veto", VetoOutcome: value(c.VetoOutcomeRefID())}
+	case *genWf.MicroflowCompletionCriteria:
+		return &workflows.CompletionCriteria{Kind: "Microflow", Microflow: c.MicroflowQualifiedName()}
+	}
+	return nil
+}
+
+// targetUserInputFromGen reads a multi-user task's TargetUserInput.
+func targetUserInputFromGen(el element.Element) *workflows.TargetUserInput {
+	switch t := el.(type) {
+	case *genWf.AbsoluteAmountUserInput:
+		return &workflows.TargetUserInput{Kind: "Absolute", Amount: int(t.Amount())}
+	case *genWf.PercentageAmountUserInput:
+		return &workflows.TargetUserInput{Kind: "Percentage", Percentage: int(t.Percentage())}
+	case *genWf.AllUserInput:
+		return &workflows.TargetUserInput{Kind: "All"}
+	}
+	return nil
 }
 
 // workflowFlowFromGen converts a gen Flow to the semantic Flow.
@@ -116,10 +213,20 @@ func workflowActivityFromGen(el element.Element) workflows.WorkflowActivity {
 		setWfBase(&t.BaseWorkflowActivity, a.ID(), a.Name(), a.Caption(), a.Annotation(), "Workflows$MultiUserTaskActivity")
 		t.BoundaryEvents = boundaryEventsFromGen(a.BoundaryEventsItems())
 		t.Outcomes = userTaskOutcomesFromGen(a.OutcomesItems())
+		t.AwaitAllUsers = a.AwaitAllUsers()
+		t.CompletionCriteria = completionCriteriaFromGen(a.CompletionCriteria(), t.Outcomes)
+		t.TargetUserInput = targetUserInputFromGen(a.TargetUserInput())
 		return t
 	case *genWf.CallMicroflowTask:
 		t := &workflows.CallMicroflowTask{Microflow: a.MicroflowQualifiedName()}
 		setWfBase(&t.BaseWorkflowActivity, a.ID(), a.Name(), a.Caption(), a.Annotation(), "Workflows$CallMicroflowTask")
+		t.BoundaryEvents = boundaryEventsFromGen(a.BoundaryEventsItems())
+		t.Outcomes = conditionOutcomesFromGen(a.OutcomesItems())
+		t.ParameterMappings = microflowParamMappingsFromGen(a.ParameterMappingsItems())
+		return t
+	case *genWf.AIAgentTaskActivity:
+		t := &workflows.CallMicroflowTask{IsAgent: true, Microflow: a.MicroflowQualifiedName()}
+		setWfBase(&t.BaseWorkflowActivity, a.ID(), a.Name(), a.Caption(), a.Annotation(), "Workflows$AIAgentTaskActivity")
 		t.BoundaryEvents = boundaryEventsFromGen(a.BoundaryEventsItems())
 		t.Outcomes = conditionOutcomesFromGen(a.OutcomesItems())
 		t.ParameterMappings = microflowParamMappingsFromGen(a.ParameterMappingsItems())
@@ -230,7 +337,21 @@ func workflowSimpleActivityFromGen(el element.Element) workflows.WorkflowActivit
 		a := &workflows.WaitForNotificationActivity{}
 		setBase(&a.BaseWorkflowActivity)
 		return a
+	// Neither has a gen type that exposes its fields (NotificationActivity and the
+	// timer starts have no gen type at all), so both are read off the raw document.
+	case "Workflows$NotificationActivity":
+		a := &workflows.NotificationActivity{}
+		setBase(&a.BaseWorkflowActivity)
+		return a
 	default:
+		if interrupting, timer, ok := workflows.EventSubProcessStartFromStorageType(typeName); ok {
+			a := &workflows.EventSubProcessStartActivity{Interrupting: interrupting, Timer: timer}
+			setBase(&a.BaseWorkflowActivity)
+			if timer {
+				a.FirstExecutionTime = genWf.RawFieldString(raw, "FirstExecutionTime")
+			}
+			return a
+		}
 		t := &workflows.GenericWorkflowActivity{TypeString: typeName}
 		t.ID = model.ID(el.ID())
 		t.TypeName = typeName
@@ -404,6 +525,22 @@ func boundaryEventsFromGen(items []element.Element) []*workflows.BoundaryEvent {
 }
 
 func boundaryEventFromGen(el element.Element) *workflows.BoundaryEvent {
+	// Notification boundary events have no gen type: the element is a raw Base,
+	// so its fields — and its flow — are read off the stored document.
+	if eventType, ok := workflows.BoundaryEventTypeFromStorage(el.TypeName()); ok {
+		if be := (&workflows.BoundaryEvent{EventType: eventType}); be.IsNotification() {
+			raw := el.Raw()
+			be.ID = model.ID(el.ID())
+			be.Name = genWf.RawFieldString(raw, "Name")
+			be.Caption = genWf.RawFieldString(raw, "Caption")
+			if child, err := codec.DecodeChild(raw, "Flow"); err == nil {
+				if f, ok := child.(*genWf.Flow); ok && f != nil {
+					be.Flow = workflowFlowFromGen(f)
+				}
+			}
+			return be
+		}
+	}
 	// The three timer variants differ only in $Type, and gen gives each its own
 	// concrete type, so the shared shape is read through a small interface rather
 	// than repeated three times.

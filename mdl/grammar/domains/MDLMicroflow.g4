@@ -588,9 +588,12 @@ openUserTaskStatement
     : OPEN USER TASK VARIABLE onErrorClause?
     ;
 
-// NOTIFY WORKFLOW $Wf;
+// [$Notified =] NOTIFY WORKFLOW $Wf TARGET Module.Workflow.Name;
+// The target names the notification start, notification activity, notification
+// boundary event or wait-for-notification the action reaches. It is optional here
+// and required by check (MDL-WF16): Mendix refuses a notify with none (CE0166).
 notifyWorkflowStatement
-    : (VARIABLE EQUALS)? NOTIFY WORKFLOW VARIABLE onErrorClause?
+    : (VARIABLE EQUALS)? NOTIFY WORKFLOW VARIABLE (TARGET qualifiedName)? onErrorClause?
     ;
 
 // OPEN WORKFLOW $Wf;

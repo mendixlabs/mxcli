@@ -7,9 +7,10 @@ import (
 	"testing"
 
 	modelsdk "github.com/mendixlabs/mxcli"
+	"github.com/mendixlabs/mxcli/mdl/backend"
 )
 
-func openFixture(mprPath string) (*modelsdk.Reader, error) { return modelsdk.Open(mprPath) }
+func openFixture(mprPath string) (backend.FullBackend, error) { return modelsdk.Open(mprPath) }
 
 // Version UUIDs read from the live marketplace API, cross-checked against what
 // a blank Mendix 11.12.1 project records for the module each one installs. They
@@ -152,7 +153,7 @@ func listFixtureModules(t *testing.T, mprPath string) []fixtureModule {
 	if err != nil {
 		t.Fatalf("open fixture: %v", err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 
 	mods, err := reader.ListModules()
 	if err != nil {

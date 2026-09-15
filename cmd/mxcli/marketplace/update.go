@@ -227,7 +227,7 @@ func StampMarketplaceVersion(mprPath, moduleName, versionNumber, versionID strin
 	}
 	units, err := reader.ListRawUnitsByType("Projects$ModuleImpl")
 	if err != nil {
-		reader.Close()
+		reader.Disconnect()
 		return fmt.Errorf("read module documents: %w", err)
 	}
 
@@ -247,13 +247,13 @@ func StampMarketplaceVersion(mprPath, moduleName, versionNumber, versionID strin
 		setBoolField(doc, "FromAppStore", true)
 		enc, merr := bson.Marshal(doc)
 		if merr != nil {
-			reader.Close()
+			reader.Disconnect()
 			return fmt.Errorf("re-encode module document: %w", merr)
 		}
 		unitID, contents = string(u.ID), enc
 		break
 	}
-	reader.Close()
+	reader.Disconnect()
 
 	if unitID == "" {
 		return fmt.Errorf("module %q not found when stamping its version", moduleName)
@@ -262,7 +262,7 @@ func StampMarketplaceVersion(mprPath, moduleName, versionNumber, versionID strin
 	if err != nil {
 		return fmt.Errorf("open %s for writing: %w", mprPath, err)
 	}
-	defer writer.Close()
+	defer writer.Disconnect()
 	return writer.UpdateRawUnit(unitID, contents)
 }
 

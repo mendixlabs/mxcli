@@ -180,6 +180,30 @@ features:
       min_version: "9.0.0"
     user_task:
       min_version: "9.0.0"
+    ai_agent_task:
+      min_version: "11.9.0"
+      mdl: "CALL AGENT MICROFLOW Module.InvokeAgent WITH (Param = '$WorkflowContext')"
+      notes: "Workflows$AIAgentTaskActivity, introduced when Mendix 11.9 split MicroflowBasedActivity into CallMicroflowActivity + AIAgentTaskActivity. Absent from the 11.6 mxbuild, present from 11.10."
+    event_handlers:
+      min_version: "10.7.0"
+      mdl: "CREATE WORKFLOW … ON WORKFLOW EVENTS (…) MICROFLOW Module.Handler AS '…'"
+      notes: "Workflow.onWorkflowEvent introduced in 10.7.0 (modelsdk gen). `ON ANY WORKFLOW EVENT` expands to the measured per-version type list and needs 11.6.0+."
+    event_subprocesses:
+      min_version: "11.8.0"
+      mdl: "EVENT SUBPROCESS ESP_Cancel ON INTERRUPTING NOTIFICATION espCancelStart { … };"
+      notes: "Workflow.eventSubProcesses introduced in 11.8.0 (modelsdk gen). Notification starts measured to load on the 11.10, 11.11, 11.12 and 11.13 mxbuilds."
+    timer_event_subprocesses:
+      min_version: "11.13.0"
+      mdl: "EVENT SUBPROCESS ESP_Remind ON NON INTERRUPTING TIMER 'addDays([%CurrentDateTime%], 1)' { … };"
+      notes: "(Non)InterruptingTimerEventSubProcessStartActivity: TypeCacheUnknownTypeException on the 11.10, 11.11 and 11.12 mxbuilds, loads on 11.13."
+    notification_events:
+      min_version: "11.11.0"
+      mdl: "NOTIFICATION Received; … BOUNDARY EVENT INTERRUPTING NOTIFICATION Withdrawn { … }"
+      notes: "Workflows$NotificationActivity and (Non)InterruptingNotificationBoundaryEvent: TypeCacheUnknownTypeException on the 11.10 mxbuild, load on 11.11, 11.12 and 11.13."
+    notify_target:
+      min_version: "11.7.0"
+      mdl: "$Notified = NOTIFY WORKFLOW $Workflow TARGET Module.Workflow.espCancelStart;"
+      notes: "NotifyWorkflowAction.notifyTarget introduced in 11.7.0 (modelsdk gen), replacing Activity. Not a refusal: before 11.7 mxcli writes the Activity form. A notify with no target is CE0166 on 11.6, 11.10 and 11.13."
 
   navigation:
     profiles:

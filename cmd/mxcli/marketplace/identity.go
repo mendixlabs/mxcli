@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	modelsdk "github.com/mendixlabs/mxcli"
+	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"go.mongodb.org/mongo-driver/bson"
@@ -54,7 +55,7 @@ func CaptureIdentities(mprPath, moduleName string) (Identities, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", mprPath, err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 
 	units, err := reader.ListUnits()
 	if err != nil {
@@ -128,7 +129,7 @@ func nameAndGUID(d bson.D) (name string, guid []byte, hasGUID bool) {
 
 // unitsOfModule returns the IDs of every unit contained in the named module,
 // directly or through any depth of folders.
-func unitsOfModule(reader *modelsdk.Reader, units []*types.UnitInfo, moduleName string) ([]string, error) {
+func unitsOfModule(reader backend.FullBackend, units []*types.UnitInfo, moduleName string) ([]string, error) {
 	parent := make(map[string]string, len(units))
 	for _, u := range units {
 		parent[string(u.ID)] = string(u.ContainerID)
@@ -200,12 +201,12 @@ func ApplyIdentities(mprPath, moduleName string, ids Identities) (applied int, m
 	}
 	units, err := reader.ListUnits()
 	if err != nil {
-		reader.Close()
+		reader.Disconnect()
 		return 0, nil, fmt.Errorf("list units: %w", err)
 	}
 	inModule, err := unitsOfModule(reader, units, moduleName)
 	if err != nil {
-		reader.Close()
+		reader.Disconnect()
 		return 0, nil, err
 	}
 
@@ -231,13 +232,13 @@ func ApplyIdentities(mprPath, moduleName string, ids Identities) (applied int, m
 		}
 		encoded, merr := bson.Marshal(doc)
 		if merr != nil {
-			reader.Close()
+			reader.Disconnect()
 			return 0, nil, fmt.Errorf("re-encode unit %s: %w", unitID, merr)
 		}
 		writes = append(writes, pending{unitID, encoded})
 		applied += n
 	}
-	reader.Close()
+	reader.Disconnect()
 
 	for _, p := range ids.Paths() {
 		if !placed[p] {
@@ -252,7 +253,7 @@ func ApplyIdentities(mprPath, moduleName string, ids Identities) (applied int, m
 	if err != nil {
 		return 0, nil, fmt.Errorf("open %s for writing: %w", mprPath, err)
 	}
-	defer writer.Close()
+	defer writer.Disconnect()
 	for _, w := range writes {
 		if err := writer.UpdateRawUnit(w.id, w.contents); err != nil {
 			return 0, nil, fmt.Errorf("write identities into unit %s: %w", w.id, err)

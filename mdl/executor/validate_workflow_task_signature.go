@@ -107,6 +107,10 @@ func newWorkflowTaskSignatureChecker(ctx *ExecContext, sc *scriptContext) *workf
 func (c *workflowTaskSignatureChecker) checkActivities(activities []ast.WorkflowActivityNode, contextEntity string) []string {
 	var errs []string
 	walkWorkflowActivities(activities, func(a ast.WorkflowActivityNode) {
+		if cm, ok := a.(*ast.WorkflowCallMicroflowNode); ok && cm.Agent {
+			errs = appendIfSet(errs, c.checkAgentMicroflow("AI agent task "+workflowCallMicroflowLabel(cm), cm.Microflow.String()))
+			return
+		}
 		n, ok := a.(*ast.WorkflowUserTaskNode)
 		if !ok {
 			return
@@ -120,6 +124,10 @@ func (c *workflowTaskSignatureChecker) checkActivities(activities []ast.Workflow
 		// "microflow" and "group_microflow"; the XPath kinds name no document.
 		if strings.Contains(n.Targeting.Kind, "microflow") {
 			errs = appendIfSet(errs, c.checkTargeting(label, n.Targeting.Microflow.String(), contextEntity))
+		}
+		errs = appendIfSet(errs, c.checkOnCreated(label, n.OnCreated.String(), contextEntity))
+		if n.Completion != nil && n.Completion.Rule == "microflow" {
+			errs = appendIfSet(errs, c.checkDecisionMicroflow(label, n.Completion.Microflow.String()))
 		}
 	})
 	return errs
@@ -172,22 +180,7 @@ func (c *workflowTaskSignatureChecker) checkTargeting(label, mfQN, contextEntity
 // context entity's inheritance chain leaves what can be resolved, the answer is
 // "not proven", which is not a refusal.
 func (c *workflowTaskSignatureChecker) targetingMismatch(sig *flowSignature, contextEntity string) bool {
-	if len(sig.Params) != 2 {
-		return true
-	}
-	for i, p := range sig.Params {
-		if !strings.EqualFold(p.Entity, workflowEntity) {
-			continue
-		}
-		other := sig.Params[1-i]
-		if other.Entity == "" {
-			continue
-		}
-		if c.contextAssignableTo(contextEntity, other.Entity) != inheritanceNo {
-			return false
-		}
-	}
-	return true
+	return c.pairMismatch(sig, workflowEntity, contextEntity)
 }
 
 type inheritance int

@@ -223,6 +223,116 @@ func TestValidateXPathMembers_SilentWhenTheBaseEntityIsUnknown(t *testing.T) {
 	}
 }
 
+// THE REGRESSION this check shipped with, reported against a real app
+// (ako/mxcli-sudoku FINDINGS #57). An association a specialization has only
+// through its GENERALIZATION was called missing on a page mxbuild builds at 0
+// errors — measured on 11.13.0: `Administration.Account` (extends System.User)
+// constrained on `System.UserRoles` (declared from System.User).
+//
+// It landed because a helper documented as "returns false when it cannot
+// establish the answer" gained a second caller that read false as evidence. The
+// entity's own attributes were fine throughout, because that path walks the
+// chain; only the association path compared two names.
+func TestValidateXPathMembers_FollowsGeneralizationForAssociations(t *testing.T) {
+	ctx := memberFixture(t)
+	for _, tc := range []struct{ name, where string }{
+		{"an inherited association as a bare hop", "[not(Shop.Base_Region)]"},
+		{"an inherited association, then the target's attribute",
+			"[Shop.Base_Region/Shop.Region/RegionName != '']"},
+		// Same defect in the other spelling: an association that LEAVES its
+		// module is stored in CrossAssociations, which the lookup never read.
+		{"a cross-module association", "[Shop.Order_Bin/Warehouse.Bin/BinCode != '']"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if errs := validateXPathMembers(ctx, pageWith(
+				dbGrid("Shop.Order", tc.where))); len(errs) != 0 {
+				t.Errorf("reported an association the entity really has: %v", errs)
+			}
+		})
+	}
+}
+
+// THE CONTROL for the fix above, and the reason it is a chain walk rather than
+// "stop reporting associations". Each of these must still be reported, or the
+// rule has been disabled rather than corrected.
+func TestValidateXPathMembers_StillReportsAnAssociationTheEntityLacks(t *testing.T) {
+	ctx := memberFixture(t)
+	for _, tc := range []struct{ name, entity, where string }{
+		// Real association, wrong entity: Order_Customer runs Order↔Customer and
+		// Region is neither, nor a specialization of either.
+		{"an association of some other entity", "Shop.Region",
+			"[Shop.Order_Customer/Shop.Customer/Name = 'x']"},
+		// No association of that name in a module that WAS read.
+		{"a name no association has", "Shop.Order", "[Shop.Order_Status = 'Open']"},
+		// The generalization direction is one-way: Base does not get Order's.
+		{"a SPECIALIZATION's association, from the generalization", "Shop.Base",
+			"[Shop.Order_Customer/Shop.Customer/Name = 'x']"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if errs := validateXPathMembers(ctx, pageWith(
+				dbGrid(tc.entity, tc.where))); len(errs) != 1 {
+				t.Errorf("did not report an association the entity lacks: %v", errs)
+			}
+		})
+	}
+}
+
+// The other axis of could-not-establish, which the base-entity guard does not
+// cover. Shop.Imported's generalization lives in a module the fixture refuses to
+// read, so an association it might inherit is UNKNOWABLE — and the entity itself
+// is known, so the existing guard lets it through to be reported.
+//
+// Collapse assocUnknown into a reportable state and this fires.
+func TestValidateXPathMembers_SilentWhenTheChainCannotBeWalked(t *testing.T) {
+	ctx := memberFixture(t)
+	if errs := validateXPathMembers(ctx, pageWith(
+		dbGrid("Shop.Imported", "[Shop.Order_Customer/Shop.Customer/Name = 'x']"))); len(errs) != 0 {
+		t.Errorf("reported past a generalization the backend could not read: %v", errs)
+	}
+
+	// CONTROL: the silence is about the CHAIN, not about the entity. A name no
+	// association has needs no chain walk to rule out, and is still reported.
+	if errs := validateXPathMembers(ctx, pageWith(
+		dbGrid("Shop.Imported", "[Shop.Nothing_Here = 'x']"))); len(errs) != 1 {
+		t.Errorf("a name that exists nowhere went unreported: %v", errs)
+	}
+}
+
+// Resolving the hop is not only about what is reported: it types the far end, so
+// the steps AFTER an inherited association are checked at all. Before the chain
+// walk the hop yielded nothing and everything past it was silent.
+func TestResolveAssociationFrom_TypesTheFarEndThroughTheChain(t *testing.T) {
+	ctx := memberFixture(t)
+	for _, tc := range []struct{ assoc, from, want string }{
+		{"Shop.Base_Region", "Shop.Order", "Shop.Region"}, // inherited, forward
+		{"Shop.Base_Region", "Shop.Region", "Shop.Base"},  // and from the far end
+		{"Shop.Order_Bin", "Shop.Order", "Warehouse.Bin"}, // cross-module
+		{"Shop.Order_Customer", "Shop.Order", "Shop.Customer"},
+	} {
+		got, res := resolveAssociationFrom(ctx, tc.assoc, tc.from)
+		if res != assocResolved || got != tc.want {
+			t.Errorf("%s from %s = (%q, %v), want (%q, assocResolved)",
+				tc.assoc, tc.from, got, res, tc.want)
+		}
+	}
+
+	// And the three ways it does not resolve stay distinguishable — the whole
+	// point of the type. A boolean here is what produced the false positive.
+	for _, tc := range []struct {
+		assoc, from string
+		want        assocResolution
+	}{
+		{"Shop.Order_Status", "Shop.Order", assocMissing},
+		{"Nowhere.Thing", "Shop.Order", assocMissing},
+		{"Shop.Order_Customer", "Shop.Region", assocNotAnEnd},
+		{"Shop.Order_Customer", "Shop.Imported", assocUnknown},
+	} {
+		if _, res := resolveAssociationFrom(ctx, tc.assoc, tc.from); res != tc.want {
+			t.Errorf("%s from %s = %v, want %v", tc.assoc, tc.from, res, tc.want)
+		}
+	}
+}
+
 // Only a DATABASE source names its entity in the statement. Anything else
 // carries it elsewhere, so the constraint is left unchecked rather than checked
 // against the wrong entity.

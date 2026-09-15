@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"os"
 
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 func main() {
@@ -21,14 +21,15 @@ func main() {
 
 	// Open writer
 	fmt.Println("Opening project...")
-	writer, err := mpr.NewWriter(mprPath)
+	writer := modelsdkbackend.New()
+	err := writer.Connect(mprPath)
 	if err != nil {
 		fmt.Printf("Error opening writer: %v\n", err)
 		os.Exit(1)
 	}
-	defer writer.Close()
+	defer func() { _ = writer.Disconnect() }()
 
-	reader := writer.Reader()
+	reader := writer
 
 	// Find MyFirstModule
 	modules, err := reader.ListModules()

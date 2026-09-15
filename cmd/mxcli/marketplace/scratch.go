@@ -33,7 +33,7 @@ func InstalledModule(mprPath, moduleName string) (appStoreVersion, mendixVersion
 	if err != nil {
 		return "", "", fmt.Errorf("open %s: %w", mprPath, err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 
 	mendixVersion, _ = reader.GetMendixVersion()
 
@@ -88,7 +88,7 @@ func ModuleForVersionIDs(mprPath string, versionIDs []string) (moduleName, versi
 	if err != nil {
 		return "", "", fmt.Errorf("open %s: %w", mprPath, err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 
 	mods, err := reader.ListModules()
 	if err != nil {
@@ -405,7 +405,7 @@ func verifyProjectVersion(mprPath, want string) error {
 		return fmt.Errorf("open reference project: %w", err)
 	}
 	got, _ := reader.GetMendixVersion()
-	_ = reader.Close()
+	_ = reader.Disconnect()
 
 	if got == want {
 		return nil

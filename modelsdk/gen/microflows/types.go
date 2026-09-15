@@ -15495,7 +15495,13 @@ func initNotifyWorkflowAction() *NotifyWorkflowAction {
 	o.activity.Bind(&o.Base, 2)
 	o.notifyTarget = property.NewPart[element.Element]("NotifyTarget")
 	o.notifyTarget.Bind(&o.Base, 3)
-	o.outputVariableName = property.NewPrimitive[string]("VariableName", property.DecodeString)
+	// STORAGE-NAME OVERRIDE: BSON key is "OutputVariableName", not "VariableName"
+	// (generated/metamodel tags it `json:"outputVariableName"`, and ako/TestApp's
+	// Studio Pro 11.14 notify actions store "OutputVariableName"). Measured on the
+	// 11.6, 11.10 and 11.13 mxbuilds: under "VariableName" the output variable is
+	// undefined (CE0109). A Primitive uses its bound name for both decode and
+	// encode, so this one literal covers InitFromRaw too.
+	o.outputVariableName = property.NewPrimitive[string]("OutputVariableName", property.DecodeString)
 	o.outputVariableName.Bind(&o.Base, 4)
 	o.SetProperties([]element.Property{o.errorHandlingType, o.workflowVariable, o.activity, o.notifyTarget, o.outputVariableName})
 	return o

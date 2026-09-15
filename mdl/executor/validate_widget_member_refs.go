@@ -318,7 +318,15 @@ func (v *xpathMemberVisitor) noteQualified(qn, cur string) {
 	if cur == "" || !v.model.IsEntity(cur) {
 		return
 	}
-	v.add(badStep{name: qn, kind: "association"})
+	// And the same discipline on the OTHER axis, which this guard does not cover:
+	// the base entity being known says nothing about whether the ASSOCIATION was
+	// ruled out. AssociationTarget above answers yes-or-not-established, so a hop
+	// mxcli merely failed to resolve would be reported as a defect. Only a lookup
+	// that actually ruled the name out becomes a finding.
+	switch _, res := resolveAssociationFrom(v.ctx, qn, cur); res {
+	case assocMissing, assocNotAnEnd:
+		v.add(badStep{name: qn, kind: "association"})
+	}
 }
 
 func (v *xpathMemberVisitor) walkPath(steps []ast.XPathStep, cur string) {

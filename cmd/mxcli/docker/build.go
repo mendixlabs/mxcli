@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"github.com/mendixlabs/mxcli/sdk/mpr/version"
 )
 
@@ -50,12 +49,12 @@ func Build(opts BuildOptions) error {
 
 	// Step 1: Detect version
 	fmt.Fprintln(w, "Detecting project version...")
-	reader, err := mpr.Open(opts.ProjectPath)
+	reader, err := openReadOnly(opts.ProjectPath)
 	if err != nil {
 		return fmt.Errorf("opening project: %w", err)
 	}
 	pv := reader.ProjectVersion()
-	reader.Close()
+	reader.Disconnect()
 
 	fmt.Fprintf(w, "  Mendix version: %s\n", pv.ProductVersion)
 
@@ -276,12 +275,12 @@ func Run(opts RunOptions) error {
 
 	// Step 1: Detect version
 	fmt.Fprintln(w, "Detecting project version...")
-	reader, err := mpr.Open(opts.ProjectPath)
+	reader, err := openReadOnly(opts.ProjectPath)
 	if err != nil {
 		return fmt.Errorf("opening project: %w", err)
 	}
 	pv := reader.ProjectVersion()
-	reader.Close()
+	reader.Disconnect()
 	fmt.Fprintf(w, "  Mendix version: %s\n", pv.ProductVersion)
 
 	// Step 2 & 3: Ensure MxBuild and runtime are available.
@@ -720,13 +719,13 @@ func ensurePADFiles(productVersion string, w io.Writer) error {
 func ensureDemoUsers(projectPath string, w io.Writer) error {
 	fmt.Fprintln(w, "Checking demo users...")
 
-	reader, err := mpr.Open(projectPath)
+	reader, err := openReadOnly(projectPath)
 	if err != nil {
 		return fmt.Errorf("opening project: %w", err)
 	}
 
 	ps, err := reader.GetProjectSecurity()
-	reader.Close()
+	reader.Disconnect()
 	if err != nil {
 		return fmt.Errorf("reading project security: %w", err)
 	}
@@ -739,14 +738,14 @@ func ensureDemoUsers(projectPath string, w io.Writer) error {
 
 	fmt.Fprintln(w, "  No demo users found, creating default admin...")
 
-	writer, err := mpr.NewWriter(projectPath)
+	writer, err := openForWriting(projectPath)
 	if err != nil {
 		return fmt.Errorf("opening project for writing: %w", err)
 	}
-	defer writer.Close()
+	defer writer.Disconnect()
 
 	// Re-read security through writer's reader
-	ps, err = writer.Reader().GetProjectSecurity()
+	ps, err = writer.GetProjectSecurity()
 	if err != nil {
 		return fmt.Errorf("reading project security: %w", err)
 	}

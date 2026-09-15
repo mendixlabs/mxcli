@@ -26,7 +26,7 @@ import (
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend"
-	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 	"github.com/pmezard/go-difflib/difflib"
 )
@@ -295,14 +295,18 @@ func copyDir(src, dst string) error {
 }
 
 // setupTestEnv creates a new test environment with a fresh copy of the source project.
+//
+// This defaulted to the LEGACY engine, so most of this package's integration
+// tests ran on the engine that has since been deleted rather than on the one
+// users get. Deleting it (docs/plans/2026-09-14-retire-legacy-engine.md) moved
+// them all onto the codec engine, which is the coverage that was intended.
 func setupTestEnv(t *testing.T) *testEnv {
-	return setupTestEnvWithBackend(t, func() backend.FullBackend { return mprbackend.New() })
+	return setupTestEnvWithBackend(t, func() backend.FullBackend { return modelsdkbackend.New() })
 }
 
-// setupTestEnvWithBackend is setupTestEnv parametrized by the engine's backend
-// factory, so a test can exercise the same script on both the modelsdk (default)
-// and legacy engines (see TestMxCheck_DoctypeScripts). setupTestEnv keeps the
-// legacy default for the many tests that don't care which engine they run on.
+// setupTestEnvWithBackend is setupTestEnv parametrized by the backend factory,
+// so a test can name the engine it wants (see TestMxCheck_DoctypeScripts, which
+// loops over the matrix).
 func setupTestEnvWithBackend(t *testing.T, factory func() backend.FullBackend) *testEnv {
 	t.Helper()
 

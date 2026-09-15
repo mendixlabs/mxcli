@@ -1,7 +1,10 @@
 # Implementation Plan — Adopt the modelsdk engine on `main`, behind a feature flag with dual-engine comparison
 
 **Date:** 2026-06-05
-**Status:** Draft plan
+**Status:** Superseded — the engine was adopted and became the default; the legacy engine it was
+flagged against was then deleted by
+[`2026-09-14-retire-legacy-engine.md`](2026-09-14-retire-legacy-engine.md). Kept for the design
+record; the dual-engine and feature-flag machinery it describes no longer exists.
 **Implements:** the "vendor the engine into `main`" path from
 [`PROPOSAL_backend_strategy.md`](../11-proposals/PROPOSAL_backend_strategy.md) (Option 3 evolved
 into a sequencing plan) — *keep `main` canonical and our product surface intact; lift the one

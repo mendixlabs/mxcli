@@ -35,6 +35,35 @@ func StatementAnnotations(s MicroflowStatement) *ActivityAnnotations {
 	return ann
 }
 
+// SetStatementAnnotations attaches ann to a microflow statement and reports
+// whether the statement type has anywhere to hold it.
+//
+// The write side of StatementAnnotations, reflective for the same reason. The
+// visitor and the flow builder each used to carry a hand-written type switch
+// here, and neither had a case for the eleven workflow statements, the three
+// mapping statements or (on one side each) CASE and SEND REST REQUEST — so their
+// @position was parsed and dropped, and rewriting a microflow from its own
+// DESCRIBE output moved every one of those activities.
+func SetStatementAnnotations(s MicroflowStatement, ann *ActivityAnnotations) bool {
+	if s == nil {
+		return false
+	}
+	v := reflect.ValueOf(s)
+	if v.Kind() != reflect.Ptr || v.IsNil() {
+		return false
+	}
+	v = v.Elem()
+	if v.Kind() != reflect.Struct {
+		return false
+	}
+	f := v.FieldByName("Annotations")
+	if !f.IsValid() || !f.CanSet() || f.Type() != reflect.TypeOf(ann) {
+		return false
+	}
+	f.Set(reflect.ValueOf(ann))
+	return true
+}
+
 // StatementBodies returns every nested statement list a microflow statement
 // contains — an IF's two branches, a CASE's arms, a loop body, an ON ERROR
 // handler's body — so a check that has to span the whole flow can recurse

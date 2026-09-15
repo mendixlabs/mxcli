@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package modelsdkbackend is the modelsdk-engine implementation of
-// backend.FullBackend. It lives at a separate import path from the legacy
-// mdl/backend/mpr (mprbackend) package so both engines can be linked at once
-// and selected via the MXCLI_ENGINE seam (see cmd/mxcli/engine.go).
+// Package modelsdkbackend is the codec-engine implementation of
+// backend.FullBackend, and the only local engine there is: the legacy
+// mdl/backend/mpr package it was written to replace has been deleted
+// (docs/plans/2026-09-14-retire-legacy-engine.md). Reads and writes are both
+// complete; --engine and MXCLI_ENGINE survive as a warning-only no-op so that
+// scripts pinning the old engine keep working.
 //
-// Phase 1 (docs/plans/2026-06-05-adopt-modelsdk-engine.md) is a READ slice:
-// it embeds *mock.MockBackend so the full 27-interface FullBackend surface is
-// satisfied, and overrides only the connection + module read methods to drive
-// the real modelsdk codec engine. Un-overridden methods fall through to the
-// mock stubs (which return zero/nil and never panic). Write methods are NOT
-// implemented yet — callers must not rely on them persisting; the CLI prints a
-// read-only warning when this engine is selected.
+// It embeds the generated `unimplemented` (gen_unimplemented.go) so the whole
+// FullBackend surface is satisfied, and every method it has not ported fails
+// loudly with errUnimplemented rather than silently returning a zero value. The
+// set that still falls through is pinned by
+// unimplemented_reachability_test.go, which is worth reading as a map: each
+// entry is there because some caller reaches that method while holding a
+// concrete sdk/mpr reader instead of a backend value, so the list shrinks by
+// closing a bypass rather than by deleting interface surface.
 package modelsdkbackend
 
 import (
@@ -56,8 +59,17 @@ func New() *Backend {
 // errUnimplemented is the error every not-yet-ported FullBackend method returns
 // (via the generated unimplemented embed). Loud failure beats the silent no-op
 // the embedded mock used to give — see ADR-0005 "guard, don't silently drop".
+//
+// It used to end "rerun with MXCLI_ENGINE=legacy". That engine is gone, so the
+// message now asks for a report instead of naming a fallback that does not
+// exist: a user told to rerun on a deleted engine learns nothing and gets a
+// second failure. Reaching this at all is a bug rather than a known gap — the
+// set of methods that can is pinned by unimplemented_reachability_test.go and
+// measured to have no caller through a backend value.
 func errUnimplemented(method string) error {
-	return fmt.Errorf("modelsdk engine: %s not implemented yet — rerun with MXCLI_ENGINE=legacy", method)
+	return fmt.Errorf("mxcli: %s is not implemented on the model engine. "+
+		"This should be unreachable — please report it at "+
+		"https://github.com/mendixlabs/mxcli/issues with the command you ran", method)
 }
 
 // WriteStats reports how many unit writes reached storage versus how many were
@@ -96,6 +108,24 @@ func (b *Backend) Connect(path string) error {
 	}
 	b.reader = r
 	b.writer = mmpr.NewWriterWithReader(r)
+	b.path = path
+	return nil
+}
+
+// ConnectReadOnly opens a project for reading only, leaving the writer nil.
+//
+// For a caller that must not take a lock on a file something else owns — the MCP
+// backend reads the local .mpr while Studio Pro has it open, and sends its writes
+// to Studio Pro rather than to disk. Every write method here already guards on a
+// nil writer, so a write attempted through a read-only backend is refused with
+// "not connected for writing" rather than silently locking the project.
+func (b *Backend) ConnectReadOnly(path string) error {
+	r, err := mmpr.OpenWithOptions(path, mmpr.OpenOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	b.reader = r
+	b.writer = nil
 	b.path = path
 	return nil
 }

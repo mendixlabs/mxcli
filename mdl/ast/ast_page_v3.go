@@ -93,6 +93,15 @@ type CreateLayoutStmt struct {
 	DocumentationSet bool // see mendixlabs/mxcli#1018: absent preserves, empty clears
 	IsReplace        bool
 	IsModify         bool
+
+	// BracedPlaceholders names the `placeholder X { … }` blocks written inside
+	// this layout. A layout DECLARES a placeholder with the bodiless form; the
+	// braced form is the page-side spelling that FILLS one, and the visitor
+	// drops it from the widget tree. Recording the names here is what lets the
+	// checker say so, instead of the write failing later with "declares no
+	// placeholder" — which contradicts what the author wrote
+	// (mendixlabs/mxcli#1063).
+	BracedPlaceholders []string
 }
 
 func (s *CreateLayoutStmt) isStatement() {}

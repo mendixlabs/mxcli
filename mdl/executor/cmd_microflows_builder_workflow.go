@@ -189,6 +189,9 @@ func (fb *flowBuilder) addNotifyWorkflowAction(s *ast.NotifyWorkflowStmt) model.
 		OutputVariableName: s.OutputVariable,
 		WorkflowVariable:   s.WorkflowVariable,
 	}
+	if s.Target != "" {
+		fb.setNotifyTarget(action, s.Target)
+	}
 	return fb.wrapAction(action, s.ErrorHandling)
 }
 

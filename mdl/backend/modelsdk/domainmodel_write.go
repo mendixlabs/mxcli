@@ -69,6 +69,11 @@ func (b *Backend) CreateAssociation(domainModelID model.ID, assoc *domainmodel.A
 	}
 	ga := assocToGen(assoc)
 	assignAssociationIDs(ga)
+	// Same contract as CreateEntity: report the minted identity rather than
+	// leaving the caller holding an empty one.
+	if assoc.ID == "" {
+		assoc.ID = model.ID(ga.ID())
+	}
 	dm.AddAssociations(ga)
 
 	contents, err := (&codec.Encoder{}).Encode(dm)
@@ -165,6 +170,13 @@ func (b *Backend) CreateEntity(domainModelID model.ID, entity *domainmodel.Entit
 	}
 	ge := entityToGen(entity, b.moduleNameFor(domainModelID), b.majorVersion())
 	assignEntityIDs(ge)
+	// Report the minted identities back to the caller. assignEntityIDs fills
+	// them on the gen element, so a caller that did not pre-assign an ID is
+	// otherwise left holding an entity with an empty one — and its very next
+	// call (AddAttribute, CreateAssociation) fails with "entity not found: ".
+	// The legacy writer populated these, so not doing it is a silent behaviour
+	// difference rather than a design choice; examples/modify_project caught it.
+	copyAssignedIDs(entity, ge)
 	dm.AddEntities(ge)
 
 	enc := &codec.Encoder{}
@@ -894,4 +906,37 @@ func deleteErrorText(db *domainmodel.DeleteBehavior) *model.Text {
 		msg = db.ErrorMessage
 	}
 	return &model.Text{Translations: map[string]string{"en_US": msg}}
+}
+
+// copyAssignedIDs writes the identities minted on a gen entity back onto the
+// semantic entity the caller passed in.
+//
+// Attributes are matched BY NAME rather than by position: entityToGen may add,
+// skip or reorder elements (an audit pseudo-type becomes a System-module
+// generalization, not an attribute), so an index-based copy would hand the
+// caller another attribute's identity — a worse failure than the empty ID it
+// replaces, because it looks like it worked.
+func copyAssignedIDs(dst *domainmodel.Entity, src *genDm.Entity) {
+	if dst == nil || src == nil {
+		return
+	}
+	if dst.ID == "" {
+		dst.ID = model.ID(src.ID())
+	}
+	byName := map[string]element.ID{}
+	for _, el := range src.AttributesItems() {
+		a, ok := el.(*genDm.Attribute)
+		if !ok {
+			continue
+		}
+		byName[a.Name()] = a.ID()
+	}
+	for _, attr := range dst.Attributes {
+		if attr == nil || attr.ID != "" {
+			continue
+		}
+		if id, ok := byName[attr.Name]; ok {
+			attr.ID = model.ID(id)
+		}
+	}
 }

@@ -169,6 +169,10 @@ features:
       min_version: "9.0.0"
     user_task:
       min_version: "9.0.0"
+    event_handlers:
+      min_version: "10.7.0"
+      mdl: "CREATE WORKFLOW … ON WORKFLOW EVENTS (…) MICROFLOW Module.Handler AS '…'"
+      notes: "Workflow.onWorkflowEvent introduced in 10.7.0 (modelsdk gen). `ON ANY WORKFLOW EVENT` expands to the measured per-version type list and needs 11.6.0+."
 
   navigation:
     profiles:

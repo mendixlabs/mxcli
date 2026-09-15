@@ -28,6 +28,22 @@ func execAlterWorkflow(ctx *ExecContext, s *ast.AlterWorkflowStmt) error {
 		return err
 	}
 
+	if vs := completionRuleViolations(alterWorkflowAddedActivities(s), workflowLocation(s.Name)); len(vs) > 0 {
+		return mdlerrors.NewValidationf("%s\n  → %s", vs[0].Message, vs[0].Suggestion)
+	}
+	if workflowUsesAgentTask(alterWorkflowAddedActivities(s)) {
+		if err := checkFeature(ctx, "workflows", "ai_agent_task", "call agent microflow",
+			"AI agent tasks need Mendix 11.9 or later — use `call microflow` on older projects"); err != nil {
+			return err
+		}
+	}
+	if workflowUsesNotificationEvents(alterWorkflowAddedActivities(s)) {
+		if err := checkFeature(ctx, "workflows", "notification_events", "notification activities and notification boundary events",
+			"these need Mendix 11.11 or later — use `wait for notification` on older projects"); err != nil {
+			return err
+		}
+	}
+
 	// Same exec-side guard as CREATE WORKFLOW: ALTER had no reference validation
 	// at all, so an inserted activity could name a microflow that exists nowhere
 	// and still be written (issue #943).
@@ -167,6 +183,12 @@ func execAlterWorkflow(ctx *ExecContext, s *ast.AlterWorkflowStmt) error {
 			}
 
 		case *ast.InsertBoundaryEventOp:
+			// The op carries no name, and a notification boundary event is only
+			// reachable by its name. Refused rather than written unnamed.
+			if (&workflows.BoundaryEvent{EventType: o.EventType}).IsNotification() {
+				return mdlerrors.NewUnsupported("insert boundary event: a notification boundary event cannot be inserted with ALTER WORKFLOW yet — " +
+					"restate the workflow with CREATE OR MODIFY WORKFLOW, which accepts `boundary event interrupting notification <name> '<caption>' { … }`")
+			}
 			acts := buildAndBindActivities(ctx, o.Activities)
 			if err := mutator.InsertBoundaryEvent(o.ActivityRef, o.AtPosition, o.EventType, o.Delay, acts); err != nil {
 				return mdlerrors.NewBackend("insert boundary event", err)

@@ -131,9 +131,6 @@ DROP MESSAGE DEFINITION COLLECTION module.Name;
 `DESCRIBE` emits re-executable MDL. `OR MODIFY` preserves the document UUID, so
 mappings bound to it keep resolving.
 
-Authoring requires the modelsdk engine; `MXCLI_ENGINE=legacy` refuses. Reading
-works on both.
-
 ## See Also
 
 [CREATE IMPORT MAPPING](create-import-mapping.md), [CREATE EXPORT MAPPING](create-export-mapping.md), [CREATE JSON STRUCTURE](create-json-structure.md)

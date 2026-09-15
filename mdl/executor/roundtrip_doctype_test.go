@@ -18,16 +18,19 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
-	mprbackend "github.com/mendixlabs/mxcli/mdl/backend/mpr"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 )
 
 // gateEngine pairs an engine name with its backend factory. The gate runs every
-// doctype script through exec + mx check on BOTH engines: modelsdk (the default)
-// and legacy. Previously it only ran legacy, so modelsdk-only serialization
-// regressions (dangling pointers, lossy round-trips, missing serializers) went
-// uncaught — see issue #691.
+// doctype script through exec + mx check on every engine in the matrix.
+//
+// The matrix has ONE entry since the legacy sdk/mpr engine was deleted
+// (docs/plans/2026-09-14-retire-legacy-engine.md). It is kept as a matrix rather
+// than collapsed into a single call for two reasons, neither of them symmetry:
+// it is the seam a future backend plugs into, and — the load-bearing one — the
+// selection below still turns a stale `MXCLI_TEST_ENGINES=legacy` into a loud
+// failure instead of a gate that runs nothing and reports success.
 type gateEngine struct {
 	name    string
 	factory func() backend.FullBackend
@@ -35,36 +38,27 @@ type gateEngine struct {
 
 var allGateEngines = []gateEngine{
 	{"modelsdk", func() backend.FullBackend { return modelsdkbackend.New() }},
-	{"legacy", func() backend.FullBackend { return mprbackend.New() }},
 }
 
 // gateEnginesEnv narrows the matrix above to a subset, as a comma- or
-// space-separated list of engine names ("modelsdk", "legacy"); empty or "all"
-// means every engine.
+// space-separated list of engine names; empty or "all" means every engine.
 //
-// It exists because the matrix is most of what the gate costs: each script is
-// executed and then handed to mxbuild once PER ENGINE, and mxbuild dominates.
-// On CI the per-push job runs `modelsdk` alone (see .github/workflows/
-// push-test.yml) and the nightly runs both — but on ONE Mendix version rather
-// than all five (nightly.yml), since nothing routes to legacy any more and it
-// was five sixths of that fleet's cost. Legacy stays verified daily, at a fifth
-// of what it used to cost, and its unit tests still run on every push.
+// With a one-engine matrix it narrows nothing, and what remains is the guard:
+// a name that is not in the matrix is REPORTED, so a workflow or a shell still
+// exporting MXCLI_TEST_ENGINES=legacy fails in TestMain rather than selecting
+// zero engines and reporting the gate green. That is why the deletion of legacy
+// left this in place instead of taking it along.
 //
-// The DEFAULT is every engine, deliberately. Nightly could have relied on a
-// default of "modelsdk" and set "all" itself, but then a mistake in EITHER
-// workflow file loses legacy coverage silently, and a lost gate is the failure
-// this repo has already shipped once (#808, an integration test that had only
-// ever skipped). With this default a mistake in the per-push file costs
-// minutes, not coverage — the failure mode is biased the right way. For the
-// same reason a narrowed matrix is announced in TestMain rather than applied
-// quietly: a run that covered less than it looks like it did should say so.
+// The DEFAULT is every engine, deliberately: a workflow file that forgets to set
+// this loses minutes, never coverage. A lost gate is the failure this repo has
+// already shipped once (#808, an integration test that had only ever skipped),
+// so the failure mode is biased the other way on purpose.
 //
-// One limit on that announcement, measured rather than assumed: `go test`
-// without -v DISCARDS a passing package's output, so TestMain's notice does not
-// reach a green CI log — only a -v run or a FAILING package shows it. The fatal
-// path is unaffected (an unknown name exits non-zero, and a failing package's
-// output is shown), but the visibility half is carried by the CI step NAME,
-// which states the engine set outright.
+// One limit on TestMain's announcement of a narrowed matrix, measured rather
+// than assumed: `go test` without -v DISCARDS a passing package's output, so the
+// notice does not reach a green CI log — only a -v run or a FAILING package
+// shows it. The fatal path is unaffected (an unknown name exits non-zero, and a
+// failing package's output is shown).
 const gateEnginesEnv = "MXCLI_TEST_ENGINES"
 
 // gateEngines is the matrix every gate test loops over.

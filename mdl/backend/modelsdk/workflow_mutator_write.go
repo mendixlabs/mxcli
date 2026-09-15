@@ -33,16 +33,6 @@ func (b *Backend) OpenWorkflowForMutation(unitID model.ID) (backend.WorkflowMuta
 	return wfmutator.New(d, unitID, codecWorkflowDeps{b: b}), nil
 }
 
-// SerializeWorkflowActivity converts a domain WorkflowActivity to its raw bson.D
-// form via the codec converters (used by the ALTER WORKFLOW insert/replace paths).
-func (b *Backend) SerializeWorkflowActivity(a workflows.WorkflowActivity) (any, error) {
-	d := serializeWorkflowActivityToBSON(a, b.useCallMicroflowActivityName())
-	if d == nil {
-		return nil, fmt.Errorf("SerializeWorkflowActivity: unsupported activity %T", a)
-	}
-	return d, nil
-}
-
 // codecWorkflowDeps implements wfmutator.Deps for the modelsdk (codec) backend.
 type codecWorkflowDeps struct{ b *Backend }
 

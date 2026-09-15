@@ -8,9 +8,9 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 func main() {
@@ -41,14 +41,15 @@ func main() {
 
 	// Open writer
 	fmt.Println("\nOpening writer...")
-	writer, err := mpr.NewWriter(mprPath)
+	writer := modelsdkbackend.New()
+	err := writer.Connect(mprPath)
 	if err != nil {
 		fmt.Printf("Error opening writer: %v\n", err)
 		os.Exit(1)
 	}
-	defer writer.Close()
+	defer func() { _ = writer.Disconnect() }()
 
-	reader := writer.Reader()
+	reader := writer
 	fmt.Printf("MPR Version: %d\n", reader.Version())
 
 	// List existing modules to find one to add entity to

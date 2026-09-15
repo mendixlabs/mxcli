@@ -21,7 +21,46 @@ createWorkflowStatement
       (EXPORT LEVEL (IDENTIFIER | API))?
       (OVERVIEW PAGE qualifiedName)?
       (DUE DATE_TYPE dueDate=STRING_LITERAL)?
-      BEGIN workflowMainBody END WORKFLOW SEMICOLON? SLASH?
+      workflowEventHandlerClause*
+      BEGIN workflowMainBody workflowEventSubProcess* END WORKFLOW SEMICOLON? SLASH?
+    ;
+
+/**
+ * An event sub-process: a flow outside the main flow that its own start event
+ * triggers while the workflow runs — a `notify workflow … target <start>`, or a
+ * timer. Interrupting cancels every active path first; non-interrupting runs
+ * alongside. Written after the main body, because Studio Pro stores them in the
+ * workflow's EventSubProcesses list, not in its flow.
+ *
+ * The body's End is implicit, as in the main flow: the builder appends one when
+ * the body does not already end (in an End, a jump, or branches that all end).
+ */
+workflowEventSubProcess
+    : EVENT SUBPROCESS workflowActivityName STRING_LITERAL?
+      ON (INTERRUPTING | NON INTERRUPTING) workflowEventSubProcessTrigger
+      LBRACE workflowBody RBRACE SEMICOLON
+    ;
+
+/**
+ * The start event. A notification start is what `notify workflow … target`
+ * names; a timer start takes the first-execution-time expression, which Mendix
+ * requires (CE0126).
+ */
+workflowEventSubProcessTrigger
+    : NOTIFICATION workflowActivityName? STRING_LITERAL?
+    | TIMER STRING_LITERAL (AS workflowActivityName)? (COMMENT STRING_LITERAL)?
+    ;
+
+/**
+ * A workflow event handler: a microflow the runtime calls when one of the named
+ * workflow events happens. Studio Pro stores the event types as an explicit list
+ * even when every one is ticked, so `any workflow event` is written as the list
+ * the project's Mendix version knows. The optional `as` string is the handler's
+ * description, which is how Studio Pro tells handlers apart.
+ */
+workflowEventHandlerClause
+    : ON ANY WORKFLOW EVENT MICROFLOW qualifiedName (AS STRING_LITERAL)?
+    | ON WORKFLOW EVENTS LPAREN IDENTIFIER (COMMA IDENTIFIER)* RPAREN MICROFLOW qualifiedName (AS STRING_LITERAL)?
     ;
 
 /**
@@ -68,6 +107,7 @@ workflowActivityStmt
     | workflowJumpToStmt SEMICOLON
     | workflowWaitForTimerStmt SEMICOLON
     | workflowWaitForNotificationStmt SEMICOLON
+    | workflowNotificationStmt SEMICOLON
     | workflowAnnotationStmt SEMICOLON
     ;
 
@@ -88,6 +128,7 @@ workflowUserTaskStmt
       (PAGE qualifiedName)?
       (TARGETING (USERS | GROUPS)? MICROFLOW qualifiedName)?
       (TARGETING (USERS | GROUPS)? XPATH STRING_LITERAL)?
+      (ON CREATED MICROFLOW qualifiedName)?
       (ENTITY qualifiedName)?
       (DUE DATE_TYPE STRING_LITERAL)?
       (DESCRIPTION STRING_LITERAL)?
@@ -97,11 +138,44 @@ workflowUserTaskStmt
       (PAGE qualifiedName)?
       (TARGETING (USERS | GROUPS)? MICROFLOW qualifiedName)?
       (TARGETING (USERS | GROUPS)? XPATH STRING_LITERAL)?
+      (ON CREATED MICROFLOW qualifiedName)?
       (ENTITY qualifiedName)?
       (DUE DATE_TYPE STRING_LITERAL)?
       (DESCRIPTION STRING_LITERAL)?
+      workflowParticipantsClause?
+      workflowCompletionClause?
+      (AWAIT ALL USERS)?
       (OUTCOMES workflowUserTaskOutcome+)?
       (BOUNDARY EVENT workflowBoundaryEventClause ((BOUNDARY EVENT)? workflowBoundaryEventClause)*)?
+    ;
+
+/**
+ * How many of a multi-user task's targeted users must respond (TargetUserInput).
+ * Omitted means all of them. A sub-rule, so its number stays out of the task's
+ * positional reads.
+ */
+workflowParticipantsClause
+    : PARTICIPANTS ALL
+    | PARTICIPANTS NUMBER_LITERAL PERCENT_KW?
+    ;
+
+/**
+ * How a multi-user task turns its participants' outcomes into one outcome
+ * (CompletionCriteria). Omitted means consensus falling back to the first
+ * outcome. The fallback is optional here and required by check (CE1866): a
+ * platform rule reported as a parse error reads as "not implemented".
+ */
+workflowCompletionClause
+    : DECIDE BY CONSENSUS workflowFallbackClause?
+    | DECIDE BY MAJORITY MORE_KW THAN HALF workflowFallbackClause?
+    | DECIDE BY MAJORITY MOST CHOSEN workflowFallbackClause?
+    | DECIDE BY THRESHOLD NUMBER_LITERAL (PERCENT_KW | VOTES) workflowFallbackClause?
+    | DECIDE BY VETO STRING_LITERAL
+    | DECIDE BY MICROFLOW qualifiedName
+    ;
+
+workflowFallbackClause
+    : FALLBACK STRING_LITERAL
     ;
 
 /**
@@ -115,14 +189,24 @@ workflowBoundaryEventClause
     : INTERRUPTING TIMER STRING_LITERAL? (LBRACE workflowBody RBRACE)?
     | NON INTERRUPTING TIMER STRING_LITERAL? (LBRACE workflowBody RBRACE)?
     | TIMER STRING_LITERAL? (LBRACE workflowBody RBRACE)?
+    // A notification boundary event is triggered by `notify workflow … target
+    // <name>`, so its name is what matters; the string is its caption.
+    | INTERRUPTING NOTIFICATION workflowActivityName? STRING_LITERAL? (LBRACE workflowBody RBRACE)?
+    | NON INTERRUPTING NOTIFICATION workflowActivityName? STRING_LITERAL? (LBRACE workflowBody RBRACE)?
     ;
 
 workflowUserTaskOutcome
     : STRING_LITERAL LBRACE workflowBody RBRACE
     ;
 
+/**
+ * `call agent microflow` is the AI agent task (Mendix 11.9+): stored as
+ * Workflows$AIAgentTaskActivity, the same shape as a call-microflow activity, and
+ * run by the workflow engine as an agent step. The microflow is where the agent is
+ * invoked.
+ */
 workflowCallMicroflowStmt
-    : CALL MICROFLOW qualifiedName (AS workflowActivityName)? (COMMENT STRING_LITERAL)?
+    : CALL AGENT? MICROFLOW qualifiedName (AS workflowActivityName)? (COMMENT STRING_LITERAL)?
       (WITH LPAREN workflowParameterMapping (COMMA workflowParameterMapping)* RPAREN)?
       (OUTCOMES workflowConditionOutcome+)?
       (BOUNDARY EVENT workflowBoundaryEventClause ((BOUNDARY EVENT)? workflowBoundaryEventClause)*)?
@@ -166,6 +250,14 @@ workflowWaitForTimerStmt
 workflowWaitForNotificationStmt
     : WAIT FOR NOTIFICATION workflowActivityName? (COMMENT STRING_LITERAL)?
       (BOUNDARY EVENT workflowBoundaryEventClause ((BOUNDARY EVENT)? workflowBoundaryEventClause)*)?
+    ;
+
+/**
+ * An intermediate notification event on a flow (Workflows$NotificationActivity):
+ * the point a `notify workflow … target <name>` reaches.
+ */
+workflowNotificationStmt
+    : NOTIFICATION workflowActivityName? (COMMENT STRING_LITERAL)?
     ;
 
 workflowAnnotationStmt

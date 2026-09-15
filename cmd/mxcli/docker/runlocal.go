@@ -18,8 +18,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // runlocal.go is the `mxcli run --local` orchestrator: a warm, Docker-free dev
@@ -275,7 +275,7 @@ func parseRuntimeSetting(s string) (string, any, error) {
 // selection per developer — so the one named "Default" wins, falling back to
 // the first configuration that actually sets a URL. A settings read failure is
 // not fatal: the run simply proceeds without a root URL, exactly as before.
-func configuredApplicationRootURL(reader *mpr.Reader) (rootURL, configName string) {
+func configuredApplicationRootURL(reader backend.FullBackend) (rootURL, configName string) {
 	settings, err := reader.GetProjectSettings()
 	if err != nil {
 		return "", ""
@@ -555,7 +555,7 @@ func RunLocal(opts LocalRunOptions) error {
 
 	// 1. Detect the project's Mendix version.
 	fmt.Fprintln(w, "Detecting project version...")
-	reader, err := mpr.Open(opts.ProjectPath)
+	reader, err := openReadOnly(opts.ProjectPath)
 	if err != nil {
 		return fmt.Errorf("opening project: %w", err)
 	}
@@ -569,7 +569,7 @@ func RunLocal(opts LocalRunOptions) error {
 	// separate step; collect them here so the boot can vendor any that are
 	// missing (mxcli-formula1 findings #12).
 	declaredJars := declaredJarDependencies(reader)
-	reader.Close()
+	reader.Disconnect()
 	version := pv.ProductVersion
 	fmt.Fprintf(w, "  Mendix version: %s\n", version)
 
@@ -1333,7 +1333,7 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, w
 
 // declaredJarDependencies collects the managed Java dependency coordinates the
 // model declares, across every module.
-func declaredJarDependencies(reader *mpr.Reader) []JarDependencyRef {
+func declaredJarDependencies(reader backend.FullBackend) []JarDependencyRef {
 	all, err := reader.ListModuleSettings()
 	if err != nil {
 		return nil

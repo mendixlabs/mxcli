@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // DefaultJavaMajor is the Java release assumed when a project does not say which
@@ -33,11 +31,11 @@ const DefaultJavaMajor = 21
 // before: guessing a different JDK from an unreadable model would trade a clear
 // failure for a confusing one.
 func ProjectJavaMajor(projectPath string) (int, bool) {
-	reader, err := mpr.Open(projectPath)
+	reader, err := openReadOnly(projectPath)
 	if err != nil {
 		return DefaultJavaMajor, false
 	}
-	defer func() { _ = reader.Close() }()
+	defer func() { _ = reader.Disconnect() }()
 
 	ps, err := reader.GetProjectSettings()
 	if err != nil || ps == nil || ps.Model == nil {

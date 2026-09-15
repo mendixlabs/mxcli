@@ -20,17 +20,17 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 // storageVersion reports the .mpr's detected on-disk storage format.
-func storageVersion(t *testing.T, mprPath string) mpr.MPRVersion {
+func storageVersion(t *testing.T, mprPath string) types.MPRVersion {
 	t.Helper()
-	reader, err := mpr.Open(mprPath)
+	reader, err := openReadOnly(mprPath)
 	if err != nil {
-		t.Fatalf("mpr.Open(%s): %v", mprPath, err)
+		t.Fatalf("openReadOnly(%s): %v", mprPath, err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 	return reader.Version()
 }
 
@@ -43,7 +43,7 @@ func v2Fixture(t *testing.T) string {
 		t.Fatalf("copy v2 fixture: %v", err)
 	}
 	p := filepath.Join(dst, "minimal.mpr")
-	if v := storageVersion(t, p); v != mpr.MPRVersionV2 {
+	if v := storageVersion(t, p); v != types.MPRVersionV2 {
 		t.Fatalf("fixture is %v, not MPRv2 — this test would prove nothing", v)
 	}
 	return p
@@ -57,7 +57,7 @@ func v1Fixture(t *testing.T) string {
 		t.Fatalf("copy v1 fixture: %v", err)
 	}
 	p := filepath.Join(dst, "App.mpr")
-	if v := storageVersion(t, p); v != mpr.MPRVersionV1 {
+	if v := storageVersion(t, p); v != types.MPRVersionV1 {
 		t.Fatalf("fixture is %v, not MPRv1", v)
 	}
 	return p
@@ -120,7 +120,7 @@ func TestRunUpdateWidgets_RestoresV2AfterConversion(t *testing.T) {
 	} else if !bytes.Equal(got, orig) {
 		t.Errorf(".mpr not restored: got %d bytes, want the original %d (#808)", len(got), len(orig))
 	}
-	if v := storageVersion(t, mprPath); v != mpr.MPRVersionV2 {
+	if v := storageVersion(t, mprPath); v != types.MPRVersionV2 {
 		t.Errorf("project left as %v; MPRv2 storage must be preserved (#808)", v)
 	}
 	if entries, err := os.ReadDir(contentsDir); err != nil {
@@ -174,7 +174,7 @@ func TestRunUpdateWidgets_SkipsStepWhenSnapshotFails(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(filepath.Dir(mprPath), "mprcontents")); err != nil {
 		t.Fatal(err)
 	}
-	if v := storageVersion(t, mprPath); v != mpr.MPRVersionV2 {
+	if v := storageVersion(t, mprPath); v != types.MPRVersionV2 {
 		t.Fatalf("fixture no longer reads as MPRv2 (%v) — test premise broken", v)
 	}
 
@@ -211,7 +211,7 @@ func TestRunUpdateWidgets_RestoresWhenStepFails(t *testing.T) {
 	restore := runUpdateWidgets("mx", mprPath, &out, io.Discard)
 	restore()
 
-	if v := storageVersion(t, mprPath); v != mpr.MPRVersionV2 {
+	if v := storageVersion(t, mprPath); v != types.MPRVersionV2 {
 		t.Errorf("project left as %v after a failed update-widgets; the snapshot must still be restored (#808)", v)
 	}
 }

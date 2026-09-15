@@ -51,7 +51,7 @@ func collectEndBodies(b endBody, out *[]endBody) {
 	}
 	boundary := func(events []ast.WorkflowBoundaryEventNode) {
 		for _, e := range events {
-			child(e.Activities, false, e.EventType == "NonInterruptingTimer")
+			child(e.Activities, false, nonInterruptingEventType(e.EventType))
 		}
 	}
 	for _, a := range b.activities {
@@ -78,6 +78,12 @@ func collectEndBodies(b endBody, out *[]endBody) {
 			boundary(n.BoundaryEvents)
 		}
 	}
+}
+
+// nonInterruptingEventType reports whether a boundary event of this kind runs
+// alongside its activity (timer or notification).
+func nonInterruptingEventType(eventType string) bool {
+	return (&workflows.BoundaryEvent{EventType: eventType}).IsNonInterrupting()
 }
 
 // flowEnds reports whether control can never leave the end of a block.
@@ -142,6 +148,11 @@ func branchingLabel(a ast.WorkflowActivityNode) string {
 func ValidateWorkflowEnds(stmt *ast.CreateWorkflowStmt) []linter.Violation {
 	var bodies []endBody
 	collectEndBodies(endBody{activities: stmt.Activities, mainFlow: true}, &bodies)
+	// An event sub-process body is its own flow: `end workflow` may close it,
+	// and one that already ends takes no implicit End (the builder adds none).
+	for _, esp := range stmt.EventSubProcesses {
+		collectEndBodies(endBody{activities: esp.Activities}, &bodies)
+	}
 	return checkEndBodies(bodies, workflowLocation(stmt.Name))
 }
 
@@ -165,7 +176,7 @@ func ValidateAlterWorkflowEnds(stmt *ast.AlterWorkflowStmt) []linter.Violation {
 		case *ast.InsertPathOp:
 			collectEndBodies(endBody{activities: o.Activities, underSplit: true}, &bodies)
 		case *ast.InsertBoundaryEventOp:
-			collectEndBodies(endBody{activities: o.Activities, underNonInterrupting: o.EventType == "NonInterruptingTimer"}, &bodies)
+			collectEndBodies(endBody{activities: o.Activities, underNonInterrupting: nonInterruptingEventType(o.EventType)}, &bodies)
 		}
 	}
 	return checkEndBodies(bodies, workflowLocation(stmt.Name))
@@ -279,7 +290,7 @@ func validateAlterWorkflowEndAncestry(ctx *ExecContext, s *ast.AlterWorkflowStmt
 		case *ast.InsertBranchOp:
 			check("insert condition", o.ActivityRef, o.AtPosition, o.Activities)
 		case *ast.InsertBoundaryEventOp:
-			if o.EventType != "NonInterruptingTimer" { // that one is reported without a project
+			if !nonInterruptingEventType(o.EventType) { // that one is reported without a project
 				check("insert boundary event", o.ActivityRef, o.AtPosition, o.Activities)
 			}
 		}
@@ -320,7 +331,7 @@ func collectStoredPlacements(flow *workflows.Flow, ref string, at storedPlacemen
 		for _, b := range events {
 			if b != nil {
 				nested := at
-				nested.underNonInterrupting = at.underNonInterrupting || b.EventType == "NonInterruptingTimer"
+				nested.underNonInterrupting = at.underNonInterrupting || b.IsNonInterrupting()
 				collectStoredPlacements(b.Flow, ref, nested, out)
 			}
 		}

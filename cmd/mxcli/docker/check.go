@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // CheckOptions configures the mx check command.
@@ -72,9 +70,9 @@ func Check(opts CheckOptions) error {
 	// Resolve mx binary
 	projectVersion := ""
 	if opts.ProjectPath != "" {
-		if reader, err := mpr.Open(opts.ProjectPath); err == nil {
+		if reader, err := openReadOnly(opts.ProjectPath); err == nil {
 			projectVersion = reader.ProjectVersion().ProductVersion
-			reader.Close()
+			reader.Disconnect()
 		}
 	}
 

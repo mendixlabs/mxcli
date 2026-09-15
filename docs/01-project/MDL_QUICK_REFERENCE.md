@@ -659,22 +659,40 @@ Nested folders use `/` separator: `'Parent/Child/Grandchild'`. Missing folders a
 |-----------|--------|-------|
 | Show workflows | `show workflows [in module];` | List all or filter by module |
 | Describe workflow | `describe workflow Module.Name;` | Full MDL output |
-| Create workflow | `create [or modify] workflow Module.Name [folder 'path'] parameter $Ctx: Module.Entity begin ... end workflow;` | See activity types below |
+| Create workflow | `create [or modify] workflow Module.Name [folder 'path'] parameter $Ctx: Module.Entity [on workflow events (<type>, ...) microflow Mod.MF [as '<text>']] [on any workflow event microflow Mod.MF [as '<text>']] begin ... end workflow;` | See activity types and event handlers below |
 | Drop workflow | `drop workflow Module.Name;` | |
 
 **Workflow Activity Types:**
-- `[multi] user task <name> '<caption>' [page Mod.Page] [targeting [users|groups] microflow Mod.MF] [targeting [users|groups] xpath '<expr>'] [outcomes '<out>' { } ...];`
+- `[multi] user task <name> '<caption>' [page Mod.Page] [targeting [users|groups] microflow Mod.MF] [targeting [users|groups] xpath '<expr>'] [on created microflow Mod.MF] [participants all|<n>|<n> percent] [decide by <rule>] [await all users] [outcomes '<out>' { } ...];`
+  - **Multi-user only:** `decide by consensus|majority more than half|majority most chosen|threshold <n> percent|votes fallback '<outcome>'`, `decide by veto '<outcome>'`, `decide by microflow Mod.MF`. A fallback is required for consensus, majority and threshold (CE1866), a veto needs its outcome (CE1867), and a decision microflow returns String (CE5012) — all `MDL-WF13` / check. Omitted: all participants, consensus on the first outcome, not waiting.
   - The **task page** must take a `System.WorkflowUserTask` parameter — none at all is CE7410, none of that type is CE7412; extra parameters are allowed.
   - A **targeting microflow** takes exactly `System.Workflow` + the context entity (or a generalization of it), in either order — anything else is CE6677. Users targeting returns a list of `System.User`, groups a list of `System.WorkflowGroup`.
-  - `check --references` reports both before anything is written; `exec` refuses the workflow statement itself (Mendix 11+).
+  - An **on-created microflow** takes exactly `System.WorkflowUserTask` + the context entity, in either order (CE6683), and returns nothing (CE5012).
+  - `check --references` reports these before anything is written; `exec` refuses the workflow statement itself (Mendix 11+).
 - `call microflow Mod.MF [as <name>] [comment '<text>'] [with (<Param> = '<expr>', ...)] [outcomes '<out>' -> { } ...];`
+- `call agent microflow Mod.MF [as <name>] [comment '<text>'] [with (<Param> = '<expr>', ...)] [outcomes … -> { } ...];` — an **AI agent task** (Mendix 11.9+): the call-microflow statement stored as `Workflows$AIAgentTaskActivity`. Its microflow must take at least one parameter (CE1590).
 - `call workflow Mod.WF [as <name>] [comment '<text>'] [with (<Param> = '<expr>', ...)];`
 - `decision [<name>] ['<expression>'] outcomes <true|false|'Module.Enum.Value'> -> { } ...;`
 - `parallel split [<name>] path 1 { } path 2 { };`
 - `jump to <activity-name>;`
 - `wait for timer [<name>] ['<expr>'];`
 - `wait for notification [<name>];`
+- `notification [<name>] [comment '<caption>'];` — an intermediate notification event (Mendix 11.11+)
 - `end workflow [comment '<caption>'];` — only inside a `{ }` block; ends the whole workflow
+- Boundary events, after `outcomes`: `boundary event [non] interrupting timer '<expr>' { … }` or `boundary event [non] interrupting notification <name> ['<caption>'] { … }` (11.11+). One interrupting event per activity (CE6697, MDL-WF15).
+
+**Notifying a workflow** (a microflow statement): `[$Notified =] notify workflow $Workflow target Module.Workflow.ElementName;` — the element is a notification-started event sub-process's start, a notification activity, a notification boundary event or a wait for notification, and mxcli resolves which. The target is required (CE0166, MDL-WF16).
+
+**Event sub-processes**, after the main body: `event subprocess <name> ['<caption>'] on [non] interrupting notification [<start>] ['<caption>'] { … };` (11.8+) or `… on [non] interrupting timer '<first-execution-time>' [as <start>] [comment '<caption>'] { … };` (11.13+). The body's End is implicit; a `jump to` stays in its own sub-process (CE6682, MDL-WF05); a timer needs its expression (CE0126, MDL-WF14).
+
+**Workflow event handlers.** `on workflow events (UserTaskStarted, UserTaskEnded)
+microflow Mod.MF as 'Task audit'` in the header runs the microflow for each listed
+event; the microflow takes exactly `System.WorkflowEvent`, `System.WorkflowRecord`
+and `System.WorkflowActivityRecord` (CE6691). The build does not check event type
+names — an invented one builds and never fires — so mxcli refuses an unknown name
+(MDL-WF12) and one the project's Mendix version lacks. `on any workflow event`
+stores every type the version has (Studio Pro stores the list, not a flag) and
+needs 11.6+. Types: `mxcli syntax workflow.event-handlers`.
 
 **Ending a workflow early.** `end workflow` inside an outcome, a decision branch, a
 call-microflow outcome or an interrupting boundary-event path ends the whole
@@ -1389,6 +1407,8 @@ MDL uses explicit property declarations for pages:
 | List layouts | `show layouts [in module];` | |
 | Describe layout | `describe layout Module.Name;` | Round-trippable MDL — describe an Atlas layout, rename it, run it to get a copy in your own module |
 | Create layout | `create [or replace] layout Module.Name ( layouttype: 'X' ) { <widgets> };` | modelsdk engine only. Refused in a Marketplace module: an update replaces the module and the edit is gone |
+| Drop layout | `drop layout Module.Name;` | Pages still bound to it are named in a warning and the drop proceeds; left dropped they fail **CE1613**, which names the *page* |
+| Declare a placeholder | `placeholder Main` | **No body.** Exactly one must be named `Main` — mxbuild enforces it (**CE0848**/**CE0849**), and names must be unique (**CE0495**). `placeholder X { … }` is the page-side form and declares nothing (MDL083) |
 | Alter layout | `alter layout Module.Name { <alter-page operations> };` | Edits the stored document, so widgets MDL cannot spell survive. Refused for a Marketplace target |
 | Repoint one page | `alter page Module.Page { set Layout = Module.Layout [map (Old as New, …)]; };` | Rewrites the layout reference **and** every placeholder binding |
 | Repoint many pages | `alter pages [in <module>] set layout = Module.Layout [map (…)] [where layout = Module.Old];` | The migration form. Marketplace pages are skipped and named. A `where layout` that names no real layout is an error, not a 0-page success |

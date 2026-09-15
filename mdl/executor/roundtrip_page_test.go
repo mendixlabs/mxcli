@@ -693,8 +693,19 @@ func TestRoundtripPage_MicroflowButtonWithCurrentObject(t *testing.T) {
 	if !strings.Contains(output, mfName) {
 		t.Errorf("Expected microflow name '%s' in describe output.\nOutput:\n%s", mfName, output)
 	}
-	if !strings.Contains(output, "Target: $currentObject") {
-		t.Errorf("Expected 'Target: $currentObject' parameter mapping in describe output.\nOutput:\n%s", output)
+	// Quoting-agnostic on purpose. DESCRIBE emits an identifier through mdlIdent,
+	// which quotes anything that does not LEX as a bare identifier — so the day
+	// `TARGET` became a lexer token (the notify-workflow target clause, #476) this
+	// output went from `Target:` to `"Target":` and an exact-substring assertion
+	// started failing on a describe that had become MORE correct, not less.
+	//
+	// Both forms re-parse here (TARGET is non-reserved, so the unquoted spelling
+	// this test's own input uses is still accepted); what the assertion is for is
+	// the MAPPING surviving the roundtrip, which is independent of the quoting.
+	if !strings.Contains(output, "Target: $currentObject") &&
+		!strings.Contains(output, `"Target": $currentObject`) {
+		t.Errorf("Expected a 'Target: $currentObject' parameter mapping (quoted or not) "+
+			"in describe output.\nOutput:\n%s", output)
 	}
 
 	t.Logf("Microflow button with $currentObject roundtrip successful:\n%s", output)

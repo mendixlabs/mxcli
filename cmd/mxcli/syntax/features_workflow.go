@@ -32,9 +32,62 @@ func init() {
 			"create workflow", "new workflow", "define workflow",
 			"parameter", "overview page", "due date",
 		},
-		Syntax:  "CREATE [OR MODIFY] WORKFLOW Module.Name\n  [FOLDER 'path']\n  PARAMETER $Context: Module.Entity\n  [OVERVIEW PAGE Module.OverviewPage]\n  [DUE DATE '<expression>']\nBEGIN\n  <activities>\nEND WORKFLOW;",
+		Syntax:  "CREATE [OR MODIFY] WORKFLOW Module.Name\n  [FOLDER 'path']\n  PARAMETER $Context: Module.Entity\n  [OVERVIEW PAGE Module.OverviewPage]\n  [DUE DATE '<expression>']\n  [ON WORKFLOW EVENTS (<type>, ...) MICROFLOW Module.Handler [AS '<description>']]...\n  [ON ANY WORKFLOW EVENT MICROFLOW Module.Handler [AS '<description>']]...\nBEGIN\n  <activities>\nEND WORKFLOW;",
 		Example: "CREATE WORKFLOW Module.ApprovalFlow\n  PARAMETER $Context: Module.Request\n  OVERVIEW PAGE Module.WF_Overview\nBEGIN\n  USER TASK ReviewTask 'Review the request'\n    PAGE Module.ReviewPage\n    OUTCOMES 'Approve' { } 'Reject' { };\nEND WORKFLOW;",
-		SeeAlso: []string{"workflow.user-task", "workflow.decision", "workflow.drop"},
+		SeeAlso: []string{"workflow.user-task", "workflow.event-handlers", "workflow.decision", "workflow.drop"},
+	})
+
+	Register(SyntaxFeature{
+		Path:    "workflow.event-handlers",
+		Summary: "Run a microflow when workflow events happen (task started, workflow completed, ...)",
+		Keywords: []string{
+			"event handler", "workflow event", "on workflow events", "any workflow event",
+			"audit", "on created", "on-created microflow", "WorkflowEvent", "OnWorkflowEvent",
+		},
+		// Every rule below is an mxbuild 11.13.0 measurement. The invented-type row
+		// is the one worth saying out loud: the build does not check type names.
+		Syntax: "-- Workflow header, before BEGIN; repeat for more handlers:\n" +
+			"ON WORKFLOW EVENTS (<type>, ...) MICROFLOW Module.Handler [AS '<description>']\n" +
+			"ON ANY WORKFLOW EVENT MICROFLOW Module.Handler [AS '<description>']\n\n" +
+			"-- The handler microflow takes exactly these three, in any order (else CE6691):\n" +
+			"--   System.WorkflowEvent, System.WorkflowRecord, System.WorkflowActivityRecord\n\n" +
+			"-- Event types (names are checked by mxcli — mxbuild accepts any name,\n" +
+			"-- and a misspelt type never fires; MDL-WF12):\n" +
+			"--   WorkflowCompleted WorkflowInitiated WorkflowRestarted WorkflowFailed WorkflowAborted\n" +
+			"--   WorkflowPaused WorkflowUnpaused WorkflowRetried WorkflowUpdated WorkflowUpgraded\n" +
+			"--   WorkflowConflicted WorkflowResolved WorkflowJumpToOptionApplied\n" +
+			"--   StartEventExecuted EndEventExecuted DecisionExecuted JumpExecuted\n" +
+			"--   ParallelSplitExecuted ParallelMergeExecuted CallWorkflowStarted CallWorkflowEnded\n" +
+			"--   CallMicroflowStarted CallMicroflowEnded WaitForNotificationStarted WaitForNotificationEnded\n" +
+			"--   WaitForTimerStarted WaitForTimerEnded UserTaskStarted MultiUserTaskOutcomeSelected UserTaskEnded\n" +
+			"--   NonInterruptingTimerEventExecuted InterruptingTimerEventExecuted\n" +
+			"--   11.10+: AIAgentTaskStarted AIAgentTaskEnded\n" +
+			"--           NonInterruptingNotificationEventSubProcessStartExecuted\n" +
+			"--           InterruptingNotificationEventSubProcessStartExecuted\n" +
+			"--   11.13+: NotificationStarted NotificationEnded\n" +
+			"--           NonInterruptingNotificationEventExecuted InterruptingNotificationEventExecuted\n" +
+			"--           NonInterruptingTimerEventSubProcessStartExecuted InterruptingTimerEventSubProcessStartExecuted\n\n" +
+			"-- ANY WORKFLOW EVENT stores every type the project's Mendix version has (Studio Pro\n" +
+			"-- stores the list, not a flag), so it needs Mendix 11.6+; name the types before that.\n\n" +
+			"-- A user task's on-created microflow (see workflow.user-task) takes exactly\n" +
+			"-- System.WorkflowUserTask and the context entity, in either order (else CE6683),\n" +
+			"-- and returns nothing (else CE5012).",
+		Example: "CREATE MICROFLOW HR.ACT_AuditTask (\n" +
+			"  $WorkflowEvent: System.WorkflowEvent,\n" +
+			"  $WorkflowRecord: System.WorkflowRecord,\n" +
+			"  $WorkflowActivityRecord: System.WorkflowActivityRecord\n" +
+			") BEGIN END;\n\n" +
+			"CREATE WORKFLOW HR.LeaveApproval\n" +
+			"  PARAMETER $Request: HR.LeaveRequest\n" +
+			"  ON WORKFLOW EVENTS (UserTaskStarted, UserTaskEnded) MICROFLOW HR.ACT_AuditTask AS 'Task audit'\n" +
+			"  ON ANY WORKFLOW EVENT MICROFLOW HR.ACT_LogEvent AS 'OnAnyEvent'\n" +
+			"BEGIN\n" +
+			"  USER TASK Review 'Review the request'\n" +
+			"    PAGE HR.ReviewPage\n" +
+			"    ON CREATED MICROFLOW HR.ACT_AssignReviewer\n" +
+			"    OUTCOMES 'Approve' { } 'Reject' { };\n" +
+			"END WORKFLOW;",
+		SeeAlso: []string{"workflow.create", "workflow.user-task"},
 	})
 
 	Register(SyntaxFeature{
@@ -52,6 +105,7 @@ func init() {
 		Syntax: "[MULTI] USER TASK <name> '<caption>'\n" +
 			"  PAGE Module.TaskPage\n" +
 			"  [TARGETING [USERS | GROUPS] MICROFLOW Module.MF | TARGETING [USERS | GROUPS] XPATH '<xpath>']\n" +
+			"  [ON CREATED MICROFLOW Module.MF]  -- (System.WorkflowUserTask, <context entity>), returns nothing\n" +
 			"  [ENTITY Module.Entity]\n" +
 			"  [DUE DATE '<expression>']\n" +
 			"  [DESCRIPTION '<text>']\n" +
@@ -103,6 +157,8 @@ func init() {
 		Keywords: []string{
 			"multi user task", "multi-user task", "several users", "multiple assignees",
 			"assessors", "voting", "parallel approval", "group approval",
+			"decide by", "consensus", "majority", "threshold", "veto", "fallback",
+			"participants", "await all users", "completion criteria",
 		},
 		// The grammar has accepted MULTI USER TASK since issue #8, and a team
 		// shipped one fanning out to eight assessors — but there was no topic for
@@ -112,14 +168,27 @@ func init() {
 		Syntax: "MULTI USER TASK <name> '<caption>'\n" +
 			"  PAGE Module.TaskPage\n" +
 			"  [TARGETING [USERS | GROUPS] MICROFLOW Module.MF | TARGETING [USERS | GROUPS] XPATH '<xpath>']\n" +
+			"  [ON CREATED MICROFLOW Module.MF]  -- (System.WorkflowUserTask, <context entity>), returns nothing\n" +
 			"  [ENTITY Module.Entity]\n" +
 			"  [DUE DATE '<expression>']\n" +
 			"  [DESCRIPTION '<text>']\n" +
+			"  [PARTICIPANTS ALL | <n> | <n> PERCENT]\n" +
+			"  [DECIDE BY <rule>]\n" +
+			"  [AWAIT ALL USERS]\n" +
 			"  OUTCOMES '<outcome1>' { <activities> } '<outcome2>' { <activities> };\n\n" +
-			"-- Same clauses, task-page rule and targeting rule as USER TASK.\n" +
-			"-- MDL has no clause for a multi-user task's completion settings (how the\n" +
-			"-- individual answers decide the outcome); set those in Studio Pro.",
-		Example: "MULTI USER TASK ExpertAssessment 'Expert assessment'\n  PAGE MOC.AssessmentPage\n  TARGETING MICROFLOW MOC.GetAssessors\n  OUTCOMES 'Approve' { } 'Reject' { };",
+			"-- Rules:\n" +
+			"--   DECIDE BY CONSENSUS FALLBACK '<outcome>'\n" +
+			"--   DECIDE BY MAJORITY MORE THAN HALF FALLBACK '<outcome>'\n" +
+			"--   DECIDE BY MAJORITY MOST CHOSEN FALLBACK '<outcome>'\n" +
+			"--   DECIDE BY THRESHOLD <n> PERCENT | <n> VOTES FALLBACK '<outcome>'\n" +
+			"--   DECIDE BY VETO '<outcome>'\n" +
+			"--   DECIDE BY MICROFLOW Module.Decide      -- returns String (else CE5012)\n" +
+			"-- The fallback is required for consensus, majority and threshold (CE1866); a\n" +
+			"-- veto needs its outcome (CE1867); both must name one of the task's outcomes\n" +
+			"-- (MDL-WF13). Omitted: all participants, consensus on the first outcome, not\n" +
+			"-- waiting. The build does not range-check thresholds or participant counts.\n" +
+			"-- Same page and targeting rules as USER TASK.",
+		Example: "MULTI USER TASK ExpertAssessment 'Expert assessment'\n  PAGE MOC.AssessmentPage\n  TARGETING MICROFLOW MOC.GetAssessors\n  PARTICIPANTS 80 PERCENT\n  DECIDE BY THRESHOLD 60 PERCENT FALLBACK 'Reject'\n  AWAIT ALL USERS\n  OUTCOMES 'Approve' { } 'Reject' { };",
 		SeeAlso: []string{"workflow.user-task", "workflow.user-task.targeting"},
 	})
 
@@ -174,7 +243,34 @@ func init() {
 		// author ends up writing the unquoted form (ako/mxcli#1023).
 		Syntax:  "CALL MICROFLOW Module.MF [AS <name>] [COMMENT '<text>']\n  [WITH (<Param> = '<expression>', ...)]\n  [OUTCOMES '<outcome>' -> { <activities> } ...];",
 		Example: "CALL MICROFLOW HR.SendNotification\n  COMMENT 'Notify manager';\n\n-- Parameter values are quoted, and named by their BARE parameter name:\nCALL MICROFLOW HR.Escalate AS callMicroflow1\n  WITH (Request = '$WorkflowContext');",
-		SeeAlso: []string{"workflow.create", "workflow.call-workflow"},
+		SeeAlso: []string{"workflow.create", "workflow.call-workflow", "workflow.ai-agent-task"},
+	})
+
+	Register(SyntaxFeature{
+		Path:    "workflow.ai-agent-task",
+		Summary: "AI agent task — a workflow step that runs an agent through a microflow (Mendix 11.9+)",
+		Keywords: []string{
+			"ai agent task", "agent task", "call agent", "call agent microflow",
+			"agent", "llm", "genai", "AIAgentTaskActivity",
+		},
+		// Measured on mxbuild 11.13.0 against the same activity written as a call
+		// microflow: the only difference in what builds is CE1590 for a microflow
+		// with no parameters.
+		Syntax: "CALL AGENT MICROFLOW Module.MF [AS <name>] [COMMENT '<text>']\n" +
+			"  [WITH (<Param> = '<expression>', ...)]\n" +
+			"  [OUTCOMES <true|false|'Module.Enum.Value'|''> -> { <activities> } ...]\n" +
+			"  [BOUNDARY EVENT ...];\n\n" +
+			"-- The same statement as CALL MICROFLOW, stored as an AI agent task. The microflow\n" +
+			"-- is where the agent is invoked; it must take at least one parameter (else CE1590),\n" +
+			"-- usually the workflow's context object. Return Boolean or an enumeration to\n" +
+			"-- branch on the agent's answer with OUTCOMES. Needs Mendix 11.9+.",
+		Example: "CREATE MICROFLOW HR.ACT_ClassifyRequest ($Request: HR.LeaveRequest)\n" +
+			"RETURNS Boolean AS $Urgent\nBEGIN\n  -- call the agent here\n  RETURN false;\nEND;\n\n" +
+			"CALL AGENT MICROFLOW HR.ACT_ClassifyRequest AS aiAgentTask1 COMMENT 'Classify the request'\n" +
+			"  WITH (Request = '$WorkflowContext')\n" +
+			"  OUTCOMES true -> { USER TASK Expedite 'Expedite' PAGE HR.TaskPage OUTCOMES 'Done' { }; }\n" +
+			"           false -> { };",
+		SeeAlso: []string{"workflow.call-microflow", "agents"},
 	})
 
 	Register(SyntaxFeature{
@@ -282,10 +378,78 @@ func init() {
 		// 'Workflows$TimerBoundaryEvent' could not be found"). This entry showed
 		// the bare form, with 'P3D' — not a valid timer expression — as its delay.
 		// ako/view-entity-examples FINDINGS §7.
-		Syntax:     "-- inline, as a clause of a USER TASK (after OUTCOMES):\nBOUNDARY EVENT (INTERRUPTING | NON INTERRUPTING) TIMER '<datetime-expression>' { <activities> }\n\n-- or add one to an existing task:\nALTER WORKFLOW <wf> INSERT BOUNDARY EVENT ON <task> (INTERRUPTING | NON INTERRUPTING) TIMER '<datetime-expression>' { <activities> }\n\n-- Name the kind: a bare TIMER is refused on Mendix 11 (MDL-WF07) — it writes a\n-- type the runtime cannot load. The delay is an expression that yields a\n-- DateTime, e.g. 'addDays([%CurrentDateTime%], 3)'. mxcli ends every boundary\n-- path with Mendix's end-of-path marker, so a path may end in a call; use\n-- JUMP TO to return to the task instead.",
+		Syntax:     "-- inline, as a clause of a USER TASK (after OUTCOMES):\nBOUNDARY EVENT (INTERRUPTING | NON INTERRUPTING) TIMER '<datetime-expression>' { <activities> }\nBOUNDARY EVENT (INTERRUPTING | NON INTERRUPTING) NOTIFICATION <name> ['<caption>'] { <activities> }\n\n-- A notification boundary event (Mendix 11.11+) is triggered by `notify workflow`\n-- targeting its name, so the name is unique in the workflow. ALTER cannot insert\n-- one yet; restate the workflow instead.\n\n-- or add a timer to an existing task:\nALTER WORKFLOW <wf> INSERT BOUNDARY EVENT ON <task> (INTERRUPTING | NON INTERRUPTING) TIMER '<datetime-expression>' { <activities> }\n\n-- Name the kind: a bare TIMER is refused on Mendix 11 (MDL-WF07) — it writes a\n-- type the runtime cannot load. The delay is an expression that yields a\n-- DateTime, e.g. 'addDays([%CurrentDateTime%], 3)'. mxcli ends every boundary\n-- path with Mendix's end-of-path marker, so a path may end in a call; use\n-- JUMP TO to return to the task instead.",
 		Example:    "user task ReviewTask 'Review'\n  page Module.WF_Review\n  outcomes 'Done' { }\n  boundary event interrupting timer 'addDays([%CurrentDateTime%], 3)' {\n    call microflow Module.WF_Escalate;\n  };",
 		MinVersion: "10.6.0",
-		SeeAlso:    []string{"workflow.user-task"},
+		SeeAlso:    []string{"workflow.user-task", "workflow.notification", "workflow.event-subprocess"},
+	})
+
+	Register(SyntaxFeature{
+		Path:    "workflow.event-subprocess",
+		Summary: "Event sub-processes — flows a notification or timer starts while the workflow runs",
+		Keywords: []string{
+			"event subprocess", "event sub-process", "esp", "cancel workflow",
+			"interrupting", "non interrupting", "notification start", "timer start",
+		},
+		Syntax: "-- after the main body, before END WORKFLOW:\n" +
+			"EVENT SUBPROCESS <name> ['<caption>']\n" +
+			"  ON (INTERRUPTING | NON INTERRUPTING) NOTIFICATION [<start>] ['<start caption>']\n" +
+			"  { <activities> };\n" +
+			"EVENT SUBPROCESS <name> ['<caption>']\n" +
+			"  ON (INTERRUPTING | NON INTERRUPTING) TIMER '<first-execution-time>' [AS <start>] [COMMENT '<start caption>']\n" +
+			"  { <activities> };\n\n" +
+			"-- Interrupting cancels every active path first; non-interrupting runs alongside.\n" +
+			"-- A notification start is what `notify workflow` targets. The body's End is\n" +
+			"-- implicit, as in the main flow; `jump to` stays inside its own sub-process\n" +
+			"-- (CE6682, MDL-WF05). A timer needs its expression (CE0126, MDL-WF14).\n" +
+			"-- Mendix 11.8+ for notification starts, 11.13+ for timer starts.",
+		Example: "create workflow HR.Leave parameter $Ctx: HR.Request\n" +
+			"begin\n" +
+			"  user task Review 'Review' page HR.ReviewPage outcomes 'Approve' { } 'Reject' { };\n" +
+			"  event subprocess ESP_Cancel 'Cancel request'\n" +
+			"    on interrupting notification espCancelStart 'Cancel received' {\n" +
+			"    call microflow HR.ACT_LogCancel;\n" +
+			"  };\n" +
+			"  event subprocess ESP_Reminder 'Daily reminder'\n" +
+			"    on non interrupting timer 'addDays([%CurrentDateTime%], 1)' as espReminderStart {\n" +
+			"    call microflow HR.ACT_Remind;\n" +
+			"  };\n" +
+			"end workflow;",
+		MinVersion: "11.8.0",
+		SeeAlso:    []string{"workflow.notification", "workflow.boundary-event", "workflow.create"},
+	})
+
+	Register(SyntaxFeature{
+		Path:    "workflow.notification",
+		Summary: "Notification activity — an intermediate notification event on a flow",
+		Keywords: []string{
+			"notification", "notification activity", "intermediate event", "notify",
+		},
+		Syntax: "NOTIFICATION [<name>] [COMMENT '<caption>'];\n\n" +
+			"-- The point a `notify workflow` action reaches (Workflows$NotificationActivity,\n" +
+			"-- Mendix 11.11+). `wait for notification` is the older activity for the same\n" +
+			"-- purpose and works on every version.",
+		Example:    "notification DocumentsReceived comment 'Documents received';",
+		MinVersion: "11.11.0",
+		SeeAlso:    []string{"workflow.event-subprocess", "workflow.boundary-event", "workflow.notify"},
+	})
+
+	Register(SyntaxFeature{
+		Path:    "workflow.notify",
+		Summary: "Notify a running workflow — resume the element the notification targets",
+		Keywords: []string{
+			"notify workflow", "notify", "notify target", "resume workflow", "trigger event sub-process",
+		},
+		Syntax: "[$Notified =] NOTIFY WORKFLOW $Workflow TARGET Module.Workflow.ElementName;\n\n" +
+			"-- A microflow statement. The target names a notification-started event\n" +
+			"-- sub-process's start, a notification activity, a notification boundary event\n" +
+			"-- or a wait for notification; mxcli looks up which it is and refuses an element\n" +
+			"-- a notification cannot reach (a timer start, a user task). The target is\n" +
+			"-- required: without one the build fails CE0166 (MDL-WF16). $Notified is a\n" +
+			"-- Boolean. Before Mendix 11.7 only a wait for notification can be named.",
+		Example:    "$Cancelled = notify workflow $Workflow target HR.Leave.espCancelStart;",
+		MinVersion: "11.7.0",
+		SeeAlso:    []string{"workflow.event-subprocess", "workflow.notification", "workflow.boundary-event"},
 	})
 
 	Register(SyntaxFeature{

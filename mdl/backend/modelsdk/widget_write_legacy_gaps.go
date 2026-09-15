@@ -9,10 +9,12 @@ import (
 	"github.com/mendixlabs/mxcli/sdk/pages"
 )
 
-// The last widgets that sent a user to `MXCLI_ENGINE=legacy`.
+// The last widgets that sent a user to the legacy engine, now deleted
+// (docs/plans/2026-09-14-retire-legacy-engine.md). Closing these was one of its
+// preconditions, which is why the file is named for them.
 //
-// Every "not yet supported by the modelsdk engine" message is a reason the
-// legacy engine has to stay shipped and tested. Measured against sdk/pages, the
+// Every "not yet supported by the modelsdk engine" message was a reason the
+// legacy engine had to stay shipped and tested. Measured against sdk/pages, the
 // reachable set was five, not the twenty-three a name-based scan suggests:
 // nineteen widget structs are never constructed by the executor at all, and two
 // of the three remaining data-source / client-action gaps (EntityPathSource,

@@ -12,6 +12,7 @@ import (
 	genDb "github.com/mendixlabs/mxcli/modelsdk/gen/databaseconnector"
 	genMf "github.com/mendixlabs/mxcli/modelsdk/gen/microflows"
 	genTexts "github.com/mendixlabs/mxcli/modelsdk/gen/texts"
+	genWf "github.com/mendixlabs/mxcli/modelsdk/gen/workflows"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
@@ -638,11 +639,19 @@ func actionFromGen(el element.Element) microflows.MicroflowAction {
 		return out
 
 	case *genMf.NotifyWorkflowAction:
-		// NOTIFY WORKFLOW $Workflow. Mirrors legacy parseNotifyWorkflowAction.
+		// NOTIFY WORKFLOW $Workflow TARGET Module.Workflow.Name. Two of the five
+		// target types have no gen type, so the target is read off its raw document
+		// by $Type, like any of them.
 		out := &microflows.NotifyWorkflowAction{
 			ErrorHandlingType:  microflows.ErrorHandlingType(a.ErrorHandlingType()),
 			OutputVariableName: a.OutputVariableName(),
 			WorkflowVariable:   a.WorkflowVariable(),
+			Activity:           a.ActivityQualifiedName(),
+		}
+		if t := a.NotifyTarget(); t != nil && t.TypeName() != "" {
+			target := &microflows.NotifyTarget{TypeName: t.TypeName()}
+			target.Name = genWf.RawFieldString(t.Raw(), target.Key())
+			out.Target = target
 		}
 		out.ID = model.ID(a.ID())
 		return out

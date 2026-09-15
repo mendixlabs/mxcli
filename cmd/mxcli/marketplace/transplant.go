@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	modelsdk "github.com/mendixlabs/mxcli"
+	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/mendixlabs/mxcli/model"
 )
 
@@ -38,7 +39,7 @@ func TransplantModule(srcMpr, dstMpr, moduleName string) (copied int, err error)
 	if err != nil {
 		return 0, fmt.Errorf("open source %s: %w", srcMpr, err)
 	}
-	defer src.Close()
+	defer src.Disconnect()
 
 	srcUnits, err := src.ListUnits()
 	if err != nil {
@@ -87,7 +88,7 @@ func TransplantModule(srcMpr, dstMpr, moduleName string) (copied int, err error)
 	if err != nil {
 		return 0, fmt.Errorf("open destination %s for writing: %w", dstMpr, err)
 	}
-	defer writer.Close()
+	defer writer.Disconnect()
 
 	for _, id := range order {
 		u := byID[id]
@@ -122,7 +123,7 @@ func containsStr(haystack []string, needle string) bool {
 	return false
 }
 
-func moduleUnitIDOf(reader *modelsdk.Reader, moduleName string) (string, error) {
+func moduleUnitIDOf(reader backend.FullBackend, moduleName string) (string, error) {
 	mods, err := reader.ListModules()
 	if err != nil {
 		return "", err
@@ -142,7 +143,7 @@ func projectUnitID(mprPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("open %s: %w", mprPath, err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 
 	units, err := reader.ListUnits()
 	if err != nil {
@@ -164,7 +165,7 @@ func refuseIfPresent(mprPath, moduleName string) error {
 	if err != nil {
 		return fmt.Errorf("open %s: %w", mprPath, err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 
 	mods, err := reader.ListModules()
 	if err != nil {

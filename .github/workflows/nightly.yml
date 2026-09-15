@@ -14,20 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # `engines` is spelled out per entry rather than defaulted, so reading
-        # this block tells you where legacy runs without also knowing what an
-        # omitted key falls back to.
-        include:
-          - mendix-version: '10.24.24.119349'
-            engines: modelsdk
-          - mendix-version: '11.6.8'
-            engines: modelsdk
-          - mendix-version: '11.12.2'
-            engines: modelsdk
-          - mendix-version: '11.13.0'
-            engines: modelsdk
-          - mendix-version: '11.14.0'
-            engines: all
+        # There is one engine since the legacy sdk/mpr backend was deleted
+        # (docs/plans/2026-09-14-retire-legacy-engine.md), so the matrix is over
+        # Mendix versions alone. MXCLI_TEST_ENGINES is left unset: its default is
+        # every engine, and a name that no longer exists fails loudly rather than
+        # selecting nothing.
+        mendix-version:
+          - '10.24.24.119349'
+          - '11.6.8'
+          - '11.12.2'
+          - '11.13.0'
+          - '11.14.0'
       fail-fast: false
     name: test (Mendix ${{ matrix.mendix-version }})
     steps:
@@ -57,36 +54,8 @@ jobs:
       - name: Setup mxbuild ${{ matrix.mendix-version }}
         run: ./bin/mxcli setup mxbuild --version ${{ matrix.mendix-version }}
 
-      # The nightly is where legacy is verified — the per-push job runs modelsdk
-      # alone (push-test.yml) — but it no longer runs on every Mendix version.
-      #
-      # The engine matrix is most of what this step costs: each script is
-      # executed and handed to mxbuild once PER ENGINE (measured 588s -> 232s
-      # for modelsdk alone), so legacy was five sixths of the fleet's cost for a
-      # path nothing routes to any more. As of 2026-09-12 no mxcli feature falls
-      # back to it: the last four widget keywords are written by the codec engine
-      # and the last two reachable unimplemented backend methods are implemented
-      # (mdl/backend/modelsdk/unimplemented_reachability_test.go holds that
-      # measurement). Legacy is now strictly weaker — rules, menus, layouts,
-      # message definitions and regular expressions all refuse on it.
-      #
-      # It is narrowed rather than dropped, deliberately. `--engine legacy` is
-      # still a thing a user can type, and an engine that ships untested rots
-      # silently — the failure this repo has already had once (#808, an
-      # integration test that had only ever skipped). One version keeps the
-      # engine honest at a fifth of the cost; drop this line only together with
-      # the engine itself.
-      #
-      # Legacy's UNIT tests are unaffected and still run on every push: what
-      # narrows here is only the expensive exec + mxbuild loop.
-      #
-      # The engine set is in the step NAME as well as the env, because `go test`
-      # without -v discards a passing package's output, so TestMain's own notice
-      # never reaches a green log.
-      - name: "Integration tests (Mendix ${{ matrix.mendix-version }}, engines: ${{ matrix.engines }})"
+      - name: "Integration tests (Mendix ${{ matrix.mendix-version }})"
         run: make test-integration
-        env:
-          MXCLI_TEST_ENGINES: ${{ matrix.engines }}
         timeout-minutes: 30
 
   nightly:

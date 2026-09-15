@@ -18,7 +18,6 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/executor"
 	"github.com/mendixlabs/mxcli/mdl/linter"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 )
 
 // legacyHit records one legacy widget occurrence with enough context to
@@ -35,15 +34,15 @@ type legacyHit struct {
 // returns a violation for every legacy native widget found that's deprecated
 // on the project's Mendix version.
 func scanLegacyWidgets(projectPath string) ([]linter.Violation, error) {
-	reader, err := mpr.Open(projectPath)
+	reader, err := openProjectReadOnly(projectPath)
 	if err != nil {
 		return nil, fmt.Errorf("opening project: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Disconnect() }()
 
 	mendixVersion, _ := reader.GetMendixVersion()
 
-	hierarchy, err := executor.NewContainerHierarchy(reader)
+	hierarchy, err := executor.NewContainerHierarchyFromBackend(reader)
 	if err != nil {
 		return nil, fmt.Errorf("building project hierarchy: %w", err)
 	}

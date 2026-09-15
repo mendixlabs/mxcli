@@ -86,7 +86,7 @@ func clearThemeModuleFlag(mprPath string) (bool, error) {
 	}
 	units, err := reader.ListRawUnitsByType("Projects$ModuleImpl")
 	if err != nil {
-		_ = reader.Close()
+		_ = reader.Disconnect()
 		return false, fmt.Errorf("read the package's module document: %w", err)
 	}
 
@@ -118,12 +118,12 @@ func clearThemeModuleFlag(mprPath string) (bool, error) {
 		}
 		encoded, err := bson.Marshal(doc)
 		if err != nil {
-			_ = reader.Close()
+			_ = reader.Disconnect()
 			return false, fmt.Errorf("re-encode the module document: %w", err)
 		}
 		edits = append(edits, edit{id: string(u.ID), contents: encoded})
 	}
-	_ = reader.Close()
+	_ = reader.Disconnect()
 
 	if len(edits) == 0 {
 		return false, nil
@@ -133,7 +133,7 @@ func clearThemeModuleFlag(mprPath string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("open the package's project model for writing: %w", err)
 	}
-	defer writer.Close()
+	defer writer.Disconnect()
 	for _, e := range edits {
 		if err := writer.UpdateRawUnit(e.id, e.contents); err != nil {
 			return false, fmt.Errorf("clear the theme-module flag: %w", err)

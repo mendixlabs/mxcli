@@ -21,8 +21,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -37,11 +37,11 @@ func stubMxTool(t *testing.T, fn func(mxPath string, args []string, w, stderr io
 // firstUnitID returns some unit of the project, for a test to mutate.
 func firstUnitID(t *testing.T, mprPath string) string {
 	t.Helper()
-	reader, err := mpr.Open(mprPath)
+	reader, err := openReadOnly(mprPath)
 	if err != nil {
 		t.Fatalf("open %s: %v", mprPath, err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 	units, err := reader.ListUnits()
 	if err != nil || len(units) == 0 {
 		t.Fatalf("fixture has no units (err=%v)", err)
@@ -53,12 +53,12 @@ func firstUnitID(t *testing.T, mprPath string) string {
 // unit. A canonical comparison must see it — it is a property, not an $ID.
 func markUnit(t *testing.T, mprPath, unitID, marker string) {
 	t.Helper()
-	reader, err := mpr.Open(mprPath)
+	reader, err := openReadOnly(mprPath)
 	if err != nil {
 		t.Fatalf("open for marking: %v", err)
 	}
 	raw, err := reader.GetRawUnitBytes(model.ID(unitID))
-	_ = reader.Close()
+	_ = reader.Disconnect()
 	if err != nil {
 		t.Fatalf("read unit %s: %v", unitID, err)
 	}
@@ -71,11 +71,11 @@ func markUnit(t *testing.T, mprPath, unitID, marker string) {
 	if err != nil {
 		t.Fatalf("encode unit %s: %v", unitID, err)
 	}
-	writer, err := mpr.NewWriter(mprPath)
+	writer, err := openForWriting(mprPath)
 	if err != nil {
 		t.Fatalf("open for writing: %v", err)
 	}
-	defer writer.Close()
+	defer writer.Disconnect()
 	if err := writer.UpdateRawUnit(unitID, encoded); err != nil {
 		t.Fatalf("write unit %s: %v", unitID, err)
 	}
@@ -84,11 +84,11 @@ func markUnit(t *testing.T, mprPath, unitID, marker string) {
 // unitMarker reads back what markUnit wrote, or "" when absent.
 func unitMarker(t *testing.T, mprPath, unitID string) string {
 	t.Helper()
-	reader, err := mpr.Open(mprPath)
+	reader, err := openReadOnly(mprPath)
 	if err != nil {
 		t.Fatalf("open for reading marker: %v", err)
 	}
-	defer reader.Close()
+	defer reader.Disconnect()
 	raw, err := reader.GetRawUnitBytes(model.ID(unitID))
 	if err != nil {
 		t.Fatalf("read unit %s: %v", unitID, err)
@@ -133,7 +133,7 @@ func TestRunToolPreservingFormat_CarriesTheToolsChangeBack(t *testing.T) {
 	if !res.Harvested || !res.StillV2 {
 		t.Errorf("Harvested=%v StillV2=%v, want both true", res.Harvested, res.StillV2)
 	}
-	if v := storageVersion(t, mprPath); v != mpr.MPRVersionV2 {
+	if v := storageVersion(t, mprPath); v != types.MPRVersionV2 {
 		t.Errorf("project is %v afterwards, want MPRv2 — the format is the whole point", v)
 	}
 }
@@ -199,7 +199,7 @@ func TestRunToolPreservingFormat_RestoresFormatWhenTheToolFails(t *testing.T) {
 	if _, err := os.Stat(contentsDir); err != nil {
 		t.Fatalf("mprcontents/ was not restored after a failed tool run: %v", err)
 	}
-	if v := storageVersion(t, mprPath); v != mpr.MPRVersionV2 {
+	if v := storageVersion(t, mprPath); v != types.MPRVersionV2 {
 		t.Errorf("project left as %v after a failed run, want MPRv2", v)
 	}
 }
@@ -217,7 +217,7 @@ func TestRunToolPreservingFormat_RestoresFormatWhenTheOutputIsUnreadable(t *test
 	if _, err := RunToolPreservingFormat("mx", mprPath, "rename-design-properties", io.Discard, io.Discard); err == nil {
 		t.Fatal("expected unreadable tool output to be an error, not a silent no-op")
 	}
-	if v := storageVersion(t, mprPath); v != mpr.MPRVersionV2 {
+	if v := storageVersion(t, mprPath); v != types.MPRVersionV2 {
 		t.Errorf("project left as %v after an unreadable harvest, want MPRv2", v)
 	}
 }
@@ -259,12 +259,12 @@ func TestUnitCount_CountsOnlyMxunitFiles(t *testing.T) {
 	mprPath := v2Fixture(t)
 	contentsDir := filepath.Join(filepath.Dir(mprPath), "mprcontents")
 
-	reader, err := mpr.Open(mprPath)
+	reader, err := openReadOnly(mprPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	units, err := reader.ListUnits()
-	_ = reader.Close()
+	_ = reader.Disconnect()
 	if err != nil {
 		t.Fatal(err)
 	}

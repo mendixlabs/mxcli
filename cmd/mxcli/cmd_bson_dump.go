@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	bsondebug "github.com/mendixlabs/mxcli/cmd/mxcli/bson"
-	"github.com/mendixlabs/mxcli/sdk/mpr"
+	mpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
 	"github.com/spf13/cobra"
 	"go.mongodb.org/mongo-driver/bson"
 )

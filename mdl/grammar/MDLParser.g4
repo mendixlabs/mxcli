@@ -429,6 +429,7 @@ dropStatement
     | DROP NANOFLOW qualifiedName
     | DROP RULE qualifiedName
     | DROP PAGE qualifiedName
+    | DROP LAYOUT qualifiedName
     | DROP SNIPPET qualifiedName
     | DROP MENU_KW qualifiedName
     | DROP MODULE qualifiedName

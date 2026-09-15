@@ -61,8 +61,19 @@ func workflowMicroflowActionToGen(act microflows.MicroflowAction) element.Elemen
 		addStr(g, "UserTaskVariable", a.UserTaskVariable)
 		return g
 	case *microflows.NotifyWorkflowAction:
+		// Key order as ako/TestApp (Studio Pro 11.14) stores it: ErrorHandlingType,
+		// NotifyTarget, OutputVariableName, WorkflowVariable. Before 11.7 the target
+		// was the Activity string instead; the executor sets whichever applies.
 		g := newElem("Microflows$NotifyWorkflowAction", string(a.ID))
+		if a.Activity != "" {
+			addStr(g, "Activity", a.Activity)
+		}
 		addStr(g, "ErrorHandlingType", orDefault(string(a.ErrorHandlingType), "Rollback"))
+		if t := a.Target; t != nil {
+			target := newElem(t.TypeName, "")
+			addStr(target, t.Key(), t.Name)
+			addPart(g, "NotifyTarget", target)
+		}
 		addStr(g, "OutputVariableName", a.OutputVariableName)
 		addStr(g, "WorkflowVariable", a.WorkflowVariable)
 		return g

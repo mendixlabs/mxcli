@@ -385,6 +385,15 @@ func buildPageBodyV3(ctx parser.IPageBodyV3Context, b *Builder) []*ast.WidgetV3 
 					Name:       placeholderBlockName(c),
 					Properties: map[string]any{},
 				})
+			} else if b != nil && b.inLayout {
+				// Still dropped — the braced form declares nothing. But in a
+				// LAYOUT it is a mistake rather than the page-side job, so the
+				// name is recorded for the checker to report against. Without
+				// this the layout silently ends up with no placeholder and the
+				// write fails with a message that contradicts the script
+				// (mendixlabs/mxcli#1063).
+				b.layoutBracedPlaceholders = append(b.layoutBracedPlaceholders,
+					placeholderBlockName(c))
 			}
 		}
 	}
@@ -1855,7 +1864,14 @@ func (b *Builder) buildLayoutV3(ctx *parser.CreateLayoutStatementContext) *ast.C
 		stmt.Properties = holder.Properties
 	}
 	if bodyCtx := ctx.PageBodyV3(); bodyCtx != nil {
+		// Saved and restored rather than just set: the flag steers the shared
+		// page-body builder, and leaving it on would make the next page in the
+		// script report its own (correct) placeholder blocks as layout mistakes.
+		prevIn, prevBraced := b.inLayout, b.layoutBracedPlaceholders
+		b.inLayout, b.layoutBracedPlaceholders = true, nil
 		stmt.Widgets = buildPageBodyV3(bodyCtx, b)
+		stmt.BracedPlaceholders = b.layoutBracedPlaceholders
+		b.inLayout, b.layoutBracedPlaceholders = prevIn, prevBraced
 	}
 	return stmt
 }

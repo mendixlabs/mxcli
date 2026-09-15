@@ -467,6 +467,16 @@ type Builder struct {
 	// documentAnnotations collects every `@name` written before a CREATE, with
 	// the kind of document it was on — see ExitCreateStatement.
 	documentAnnotations []ast.DocumentAnnotation
+
+	// inLayout is set while a CREATE LAYOUT body is being built. The page body
+	// builder serves both documents and cannot otherwise tell which it is in,
+	// and a `placeholder X { … }` means opposite things in the two: in a page it
+	// FILLS a layout's slot, in a layout it is a mistake for the bodiless
+	// declaration. See buildLayoutV3 (mendixlabs/mxcli#1063).
+	inLayout bool
+	// layoutBracedPlaceholders collects the braced placeholder names seen while
+	// inLayout, at any depth, for the checker to report.
+	layoutBracedPlaceholders []string
 }
 
 // NewBuilder creates a new AST builder.
