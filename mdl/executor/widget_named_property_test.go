@@ -10,6 +10,48 @@ import (
 	"github.com/mendixlabs/mxcli/sdk/widgets/mpk"
 )
 
+func TestNamedDataSourceValue(t *testing.T) {
+	named := &ast.DataSourceV3{Type: "microflow", Reference: "Demo.DS_Primary"}
+	generic := &ast.DataSourceV3{Type: "microflow", Reference: "Demo.DS_Other"}
+	mapping := PropertyMapping{PropertyKey: "primarySource", Source: "DataSource", Operation: "datasource"}
+	w := &ast.WidgetV3{Properties: map[string]any{
+		"PrimarySource": named,
+		"DataSource":    generic,
+	}}
+
+	if got := namedDataSourceValue(mapping, w); got != named {
+		t.Fatalf("namedDataSourceValue() = %#v, want the named datasource %#v", got, named)
+	}
+}
+
+func TestNamedDataSourceValue_Alias(t *testing.T) {
+	named := &ast.DataSourceV3{Type: "database", Reference: "Demo.PrimaryRow"}
+	mapping := PropertyMapping{
+		PropertyKey: "primarySource", Source: "DataSource", Operation: "datasource", MdlAliases: []string{"ItemsSource"},
+	}
+	w := &ast.WidgetV3{Properties: map[string]any{"itemssource": named}}
+
+	if got := namedDataSourceValue(mapping, w); got != named {
+		t.Fatalf("namedDataSourceValue() = %#v, want datasource supplied through alias", got)
+	}
+}
+
+func TestMappedPropertyNamesAreCaseInsensitive(t *testing.T) {
+	mappings := []PropertyMapping{{
+		PropertyKey: "primaryLabelAttribute",
+		Source:      "Attribute",
+		Operation:   "attribute",
+		MdlAliases:  []string{"ItemLabel"},
+	}}
+
+	mapped := mappedWidgetPropertyNames(mappings, nil)
+	for _, name := range []string{"attribute", "primarylabelattribute", "itemlabel"} {
+		if !mapped[name] {
+			t.Errorf("mapped property set does not contain %q", name)
+		}
+	}
+}
+
 // namedPropValue routes a widget-level property to the right MDL keyword via its
 // PropertyKey or a registered alias (item 1b — PieChart/HeatMap bind several
 // attribute/texttemplate properties that the single generic `Attribute:` keyword
@@ -52,6 +94,51 @@ func TestResolveMapping_NamedAttribute(t *testing.T) {
 	}
 	if ctx.AttributePath != "ChartExamples.SalesByRegion.Total" {
 		t.Errorf("AttributePath = %q, want ChartExamples.SalesByRegion.Total", ctx.AttributePath)
+	}
+}
+
+// A mode with several DataSource mappings has no single datasource the
+// generic `DataSource:` clause could mean, so an unnamed slot must not fall
+// back to it — that would silently copy one binding into every unnamed slot
+// instead of requiring each to be addressed by its own schema key.
+func TestResolveMapping_DataSourceFallback_SuppressedInMultiSourceMode(t *testing.T) {
+	generic := &ast.DataSourceV3{Type: "parameter", Reference: "P"}
+	pb := &pageBuilder{
+		paramScope:       map[string]model.ID{"P": model.ID("entity-id")},
+		paramEntityNames: map[string]string{"P": "Demo.Entity"},
+	}
+	engine := &PluggableWidgetEngine{pageBuilder: pb, currentModeDataSourceCount: 2}
+	mapping := PropertyMapping{PropertyKey: "secondarySource", Source: "DataSource", Operation: "datasource"}
+	w := &ast.WidgetV3{Properties: map[string]any{"DataSource": generic}}
+
+	ctx, err := engine.resolveMapping(mapping, w)
+	if err != nil {
+		t.Fatalf("resolveMapping: %v", err)
+	}
+	if ctx.DataSource != nil {
+		t.Errorf("DataSource = %#v, want nil — an unnamed slot in a multi-source mode must not fall back to the generic clause", ctx.DataSource)
+	}
+}
+
+// The single-datasource widget the fallback exists for still gets it: with at
+// most one DataSource mapping in the mode, the generic `DataSource:` clause is
+// unambiguous.
+func TestResolveMapping_DataSourceFallback_AllowedInSingleSourceMode(t *testing.T) {
+	generic := &ast.DataSourceV3{Type: "parameter", Reference: "P"}
+	pb := &pageBuilder{
+		paramScope:       map[string]model.ID{"P": model.ID("entity-id")},
+		paramEntityNames: map[string]string{"P": "Demo.Entity"},
+	}
+	engine := &PluggableWidgetEngine{pageBuilder: pb, currentModeDataSourceCount: 1}
+	mapping := PropertyMapping{PropertyKey: "dataSource", Source: "DataSource", Operation: "datasource"}
+	w := &ast.WidgetV3{Properties: map[string]any{"DataSource": generic}}
+
+	ctx, err := engine.resolveMapping(mapping, w)
+	if err != nil {
+		t.Fatalf("resolveMapping: %v", err)
+	}
+	if ctx.DataSource == nil {
+		t.Errorf("DataSource = nil, want the generic clause's datasource for a single-source widget")
 	}
 }
 

@@ -1106,17 +1106,21 @@ func validatePluggableWidgetProperties(w *ast.WidgetV3, registry *WidgetRegistry
 		}
 		lower := strings.ToLower(key)
 
-		// A datasource-typed property must be supplied via the widget's
-		// `datasource:` clause (which the engine reads), NOT as a named value
-		// like `optionsSourceAssociationDataSource: Module.Entity` — that lands
-		// in a different slot and is silently dropped, so the widget builds
-		// without an entity (CE0642). Flag it instead of passing it (issue #643).
+		// Named datasource properties are supported when the value parsed as a
+		// real datasource expression (`people: microflow M.DS_People`). A scalar
+		// that merely names an entity is still invalid: it cannot be persisted as
+		// a datasource and caused the silent drop/CE0642 from issue #643.
 		if dsKeys[lower] {
+			if raw, ok := lookupProperty(w.Properties, key); ok {
+				if _, ok := raw.(*ast.DataSourceV3); ok {
+					continue
+				}
+			}
 			out = append(out, linter.Violation{
 				RuleID:   "MDL-WIDGET05",
 				Severity: linter.SeverityError,
 				Message: fmt.Sprintf(
-					"%s: widget `%s` (%s) property `%s` is datasource-typed — provide it via the widget `datasource:` clause (e.g. `datasource: database Module.Entity`); a value written as `%s: …` is not persisted",
+					"%s: widget `%s` (%s) property `%s` is datasource-typed — use a datasource expression such as `%s: database Module.Entity` or the generic `datasource:` clause; the supplied scalar value cannot be persisted",
 					locationPrefix, w.Name, def.MDLName, key, key,
 				),
 			})
@@ -1248,13 +1252,27 @@ func actionStorageKeys(def *WidgetDefinition) map[string]string {
 	return out
 }
 
-// These must be authored via the widget `datasource:` clause, not by name.
+// Datasource properties may be authored by name when their value is a real
+// *ast.DataSourceV3. The key set lets validation reject scalar lookalikes.
+//
+// A datasource mapping's MdlAliases are authorable spellings too (resolved by
+// namedDataSourceValue in widget_engine.go exactly like the PropertyKey
+// itself), so they belong in this set with the same lowercased normalization
+// as the PropertyKey — otherwise a scalar written under an alias (e.g.
+// `ItemsSource: 'x'`) skips the MDL-WIDGET05 datasource-typed check entirely
+// and falls through to the generic property handling below.
 func datasourceTypedKeys(def *WidgetDefinition) map[string]bool {
 	out := make(map[string]bool)
 	collect := func(ms []PropertyMapping) {
 		for _, m := range ms {
-			if m.Operation == "datasource" && m.PropertyKey != "" {
+			if m.Operation != "datasource" {
+				continue
+			}
+			if m.PropertyKey != "" {
 				out[strings.ToLower(m.PropertyKey)] = true
+			}
+			for _, alias := range m.MdlAliases {
+				out[strings.ToLower(alias)] = true
 			}
 		}
 	}

@@ -158,6 +158,7 @@ func TestEvaluateCondition(t *testing.T) {
 		name      string
 		condition string
 		widget    *ast.WidgetV3
+		mappings  []PropertyMapping
 		expected  bool
 	}{
 		{
@@ -169,6 +170,24 @@ func TestEvaluateCondition(t *testing.T) {
 				},
 			},
 			expected: true,
+		},
+		{
+			name:      "hasDataSource with named mapped datasource present",
+			condition: "hasDataSource",
+			widget: &ast.WidgetV3{Properties: map[string]any{
+				"optionsSource": &ast.DataSourceV3{Type: "database", Reference: "Module.Entity"},
+			}},
+			mappings: []PropertyMapping{{PropertyKey: "optionsSource", Source: "DataSource", Operation: "datasource"}},
+			expected: true,
+		},
+		{
+			name:      "hasDataSource ignores datasource-shaped named action",
+			condition: "hasDataSource",
+			widget: &ast.WidgetV3{Properties: map[string]any{
+				"onComplete": &ast.DataSourceV3{Type: "microflow", Reference: "Module.ACT_Complete"},
+			}},
+			mappings: []PropertyMapping{{PropertyKey: "onComplete", Operation: "action"}},
+			expected: false,
 		},
 		{
 			name:      "hasDataSource without datasource",
@@ -210,7 +229,7 @@ func TestEvaluateCondition(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := engine.evaluateCondition(tc.condition, tc.widget)
+			result := engine.evaluateCondition(tc.condition, tc.widget, tc.mappings)
 			if result != tc.expected {
 				t.Errorf("evaluateCondition(%q) = %v, want %v", tc.condition, result, tc.expected)
 			}
@@ -249,9 +268,12 @@ func TestSelectMappings_WithModes(t *testing.T) {
 	def := &WidgetDefinition{
 		Modes: []WidgetMode{
 			{
-				Name:             "association",
-				Condition:        "hasDataSource",
-				PropertyMappings: []PropertyMapping{{PropertyKey: "assoc", Operation: "association"}},
+				Name:      "association",
+				Condition: "hasDataSource",
+				PropertyMappings: []PropertyMapping{
+					{PropertyKey: "optionsSource", Source: "DataSource", Operation: "datasource"},
+					{PropertyKey: "assoc", Operation: "association"},
+				},
 			},
 			{
 				Name:             "default",
@@ -270,8 +292,21 @@ func TestSelectMappings_WithModes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(mappings) != 1 || mappings[0].PropertyKey != "assoc" {
+		if len(mappings) != 2 || mappings[0].PropertyKey != "optionsSource" {
 			t.Errorf("expected association mode, got %v", mappings)
+		}
+	})
+
+	t.Run("named datasource matches association mode", func(t *testing.T) {
+		w := &ast.WidgetV3{Properties: map[string]any{
+			"optionsSource": &ast.DataSourceV3{Type: "database", Reference: "Module.Entity"},
+		}}
+		mappings, _, err := engine.selectMappings(def, w)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(mappings) != 2 || mappings[0].PropertyKey != "optionsSource" {
+			t.Errorf("expected association mode for named datasource, got %v", mappings)
 		}
 	})
 

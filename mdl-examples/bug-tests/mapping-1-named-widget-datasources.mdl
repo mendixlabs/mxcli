@@ -1,0 +1,43 @@
+-- A datasource mapping may be addressed by its schema key.
+--
+-- ComboBox is the public, embedded regression fixture. Its association mode is
+-- selected by hasDataSource and maps optionsSourceAssociationDataSource to the
+-- widget's datasource slot. Before the fix, the structured named expression
+-- below was rejected by MDL-WIDGET05; allowing it without updating mode
+-- selection would instead choose the enumeration mode and still drop it.
+--
+-- The executor unit tests extend this same mapping behavior to a synthetic
+-- widget with three simultaneously populated datasource mappings and prove
+-- that DESCRIBE PAGE preserves all three schema keys.
+
+create module NamedDS;
+create module role NamedDS.User;
+
+create persistent entity NamedDS.Customer (
+  Name: string(200)
+);
+
+create persistent entity NamedDS.Order (
+  Number: string(80)
+);
+
+create association NamedDS.Order_Customer
+  from NamedDS.Order to NamedDS.Customer;
+
+create or replace page NamedDS.Order_Edit (
+  Title: 'Named datasource mapping',
+  Layout: Atlas_Core.Atlas_Default,
+  Params: { $Order: NamedDS.Order }
+) {
+  dataview orderView (DataSource: $Order) {
+    pluggablewidget 'com.mendix.widget.web.combobox.Combobox' customer (
+      optionsSourceAssociationDataSource: database from NamedDS.Customer,
+      Association: Order_Customer,
+      CaptionAttribute: Name
+    )
+  }
+}
+
+grant view on page NamedDS.Order_Edit to NamedDS.User;
+
+describe page NamedDS.Order_Edit;

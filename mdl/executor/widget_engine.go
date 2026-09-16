@@ -257,6 +257,14 @@ type PluggableWidgetEngine struct {
 	// consults it to tell the widget's PRIMARY attribute property from its others
 	// (#238); nil outside a build.
 	currentDef *WidgetDefinition
+
+	// currentModeDataSourceCount is how many PropertyMappings in the selected
+	// mode's mappings have Source == "DataSource". resolveMapping's "DataSource"
+	// case consults it to decide whether an unnamed generic `DataSource:` is a
+	// safe fallback for a mapping the script left unnamed: safe for a
+	// single-datasource widget, wrong for a multi-source one, where falling back
+	// would silently duplicate one datasource's binding into every unnamed slot.
+	currentModeDataSourceCount int
 }
 
 // NewPluggableWidgetEngine creates a new engine with the given backend and page builder.
@@ -308,6 +316,15 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	if err != nil {
 		return nil, err
 	}
+
+	oldModeDataSourceCount := e.currentModeDataSourceCount
+	e.currentModeDataSourceCount = 0
+	for _, m := range mappings {
+		if m.Source == "DataSource" {
+			e.currentModeDataSourceCount++
+		}
+	}
+	defer func() { e.currentModeDataSourceCount = oldModeDataSourceCount }()
 
 	// 3. Apply property mappings.
 	//
@@ -503,17 +520,9 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	}
 
 	// 4.6 Apply explicit properties (not covered by .def.json mappings)
-	mappedKeys := make(map[string]bool)
-	for _, m := range mappings {
-		if m.Source != "" {
-			mappedKeys[m.Source] = true
-		}
-	}
-	for _, s := range slots {
-		mappedKeys[s.MDLContainer] = true
-	}
+	mappedKeys := mappedWidgetPropertyNames(mappings, slots)
 	for propName, propVal := range w.Properties {
-		if mappedKeys[propName] || isBuiltinPropName(propName) {
+		if mappedKeys[strings.ToLower(propName)] || isBuiltinPropName(propName) {
 			continue
 		}
 		entry, ok := propertyTypeIDs[propName]
@@ -607,6 +616,28 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	}
 
 	return cw, nil
+}
+
+// mappedWidgetPropertyNames returns every AST spelling consumed by the mapping
+// pass. The explicit-property fallback must skip all of them or it will apply a
+// named property twice, potentially under a different datasource context.
+func mappedWidgetPropertyNames(mappings []PropertyMapping, slots []ChildSlotMapping) map[string]bool {
+	mapped := make(map[string]bool)
+	for _, mapping := range mappings {
+		if mapping.Source != "" {
+			mapped[strings.ToLower(mapping.Source)] = true
+		}
+		if mapping.PropertyKey != "" {
+			mapped[strings.ToLower(mapping.PropertyKey)] = true
+		}
+		for _, alias := range mapping.MdlAliases {
+			mapped[strings.ToLower(alias)] = true
+		}
+	}
+	for _, slot := range slots {
+		mapped[strings.ToLower(slot.MDLContainer)] = true
+	}
+	return mapped
 }
 
 // isPrimaryAttributeMapping reports whether mapping is the one a bare
@@ -877,7 +908,7 @@ func (e *PluggableWidgetEngine) selectMappings(def *WidgetDefinition, w *ast.Wid
 			}
 			continue
 		}
-		if e.evaluateCondition(mode.Condition, w) {
+		if e.evaluateCondition(mode.Condition, w, mode.PropertyMappings) {
 			return mode.PropertyMappings, mode.ChildSlots, nil
 		}
 	}
@@ -893,10 +924,22 @@ func (e *PluggableWidgetEngine) selectMappings(def *WidgetDefinition, w *ast.Wid
 }
 
 // evaluateCondition checks a built-in condition string against the AST widget.
-func (e *PluggableWidgetEngine) evaluateCondition(condition string, w *ast.WidgetV3) bool {
+func (e *PluggableWidgetEngine) evaluateCondition(condition string, w *ast.WidgetV3, mappings []PropertyMapping) bool {
 	switch {
 	case condition == "hasDataSource":
-		return w.GetDataSource() != nil
+		if w.GetDataSource() != nil {
+			return true
+		}
+		// A mode that owns a named datasource mapping must activate when that
+		// property's structured datasource is present. Looking at every AST
+		// DataSourceV3 would misclassify named action slots: microflow/nanoflow
+		// actions share that parser shape and are converted only by their mapping.
+		for _, mapping := range mappings {
+			if strings.EqualFold(mapping.Operation, "datasource") && namedDataSourceValue(mapping, w) != nil {
+				return true
+			}
+		}
+		return false
 	case condition == "hasAttribute":
 		return w.GetAttribute() != ""
 	case strings.HasPrefix(condition, "hasProp:"):
@@ -922,6 +965,31 @@ func namedPropValue(mapping PropertyMapping, w *ast.WidgetV3) string {
 		}
 	}
 	return ""
+}
+
+// namedDataSourceValue returns a datasource authored using the widget schema's
+// own property key (or one of its aliases), for example:
+//
+//	primarySource: microflow Demo.DS_Primary
+//	secondarySource: microflow Demo.DS_Secondary
+//
+// Keeping this separate from namedPropValue is important: stringifyAny would
+// turn the structured datasource AST into text and lose its source type,
+// arguments and constraints.
+func namedDataSourceValue(mapping PropertyMapping, w *ast.WidgetV3) *ast.DataSourceV3 {
+	if v, ok := lookupProperty(w.Properties, mapping.PropertyKey); ok {
+		if ds, ok := v.(*ast.DataSourceV3); ok {
+			return ds
+		}
+	}
+	for _, alias := range mapping.MdlAliases {
+		if v, ok := lookupProperty(w.Properties, alias); ok {
+			if ds, ok := v.(*ast.DataSourceV3); ok {
+				return ds
+			}
+		}
+	}
+	return nil
 }
 
 // resolveMapping resolves a PropertyMapping's source into a BuildContext.
@@ -1019,7 +1087,18 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 		}
 
 	case "DataSource":
-		if ds := w.GetDataSource(); ds != nil {
+		// A widget may expose several independently named datasources. Prefer the
+		// value authored for this mapping; keep the generic `datasource:` clause
+		// as the backward-compatible fallback, but only for single-datasource
+		// widgets. A mode with several DataSource mappings has no single
+		// datasource the generic clause could mean, so falling back there would
+		// silently copy one binding into every unnamed slot; each must be
+		// addressed by its own schema key instead.
+		ds := namedDataSourceValue(mapping, w)
+		if ds == nil && e.currentModeDataSourceCount <= 1 {
+			ds = w.GetDataSource()
+		}
+		if ds != nil {
 			dataSource, entityName, err := e.pageBuilder.buildDataSourceV3(ds)
 			if err != nil {
 				return nil, mdlerrors.NewBackend("build datasource", err)

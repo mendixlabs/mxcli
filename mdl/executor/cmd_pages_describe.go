@@ -609,20 +609,25 @@ type rawWidget struct {
 	// named variants are spelled identically, so a reader that keeps the name
 	// without the kind cannot avoid converting one into the other
 	// (mendixlabs/mxcli#1059). Same split as types.NavMenuItem's.
-	Icon            string // e.g. Atlas_Core.Atlas_Filled.pencil
-	IconType        string // storage $Type, "" when the widget carries no icon
-	IconCode        int    // Forms$GlyphIcon's Code — the only identity a glyph icon has
-	Selection       string // For Gallery selection mode (Single, Multi, None)
-	Class           string // CSS class from Appearance
-	Style           string // Inline CSS style from Appearance
-	DynamicClasses  string // Dynamic-classes expression from Appearance
-	Parameters      []string
-	Children        []rawWidget
-	FilterWidgets   []rawWidget // For Gallery filter widgets
-	ControlBar      []rawWidget // For DataGrid2 CONTROLBAR widgets
-	Rows            []rawWidgetRow
-	DataSource      *rawDataSource
-	DataGridColumns []rawDataGridColumn // For DataGrid2 widgets
+	Icon           string // e.g. Atlas_Core.Atlas_Filled.pencil
+	IconType       string // storage $Type, "" when the widget carries no icon
+	IconCode       int    // Forms$GlyphIcon's Code — the only identity a glyph icon has
+	Selection      string // For Gallery selection mode (Single, Multi, None)
+	Class          string // CSS class from Appearance
+	Style          string // Inline CSS style from Appearance
+	DynamicClasses string // Dynamic-classes expression from Appearance
+	Parameters     []string
+	Children       []rawWidget
+	FilterWidgets  []rawWidget // For Gallery filter widgets
+	ControlBar     []rawWidget // For DataGrid2 CONTROLBAR widgets
+	Rows           []rawWidgetRow
+	DataSource     *rawDataSource
+	// NamedDataSources preserves widgets that expose more than one datasource.
+	// A single datasource continues to use DataSource and its friendly MDL
+	// keyword; multiple sources must retain their schema property keys or a
+	// describe -> exec round trip would fan one source out over every mapping.
+	NamedDataSources []rawNamedDataSource
+	DataGridColumns  []rawDataGridColumn // For DataGrid2 widgets
 	// Input widget properties
 	Editable      string // "Always", "Never", "Conditional"
 	ReadOnlyStyle string // "Inherit", "Control", "Text"
@@ -722,6 +727,11 @@ type rawWidget struct {
 type rawNamedAction struct {
 	Key string
 	MDL string
+}
+
+type rawNamedDataSource struct {
+	Key        string
+	DataSource *rawDataSource
 }
 
 type rawExplicitProp struct {

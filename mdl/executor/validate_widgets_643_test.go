@@ -75,6 +75,52 @@ func TestIssue643_DatasourceClause_NotFlagged(t *testing.T) {
 	}
 }
 
+func TestNamedDatasourceExpression_NotFlagged(t *testing.T) {
+	reg := LoadWidgetRegistry("")
+	if reg == nil {
+		t.Fatal("built-in widget registry not available")
+	}
+	w := combo(map[string]any{
+		"optionsSourceType": "association",
+		"optionsSourceAssociationDataSource": &ast.DataSourceV3{
+			Type: "database", Reference: "Administration.Account",
+		},
+	})
+	for _, v := range validatePluggableWidgetProperties(w, reg, "page P") {
+		if v.RuleID == "MDL-WIDGET05" {
+			t.Errorf("named datasource expression must not trigger MDL-WIDGET05: %s", v.Message)
+		}
+	}
+}
+
+// A datasource mapping's MdlAliases (e.g. ItemsSource) must be classified the
+// same as its PropertyKey. Before this, datasourceTypedKeys only carried the
+// PropertyKey, so a scalar value written under the alias skipped the
+// datasource-typed check entirely and fell through to generic property
+// handling instead of being flagged.
+func TestDatasourceAlias_ScalarRejected(t *testing.T) {
+	def := &WidgetDefinition{
+		WidgetID: "com.example.aliaswidget.AliasWidget",
+		MDLName:  "aliaswidget",
+		PropertyMappings: []PropertyMapping{
+			{PropertyKey: "primarySource", Source: "DataSource", Operation: "datasource", MdlAliases: []string{"ItemsSource"}},
+		},
+	}
+	reg := &WidgetRegistry{byWidgetID: map[string]*WidgetDefinition{def.WidgetID: def}}
+
+	w := &ast.WidgetV3{
+		Name: "aw", Type: "pluggablewidget",
+		Properties: map[string]any{
+			"WidgetType":  def.WidgetID,
+			"ItemsSource": "Module.Entity",
+		},
+	}
+	got := ruleIDs(validatePluggableWidgetProperties(w, reg, "page P"))
+	if _, ok := got["MDL-WIDGET05"]; !ok {
+		t.Errorf("expected MDL-WIDGET05 for scalar value under alias ItemsSource, got rules: %v", keysOf(got))
+	}
+}
+
 func keysOf(m map[string]string) []string {
 	var ks []string
 	for k := range m {

@@ -661,7 +661,7 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 			props = appendConditionalProps(props, w)
 			props = appendAppearanceProps(props, w)
 			formatWidgetProps(ctx.Output, prefix, header, props, "\n")
-		} else if (len(w.ExplicitProperties) > 0 || len(w.ObjectLists) > 0 || w.OnClick != "" ||
+		} else if (len(w.ExplicitProperties) > 0 || len(w.NamedDataSources) > 0 || len(w.ObjectLists) > 0 || w.OnClick != "" ||
 			w.OnChange != "" || len(w.NamedActions) > 0) && w.WidgetID != "" {
 			// Generic pluggable widget with explicit properties, object-list child
 			// blocks (chart series/lines/scaleColors), and/or an onClick action.
@@ -681,6 +681,7 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 			// the datasource is gone. The DESCRIBE text was byte-identical before
 			// and after, so only mx check separated them (#956).
 			props = appendDataSourceProp(props, w.DataSource)
+			props = appendNamedDataSourceProps(props, w.NamedDataSources)
 			for _, ep := range w.ExplicitProperties {
 				props = append(props, fmt.Sprintf("%s: %s", ep.Key, explicitPropValue(ep)))
 			}

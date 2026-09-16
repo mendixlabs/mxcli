@@ -483,14 +483,18 @@ func parseRawWidget(ctx *ExecContext, w map[string]any, parentEntityContext ...s
 		// (the action's parameter has no default once its datasource is gone),
 		// while the DESCRIBE text was byte-identical before and after (#956).
 		//
-		// anyCustomWidgetDataSource, not firstObjectPropertyDataSource: the latter
-		// stops at the first property whose DataSource parses at all, and a File
-		// Uploader has one carrying no reference ahead of its real one.
+		// Read every named source, skipping empty datasource-shaped properties.
+		// firstObjectPropertyDataSource cannot do that: it stops at the first
+		// property whose DataSource parses at all, and a File Uploader has one
+		// carrying no reference ahead of its real one.
 		if widget.DataSource == nil {
-			if ds := anyCustomWidgetDataSource(w); ds != nil {
-				widget.DataSource = ds
+			named := namedCustomWidgetDataSources(w)
+			if len(named) > 1 {
+				widget.NamedDataSources = named
+			} else if len(named) == 1 {
+				widget.DataSource = named[0].DataSource
 				if widget.EntityContext == "" {
-					widget.EntityContext = dataSourceEntityContext(ctx, ds)
+					widget.EntityContext = dataSourceEntityContext(ctx, named[0].DataSource)
 				}
 			}
 		}

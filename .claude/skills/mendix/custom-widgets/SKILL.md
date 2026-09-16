@@ -338,6 +338,32 @@ Object-list *item* action slots (chart series `staticOnClickAction`, popupmenu
 item `action`) have mappings generated but the engine still skips them at apply
 time. See upstream #956.
 
+**Widgets with multiple datasources use each datasource property's own key.**
+The friendly `DataSource:` spelling is for a widget with one logical source.
+When a widget exposes independent lists, name them exactly as `describe widget`
+does:
+
+```sql
+multisource dashboard (
+  primarySource: microflow Dashboard.DS_PrimaryRows,
+  primaryLabelAttribute: Label,
+
+  secondarySource: microflow Dashboard.DS_SecondaryRows,
+  secondaryDateAttribute: OccurredAt,
+
+  summarySource: database from Dashboard.SummaryRow,
+  summaryValueAttribute: Total
+)
+```
+
+Each named property accepts the normal datasource expressions (`database`,
+`microflow`, `nanoflow`, page parameter, selection, or association). Attribute
+mappings resolve against the matching source's entity context; in `.def.json`,
+put each datasource mapping before the attribute mappings that depend on it.
+Do not replace the named properties with one generic `DataSource:`: that loses
+which entity owns each attribute. `DESCRIBE PAGE` preserves the named form
+whenever a widget has more than one populated datasource.
+
 ### Step 2 -- Extract BSON template from Studio Pro
 
 The .def.json only describes mapping rules. The engine also needs a **template JSON** with the complete Type + Object BSON structure.
@@ -512,7 +538,7 @@ Modes are evaluated in definition order -- first match wins. A mode with no `con
 | Source | Resolution logic |
 |--------|-----------------|
 | `attribute` | `w.GetAttribute()` -> `pageBuilder.resolveAttributePath()` |
-| `datasource` | `w.GetDataSource()` -> `pageBuilder.buildDataSourceV3()` -> also updates `entityContext` |
+| `datasource` | Named datasource property matching the mapping key/alias, otherwise `w.GetDataSource()` -> `pageBuilder.buildDataSourceV3()` -> also updates `entityContext` |
 | `association` | `w.GetAttribute()` -> `pageBuilder.resolveAssociationPath()` + uses current `entityContext` |
 | `selection` | `w.GetSelection()` or `mapping.Default` fallback |
 | `CaptionAttribute` | `w.GetStringProp("CaptionAttribute")` -> auto-prefixed with `entityContext` if relative |

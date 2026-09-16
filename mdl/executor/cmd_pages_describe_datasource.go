@@ -309,6 +309,19 @@ func appendDataSourceProp(props []string, ds *rawDataSource) []string {
 	return props
 }
 
+func appendNamedDataSourceProps(props []string, sources []rawNamedDataSource) []string {
+	for _, source := range sources {
+		if expr := dataSourceExpr(source.DataSource); expr != "" {
+			props = append(props, fmt.Sprintf("%s: %s", source.Key, expr))
+			continue
+		}
+		if comment := dataSourceComment(source.DataSource); comment != "" {
+			props = append(props, fmt.Sprintf("-- %s: %s", source.Key, strings.TrimPrefix(comment, "-- ")))
+		}
+	}
+	return props
+}
+
 // xpathConstraintClause renders a stored XPath constraint as the MDL the page
 // grammar accepts after WHERE, or "" when there is no constraint.
 //
