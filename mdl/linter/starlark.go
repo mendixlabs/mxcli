@@ -343,6 +343,8 @@ func (r *StarlarkRule) buildPredeclared() starlark.StringDict {
 		"permissions_for":      starlark.NewBuiltin("permissions_for", r.builtinPermissionsFor),
 		"snippets":             starlark.NewBuiltin("snippets", r.builtinSnippets),
 		"database_connections": starlark.NewBuiltin("database_connections", r.builtinDatabaseConnections),
+		"rest_clients":         starlark.NewBuiltin("rest_clients", r.builtinRestClients),
+		"rest_operations":      starlark.NewBuiltin("rest_operations", r.builtinRestOperations),
 		"activities_for":       starlark.NewBuiltin("activities_for", r.builtinActivitiesFor),
 
 		// Project-level queries
@@ -653,6 +655,34 @@ func (r *StarlarkRule) builtinDatabaseConnections(_ *starlark.Thread, _ *starlar
 	}
 
 	return starlark.NewList(connections), nil
+}
+
+// builtinRestClients returns all consumed REST service documents.
+func (r *StarlarkRule) builtinRestClients(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if r.ctx == nil {
+		return starlark.NewList(nil), nil
+	}
+
+	var clients []starlark.Value
+	for rc := range r.ctx.RestClients() {
+		clients = append(clients, restClientToStarlark(rc))
+	}
+
+	return starlark.NewList(clients), nil
+}
+
+// builtinRestOperations returns all consumed REST operations.
+func (r *StarlarkRule) builtinRestOperations(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if r.ctx == nil {
+		return starlark.NewList(nil), nil
+	}
+
+	var operations []starlark.Value
+	for ro := range r.ctx.RestOperations() {
+		operations = append(operations, restOperationToStarlark(ro))
+	}
+
+	return starlark.NewList(operations), nil
 }
 
 // builtinScheduledEvents returns all scheduled events.
@@ -1053,6 +1083,38 @@ func activityToStarlark(a Activity) starlark.Value {
 		"microflow_qualified_name": starlark.String(a.MicroflowQualifiedName),
 		"module_name":              starlark.String(a.ModuleName),
 		"entity_ref":               starlark.String(a.EntityRef),
+	})
+}
+
+// restClientToStarlark converts a RestClient to a Starlark struct.
+func restClientToStarlark(rc RestClient) starlark.Value {
+	return starlarkstruct.FromStringDict(starlark.String("rest_client"), starlark.StringDict{
+		"id":              starlark.String(rc.ID),
+		"name":            starlark.String(rc.Name),
+		"qualified_name":  starlark.String(rc.QualifiedName),
+		"module_name":     starlark.String(rc.ModuleName),
+		"folder":          starlark.String(rc.Folder),
+		"base_url":        starlark.String(rc.BaseUrl),
+		"auth_scheme":     starlark.String(rc.AuthScheme),
+		"operation_count": starlark.MakeInt(rc.OperationCount),
+		"documentation":   starlark.String(rc.Documentation),
+	})
+}
+
+// restOperationToStarlark converts a RestOperation to a Starlark struct.
+func restOperationToStarlark(ro RestOperation) starlark.Value {
+	return starlarkstruct.FromStringDict(starlark.String("rest_operation"), starlark.StringDict{
+		"id":                     starlark.String(ro.ID),
+		"service_id":             starlark.String(ro.ServiceID),
+		"service_qualified_name": starlark.String(ro.ServiceQualifiedName),
+		"name":                   starlark.String(ro.Name),
+		"http_method":            starlark.String(ro.HttpMethod),
+		"path":                   starlark.String(ro.Path),
+		"parameter_count":        starlark.MakeInt(ro.ParameterCount),
+		"has_body":               starlark.Bool(ro.HasBody),
+		"response_type":          starlark.String(ro.ResponseType),
+		"timeout":                starlark.MakeInt(ro.Timeout),
+		"module_name":            starlark.String(ro.ModuleName),
 	})
 }
 

@@ -57,6 +57,8 @@ silently return empty results (issue #721).
 | `widgets()` | list of widget | All non-system widgets |
 | `snippets()` | list of snippet | All non-system snippets |
 | `scheduled_events()` | list of scheduled_event | All non-system scheduled events (requires MPR reader) |
+| `rest_clients()` | list of rest_client | Consumed REST service documents (excluding platform modules) |
+| `rest_operations()` | list of rest_operation | Operations on consumed REST services, including their `timeout` |
 | `attributes_for(entity_qualified_name)` | list of attribute | Attributes for a specific entity |
 | `activities_for(microflow_qualified_name)` | list of activity | Activities for a microflow (requires FULL catalog) |
 | `permissions()` | list of permission | All permissions across all element types |
@@ -320,6 +322,34 @@ def count_not(node):
 | `microflow_qualified_name` | string | `"Sales.ACT_Customer_Create"` |
 | `module_name` | string | `"Sales"` |
 | `entity_ref` | string | Referenced entity qualified name |
+
+### rest_client
+| Property | Type | Example |
+|----------|------|---------|
+| `id` | string | Document UUID |
+| `name` | string | `"CustomerApi"` |
+| `qualified_name` | string | `"Sales.CustomerApi"` |
+| `module_name` | string | `"Sales"` |
+| `folder` | string | Folder path within module |
+| `base_url` | string | `"https://api.example.com/v1"` |
+| `auth_scheme` | string | Authentication scheme, empty when none |
+| `operation_count` | int | Number of operations on the service |
+| `documentation` | string | Documentation text |
+
+### rest_operation
+| Property | Type | Example |
+|----------|------|---------|
+| `id` | string | Operation UUID |
+| `service_id` | string | Owning service UUID |
+| `service_qualified_name` | string | `"Sales.CustomerApi"` |
+| `name` | string | `"GetCustomer"` |
+| `http_method` | string | `"GET"`, `"POST"`, … |
+| `path` | string | `"/customers/{id}"` |
+| `parameter_count` | int | Number of parameters |
+| `has_body` | bool | True when the request carries a body |
+| `response_type` | string | Response type name |
+| `timeout` | int | Configured timeout in milliseconds; `0` when none is set |
+| `module_name` | string | `"Sales"` |
 
 ### permission
 
