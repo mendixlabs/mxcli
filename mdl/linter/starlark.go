@@ -1053,6 +1053,8 @@ func activityToStarlark(a Activity) starlark.Value {
 		"microflow_qualified_name": starlark.String(a.MicroflowQualifiedName),
 		"module_name":              starlark.String(a.ModuleName),
 		"entity_ref":               starlark.String(a.EntityRef),
+		"service_ref":              starlark.String(a.ServiceRef),
+		"action_ref":               starlark.String(a.ActionRef),
 	})
 }
 

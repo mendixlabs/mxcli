@@ -320,6 +320,8 @@ def count_not(node):
 | `microflow_qualified_name` | string | `"Sales.ACT_Customer_Create"` |
 | `module_name` | string | `"Sales"` |
 | `entity_ref` | string | Referenced entity qualified name |
+| `service_ref` | string | Called service document (REST / web service / OData client); empty when the activity calls none |
+| `action_ref` | string | Operation or action within that service; empty when the activity calls none |
 
 ### permission
 
