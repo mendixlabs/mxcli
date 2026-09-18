@@ -127,7 +127,7 @@ def check():
 | `qualified_name` | string | `"Sales.Customer"` |
 | `module_name` | string | `"Sales"` |
 | `folder` | string | `"DomainModel"` — folder path within module |
-| `entity_type` | string | `"persistent"`, `"NonPersistent"`, `"view"` |
+| `entity_type` | string | `"Persistent"`, `"NonPersistent"`, `"View"` — normalised from the catalog's `PERSISTENT`/`NON_PERSISTENT`/`VIEW` |
 | `description` | string | Documentation text |
 | `generalization` | string | Parent entity qualified name |
 | `attribute_count` | int | Number of attributes |
@@ -327,12 +327,12 @@ Returned by `permissions()` (all types) or `permissions_for()` (entity-specific)
 
 | Property | Type | Example |
 |----------|------|---------|
-| `module_role_name` | string | `"Admin"` |
+| `module_role_name` | string | `"Sales.Admin"` — qualified, so it compares directly against `user_role.module_roles` |
 | `element_type` | string | `"entity"`, `"microflow"`, `"page"`, `"ODATA_SERVICE"` (from `permissions()` only) |
 | `element_name` | string | `"Sales.Customer"` |
 | `module_name` | string | `"Sales"` |
 | `entity_name` | string | `"Sales.Customer"` (from `permissions_for()` only) |
-| `access_type` | string | `"create"`, `"read"`, `"write"`, `"delete"`, `"execute"`, `"view"`, `"access"`, `"MEMBER_READ"`, `"MEMBER_WRITE"` |
+| `access_type` | string | `"CREATE"`, `"READ"`, `"WRITE"`, `"DELETE"`, `"EXECUTE"`, `"VIEW"`, `"ACCESS"`, `"MEMBER_READ"`, `"MEMBER_WRITE"` — always upper case |
 | `member_name` | string | Attribute name (for MEMBER_READ/MEMBER_WRITE) |
 | `xpath_constraint` | string | XPath constraint or empty |
 | `is_constrained` | bool | True if XPath constraint is set |
@@ -416,7 +416,7 @@ SEVERITY = "warning"
 def check():
     violations = []
     for e in entities():
-        if e.entity_type == "persistent" and not e.is_external and e.access_rule_count == 0:
+        if e.entity_type == "Persistent" and not e.is_external and e.access_rule_count == 0:
             violations.append(violation(
                 message="persistent entity '{}' has no access rules".format(e.qualified_name),
                 location=location(module=e.module_name, document_type="entity", document_name=e.name),
