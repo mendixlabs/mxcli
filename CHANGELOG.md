@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Elements overlapped where a microflow's layout needed a nested decision, a named merge or a wide `case`** (mendixlabs/mxcli#1158). Three fixed-size disagreements between what `measureStatements` predicts and where the builder actually places things — every merge, every following statement and every branch lane is positioned from the first and drawn by the second, so a few pixels of disagreement is an overlap rather than a cosmetic difference. Measured on `mdl-examples/doctype-tests/02c-complex-layout-examples.mdl`: **15 overlapping pairs in 3 of its 6 flows, down to none** (`mx check` 0 errors before and after).
+
+  - **A split was measured to its branch, not to the merge that closes it** — 25 px short, because the merge is what a following statement has to clear. Nothing noticed while an extra half pitch was still being added on top of every split's width.
+  - **The advance past a merge came from its centre as though a merge were an activity's width.** Half a pitch is 80 px; a merge is 40 wide against an activity's 120, so the next element's left edge landed exactly on the merge's right edge. Both the `case` statement's own merge and `merge <label>` now clear the merge first and then leave the ordinary gap, which is what `if` has always done.
+  - **A branch lane was placed half the branch's measured HEIGHT below the line.** That is only right for content centred on its line: a branch holding a nested `if` hangs entirely below its own, so a lane placed on the measurement landed 50 px inside it. The branch above is already built when the next lane is placed, so its real extent is measured instead of modelled.
+
 ### Changed
 
 - **Microflows written without `@position` are laid out to be read, not just to be valid** (mendixlabs/mxcli#1154). Geometry and connection sides only: no MDL syntax changes, a statement carrying `@position` is never moved, and `describe` → `exec` still reports `Unchanged microflow`. Measured on a generated app of 41 microflows, none with an `@position`: the widest flow went from 6930×160 px on one row to 3220 px, with 0 overlapping elements and `mx check` at 0 errors before and after.

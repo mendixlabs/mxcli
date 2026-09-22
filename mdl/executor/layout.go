@@ -111,6 +111,17 @@ func (m *layoutMeasurer) measureBranch(stmts []ast.MicroflowStatement) Bounds {
 	return b
 }
 
+// splitWidthWithMerge is how wide a split and its branches really are: from the
+// split's left edge to the right edge of the merge that closes them. The branch
+// width is edge to edge and starts half an activity left of thenStartX.
+//
+// Measured to the MERGE, not to the branch: the merge is the element a following
+// statement has to clear, and a width that stopped at the branch left it 25px short
+// — which nothing noticed while an extra half pitch was being added on top.
+func splitWidthWithMerge(branchWidth int) int {
+	return SplitWidth/2 + SplitWidth + HorizontalSpacing/2 + branchWidth + MergeSize/2
+}
+
 // gapBetween is the empty space the builder actually leaves between two consecutive
 // elements of a run, edge to edge.
 //
@@ -125,31 +136,20 @@ func (m *layoutMeasurer) measureBranch(stmts []ast.MicroflowStatement) Bounds {
 // keeps the old, generous gap, because a merge placed short of its branch's content
 // is worse than a merge placed long.
 func gapBetween(prev, next ast.MicroflowStatement) int {
-	// Distance from prev's measured right edge to the centre the builder gives next.
-	var toNextCentre int
-	switch prev.(type) {
-	case *ast.IfStmt:
-		// After an IF, posX = (measured right edge) + HorizontalSpacing/2.
-		toNextCentre = HorizontalSpacing / 2
-	case *ast.EnumSplitStmt, *ast.InheritanceSplitStmt:
+	// The builder leaves the same empty space after every element: it centres the
+	// next one laneGap past the previous right edge. The one exception is a guard,
+	// whose branch drops into the lane below and whose main line therefore resumes
+	// in the branch's own column, half a pitch past the split.
+	toNextCentre := ActivityWidth/2 + laneGap
+	if s, ok := prev.(*ast.IfStmt); ok && isGuard(s) {
+		toNextCentre = SplitWidth/2 + HorizontalSpacing/2
+	}
+	if _, ok := prev.(*ast.InheritanceSplitStmt); ok {
+		// Its branches are still placed on a fixed vertical step and its advance is
+		// not derived here; keep the old, generous gap.
 		return HorizontalSpacing
-	default:
-		// A simple activity, or a loop box: after either, the builder centres the
-		// next element one activity-gap plus half an activity past the right edge.
-		// A simple activity: centre-to-centre pitch, less its own right half.
-		toNextCentre = HorizontalSpacing - ActivityWidth/2
 	}
-	// How far next reaches left of the centre it is given.
-	var leftHalf int
-	switch next.(type) {
-	case *ast.IfStmt, *ast.EnumSplitStmt:
-		leftHalf = SplitWidth / 2
-	default:
-		// An activity — and a loop box, whose left edge the builder now puts where
-		// an activity's would be.
-		leftHalf = ActivityWidth / 2
-	}
-	return max(toNextCentre-leftHalf, 20)
+	return max(toNextCentre-leftHalfOf(next), 20)
 }
 
 // measureStatementsSpan returns the horizontal extent a statement run actually
@@ -237,7 +237,7 @@ func (m *layoutMeasurer) measureEnumSplitStatement(s *ast.EnumSplitStmt) Bounds 
 	}
 	totalHeight += (len(branchHeights) - 1) * BranchGap
 
-	width := SplitWidth + HorizontalSpacing/2 + maxBranchWidth + MergeSize
+	width := splitWidthWithMerge(maxBranchWidth)
 	return Bounds{Width: width, Height: totalHeight}
 }
 
@@ -283,14 +283,14 @@ func (m *layoutMeasurer) measureIfStatement(s *ast.IfStmt) Bounds {
 		branchWidth = HorizontalSpacing / 2
 	}
 
-	totalWidth := SplitWidth + HorizontalSpacing/2 + branchWidth + MergeSize
+	totalWidth := splitWidthWithMerge(branchWidth)
 	// A guard — `if X then ...; return; end if` with no ELSE — has no merge: its
 	// branch ends in an end event and the main line resumes straight after the
 	// branch (addIfStatement's no-merge exit). Measuring a merge and its spacing
 	// that are never drawn left 120px of empty main line after every guard nested
 	// in a branch.
 	if isGuard(s) {
-		totalWidth = SplitWidth + HorizontalSpacing/2 + thenBounds.Width
+		totalWidth = guardBranchInset + thenBounds.Width
 	}
 
 	// Height depends on layout strategy

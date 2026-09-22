@@ -149,10 +149,18 @@ func TestTypeSplitMergeDoesFollowBranchWidth(t *testing.T) {
 	}
 }
 
-// The enum split is the construct the field report compared against, and it was
-// already correct. Pinned here so a later attempt to unify the two cannot move
-// it silently: every existing enum split in every project would be re-laid out.
-func TestEnumSplitGeometryIsUnchanged(t *testing.T) {
+// The enum split is the construct the field report compared against. Pinned here so
+// a later attempt to unify the two cannot move it silently: every existing enum
+// split in every project would be re-laid out.
+//
+// Its merge still stands where one branch's width puts it, whatever the branch
+// count. What DID change, deliberately: the advance past that merge. Half a pitch
+// from the merge's CENTRE is 80px, and a merge is 40 wide against an activity's 120,
+// so the next activity's left edge landed exactly on the merge's right edge — two
+// touching elements on the main line of every enum split with a statement after it.
+// The advance now clears the merge first and then leaves the ordinary gap, which is
+// the arithmetic addIfStatement has always used after the merge that closes an IF.
+func TestEnumSplitAdvanceClearsItsMerge(t *testing.T) {
 	build := func(n int) (*microflows.ExclusiveMerge, int) {
 		s := &ast.EnumSplitStmt{Variable: "kind"}
 		for i := 0; i < n; i++ {
@@ -172,8 +180,11 @@ func TestEnumSplitGeometryIsUnchanged(t *testing.T) {
 	if two.Position.X != five.Position.X {
 		t.Errorf("enum split merge moved with branch count: x=%d then x=%d", two.Position.X, five.Position.X)
 	}
-	if want := two.Position.X + HorizontalSpacing/2; nextTwo != want {
-		t.Errorf("enum split next x = %d, want %d — this test pins existing behaviour; "+
-			"changing it re-lays-out every enum split ever written", nextTwo, want)
+	if want := two.Position.X + MergeSize + HorizontalSpacing/2; nextTwo != want {
+		t.Errorf("enum split next x = %d, want %d (clear the merge, then one gap)", nextTwo, want)
+	}
+	if gap := (nextTwo - ActivityWidth/2) - (two.Position.X + MergeSize/2); gap != laneGap {
+		t.Errorf("gap between the merge and the next activity is %d, want %d — the same "+
+			"space two activities have", gap, laneGap)
 	}
 }

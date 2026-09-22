@@ -109,7 +109,11 @@ func (fb *flowBuilder) addMergeStatement(s *ast.MergeStmt) model.ID {
 	// Adopt the declaration's position even when a forward `join` created the
 	// object earlier at whatever the cursor happened to be.
 	m.Position = model.Point{X: fb.posX, Y: fb.posY}
-	fb.posX += fb.spacing / 2
+	// A merge is MergeSize wide, not an activity's width, so half a pitch from its
+	// CENTRE put the next activity's edge exactly on the merge's. Clear the merge
+	// first, then leave the ordinary gap — the same arithmetic addIfStatement uses
+	// after the merge that closes a split.
+	fb.posX += MergeSize + fb.spacing/2
 	// A merge is a join point, not a terminator: whatever follows continues from
 	// it, so an end event is owed again even if the path that reached here
 	// arrived by `join`.

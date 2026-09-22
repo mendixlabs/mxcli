@@ -149,6 +149,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 
 	if hasElseBody {
 		// IF WITH ELSE: TRUE path horizontal (happy path), FALSE path below
+		thenFirstObject := len(fb.objects)
 		fb.posX = thenStartX
 		fb.posY = centerY
 		fb.endsWithReturn = false
@@ -241,10 +242,15 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 			fb.addPendingErrorHandlerFlowTo(mergeID)
 		}
 
-		// Process ELSE body (below the THEN path)
+		// Process ELSE body (below the THEN path), clear of what the THEN path
+		// actually occupies — see lowestSince: a THEN that contains a nested IF hangs
+		// below its own line, and half its measured height does not reach that far.
 		thenH := max(thenBounds.Height, ActivityHeight)
 		elseH := max(elseBounds.Height, ActivityHeight)
 		elseCenterY := centerY + thenH/2 + BranchGap + elseH/2
+		if built := fb.lowestBetween(thenFirstObject, -1, centerY+ActivityHeight/2) + BranchGap + elseH/2; built > elseCenterY {
+			elseCenterY = built
+		}
 		fb.posX = thenStartX
 		fb.posY = elseCenterY
 		fb.endsWithReturn = false

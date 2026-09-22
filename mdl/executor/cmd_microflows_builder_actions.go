@@ -475,6 +475,11 @@ func (fb *flowBuilder) addEnumSplit(s *ast.EnumSplitStmt) model.ID {
 		}
 	}
 
+	// The branch above's own objects, so a lane can be placed clear of what it really
+	// occupies. Bounded at both ends: the merge that closes the split is appended
+	// while the branches are being built, and it sits on the centre line, so an open
+	// range would measure it as part of whichever branch came before it.
+	prevBranchStart, prevBranchEnd := 0, 0
 	origins := enumSplitOriginAnchors(branchYs, centerY)
 	slot := func(i int) splitCaseSlot {
 		if origins == nil {
@@ -486,6 +491,15 @@ func (fb *flowBuilder) addEnumSplit(s *ast.EnumSplitStmt) model.ID {
 	savedEndsWithReturn := fb.endsWithReturn
 	allBranchesReturn := len(branches) > 0
 	for i, br := range branches {
+		if i > 0 {
+			// Clear of what the branch above actually occupies, not of half its
+			// measured height: a branch holding a nested IF hangs below its own line.
+			fallback := branchYs[i-1] + ActivityHeight/2
+			if below := fb.lowestBetween(prevBranchStart, prevBranchEnd, fallback) + BranchGap + branchHeights[i]/2; below > branchYs[i] {
+				branchYs[i] = below
+			}
+		}
+		prevBranchStart = len(fb.objects)
 		branchY := branchYs[i]
 		fb.posX = splitX + SplitWidth + HorizontalSpacing/2
 		fb.posY = branchY
@@ -554,6 +568,7 @@ func (fb *flowBuilder) addEnumSplit(s *ast.EnumSplitStmt) model.ID {
 				lastID = actID
 			}
 		}
+		prevBranchEnd = len(fb.objects)
 
 		if lastStmtIsReturn(br.body) {
 			continue
@@ -575,7 +590,7 @@ func (fb *flowBuilder) addEnumSplit(s *ast.EnumSplitStmt) model.ID {
 		}
 	}
 
-	fb.posX = mergeX + HorizontalSpacing/2
+	fb.posX = mergeX + MergeSize + HorizontalSpacing/2
 	fb.posY = centerY
 	fb.endsWithReturn = savedEndsWithReturn
 	if allBranchesReturn {
