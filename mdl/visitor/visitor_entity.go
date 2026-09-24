@@ -825,19 +825,23 @@ func (b *Builder) ExitDropStatement(ctx *parser.DropStatementContext) {
 
 	if ctx.ENTITY() != nil {
 		b.statements = append(b.statements, &ast.DropEntityStmt{
-			Name: buildQualifiedName(names[0]),
+			Name:         buildQualifiedName(names[0]),
+			DropIfExists: ast.DropIfExists{IfExists: ctx.IfExists() != nil},
 		})
 	} else if ctx.ASSOCIATION() != nil {
 		b.statements = append(b.statements, &ast.DropAssociationStmt{
-			Name: buildQualifiedName(names[0]),
+			Name:         buildQualifiedName(names[0]),
+			DropIfExists: ast.DropIfExists{IfExists: ctx.IfExists() != nil},
 		})
 	} else if ctx.ENUMERATION() != nil {
 		b.statements = append(b.statements, &ast.DropEnumerationStmt{
-			Name: buildQualifiedName(names[0]),
+			Name:         buildQualifiedName(names[0]),
+			DropIfExists: ast.DropIfExists{IfExists: ctx.IfExists() != nil},
 		})
 	} else if ctx.CONSTANT() != nil {
 		b.statements = append(b.statements, &ast.DropConstantStmt{
-			Name: buildQualifiedName(names[0]),
+			Name:         buildQualifiedName(names[0]),
+			DropIfExists: ast.DropIfExists{IfExists: ctx.IfExists() != nil},
 		})
 	} else if ctx.MODULE() != nil {
 		name := getQualifiedNameText(names[0])
@@ -846,11 +850,13 @@ func (b *Builder) ExitDropStatement(ctx *parser.DropStatementContext) {
 		})
 	} else if ctx.MICROFLOW() != nil {
 		b.statements = append(b.statements, &ast.DropMicroflowStmt{
-			Name: buildQualifiedName(names[0]),
+			Name:         buildQualifiedName(names[0]),
+			DropIfExists: ast.DropIfExists{IfExists: ctx.IfExists() != nil},
 		})
 	} else if ctx.NANOFLOW() != nil {
 		b.statements = append(b.statements, &ast.DropNanoflowStmt{
-			Name: buildQualifiedName(names[0]),
+			Name:         buildQualifiedName(names[0]),
+			DropIfExists: ast.DropIfExists{IfExists: ctx.IfExists() != nil},
 		})
 	} else if ctx.RULE() != nil {
 		b.statements = append(b.statements, &ast.DropRuleStmt{
@@ -858,19 +864,23 @@ func (b *Builder) ExitDropStatement(ctx *parser.DropStatementContext) {
 		})
 	} else if ctx.PAGE() != nil {
 		b.statements = append(b.statements, &ast.DropPageStmt{
-			Name: buildQualifiedName(names[0]),
+			Name:         buildQualifiedName(names[0]),
+			DropIfExists: ast.DropIfExists{IfExists: ctx.IfExists() != nil},
 		})
 	} else if ctx.LAYOUT() != nil {
 		b.statements = append(b.statements, &ast.DropLayoutStmt{
-			Name: buildQualifiedName(names[0]),
+			Name:         buildQualifiedName(names[0]),
+			DropIfExists: ast.DropIfExists{IfExists: ctx.IfExists() != nil},
 		})
 	} else if ctx.SNIPPET() != nil {
 		b.statements = append(b.statements, &ast.DropSnippetStmt{
-			Name: buildQualifiedName(names[0]),
+			Name:         buildQualifiedName(names[0]),
+			DropIfExists: ast.DropIfExists{IfExists: ctx.IfExists() != nil},
 		})
 	} else if ctx.MENU_KW() != nil {
 		b.statements = append(b.statements, &ast.DropMenuStmt{
-			Name: buildQualifiedName(names[0]),
+			Name:         buildQualifiedName(names[0]),
+			DropIfExists: ast.DropIfExists{IfExists: ctx.IfExists() != nil},
 		})
 	} else if ctx.JAVASCRIPT() != nil && ctx.ACTION() != nil {
 		b.statements = append(b.statements, &ast.DropJavaScriptActionStmt{
@@ -878,7 +888,8 @@ func (b *Builder) ExitDropStatement(ctx *parser.DropStatementContext) {
 		})
 	} else if ctx.JAVA() != nil && ctx.ACTION() != nil {
 		b.statements = append(b.statements, &ast.DropJavaActionStmt{
-			Name: buildQualifiedName(names[0]),
+			Name:         buildQualifiedName(names[0]),
+			DropIfExists: ast.DropIfExists{IfExists: ctx.IfExists() != nil},
 		})
 	} else if ctx.ODATA() != nil && ctx.CLIENT() != nil {
 		b.statements = append(b.statements, &ast.DropODataClientStmt{
@@ -898,7 +909,8 @@ func (b *Builder) ExitDropStatement(ctx *parser.DropStatementContext) {
 		})
 	} else if ctx.IMAGE() != nil && ctx.COLLECTION() != nil {
 		b.statements = append(b.statements, &ast.DropImageCollectionStmt{
-			Name: buildQualifiedName(names[0]),
+			Name:         buildQualifiedName(names[0]),
+			DropIfExists: ast.DropIfExists{IfExists: ctx.IfExists() != nil},
 		})
 	} else if ctx.QUEUE() != nil {
 		b.statements = append(b.statements, &ast.DropQueueStmt{

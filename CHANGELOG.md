@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`DROP <document> IF EXISTS`** (mendixlabs/mxcli#1190) — `DROP ENTITY`, `ASSOCIATION`, `ENUMERATION`, `CONSTANT`, `MICROFLOW`, `NANOFLOW`, `PAGE`, `LAYOUT`, `SNIPPET`, `MENU`, `JAVA ACTION` and `IMAGE COLLECTION` take `IF EXISTS`: a missing document is reported as `… does not exist, skipping` instead of stopping exec, so a script that removes one can run twice. Only the named document (or its module) being absent is skipped; every other error still fails the statement.
+
 ## [0.24.0] - 2026-09-24
 
 Headline: **An element's storage GUID is the database's identity, and mxcli now treats it as one.** A production report of 28 attributes emptied across 607 rows by a single edit (mendixlabs/mxcli#1119) traced to five write paths that re-minted GUIDs — one of them moving 282 in a single module. They are fixed, and a new guard at the write choke point refuses any write that moves one: a class of data loss that leaves the model valid, `mx check` clean and `DESCRIBE` byte-identical, and surfaces only when the package meets a database that already holds data. Alongside it, `MOVE ENTITY` and `RENAME` stop leaving a project unbuildable, and four more scripts that passed every gate and failed the build are refused.

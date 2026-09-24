@@ -209,6 +209,8 @@ func stmtDropInfo(stmt ast.Statement) (docType, name string) {
 		return "agent", s.Name.String()
 	case *ast.DropImageCollectionStmt:
 		return "image-collection", s.Name.String()
+	case *ast.DropMenuStmt:
+		return "menu", s.Name.String()
 	}
 	return "", ""
 }

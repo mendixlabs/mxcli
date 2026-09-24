@@ -3,8 +3,10 @@
 package executor
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
@@ -88,7 +90,32 @@ func (r *Registry) Dispatch(ctx *ExecContext, stmt ast.Statement) error {
 	if h == nil {
 		return mdlerrors.NewUnsupported(fmt.Sprintf("unhandled statement type %T", stmt))
 	}
-	return h(ctx, stmt)
+	return skipMissingIfAsked(ctx, stmt, h(ctx, stmt))
+}
+
+// skipMissingIfAsked turns "<kind> not found" into a notice for a DROP written
+// with IF EXISTS. Only the document the statement names counts (or its module,
+// which leaves the document missing just the same): any other not-found error
+// is a real failure and is returned as is.
+func skipMissingIfAsked(ctx *ExecContext, stmt ast.Statement, err error) error {
+	skipper, ok := stmt.(ast.MissingSkipper)
+	if err == nil || !ok || !skipper.SkipsMissing() {
+		return err
+	}
+	var missing *mdlerrors.NotFoundError
+	if !errors.As(err, &missing) {
+		return err
+	}
+	kind, name := stmtDropInfo(stmt)
+	if missing.Kind != "module" && missing.Name != name {
+		return err
+	}
+	label := strings.ReplaceAll(kind, "-", " ")
+	if kind == "javaaction" {
+		label = "java action"
+	}
+	fmt.Fprintf(ctx.Output, "%s %s does not exist, skipping\n", label, name)
+	return nil
 }
 
 // Validate checks that every known AST statement type has a registered

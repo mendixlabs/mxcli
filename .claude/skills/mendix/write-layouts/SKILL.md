@@ -55,8 +55,14 @@ layout, so repoint them first:
 
 ```sql
 ALTER PAGES SET LAYOUT = MyModule.App_New WHERE LAYOUT = MyModule.App_Old;
-DROP LAYOUT MyModule.App_Old;
+DROP LAYOUT IF EXISTS MyModule.App_Old;
 ```
+
+`IF EXISTS` keeps the script re-runnable: on a second run the layout is already
+gone, and without it exec stops at the `DROP` and skips everything after it.
+Every document DROP a script typically needs takes it — entity, association,
+enumeration, constant, microflow, nanoflow, page, layout, snippet, menu, java
+action, image collection.
 
 To *correct* a layout rather than remove it, re-create it under the same name
 (`CREATE OR REPLACE LAYOUT`): the pages stay bound by qualified name and rebind

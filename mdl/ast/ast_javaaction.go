@@ -47,6 +47,7 @@ func (s *CreateJavaActionStmt) isStatement() {}
 // DropJavaActionStmt represents: DROP JAVA ACTION Module.Name
 type DropJavaActionStmt struct {
 	Name QualifiedName
+	DropIfExists
 }
 
 func (s *DropJavaActionStmt) isStatement() {}

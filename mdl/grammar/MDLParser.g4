@@ -467,30 +467,34 @@ createMenuStatement
     : MENU_KW qualifiedName (FOLDER STRING_LITERAL)? LPAREN navMenuItemDef* RPAREN
     ;
 
+// IF EXISTS on the document kinds a script actually removes, so a script that
+// drops a document can run twice: without it the second run stops at the DROP
+// and every later statement is skipped (mendixlabs/mxcli#1190). Same ifExists
+// rule as DROP USER ROLE and ALTER ENTITY ... DROP ATTRIBUTE.
 dropStatement
-    : DROP ENTITY qualifiedName
-    | DROP ASSOCIATION qualifiedName
-    | DROP ENUMERATION qualifiedName
-    | DROP CONSTANT qualifiedName
-    | DROP MICROFLOW qualifiedName
-    | DROP NANOFLOW qualifiedName
+    : DROP ENTITY ifExists? qualifiedName
+    | DROP ASSOCIATION ifExists? qualifiedName
+    | DROP ENUMERATION ifExists? qualifiedName
+    | DROP CONSTANT ifExists? qualifiedName
+    | DROP MICROFLOW ifExists? qualifiedName
+    | DROP NANOFLOW ifExists? qualifiedName
     | DROP RULE qualifiedName
-    | DROP PAGE qualifiedName
-    | DROP LAYOUT qualifiedName
-    | DROP SNIPPET qualifiedName
-    | DROP MENU_KW qualifiedName
+    | DROP PAGE ifExists? qualifiedName
+    | DROP LAYOUT ifExists? qualifiedName
+    | DROP SNIPPET ifExists? qualifiedName
+    | DROP MENU_KW ifExists? qualifiedName
     | DROP MODULE qualifiedName
     | DROP QUEUE qualifiedName
     | DROP SCHEDULED EVENT qualifiedName
     | DROP REGULAR EXPRESSION qualifiedName
-    | DROP JAVA ACTION qualifiedName
+    | DROP JAVA ACTION ifExists? qualifiedName
     | DROP JAVASCRIPT ACTION qualifiedName
     | DROP INDEX qualifiedName ON qualifiedName
     | DROP ODATA CLIENT qualifiedName
     | DROP ODATA SERVICE qualifiedName
     | DROP BUSINESS EVENT SERVICE qualifiedName
     | DROP WORKFLOW qualifiedName
-    | DROP IMAGE COLLECTION qualifiedName
+    | DROP IMAGE COLLECTION ifExists? qualifiedName
     | DROP ANNOTATION STRING_LITERAL IN identifierOrKeyword
     | DROP ANNOTATION AT_KW LPAREN NUMBER_LITERAL COMMA NUMBER_LITERAL RPAREN IN identifierOrKeyword
     | DROP JSON STRUCTURE qualifiedName

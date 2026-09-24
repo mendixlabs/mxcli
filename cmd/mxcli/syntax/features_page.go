@@ -512,7 +512,10 @@ CREATE PAGE Sales.Detail (Title: 'Detail', Layout: Atlas_Core.Atlas_Default) {
 		Keywords: []string{
 			"drop layout", "delete layout", "remove layout",
 		},
-		Syntax: "DROP LAYOUT Module.Name",
+		Syntax: "DROP LAYOUT [IF EXISTS] Module.Name\n\n" +
+			"-- IF EXISTS skips a layout that is already gone, so the script re-runs.\n" +
+			"-- The same clause works on DROP ENTITY, ASSOCIATION, ENUMERATION, CONSTANT,\n" +
+			"-- MICROFLOW, NANOFLOW, PAGE, SNIPPET, MENU, JAVA ACTION and IMAGE COLLECTION.",
 		Example: "DROP LAYOUT MyModule.App_Old;\n\n" +
 			"-- Pages still bound to it are named in a warning, and the drop proceeds.\n" +
 			"-- Left dropped, each of those pages fails the build with CE1613 — which\n" +

@@ -146,6 +146,7 @@ func (s *CreateMicroflowStmt) isStatement() {}
 // DropMicroflowStmt represents: DROP MICROFLOW Module.Name
 type DropMicroflowStmt struct {
 	Name QualifiedName
+	DropIfExists
 }
 
 func (s *DropMicroflowStmt) isStatement() {}
@@ -214,6 +215,7 @@ func (s *DropRuleStmt) isStatement() {}
 // DropNanoflowStmt represents: DROP NANOFLOW Module.Name
 type DropNanoflowStmt struct {
 	Name QualifiedName
+	DropIfExists
 }
 
 func (s *DropNanoflowStmt) isStatement() {}

@@ -46,6 +46,7 @@ type DataGridColumnDef struct {
 // DropPageStmt represents: DROP PAGE Module.Name
 type DropPageStmt struct {
 	Name QualifiedName
+	DropIfExists
 }
 
 func (s *DropPageStmt) isStatement() {}
@@ -57,6 +58,7 @@ func (s *DropPageStmt) isStatement() {}
 // exactly that — had no headless remedy at all.
 type DropLayoutStmt struct {
 	Name QualifiedName
+	DropIfExists
 }
 
 func (s *DropLayoutStmt) isStatement() {}
@@ -64,6 +66,7 @@ func (s *DropLayoutStmt) isStatement() {}
 // DropSnippetStmt represents: DROP SNIPPET Module.Name
 type DropSnippetStmt struct {
 	Name QualifiedName
+	DropIfExists
 }
 
 func (s *DropSnippetStmt) isStatement() {}

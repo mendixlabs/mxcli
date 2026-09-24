@@ -58,6 +58,7 @@ func (s *CreateEntityStmt) isStatement() {}
 // DropEntityStmt represents: DROP ENTITY Module.Name
 type DropEntityStmt struct {
 	Name QualifiedName
+	DropIfExists
 }
 
 func (s *DropEntityStmt) isStatement() {}

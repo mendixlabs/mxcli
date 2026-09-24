@@ -91,6 +91,7 @@ const (
 // DropEnumerationStmt represents: DROP ENUMERATION Module.Name
 type DropEnumerationStmt struct {
 	Name QualifiedName
+	DropIfExists
 }
 
 func (s *DropEnumerationStmt) isStatement() {}
@@ -117,6 +118,7 @@ func (s *CreateConstantStmt) isStatement() {}
 // DropConstantStmt represents: DROP CONSTANT Module.Name
 type DropConstantStmt struct {
 	Name QualifiedName
+	DropIfExists
 }
 
 func (s *DropConstantStmt) isStatement() {}

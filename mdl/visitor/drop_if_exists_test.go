@@ -73,3 +73,34 @@ func TestDropDemoUser_IfExistsIsParsed(t *testing.T) {
 		}
 	}
 }
+
+// Document DROPs take IF EXISTS too, so a script that removes a layout or a page
+// can run a second time (mendixlabs/mxcli#1190). One case per kind: the flag is
+// set, and IF EXISTS is not read as part of the name.
+func TestDropDocument_IfExistsIsParsed(t *testing.T) {
+	for _, kind := range []string{
+		"entity", "association", "enumeration", "constant", "microflow", "nanoflow",
+		"page", "layout", "snippet", "menu", "java action", "image collection",
+	} {
+		for _, withIf := range []bool{true, false} {
+			src := "drop " + kind + " M.Doc;"
+			if withIf {
+				src = "drop " + kind + " if exists M.Doc;"
+			}
+			prog, errs := Build(src)
+			if len(errs) > 0 {
+				t.Fatalf("%s: parse: %v", src, errs[0])
+			}
+			if len(prog.Statements) != 1 {
+				t.Fatalf("%s: got %d statements", src, len(prog.Statements))
+			}
+			skipper, ok := prog.Statements[0].(ast.MissingSkipper)
+			if !ok {
+				t.Fatalf("%s: %T does not take IF EXISTS", src, prog.Statements[0])
+			}
+			if skipper.SkipsMissing() != withIf {
+				t.Errorf("%s: SkipsMissing = %v, want %v", src, skipper.SkipsMissing(), withIf)
+			}
+		}
+	}
+}

@@ -1,0 +1,25 @@
+-- ============================================================================
+-- mendixlabs/mxcli#1190 — DROP <document> IF EXISTS makes a cleanup re-runnable
+-- ============================================================================
+--
+-- The second DROP of each pair finds nothing and is skipped with
+-- "<kind> <name> does not exist, skipping" instead of stopping exec, so this
+-- whole file can be executed twice against the same project.
+-- ============================================================================
+
+CREATE MODULE BugDropIfExists;
+
+CREATE OR MODIFY PERSISTENT ENTITY BugDropIfExists.Scratch ( Note: String(100) );
+
+CREATE OR MODIFY MICROFLOW BugDropIfExists.ACT_Scratch ()
+BEGIN
+  LOG INFO 'scratch';
+END;
+/
+
+DROP MICROFLOW IF EXISTS BugDropIfExists.ACT_Scratch;
+DROP MICROFLOW IF EXISTS BugDropIfExists.ACT_Scratch;
+DROP ENTITY IF EXISTS BugDropIfExists.Scratch;
+DROP ENTITY IF EXISTS BugDropIfExists.Scratch;
+DROP LAYOUT IF EXISTS BugDropIfExists.NeverCreated;
+DROP PAGE IF EXISTS BugDropIfExists.NeverCreated;

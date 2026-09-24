@@ -26,6 +26,7 @@ func (s *CreateImageCollectionStmt) isStatement() {}
 // DropImageCollectionStmt represents: DROP IMAGE COLLECTION Module.Name
 type DropImageCollectionStmt struct {
 	Name QualifiedName
+	DropIfExists
 }
 
 func (s *DropImageCollectionStmt) isStatement() {}
