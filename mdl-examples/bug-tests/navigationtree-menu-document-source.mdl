@@ -1,0 +1,36 @@
+-- ============================================================================
+-- mendixlabs/mxcli#1189 — a navigation tree and a menu bar on a menu document
+-- ============================================================================
+--
+-- A tree's items come from a navigation profile OR a menu document. `Menu:`
+-- used to be ignored: the widget was stored on the Responsive profile, and
+-- DESCRIBE printed a tree on a menu document (Atlas_Core.Tablet_Sidebar) as a
+-- bare `navigationtree`, so a describe -> exec copy showed the desktop menu.
+--
+-- After exec, DESCRIBE LAYOUT BugNavMenuSource.Side_Layout prints both widgets
+-- with `(Menu: BugNavMenuSource.Side_Menu)`, and `mxcli bson dump --type layout`
+-- shows MenuSource $Type Forms$MenuDocumentSource. Verified on 11.12.1:
+-- mx check 0 errors.
+-- ============================================================================
+
+CREATE MODULE BugNavMenuSource;
+
+CREATE OR MODIFY MENU BugNavMenuSource.Side_Menu (
+  MENU ITEM 'Home' ICON Atlas_Core.Atlas_Filled.home;
+);
+
+CREATE LAYOUT BugNavMenuSource.Side_Layout (
+  layouttype: 'Responsive'
+) {
+  SCROLLCONTAINER layoutContainer {
+    REGION top (Size: 60, SizeMode: 'Pixels') {
+      MENUBAR topMenu (Menu: BugNavMenuSource.Side_Menu)
+    }
+    REGION left (Size: 232, SizeMode: 'Pixels') {
+      NAVIGATIONTREE sideMenu (Menu: BugNavMenuSource.Side_Menu)
+    }
+    REGION center {
+      PLACEHOLDER Main
+    }
+  }
+}

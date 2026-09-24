@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A navigation tree or menu bar on a menu document kept the Responsive menu instead** (mendixlabs/mxcli#1189) — `navigationtree nav (Menu: Module.Menu)` passed `check` and `exec` and was stored on the Responsive profile; `describe` printed a tree on a menu document (Atlas_Core's `Tablet_Sidebar`, `Phone_Sidebar`) as a bare `navigationtree`, so a describe → exec copy of `Tablet_Sidebar` showed the desktop menu. `Menu:` is now written as a `Forms$MenuDocumentSource` and described back; `Menu:` with `Profile:`, or a menu that does not exist, is refused.
+
 ## [0.24.0] - 2026-09-24
 
 Headline: **An element's storage GUID is the database's identity, and mxcli now treats it as one.** A production report of 28 attributes emptied across 607 rows by a single edit (mendixlabs/mxcli#1119) traced to five write paths that re-minted GUIDs — one of them moving 282 in a single module. They are fixed, and a new guard at the write choke point refuses any write that moves one: a class of data loss that leaves the model valid, `mx check` clean and `DESCRIBE` byte-identical, and surfaces only when the package meets a database that already holds data. Alongside it, `MOVE ENTITY` and `RENAME` stop leaving a project unbuildable, and four more scripts that passed every gate and failed the build are refused.

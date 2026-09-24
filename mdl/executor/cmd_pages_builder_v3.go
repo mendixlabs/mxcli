@@ -2786,6 +2786,10 @@ func (pb *pageBuilder) buildScrollContainerV3(w *ast.WidgetV3) (pages.Widget, er
 // buildNavigationTreeV3 builds the sidebar menu. The profile is stored inside a
 // Forms$NavigationSource, not on the tree — see widget_write.go.
 func (pb *pageBuilder) buildNavigationTreeV3(w *ast.WidgetV3) (pages.Widget, error) {
+	menu, err := pb.menuSourceDocument(w)
+	if err != nil {
+		return nil, err
+	}
 	nt := &pages.NavigationTree{
 		BaseWidget: pages.BaseWidget{
 			BaseElement: model.BaseElement{
@@ -2795,8 +2799,38 @@ func (pb *pageBuilder) buildNavigationTreeV3(w *ast.WidgetV3) (pages.Widget, err
 			Name: w.Name,
 		},
 		NavigationProfile: w.GetStringProp("Profile"),
+		MenuDocument:      menu,
 	}
 	return nt, nil
+}
+
+// menuSourceDocument reads `Menu: Module.Name`, the menu document a navigation
+// tree or menu bar draws its items from instead of a profile. It used to be
+// ignored: the widget was stored with the Responsive profile, and a copy of
+// Atlas_Core.Tablet_Sidebar showed the desktop menu (mendixlabs/mxcli#1189).
+// The menu must exist when the layout is written: a dangling by-name reference
+// passes mx check and draws an empty menu.
+func (pb *pageBuilder) menuSourceDocument(w *ast.WidgetV3) (string, error) {
+	menu := strings.TrimSpace(w.GetStringProp("Menu"))
+	if menu == "" {
+		return "", nil
+	}
+	if w.GetStringProp("Profile") != "" {
+		return "", mdlerrors.NewValidationf(
+			"%s %s: Menu and Profile are two sources for the same items -- give one", strings.ToLower(w.Type), w.Name)
+	}
+	qn := parseQualifiedNameStr(menu)
+	if qn.Module == "" {
+		return "", mdlerrors.NewValidationf("%s %s: Menu needs a qualified name, Module.Menu -- got %q",
+			strings.ToLower(w.Type), w.Name, menu)
+	}
+	if pb.backend != nil {
+		if _, err := pb.backend.GetMenuDocumentByQualifiedName(qn.Module, qn.Name); err != nil {
+			return "", mdlerrors.NewValidationf("%s %s: menu not found: %s (create it with `create menu`)",
+				strings.ToLower(w.Type), w.Name, qn.String())
+		}
+	}
+	return qn.String(), nil
 }
 
 // buildPlaceholderV3 declares a slot a page can bind to.
@@ -2822,6 +2856,10 @@ func (pb *pageBuilder) buildPlaceholderV3(w *ast.WidgetV3) (pages.Widget, error)
 // buildMenuBarV3 builds the horizontal navigation a topbar carries. Same shape
 // as a navigation tree — see widget_write.go.
 func (pb *pageBuilder) buildMenuBarV3(w *ast.WidgetV3) (pages.Widget, error) {
+	menu, err := pb.menuSourceDocument(w)
+	if err != nil {
+		return nil, err
+	}
 	return &pages.MenuBar{
 		BaseWidget: pages.BaseWidget{
 			BaseElement: model.BaseElement{
@@ -2831,6 +2869,7 @@ func (pb *pageBuilder) buildMenuBarV3(w *ast.WidgetV3) (pages.Widget, error) {
 			Name: w.Name,
 		},
 		NavigationProfile: w.GetStringProp("Profile"),
+		MenuDocument:      menu,
 	}, nil
 }
 

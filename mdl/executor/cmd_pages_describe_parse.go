@@ -274,9 +274,14 @@ func parseRawWidget(ctx *ExecContext, w map[string]any, parentEntityContext ...s
 		"Forms$MenuBar", "Pages$MenuBar":
 		// The profile is a qualified name one level down, in a
 		// Forms$NavigationSource, not a property of the tree.
+		// Or a menu document, in a Forms$MenuDocumentSource (Atlas_Core's
+		// Tablet_Sidebar and Phone_Sidebar); mendixlabs/mxcli#1189.
 		if src, ok := w["MenuSource"].(map[string]any); ok {
 			if p, ok := src["NavigationProfile"].(string); ok {
 				widget.NavigationProfile = p
+			}
+			if m, ok := src["Menu"].(string); ok {
+				widget.MenuDocument = m
 			}
 		}
 		return []rawWidget{widget}

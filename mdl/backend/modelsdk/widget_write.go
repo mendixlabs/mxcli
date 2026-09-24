@@ -644,10 +644,7 @@ func widgetToGen(w pages.Widget) (element.Element, error) {
 	case *pages.NavigationTree:
 		g := genPg.NewNavigationTree()
 		applyWidgetBase(g, &x.BaseWidget)
-		src := genPg.NewNavigationSource()
-		assignID(src)
-		src.SetNavigationProfileQualifiedName(orDefaultStr(x.NavigationProfile, "Responsive"))
-		g.SetMenuSource(src)
+		g.SetMenuSource(menuSourceToGen(x.NavigationProfile, x.MenuDocument))
 		return g, nil
 
 	case *pages.MenuBar:
@@ -655,10 +652,7 @@ func widgetToGen(w pages.Widget) (element.Element, error) {
 		// a menu bar is the horizontal navigation a topbar carries.
 		g := genPg.NewMenuBar()
 		applyWidgetBase(g, &x.BaseWidget)
-		src := genPg.NewNavigationSource()
-		assignID(src)
-		src.SetNavigationProfileQualifiedName(orDefaultStr(x.NavigationProfile, "Responsive"))
-		g.SetMenuSource(src)
+		g.SetMenuSource(menuSourceToGen(x.NavigationProfile, x.MenuDocument))
 		return g, nil
 
 	case *pages.GroupBox:
@@ -1844,6 +1838,22 @@ func clientActionToGen(a pages.ClientAction) (element.Element, error) {
 }
 
 // orDefaultStr returns s, or def when s is empty.
+// menuSourceToGen is the MenuSource a navigation tree or menu bar carries: a
+// Forms$MenuDocumentSource when the widget names a menu document, else a
+// Forms$NavigationSource on the profile (Responsive when none is named).
+func menuSourceToGen(profile, menuDocument string) element.Element {
+	if menuDocument != "" {
+		src := genPg.NewMenuDocumentSource()
+		assignID(src)
+		src.SetMenuQualifiedName(menuDocument)
+		return src
+	}
+	src := genPg.NewNavigationSource()
+	assignID(src)
+	src.SetNavigationProfileQualifiedName(orDefaultStr(profile, "Responsive"))
+	return src
+}
+
 func orDefaultStr(s, def string) string {
 	if s == "" {
 		return def

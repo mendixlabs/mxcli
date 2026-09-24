@@ -146,8 +146,8 @@ create page MyModule.Home (title: 'Home', layout: MyModule.App_Default) {
 | Scroll container | `scrollcontainer name { … }` | The layout's root. Its children are **regions**, never widgets |
 | Region | `region top \| right \| bottom \| left \| center` | Five **named slots**, not a list. One region per slot; a repeat is refused |
 | Placeholder | `placeholder Main` | The hole a page's content goes into. No properties, no body |
-| Navigation tree | `navigationtree name (profile: 'Responsive')` | The sidebar menu — vertical. The profile is a navigation profile name |
-| Menu bar | `menubar name (profile: 'Responsive')` | The topbar menu — horizontal. Same stored shape as a navigation tree |
+| Navigation tree | `navigationtree name (profile: 'Responsive')` or `(menu: Module.MenuName)` | The sidebar menu — vertical. Its items come from a navigation profile **or** a menu document (`create menu`), never both |
+| Menu bar | `menubar name (profile: 'Responsive')` or `(menu: Module.MenuName)` | The topbar menu — horizontal. Same stored shape as a navigation tree |
 
 Region properties: `size` (integer), `sizemode` (`Fixed` / `Pixels` / `Auto`),
 `class`. Unset is Studio Pro's `200` / `Auto`.

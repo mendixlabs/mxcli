@@ -460,6 +460,7 @@ CREATE PAGE Sales.Detail (Title: 'Detail', Layout: Atlas_Core.Atlas_Default) {
 			"      -- widgets, plus:\n" +
 			"      NAVIGATIONTREE name (Profile: 'Responsive')   -- vertical, for a sidebar\n" +
 			"      MENUBAR name (Profile: 'Responsive')          -- horizontal, for a topbar\n" +
+			"      -- or (Menu: Module.MenuName): items from a menu document, not a profile\n" +
 			"      PLACEHOLDER Main\n" +
 			"    }\n" +
 			"  }\n" +

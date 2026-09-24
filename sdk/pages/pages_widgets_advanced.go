@@ -16,8 +16,13 @@ type NavigationTree struct {
 	BaseWidget
 	// NavigationProfile names the profile the menu is drawn from. It is stored
 	// inside a Forms$NavigationSource under MenuSource, not on the tree itself.
-	NavigationProfile string            `json:"navigationProfile,omitempty"`
-	Items             []*NavigationItem `json:"items,omitempty"`
+	NavigationProfile string `json:"navigationProfile,omitempty"`
+	// MenuDocument is the other source a tree can draw from: a Menus$MenuDocument,
+	// stored as a Forms$MenuDocumentSource. Atlas_Core's Tablet_Sidebar and
+	// Phone_Sidebar trees read Tablet_Menu and Phone_Menu this way. At most one
+	// of MenuDocument and NavigationProfile is set.
+	MenuDocument string            `json:"menuDocument,omitempty"`
+	Items        []*NavigationItem `json:"items,omitempty"`
 }
 
 // NavigationItem represents an item in navigation.
@@ -40,6 +45,8 @@ type NavigationItem struct {
 type MenuBar struct {
 	BaseWidget
 	NavigationProfile string `json:"navigationProfile,omitempty"`
+	// MenuDocument: see NavigationTree.
+	MenuDocument string `json:"menuDocument,omitempty"`
 
 	// MenuSource is the older polymorphic form, kept because the type is
 	// exported. Nothing reads or writes it.

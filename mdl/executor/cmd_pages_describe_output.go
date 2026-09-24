@@ -311,7 +311,9 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 		}
 		header := fmt.Sprintf("%s %s", keyword, mdlIdent(w.Name))
 		var props []string
-		if w.NavigationProfile != "" {
+		if w.MenuDocument != "" {
+			props = append(props, fmt.Sprintf("Menu: %s", w.MenuDocument))
+		} else if w.NavigationProfile != "" {
 			props = append(props, fmt.Sprintf("Profile: %s", mdlQuote(w.NavigationProfile)))
 		}
 		props = appendAppearanceProps(props, w)

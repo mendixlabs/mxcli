@@ -704,6 +704,8 @@ type rawWidget struct {
 	// NavigationProfile is a Forms$NavigationTree's profile, which the document
 	// keeps one level down in MenuSource rather than on the tree.
 	NavigationProfile string
+	// MenuDocument is the other MenuSource: a Forms$MenuDocumentSource's menu.
+	MenuDocument string
 	// Specialization is the entity a List View template renders. Set only on the
 	// synthetic wrappers parseListViewContent emits for Forms$ListViewTemplate,
 	// which is the same shape as TabCaption above: a container with no name, whose

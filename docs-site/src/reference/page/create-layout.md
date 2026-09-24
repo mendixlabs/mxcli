@@ -119,8 +119,8 @@ Main, not by a property)
 | Scroll container | `SCROLLCONTAINER name { … }` | The layout's root. Its children are **regions**, never widgets |
 | Region | `REGION top \| right \| bottom \| left \| center` | Five **named slots**, not a list. One region per slot |
 | Placeholder | `PLACEHOLDER Main` | The hole a page's content goes into. No properties, no body |
-| Navigation tree | `NAVIGATIONTREE name (profile: 'Responsive')` | The sidebar menu — vertical |
-| Menu bar | `MENUBAR name (profile: 'Responsive')` | The topbar menu — horizontal |
+| Navigation tree | `NAVIGATIONTREE name (profile: 'Responsive')` or `(menu: Module.MenuName)` | The sidebar menu — vertical. Items from a navigation profile or a menu document, not both |
+| Menu bar | `MENUBAR name (profile: 'Responsive')` or `(menu: Module.MenuName)` | The topbar menu — horizontal |
 
 ## Examples
 
