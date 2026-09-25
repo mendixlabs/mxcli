@@ -155,33 +155,6 @@ func TestDescribe_RollbackIsStillNotRendered(t *testing.T) {
 	}
 }
 
-// actionErrorHandlingField is the reflection lookup that replaced the switch.
-// Pinning it directly is what makes the fix durable: a NEW action type carrying
-// ErrorHandlingType is handled the moment it exists, with nothing to remember.
-func TestActionErrorHandlingField(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		action microflows.MicroflowAction
-		want   microflows.ErrorHandlingType
-	}{
-		{"reads the field", &microflows.CreateVariableAction{
-			ErrorHandlingType: microflows.ErrorHandlingTypeCustom}, microflows.ErrorHandlingTypeCustom},
-		{"empty when unset", &microflows.CreateVariableAction{}, ""},
-		{"action without the field", &microflows.ListOperationAction{}, ""},
-		{"nil action", nil, ""},
-	} {
-		if got := actionErrorHandlingField(tc.action); got != tc.want {
-			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
-		}
-	}
-
-	// A typed-nil pointer must not panic — activity.Action can hold one.
-	var typedNil *microflows.CreateVariableAction
-	if got := actionErrorHandlingField(typedNil); got != "" {
-		t.Errorf("typed nil: got %q, want empty", got)
-	}
-}
-
 // RestOperationCallAction stores the field but Mendix refuses a custom handler on
 // it (CE6035), so it is the one action deliberately not reported. A reflection
 // lookup would otherwise pick it up — this is the case that stops the generic fix

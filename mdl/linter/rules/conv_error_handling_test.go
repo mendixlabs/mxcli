@@ -3,6 +3,7 @@
 package rules
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/mendixlabs/mxcli/mdl/linter"
@@ -227,5 +228,44 @@ func TestNoContinueErrorHandlingRule_Metadata(t *testing.T) {
 	r := NewNoContinueErrorHandlingRule()
 	if r.ID() != "CONV014" {
 		t.Errorf("ID = %q, want CONV014", r.ID())
+	}
+}
+
+// The readers store an action activity's error handling on the ACTION and leave
+// the activity field empty. Before the rules read it there, a handled Java call
+// was reported as "uses ” error handling" and `on error continue` on an action
+// was never reported at all.
+func TestFindUnhandledCalls_HandlingOnTheAction(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		eh    microflows.ErrorHandlingType
+		count int
+	}{
+		{"custom", microflows.ErrorHandlingTypeCustom, 0},
+		{"custom without rollback", microflows.ErrorHandlingTypeCustomWithoutRollback, 0},
+		{"rollback", microflows.ErrorHandlingTypeRollback, 1},
+	} {
+		objects := []microflows.MicroflowObject{
+			&microflows.ActionActivity{Action: &microflows.JavaActionCallAction{ErrorHandlingType: tc.eh}},
+		}
+		var violations []linter.Violation
+		findUnhandledCalls(objects, testMicroflow(), NewErrorHandlingOnCallsRule(), &violations)
+		if len(violations) != tc.count {
+			t.Fatalf("%s: expected %d violation(s), got %d", tc.name, tc.count, len(violations))
+		}
+		if tc.count == 1 && !strings.Contains(violations[0].Message, "'Rollback'") {
+			t.Errorf("%s: message should name the stored handling, got %q", tc.name, violations[0].Message)
+		}
+	}
+}
+
+func TestFindContinueErrorHandling_ContinueOnTheAction(t *testing.T) {
+	objects := []microflows.MicroflowObject{
+		&microflows.ActionActivity{Action: &microflows.MicroflowCallAction{ErrorHandlingType: microflows.ErrorHandlingTypeContinue}},
+	}
+	var violations []linter.Violation
+	findContinueErrorHandling(objects, testMicroflow(), NewNoContinueErrorHandlingRule(), &violations)
+	if len(violations) != 1 || violations[0].RuleID != "CONV014" {
+		t.Fatalf("expected one CONV014 for `on error continue` stored on the action, got %v", violations)
 	}
 }

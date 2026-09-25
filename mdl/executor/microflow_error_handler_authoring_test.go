@@ -45,7 +45,7 @@ func actionErrorHandlingTypes(fb *flowBuilder) []microflows.ErrorHandlingType {
 	var out []microflows.ErrorHandlingType
 	for _, o := range fb.objects {
 		if a, ok := o.(*microflows.ActionActivity); ok {
-			out = append(out, actionErrorHandlingField(a.Action))
+			out = append(out, microflows.ActionErrorHandlingType(a.Action))
 		}
 	}
 	return out
