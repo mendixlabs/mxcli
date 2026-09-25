@@ -71,14 +71,15 @@ func findUnhandledCalls(objects []microflows.MicroflowObject, mf linter.Microflo
 				continue
 			}
 
-			// Check if error handling is not custom
-			if act.ErrorHandlingType != microflows.ErrorHandlingTypeCustom &&
-				act.ErrorHandlingType != microflows.ErrorHandlingTypeCustomWithoutRollback {
+			// Check if error handling is not custom. It is stored on the action, not the activity.
+			errType := act.ErrorHandling()
+			if errType != microflows.ErrorHandlingTypeCustom &&
+				errType != microflows.ErrorHandlingTypeCustomWithoutRollback {
 				*violations = append(*violations, linter.Violation{
 					RuleID:   r.ID(),
 					Severity: r.DefaultSeverity(),
 					Message: fmt.Sprintf("%s in '%s.%s' uses '%s' error handling instead of Custom.",
-						actionName, mf.ModuleName, mf.Name, act.ErrorHandlingType),
+						actionName, mf.ModuleName, mf.Name, errType),
 					Location: linter.Location{
 						Module:       mf.ModuleName,
 						DocumentType: mf.DocumentNoun(),
@@ -144,7 +145,7 @@ func findContinueErrorHandling(objects []microflows.MicroflowObject, mf linter.M
 	for _, obj := range objects {
 		switch act := obj.(type) {
 		case *microflows.ActionActivity:
-			if act.ErrorHandlingType == microflows.ErrorHandlingTypeContinue {
+			if act.ErrorHandling() == microflows.ErrorHandlingTypeContinue {
 				caption := act.Caption
 				if caption == "" {
 					caption = "(unnamed activity)"

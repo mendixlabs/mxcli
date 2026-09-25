@@ -1,0 +1,64 @@
+-- ============================================================================
+-- Lint: CONV013 / CONV014 read the error handling of an action activity
+-- ============================================================================
+--
+-- Symptom (before fix):
+--   The reader stores an action activity's error handling on the ACTION
+--   (Microflows$*Action.ErrorHandlingType), where the model keeps it. CONV013
+--   and CONV014 read the activity-level field instead, which the reader
+--   leaves empty. So:
+--     - CONV013 flags every Java action, REST and web service call, including
+--       ones with `on error { ... }`, as "uses '' error handling";
+--     - CONV014 never flags an action with `on error continue`.
+--
+-- After fix:
+--   Both rules read the action's handling, the same way DESCRIBE does
+--   (getActionErrorHandlingType): MF_Handled and MF_HandledNoRollback
+--   raise no CONV013, MF_Unhandled raises one, MF_Continue raises CONV014.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/lint-action-error-handling.mdl -p app.mpr
+--   mxcli lint -p app.mpr   (look for LintEh.* under CONV013 / CONV014)
+-- ============================================================================
+
+create module LintEh;
+
+create java action LintEh.JA_Echo (
+  Text: string not null
+) returns string
+as $$
+return Text;
+$$;
+/
+
+-- Custom handling with rollback: no CONV013.
+create microflow LintEh.MF_Handled ($Text: string)
+begin
+  call java action LintEh.JA_Echo (Text = $Text) on error {
+    log error node 'LintEh' 'echo failed';
+  };
+end;
+/
+
+-- Custom handling without rollback: no CONV013.
+create microflow LintEh.MF_HandledNoRollback ($Text: string)
+begin
+  call java action LintEh.JA_Echo (Text = $Text) on error without rollback {
+    log error node 'LintEh' 'echo failed';
+  };
+end;
+/
+
+-- No handling (the default, Rollback): CONV013.
+create microflow LintEh.MF_Unhandled ($Text: string)
+begin
+  call java action LintEh.JA_Echo (Text = $Text);
+end;
+/
+
+-- Continue swallows the error: CONV014.
+create microflow LintEh.MF_Continue ($Text: string)
+begin
+  call java action LintEh.JA_Echo (Text = $Text) on error continue;
+end;
+/

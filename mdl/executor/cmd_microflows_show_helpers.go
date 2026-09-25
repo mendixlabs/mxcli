@@ -6,7 +6,6 @@ package executor
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -2284,41 +2283,8 @@ func getActionErrorHandlingType(activity *microflows.ActionActivity) microflows.
 		return ""
 	}
 
-	if errType := actionErrorHandlingField(activity.Action); errType != "" {
-		return errType
-	}
-	// Fall back to activity level for action types without ErrorHandlingType field.
-	return activity.ErrorHandlingType
-}
-
-// actionErrorHandlingField reads ErrorHandlingType off any action that declares it.
-//
-// Reflection rather than a case per action type. The hand-maintained switch this
-// replaces had drifted to 17 of the 38 action types that carry the field, and
-// every one of the 21 it missed — CreateObjectAction and ChangeObjectAction
-// among them — dropped that activity's whole error branch from DESCRIBE. The
-// list had already been patched twice for individual instances (#863, #1020's
-// neighbour) and silently regrew, which is what makes an enumeration the wrong
-// shape here: a new action type must not have to be remembered.
-//
-// Actions embed model.BaseElement, which has no such field, so a promoted field
-// cannot be picked up by accident.
-func actionErrorHandlingField(action microflows.MicroflowAction) microflows.ErrorHandlingType {
-	v := reflect.ValueOf(action)
-	for v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			return ""
-		}
-		v = v.Elem()
-	}
-	if v.Kind() != reflect.Struct {
-		return ""
-	}
-	f := v.FieldByName("ErrorHandlingType")
-	if !f.IsValid() || f.Kind() != reflect.String {
-		return ""
-	}
-	return microflows.ErrorHandlingType(f.String())
+	// On the action where Mendix stores it; the activity field for action types without one.
+	return activity.ErrorHandling()
 }
 
 // collectErrorHandlerStatements traverses the error handler flow and collects statements.
