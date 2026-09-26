@@ -1,6 +1,6 @@
 # ADR-0003: MDL is SQL-shaped
 
-- **Status**: Accepted
+- **Status**: Accepted. The verb inventory (`SHOW / LIST`) is amended by [ADR-0010](0010-mdl-canonical-syntax-rules.md) (R6: `show` is dropped); the rest stands.
 - **Date**: 2026-05-24
 - **Related**: [PROPOSAL_mdl_syntax_design_guidelines.md](../11-proposals/PROPOSAL_mdl_syntax_design_guidelines.md); [`design-mdl-syntax` skill](../../.claude/skills/design-mdl-syntax.md)
 

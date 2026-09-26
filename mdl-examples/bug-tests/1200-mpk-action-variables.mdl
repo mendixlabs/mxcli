@@ -1,0 +1,24 @@
+-- #1200: a pluggable widget built from its .mpk (no embedded template) lost the
+-- `<actionVariables>` its action properties declare. The action's ValueType
+-- was written with an empty ActionVariables list, so the stored widget Type
+-- disagreed with the package and `mx check` reported CE0463 — even with no
+-- action configured, because the variables belong to the widget DEFINITION.
+--
+-- Reported on Mendix 11.12.2 with Signature 2.1.0 and Calendar 2.6.0. This
+-- script needs Signature 2.1.0 in the project's widgets/ folder; mxcli now
+-- writes each declared variable as a CustomWidgets$WidgetActionVariable
+-- (Key, Type, Caption), the shape Studio Pro stores.
+--
+-- Expected: `mxcli docker check --no-update-widgets` reports no CE0463 on
+-- Sig.Sign_Edit. (`mx update-widgets` would hide the defect by repairing it.)
+
+create module Sig;
+create persistent entity Sig.Request ( SignatureData: string(unlimited) );
+
+create or replace page Sig.Sign_Edit (Title: 'Sign', Layout: Atlas_Core.Atlas_Default,
+  Params: { $Request: Sig.Request })
+{
+  DATAVIEW dv (DataSource: $Request) {
+    pluggablewidget 'com.mendix.widget.web.signature.Signature' sig1 ()
+  }
+}

@@ -103,6 +103,9 @@ This preserves the audit trail.
 | [0007](0007-mcp-read-model-session-overlay.md) | MCP backend read model — disk base with session overlay | Proposed |
 | [0008](0008-identity-and-idempotence.md) | Skip unchanged writes; never renumber element IDs in place | Accepted |
 | [0009](0009-tunnel-is-linux-only.md) | The embedded tunnel ships in Linux builds only | Accepted |
+| [0010](0010-mdl-canonical-syntax-rules.md) | MDL has one canonical form, governed by twelve syntax rules | Accepted |
+| [0011](0011-mdl-language-versioning.md) | MDL evolves through deprecation aliases and a language header; meaning changes only across versions | Accepted |
+| [0012](0012-mdl-first-and-data-first-editing.md) | MDL-first and data-first editing share one syntax and one patch engine | Accepted |
 
 ## Candidates to back-fill
 

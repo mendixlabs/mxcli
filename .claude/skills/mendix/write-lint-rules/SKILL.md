@@ -57,6 +57,12 @@ silently return empty results (issue #721).
 | `widgets()` | list of widget | All non-system widgets |
 | `snippets()` | list of snippet | All non-system snippets |
 | `scheduled_events()` | list of scheduled_event | All non-system scheduled events (requires MPR reader) |
+| `queues()` | list of queue | All non-system task queues |
+| `java_actions()` | list of java_action | All non-system, non-marketplace Java actions, each carrying its parameters |
+| `database_connections()` | list of database_connection | All non-system external database connections |
+| `documents()` | list of document | Every App Explorer document outside System and Marketplace modules, as one uniform projection with `folder` — for rules about where a document *lives* |
+| `documentable_elements()` | list of documentable | Every element that can carry documentation, across all document types, with its `description` — for documentation sweeps. Leaves out microflows and Java actions; use `microflows()` / `java_actions()` for those |
+| `navigation_targets()` | list of navigation_target | Every page a navigation profile routes to: profile home pages, role home pages and menu items. Login and not-found pages are excluded |
 | `rest_clients()` | list of rest_client | Consumed REST service documents (excluding platform modules) |
 | `rest_operations()` | list of rest_operation | Operations on consumed REST services, including their `timeout` |
 | `attributes_for(entity_qualified_name)` | list of attribute | Attributes for a specific entity |
@@ -84,6 +90,7 @@ not fail). In a session, run `refresh catalog communities` before `lint`.
 | `layer_of(asset)` | int or None | Topological layer sequence number (no opinion on ordering) |
 | `community_of(asset)` | struct{id, label} or None | The asset's detected community (bounded context) |
 | `cycles()` | list of struct{id, size, members} | Dependency cycles (SCCs > 1 node) |
+| `module_cycles()` | list of struct{id, size, members} | Module-level dependency cycles over every reference kind; `members` are module names. Use this, not `cycles()`, for "no circular module dependencies" — modules can reference each other through documents that form no asset-level cycle |
 | `module_dependencies()` | list of struct{source_module, target_module, ref_kind, edges} | Directed module→module edges |
 | `centrality(asset)` | struct{in, out, total, pagerank, betweenness} or None | Centrality of an asset |
 | `god_nodes(metric="degree"\|"pagerank"\|"betweenness", min=N)` | list of struct{asset, object_type, module_name, degree, pagerank, betweenness} | High-centrality assets above a threshold |
@@ -255,7 +262,86 @@ def check():
 | `module_name` | string | `"MyModule"` |
 | `microflow_name` | string | `"MyModule.MF_NightlyCleanup"` — resolved from catalog; raw UUID when catalog not built |
 | `interval_seconds` | int | `86400` — `0` for unrecognised interval type |
+| `repeat` | string | Schedule variant: `"Minute"`, `"Hour"`, `"Day"`, `"Week"`, `"MonthDate"`, `"MonthWeekday"`, `"YearDate"` or `"YearWeekday"`; `""` when the event has no schedule |
+| `on_overlap` | string | `"DelayNext"` or `"SkipNext"` — what happens when a run is still going at the next start |
+| `time_zone` | string | Time zone the schedule is evaluated in |
 | `enabled` | bool | `True` if the event is active |
+
+### queue
+| Property | Type | Example |
+|----------|------|---------|
+| `name` | string | `"ImportQueue"` |
+| `qualified_name` | string | `"Sales.ImportQueue"` |
+| `module_name` | string | `"Sales"` |
+| `parallelism` | string | `"3"` — an **expression**, stored as a string; do not assume it parses as an integer |
+| `cluster_wide` | bool | `True` if parallelism applies across the cluster rather than per node |
+
+### java_action
+| Property | Type | Example |
+|----------|------|---------|
+| `id` | string | Document UUID |
+| `name` | string | `"JA_ParseJson"` |
+| `qualified_name` | string | `"Sales.JA_ParseJson"` |
+| `module_name` | string | `"Sales"` |
+| `folder` | string | Folder path within module |
+| `documentation` | string | Documentation text |
+| `description` | string | Same as `documentation`, so a rule sweeping mixed document kinds can read one field name |
+| `export_level` | string | `"Hidden"` or `"API"` |
+| `return_type` | string | Return type |
+| `parameter_count` | int | Number of parameters |
+| `parameters` | list of java_action_parameter | The action's parameters, in order |
+
+#### java_action_parameter (nested in java_action)
+| Property | Type | Example |
+|----------|------|---------|
+| `name` | string | `"InputString"` |
+| `description` | string | Parameter documentation |
+| `parameter_type` | string | Parameter type |
+| `is_required` | bool | `True` if the parameter is required |
+
+### database_connection
+| Property | Type | Example |
+|----------|------|---------|
+| `id` | string | Document UUID |
+| `name` | string | `"LegacyDB"` |
+| `qualified_name` | string | `"Integration.LegacyDB"` |
+| `module_name` | string | `"Integration"` |
+| `folder` | string | Folder path within module |
+| `database_type` | string | Database engine of the connection |
+| `query_count` | int | Number of queries defined on the connection |
+
+### document
+Returned by `documents()`.
+
+| Property | Type | Example |
+|----------|------|---------|
+| `kind` | string | Catalog object type, upper-case: `"MICROFLOW"`, `"PAGE"`, `"WORKFLOW"`, … |
+| `name` | string | `"Customer_Overview"` |
+| `qualified_name` | string | `"Sales.Customer_Overview"` |
+| `module_name` | string | `"Sales"` |
+| `folder` | string | Folder path within module; `""` means directly in the module root |
+
+### documentable
+Returned by `documentable_elements()`.
+
+| Property | Type | Example |
+|----------|------|---------|
+| `kind` | string | Mendix term, TitleCase: `"Page"`, `"Enumeration"`, `"Workflow"`, … |
+| `name` | string | `"OrderStatus"` |
+| `qualified_name` | string | `"Sales.OrderStatus"` |
+| `module_name` | string | `"Sales"` |
+| `description` | string | Documentation text, whichever of the element's Documentation/Description properties holds it |
+
+### navigation_target
+Returned by `navigation_targets()`.
+
+| Property | Type | Example |
+|----------|------|---------|
+| `profile` | string | Navigation profile: `"Responsive"`, `"Phone"`, `"Tablet"`, … |
+| `kind` | string | `"home"`, `"role_home"` or `"menu"` |
+| `role` | string | User role, for a `"role_home"` target; `""` otherwise |
+| `caption` | string | Menu item caption, for a `"menu"` target; `""` otherwise |
+| `page` | string | Qualified name of the target page |
 
 ### xpath_expression
 
@@ -449,6 +535,7 @@ Returned by `project_security()`. Returns `none` if no MPR reader is available.
 | `enable_guest_access` | bool | Whether anonymous/guest access is enabled |
 | `check_security` | bool | Whether security checking is active |
 | `strict_mode` | bool | Strict security mode |
+| `anonymous_user_role` | string | Name of the project's guest user role, the role anonymous users get. Read `enable_guest_access` too: the role name can stay set while guest access is off |
 | `password_policy` | struct | Nested password policy settings |
 
 #### password_policy (nested in project_security)
@@ -469,6 +556,8 @@ Returned by `project_security()`. Returns `none` if no MPR reader is available.
 | `is_pascal_case(s)` | Returns True if string is PascalCase |
 | `is_camel_case(s)` | Returns True if string is camelCase |
 | `matches(s, pattern)` | Returns True if string matches regex |
+| `get_option(key, default?)` | The rule's option `key` from the `options:` block under its rule ID in `.claude/lint-config.yaml`, or `default` (`None` if omitted) when unset |
+| `struct(**kwargs)` | Build an ad-hoc struct, e.g. `struct(name="x", count=1)`, to group values inside a rule |
 
 ## Common Patterns
 

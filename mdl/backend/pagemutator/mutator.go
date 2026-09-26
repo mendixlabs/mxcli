@@ -1798,6 +1798,31 @@ func buildPropKeyMap(widgetDoc bson.D) map[string]string {
 	return m
 }
 
+// buildPropKindMap builds a TypePointer ID -> declared value kind map
+// (PropertyTypes[].ValueType.Type) for a widget's top-level properties. Kept
+// apart from buildPropKeyMap, which has many callers that want only the key.
+func buildPropKindMap(widgetDoc bson.D) map[string]string {
+	m := make(map[string]string)
+	objType := bsonnav.DGetDoc(bsonnav.DGetDoc(widgetDoc, "Type"), "ObjectType")
+	if objType == nil {
+		return m
+	}
+	for _, pt := range bsonnav.DGetArrayElements(bsonnav.DGet(objType, "PropertyTypes")) {
+		ptDoc, ok := pt.(bson.D)
+		if !ok {
+			continue
+		}
+		id := bsonnav.ExtractBinaryIDFromDoc(bsonnav.DGet(ptDoc, "$ID"))
+		if id == "" {
+			continue
+		}
+		if kind := bsonnav.DGetString(bsonnav.DGetDoc(ptDoc, "ValueType"), "Type"); kind != "" {
+			m[id] = kind
+		}
+	}
+	return m
+}
+
 // buildColumnPropKeyMap builds a TypePointer ID -> PropertyKey map for column properties.
 func buildColumnPropKeyMap(widgetDoc bson.D, columnsTypePointerID string) (map[string]string, map[string]string) {
 	m := make(map[string]string)
@@ -2328,6 +2353,9 @@ func settableColumnProperties(propKeyMap map[string]string) string {
 // `SET DynamicCellClass` and `SET Visible` both reported success, wrote a value
 // Studio Pro does not read, did not survive a DESCRIBE round trip, and left
 // `mx check` at 0 errors.
+//
+// Shared by setPluggableWidgetPropertyMut, which had the same always-
+// PrimitiveValue bug for a widget's own properties (mendixlabs/mxcli#1201).
 //
 // The second return reports whether the kind is settable at all. Attribute,
 // datasource, action and widget-valued properties need a structured value, not a
@@ -2960,6 +2988,13 @@ func setPluggableWidgetPropertyMut(widget bson.D, propName string, value any) er
 	// now one function — a resolver that disagrees with itself is the failure
 	// this whole area keeps producing.
 	propTypeKeyMap := buildPropKeyMap(widget)
+	propKindMap := buildPropKindMap(widget)
+
+	// No pluggable property takes a list. A bracketed value arrives as a
+	// []string, and %v fused its tokens into one string written as success.
+	if _, isList := value.([]string); isList {
+		return errExpressionNotAString(propName, value)
+	}
 
 	props := bsonnav.DGetArrayElements(bsonnav.DGet(obj, "Properties"))
 	for _, prop := range props {
@@ -2972,26 +3007,58 @@ func setPluggableWidgetPropertyMut(widget bson.D, propName string, value any) er
 		if propKey == "" || !strings.EqualFold(propKey, propName) {
 			continue
 		}
-		if valDoc := bsonnav.DGetDoc(propDoc, "Value"); valDoc != nil {
-			switch v := value.(type) {
-			case string:
-				bsonnav.DSet(valDoc, "PrimitiveValue", v)
-			case bool:
-				if v {
-					bsonnav.DSet(valDoc, "PrimitiveValue", "yes")
-				} else {
-					bsonnav.DSet(valDoc, "PrimitiveValue", "no")
-				}
-			case int:
-				bsonnav.DSet(valDoc, "PrimitiveValue", fmt.Sprintf("%d", v))
-			case float64:
-				bsonnav.DSet(valDoc, "PrimitiveValue", fmt.Sprintf("%g", v))
-			default:
-				bsonnav.DSet(valDoc, "PrimitiveValue", fmt.Sprintf("%v", v))
+		valDoc := bsonnav.DGetDoc(propDoc, "Value")
+		if valDoc == nil {
+			return fmt.Errorf("property %q has no Value map", propName)
+		}
+		// Which field the value belongs in is the schema's to say, exactly as
+		// for a DataGrid 2 column (columnValueField). Writing PrimitiveValue for
+		// every kind made `SET ImageUrl` on an image report "Altered page" and
+		// change nothing: imageUrl is a TextTemplate, and DESCRIBE, mx check and
+		// the runtime all read the template (mendixlabs/mxcli#1201). An empty
+		// kind — a document with no ValueType — stays primitive, as before.
+		kind := propKindMap[typePointerID]
+		field, settable := columnValueField(kind)
+		if !settable {
+			return fmt.Errorf(
+				"pluggable property %q holds a value of kind %s, which ALTER cannot set from a plain value — "+
+					"rewrite the widget with CREATE OR REPLACE PAGE (or ALTER PAGE REPLACE) instead",
+				propName, kind)
+		}
+		switch field {
+		case "TextTemplate":
+			// A null template is how #574 stores one its condition hides. ALTER
+			// does not re-run visibility, so building one here would put text in
+			// a pruned slot — refused, not created.
+			textTemplate := bsonnav.DGetDoc(valDoc, "TextTemplate")
+			if textTemplate == nil || !updateClientTemplateText(textTemplate, fmt.Sprintf("%v", value)) {
+				return fmt.Errorf(
+					"pluggable property %q has no text template to update — it is hidden by the widget's "+
+						"current configuration; set the property that enables it with CREATE OR REPLACE PAGE",
+					propName)
 			}
 			return nil
+		case "Expression":
+			bsonnav.DSet(valDoc, "Expression", fmt.Sprintf("%v", value))
+			return nil
 		}
-		return fmt.Errorf("property %q has no Value map", propName)
+		switch v := value.(type) {
+		case string:
+			bsonnav.DSet(valDoc, "PrimitiveValue", v)
+		case bool:
+			if v {
+				bsonnav.DSet(valDoc, "PrimitiveValue", "yes")
+			} else {
+				bsonnav.DSet(valDoc, "PrimitiveValue", "no")
+			}
+		case int:
+			bsonnav.DSet(valDoc, "PrimitiveValue", fmt.Sprintf("%d", v))
+		case float64:
+			bsonnav.DSet(valDoc, "PrimitiveValue", fmt.Sprintf("%g", v))
+		default:
+			bsonnav.DSet(valDoc, "PrimitiveValue", fmt.Sprintf("%v", v))
+		}
+		return nil
 	}
 	return fmt.Errorf("pluggable property %q not found", propName)
 }

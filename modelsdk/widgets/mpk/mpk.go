@@ -47,7 +47,20 @@ type PropertyDef struct {
 	AllowedTypes           []string      // for attribute properties: Mendix type names ("String", "Decimal", etc.)
 	EnumValues             []EnumValue   // for enumeration properties: the declared options (key + caption)
 	Translations           []Translation // widget-shipped caption/template translations (<translations>)
-	Children               []PropertyDef // nested properties for object-type properties
+	// ActionVariables are the variables an action property passes to the flow
+	// it calls (`<actionVariables>`). Part of the widget DEFINITION — Studio Pro
+	// stores them on the ValueType whether or not an action is configured — so
+	// writing an empty list where the package declares some is CE0463
+	// (mendixlabs/mxcli#1200, Signature 2.1.0, Calendar 2.6.0).
+	ActionVariables []ActionVariable
+	Children        []PropertyDef // nested properties for object-type properties
+}
+
+// ActionVariable is one `<actionVariable key type caption/>` of an action property.
+type ActionVariable struct {
+	Key     string
+	Type    string // Mendix type name as the XML spells it: "String", "DateTime", …
+	Caption string
 }
 
 // EnumValue is one option of an enumeration-typed widget property.
@@ -223,8 +236,17 @@ type xmlProperty struct {
 	SelectionTypes []xmlSelectionType `xml:"selectionTypes>selectionType"`
 	ReturnType     xmlReturnType      `xml:"returnType"`
 	Translations   []xmlTranslation   `xml:"translations>translation"`
+	// ActionVariables of an action property (<actionVariables><actionVariable …/>).
+	ActionVariables []xmlActionVariable `xml:"actionVariables>actionVariable"`
 	// Nested properties for object type
 	NestedProps []xmlPropGroup `xml:"properties>propertyGroup"`
+}
+
+// xmlActionVariable represents <actionVariable key="…" caption="…" type="…"/>.
+type xmlActionVariable struct {
+	Key     string `xml:"key,attr"`
+	Caption string `xml:"caption,attr"`
+	Type    string `xml:"type,attr"`
 }
 
 // xmlSelectionType represents <selectionType name="..."/> on a selection property.
@@ -415,6 +437,7 @@ func walkPropertyGroup(pg xmlPropGroup, parentCategory string, def *WidgetDefini
 			AllowedTypes:           allowedTypes,
 			EnumValues:             enumValues,
 			Translations:           toTranslations(p.Translations),
+			ActionVariables:        toActionVariables(p.ActionVariables),
 		}
 
 		// Parse nested properties for object-type properties
@@ -489,6 +512,7 @@ func collectNestedProperties(pg xmlPropGroup, parent *PropertyDef, parentCategor
 			AllowedTypes:           allowedTypes,
 			EnumValues:             enumValues,
 			Translations:           toTranslations(p.Translations),
+			ActionVariables:        toActionVariables(p.ActionVariables),
 		}
 		// Nested object-type properties can themselves contain object lists.
 		if p.Type == "object" && len(p.NestedProps) > 0 {
@@ -531,6 +555,20 @@ func toTranslations(xts []xmlTranslation) []Translation {
 			continue
 		}
 		out = append(out, Translation{Lang: xt.Lang, Text: strings.TrimSpace(xt.Text)})
+	}
+	return out
+}
+
+func toActionVariables(xavs []xmlActionVariable) []ActionVariable {
+	if len(xavs) == 0 {
+		return nil
+	}
+	out := make([]ActionVariable, 0, len(xavs))
+	for _, x := range xavs {
+		if x.Key == "" {
+			continue
+		}
+		out = append(out, ActionVariable{Key: x.Key, Type: x.Type, Caption: x.Caption})
 	}
 	return out
 }

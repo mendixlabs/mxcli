@@ -1,0 +1,24 @@
+-- #1201: `ALTER PAGE … SET ImageUrl = … ON <image>` printed "Altered page"
+-- and changed nothing.
+--
+-- The pluggable Image widget's `imageUrl` is a TextTemplate-kind property. The
+-- ALTER setter wrote every pluggable value to PrimitiveValue, a field DESCRIBE,
+-- mx check and the runtime never read for that kind, so the page kept the old
+-- URL. It now writes the field the widget schema declares — the template text
+-- for TextTemplate, Expression for Expression, PrimitiveValue for primitives —
+-- and refuses kinds a plain value cannot express (Action, DataSource, Image, …)
+-- instead of reporting success.
+--
+-- Expected: the describe below shows 'https://b.example/y.png'.
+
+create module IMod;
+
+create page IMod.P1 ( title: 'P1', layout: Atlas_Core.Atlas_Default ) {
+  image img1 (ImageType: imageUrl, ImageUrl: 'https://a.example/x.png')
+};
+
+alter page IMod.P1 {
+  set ImageUrl = 'https://b.example/y.png' on img1
+};
+
+describe page IMod.P1;

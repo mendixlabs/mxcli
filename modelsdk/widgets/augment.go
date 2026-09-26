@@ -429,6 +429,14 @@ func reconcileValueTypesFromMPK(tmpl *WidgetTemplate, byKey map[string]mpk.Prope
 							if len(pd.Translations) > 0 {
 								vt["Translations"] = buildTranslationsArray(pd.Translations)
 							}
+							// The package's action variables. A template from an older
+							// widget version (or one cloned without them) otherwise keeps
+							// a list that disagrees with the installed definition — CE0463
+							// (#1200). Rewritten only when it differs, so a template that
+							// already agrees keeps its entries as they are.
+							if !actionVariablesMatch(vt["ActionVariables"], pd.ActionVariables) {
+								vt["ActionVariables"] = buildActionVariablesArray(pd.ActionVariables)
+							}
 						}
 					}
 				}
@@ -531,6 +539,43 @@ func buildTranslationsArray(trans []mpk.Translation) []any {
 		})
 	}
 	return arr
+}
+
+// buildActionVariablesArray builds a ValueType.ActionVariables list (leading
+// Mendix array marker 2 followed by CustomWidgets$WidgetActionVariable entries)
+// from a .mpk action property's declared <actionVariables> — the shape Studio
+// Pro stores (templates/mendix-11.6/combobox.json, onChangeFilterInputEvent).
+// Caption is a plain string, not a Texts$Text. Placeholder $IDs are remapped by
+// the loader's ID phase.
+func buildActionVariablesArray(vars []mpk.ActionVariable) []any {
+	arr := []any{float64(2)}
+	for _, v := range vars {
+		arr = append(arr, map[string]any{
+			"$ID":     placeholderID(),
+			"$Type":   "CustomWidgets$WidgetActionVariable",
+			"Caption": v.Caption,
+			"Key":     v.Key,
+			"Type":    v.Type,
+		})
+	}
+	return arr
+}
+
+// actionVariablesMatch reports whether a stored ActionVariables list already
+// declares exactly vars, in order — so reconcile leaves a template that agrees
+// with its package byte-for-byte instead of re-minting its entries' $IDs.
+func actionVariablesMatch(stored any, vars []mpk.ActionVariable) bool {
+	arr, ok := stored.([]any)
+	if !ok || len(arr) == 0 || len(arr)-1 != len(vars) {
+		return false
+	}
+	for i, v := range vars {
+		e, ok := arr[i+1].(map[string]any)
+		if !ok || e["Key"] != v.Key || e["Type"] != v.Type || e["Caption"] != v.Caption {
+			return false
+		}
+	}
+	return true
 }
 
 // buildAllowedTypesArray builds a ValueType.AllowedTypes list (leading Mendix array
@@ -778,7 +823,7 @@ func createDefaultValueType(vtID string, bsonType string, p mpk.PropertyDef) map
 	vt := map[string]any{
 		"$ID":                         vtID,
 		"$Type":                       "CustomWidgets$WidgetValueType",
-		"ActionVariables":             []any{float64(2)},
+		"ActionVariables":             buildActionVariablesArray(p.ActionVariables),
 		"AllowNonPersistableEntities": false,
 		"AllowedTypes":                allowedTypes,
 		"AssociationTypes":            []any{float64(1)},
