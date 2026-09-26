@@ -11,6 +11,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
 // listPublishedRestServices handles SHOW PUBLISHED REST SERVICES [IN module] command.
@@ -248,6 +249,7 @@ func execCreatePublishedRestService(ctx *ExecContext, s *ast.CreatePublishedRest
 		svc.Resources = append(svc.Resources, resource)
 	}
 
+	deriveOperationParameters(ctx, svc)
 	if existing != nil {
 		if s.Folder == "" {
 			svc.ContainerID = existing.ContainerID
@@ -270,6 +272,62 @@ func execCreatePublishedRestService(ctx *ExecContext, s *ast.CreatePublishedRest
 		}
 	}
 	return nil
+}
+
+// deriveOperationParameters gives every operation the parameters Studio Pro derives from
+// its microflow: a parameter named in the path is a path parameter, an object or a list is
+// the body, and any other parameter is a query parameter. System.HttpRequest and
+// System.HttpResponse parameters are the request and response themselves, not operation
+// parameters. Without the query and body parameters mx check reports CE0350 for every
+// microflow parameter the path does not name.
+func deriveOperationParameters(ctx *ExecContext, svc *model.PublishedRestService) {
+	for _, resource := range svc.Resources {
+		for _, op := range resource.Operations {
+			op.OperationParameters = nil
+			if op.Microflow == "" {
+				continue
+			}
+			mf := findMicroflowByQualifiedName(ctx, op.Microflow)
+			if mf == nil {
+				fmt.Fprintf(ctx.Output, "Warning: microflow %s not found, so operation %s %s gets only its path parameters -- "+
+					"create the microflow before the service, or its other parameters fail mx check with CE0350\n",
+					op.Microflow, strings.ToUpper(op.HTTPMethod), op.Path)
+				continue
+			}
+			op.OperationParameters = operationParametersOf(mf, op.PathParameterNames())
+		}
+	}
+}
+
+// operationParametersOf maps a microflow's parameters to operation parameters.
+func operationParametersOf(mf *microflows.Microflow, pathNames []string) []*model.PublishedRestOperationParameter {
+	inPath := make(map[string]bool, len(pathNames))
+	for _, name := range pathNames {
+		inPath[name] = true
+	}
+	var params []*model.PublishedRestOperationParameter
+	for _, p := range mf.Parameters {
+		param := &model.PublishedRestOperationParameter{Name: p.Name, ParameterType: "Query"}
+		if p.Type != nil {
+			param.DataType = p.Type.GetTypeName()
+		}
+		switch t := p.Type.(type) {
+		case *microflows.ObjectType:
+			if t.EntityQualifiedName == "System.HttpRequest" || t.EntityQualifiedName == "System.HttpResponse" {
+				continue
+			}
+			param.ParameterType, param.QualifiedName = "Body", t.EntityQualifiedName
+		case *microflows.ListType:
+			param.ParameterType, param.QualifiedName = "Body", t.EntityQualifiedName
+		case *microflows.EnumerationType:
+			param.QualifiedName = t.EnumerationQualifiedName
+		}
+		if inPath[p.Name] {
+			param.ParameterType = "Path"
+		}
+		params = append(params, param)
+	}
+	return params
 }
 
 // execDropPublishedRestService deletes a published REST service.
@@ -381,6 +439,7 @@ func execAlterPublishedRestService(ctx *ExecContext, s *ast.AlterPublishedRestSe
 		}
 	}
 
+	deriveOperationParameters(ctx, svc)
 	if err := ctx.Backend.UpdatePublishedRestService(svc); err != nil {
 		return mdlerrors.NewBackend("alter published rest service", err)
 	}

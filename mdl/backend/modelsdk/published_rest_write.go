@@ -13,6 +13,7 @@ import (
 	"github.com/mendixlabs/mxcli/modelsdk/element"
 	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
 	"github.com/mendixlabs/mxcli/modelsdk/property"
+	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
 func init() {
@@ -164,18 +165,25 @@ func publishedRestOperationToGen(op *model.PublishedRestOperation) element.Eleme
 	addStr(g, "ExportMapping", "")
 	addStr(g, "ImportMapping", "")
 	addStr(g, "ObjectHandlingBackup", "Create")
-	// Path parameters are auto-extracted from {name} placeholders and wired to the
-	// matching microflow parameter (Module.Microflow.name) — without that wiring
-	// mx check raises CE6538 / CE0350.
-	params := make([]element.Element, 0)
-	for _, name := range extractPathParams(op.Path) {
+	// The parameters the executor derived from the microflow (path, query, body). When it
+	// could not read the microflow, only the {name} placeholders of the path are known;
+	// those are written as String path parameters wired to the microflow parameter of
+	// that name, since without that wiring mx check raises CE6538 / CE0350.
+	opParams := op.OperationParameters
+	if len(opParams) == 0 {
+		for _, name := range op.PathParameterNames() {
+			opParams = append(opParams, &model.PublishedRestOperationParameter{Name: name, ParameterType: "Path", DataType: "String"})
+		}
+	}
+	params := make([]element.Element, 0, len(opParams))
+	for _, param := range opParams {
 		p := newElem("Rest$RestOperationParameter", "")
-		addStr(p, "Name", name)
-		addPart(p, "Type", newElem("DataTypes$StringType", ""))
-		addStr(p, "ParameterType", "Path")
+		addStr(p, "Name", param.Name)
+		addPart(p, "Type", microflowDataTypeToGen(operationParameterDataType(param)))
+		addStr(p, "ParameterType", param.ParameterType)
 		mfParam := ""
 		if op.Microflow != "" {
-			mfParam = op.Microflow + "." + name
+			mfParam = op.Microflow + "." + param.Name
 		}
 		addStr(p, "MicroflowParameter", mfParam)
 		addStr(p, "Description", "")
@@ -197,22 +205,32 @@ func addByNameRefList(b *element.Base, name, targetType string, qnames []string)
 	}
 }
 
-// extractPathParams returns parameter names from {param} placeholders in a path.
-func extractPathParams(path string) []string {
-	var names []string
-	for {
-		start := strings.Index(path, "{")
-		if start < 0 {
-			break
-		}
-		end := strings.Index(path[start:], "}")
-		if end < 0 {
-			break
-		}
-		names = append(names, path[start+1:start+end])
-		path = path[start+end+1:]
+// operationParameterDataType is the microflow data type an operation parameter carries.
+func operationParameterDataType(p *model.PublishedRestOperationParameter) microflows.DataType {
+	switch p.DataType {
+	case "Boolean":
+		return &microflows.BooleanType{}
+	case "Integer":
+		return &microflows.IntegerType{}
+	case "Long":
+		return &microflows.LongType{}
+	case "Decimal":
+		return &microflows.DecimalType{}
+	case "DateTime":
+		return &microflows.DateTimeType{}
+	case "Date":
+		return &microflows.DateType{}
+	case "Binary":
+		return &microflows.BinaryType{}
+	case "Enumeration":
+		return &microflows.EnumerationType{EnumerationQualifiedName: p.QualifiedName}
+	case "Object":
+		return &microflows.ObjectType{EntityQualifiedName: p.QualifiedName}
+	case "List":
+		return &microflows.ListType{EntityQualifiedName: p.QualifiedName}
+	default:
+		return &microflows.StringType{}
 	}
-	return names
 }
 
 // httpMethodToMendix converts an HTTP method name to Mendix casing.
