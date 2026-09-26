@@ -322,7 +322,22 @@ CREATE PUBLISHED REST SERVICE Module.OrderAPI (
 };
 ```
 
-**Operation paths:** Use empty string `''` for the root, `'{paramName}'` for path parameters. Do NOT start or end with `/`. Path parameters must match a microflow parameter name exactly (case-sensitive) — e.g., `'{id}'` requires the microflow to declare `$id: String`.
+**Operation paths:** Use empty string `''` for the root, `'{paramName}'` for path parameters. Do NOT start or end with `/`. Path parameters must match a microflow parameter name exactly (case-sensitive) — e.g., `'{id}'` requires the microflow to declare `$id`, of any primitive type.
+
+**Operation parameters** come from the microflow's parameters, the way Studio Pro derives them: a parameter named in the path is a path parameter, an object or a list is the body, `System.HttpRequest` and `System.HttpResponse` give the microflow the request and the response, and any other parameter is a query parameter. Create the microflow before the service; a service written first gets only its path parameters, and says so.
+
+```sql
+-- GET rest/orders/v1/orders/status?orderNumber=ORD%2F2026%2F0012
+create microflow Module.PRS_GetOrderStatus ($orderNumber: String)
+returns String as $Status
+begin
+  retrieve $Order from Module.Order where [OrderNumber = $orderNumber] limit 1;
+  declare $Status String = getCaption($Order/Status);
+  return $Status;
+end;
+/
+-- in the service: GET 'status' MICROFLOW Module.PRS_GetOrderStatus;
+```
 
 ### Multiple Resources
 

@@ -1,0 +1,60 @@
+-- ============================================================================
+-- mendixlabs/mxcli#1206 — a published REST operation gets its parameters from its microflow
+-- ============================================================================
+--
+-- Studio Pro derives an operation's parameters from its microflow: a parameter
+-- named in the path is a path parameter, an object or a list is the body,
+-- System.HttpRequest / HttpResponse are the request and the response, and any
+-- other parameter is a query parameter. mxcli wrote only the path placeholders,
+-- each as a String, so mx check failed this service with CE0350 (orderNumber,
+-- count, verbose, file) and CE6539 (the Integer id).
+--
+-- Verified on Mendix 11.12.1: 4 errors with v0.24.0, 0 with the fix, and
+-- GET rest/orders/v1/orders/status?orderNumber=ORD%2F2026%2F0012&count=3
+-- answers ORD/2026/0012:3 at runtime.
+-- ============================================================================
+
+create module BugRestParams;
+
+create persistent entity BugRestParams.Upload extends System.FileDocument (
+  Label: String(100)
+);
+
+create microflow BugRestParams.GetStatus ($orderNumber: String, $count: Integer, $httpRequest: System.HttpRequest)
+returns String as $Result
+begin
+  declare $Result String = $orderNumber + ':' + toString($count);
+  return $Result;
+end;
+/
+
+create microflow BugRestParams.GetById ($id: Integer, $verbose: Boolean)
+returns String as $Result
+begin
+  declare $Result String = toString($id);
+  return $Result;
+end;
+/
+
+create microflow BugRestParams.PutFile ($file: BugRestParams.Upload)
+returns String as $Result
+begin
+  declare $Result String = 'ok';
+  return $Result;
+end;
+/
+
+create published rest service BugRestParams.PRS_Orders (
+  Path: 'rest/orders/v1',
+  Version: '1.0.0',
+  ServiceName: 'Orders'
+)
+{
+  resource 'orders' {
+    GET 'status' microflow BugRestParams.GetStatus;
+    GET 'items/{id}' microflow BugRestParams.GetById;
+    POST 'upload' microflow BugRestParams.PutFile;
+  }
+};
+/
+

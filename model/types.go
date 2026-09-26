@@ -5,6 +5,7 @@ package model
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -808,6 +809,39 @@ type PublishedRestOperation struct {
 	Microflow  string   `json:"microflow,omitempty"`
 	Deprecated bool     `json:"deprecated,omitempty"`
 	Parameters []string `json:"parameters,omitempty"` // path parameter names extracted from {param} in Path
+	// OperationParameters are the operation's parameters as Studio Pro derives them from
+	// its microflow. Empty when the microflow could not be read; the writer then writes
+	// the path placeholders alone, as String path parameters.
+	OperationParameters []*PublishedRestOperationParameter `json:"operationParameters,omitempty"`
+}
+
+// PathParameterNames returns the names of the {name} placeholders in the operation's
+// path, in order.
+func (op *PublishedRestOperation) PathParameterNames() []string {
+	var names []string
+	path := op.Path
+	for {
+		start := strings.Index(path, "{")
+		if start < 0 {
+			break
+		}
+		end := strings.Index(path[start:], "}")
+		if end < 0 {
+			break
+		}
+		names = append(names, path[start+1:start+end])
+		path = path[start+end+1:]
+	}
+	return names
+}
+
+// PublishedRestOperationParameter is one parameter of a published REST operation. It
+// binds to the operation microflow's parameter of the same name.
+type PublishedRestOperationParameter struct {
+	Name          string `json:"name"`
+	ParameterType string `json:"parameterType"`           // "Path", "Query" or "Body"
+	DataType      string `json:"dataType"`                // the microflow parameter's type: "String", "Integer", "Object", ...
+	QualifiedName string `json:"qualifiedName,omitempty"` // the entity of an Object or List, or the enumeration
 }
 
 // ============================================================================
