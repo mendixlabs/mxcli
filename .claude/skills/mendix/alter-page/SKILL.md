@@ -153,6 +153,7 @@ so a silent write would build cleanly and then fail to open.
 | `'<slotKey>'` | Pluggable widgets — any **action-typed** property (File Uploader `createFileAction`, DataGrid 2 `onSelectionChange`, …) | Any `create page` action expression | `set 'createFileAction' = microflow M.ACT_Create on fileUploader1` — refused, naming the widget's action slots, if the key is not action-typed |
 | `caption` | ACTIONBUTTON, LINKBUTTON | String | `set caption = 'Submit' on btnSave` |
 | `content` | DYNAMICTEXT | String | `set content = 'New Heading' on txtTitle` |
+| `RenderMode` | DYNAMICTEXT | Text, Paragraph, H1–H6 (any case; anything else is refused) | `set RenderMode = H2 on txtTitle` |
 | `label` | TEXTBOX, TEXTAREA, DATEPICKER, COMBOBOX, CHECKBOX, RADIOBUTTONS | String | `set label = 'full Name' on txtName` |
 | `buttonstyle` | ACTIONBUTTON, LINKBUTTON | Primary, Default, Success, Danger, Warning, Info | `set buttonstyle = danger on btnDelete` |
 | `class` | Any widget | CSS class string | `set class = 'card mx-2' on container1` |

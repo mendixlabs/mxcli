@@ -1645,6 +1645,7 @@ Modify an existing page or snippet's widget tree in-place without full `create o
 | Documentation | `set Documentation = 'What this page is for.'` | Page-level. Same property the `/** … */` doc comment on `CREATE PAGE` writes, so an existing page can be documented without restating it. `''` clears it |
 | Pop-up dimensions | `set PopupWidth = 800` / `set PopupHeight = 480` / `set PopupResizable = true` | Page-level; apply when the page opens in a pop-up |
 | Page CSS class / style | `set Class = 'css-class'` / `set Style = 'css: rule'` | Page-level (no ON clause); sets the page's Appearance |
+| Dynamic text heading level | `set RenderMode = H2 on txtTitle` | Dynamic text only: Text, Paragraph, H1–H6 (any casing). Any other widget or value is an error naming the allowed set |
 | Widget dynamic classes | `set DynamicClasses = 'expr' on widgetName` | Runtime-computed classes on a widget — the surgical alternative to a bulk `update widgets` |
 | Insert after | `insert after widgetName { widgets }` | Add widgets after target |
 | Insert before | `insert before widgetName { widgets }` | Add widgets before target |
@@ -1661,7 +1662,7 @@ Modify an existing page or snippet's widget tree in-place without full `create o
 | Set layout | `set layout = Module.LayoutName` | Change page layout, auto-maps placeholders |
 | Set layout + map | `set layout = Module.Layout map (Old as New)` | Explicit placeholder mapping |
 
-**Supported SET properties:** Caption, Label, ButtonStyle, Class, Style, DynamicClasses, Editable, Visible, Name, Title (page-level), Documentation (page-level), Layout (page-level), PopupWidth / PopupHeight / PopupResizable (page-level), and quoted pluggable widget properties.
+**Supported SET properties:** Caption, Label, ButtonStyle, Class, Style, DynamicClasses, RenderMode (dynamic text), Editable, Visible, Name, Title (page-level), Documentation (page-level), Layout (page-level), PopupWidth / PopupHeight / PopupResizable (page-level), and quoted pluggable widget properties.
 
 **Example:**
 ```sql
