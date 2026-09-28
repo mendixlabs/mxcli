@@ -818,6 +818,10 @@ func ApplyVisibilityRules(object bson.D, propertyTypeIDs map[string]pages.Proper
 	hidden := make(map[string]bool, len(rules))
 	conditional := make([]string, 0, len(rules))
 	for _, rule := range rules {
+		if rule.Nested() {
+			// Item sub-property of an object list: evaluated per item below.
+			continue
+		}
 		entry, ok := propertyTypeIDs[rule.PropertyKey]
 		if !ok || entry.ValueType != "TextTemplate" {
 			continue
@@ -849,6 +853,83 @@ func ApplyVisibilityRules(object bson.D, propertyTypeIDs map[string]pages.Proper
 			// Never clobber real content — only fill in the absent template.
 			if bsonFieldIsNil(val, "TextTemplate") {
 				return setBSONField(val, "TextTemplate", BuildEmptyClientTemplate())
+			}
+			return val
+		})
+	}
+	return applyNestedVisibilityRules(object, propertyTypeIDs, rules)
+}
+
+// applyNestedVisibilityRules nulls the TextTemplate of an object-list ITEM
+// sub-property that a nested rule (ListPropertyKey set) hides under that
+// item's own configuration.
+//
+// The File Uploader 2.5.0 `allowedFileFormats` item is the case that found it:
+// `typeFormatDescription` is a REQUIRED TextTemplate hidden when
+// `configMode = "simple"`. buildObjectListItemBSON fills unset required
+// templates with the shipped default text (#891), which is right while the
+// property is visible and CE0463 while it is hidden: Studio Pro stores null
+// there, and `mx update-widgets` rewrites exactly that field and nothing else.
+//
+// Only the hidden direction is applied. A visible item template is already
+// handled at item build time (#891 / emptyClientTemplateRules), and an
+// indeterminable rule leaves the item untouched.
+func applyNestedVisibilityRules(object bson.D, propertyTypeIDs map[string]pages.PropertyTypeIDEntry, rules []types.WidgetVisibilityRule) bson.D {
+	byList := map[string][]types.WidgetVisibilityRule{}
+	for _, rule := range rules {
+		if rule.Nested() {
+			byList[rule.ListPropertyKey] = append(byList[rule.ListPropertyKey], rule)
+		}
+	}
+	if len(byList) == 0 {
+		return object
+	}
+	listKeys := make([]string, 0, len(byList))
+	for k := range byList {
+		listKeys = append(listKeys, k)
+	}
+	sort.Strings(listKeys)
+	for _, listKey := range listKeys {
+		entry, ok := propertyTypeIDs[listKey]
+		if !ok || len(entry.NestedPropertyIDs) == 0 {
+			continue
+		}
+		listRules := byList[listKey]
+		object = updateWidgetPropertyValue(object, propertyTypeIDs, listKey, func(val bson.D) bson.D {
+			for i, elem := range val {
+				if elem.Key != "Objects" {
+					continue
+				}
+				arr, ok := elem.Value.(bson.A)
+				if !ok {
+					continue
+				}
+				out := make(bson.A, len(arr))
+				for j, it := range arr {
+					item, ok := it.(bson.D)
+					if !ok {
+						out[j] = it
+						continue
+					}
+					values := primitiveValuesOf(item, entry.NestedPropertyIDs)
+					for _, rule := range listRules {
+						sub, ok := entry.NestedPropertyIDs[rule.PropertyKey]
+						if !ok || sub.ValueType != "TextTemplate" {
+							continue
+						}
+						fires, determinable := rule.Fires(func(c types.WidgetVisibilityCondition) (string, bool) {
+							v, ok := values[c.PropertyKey]
+							return v, ok
+						})
+						if determinable && fires {
+							item = updateWidgetPropertyValue(item, entry.NestedPropertyIDs, rule.PropertyKey, func(v bson.D) bson.D {
+								return setBSONField(v, "TextTemplate", nil)
+							})
+						}
+					}
+					out[j] = item
+				}
+				val[i] = bson.E{Key: "Objects", Value: out}
 			}
 			return val
 		})
