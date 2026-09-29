@@ -1,0 +1,64 @@
+-- ============================================================================
+-- ALTER PAGE / ALTER SNIPPET: SET RenderMode on a dynamic text
+-- ============================================================================
+--
+-- Reported:
+--
+--   alter page MyModule.Comparison_Page { set RenderMode = H2 on compTitle }
+--   -> failed to set RenderMode on compTitle: property "RenderMode" not found
+--      (widget has no pluggable Object)
+--
+-- (current main words the same refusal as "not a property of this built-in
+-- widget … use alter styling", which is no more true: RenderMode is not a
+-- design property either).
+--
+-- `create page … dynamictext x (RenderMode: H1)` and `replace x with { … }`
+-- both accept it, because RenderMode is a first-class Forms$DynamicText
+-- property. The ALTER SET switch in setRawWidgetPropertyMut simply had no case
+-- for it, so it fell through to the pluggable-property setter.
+--
+-- Values: Text, Paragraph, H1..H6 (matched case-insensitively, stored in the
+-- canonical spelling). Anything else is refused by both `check -p` and `exec`
+-- — e.g. `set RenderMode = H7 on title` →
+--   invalid RenderMode "H7" for dynamic text "title": expected one of Text,
+--   Paragraph, H1, H2, H3, H4, H5, H6
+--
+-- Measured on a copy of a real Mendix 11.14.0 app: exec → "Altered page",
+-- describe shows RenderMode: H2, mx check → 0 errors; exactly one .mxunit
+-- changed.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/alter-page-set-rendermode-dynamictext.mdl -p app.mpr
+-- ============================================================================
+
+create entity MyFirstModule.RmRow ( Name: String );
+
+create or replace page MyFirstModule.P_SetRenderMode
+(
+  Title: 'Set RenderMode',
+  Layout: Atlas_Core.Atlas_Default,
+  Params: { $Row: MyFirstModule.RmRow }
+)
+{
+  dataview dv (datasource: $Row) {
+    dynamictext title (content: 'Title {1}', contentparams: [{1} = Name], rendermode: H1)
+    dynamictext body (content: 'Body')
+  }
+}
+
+alter page MyFirstModule.P_SetRenderMode {
+  set RenderMode = H2 on title;
+  set rendermode = paragraph on body;
+}
+
+create or replace snippet MyFirstModule.S_SetRenderMode
+{
+  dynamictext snipTitle (content: 'Snippet title', rendermode: H3)
+}
+
+alter snippet MyFirstModule.S_SetRenderMode {
+  set RenderMode = H4 on snipTitle;
+}
+
+describe page MyFirstModule.P_SetRenderMode;
+describe snippet MyFirstModule.S_SetRenderMode;

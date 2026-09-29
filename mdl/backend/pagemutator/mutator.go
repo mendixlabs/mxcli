@@ -2752,10 +2752,67 @@ func setRawWidgetPropertyMut(widget bson.D, propName string, value any) error {
 		return nil
 	case "attribute":
 		return setWidgetAttributeRefMut(widget, value)
+	case "rendermode":
+		// RenderMode is a first-class property of a dynamic text (Text, Paragraph,
+		// H1–H6). Other widgets that store a RenderMode (a container's Div/Section/…)
+		// or a pluggable widget with its own "renderMode" key keep the existing path.
+		if isDynamicTextWidget(widget) {
+			return setDynamicTextRenderModeMut(widget, value)
+		}
+		return setPluggableWidgetPropertyMut(widget, propName, value)
 	default:
 		// Try as pluggable widget property
 		return setPluggableWidgetPropertyMut(widget, propName, value)
 	}
+}
+
+// dynamicTextRenderModes are the values a Forms$DynamicText's RenderMode takes —
+// the same set CREATE PAGE writes from `dynamictext x (RenderMode: …)`.
+var dynamicTextRenderModes = []pages.TextRenderMode{
+	pages.TextRenderModeText,
+	pages.TextRenderModeParagraph,
+	pages.TextRenderModeH1,
+	pages.TextRenderModeH2,
+	pages.TextRenderModeH3,
+	pages.TextRenderModeH4,
+	pages.TextRenderModeH5,
+	pages.TextRenderModeH6,
+}
+
+// isDynamicTextWidget reports whether a stored widget is a dynamic text. Stored
+// documents carry Forms$DynamicText; Pages$DynamicText is the SDK spelling.
+func isDynamicTextWidget(widget bson.D) bool {
+	switch bsonnav.DGetString(widget, "$Type") {
+	case "Forms$DynamicText", "Pages$DynamicText":
+		return true
+	}
+	return false
+}
+
+// setDynamicTextRenderModeMut writes a dynamic text's RenderMode in place. The
+// value is matched case-insensitively (MDL passes it as typed: `H1`, `h1`) and
+// stored in the canonical spelling; anything outside the enumeration is refused
+// before the document is touched — an unknown enum member is a document Studio
+// Pro cannot open.
+func setDynamicTextRenderModeMut(widget bson.D, value any) error {
+	s, _ := value.(string)
+	for _, mode := range dynamicTextRenderModes {
+		if s != "" && strings.EqualFold(s, string(mode)) {
+			if !bsonnav.DSet(widget, "RenderMode", string(mode)) {
+				// Studio Pro writes RenderMode on every dynamic text; a document
+				// without it is not one this setter should guess a position for.
+				return fmt.Errorf("dynamic text %q has no stored RenderMode property to set",
+					bsonnav.DGetString(widget, "Name"))
+			}
+			return nil
+		}
+	}
+	names := make([]string, len(dynamicTextRenderModes))
+	for i, mode := range dynamicTextRenderModes {
+		names[i] = string(mode)
+	}
+	return fmt.Errorf("invalid RenderMode %q for dynamic text %q: expected one of %s",
+		fmt.Sprint(value), bsonnav.DGetString(widget, "Name"), strings.Join(names, ", "))
 }
 
 // ---------------------------------------------------------------------------

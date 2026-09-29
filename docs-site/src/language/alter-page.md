@@ -40,6 +40,7 @@ ALTER PAGE Module.EditPage {
 |----------|-------------|---------|
 | `Caption` | Button/link caption | `SET Caption = 'Submit' ON btnSave` |
 | `Label` | Input field label | `SET Label = 'Full Name' ON txtName` |
+| `RenderMode` | Dynamic text rendering: `Text`, `Paragraph`, `H1`–`H6` | `SET RenderMode = H2 ON txtTitle` |
 | `ButtonStyle` | Button visual style | `SET ButtonStyle = Danger ON btnDelete` |
 | `Class` | CSS class names | `SET Class = 'card p-3' ON cMain` |
 | `Style` | Inline CSS | `SET Style = 'margin: 8px;' ON cBox` |
