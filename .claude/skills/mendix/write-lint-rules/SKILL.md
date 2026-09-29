@@ -497,6 +497,10 @@ Returned by `permissions()` (all types) or `permissions_for()` (entity-specific)
 | `name` | string | `"Administrator"` |
 | `is_anonymous` | bool | True if this is the anonymous/guest role |
 | `module_roles` | list of string | `["Sales.Admin", "HR.Viewer"]` |
+| `check_security` | bool | Studio Pro's per-role "Check security" flag |
+| `manage_all_roles` | bool | The role may hand out every user role |
+| `manage_users_without_roles` | bool | The role may manage users that have no role |
+| `manageable_roles` | list of string | The user roles this role may hand out, when not all |
 
 ### module_role
 | Property | Type | Example |
