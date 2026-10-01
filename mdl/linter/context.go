@@ -485,6 +485,16 @@ type UserRoleInfo struct {
 	Name        string
 	IsAnonymous bool
 	ModuleRoles []string
+	// CheckSecurity is Studio Pro's per-role "Check security" flag. With it on,
+	// the Modeler verifies that the role's access rules actually grant what its
+	// pages and microflows need — the setting a rule of the form "security
+	// should be checked for each project role" asserts.
+	CheckSecurity bool
+	// ManageAllRoles, ManageUsersWithoutRoles and ManageableRoles are the
+	// user-management grants: which other roles this role may hand out.
+	ManageAllRoles          bool
+	ManageUsersWithoutRoles bool
+	ManageableRoles         []string
 }
 
 // UserRoles returns the user roles from project security.
@@ -501,9 +511,13 @@ func (ctx *LintContext) UserRoles() []UserRoleInfo {
 	var roles []UserRoleInfo
 	for _, ur := range ps.UserRoles {
 		roles = append(roles, UserRoleInfo{
-			Name:        ur.Name,
-			IsAnonymous: ur.Name == ps.GuestUserRole,
-			ModuleRoles: ur.ModuleRoles,
+			Name:                    ur.Name,
+			IsAnonymous:             ur.Name == ps.GuestUserRole,
+			ModuleRoles:             ur.ModuleRoles,
+			CheckSecurity:           ur.CheckSecurity,
+			ManageAllRoles:          ur.ManageAllRoles,
+			ManageUsersWithoutRoles: ur.ManageUsersWithoutRoles,
+			ManageableRoles:         ur.ManageableRoles,
 		})
 	}
 	return roles
