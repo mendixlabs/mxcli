@@ -7,16 +7,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-)
 
-func setTestHomeDir(t *testing.T, dir string) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Setenv("USERPROFILE", dir)
-	} else {
-		t.Setenv("HOME", dir)
-	}
-}
+	"github.com/mendixlabs/mxcli/internal/testutil"
+)
 
 // setTestApplicationsDir redirects the macOS Applications directory scan to dir
 // so tests that set up cached binaries are not confused by real Studio Pro installs.
@@ -66,7 +59,7 @@ func TestCachedMxBuildPath_NotCached(t *testing.T) {
 func TestCachedMxBuildPath_Cached(t *testing.T) {
 	// Create a fake cached mxbuild
 	dir := t.TempDir()
-	setTestHomeDir(t, dir)
+	testutil.SetHome(t, dir)
 
 	version := "99.99.99"
 	modelerDir := filepath.Join(dir, ".mxcli", "mxbuild", version, "modeler")
@@ -83,7 +76,7 @@ func TestCachedMxBuildPath_Cached(t *testing.T) {
 
 func TestAnyCachedMxBuildPath_Empty(t *testing.T) {
 	dir := t.TempDir()
-	setTestHomeDir(t, dir)
+	testutil.SetHome(t, dir)
 
 	path := AnyCachedMxBuildPath()
 	if path != "" {
@@ -93,7 +86,7 @@ func TestAnyCachedMxBuildPath_Empty(t *testing.T) {
 
 func TestAnyCachedMxBuildPath_Found(t *testing.T) {
 	dir := t.TempDir()
-	setTestHomeDir(t, dir)
+	testutil.SetHome(t, dir)
 
 	modelerDir := filepath.Join(dir, ".mxcli", "mxbuild", "11.6.3", "modeler")
 	os.MkdirAll(modelerDir, 0755)
@@ -108,7 +101,7 @@ func TestAnyCachedMxBuildPath_Found(t *testing.T) {
 
 func TestAnyCachedMxBuildPath_PicksNewestNumericVersion(t *testing.T) {
 	dir := t.TempDir()
-	setTestHomeDir(t, dir)
+	testutil.SetHome(t, dir)
 
 	versions := []string{"9.24.40.80973", "11.6.3", "11.9.0"}
 	var newest string
@@ -161,7 +154,7 @@ func TestCachedRuntimePath_NotCached(t *testing.T) {
 
 func TestCachedRuntimePath_Cached(t *testing.T) {
 	dir := t.TempDir()
-	setTestHomeDir(t, dir)
+	testutil.SetHome(t, dir)
 
 	version := "99.99.99"
 	launcherDir := filepath.Join(dir, ".mxcli", "runtime", version, "runtime", "launcher")
@@ -177,7 +170,7 @@ func TestCachedRuntimePath_Cached(t *testing.T) {
 
 func TestResolveMxBuild_FindsCachedVersion(t *testing.T) {
 	dir := t.TempDir()
-	setTestHomeDir(t, dir)
+	testutil.SetHome(t, dir)
 
 	// Set up a fake cached mxbuild
 	modelerDir := filepath.Join(dir, ".mxcli", "mxbuild", "11.6.3", "modeler")

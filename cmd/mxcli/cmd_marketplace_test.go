@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/mendixlabs/mxcli/internal/marketplace"
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -37,7 +38,7 @@ func runMarketplace(t *testing.T, handler http.HandlerFunc, args ...string) (str
 	t.Helper()
 	// Isolate the catalog cache (~/.mxcli/...) into a temp HOME so tests never
 	// read or write the real user cache.
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 

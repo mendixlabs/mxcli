@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/model"
 )
 
@@ -245,7 +246,7 @@ func TestLocalRunOptions_DefaultsRespectOverrides(t *testing.T) {
 func TestEnsureMxBuildRuntimeSibling(t *testing.T) {
 	// Point the cache roots at a temp HOME so we don't touch the real cache.
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	version := "99.99.99"
 	// Build the runtime cache with a runtime/ dir.
@@ -275,7 +276,7 @@ func TestEnsureMxBuildRuntimeSibling(t *testing.T) {
 
 func TestEnsureMxBuildRuntimeSibling_MissingSource(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	version := "99.99.98"
 	mxbuildCache, _ := MxBuildCacheDir(version)
 	_ = os.MkdirAll(filepath.Join(mxbuildCache, "modeler"), 0o755)

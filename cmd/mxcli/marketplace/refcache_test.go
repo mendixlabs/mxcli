@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 // TestCacheReadyNeedsTheMarker guards the invariant the whole cache rests on: a
@@ -210,7 +212,7 @@ func readFile(t *testing.T, path string) string {
 // hold anything and every run would silently rebuild.
 func TestPruneKeepsNewestAndBoundOfOne(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("HOME", root)
+	testutil.SetHome(t, root)
 	refRoot := filepath.Join(root, ".mxcli", "marketplace-refs", "ref")
 
 	// Three entries, oldest first, with distinct marker times.
@@ -250,7 +252,7 @@ func TestPruneKeepsNewestAndBoundOfOne(t *testing.T) {
 // TestPruneDisabledByZero checks the escape hatch for anyone with disk to spare.
 func TestPruneDisabledByZero(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("HOME", root)
+	testutil.SetHome(t, root)
 	refRoot := filepath.Join(root, ".mxcli", "marketplace-refs", "ref")
 	for _, n := range []string{"a", "b", "c"} {
 		mustWrite(t, filepath.Join(refRoot, n, completeMarker), "")

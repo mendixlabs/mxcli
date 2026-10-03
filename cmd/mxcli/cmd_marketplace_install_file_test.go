@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/mendixlabs/mxcli/internal/marketplace"
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/spf13/cobra"
 )
 
@@ -48,7 +49,7 @@ func buildLocalMPK(t *testing.T, name string, entries map[string]string) string 
 // placeholder .mpr — the widget path only checks that the project exists.
 func runInstallFile(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 
 	origFactory := marketplaceClientFactory
 	marketplaceClientFactory = func(_ context.Context, _ *cobra.Command) (*marketplace.Client, error) {
@@ -183,7 +184,7 @@ func TestInstallFile_NoContentIDAndNoFile(t *testing.T) {
 // and still reaches the client factory (which this helper makes fatal).
 func TestInstallFile_ContentIDStillUsesTheClient(t *testing.T) {
 	mpr := placeholderProject(t)
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	called := false
 	origFactory := marketplaceClientFactory
 	marketplaceClientFactory = func(_ context.Context, _ *cobra.Command) (*marketplace.Client, error) {

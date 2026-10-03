@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 // The local loop resolves mxbuild once (ResolveMxBuildForLocal) and then started
@@ -37,7 +39,7 @@ func plantCacheEntry(t *testing.T, home, version string) string {
 // A known version that is not cached must fail HERE, naming both versions.
 func TestStartServeRefusesVersionSubstitution(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	plantCacheEntry(t, home, "11.14.0")
 
 	_, err := StartServe(ServeOptions{Version: "11.12.2"})
@@ -58,7 +60,7 @@ func TestStartServeRefusesVersionSubstitution(t *testing.T) {
 // half-populated directory that defeats CachedMxBuildPath is mxcli's own work.
 func TestStartServeRefusesModelerlessCacheDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	plantCacheEntry(t, home, "11.14.0")
 
 	// What ensureMxBuildRuntimeSibling leaves behind for the project's version.
@@ -90,7 +92,7 @@ func TestStartServeRefusesModelerlessCacheDir(t *testing.T) {
 // mismatched against.
 func TestStartServeUsesAnyCachedOnlyWithoutAVersion(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	planted := plantCacheEntry(t, home, "11.14.0")
 
 	if got := resolveServeMxBuild(ServeOptions{}); got != planted {

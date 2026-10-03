@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 func TestCredentialFromEnv_PAT(t *testing.T) {
@@ -55,7 +57,7 @@ func TestCredentialFromEnv_WhitespaceTrimmed(t *testing.T) {
 func TestResolve_EnvWinsOverStore(t *testing.T) {
 	// Point DefaultFileStore at a tempdir to avoid touching the real
 	// ~/.mxcli/auth.json.
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	t.Setenv(EnvPAT, "env-pat")
 	t.Setenv(EnvProfile, "")
 
@@ -76,7 +78,7 @@ func TestResolve_EnvWinsOverStore(t *testing.T) {
 }
 
 func TestResolve_FallsBackToStore(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	t.Setenv(EnvPAT, "")
 	t.Setenv(EnvProfile, "")
 
@@ -93,7 +95,7 @@ func TestResolve_FallsBackToStore(t *testing.T) {
 }
 
 func TestResolve_NoCredential(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	t.Setenv(EnvPAT, "")
 	t.Setenv(EnvProfile, "")
 
@@ -105,7 +107,7 @@ func TestResolve_NoCredential(t *testing.T) {
 }
 
 func TestResolve_EmptyProfileDefaultsToDefault(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	t.Setenv(EnvPAT, "env-pat")
 	t.Setenv(EnvProfile, "")
 
