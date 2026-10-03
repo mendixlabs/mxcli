@@ -19,6 +19,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 // cacheFakeMx plants a fake cached mx binary for each version under a fake HOME.
@@ -41,7 +43,7 @@ func cacheFakeMx(t *testing.T, home string, versions ...string) map[string]strin
 
 func isolateResolution(t *testing.T, home string) {
 	t.Helper()
-	setTestHomeDir(t, home)
+	testutil.SetHome(t, home)
 	setTestApplicationsDir(t, t.TempDir()) // no real macOS Studio Pro
 	t.Setenv("PATH", t.TempDir())          // no mx on PATH
 }

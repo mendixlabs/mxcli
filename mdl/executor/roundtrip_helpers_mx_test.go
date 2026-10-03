@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 func TestNewestVersionedPath_PicksNewestNumericVersion(t *testing.T) {
@@ -50,7 +51,7 @@ func TestFindMxBinary_PrefersPathOverCachedDownloads(t *testing.T) {
 		}
 	}
 
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	t.Setenv("PATH", pathDir)
 	t.Setenv("MX_BINARY", "")
 

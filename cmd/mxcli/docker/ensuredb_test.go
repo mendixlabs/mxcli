@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 func TestSplitHostPort(t *testing.T) {
@@ -159,7 +161,7 @@ func newStubPATH(t *testing.T) (dir, logPath string) {
 	}
 	dir = t.TempDir()
 	t.Setenv("PATH", dir)
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	// A stubbed PATH is only hermetic if the server-binary lookup is stubbed
 	// too: this host really does have /usr/lib/postgresql/*/bin, so a test that
 	// asserts "the tools are missing" would otherwise run a real initdb.

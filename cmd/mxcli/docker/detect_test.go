@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 func TestResolveMxBuild_ExplicitPath(t *testing.T) {
@@ -285,7 +287,7 @@ func TestResolveMxBuild_PrefersStudioProOverCache(t *testing.T) {
 
 func TestResolveMxBuild_PrefersExactCachedVersion(t *testing.T) {
 	dir := t.TempDir()
-	setTestHomeDir(t, dir)
+	testutil.SetHome(t, dir)
 	setTestApplicationsDir(t, t.TempDir()) // prevent real macOS Studio Pro from matching
 	// Point PATH at an empty temp dir (rather than clearing it) so exec.LookPath
 	// still works for any other testing infrastructure but can't find mxbuild.

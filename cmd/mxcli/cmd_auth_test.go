@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/mendixlabs/mxcli/internal/auth"
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -24,7 +25,7 @@ import (
 func withTestHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	t.Setenv(auth.EnvPAT, "")
 	t.Setenv(auth.EnvProfile, "")
 	return home

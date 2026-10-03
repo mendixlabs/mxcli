@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 // rewriteTransport routes all requests to a given test server's URL while
@@ -122,7 +124,7 @@ func TestAuthTransport_DoesNotMutateCallerRequest(t *testing.T) {
 }
 
 func TestClientFor_ResolvesFromEnv(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	t.Setenv(EnvPAT, "env-pat")
 	t.Setenv(EnvProfile, "")
 
@@ -139,7 +141,7 @@ func TestClientFor_ResolvesFromEnv(t *testing.T) {
 }
 
 func TestClientFor_NoCredential(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	t.Setenv(EnvPAT, "")
 	t.Setenv(EnvProfile, "")
 

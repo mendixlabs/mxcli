@@ -6,13 +6,15 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 // runOneLinerForTest runs `mxcli -c <commands>` without a project and returns
 // the exit code and everything written to the error stream.
 func runOneLinerForTest(t *testing.T, commands string, continueOnError bool) (int, string, string) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir()) // the session log is not the developer's
+	testutil.SetHome(t, t.TempDir()) // the session log is not the developer's
 	var errOut bytes.Buffer
 	var code int
 	out, _ := captureStdout(t, func() error {
