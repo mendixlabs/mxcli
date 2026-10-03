@@ -62,6 +62,14 @@ type LocalRunOptions struct {
 	AppPort   int
 	AdminPort int
 	ServePort int
+	// ListenAddr is the address the app binds to. Empty means 127.0.0.1, which
+	// is loopback-only on purpose. Set it to 0.0.0.0 to let the app be reached
+	// from other machines on the network; pair that with a reachable
+	// ApplicationRootUrl (--runtime-setting), because the runtime otherwise
+	// derives its root URL from this address and 0.0.0.0 is not a host a
+	// browser can ask for. The M2EE admin API is unaffected and stays on
+	// loopback.
+	ListenAddr string
 	// AdminPass is the M2EE admin password (default is a fixed local-dev value).
 	AdminPass string
 	// DB is the Postgres the runtime connects to (devcontainer defaults applied).
@@ -772,6 +780,7 @@ func RunLocal(opts LocalRunOptions) error {
 		JavaMajor:          javaMajor,
 		AppPort:            opts.AppPort,
 		AdminPort:          opts.AdminPort,
+		ListenAddr:         opts.ListenAddr,
 		AdminPass:          opts.AdminPass,
 		ApplicationRootUrl: appRootURL,
 		DB:                 opts.DB,

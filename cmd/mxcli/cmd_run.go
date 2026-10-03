@@ -149,6 +149,7 @@ Examples:
 		appPort, _ := cmd.Flags().GetInt("app-port")
 		adminPort, _ := cmd.Flags().GetInt("admin-port")
 		servePort, _ := cmd.Flags().GetInt("serve-port")
+		listenAddr, _ := cmd.Flags().GetString("listen-addr")
 		mxbuildPath, _ := cmd.Flags().GetString("mxbuild-path")
 		dbType, _ := cmd.Flags().GetString("db-type")
 		dbHost, _ := cmd.Flags().GetString("db-host")
@@ -206,6 +207,7 @@ Examples:
 			AppPort:            appPort,
 			AdminPort:          adminPort,
 			ServePort:          servePort,
+			ListenAddr:         listenAddr,
 			MxBuildPath:        mxbuildPath,
 			Watch:              watch,
 			EnsureDB:           ensureDB,
@@ -318,6 +320,7 @@ func init() {
 	runCmd.Flags().Bool("setup", false, "Prepare prerequisites (cache MxBuild+runtime, ensure DB) and exit without booting — for a SessionStart hook")
 	runCmd.Flags().Int("app-port", 0, "HTTP port for the app (default 8080)")
 	runCmd.Flags().Int("admin-port", 0, "M2EE admin API port (default 8090)")
+	runCmd.Flags().String("listen-addr", "", "Address the app binds to (default 127.0.0.1, loopback only). Set 0.0.0.0 to reach the app from other machines on the network, and pair it with a reachable root URL — either an ApplicationRootUrl naming a real host in the model, or --runtime-setting ApplicationRootUrl=http://<host>:<port>/ — because with none the runtime derives its root URL from this address and 0.0.0.0 is not a host a browser can ask for. The M2EE admin API is unaffected and always stays on 127.0.0.1.")
 	runCmd.Flags().Int("serve-port", 0, "mxbuild --serve port (default 6543)")
 	runCmd.Flags().String("mxbuild-path", "", "Path to the mxbuild to build with, overriding resolution (Studio Pro's bundled mxbuild on macOS/Windows, the cached CDN download on Linux)")
 	runCmd.Flags().String("db-type", "", "Database type for a local run: postgresql (default) or hsqldb (the runtime's built-in file database — no server, no --db-host/--db-user/--db-password, data under <project>/deployment/data/database/hsqldb/)")

@@ -20,6 +20,10 @@ type LocalAppOptions struct {
 	AppPort   int
 	AdminPort int
 	ServePort int
+	// ListenAddr is the address the app binds to. Empty means 127.0.0.1
+	// (loopback only); set 0.0.0.0 to reach the app from other machines on the
+	// network. The M2EE admin API is unaffected and always stays on loopback.
+	ListenAddr string
 	// AdminPass is the M2EE admin password (defaults to the local-run password).
 	AdminPass string
 	// MxBuildPath overrides mxbuild resolution (optional), as --mxbuild-path does
@@ -69,6 +73,7 @@ func (o LocalAppOptions) runtimeOptions(installPath string) LocalRuntimeOptions 
 		JavaMajor:         javaMajor,
 		AppPort:           o.AppPort,
 		AdminPort:         o.AdminPort,
+		ListenAddr:        o.ListenAddr,
 		AdminPass:         o.AdminPass,
 		DB:                o.DB,
 		RuntimeLogPath:    o.RuntimeLogPath,
