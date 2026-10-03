@@ -84,6 +84,15 @@ type RunOptions struct {
 	// bundled mxbuild on macOS/Windows, the cached CDN download on Linux.
 	MxBuildPath string
 
+	// DBType selects the database a --local run boots against, as
+	// `run --local --db-type` does: empty or "postgresql" for the scratch
+	// PostgreSQL this command has always used, "hsqldb" for the runtime's
+	// built-in file database — no server, and nothing to provision. Pass it
+	// through ResolveTestDBType rather than reading it raw, so it arrives in the
+	// runtime's upper-case spelling and an unknown value is refused at the
+	// command line instead of after a boot.
+	DBType string
+
 	// Timeout for runtime startup and test execution.
 	Timeout time.Duration
 

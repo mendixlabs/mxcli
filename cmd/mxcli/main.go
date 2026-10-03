@@ -391,6 +391,7 @@ func init() {
 	testRunCmd.Flags().String("configuration", "", "With --local, which project configuration's constant values to run the tests with (default: the only one, or \"Default\") — the same resolution 'mxcli run --local' uses, so a suite sees the same constants either way")
 	testRunCmd.Flags().StringArray("constant", nil, "With --local, set a constant for THIS RUN only: Module.Name=value (repeatable). Never written to the project. The value is visible in shell history and in `ps` — for a value that must not be, see docs/11-proposals/PROPOSAL_constant_values.md")
 	testRunCmd.Flags().String("mxbuild-path", "", "With --local, the mxbuild to build with, overriding resolution (Studio Pro's bundled mxbuild on macOS/Windows, the cached CDN download on Linux); also settable as MXCLI_MXBUILD_PATH")
+	testRunCmd.Flags().String("db-type", "", "With --local, database to run the tests against: postgresql (default — a scratch database, so a `run --local` dev loop keeps serving the same project) or hsqldb (the runtime's built-in file database — no server, no --ensure-db, data under <project>/deployment/data/database/hsqldb/). Same values as `run --local --db-type`")
 	testRunCmd.Flags().BoolP("verbose", "v", false, "Show all runtime log output")
 	testRunCmd.Flags().BoolP("color", "", false, "Use colored output")
 	testRunCmd.Flags().StringP("timeout", "t", "5m", "Timeout for runtime startup and test execution")

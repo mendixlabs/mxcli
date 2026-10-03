@@ -145,6 +145,16 @@ Examples:
 		color, _ := cmd.Flags().GetBool("color")
 		timeoutStr, _ := cmd.Flags().GetString("timeout")
 
+		// Resolved before anything boots: an unknown --db-type is a typo, and
+		// reporting it here names the flag instead of surfacing later as a
+		// connection failure to a database the user never asked for.
+		dbTypeRaw, _ := cmd.Flags().GetString("db-type")
+		dbType, err := testrunner.ResolveTestDBType(dbTypeRaw)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
 		timeout, err := time.ParseDuration(timeoutStr)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Invalid timeout: %v\n", err)
@@ -178,6 +188,7 @@ Examples:
 			Attach:            attach,
 			SkipAppStartup:    skipAppStartup,
 			MxBuildPath:       mxbuildPath,
+			DBType:            dbType,
 			Timeout:           timeout,
 			JUnitOutput:       junitOutput,
 			RequireAssertions: requireAssertions,
