@@ -7,13 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
-)
 
-// syscallSignalZero is signal 0: delivered to no one, but still performs the
-// process-exists and permission checks. The idiom for "is this pid alive?".
-const syscallSignalZero = syscall.Signal(0)
+	"github.com/mendixlabs/mxcli/internal/procalive"
+)
 
 // HandshakeFile is where a `run --local --test-endpoint` session publishes what
 // `mxcli test --attach` needs to reach it. It lives beside the project rather
@@ -109,25 +106,12 @@ func ReadHandshake(projectPath string) (*Handshake, error) {
 	if h.Token == "" || h.AppPort == 0 {
 		return nil, fmt.Errorf("%s is incomplete; stop and restart the hosting 'mxcli run --local --test-endpoint'", path)
 	}
-	if !processAlive(h.PID) {
+	if !procalive.Alive(h.PID) {
 		return nil, fmt.Errorf("the app that published %s (pid %d, started %s) is no longer running\n"+
 			"  Start one with: mxcli run --local --test-endpoint -p %s",
 			path, h.PID, h.Started.Format(time.RFC3339), projectPath)
 	}
 	return &h, nil
-}
-
-// processAlive reports whether a pid names a live process. Signal 0 performs the
-// existence and permission checks without delivering anything.
-func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return proc.Signal(syscallSignalZero) == nil
 }
 
 // nowFunc is time.Now, indirected so a test can pin the timestamp.

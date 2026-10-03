@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
+
+	"github.com/mendixlabs/mxcli/internal/procalive"
 )
 
 // devLoopHandshakeName is what `mxcli run --local` publishes so another mxcli
@@ -95,22 +96,9 @@ func readDevLoopHandshake(projectPath string) (devLoopHandshake, error) {
 	if err := json.Unmarshal(body, &h); err != nil {
 		return h, fmt.Errorf("%s is not valid JSON: %w", path, err)
 	}
-	if !processAlive(h.PID) {
+	if !procalive.Alive(h.PID) {
 		return h, fmt.Errorf("%s refers to process %d, which is no longer running\n"+
 			"  (the dev loop was stopped without cleaning up; start a new one)", path, h.PID)
 	}
 	return h, nil
-}
-
-// processAlive reports whether a pid exists. Signal 0 is delivered to no one but
-// still performs the existence and permission checks.
-func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return p.Signal(syscall.Signal(0)) == nil
 }

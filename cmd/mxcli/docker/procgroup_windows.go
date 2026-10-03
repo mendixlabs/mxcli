@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"strconv"
 	"syscall"
+
+	"github.com/mendixlabs/mxcli/internal/procalive"
 )
 
 // procgroup_windows.go provides the Windows implementations of the process
@@ -76,19 +78,11 @@ func killProcessTree(pid int) error {
 // had exited the instant it was launched, and the local loop never got past
 // "Starting mxbuild --serve...". WaitForSingleObject on a SYNCHRONIZE handle is
 // the real check: it returns WAIT_TIMEOUT while the process runs and
-// WAIT_OBJECT_0 once it has terminated (even before it is reaped).
+// WAIT_OBJECT_0 once it has terminated (even before it is reaped). The check
+// itself now lives in procalive.Alive, shared with the handshake readers.
 func processAlive(p *os.Process) bool {
 	if p == nil {
 		return false
 	}
-	h, err := syscall.OpenProcess(syscall.SYNCHRONIZE, false, uint32(p.Pid))
-	if err != nil {
-		return false
-	}
-	defer syscall.CloseHandle(h)
-	event, err := syscall.WaitForSingleObject(h, 0)
-	if err != nil {
-		return false
-	}
-	return event == syscall.WAIT_TIMEOUT
+	return procalive.Alive(p.Pid)
 }
