@@ -403,7 +403,9 @@ func deriveDBName(projectPath string) string {
 // runtime/ sibling of the mxbuild cache's modeler/ dir. mxbuild's Deploy/serve
 // javac step resolves the Mendix API from there; without it compilation fails
 // with "package com.mendix.* does not exist". It is a no-op if the sibling
-// already exists (symlink or real dir). Mirrors ensurePADFiles' link pattern.
+// already exists (link or real dir). Mirrors ensurePADFiles' link pattern. The
+// link is a symlink, or a directory junction when Windows refuses a symlink
+// (see linkDir, mendixlabs/mxcli#1286).
 func ensureMxBuildRuntimeSibling(version string, w io.Writer) error {
 	mxbuildDir, err := MxBuildCacheDir(version)
 	if err != nil {
@@ -424,7 +426,7 @@ func ensureMxBuildRuntimeSibling(version string, w io.Writer) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	if err := os.Symlink(src, dst); err != nil {
+	if err := linkDir(src, dst); err != nil {
 		return fmt.Errorf("linking runtime into mxbuild cache: %w", err)
 	}
 	fmt.Fprintf(w, "  Linked runtime into mxbuild cache: %s -> %s\n", dst, src)

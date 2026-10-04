@@ -778,8 +778,8 @@ func ensurePADFiles(productVersion string, w io.Writer) error {
 		return fmt.Errorf("creating runtime directory in mxbuild: %w", err)
 	}
 
-	// Symlink runtime/pad into mxbuild
-	if err := os.Symlink(runtimePAD, mxbuildPAD); err != nil {
+	// Link runtime/pad into mxbuild (junction when Windows refuses a symlink)
+	if err := linkDir(runtimePAD, mxbuildPAD); err != nil {
 		return fmt.Errorf("symlinking PAD files: %w", err)
 	}
 	fmt.Fprintf(w, "  Linked PAD runtime files: %s -> %s\n", mxbuildPAD, runtimePAD)
