@@ -89,6 +89,73 @@ func TestErrorHandlerStatementVarRefsSeesAddExpressionValue(t *testing.T) {
 	}
 }
 
+func TestAddToAssociationTargetUsesChangeObjectWithAddMember(t *testing.T) {
+	fb := &flowBuilder{}
+
+	fb.addAddToListAction(&ast.AddToListStmt{
+		Value: &ast.VariableExpr{Name: "Line"},
+		List:  "Order/MyModule.Sales.Order_Line",
+	})
+
+	// An association target cannot be a ChangeListAction: `changeVariableName`
+	// is a variable name, and mx rejects a path there with
+	//   CE0109 "Undefined variable 'Order/MyModule.Sales.Order_Line'"
+	// The platform models this as a Change-object action carrying an
+	// association MemberChange of Type Add — the same shape Studio Pro writes
+	// for the Add/Remove buttons on a many-to-many member.
+	activity, ok := fb.objects[len(fb.objects)-1].(*microflows.ActionActivity)
+	if !ok {
+		t.Fatalf("Last object = %T, want ActionActivity", fb.objects[len(fb.objects)-1])
+	}
+	action, ok := activity.Action.(*microflows.ChangeObjectAction)
+	if !ok {
+		t.Fatalf("Action = %T, want ChangeObjectAction for an association target", activity.Action)
+	}
+	if action.ChangeVariable != "Order" {
+		t.Fatalf("ChangeVariable = %q, want Order (the object, not the path)", action.ChangeVariable)
+	}
+	if len(action.Changes) != 1 {
+		t.Fatalf("Changes = %d, want 1", len(action.Changes))
+	}
+	mc := action.Changes[0]
+	if mc.Type != microflows.MemberChangeTypeAdd {
+		t.Errorf("MemberChange.Type = %q, want Add", mc.Type)
+	}
+	if got := mc.AssociationQualifiedName; got != "MyModule.Sales.Order_Line" {
+		t.Errorf("Association = %q, want MyModule.Sales.Order_Line", got)
+	}
+	if mc.Value != "$Line" {
+		t.Errorf("Value = %q, want $Line", mc.Value)
+	}
+}
+
+func TestRemoveFromAssociationTargetUsesChangeObjectWithRemoveMember(t *testing.T) {
+	fb := &flowBuilder{}
+
+	fb.addRemoveFromListAction(&ast.RemoveFromListStmt{
+		Item: "Line",
+		List: "Order/MyModule.Sales.Order_Line",
+	})
+
+	activity := fb.objects[len(fb.objects)-1].(*microflows.ActionActivity)
+	action, ok := activity.Action.(*microflows.ChangeObjectAction)
+	if !ok {
+		t.Fatalf("Action = %T, want ChangeObjectAction for an association target", activity.Action)
+	}
+	if action.ChangeVariable != "Order" {
+		t.Fatalf("ChangeVariable = %q, want Order", action.ChangeVariable)
+	}
+	if len(action.Changes) != 1 {
+		t.Fatalf("Changes = %d, want 1", len(action.Changes))
+	}
+	if action.Changes[0].Type != microflows.MemberChangeTypeRemove {
+		t.Errorf("MemberChange.Type = %q, want Remove", action.Changes[0].Type)
+	}
+	if got := action.Changes[0].AssociationQualifiedName; got != "MyModule.Sales.Order_Line" {
+		t.Errorf("Association = %q, want MyModule.Sales.Order_Line", got)
+	}
+}
+
 func lastChangeListAction(t *testing.T, fb *flowBuilder) *microflows.ChangeListAction {
 	t.Helper()
 

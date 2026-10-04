@@ -1128,6 +1128,14 @@ func buildAddToListStatement(ctx parser.IAddToListStatementContext) *ast.AddToLi
 	if v := addCtx.VARIABLE(); v != nil {
 		stmt.List = strings.TrimPrefix(v.GetText(), "$")
 	}
+	// A many-to-many association target arrives as an attributePath
+	// (`$Order/Module.Assoc`) rather than a VARIABLE. Mendix's own ChangeListAction
+	// stores it in the same `changeVariableName` string, so the raw text is the
+	// right thing to keep — one hop is what an association target is, and a deeper
+	// path is not something this statement can mean.
+	if p := addCtx.AttributePath(); p != nil {
+		stmt.List = strings.TrimPrefix(p.GetText(), "$")
+	}
 
 	return stmt
 }
@@ -1149,6 +1157,11 @@ func buildRemoveFromListStatement(ctx parser.IRemoveFromListStatementContext) *a
 	}
 	if len(vars) >= 2 {
 		stmt.List = strings.TrimPrefix(vars[1].GetText(), "$")
+	}
+	// Association target (`REMOVE $Line FROM $Order/Module.Assoc`); see
+	// buildAddToListStatement for why this is the raw text minus the `$`.
+	if p := removeCtx.AttributePath(); p != nil {
+		stmt.List = strings.TrimPrefix(p.GetText(), "$")
 	}
 
 	return stmt

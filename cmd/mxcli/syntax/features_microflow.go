@@ -387,7 +387,7 @@ func init() {
 			"union", "intersect", "subtract", "count", "sum",
 			"average", "aggregate", "add to list", "remove from list",
 			"clear list", "clear", "change list", "replace list", "CE7247",
-			"create list",
+			"create list", "append to association", "add to association",
 			// RANGE was authorable but absent from this topic, so the paging
 			// form could not be discovered from the CLI at all (issue #966).
 			"range", "paging", "pagination", "offset", "limit", "amount", "page",
@@ -403,7 +403,13 @@ func init() {
 			"SET $List = $Other;   -- on a LIST variable: Change list Replace, not\n" +
 			"                      -- Change variable (CE7247 on a list)\n\n" +
 			"-- One statement per Studio Pro activity. The keyword is the operation's\n" +
-			"-- name and the operand is always a variable, as in the activity's dialog.\n" +
+			"-- name and the operand is a variable, as in the activity's dialog.\n" +
+			"-- The target may also be a many-to-many association:\n" +
+			"ADD $Item TO $Parent/Module.Parent_Child;    -- append to a n2n association\n" +
+			"REMOVE $Item FROM $Parent/Module.Parent_Child; -- detach from it\n" +
+			"-- Use this rather than CHANGE $Parent (Assoc = $Item), which ASSIGNS the\n" +
+			"-- whole set: three CHANGEs in a row leave one member attached and two\n" +
+			"-- orphans in the table.\n" +
 			"-- List operation:\n" +
 			"$Result = HEAD $List;\n$Result = TAIL $List;\n" +
 			"$Result = FIND $List BY Member = value;          -- Find (attribute or association)\n" +

@@ -1997,10 +1997,88 @@ func (fb *flowBuilder) addCreateListAction(s *ast.CreateListStmt) model.ID {
 }
 
 // addAddToListAction creates an ADD TO list statement.
+// splitAssociationTarget splits an ADD/REMOVE target into the object variable and
+// the association qualified name, reporting whether the target was an association at
+// all. `$Order` and `$Order/MyModule.Sales.Order_Line` are the two shapes; only the
+// second is an association, and it is the one that has to become a Change-object
+// action instead of a Change-list action (see addAssociationMemberAction).
+func splitAssociationTarget(target string) (objectVar, associationQN string, ok bool) {
+	idx := strings.Index(target, "/")
+	if idx < 0 {
+		return "", "", false
+	}
+	objectVar = target[:idx]
+	associationQN = target[idx+1:]
+	if objectVar == "" || associationQN == "" || strings.Contains(associationQN, "/") {
+		return "", "", false
+	}
+	return objectVar, associationQN, true
+}
+
+// addAssociationMemberAction builds the platform's representation of "append to /
+// remove from a many-to-many association": a Change-object action on the owning
+// object carrying an association MemberChange of Type Add or Remove.
+//
+// A ChangeListAction cannot express this. Its `changeVariableName` is a variable
+// name, and handing it a path produces a model mx rejects with
+//
+//	CE0109 "Undefined variable 'Order/MyModule.Sales.Order_Line'." at Change list activity
+//
+// which is a clean build refusal rather than a wrong model — the grammar accepted
+// the path, the platform did not. MemberChangeTypeAdd/Remove already existed in the
+// SDK; nothing had written them.
+func (fb *flowBuilder) addAssociationMemberAction(memberType microflows.MemberChangeType, associationQN, objectVar, value string) model.ID {
+	action := &microflows.ChangeObjectAction{
+		BaseElement:       model.BaseElement{ID: model.ID(types.GenerateID())},
+		ErrorHandlingType: fb.ehType(nil),
+		ChangeVariable:    objectVar,
+	}
+	memberChange := &microflows.MemberChange{
+		BaseElement:              model.BaseElement{ID: model.ID(types.GenerateID())},
+		Type:                     memberType,
+		AssociationQualifiedName: associationQN,
+		Value:                    value,
+	}
+	// Reuse the domain-model lookup so the association gets its ID the same way a
+	// `change $x (Module.Assoc = $y)` does, and so an unknown name is reported
+	// rather than silently written.
+	fb.resolveMemberChange(memberChange, associationQN, fb.varEntityQN(objectVar))
+	action.Changes = append(action.Changes, memberChange)
+
+	activity := &microflows.ActionActivity{
+		BaseActivity: microflows.BaseActivity{
+			BaseMicroflowObject: microflows.BaseMicroflowObject{
+				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
+				Position:    model.Point{X: fb.posX, Y: fb.posY},
+				Size:        model.Size{Width: ActivityWidth, Height: ActivityHeight},
+			},
+			AutoGenerateCaption: true,
+			ErrorHandlingType:   fb.ehType(nil),
+		},
+		Action: action,
+	}
+
+	fb.objects = append(fb.objects, activity)
+	fb.posX += fb.spacing
+	return activity.ID
+}
+
+// varEntityQN returns the entity qualified name a variable holds, or "" when the
+// builder has no type for it (a java-action return, an untyped loop iterator).
+func (fb *flowBuilder) varEntityQN(varName string) string {
+	if fb.varTypes == nil {
+		return ""
+	}
+	return fb.varTypes[varName]
+}
+
 func (fb *flowBuilder) addAddToListAction(s *ast.AddToListStmt) model.ID {
 	value := fb.exprToString(s.Value)
 	if value == "" && s.Item != "" {
 		value = "$" + s.Item
+	}
+	if objectVar, associationQN, ok := splitAssociationTarget(s.List); ok {
+		return fb.addAssociationMemberAction(microflows.MemberChangeTypeAdd, associationQN, objectVar, value)
 	}
 	action := &microflows.ChangeListAction{
 		BaseElement:       model.BaseElement{ID: model.ID(types.GenerateID())},
@@ -2029,6 +2107,9 @@ func (fb *flowBuilder) addAddToListAction(s *ast.AddToListStmt) model.ID {
 
 // addRemoveFromListAction creates a REMOVE FROM list statement.
 func (fb *flowBuilder) addRemoveFromListAction(s *ast.RemoveFromListStmt) model.ID {
+	if objectVar, associationQN, ok := splitAssociationTarget(s.List); ok {
+		return fb.addAssociationMemberAction(microflows.MemberChangeTypeRemove, associationQN, objectVar, "$"+s.Item)
+	}
 	return fb.addChangeListAction(microflows.ChangeListTypeRemove, s.List, "$"+s.Item, nil)
 }
 

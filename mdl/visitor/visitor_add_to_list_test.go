@@ -42,6 +42,32 @@ END;`
 	}
 }
 
+func TestAddToListAcceptsAssociationPathTarget(t *testing.T) {
+	input := `CREATE MICROFLOW Sales.AddLine ($Order: Sales.Order, $Line: Sales.OrderLine)
+RETURNS Boolean
+BEGIN
+  ADD $Line TO $Order/MyModule.Sales.Order_Line;
+  RETURN true;
+END;`
+
+	prog, errs := Build(input)
+	if len(errs) > 0 {
+		for _, err := range errs {
+			t.Errorf("Parse error: %v", err)
+		}
+		return
+	}
+
+	mf := prog.Statements[0].(*ast.CreateMicroflowStmt)
+	addStmt, ok := mf.Body[0].(*ast.AddToListStmt)
+	if !ok {
+		t.Fatalf("Expected AddToListStmt, got %T", mf.Body[0])
+	}
+	if addStmt.List != "Order/MyModule.Sales.Order_Line" {
+		t.Fatalf("List = %q, want Order/MyModule.Sales.Order_Line", addStmt.List)
+	}
+}
+
 func TestAddToListKeepsSimpleVariableCompatibility(t *testing.T) {
 	input := `CREATE MICROFLOW Sales.CollectOrders ($Order: Sales.Order)
 RETURNS Boolean

@@ -1052,16 +1052,30 @@ createListStatement
 
 /**
  * Add an item to a list.
+ *
+ * The target is an `attributePath` as well as a plain VARIABLE so a
+ * many-to-many association can be appended to directly:
+ * `ADD $Line TO $Order/MyModule.Sales.Order_Line`. Without this, n2n
+ * append is inexpressible — `CHANGE $Order (Assoc = $Line)` ASSIGNS the
+ * whole set, so three adds in a row leave one line attached and two
+ * orphans in the table (measured: 3 rows in SkuRow, 1 with a non-null
+ * association). The read-out / add-to-list / write-back dance works but
+ * is O(n) per call and reads like a mistake.
+ *
+ * `attributePath` requires at least one SLASH/DOT, so `ADD $X TO $List`
+ * keeps parsing as before.
  */
 addToListStatement
-    : ADD expression TO VARIABLE
+    : ADD expression TO (attributePath | VARIABLE)
     ;
 
 /**
- * Remove an item from a list.
+ * Remove an item from a list, or from a many-to-many association.
+ * Same reasoning as addToListStatement: `REMOVE $Line FROM $Order/Module.Assoc`
+ * is the inverse operation, and CHANGE cannot express it either.
  */
 removeFromListStatement
-    : REMOVE VARIABLE FROM VARIABLE
+    : REMOVE VARIABLE FROM (attributePath | VARIABLE)
     ;
 
 /**
