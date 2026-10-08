@@ -78,6 +78,16 @@ func TestValidateStaticWidgetUnknownProps(t *testing.T) {
 		{"lowercase keyword clean", dt(map[string]any{"content": "hi", "dynamicclasses": "x"}), 0, ""},
 		{"unknown property warns", dt(map[string]any{"Content": "hi", "TotallyMadeUp": "x"}), 1, ""},
 		{"typo suggests nearest", dt(map[string]any{"Contnet": "hi"}), 1, "did you mean `Content`"},
+		// A data view's ShowFooter is read by the dataview builder and emitted by
+		// describe page; it must not be reported as silently dropped.
+		{"dataview showFooter clean", &ast.WidgetV3{
+			Type: "dataview", Name: "dvOrder",
+			Properties: map[string]any{"DataSource": &ast.DataSourceV3{Type: "parameter", Reference: "Order"}, "showFooter": true},
+		}, 0, ""},
+		{"dataview ShowFooter clean", &ast.WidgetV3{
+			Type: "dataview", Name: "dvOrder",
+			Properties: map[string]any{"ShowFooter": false},
+		}, 0, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -114,7 +124,7 @@ func TestStaticWidgetKnownPropsCoverDescribe(t *testing.T) {
 		"Height", "HeightUnit", "Hidable", "Image", "ImageType", "ImageUrl", "Label", "LabelWidth",
 		"OnClick", "PageSize", "Pagination", "PagingPosition", "PhoneColumns", "PhoneWidth",
 		"ReadOnlyStyle", "RenderMode", "Responsive", "Selection", "ShowContentAs",
-		"ShowPagingButtons", "Size", "Snippet", "Sortable", "Style", "TabletColumns",
+		"ShowFooter", "ShowPagingButtons", "Size", "Snippet", "Sortable", "Style", "TabletColumns",
 		"TabletWidth", "Tooltip", "Visible", "Width", "WidthUnit",
 	}
 	for _, p := range describeVocabulary {

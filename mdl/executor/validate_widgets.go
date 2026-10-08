@@ -770,6 +770,9 @@ var staticWidgetKnownProps = func() map[string]bool {
 		// box's password flag and its Forms$WidgetValidation. Leaving them out
 		// makes the describe -> create round trip warn about its own output.
 		"Password", "Validation", "ValidationMessage",
+		// data view footer visibility (#813): read by the dataview builder and
+		// emitted by describe page when it differs from the footer block.
+		"ShowFooter",
 		// button icon-collection reference (issue #602)
 		"Icon",
 		// staticimage's image-collection reference, Module.Collection.Image
