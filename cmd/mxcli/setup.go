@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -234,6 +235,25 @@ func mxcliReleaseTag() string {
 		v = v[:idx]
 	}
 	return v
+}
+
+// releaseTagPattern matches a tag mxcliReleaseTag can produce for a published
+// release: "vX.Y.Z" (nightly builds map to the literal "nightly" tag).
+var releaseTagPattern = regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
+
+// hasPublishedRelease reports whether the running binary has a matching
+// release on GitHub to download from. A development build does not: a plain
+// `go build` has no -X main.Version and reports the default "0.1.0" (so
+// mxcliReleaseTag says v0.1.0, which was never released), and `make build`
+// outside a git checkout stamps "dev" or a bare commit hash. Only a build
+// stamped by `make release` (vX.Y.Z, vX.Y.Z-N-gHASH or nightly-...) maps to
+// a real tag.
+func hasPublishedRelease() bool {
+	if Version == "" {
+		return false
+	}
+	tag := mxcliReleaseTag()
+	return tag == "nightly" || releaseTagPattern.MatchString(tag)
 }
 
 // downloadMxcliBinary downloads the mxcli binary for the given OS/arch from

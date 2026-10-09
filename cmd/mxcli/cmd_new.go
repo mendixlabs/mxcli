@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -300,13 +301,7 @@ Examples:
 		mxcliBinPath := filepath.Join(absDir, "mxcli")
 		if runtime.GOOS != "linux" {
 			// Running on Windows/macOS — download the Linux binary for devcontainer
-			tag := mxcliReleaseTag()
-			fmt.Printf("  Downloading Linux mxcli (%s) for devcontainer...\n", tag)
-			if err := downloadMxcliBinary("mendixlabs/mxcli", tag, "linux", "amd64", mxcliBinPath, os.Stdout); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: could not download Linux mxcli binary for devcontainer: %v\n", err)
-				fmt.Fprintln(os.Stderr, "  Run 'mxcli setup mxcli --output ./mxcli' inside the project directory to fix this.")
-				os.Exit(1)
-			}
+			fetchDevcontainerMxcli(mxcliBinPath, os.Stdout, os.Stderr)
 		} else {
 			// Running on Linux — link ourselves into the project. Prefer a hard link:
 			// it shares the inode (no ~111MB duplicated per project on the same
@@ -401,4 +396,30 @@ func init() {
 		"Create a layout the project owns and move its pages onto it ('none' to keep Atlas's)")
 
 	rootCmd.AddCommand(newCmd)
+}
+
+// downloadDevcontainerBinary is the downloader step 7 of `mxcli new` uses.
+// It is a variable so tests can stand in for the network.
+var downloadDevcontainerBinary = downloadMxcliBinary
+
+// fetchDevcontainerMxcli downloads the Linux mxcli into the project for the
+// devcontainer to use (step 7 of `mxcli new` on Windows/macOS).
+//
+// By step 7 the project is complete, so nothing here may fail the command:
+// a development build has no release to download (skipped with a note), and a
+// failed download — no network, blocked GitHub assets — is a warning, like a
+// failed first build in step 6 (mendixlabs/mxcli#1365).
+func fetchDevcontainerMxcli(mxcliBinPath string, out, errOut io.Writer) {
+	if !hasPublishedRelease() {
+		fmt.Fprintf(out, "  This is a development build (version %s) with no matching release, so no Linux mxcli was downloaded.\n", version)
+		fmt.Fprintln(out, "  For the devcontainer, run 'mxcli setup mxcli --tag <release> --output ./mxcli' inside the project directory.")
+		return
+	}
+	tag := mxcliReleaseTag()
+	fmt.Fprintf(out, "  Downloading Linux mxcli (%s) for devcontainer...\n", tag)
+	if err := downloadDevcontainerBinary("mendixlabs/mxcli", tag, "linux", "amd64", mxcliBinPath, out); err != nil {
+		fmt.Fprintf(errOut, "  Warning: could not download the Linux mxcli binary for the devcontainer: %v\n", err)
+		fmt.Fprintln(errOut, "  The project is usable. Run 'mxcli setup mxcli --output ./mxcli' inside the project")
+		fmt.Fprintln(errOut, "  directory to fetch it later.")
+	}
 }
