@@ -103,7 +103,7 @@ Examples:
   # Run tests from a test file
   mxcli test tests/microflows.test.mdl -p app.mpr
 
-  # Run all tests in a directory
+  # Run all tests in a directory, subfolders included (tests/Sales/*.test.mdl)
   mxcli test tests/ -p app.mpr
 
   # Output JUnit XML for CI

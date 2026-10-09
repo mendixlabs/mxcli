@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1003,18 +1004,16 @@ func emptySuiteError(paths []string) error {
 		if err != nil || !info.IsDir() {
 			continue
 		}
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if e.IsDir() || isTestFile(e.Name()) {
-				continue
+		// Same walk as ParseTestDir, so a misnamed file in tests/Sales/ is
+		// named too.
+		_ = walkTestTree(path, func(file string, d fs.DirEntry) {
+			if isTestFile(d.Name()) {
+				return
 			}
-			if l := strings.ToLower(e.Name()); strings.HasSuffix(l, ".mdl") || strings.HasSuffix(l, ".md") {
-				skipped = append(skipped, filepath.Join(path, e.Name()))
+			if l := strings.ToLower(d.Name()); strings.HasSuffix(l, ".mdl") || strings.HasSuffix(l, ".md") {
+				skipped = append(skipped, file)
 			}
-		}
+		})
 	}
 	sort.Strings(skipped)
 

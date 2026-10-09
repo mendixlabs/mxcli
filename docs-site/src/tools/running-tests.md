@@ -72,7 +72,7 @@ first call only stages the change.
 ## Basic Usage
 
 ```bash
-# Run all tests in a directory
+# Run all tests in a directory, including its subfolders
 mxcli test tests/ -p app.mpr
 
 # Run a specific test file
