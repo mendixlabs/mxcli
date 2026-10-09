@@ -11,8 +11,8 @@ import (
 )
 
 // TestDownloadMxcliBinary_HTTP404ReturnsError verifies that a 404 from the
-// release server is surfaced as an error. This exercises the path in
-// cmd_new.go step 4 that must exit 1 when the download fails.
+// release server is surfaced as an error. fetchDevcontainerMxcli turns this
+// error into a warning in step 7 of cmd_new.go.
 func TestDownloadMxcliBinary_HTTP404ReturnsError(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
