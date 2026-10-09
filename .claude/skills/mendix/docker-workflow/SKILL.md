@@ -148,6 +148,8 @@ mxcli docker init -p app.mpr
 
 This creates a `.docker/` directory with Docker Compose configuration for the Mendix app + PostgreSQL.
 
+**Stack name:** `docker init` writes a Compose project name into `.docker/docker-compose.yml` (`name: "mxcli-<app folder>"`), so containers and volumes of different apps are separate (`mxcli-myapp-db-1`, `mxcli-myapp_postgres-data`). Never change `name:` on a stack that holds data you need: Compose then starts new containers with an empty database and leaves the old volume behind. Projects initialised by older mxcli have no `name:`, so Compose calls them `docker` (`docker-db-1`, `docker_postgres-data`), shared with every other such project; `docker init --force` keeps that name rather than stranding the data.
+
 **Port conflicts:** If default ports (8080/8090/5432) are already in use, check with `ss -tlnp | grep -E '808|809|543'` and use `--port-offset N` to shift all ports:
 
 ```bash
@@ -431,5 +433,6 @@ All defaults can be overridden in `.docker/.env`.
 | `password should not be empty (debugger)` | Add `RUNTIME_DEBUGGER_PASSWORD` — re-run `mxcli docker init --force` |
 | `security level should be set to CHECKEVERYTHING` | App in Production mode without security — set to Development mode or configure security |
 | Port 8080 not accessible | Check `forwardPorts` in devcontainer.json includes 8080 |
+| Two projects overwrite each other's containers or share one database (both show as project `docker`) | Old compose file without `name:`. Back up the data, set a unique `name:` at the top of `.docker/docker-compose.yml` (e.g. `mxcli-myapp`), then `docker compose up`; the new stack starts with an empty database |
 | Database errors on startup | Try `mxcli docker up -p app.mpr --fresh` to reset volumes |
 | OQL: "Action not found: preview_execute_oql" | Runtime needs `-Dmendix.live-preview=enabled` JVM flag — re-run `mxcli docker init --force` to get the updated docker-compose.yml |
