@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -150,35 +151,61 @@ func ParseTestFile(path string) (*TestSuite, error) {
 	}, nil
 }
 
-// ParseTestDir parses all test files in a directory.
+// ParseTestDir parses all test files under a directory, at any depth, in
+// lexical path order. A suite per module (tests/Sales/*.test.mdl) is the usual
+// layout, so `mxcli test tests` must find what `mxcli test tests/Sales` finds
+// (mendixlabs/mxcli#1363). Hidden folders (.git, .mxcli, ...) are not entered.
 func ParseTestDir(dir string) (*TestSuite, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("reading test directory: %w", err)
-	}
-
 	suite := &TestSuite{
 		Name: filepath.Base(dir),
 	}
 
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
+	err := walkTestTree(dir, func(path string, d fs.DirEntry) {
+		if !isTestFile(d.Name()) {
+			return
 		}
-		name := e.Name()
-		if isTestFile(name) {
-			path := filepath.Join(dir, name)
-			suite.FilesRead++
-			sub, err := ParseTestFile(path)
-			if err != nil {
-				suite.FileErrors = append(suite.FileErrors, FileError{Path: path, Err: err})
-				continue
-			}
-			suite.Tests = append(suite.Tests, sub.Tests...)
+		suite.FilesRead++
+		sub, err := ParseTestFile(path)
+		if err != nil {
+			suite.FileErrors = append(suite.FileErrors, FileError{Path: path, Err: err})
+			return
 		}
+		suite.Tests = append(suite.Tests, sub.Tests...)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("reading test directory: %w", err)
 	}
 
 	return suite, nil
+}
+
+// walkTestTree calls fn for every non-directory entry under root, in lexical
+// order, without entering hidden (dot-prefixed) folders below root. The root
+// itself is always walked, whatever it is called: `mxcli test .` has a root
+// named ".". A root that is a symlink is followed (as os.ReadDir did);
+// symlinked folders below it are not, which keeps a link cycle from looping.
+func walkTestTree(root string, fn func(path string, d fs.DirEntry)) error {
+	if info, err := os.Lstat(root); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if resolved, err := filepath.EvalSymlinks(root); err == nil {
+			root = resolved
+		}
+	}
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if path != root && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if path == root {
+			return fmt.Errorf("%s is not a directory", root)
+		}
+		fn(path, d)
+		return nil
+	})
 }
 
 // isTestFile returns true if the filename matches a test file pattern.
