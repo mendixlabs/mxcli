@@ -1,7 +1,18 @@
-# mxcli-template-version: 2
+# mxcli-template-version: 3
 # Regenerate with `mxcli docker init --force` when mxcli reports this file is
 # out of date — template fixes (e.g. the OQL dev-servlet flags) only reach an
 # existing .docker/ when the compose file is rewritten.
+#
+# Compose project name: prefixes every container, network and volume of this
+# stack (<name>-db-1, <name>_postgres-data), so each project needs its own —
+# before v3 it was the ".docker" folder name, i.e. "docker" for every project,
+# and the stacks and databases of different apps collided (mxcli#1364).
+# The name identifies the stack's data: change it and Compose starts NEW
+# containers with an EMPTY database volume, leaving the old one behind. Keep it
+# stable; `mxcli docker init --force` keeps whatever is here. `docker compose -p`
+# and COMPOSE_PROJECT_NAME override it.
+name: __COMPOSE_PROJECT_NAME__
+
 services:
   mendix:
     image: eclipse-temurin:21-jre

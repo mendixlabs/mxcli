@@ -239,6 +239,14 @@ Creates a .docker/ directory next to the MPR file containing:
 The compose file references ./build as the build context, which is where
 'mxcli docker build' outputs the PAD package.
 
+Each project gets its own Compose project name ("name:" at the top of
+docker-compose.yml, "mxcli-<app folder>"), so the containers and database volume
+of different apps no longer collide. The name identifies the stack's data:
+changing it makes Compose start new containers with an empty database. --force
+therefore keeps the name an existing docker-compose.yml already has; a file
+written by an older mxcli (no name, so Compose used "docker") stays "docker"
+until you edit 'name:' yourself.
+
 Examples:
   mxcli docker init -p app.mpr
   mxcli docker init -p app.mpr --force

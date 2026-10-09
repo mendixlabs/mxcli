@@ -49,7 +49,7 @@ func Init(opts InitOptions) error {
 
 	// Write docker-compose.yml
 	composePath := filepath.Join(dockerDir, "docker-compose.yml")
-	if err := writeTemplate(composePath, "templates/docker-compose.yml", opts.Force, w); err != nil {
+	if err := writeComposeFile(composePath, dockerDir, opts, w); err != nil {
 		return err
 	}
 
@@ -98,6 +98,50 @@ func Init(opts InitOptions) error {
 	fmt.Fprintln(w, "  1. mxcli docker build -p <project.mpr>   # Build PAD package")
 	fmt.Fprintln(w, "  2. mxcli docker up -p <project.mpr>      # Start containers")
 
+	return nil
+}
+
+// writeComposeFile writes docker-compose.yml with its Compose project name
+// filled in. A new file gets a name of its own; regenerating an existing one
+// keeps the name the stack already had (see composename.go), because a stack's
+// name is the key to its containers and its database volume.
+func writeComposeFile(composePath, dockerDir string, opts InitOptions, w io.Writer) error {
+	if !opts.Force && fileExists(composePath) {
+		fmt.Fprintf(w, "  Skipped %s (already exists)\n", composePath)
+		return nil
+	}
+
+	data, err := templatesFS.ReadFile("templates/docker-compose.yml")
+	if err != nil {
+		return fmt.Errorf("reading compose template: %w", err)
+	}
+	// Decide before the file is overwritten: the old file is the evidence.
+	name := decideComposeName(opts.ProjectPath, dockerDir, composePath)
+	rendered, err := renderComposeTemplate(data, name)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(composePath, rendered, 0644); err != nil {
+		return fmt.Errorf("writing %s: %w", composePath, err)
+	}
+
+	fmt.Fprintf(w, "  Created %s\n", composePath)
+	switch name.Source {
+	case "new":
+		fmt.Fprintf(w, "  Compose project name: %s (containers %s-db-1, %s-mendix-1; volume %s_postgres-data)\n",
+			name.Name, name.Name, name.Name, name.Name)
+	case "env":
+		fmt.Fprintf(w, "  Kept Compose project name %q from COMPOSE_PROJECT_NAME in the previous .env (which is rewritten); it is now set by 'name:' in the compose file\n", name.Name)
+	case "kept":
+		fmt.Fprintf(w, "  Kept Compose project name %q from the previous docker-compose.yml\n", name.Name)
+	case "legacy":
+		suggested := ComposeProjectNameFor(opts.ProjectPath)
+		fmt.Fprintf(w, "  Kept Compose project name %q: the previous docker-compose.yml had no 'name:', so Compose used the folder name\n", name.Name)
+		fmt.Fprintf(w, "  and your containers and database volume (%s_postgres-data) are still found under it.\n", name.Name)
+		fmt.Fprintf(w, "  Other mxcli projects using %q share that name, and with it their containers and volumes.\n", name.Name)
+		fmt.Fprintf(w, "  To isolate this project, change 'name:' in %s to e.g. %q. Compose then creates\n", composePath, suggested)
+		fmt.Fprintf(w, "  NEW containers and an EMPTY database; the old volume stays untouched (back it up first if you need its data).\n")
+	}
 	return nil
 }
 
