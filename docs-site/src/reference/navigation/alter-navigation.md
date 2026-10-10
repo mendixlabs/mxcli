@@ -9,6 +9,7 @@ CREATE OR REPLACE NAVIGATION profile
     [ LOGIN PAGE module.PageName ]
     [ NOT FOUND PAGE module.PageName ]
     [ ON SYNC ERROR { THROW | CONTINUE } ]
+    [ PROGRESSIVE WEB APP [ ( Precaching: bool, InstallPrompt: bool ) ] | PROGRESSIVE WEB APP OFF ]
     [ SYNC (
         sync_rules
     ) ]
@@ -131,6 +132,26 @@ phrase MDL already has for failure handling — a microflow's `ON ERROR CONTINUE
 stored value alone, and `DESCRIBE NAVIGATION` emits it only when it is not the
 default.
 
+`PROGRESSIVE WEB APP` is Studio Pro's *"Progressive web app"* settings. A profile
+stores none until they are set, and an **offline** profile without them gets no
+service worker: the built `index.js` has `"registerServiceWorker": false`, and no
+page opens without a network, while `check`, `exec` and `mx check` all pass
+(mendixlabs/mxcli#1377). `Precaching` pre-loads the app's pages and resources
+(default `false`); `InstallPrompt` allows the *Add to home screen* prompt (default
+`true`); a key the clause leaves out takes its default, so a bare
+`PROGRESSIVE WEB APP` writes the defaults, `PROGRESSIVE WEB APP OFF`
+stores none, and omitting the clause leaves the stored settings alone.
+`DESCRIBE NAVIGATION` emits it when settings are stored, naming only the keys that
+differ from the defaults, and `CREATE NAVIGATION` warns about an offline profile
+left without them.
+
+```sql
+CREATE OR MODIFY NAVIGATION PhoneOffline
+    HOME PAGE Field.WorkOrder_List
+    PROGRESSIVE WEB APP ( Precaching: true )
+    SYNC ( SYNC Field.WorkOrder ALL; );
+```
+
 An entity's *compatibility mode* flag has no MDL syntax. It is read, preserved
 across a rewrite, and reported by `DESCRIBE NAVIGATION` — never silently
 dropped.
@@ -164,8 +185,8 @@ CREATE OR MODIFY NAVIGATION Responsive
 
 Native mobile navigation. A native profile's home is a page or a nanoflow
 (`HOME NANOFLOW`); mxcli writes its home pages and `SYNC` block only, and refuses a
-`{ }` menu block (the bottom bar), `LOGIN PAGE`, `NOT FOUND PAGE` and `ON SYNC ERROR`
-on one — set those in Studio Pro. DESCRIBE lists the bottom bar as comments:
+`{ }` menu block (the bottom bar), `LOGIN PAGE`, `NOT FOUND PAGE`, `ON SYNC ERROR` and
+`PROGRESSIVE WEB APP` on one — set those in Studio Pro. DESCRIBE lists the bottom bar as comments:
 
 ```sql
 CREATE OR MODIFY NAVIGATION NativePhone

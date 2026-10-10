@@ -57,6 +57,11 @@ create or modify navigation "PhoneOffline"
   -- handling (a microflow's ON ERROR CONTINUE), and omitting the clause leaves
   -- the stored value alone rather than resetting it.
   on sync error continue
+  -- Studio Pro's "Progressive web app" settings. Without them Mendix registers
+  -- no service worker for the profile, so no page opens without a network
+  -- (mendixlabs/mxcli#1377). Precaching pre-loads the app's pages; the keys
+  -- left out keep their defaults (InstallPrompt: true).
+  progressive web app ( Precaching: true )
   sync (
     -- Fetched from the server; never held on the device.
     sync "OfflineSync"."Setting" online;

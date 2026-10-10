@@ -21,7 +21,10 @@ type AlterNavigationStmt struct {
 	// guard-don't-drop failure, in the one property on this statement that is
 	// a bare boolean and so has no "unset" value of its own.
 	ThrowSyncError *bool
-	CreateOrModify bool // true if CREATE OR REPLACE/MODIFY was used
+	// ProgressiveWebApp is the PROGRESSIVE WEB APP clause; nil when the
+	// statement does not mention it, so the stored settings are left alone.
+	ProgressiveWebApp *types.NavPWASpec
+	CreateOrModify    bool // true if CREATE OR REPLACE/MODIFY was used
 }
 
 func (s *AlterNavigationStmt) isStatement() {}

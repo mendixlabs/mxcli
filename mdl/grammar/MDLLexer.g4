@@ -301,6 +301,7 @@ SYNCHRONIZE: S Y N C H R O N I Z E;
 UNSYNCHRONIZED: U N S Y N C H R O N I Z E D;
 BROWSER: B R O W S E R;
 WEB: W E B;
+PROGRESSIVE: P R O G R E S S I V E;  // `progressive web app` on a navigation profile (Studio Pro's name)
 RAW: R A W;
 JAVA: J A V A;
 JAVASCRIPT: J A V A S C R I P T;

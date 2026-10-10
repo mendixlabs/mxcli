@@ -39,9 +39,12 @@ func execAlterNavigation(ctx *ExecContext, s *ast.AlterNavigationStmt) error {
 	// Each item is paired with the stored item it replaces (ako/mxcli#980).
 	var stored []*types.NavMenuItem
 	isNative := false
+	storedKind := ""
+	var storedPWA *types.NavPWASettings
 	for _, p := range nav.Profiles {
 		if strings.EqualFold(p.Name, s.ProfileName) {
 			stored, isNative = p.MenuItems, p.IsNative
+			storedKind, storedPWA = p.Kind, p.ProgressiveWebApp
 			break
 		}
 	}
@@ -116,6 +119,7 @@ func execAlterNavigation(ctx *ExecContext, s *ast.AlterNavigationStmt) error {
 	}
 
 	spec.ThrowSyncError = s.ThrowSyncError
+	spec.ProgressiveWebApp = s.ProgressiveWebApp
 	spec.HasSync = s.HasSyncBlock
 	for _, se := range s.SyncEntries {
 		spec.OfflineEntities = append(spec.OfflineEntities, types.NavOfflineEntitySpec{
@@ -141,10 +145,37 @@ func execAlterNavigation(ctx *ExecContext, s *ast.AlterNavigationStmt) error {
 		"Navigation profile %s updated.", mdlQuoted(s.ProfileName)) {
 		// A re-run whose write was elided rewrote nothing, so it carried nothing
 		// either (ako/mxcli#890 is the same rule for security and settings).
+		// The profile is still unusable offline, though, so that is said again.
+		warnOfflineWithoutPWA(ctx, s, storedKind, storedPWA)
 		return nil
 	}
 	reportKeptMenuActions(ctx, kept)
+	kind := storedKind
+	if createdProfile {
+		kind = createdKind
+	}
+	warnOfflineWithoutPWA(ctx, s, kind, storedPWA)
 	return nil
+}
+
+// warnOfflineWithoutPWA says when an offline profile is left without Progressive
+// web app settings. Mendix then registers no service worker -- index.js carries
+// "registerServiceWorker": false -- so no page opens without a network, while
+// check, exec and mx check all pass (mendixlabs/mxcli#1377).
+func warnOfflineWithoutPWA(ctx *ExecContext, s *ast.AlterNavigationStmt, kind string, stored *types.NavPWASettings) {
+	if !types.IsOfflineProfileKind(kind) {
+		return
+	}
+	has := stored != nil
+	if s.ProgressiveWebApp != nil {
+		has = !s.ProgressiveWebApp.Off
+	}
+	if has {
+		return
+	}
+	fmt.Fprintf(ctx.Output, "  warning: navigation %s is an offline profile without Progressive web app settings: Mendix registers "+
+		"no service worker for it, so no page opens without a network -- add `progressive web app ( Precaching: true )` to the statement\n",
+		mdlQuoted(s.ProfileName))
 }
 
 // checkProfileClauses refuses what the statement says that the profile cannot
@@ -179,6 +210,8 @@ func checkProfileClauses(ctx *ExecContext, s *ast.AlterNavigationStmt, isNative 
 		return refuse("not found page")
 	case s.ThrowSyncError != nil:
 		return refuse("on sync error")
+	case s.ProgressiveWebApp != nil:
+		return refuse("progressive web app")
 	}
 	for _, hp := range s.HomePages {
 		if !hp.IsPage && !hp.IsNanoflow {
@@ -676,6 +709,23 @@ func outputNavigationProfile(ctx *ExecContext, p *types.NavigationProfile) {
 	// (unmeasured there), and exec refuses the clause on one.
 	if !p.ThrowPartialSyncError && !p.IsNative {
 		fmt.Fprintln(ctx.Output, "  on sync error continue")
+	}
+
+	// Emitted when the settings are stored (null is the default), with only
+	// the keys that differ from the platform defaults (R12).
+	if pwa := p.ProgressiveWebApp; pwa != nil && !p.IsNative {
+		var keys []string
+		if pwa.Precaching != types.NavPWADefaultPrecaching {
+			keys = append(keys, fmt.Sprintf("Precaching: %t", pwa.Precaching))
+		}
+		if pwa.InstallPrompt != types.NavPWADefaultInstallPrompt {
+			keys = append(keys, fmt.Sprintf("InstallPrompt: %t", pwa.InstallPrompt))
+		}
+		if len(keys) == 0 {
+			fmt.Fprintln(ctx.Output, "  progressive web app")
+		} else {
+			fmt.Fprintf(ctx.Output, "  progressive web app ( %s )\n", strings.Join(keys, ", "))
+		}
 	}
 
 	// Offline entities. These are re-executable now, so they are emitted as a
