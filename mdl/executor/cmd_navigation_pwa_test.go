@@ -41,7 +41,9 @@ func TestPWAClauseReachesTheSpec(t *testing.T) {
 		"progressive web app":     {},
 		"progressive web app off": {Off: true},
 		"progressive web app ( Precaching: true )":                        {Precaching: boolPtr(true)},
-		"progressive web app ( precaching: false, InstallPrompt: true, )": {Precaching: boolPtr(false), InstallPrompt: boolPtr(true)},
+		"progressive web app ( Precaching: false, InstallPrompt: true, )": {Precaching: boolPtr(false), InstallPrompt: boolPtr(true)},
+		// Keys match case-insensitively, as the stored names are matched everywhere else.
+		"progressive web app ( installprompt: false )": {InstallPrompt: boolPtr(false)},
 	}
 	for clause, want := range cases {
 		var got types.NavigationProfileSpec
