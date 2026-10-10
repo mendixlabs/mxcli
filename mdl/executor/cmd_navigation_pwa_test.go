@@ -37,10 +37,10 @@ const pwaWarning = "offline profile without Progressive web app settings"
 // that does not mention it leaves the stored settings alone (nil).
 func TestPWAClauseReachesTheSpec(t *testing.T) {
 	cases := map[string]*types.NavPWASpec{
-		"":                          nil,
-		"progressive web app":       {},
-		"progressive web app off":   {Off: true},
-		"progressive web app ( Precaching: true )":                       {Precaching: boolPtr(true)},
+		"":                        nil,
+		"progressive web app":     {},
+		"progressive web app off": {Off: true},
+		"progressive web app ( Precaching: true )":                        {Precaching: boolPtr(true)},
 		"progressive web app ( precaching: false, InstallPrompt: true, )": {Precaching: boolPtr(false), InstallPrompt: boolPtr(true)},
 	}
 	for clause, want := range cases {
