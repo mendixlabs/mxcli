@@ -39,6 +39,35 @@ type NavigationProfile struct {
 	// It is therefore read and written as raw BSON rather than through the
 	// codec's typed accessors.
 	ThrowPartialSyncError bool `json:"throwPartialSyncError,omitempty"`
+	// ProgressiveWebApp is Navigation$ProgressiveWebAppSettings: nil when the
+	// profile stores null, which is what a profile created in Studio Pro or by
+	// mxcli carries until someone ticks "Progressive web app". An offline
+	// profile with nil settings gets no service worker (mendixlabs/mxcli#1377).
+	ProgressiveWebApp *NavPWASettings `json:"progressiveWebApp,omitempty"`
+}
+
+// NavPWASettings is a profile's Progressive web app settings, as stored.
+type NavPWASettings struct {
+	Precaching    bool `json:"precaching"`
+	InstallPrompt bool `json:"installPrompt"`
+}
+
+// The platform defaults of Navigation$ProgressiveWebAppSettings, from Studio
+// Pro's own schema: precaching false, installPrompt true. A bare
+// `progressive web app` clause writes these, and describe omits a key that
+// holds its default (R12).
+const (
+	NavPWADefaultPrecaching    = false
+	NavPWADefaultInstallPrompt = true
+)
+
+// NavPWASpec is the PROGRESSIVE WEB APP clause. Off stores null; otherwise the
+// stored settings (or the defaults, when there are none) are kept and the keys
+// the clause names are overlaid -- nil keys are left as they are.
+type NavPWASpec struct {
+	Off           bool
+	Precaching    *bool
+	InstallPrompt *bool
 }
 
 // NavHomePage holds a profile's default home page.
@@ -225,6 +254,9 @@ type NavigationProfileSpec struct {
 	// with no unset value of its own, so a non-pointer would silently reset it
 	// on every rewrite.
 	ThrowSyncError *bool
+	// ProgressiveWebApp is the PROGRESSIVE WEB APP clause; nil leaves the
+	// stored settings exactly as they are.
+	ProgressiveWebApp *NavPWASpec
 }
 
 // NavOfflineEntitySpec is one entity's offline sync rule, as MDL can express

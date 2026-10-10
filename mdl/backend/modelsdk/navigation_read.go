@@ -97,6 +97,11 @@ func webNavProfileFromGen(p *genNav.NavigationProfile) *types.NavigationProfile 
 	}
 	appendOfflineEntities(profile, p.OfflineEntityConfigsItems())
 	profile.ThrowPartialSyncError = throwPartialSyncError(p.Raw())
+	// Null until "Progressive web app" is ticked -- and then an offline
+	// profile has no service worker and no page opens offline (#1377).
+	if pwa, ok := p.ProgressiveWebAppSettings().(*genNav.ProgressiveWebAppSettings); ok && pwa != nil {
+		profile.ProgressiveWebApp = &types.NavPWASettings{Precaching: pwa.Precaching(), InstallPrompt: pwa.InstallPrompt()}
+	}
 	return profile
 }
 

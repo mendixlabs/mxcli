@@ -93,6 +93,9 @@ func (b *Builder) processNavigationClause(stmt *ast.AlterNavigationStmt, ctx *pa
 			item := b.buildNavMenuItemDef(itemCtx)
 			stmt.MenuItems = append(stmt.MenuItems, item)
 		}
+	} else if ctx.PROGRESSIVE() != nil {
+		// PROGRESSIVE WEB APP [( Precaching: b, InstallPrompt: b ) | OFF]
+		stmt.ProgressiveWebApp = b.buildNavPWASpec(ctx)
 	} else if ctx.ON() != nil && ctx.SYNC() != nil && ctx.ERROR() != nil {
 		// ON SYNC ERROR THROW|CONTINUE. Checked before the bare SYNC block
 		// because both alternatives carry a SYNC token.
@@ -346,4 +349,38 @@ func applyNavMenuIcon(item *ast.NavMenuItemDef, ctx parser.INavMenuIconValueCont
 			item.Icon = buildQualifiedName(qn).String()
 		}
 	}
+}
+
+// navPWAExample is the syntax an error about the clause shows.
+const navPWAExample = `create or modify navigation PhoneOffline
+  home page Module.Home
+  progressive web app ( Precaching: true, InstallPrompt: true );
+-- progressive web app off      stores no settings again`
+
+// buildNavPWASpec reads the PROGRESSIVE WEB APP clause. The keys are the stored
+// property names of Navigation$ProgressiveWebAppSettings, each a boolean; any
+// other key, or a value that is not true or false, is an error (R11).
+func (b *Builder) buildNavPWASpec(ctx *parser.NavigationClauseContext) *types.NavPWASpec {
+	spec := &types.NavPWASpec{}
+	if ctx.OFF() != nil {
+		spec.Off = true
+		return spec
+	}
+	eachSettingsProperty(ctx.SettingsItemOptions(), nil, func(key string, sv *parser.SettingsValueContext) {
+		bl := sv.BooleanLiteral()
+		if bl == nil {
+			b.addErrorWithExample(fmt.Sprintf("progressive web app: %s takes true or false, not %s", key, sv.GetText()), navPWAExample)
+			return
+		}
+		v := strings.EqualFold(bl.GetText(), "true")
+		switch {
+		case strings.EqualFold(key, "Precaching"):
+			spec.Precaching = &v
+		case strings.EqualFold(key, "InstallPrompt"):
+			spec.InstallPrompt = &v
+		default:
+			b.addErrorWithExample(fmt.Sprintf("progressive web app: unknown property %s -- the settings are Precaching and InstallPrompt", key), navPWAExample)
+		}
+	})
+	return spec
 }

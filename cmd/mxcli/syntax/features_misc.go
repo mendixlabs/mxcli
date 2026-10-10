@@ -345,7 +345,7 @@ DISCONNECT;`,
 			"login page", "not found page", "menu item", "menu icon",
 			"navigation profile", "phone profile", "tablet profile",
 			"offline profile", "offline navigation", "sync", "synchronization",
-			"offline sync", "offline entity", "pwa", "download mode",
+			"offline sync", "offline entity", "pwa", "progressive web app", "service worker", "precaching", "download mode",
 			"throw error", "sync error", "partial sync", "server rejects",
 		},
 		Syntax: `CREATE OR REPLACE NAVIGATION <profile>
@@ -354,6 +354,7 @@ DISCONNECT;`,
   [LOGIN PAGE Module.LoginPage]
   [NOT FOUND PAGE Module.Custom404]
   [ON SYNC ERROR THROW|CONTINUE]
+  [PROGRESSIVE WEB APP [( Precaching: true|false, InstallPrompt: true|false )] | PROGRESSIVE WEB APP OFF]
   [SYNC (
     SYNC Module.Entity ONLINE;
     SYNC Module.Entity ALL;
@@ -387,7 +388,7 @@ DISCONNECT;`,
 --
 -- A NATIVE profile's flow home is HOME NANOFLOW; mxcli writes its home pages
 -- and SYNC block only and refuses a { } block (the bottom bar), LOGIN PAGE,
--- NOT FOUND PAGE and ON SYNC ERROR on it.
+-- NOT FOUND PAGE, ON SYNC ERROR and PROGRESSIVE WEB APP on it.
 
 -- FOR takes a USER role, written BARE (FOR Administrator). User roles are
 -- project-level and have no module part; a module role is a different thing
@@ -441,6 +442,19 @@ DISCONNECT;`,
 -- rewrite untouched; DESCRIBE NAVIGATION flags it rather than dropping it.
 -- An invented name ("Mobile") is an error: the runtime routes on User-Agent to
 -- Mendix's own kinds, so a profile the platform does not define can never route.
+--
+-- PROGRESSIVE WEB APP is Studio Pro's "Progressive web app" settings
+-- (Navigation$ProgressiveWebAppSettings), null until set. An OFFLINE profile
+-- needs them: without them Mendix registers no service worker ("registerServiceWorker":
+-- false in the built index.js), so no page opens without a network, while
+-- check, exec and mx check all pass (mendixlabs/mxcli#1377). Exec warns about
+-- an offline profile left without them. The keys are the stored names:
+--   Precaching      pre-load the app's pages and resources (default false)
+--   InstallPrompt   allow the "Add to home screen" prompt (default true)
+-- A key the clause leaves out takes its default (a bare clause writes both
+-- defaults), OFF stores null again, and OMITTING the clause
+-- leaves the stored settings alone. DESCRIBE emits it when settings are
+-- stored, naming only the keys that differ from the defaults.
 --
 -- An OFFLINE profile restricts every page it can reach -- an attribute may be
 -- bound across at most ONE association hop (CE6206). Creating one reports the

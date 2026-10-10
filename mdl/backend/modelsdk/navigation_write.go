@@ -218,7 +218,56 @@ func navPatchWebProfile(doc bson.D, spec types.NavigationProfileSpec) (bson.D, e
 	if spec.ThrowSyncError != nil {
 		doc = navSetField(doc, "ThrowPartialSyncError", *spec.ThrowSyncError)
 	}
+
+	if spec.ProgressiveWebApp != nil {
+		doc = navSetField(doc, "ProgressiveWebAppSettings", navPWASettings(navGetDoc(doc, "ProgressiveWebAppSettings"), *spec.ProgressiveWebApp))
+	}
 	return doc, nil
+}
+
+// navPWASettings is the profile's ProgressiveWebAppSettings after the clause:
+// null for OFF; otherwise the settings the clause states, a key it leaves out
+// taking its platform default -- the same reading describe relies on when it
+// omits a default (R1, R12), so describe -> exec writes nothing. Only the stored
+// element's $ID is kept. Keys are in the alphabetical order Studio Pro stores a
+// profile's properties in.
+func navPWASettings(stored bson.D, spec types.NavPWASpec) any {
+	if spec.Off {
+		return nil
+	}
+	var id any = navID()
+	if stored != nil && navGetString(stored, "$Type") == "Navigation$ProgressiveWebAppSettings" {
+		for _, e := range stored {
+			if e.Key == "$ID" {
+				id = e.Value
+			}
+		}
+	}
+	installPrompt, precaching := types.NavPWADefaultInstallPrompt, types.NavPWADefaultPrecaching
+	if spec.InstallPrompt != nil {
+		installPrompt = *spec.InstallPrompt
+	}
+	if spec.Precaching != nil {
+		precaching = *spec.Precaching
+	}
+	return bson.D{
+		{Key: "$ID", Value: id},
+		{Key: "$Type", Value: "Navigation$ProgressiveWebAppSettings"},
+		{Key: "InstallPrompt", Value: installPrompt},
+		{Key: "Precaching", Value: precaching},
+	}
+}
+
+// navGetDoc is the value of a field that holds an embedded document, or nil.
+func navGetDoc(doc bson.D, key string) bson.D {
+	for _, e := range doc {
+		if e.Key == key {
+			if d, ok := e.Value.(bson.D); ok {
+				return d
+			}
+		}
+	}
+	return nil
 }
 
 func navPatchNativeProfile(doc bson.D, spec types.NavigationProfileSpec) bson.D {

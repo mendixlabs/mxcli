@@ -614,6 +614,13 @@ navigationClause
     // claiming a heavily-used identifier as a keyword is not worth the closer
     // paraphrase.
     | ON SYNC ERROR (THROW | CONTINUE)
+    // Studio Pro's "Progressive web app" settings, stored as the profile's
+    // Navigation$ProgressiveWebAppSettings: null unless set. An offline profile
+    // without them gets no service worker, so no page opens without a network
+    // (mendixlabs/mxcli#1377). The keys are the stored property names,
+    // Precaching and InstallPrompt (R3, R10); a bare clause sets the platform
+    // defaults, OFF stores null again, and an omitted clause leaves them alone.
+    | PROGRESSIVE WEB APP (settingsItemOptions | OFF)?
     ;
 
 // Offline synchronization, one statement per entity, mirroring the MENU block:
