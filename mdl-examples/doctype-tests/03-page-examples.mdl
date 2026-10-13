@@ -2009,6 +2009,32 @@ create page PgTest.P042_Image
   }
 };
 
+-- The image object in context (mendixlabs/mxcli#1476): an image a user
+-- uploaded, held by an object whose entity extends System.Image. `Image:
+-- $currentObject` binds the widget to the enclosing data view's or list's
+-- object; `DefaultImage:` is shown while that object holds no image. The entity
+-- is stored on `imageObject` (and on an unset `defaultImageDynamic`, as Studio
+-- Pro does), and mxbuild refuses an entity that is not an image (CE7247).
+
+create persistent entity PgTest.ProductPhoto extends System.Image (
+  Caption: String(200)
+);
+
+create page PgTest.P042b_ImageObject
+(
+  title: 'Image Object',
+  layout: Atlas_Core.Atlas_Default
+)
+{
+  listview lvPhotos (DataSource: database from PgTest.ProductPhoto) {
+    image imgPhoto (
+      Image: $currentObject,
+      DefaultImage: Atlas_Core.Layout.logo,
+      WidthUnit: pixels, Width: 120
+    )
+  }
+};
+
 -- MARK: Custom Container
 
 -- ============================================================================

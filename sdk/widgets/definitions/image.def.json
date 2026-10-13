@@ -16,6 +16,11 @@
       "operation": "image"
     },
     {
+      "propertyKey": "defaultImageDynamic",
+      "source": "DefaultImage",
+      "operation": "image"
+    },
+    {
       "propertyKey": "imageUrl",
       "source": "ImageUrl",
       "operation": "texttemplate"

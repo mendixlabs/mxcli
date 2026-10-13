@@ -1,0 +1,65 @@
+mdl 1;
+-- mendixlabs/mxcli#1476: no MDL form bound the pluggable Image widget to an
+-- image object, so a page in a React-client app could not show an image a user
+-- uploaded. The legacy `dynamicimage` is refused there:
+--
+--     [error] [CE0582] "Widget dynamic image is not supported in React client."
+--
+-- and `Image:` could only name an image collection entry.
+--
+-- `Image: $currentObject` binds the widget to the object of the enclosing data
+-- view, list view or gallery, whose entity must specialise System.Image.
+-- The stored shape is Studio Pro's, measured on 11.12.1 with the Image widget
+-- 1.5.0 by setting "Image source" to the data view's object and decoding the
+-- unit before and after:
+--
+--     imageObject          Image 'Atlas_Core.Content.Mendix' -> ''
+--                          EntityRef null -> DirectEntityRef 'Module.Photo'
+--     defaultImageDynamic  EntityRef null -> DirectEntityRef 'Module.Photo'
+--
+-- Nothing else in the unit changes. `DefaultImage:` is the fallback shown while
+-- the object holds no image. The reference page set none, so its shape is
+-- measured in the running app instead: written as a collection image on
+-- `defaultImageDynamic` WITHOUT the EntityRef it renders (an object whose
+-- HasContents is false shows the fallback); with the EntityRef beside it the
+-- widget renders hidden with no src. Both shapes pass mx check.
+--
+-- Measured on a blank Mendix 11.12.1 app (React client), mxbuild 11.12.1:
+--
+--     before  `image (Image: $currentObject)`  check: MDL-WIDGET22 + MDL-WIDGET42
+--     after   exec + mx check                  0 errors
+--     after   describe -> exec                 Unchanged page (both pages)
+--     after   a non-image entity               refused by exec; mxbuild would
+--                                              say CE7247 "Widget expects entity
+--                                              of type System.Image." twice
+
+create persistent entity MyFirstModule.Photo extends System.Image (
+  Caption: string(200)
+);
+
+-- The data view's object.
+create or modify page MyFirstModule.Photo_View (
+  Title: 'Photo',
+  Layout: Atlas_Core.PopupLayout,
+  Params: ( $Photo: MyFirstModule.Photo )
+) {
+  dataview Photo_View_Form (DataSource: $Photo) {
+    image Photo_View_Image (Image: $currentObject)
+  }
+};
+
+-- A list's row object, with a fallback for a row that has no image yet.
+create or modify page MyFirstModule.Photo_Overview (
+  Title: 'Photos',
+  Layout: Atlas_Core.Atlas_Default
+) {
+  listview Photo_Overview_List (DataSource: database from MyFirstModule.Photo) {
+    image Photo_Overview_Image (
+      Image: $currentObject,
+      DefaultImage: 'Atlas_Core.Content.Mendix',
+      WidthUnit: pixels,
+      Width: 120
+    )
+    dynamictext Photo_Overview_Caption (Content: '{1}', ContentParams: ({1} = Caption))
+  }
+};

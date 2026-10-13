@@ -144,3 +144,54 @@ func TestImageWidget_EmptyOrBlankImageIsStillReported(t *testing.T) {
 		}
 	}
 }
+
+// mendixlabs/mxcli#1476: `Image: $currentObject` binds the image to the object
+// in context. It names no collection image and is complete — MDL-WIDGET22 must
+// not ask for one, and MDL-WIDGET42 must not call it an expression.
+func currentObjectRef() *ast.DataSourceV3 {
+	return &ast.DataSourceV3{Type: "parameter", Reference: "$currentObject"}
+}
+
+func TestImageWidget_BoundToTheObjectInContextIsClean(t *testing.T) {
+	for _, props := range []map[string]any{
+		{"Image": currentObjectRef()},
+		{"Image": currentObjectRef(), "ImageType": "image"},
+		{"Image": currentObjectRef(), "DefaultImage": "Atlas_Core.Content.Mendix"},
+	} {
+		if got := imageViolations(validateImageSource(imageWidget(props), "page P")); len(got) != 0 {
+			t.Errorf("%v reported: %v", props, got)
+		}
+	}
+}
+
+func TestImageWidget_BindingIsNotAnExpression(t *testing.T) {
+	reg := LoadWidgetRegistry("")
+	w := imageWidget(map[string]any{"Image": currentObjectRef()})
+	w.ValueSource = map[string]string{"Image": "$currentObject"}
+	for _, v := range validateWidgetExpressionValues(w, reg.byMDLName["IMAGE"], nil, false, "page P") {
+		t.Errorf("reported as an expression: %s", v.Message)
+	}
+}
+
+// Anything but the context object is refused: its stored shape is unmeasured.
+func TestImageWidget_BindingToAnotherObjectIsReported(t *testing.T) {
+	w := imageWidget(map[string]any{"Image": &ast.DataSourceV3{Type: "parameter", Reference: "$Photo"}})
+	got := imageViolations(validateImageSource(w, "page P"))
+	if len(got) != 1 || !strings.Contains(got[0].Message, "$currentObject") {
+		t.Errorf("got %v, want one MDL-WIDGET22 naming $currentObject", got)
+	}
+}
+
+// The default image is the fallback for an image object; Studio Pro hides it
+// beside a collection image, and with any other image type.
+func TestImageWidget_DefaultImageWithoutABindingIsReported(t *testing.T) {
+	for _, props := range []map[string]any{
+		{"Image": "Atlas_Core.Content.Mendix", "DefaultImage": "Atlas_Core.Content.Mendix"},
+		{"ImageType": "imageUrl", "ImageUrl": "https://example.com/x.png", "DefaultImage": "Atlas_Core.Content.Mendix"},
+		{"ImageType": "icon", "Image": currentObjectRef()},
+	} {
+		if got := imageViolations(validateImageSource(imageWidget(props), "page P")); len(got) != 1 {
+			t.Errorf("%v: got %d violations, want 1", props, len(got))
+		}
+	}
+}

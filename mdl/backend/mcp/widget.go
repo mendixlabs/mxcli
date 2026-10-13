@@ -200,6 +200,16 @@ func (w *mcpWidgetBuilder) SetImage(propertyKey, imageQN string) {
 	w.object[propertyKey] = imageQN
 }
 
+// SetImageObject: the MCP widget payload's image-object shape has not been
+// measured, so the binding is reported unsupported rather than sent in a form
+// Studio Pro might store differently.
+func (w *mcpWidgetBuilder) SetImageObject(propertyKey, entityName string) {
+	if entityName == "" {
+		return
+	}
+	w.note("SetImageObject(" + propertyKey + ")")
+}
+
 func (w *mcpWidgetBuilder) SetDataSource(propertyKey string, ds pages.DataSource) {
 	if src := customWidgetXPathSource(ds); src != nil {
 		w.object[propertyKey] = src

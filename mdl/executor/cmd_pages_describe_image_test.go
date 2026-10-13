@@ -111,3 +111,52 @@ func TestDescribeImageWidget_OmitsAnAbsentReference(t *testing.T) {
 		}
 	}
 }
+
+// mendixlabs/mxcli#1476: the image object in context as Studio Pro stores it —
+// a DirectEntityRef on `imageObject`, no collection image, no source variable.
+func imageObjectWidget(value map[string]any) map[string]any {
+	w := imagePropWidget("imageObject", "")
+	props := w["Object"].(map[string]any)["Properties"].([]any)
+	stored := props[0].(map[string]any)["Value"].(map[string]any)
+	for k, v := range value {
+		stored[k] = v
+	}
+	return w
+}
+
+func TestExtractImageObjectBinding_ReadsTheContextEntity(t *testing.T) {
+	w := imageObjectWidget(map[string]any{
+		"EntityRef": map[string]any{"$Type": "DomainModels$DirectEntityRef", "Entity": "MyFirstModule.Photo"},
+	})
+	entity, unreadable := extractImageObjectBinding(w, "imageObject")
+	if entity != "MyFirstModule.Photo" || unreadable != "" {
+		t.Errorf("got (%q, %q), want (MyFirstModule.Photo, \"\")", entity, unreadable)
+	}
+}
+
+// Shapes MDL cannot spell are reported, never printed as `$currentObject`.
+func TestExtractImageObjectBinding_UnmeasuredShapesAreUnreadable(t *testing.T) {
+	for name, value := range map[string]map[string]any{
+		"association": {"EntityRef": map[string]any{"$Type": "DomainModels$IndirectEntityRef"}},
+		"parameter": {
+			"EntityRef":      map[string]any{"$Type": "DomainModels$DirectEntityRef", "Entity": "MyFirstModule.Photo"},
+			"SourceVariable": map[string]any{"$Type": "Forms$PageVariable", "PageParameter": "Photo"},
+		},
+	} {
+		entity, unreadable := extractImageObjectBinding(imageObjectWidget(value), "imageObject")
+		if entity != "" || unreadable == "" {
+			t.Errorf("%s: got (%q, %q), want no entity and a reason", name, entity, unreadable)
+		}
+	}
+}
+
+func TestDescribeImageWidget_EmitsTheImageObjectBinding(t *testing.T) {
+	w := rawWidget{Name: "Photo_View_Image", ImageObjectEntity: "MyFirstModule.Photo", DefaultImage: "Atlas_Core.Content.Mendix"}
+	got := strings.Join(describeImageWidgetProps(nil, w), ", ")
+	if !strings.Contains(got, "Image: $currentObject") {
+		t.Errorf("describe did not emit the binding: %s", got)
+	}
+	if !strings.Contains(got, "DefaultImage: 'Atlas_Core.Content.Mendix'") {
+		t.Errorf("describe did not emit the default image: %s", got)
+	}
+}

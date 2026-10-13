@@ -16,11 +16,11 @@ description: "CREATE PAGE syntax reference — parameters, variables, layouts, a
 | 196-266 | Basic Examples |
 | 267-288 | Modifying Existing Pages |
 | 289-376 | Conditional Visibility and Editability |
-| 377-526 | Known Limitations |
-| 527-535 | Tips |
-| 536-562 | Related Commands |
-| 563-587 | PLUGGABLEWIDGET Escape Hatch |
-| 588-591 | See Also |
+| 377-537 | Known Limitations |
+| 538-546 | Tips |
+| 547-573 | Related Commands |
+| 574-598 | PLUGGABLEWIDGET Escape Hatch |
+| 599-602 | See Also |
 
 <!-- /skill-index -->
 # CREATE PAGE - MDL Syntax Guide
@@ -426,6 +426,17 @@ The two other sources take no collection entry:
 ```sql
 image imgRemote (ImageType: imageUrl, ImageUrl: 'https://example.com/logo.svg')
 image imgIcon   (ImageType: icon)
+```
+
+An image a **user uploaded** — an object of an entity that extends `System.Image` —
+is the object of the enclosing data view, list view or gallery. Bind the widget to
+it with `Image: $currentObject`; `DefaultImage:` is shown while the object holds no
+image. This is the form for a React-client app, where `dynamicimage` is CE0582:
+
+```sql
+dataview dvPhoto (DataSource: $Photo) {
+  image imgPhoto (Image: $currentObject, DefaultImage: 'MyFirstModule.Images._1')
+}
 ```
 
 ### A button's icon is one of three elements

@@ -241,7 +241,11 @@ type BuildContext struct {
 	// SourceVariable names the parameter an attribute or association binding
 	// reads (`$Param.Attr`); nil for one read from the enclosing object.
 	SourceVariable *pages.WidgetVariable
-	pageBuilder    *pageBuilder
+	// ImageObjectEntity is the entity of the image object in context when the
+	// widget binds its image to it (`Image: $currentObject`), for every
+	// image-typed mapping of that widget; "" otherwise (mendixlabs/mxcli#1476).
+	ImageObjectEntity string
+	pageBuilder       *pageBuilder
 }
 
 // =============================================================================
@@ -293,6 +297,11 @@ type PluggableWidgetEngine struct {
 	// always been; more than one means it names nothing in particular, and the
 	// keys here are what the refusal offers instead. nil outside a build.
 	currentDataSourceKeys []string
+
+	// imageObjectEntity is the entity of the image object the widget being
+	// built binds its image to (`Image: $currentObject`), or "". Set once per
+	// build, before the mappings run; see imageObjectBinding.
+	imageObjectEntity string
 }
 
 // NewPluggableWidgetEngine creates a new engine with the given backend and page builder.
@@ -366,6 +375,11 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 		return nil, err
 	}
 	e.currentDataSourceKeys = dataSourceMappingKeys(mappings)
+	oldImageObjectEntity := e.imageObjectEntity
+	defer func() { e.imageObjectEntity = oldImageObjectEntity }()
+	if e.imageObjectEntity, err = e.imageObjectBinding(mappings, w); err != nil {
+		return nil, err
+	}
 	if err := refuseLinkedDataSourceMapping(def, mappings, propertyTypeIDs); err != nil {
 		return nil, err
 	}
@@ -915,6 +929,16 @@ func (e *PluggableWidgetEngine) applyOperation(builder backend.WidgetObjectBuild
 	case "selection":
 		builder.SetSelection(propKey, ctx.PrimitiveVal)
 	case "image":
+		// The image object in context, when the widget is bound to one: Studio
+		// Pro writes its entity on every image-typed property of the widget that
+		// holds no image of its own, the unset fallback included
+		// (mendixlabs/mxcli#1476). A fallback that names a collection image is
+		// written as that static image alone: with the EntityRef beside it the
+		// runtime treats the fallback as the (empty) object too and shows
+		// nothing — measured on Image widget 1.5.0, see widget_image_object.go.
+		if ctx.PrimitiveVal == "" {
+			builder.SetImageObject(propKey, ctx.ImageObjectEntity)
+		}
 		// An image collection entry, by its three-part qualified name. The
 		// value arrives through the generic source branch, so it is in
 		// PrimitiveVal like any other scalar — only the key it lands on differs.
@@ -1567,6 +1591,15 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 		}
 
 	default:
+		if mapping.Operation == "image" {
+			ctx.ImageObjectEntity = e.imageObjectEntity
+			if isImageObjectValue(w, source) {
+				// The binding itself, not a collection image: there is no text
+				// to store, and scalarPropertyText would refuse it as an
+				// expression in a scalar property.
+				return ctx, nil
+			}
+		}
 		val := w.GetStringProp(source)
 		if val == "" {
 			// Non-string AST values (e.g. `DesktopColumns: 3`, parsed as an int)

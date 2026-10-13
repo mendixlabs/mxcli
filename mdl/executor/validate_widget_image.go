@@ -44,15 +44,54 @@ var imageSourceNeedsImage = map[string]bool{
 }
 
 // validateImageSource reports an IMAGE widget whose configured source has no
-// value to render.
+// value to render, or whose image-object binding cannot be written.
+//
+// The image may also be the object in context, `Image: $currentObject`
+// (mendixlabs/mxcli#1476). That form names no collection image and is complete
+// on its own; `DefaultImage:` is its fallback, and only its — Studio Pro hides
+// the default image unless the image is bound to an object.
 func validateImageSource(w *ast.WidgetV3, locationPrefix string) []linter.Violation {
 	if w == nil || !strings.EqualFold(w.Type, "image") {
 		return nil
 	}
 	source := strings.TrimSpace(w.GetStringProp("ImageType"))
+	binding, bound := imageObjectProp(w)
+	hasDefault := strings.TrimSpace(w.GetStringProp("DefaultImage")) != ""
+
+	if bound && !isImageContextRef(binding) {
+		return []linter.Violation{{
+			RuleID:   imageSourceRule,
+			Severity: linter.SeverityError,
+			Message: fmt.Sprintf(
+				"%s: widget `%s` (image) binds its image to %s — only `$currentObject`, the object of "+
+					"the enclosing data view or list, can be bound",
+				locationPrefix, w.Name, formatDataSourceV3(binding)),
+			Location: linter.Location{DocumentType: "page"},
+			Suggestion: fmt.Sprintf(
+				"Place the widget in a data view over that object and bind it there: "+
+					"`dataview v (DataSource: $Photo) { image %s (Image: $currentObject) }`.", w.Name),
+		}}
+	}
 
 	switch {
 	case imageSourceNeedsImage[strings.ToLower(source)]:
+		if bound {
+			return nil // the image object in context — the widget is complete
+		}
+		if hasDefault {
+			return []linter.Violation{{
+				RuleID:   imageSourceRule,
+				Severity: linter.SeverityError,
+				Message: fmt.Sprintf(
+					"%s: widget `%s` (image) has a `DefaultImage` but shows a collection image — the "+
+						"default image is the fallback for an image object, and Studio Pro hides it otherwise",
+					locationPrefix, w.Name),
+				Location: linter.Location{DocumentType: "page"},
+				Suggestion: fmt.Sprintf(
+					"Bind the image to the object in context, `image %s (Image: $currentObject, "+
+						"DefaultImage: 'Module.Collection.ImageName')`, or drop `DefaultImage`.", w.Name),
+			}}
+		}
 		if strings.TrimSpace(w.GetStringProp("Image")) != "" {
 			return nil // an entry is named — the widget is complete
 		}
@@ -68,9 +107,22 @@ func validateImageSource(w *ast.WidgetV3, locationPrefix string) []linter.Violat
 			Suggestion: fmt.Sprintf(
 				"Name the entry: `image %s (Image: 'Module.Collection.ImageName')` — "+
 					"`show image collections` lists them, and `describe image collection "+
-					"Module.Collection` lists the images inside one. Or switch source: "+
+					"Module.Collection` lists the images inside one. Or show the object in context, "+
+					"inside a data view over an entity that specialises System.Image: "+
+					"`Image: $currentObject`. Or switch source: "+
 					"`ImageType: imageUrl, ImageUrl: 'https://…'`, or `ImageType: icon`.",
 				w.Name),
+		}}
+	case bound || hasDefault:
+		return []linter.Violation{{
+			RuleID:   imageSourceRule,
+			Severity: linter.SeverityError,
+			Message: fmt.Sprintf(
+				"%s: widget `%s` (image) has `ImageType: %s` and an image object or `DefaultImage` — "+
+					"both belong to `ImageType: image`, and Studio Pro hides them for any other source",
+				locationPrefix, w.Name, source),
+			Location:   linter.Location{DocumentType: "page"},
+			Suggestion: "Drop `ImageType` (it defaults to `image`), or drop `Image`/`DefaultImage`.",
 		}}
 	case strings.EqualFold(source, "imageUrl") && strings.TrimSpace(w.GetStringProp("ImageUrl")) == "":
 		return []linter.Violation{{
@@ -85,4 +137,15 @@ func validateImageSource(w *ast.WidgetV3, locationPrefix string) []linter.Violat
 		}}
 	}
 	return nil
+}
+
+// imageObjectProp returns the widget's `Image:` value when it is an object
+// rather than a collection image's name.
+func imageObjectProp(w *ast.WidgetV3) (*ast.DataSourceV3, bool) {
+	v, ok := lookupProperty(w.Properties, "Image")
+	if !ok {
+		return nil, false
+	}
+	ds, isDS := v.(*ast.DataSourceV3)
+	return ds, isDS
 }

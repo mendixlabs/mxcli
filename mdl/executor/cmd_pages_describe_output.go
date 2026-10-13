@@ -788,6 +788,11 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 			}
 		} else if widgetType == "image" {
 			header := fmt.Sprintf("image %s", mdlIdent(w.Name))
+			if w.ImageObjectUnreadable != "" {
+				fmt.Fprintf(ctx.Output, "%s-- NOT re-executable: image %s shows %s; MDL binds only the "+
+					"enclosing data container's object, `Image: $currentObject` (mendixlabs/mxcli#1476)\n",
+					prefix, mdlIdent(w.Name), w.ImageObjectUnreadable)
+			}
 			props := describeImageWidgetProps(ctx, w)
 			// appendAppearanceProps prints the visibility and editability; the
 			// conditional settings appended a second time before it printed each
@@ -2051,8 +2056,19 @@ func describeImageWidgetProps(ctx *ExecContext, w rawWidget) []string {
 	if w.ImageType != "" && w.ImageType != "image" {
 		props = append(props, fmt.Sprintf("ImageType: %s", w.ImageType))
 	}
-	if w.ImageObject != "" {
+	switch {
+	case w.ImageObjectEntity != "":
+		// The image object in context: what Studio Pro stores as a
+		// DirectEntityRef on `imageObject` (mendixlabs/mxcli#1476). Exec derives
+		// the entity from the enclosing data container again.
+		props = append(props, "Image: $currentObject")
+	case w.ImageObject != "":
 		props = append(props, fmt.Sprintf("Image: %s", mdlQuote(ctx, w.ImageObject)))
+	}
+	// The default image is the image object's fallback; it is stored, and
+	// written, only beside a binding.
+	if w.DefaultImage != "" && w.ImageObjectEntity != "" {
+		props = append(props, fmt.Sprintf("DefaultImage: %s", mdlQuote(ctx, w.DefaultImage)))
 	}
 	if w.ImageUrl != "" {
 		props = append(props, fmt.Sprintf("ImageUrl: %s", mdlQuote(ctx, w.ImageUrl)))

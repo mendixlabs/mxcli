@@ -731,7 +731,12 @@ Display images on pages:
 image imgLogo (width: 200, height: 100)
 staticimage imgBanner (Image: 'MyModule.Images.banner', width: 400, height: 120)
 
--- Dynamic image (from entity data source, e.g. inside a DataView)
+-- An uploaded image: the object of the enclosing data view, list view or
+-- gallery, whose entity extends System.Image (mendixlabs/mxcli#1476)
+image imgPhoto (Image: $currentObject, DefaultImage: 'MyModule.Images.placeholder')
+
+-- Legacy dynamic image (from entity data source, e.g. inside a DataView);
+-- CE0582 in a React-client app, where the `image` form above is the one to use
 dynamicimage imgProduct (width: 300, height: 200)
 
 -- Image without explicit dimensions

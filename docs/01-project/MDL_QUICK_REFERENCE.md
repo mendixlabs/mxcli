@@ -1127,6 +1127,7 @@ Respond in {{Language}}.$$,
 | Create or modify | `create or modify image collection Module.Name [...];` | Preserves UUID — preferred for AI agents |
 | Drop collection | `drop image collection [if exists] Module.Name;` | Removes collection and all embedded images |
 | Show an image on a page | `image imgLogo (Image: 'Module.Collection.ImageName');` | Three-part name, like an icon reference. `describe image collection` lists the names |
+| Show an uploaded image | `image imgPhoto (Image: $currentObject, DefaultImage: 'Module.Collection.ImageName');` | Inside a data view, list view or gallery over an entity extending `System.Image`; `DefaultImage` is optional (mendixlabs/mxcli#1476) |
 
 An `image` widget's default source **is** an image collection entry, so a bare
 `image imgLogo (...)` with no `Image:` builds into a model mxbuild refuses ("No

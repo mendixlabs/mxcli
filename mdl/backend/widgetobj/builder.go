@@ -127,6 +127,24 @@ func (ob *Builder) SetImage(propertyKey string, imageQN string) {
 	})
 }
 
+// SetImageObject binds an image-typed property to the image object in context
+// (mendixlabs/mxcli#1476). Measured on Studio Pro 11.12.1 with Image widget
+// 1.5.0: setting "Image source" to the data view's object stores, on the
+// property's WidgetValue, an EntityRef that is a DirectEntityRef to the data
+// view's entity and an empty Image.
+//
+// The EntityRef slot comes from the template; a template without one is left
+// alone rather than given a key the document schema may not declare, the same
+// rule setImageValue follows.
+func (ob *Builder) SetImageObject(propertyKey string, entityName string) {
+	if entityName == "" {
+		return
+	}
+	ob.object = updateWidgetPropertyValue(ob.object, ob.propertyTypeIDs, propertyKey, func(val bson.D) bson.D {
+		return setImageObjectValue(val, entityName)
+	})
+}
+
 func (ob *Builder) SetSelection(propertyKey string, value string) {
 	if value == "" {
 		return
@@ -1194,6 +1212,32 @@ func setImageValue(val bson.D, imageQN string) bson.D {
 		if elem.Key == "Image" {
 			result = append(result, bson.E{Key: "Image", Value: imageQN})
 		} else {
+			result = append(result, elem)
+		}
+	}
+	return result
+}
+
+// setImageObjectValue writes the image-object binding onto a WidgetValue: a
+// DirectEntityRef to entityName under EntityRef, and an empty Image, which is
+// what Studio Pro leaves when a property moves from a collection image to the
+// object in context.
+func setImageObjectValue(val bson.D, entityName string) bson.D {
+	if entityName == "" {
+		return val
+	}
+	result := make(bson.D, 0, len(val))
+	for _, elem := range val {
+		switch elem.Key {
+		case "EntityRef":
+			result = append(result, bson.E{Key: "EntityRef", Value: bson.D{
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
+				{Key: "$Type", Value: "DomainModels$DirectEntityRef"},
+				{Key: "Entity", Value: entityName},
+			}})
+		case "Image":
+			result = append(result, bson.E{Key: "Image", Value: ""})
+		default:
 			result = append(result, elem)
 		}
 	}

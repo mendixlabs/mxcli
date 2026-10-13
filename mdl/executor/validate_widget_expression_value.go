@@ -65,6 +65,10 @@ func validateWidgetExpressionValues(w *ast.WidgetV3, def *WidgetDefinition, item
 		case !isExpr && !scalarOperations[op]:
 			// `$var/Assoc` in a datasource or action slot is exactly that.
 			continue
+		case !isExpr && op == "image" && isImageContextRef(w.Properties[key].(*ast.DataSourceV3)):
+			// `Image: $currentObject` binds the image to the object in context
+			// (mendixlabs/mxcli#1476); MDL-WIDGET22 judges where it may appear.
+			continue
 		}
 		kind := "a plain-value property"
 		if op != "" {

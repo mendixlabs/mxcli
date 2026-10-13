@@ -386,6 +386,11 @@ type WidgetObjectBuilder interface {
 	// `imageObject`) at an image collection entry, by its three-part qualified
 	// name `Module.Collection.Image`.
 	SetImage(propertyKey string, imageQN string)
+	// SetImageObject binds an image-typed property to the image object in
+	// context — the enclosing data container's object, an entity that
+	// specialises System.Image — by naming that entity. Studio Pro stores it as
+	// a DirectEntityRef on the property's WidgetValue with no collection image.
+	SetImageObject(propertyKey string, entityName string)
 	SetExpression(propertyKey string, value string)
 	SetDataSource(propertyKey string, ds pages.DataSource)
 	SetChildWidgets(propertyKey string, children []pages.Widget)

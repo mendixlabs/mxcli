@@ -821,6 +821,12 @@ type rawWidget struct {
 	// is not an image collection, or when none is selected. Without it a
 	// describe -> exec copy loses the image (mxcli-formula1 FINDINGS §142).
 	ImageObject string
+	// ImageObjectEntity is the entity of the image object in context the
+	// pluggable Image widget is bound to, described as `Image: $currentObject`
+	// (mendixlabs/mxcli#1476). ImageObjectUnreadable says why a stored binding
+	// has no MDL spelling, when it has none.
+	ImageObjectEntity     string
+	ImageObjectUnreadable string
 	// DefaultImage is a DYNAMIC image's fallback, shown when the bound object
 	// carries none — Forms$ImageViewer.DefaultImage, a by-name reference to
 	// Images$Image, so the same three-part Module.Collection.Image name as

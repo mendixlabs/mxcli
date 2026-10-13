@@ -1052,7 +1052,7 @@ func buildConstantQualifiedNames(ctx *ExecContext) (map[string]bool, bool) {
 // ones `validate_widgets.go` already accepts for these widgets and DESCRIBE
 // already emits, so the two lists say the same thing about the same property.
 var imageRefProps = map[string][]string{
-	"image":        {"Image"},
+	"image":        {"Image", "DefaultImage"},
 	"staticimage":  {"Image"},
 	"dynamicimage": {"DefaultImage"},
 }

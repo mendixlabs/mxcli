@@ -367,7 +367,18 @@ DYNAMICIMAGE imgPhoto (DataSource: $Photo, Width: 200, Height: 150)
 
 -- Generic image widget
 IMAGE imgBanner (Width: 800, Height: 200)
+
+-- An uploaded image: the object of the enclosing data view, list view or
+-- gallery (entity must extend System.Image). Works in a React-client app,
+-- where DYNAMICIMAGE is refused with CE0582
+DATAVIEW dvPhoto (DataSource: $Photo) {
+  IMAGE imgPhoto (Image: $currentObject, DefaultImage: 'MyModule.Images.placeholder')
+}
 ```
+
+`Image:` on `IMAGE` is either a three-part image collection entry
+(`'Module.Collection.ImageName'`) or `$currentObject`. `DefaultImage:` is the
+fallback for the second, shown while the object holds no image.
 
 **Image properties:**
 

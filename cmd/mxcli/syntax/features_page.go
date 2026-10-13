@@ -176,6 +176,14 @@ LIST IMPACT OF htmlelement;
 			"--   reports that at check time, and a name that does not resolve is reported by\n" +
 			"--   `check --references` rather than failing the build with CE1613.\n" +
 			"--   The alternatives are the URL form above, or `ImageType: icon`.\n" +
+			"--   To show an image a user uploaded (an object of an entity extending\n" +
+			"--   System.Image), bind it to the object of the enclosing data view, list view\n" +
+			"--   or gallery. DefaultImage is shown while that object holds no image:\n" +
+			"DATAVIEW dvPhoto (DataSource: $Photo) {\n" +
+			"  IMAGE imgPhoto (Image: $currentObject, DefaultImage: 'Module.Collection.ImageName')\n" +
+			"}\n" +
+			"--   This is the React-client way to show an image object; DYNAMICIMAGE below is\n" +
+			"--   CE0582 there (mendixlabs/mxcli#1476).\n" +
 			"--   A text-template property (ImageUrl, AlternativeText, a pluggable widget's\n" +
 			"--   headerCaption/title/…) takes TEXT, so a bare value renders the same string\n" +
 			"--   on every row. Bind it with the property's own `<Name>Params` companion:\n" +

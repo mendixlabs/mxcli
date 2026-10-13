@@ -1050,6 +1050,55 @@ func extractCustomWidgetPropertyImage(ctx *ExecContext, w map[string]any, proper
 	return ""
 }
 
+// extractImageObjectBinding reads an image-typed property's binding to the
+// image object in context (mendixlabs/mxcli#1476): the entity of the
+// DirectEntityRef Studio Pro stores on the WidgetValue when "Image source" is
+// the data view's object.
+//
+// unreadable is set, with entity empty, for a binding stored in a shape MDL
+// has no spelling for — over an association, or through a page parameter (a
+// SourceVariable). Neither has been measured from Studio Pro; DESCRIBE says so
+// rather than printing `$currentObject`, which would re-execute into a binding
+// to a different object.
+func extractImageObjectBinding(w map[string]any, propertyKey string) (entity, unreadable string) {
+	value := customWidgetPropertyValue(w, propertyKey)
+	if value == nil {
+		return "", ""
+	}
+	ref, ok := value["EntityRef"].(map[string]any)
+	if !ok || ref == nil {
+		return "", ""
+	}
+	if sv, ok := value["SourceVariable"].(map[string]any); ok && sv != nil {
+		return "", "an image object read through a page or snippet parameter"
+	}
+	if t, _ := ref["$Type"].(string); t != "DomainModels$DirectEntityRef" {
+		return "", "an image object reached over an association"
+	}
+	entity, _ = ref["Entity"].(string)
+	return entity, ""
+}
+
+// customWidgetPropertyValue returns the stored WidgetValue of a CustomWidget's
+// property, resolved through its TypePointer, or nil.
+func customWidgetPropertyValue(w map[string]any, propertyKey string) map[string]any {
+	obj, ok := w["Object"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	propTypeKeyMap := buildPropertyTypeKeyMap(w, false)
+	for _, prop := range getBsonArrayElements(obj["Properties"]) {
+		propMap, ok := prop.(map[string]any)
+		if !ok || propTypeKeyMap[extractBinaryID(propMap["TypePointer"])] != propertyKey {
+			continue
+		}
+		if value, ok := propMap["Value"].(map[string]any); ok {
+			return value
+		}
+	}
+	return nil
+}
+
 // extractCustomWidgetPropertyExpression reads an expression-typed property's
 // stored Expression, or "" when it is unset.
 func extractCustomWidgetPropertyExpression(w map[string]any, propertyKey string) string {
@@ -1268,6 +1317,8 @@ func extractExplicitProperties(ctx *ExecContext, w map[string]any) []rawExplicit
 func extractImageProperties(ctx *ExecContext, w map[string]any, widget *rawWidget) {
 	widget.ImageType = extractCustomWidgetPropertyString(ctx, w, "datasource")
 	widget.ImageObject = extractCustomWidgetPropertyImage(ctx, w, "imageObject")
+	widget.ImageObjectEntity, widget.ImageObjectUnreadable = extractImageObjectBinding(w, "imageObject")
+	widget.DefaultImage = extractCustomWidgetPropertyImage(ctx, w, "defaultImageDynamic")
 	widget.ImageUrl, widget.ImageUrlParams = extractCustomWidgetPropertyTextTemplate(ctx, w, "imageUrl")
 	widget.AlternativeText, widget.AlternativeTextParams = extractCustomWidgetPropertyTextTemplate(ctx, w, "alternativeText")
 	widget.ImageWidth = extractCustomWidgetPropertyString(ctx, w, "width")

@@ -102,3 +102,61 @@ func TestSetImageValue_EmptyNameLeavesTheValueAlone(t *testing.T) {
 		t.Errorf("Image = %v, want the existing value untouched", got)
 	}
 }
+
+// mendixlabs/mxcli#1476: the image object in context. Studio Pro 11.12.1
+// stores it on the WidgetValue as a DirectEntityRef to the data view's entity,
+// with an empty Image:
+//
+//	EntityRef: {$Type: 'DomainModels$DirectEntityRef', Entity: 'MyFirstModule.Photo'}
+//	Image:     ''
+func imageObjectValue() bson.D {
+	return bson.D{
+		{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
+		{Key: "EntityRef", Value: nil},
+		{Key: "Image", Value: "Atlas_Core.Content.Mendix"},
+		{Key: "PrimitiveValue", Value: ""},
+	}
+}
+
+func TestSetImageObjectValue_WritesADirectEntityRefAndClearsTheImage(t *testing.T) {
+	got := setImageObjectValue(imageObjectValue(), "MyFirstModule.Photo")
+
+	ref, ok := get(got, "EntityRef").(bson.D)
+	if !ok {
+		t.Fatalf("EntityRef = %v, want a document", get(got, "EntityRef"))
+	}
+	if v := get(ref, "$Type"); v != "DomainModels$DirectEntityRef" {
+		t.Errorf("EntityRef $Type = %v, want DomainModels$DirectEntityRef", v)
+	}
+	if v := get(ref, "Entity"); v != "MyFirstModule.Photo" {
+		t.Errorf("EntityRef Entity = %v, want MyFirstModule.Photo", v)
+	}
+	if get(ref, "$ID") == nil {
+		t.Error("EntityRef has no $ID")
+	}
+	if v := get(got, "Image"); v != "" {
+		t.Errorf("Image = %v, want empty — Studio Pro clears the collection image", v)
+	}
+}
+
+// Same key set, same order: only the two values change.
+func TestSetImageObjectValue_LeavesEverythingElseAlone(t *testing.T) {
+	in := imageObjectValue()
+	got := setImageObjectValue(in, "MyFirstModule.Photo")
+	if len(got) != len(in) {
+		t.Fatalf("key count changed: %d -> %d", len(in), len(got))
+	}
+	for i := range in {
+		if got[i].Key != in[i].Key {
+			t.Errorf("key %d: %q -> %q — order changed", i, in[i].Key, got[i].Key)
+		}
+	}
+}
+
+// An empty entity name is "not bound": the value stays as it was.
+func TestSetImageObjectValue_EmptyEntityLeavesTheValueAlone(t *testing.T) {
+	got := setImageObjectValue(imageObjectValue(), "")
+	if get(got, "EntityRef") != nil || get(got, "Image") != "Atlas_Core.Content.Mendix" {
+		t.Errorf("value changed for an empty entity: %v", got)
+	}
+}

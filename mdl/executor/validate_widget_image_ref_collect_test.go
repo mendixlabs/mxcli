@@ -165,3 +165,18 @@ func TestWidgetRefs_ImagePropOnAnotherWidgetIsNotAnImageReference(t *testing.T) 
 		t.Errorf("a non-image widget's Image property was resolved as an image collection entry: %v", errs)
 	}
 }
+
+// mendixlabs/mxcli#1476 gave the pluggable `image` widget the same fallback,
+// `DefaultImage:` beside `Image: $currentObject`; it is resolved like the
+// dynamic image's, or a mistyped name is CE1613 at build time.
+func TestWidgetRefs_ImageWidgetDefaultImageIsResolved(t *testing.T) {
+	ctx := imageCollectionCtx(t)
+
+	errs := validateWidgetReferences(ctx,
+		imageRefWidget("image", "DefaultImage", "MyFirstModule.Images.NoSuchImage"),
+		newScriptContext())
+	if len(errs) != 1 || !strings.Contains(errs[0], "NoSuchImage") {
+		t.Fatalf("an image widget's fallback naming an image the collection does not hold was "+
+			"accepted; got %v", errs)
+	}
+}
