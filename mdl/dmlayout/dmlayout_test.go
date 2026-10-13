@@ -176,6 +176,30 @@ func TestPlan_NoOverlap(t *testing.T) {
 	assertNoOverlap(t, dm, Plan(dm))
 }
 
+// Location is the box's top-left corner, so a tall box stacked above a short one
+// must end above it, not run into it. Centring each box on its position put the
+// pair half a box too low and let them collide.
+func TestPlan_TallEntityAboveShortOneDoesNotOverlap(t *testing.T) {
+	// Layer members are ordered by name, so A_Tall is stacked above B_Short.
+	dm := &domainmodel.DomainModel{
+		Entities: []*domainmodel.Entity{ent("A_Tall", attrs(40)...), ent("B_Short", "x"), ent("Target", "x")},
+		Associations: []*domainmodel.Association{
+			assoc("Tall_Target", "A_Tall", "Target"),
+			assoc("Short_Target", "B_Short", "Target"),
+		},
+	}
+	pos := Plan(dm)
+	tall, short := pos["id-A_Tall"], pos["id-B_Short"]
+	if tall.X != short.X || tall.Y >= short.Y {
+		t.Fatalf("want A_Tall stacked above B_Short in one column, got %+v and %+v", tall, short)
+	}
+	_, h := boxSize(dm.Entities[0])
+	if short.Y < tall.Y+h {
+		t.Errorf("B_Short at y=%d starts inside A_Tall, which spans y=%d..%d", short.Y, tall.Y, tall.Y+h)
+	}
+	assertNoOverlap(t, dm, pos)
+}
+
 // Unconnected entities are not lookups. Putting them in layer 0 would mix the
 // non-persistent helpers in with the real reference data.
 func TestPlan_IsolatedEntitiesGoInTheirOwnBand(t *testing.T) {

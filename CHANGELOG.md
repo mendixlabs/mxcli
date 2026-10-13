@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`mxcli layout` no longer stacks a tall entity into the one below it** — the layout treated an entity's position as the centre of its box, but Studio Pro draws it as the top-left corner (the centre convention, `RelativeMiddlePoint`, belongs to microflow objects), so every placed box sat half its size lower and further right than planned and a tall box ran into a short one under it.
 - **View entities, external entities and entities imported from a contract take the grid position `create entity` does** — all three still used the old single-row default (`X: 100 + n*150, Y: 100`) that the grid replaced because 150px is narrower than an entity box: a module of 40 of them was a 6,000px line with the boxes touching. They now take the next `GridSlot` after the entities the module already holds, and an `@Position` is still honoured. Before, `create external entities from` counted only the entities it had created itself, so the first imported entity could land on one the module already had.
 
 ## [0.26.0] - 2026-10-11

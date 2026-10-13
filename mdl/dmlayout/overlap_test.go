@@ -11,7 +11,7 @@ import (
 )
 
 // assertNoOverlap fails for every pair of entities whose estimated boxes
-// intersect when each sits at pos[id]. It is the checker TestPlan_NoOverlap
+// intersect when each has its top-left corner at pos[id]. It is the checker TestPlan_NoOverlap
 // uses, shared so the two layouts are held to the same rule.
 func assertNoOverlap(t *testing.T, dm *domainmodel.DomainModel, pos map[model.ID]model.Point) {
 	t.Helper()
@@ -23,7 +23,7 @@ func assertNoOverlap(t *testing.T, dm *domainmodel.DomainModel, pos map[model.ID
 	for _, e := range dm.Entities {
 		p := pos[e.ID]
 		w, h := boxSize(e)
-		boxes = append(boxes, rect{e.Name, p.X - w/2, p.Y - h/2, p.X + w/2, p.Y + h/2})
+		boxes = append(boxes, rect{e.Name, p.X, p.Y, p.X + w, p.Y + h})
 	}
 	for i := range boxes {
 		for j := i + 1; j < len(boxes); j++ {
@@ -80,8 +80,8 @@ func withPositions(dm *domainmodel.DomainModel, pos map[model.ID]model.Point) *d
 }
 
 // gridModel is what CREATE ENTITY leaves behind: n entities on GridSlot, every
-// third one tall. Boxes are centred on the grid points, so from about 30
-// attributes (34+16*attrs high) a box reaches into the box one row down — the
+// third one tall. Boxes hang from the grid points (Location is the top-left
+// corner), so from about 30 attributes (34+16*attrs high) a box reaches into the box one row down — the
 // reported symptom, and the reason a fixed pitch cannot be the whole answer.
 func gridModel(n int) *domainmodel.DomainModel {
 	dm := &domainmodel.DomainModel{}
@@ -223,8 +223,8 @@ func TestResolveOverlaps_LeavesNoOverlap(t *testing.T) {
 				}
 				wb, hb := boxSize(b)
 				pa, pb := pos[a.ID], pos[b.ID]
-				gapX := abs(pa.X-pb.X) - (wa+wb)/2
-				gapY := abs(pa.Y-pb.Y) - (ha+hb)/2
+				gapX := max(pb.X-(pa.X+wa), pa.X-(pb.X+wb))
+				gapY := max(pb.Y-(pa.Y+ha), pa.Y-(pb.Y+hb))
 				if gapX < placementGutter-1 && gapY < placementGutter-1 {
 					t.Errorf("n=%d: moved %s is within the gutter of %s (gap %d,%d)", n, a.Name, b.Name, gapX, gapY)
 				}
@@ -348,15 +348,81 @@ func TestResolveOverlaps_NothingToDo(t *testing.T) {
 func TestResolveOverlaps_NeverPlacesBeforeTheOrigin(t *testing.T) {
 	for _, n := range []int{14, 40, 90} {
 		dm := gridModel(n)
-		byID := map[model.ID]*domainmodel.Entity{}
-		for _, e := range dm.Entities {
-			byID[e.ID] = e
-		}
 		for _, m := range ResolveOverlaps(dm).Moves {
-			w, h := boxSize(byID[m.ID])
-			if m.To.X-w/2 < 0 || m.To.Y-h/2 < 0 {
+			if m.To.X < 0 || m.To.Y < 0 {
 				t.Errorf("n=%d: %s moved to %+v, whose box starts before the origin", n, m.Name, m.To)
 			}
+		}
+	}
+}
+
+// The real case that exposed the coordinate convention: an entity's Location is
+// the top-left corner of its box in Studio Pro (verified in 11.12.5), not the
+// centre. Laid out on the default grid, a 22-attribute entity at (100,380) ran
+// into the one at (100,660) and a 45-attribute one at (880,100) into the one at
+// (880,660), and a centred estimate saw neither.
+func TestResolveOverlaps_TopLeftConventionFixture(t *testing.T) {
+	counts := []struct {
+		name  string
+		attrs int
+	}{
+		{"Customer", 4}, {"Order", 30}, {"OrderLine", 3}, {"Invoice", 45}, {"Payment", 5},
+		{"Shipment", 6}, {"Product", 22}, {"Category", 2}, {"Supplier", 4}, {"Warehouse", 3},
+		{"Employee", 50}, {"Address", 5}, {"Contact", 4}, {"Ticket", 35},
+	}
+	dm := &domainmodel.DomainModel{}
+	for i, c := range counts {
+		p := GridSlot(i)
+		dm.Entities = append(dm.Entities, withLocation(ent(c.name, attrs(c.attrs)...), p.X, p.Y))
+	}
+	dm.Entities = append(dm.Entities, withLocation(ent("Pinned", attrs(1)...), 4000, 3000))
+	p := GridSlot(15) // (880,660), under Invoice
+	dm.Entities = append(dm.Entities, withLocation(ent("OrderSummary", attrs(1)...), p.X, p.Y))
+
+	plan := ResolveOverlaps(dm)
+
+	// (a) both real collisions are found.
+	found := map[string]bool{}
+	for _, o := range plan.Pairs {
+		found[o.With+"/"+o.Entity] = true
+	}
+	for _, want := range []string{"Product/Contact", "Invoice/OrderSummary"} {
+		if !found[want] {
+			t.Errorf("collision %s not found; pairs: %+v", want, plan.Pairs)
+		}
+	}
+
+	// (b) after the moves no two boxes intersect at the measured Studio Pro
+	// geometry: 150 wide, 34 + 15 per attribute tall, Location = top-left. Worked
+	// out here on purpose, not through boxSize.
+	pos := apply(dm, plan)
+	type box struct {
+		name           string
+		x1, y1, x2, y2 int
+	}
+	var boxes []box
+	for _, e := range dm.Entities {
+		at := pos[e.ID]
+		boxes = append(boxes, box{e.Name, at.X, at.Y, at.X + 150, at.Y + 34 + 15*len(e.Attributes)})
+	}
+	for i := range boxes {
+		for j := i + 1; j < len(boxes); j++ {
+			a, b := boxes[i], boxes[j]
+			if a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2 {
+				t.Errorf("%s and %s overlap at the measured geometry: %+v vs %+v", a.name, b.name, a, b)
+			}
+		}
+	}
+
+	// (c) a second pass has nothing left to do.
+	if again := ResolveOverlaps(withPositions(dm, pos)); len(again.Moves) != 0 {
+		t.Errorf("second pass still moves %d entities: %+v", len(again.Moves), again.Moves)
+	}
+
+	// (d) nobody was sent off the top or left of the canvas.
+	for _, m := range plan.Moves {
+		if m.To.X < 0 || m.To.Y < 0 {
+			t.Errorf("%s moved to negative coordinates %+v", m.Name, m.To)
 		}
 	}
 }

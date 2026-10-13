@@ -129,7 +129,7 @@ layout into MDL.
 
 Two things to know if you place entities yourself:
 
-- The coordinate is the box's **centre**, not its top-left corner.
+- The coordinate is the box's **top-left corner**.
 - An entity created with no position takes the next slot in a wrapping grid.
   That is a default, not a layout: it keeps a large model on screen and keeps
   boxes of ordinary size apart, but it knows nothing about which entities are

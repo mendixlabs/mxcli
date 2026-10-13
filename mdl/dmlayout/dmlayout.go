@@ -28,8 +28,9 @@
 // model, deliberately generous: too much space is a diagram that scrolls, too
 // little is the overlap this package exists to remove.
 //
-// A Mendix position is the box's CENTRE (RelativeMiddlePoint), not its top-left
-// corner, which is why the placement code adds half a box rather than none.
+// An entity's Location is its box's TOP-LEFT corner (verified in Studio Pro
+// 11.12.5). RelativeMiddlePoint, which is a centre, belongs to microflow objects,
+// not to entities, so placement uses the box's corner directly.
 package dmlayout
 
 import (
@@ -122,7 +123,7 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 			if w > widest {
 				widest = w
 			}
-			out[id] = model.Point{X: x + w/2, Y: y + h/2}
+			out[id] = model.Point{X: x, Y: y}
 			y += h + rowGutter
 		}
 		if y > maxY {
@@ -136,13 +137,8 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 	if len(isolated) > 0 {
 		bandY := maxY + bandGutter
 		for i, id := range isolated {
-			e := g.byID[id]
-			w, h := boxSize(e)
 			slot := GridSlot(i)
-			out[id] = model.Point{
-				X: slot.X + w/2,
-				Y: bandY + (slot.Y - OriginY) + h/2,
-			}
+			out[id] = model.Point{X: slot.X, Y: bandY + (slot.Y - OriginY)}
 		}
 	}
 	return out

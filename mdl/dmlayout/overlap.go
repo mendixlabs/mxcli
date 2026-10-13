@@ -18,9 +18,10 @@ import (
 //
 // # Strategy
 //
-// Boxes are the estimates boxSize gives (the same ones Plan uses), centred on the
-// entity's Location, the convention this package states. A collision is a
-// strict intersection: boxes that merely touch, or sit close, are left alone.
+// Boxes are the estimates boxSize gives (the same ones Plan uses), hanging from
+// the entity's Location, which is the box's top-left corner, the convention this
+// package states. A collision is a strict intersection: boxes that merely touch,
+// or sit close, are left alone.
 //
 // Which entity gives way. Entities are taken in the order they appear in the
 // domain model, which is creation order. An entity stays if its box clears every
@@ -104,7 +105,7 @@ func (a rect) intersects(b rect, pad int) bool {
 // entityRect is the estimated box of e when its Location is at.
 func entityRect(e *domainmodel.Entity, at model.Point) rect {
 	w, h := boxSize(e)
-	return rect{at.X - w/2, at.Y - h/2, at.X - w/2 + w, at.Y - h/2 + h}
+	return rect{at.X, at.Y, at.X + w, at.Y + h}
 }
 
 // annotationRect is the generous obstacle for a note; see "Annotations" above.
@@ -212,15 +213,16 @@ func ResolveOverlaps(dm *domainmodel.DomainModel) OverlapPlan {
 	return plan
 }
 
-// nearestFree returns the point closest to from at which a w x h box centred
-// there, grown by placementGutter, intersects none of obstacles.
+// nearestFree returns the point closest to from at which a w x h box whose
+// top-left corner is there, grown by placementGutter, intersects none of
+// obstacles.
 func nearestFree(w, h int, from model.Point, obstacles []rect) model.Point {
 	free := func(p model.Point) bool {
 		// A mover never goes left of or above the canvas origin.
-		if p.X < w/2 || p.Y < h/2 {
+		if p.X < 0 || p.Y < 0 {
 			return false
 		}
-		b := rect{p.X - w/2, p.Y - h/2, p.X - w/2 + w, p.Y - h/2 + h}
+		b := rect{p.X, p.Y, p.X + w, p.Y + h}
 		for _, o := range obstacles {
 			if b.intersects(o, placementGutter) {
 				return false
@@ -231,7 +233,7 @@ func nearestFree(w, h int, from model.Point, obstacles []rect) model.Point {
 	if free(from) {
 		return from
 	}
-	start := model.Point{X: max(from.X, w/2), Y: max(from.Y, h/2)}
+	start := model.Point{X: max(from.X, 0), Y: max(from.Y, 0)}
 
 	// Past every obstacle there is always room, so the search is bounded: the
 	// first ring that reaches beyond the rightmost edge has a free point.
@@ -274,7 +276,7 @@ func nearestFree(w, h int, from model.Point, obstacles []rect) model.Point {
 		}
 	}
 	// Unreachable by the bound above; the point is clear of everything anyway.
-	return model.Point{X: right + w/2 + placementGutter + placementStep, Y: start.Y}
+	return model.Point{X: right + placementGutter + placementStep, Y: start.Y}
 }
 
 func abs(v int) int {
