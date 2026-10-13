@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/dmlayout"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
@@ -525,6 +526,7 @@ func createExternalEntities(ctx *ExecContext, s *ast.CreateExternalEntitiesStmt)
 		return mdlerrors.NewBackend("get domain model", err)
 	}
 
+	existingCount := len(dm.Entities) // before the loop: a created entity is not in this dm
 	// Index existing entities by name for upsert
 	existing := make(map[string]*domainmodel.Entity)
 	for _, ent := range dm.Entities {
@@ -817,7 +819,9 @@ func createExternalEntities(ctx *ExecContext, s *ast.CreateExternalEntitiesStmt)
 				continue
 			}
 
-			location := model.Point{X: 100 + (created+updated)*150, Y: 100}
+			// The next grid slot after the entities the module already held and the
+			// ones this import has created so far, as CREATE ENTITY places them.
+			location := dmlayout.GridSlot(existingCount + created)
 			newEntity := &domainmodel.Entity{
 				Name:     mendixName,
 				Location: location,

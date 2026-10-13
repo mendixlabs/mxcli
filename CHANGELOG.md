@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **View entities, external entities and entities imported from a contract take the grid position `create entity` does** — all three still used the old single-row default (`X: 100 + n*150, Y: 100`) that the grid replaced because 150px is narrower than an entity box: a module of 40 of them was a 6,000px line with the boxes touching. They now take the next `GridSlot` after the entities the module already holds, and an `@Position` is still honoured. Before, `create external entities from` counted only the entities it had created itself, so the first imported entity could land on one the module already had.
+
 ## [0.26.0] - 2026-10-11
 
 Headline: **Documents mxcli writes now survive Studio Pro's merge and diff: every element carries exactly the property names Studio Pro writes for the project's Mendix version.** Before, a key mxcli left out, or wrote for a newer version, made a document unmergeable the first time Studio Pro saved it, although `mx check`, the build and the runtime stayed green. `mxcli fix property-sets` repairs projects an older mxcli wrote. Alongside it: a Claude Code companion mod with a Project pane, `describe` → `exec` round trips that keep loop back-edges, shared error handlers and page design properties, `check -p` resolving script sets and security references the way `exec` does, `mxcli run --local` as a background service, and a run of Windows fixes for the local dev loop. The [language poster](https://www.mxcli.org/poster/mxcli-language-poster.html) puts all of mxcli and MDL on one page.

@@ -1026,7 +1026,8 @@ func execCreateViewEntity(ctx *ExecContext, s *ast.CreateViewEntityStmt) error {
 	} else if existingEntity != nil {
 		location = existingEntity.Location
 	} else {
-		location = model.Point{X: 100 + len(dm.Entities)*150, Y: 100}
+		// The next grid slot, as CREATE ENTITY does (see there for why not a row).
+		location = dmlayout.GridSlot(len(dm.Entities))
 	}
 
 	// Create or update ViewEntitySourceDocument (separate document for OQL query).

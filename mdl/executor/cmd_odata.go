@@ -16,6 +16,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/internal/pathutil"
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/dmlayout"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
@@ -947,8 +948,9 @@ func execCreateExternalEntity(ctx *ExecContext, s *ast.CreateExternalEntityStmt)
 		return mdlerrors.NewValidation("EntitySet property is required when creating an external entity")
 	}
 
-	// Auto-position based on existing entities
-	location := model.Point{X: 100 + len(dm.Entities)*150, Y: 100}
+	// No @Position exists for an external entity: take the next grid slot, as
+	// CREATE ENTITY does.
+	location := dmlayout.GridSlot(len(dm.Entities))
 
 	newEntity := &domainmodel.Entity{
 		Name:                s.Name.Name,
