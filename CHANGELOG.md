@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`mxcli layout --only-overlapping` moves only the entities whose boxes collide** — the default grid gives every entity the same 280px row, but a box is as tall as its attribute list, so an entity with about 17 or more attributes ran into the one below it, and the only repair was `mxcli layout`, which replaces every position in the module, including the ones set by hand. With the flag, the command finds the entities whose estimated boxes (the size estimate the full layout uses) intersect each other or a domain-model annotation, keeps the one that comes first in the model, and moves each other colliding entity to the nearest free spot (a 40px margin from every box, never above or left of the origin). Every entity that collides with nothing keeps its position exactly. `--dry-run` lists each collision and each move; a second run reports `no overlapping entities` and writes nothing. `--module` and `--include-marketplace` work as before.
+
 ### Fixed
 
 - **View entities, external entities and entities imported from a contract take the grid position `create entity` does** — all three still used the old single-row default (`X: 100 + n*150, Y: 100`) that the grid replaced because 150px is narrower than an entity box: a module of 40 of them was a 6,000px line with the boxes touching. They now take the next `GridSlot` after the entities the module already holds, and an `@Position` is still honoured. Before, `create external entities from` counted only the entities it had created itself, so the first imported entity could land on one the module already had.

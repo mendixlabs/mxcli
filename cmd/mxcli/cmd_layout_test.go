@@ -3,10 +3,13 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 )
 
 func mod(name string, marketplace bool) *model.Module {
@@ -130,5 +133,106 @@ func TestLayoutTargets_IsSorted(t *testing.T) {
 	}
 	if strings.Join(names, ",") != "Alpha,CapTrack,MyFirstModule,Zeta" {
 		t.Errorf("targets = %v, want them sorted", names)
+	}
+}
+
+// overlapFixture is a domain model as CREATE ENTITY leaves it when one entity is
+// longer than a grid row: Order (30 attributes) runs into Invoice below it.
+// Pinned sits far from both, off any grid.
+func overlapFixture() *domainmodel.DomainModel {
+	attrs := func(n int) []*domainmodel.Attribute {
+		out := make([]*domainmodel.Attribute, n)
+		for i := range out {
+			out[i] = &domainmodel.Attribute{Name: fmt.Sprintf("Attr%d", i)}
+		}
+		return out
+	}
+	mk := func(name string, n, x, y int) *domainmodel.Entity {
+		e := &domainmodel.Entity{Name: name, Attributes: attrs(n), Location: model.Point{X: x, Y: y}}
+		e.ID = model.ID("id-" + name)
+		return e
+	}
+	return &domainmodel.DomainModel{Entities: []*domainmodel.Entity{
+		mk("Order", 30, 100, 100),
+		mk("Invoice", 3, 100, 380),
+		mk("Pinned", 4, 4321, 1234),
+	}}
+}
+
+func runLayoutModule(t *testing.T, dm *domainmodel.DomainModel, dryRun, only bool) (string, int, int) {
+	t.Helper()
+	var out bytes.Buffer
+	writes := 0
+	moved, err := layoutModule(&out, "Sales", dm, dryRun, only, func(*domainmodel.DomainModel) error {
+		writes++
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out.String(), moved, writes
+}
+
+// --dry-run lists the colliding pair and the move, and neither writes nor
+// changes the model.
+func TestLayoutOnlyOverlapping_DryRunListsPairsAndMoves(t *testing.T) {
+	dm := overlapFixture()
+	before := fmt.Sprint(dm.Entities[0].Location, dm.Entities[1].Location, dm.Entities[2].Location)
+	out, moved, writes := runLayoutModule(t, dm, true, true)
+
+	for _, want := range []string{
+		"Sales.Invoice overlaps Sales.Order",
+		"Sales.Invoice  (100, 380) -> (",
+		"Sales: 1 of 3 entities would move",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Sales.Pinned  (") || strings.Contains(out, "Sales.Order  (") {
+		t.Errorf("an entity that keeps its place was listed as a move:\n%s", out)
+	}
+	if moved != 1 || writes != 0 {
+		t.Errorf("moved=%d writes=%d, want 1 and 0 on a dry run", moved, writes)
+	}
+	if after := fmt.Sprint(dm.Entities[0].Location, dm.Entities[1].Location, dm.Entities[2].Location); after != before {
+		t.Errorf("a dry run changed the model: %s -> %s", before, after)
+	}
+}
+
+// A real run moves only the colliding entity, writes once, and the next run has
+// nothing to do.
+func TestLayoutOnlyOverlapping_MovesOnlyTheCollidingEntityAndIsIdempotent(t *testing.T) {
+	dm := overlapFixture()
+	order, pinned := dm.Entities[0].Location, dm.Entities[2].Location
+	invoice := dm.Entities[1].Location
+
+	out, moved, writes := runLayoutModule(t, dm, false, true)
+	if moved != 1 || writes != 1 || !strings.Contains(out, "Sales: moved 1 of 3 entities") {
+		t.Fatalf("first run: moved=%d writes=%d\n%s", moved, writes, out)
+	}
+	if dm.Entities[0].Location != order || dm.Entities[2].Location != pinned {
+		t.Error("an entity that collides with nothing was moved")
+	}
+	if dm.Entities[1].Location == invoice {
+		t.Error("Invoice was not moved")
+	}
+
+	out, moved, writes = runLayoutModule(t, dm, false, true)
+	if moved != 0 || writes != 0 || !strings.Contains(out, "Sales: no overlapping entities (3 entities)") {
+		t.Errorf("second run: moved=%d writes=%d\n%s", moved, writes, out)
+	}
+}
+
+// CONTROL: without the flag the command is the full layout, as before.
+func TestLayoutWithoutOnlyOverlapping_StillArrangesEverything(t *testing.T) {
+	dm := overlapFixture()
+	_, moved, writes := runLayoutModule(t, dm, false, false)
+	if moved != 3 || writes != 1 {
+		t.Errorf("full layout moved %d of 3 (writes=%d), want all three", moved, writes)
+	}
+	out, moved, writes := runLayoutModule(t, dm, false, false)
+	if moved != 0 || writes != 0 || !strings.Contains(out, "already laid out") {
+		t.Errorf("second full layout: moved=%d writes=%d\n%s", moved, writes, out)
 	}
 }

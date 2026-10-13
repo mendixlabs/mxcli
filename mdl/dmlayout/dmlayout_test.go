@@ -173,26 +173,7 @@ func TestPlan_LayersTheModel(t *testing.T) {
 // ignoring the single row: a 150px step is narrower than a box.
 func TestPlan_NoOverlap(t *testing.T) {
 	dm := capTrack()
-	pos := Plan(dm)
-
-	type rect struct {
-		name           string
-		x1, y1, x2, y2 int
-	}
-	var boxes []rect
-	for _, e := range dm.Entities {
-		p := pos[e.ID]
-		w, h := boxSize(e)
-		boxes = append(boxes, rect{e.Name, p.X - w/2, p.Y - h/2, p.X + w/2, p.Y + h/2})
-	}
-	for i := range boxes {
-		for j := i + 1; j < len(boxes); j++ {
-			a, b := boxes[i], boxes[j]
-			if a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2 {
-				t.Errorf("%s and %s overlap: %+v vs %+v", a.name, b.name, a, b)
-			}
-		}
-	}
+	assertNoOverlap(t, dm, Plan(dm))
 }
 
 // Unconnected entities are not lookups. Putting them in layer 0 would mix the
