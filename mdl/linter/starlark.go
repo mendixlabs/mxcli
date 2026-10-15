@@ -1166,10 +1166,18 @@ func userRoleToStarlark(ur UserRoleInfo) starlark.Value {
 	for _, mr := range ur.ModuleRoles {
 		moduleRoles = append(moduleRoles, starlark.String(mr))
 	}
+	var manageableRoles []starlark.Value
+	for _, mr := range ur.ManageableRoles {
+		manageableRoles = append(manageableRoles, starlark.String(mr))
+	}
 	return starlarkstruct.FromStringDict(starlark.String("user_role"), starlark.StringDict{
-		"name":         starlark.String(ur.Name),
-		"is_anonymous": starlark.Bool(ur.IsAnonymous),
-		"module_roles": starlark.NewList(moduleRoles),
+		"name":                       starlark.String(ur.Name),
+		"is_anonymous":               starlark.Bool(ur.IsAnonymous),
+		"module_roles":               starlark.NewList(moduleRoles),
+		"check_security":             starlark.Bool(ur.CheckSecurity),
+		"manage_all_roles":           starlark.Bool(ur.ManageAllRoles),
+		"manage_users_without_roles": starlark.Bool(ur.ManageUsersWithoutRoles),
+		"manageable_roles":           starlark.NewList(manageableRoles),
 	})
 }
 
