@@ -1,0 +1,49 @@
+mdl 1;
+-- ============================================================================
+-- A member reached through an association is not a change item
+-- ============================================================================
+--
+-- Symptom: `change $a (A_B.Title = 'x')` passed `mxcli check`, `exec` reported
+-- success, and the next `mx check` failed the build:
+--
+--   [error] [CE1613] "The selected association 'A_B.Title' no longer exists."
+--     at Change object activity 'Change 'a' (Title)'
+--
+-- Mendix's Change object activity cannot set an attribute through an
+-- association at all — the member slot holds an attribute of the changed
+-- entity or an association reference, nothing else (probe matrix:
+-- docs/12-bug-reports/2026-10-16-change-member-through-association.md).
+-- mxcli used to write the name verbatim into the Association slot.
+--
+-- Now: `check -p` reports the form and `exec` refuses it, both naming the
+-- retrieve-then-change replacement. ACT_Bad below is the repro (uncomment to
+-- see the rejection). ACT_Good is the working idiom.
+
+create module Hop;
+create or modify persistent entity "Hop"."A" (Code: string(50));
+create or modify persistent entity "Hop"."B" (Title: string(100));
+create or modify association "Hop"."A_B"
+from "Hop"."A" to "Hop"."B"
+type reference;
+
+-- Working idiom: retrieve the associated object, change the retrieved object.
+-- (database retrieve + `first`; an association retrieve binds a single object
+-- for a reference, which mxcli currently mis-types as a list — see HANDOFF)
+create or modify microflow "Hop"."ACT_Good" ($a: Hop.A) returns string as $r
+begin
+  declare $r string = '';
+  retrieve $b from Hop.B where Hop.A_B = $a first;
+  change $b (Hop.B.Title = 'via retrieve');
+  commit $b;
+  set $r = 'ok';
+  return $r;
+end;
+
+-- Repro (refused at check and exec — uncomment to verify):
+-- create or modify microflow "Hop"."ACT_Bad" ($a: Hop.A) returns string as $r
+-- begin
+--   declare $r string = '';
+--   change $a (A_B.Title = 'x');
+--   set $r = 'ok';
+--   return $r;
+-- end;

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`change` through an association is refused with the working idiom instead of shipping a project mxbuild rejects** — `change $a (A_B.Title = 'x')` (a member whose dotted qualifier is an association, not a module) passed `mxcli check`, `exec` reported success, and the next build failed with CE1613 "The selected association 'A_B.Title' no longer exists": Mendix's Change object activity cannot set an attribute through an association at all (probe matrix in [the bug report](docs/12-bug-reports/2026-10-16-change-member-through-association.md) — every encoding, including the ones an older mxcli wrote, is rejected or unloadable), and the writer's one-dot heuristic categorized the name as an association-set verbatim. `check -p` now reports the form and `exec` refuses it, both naming the retrieve-then-change replacement (`retrieve $obj from $a/A_B;` then `change $obj (Title = …)`); the legal shapes — `Module.Assoc` association-sets and `Module.Entity.Attribute` qualified attributes — are untouched. Example: `mdl-examples/bug-tests/change-member-through-association.mdl`.
+
 ## [0.27.0] - 2026-10-15
 
 Headline: **`exec` is all or nothing: when a statement fails at write time, the whole run is rolled back, so a script never leaves a project half-changed.** Alongside it: a wave of `describe` → `check` → `exec` fixes from round-trip runs over real apps (the Siemens FSM template, the GenAI showcase, Marketplace modules), Mendix 9 projects can take microflows, nanoflows and pluggable widgets again, `check -p` resolves many more of the references `exec` and the build would refuse, the classic `filemanager` widget and role-based `Visible: roles (…)` are in MDL, and the companion draws a module's domain model. The MongoDB driver is upgraded for the October 2026 BSON advisories.

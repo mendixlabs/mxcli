@@ -175,6 +175,28 @@ func TestValidateMemberReferences_ReportsAMissingAttribute(t *testing.T) {
 	}
 }
 
+// A member reached THROUGH an association (`Assoc.Attr` — the pre-dot segment
+// is an association name, not a module) is not representable in Mendix's
+// ChangeActionItem: mxbuild rejects every encoding of it (CE1613, or an
+// unloadable .mpr). The blanket skip for dotted names trusted exec to refuse
+// the form; it does not — it writes AssociationQualifiedName = "Assoc.Attr"
+// verbatim and the project fails a whole build later. See
+// docs/12-bug-reports/2026-10-16-change-member-through-association.md.
+func TestValidateMemberReferences_RefusesAMemberThroughAnAssociation(t *testing.T) {
+	ctx := memberFixture(t)
+	msgs := validateMemberReferences(ctx,
+		flowProgram(orderParam(), changeStmt("Order", "Order_Customer.Name")), newScriptContext())
+
+	if len(msgs) != 1 {
+		t.Fatalf("got %d messages, want 1: %v", len(msgs), msgs)
+	}
+	for _, want := range []string{"Order_Customer.Name", "retrieve"} {
+		if !strings.Contains(msgs[0], want) {
+			t.Errorf("message should mention %q: %s", want, msgs[0])
+		}
+	}
+}
+
 // CONTROL: everything that legitimately resolves must stay silent. Each of
 // these is a shape a real script uses, and each would be a false error that
 // blocks a script which builds cleanly.

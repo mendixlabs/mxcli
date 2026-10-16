@@ -2243,6 +2243,28 @@ func (fb *flowBuilder) isEntity(moduleName, entityName string) bool {
 	return false
 }
 
+// moduleExists reports whether a module of this name is in the project. The
+// common path is GetModuleByName; when that errors — the error could mean
+// "not found" or "cannot read", and this decision treats those differently —
+// the module roster decides. A roster that cannot be read counts as "exists":
+// the member keeps the old silent fallback rather than this refusal, because
+// silence over a guess is this file's rule for an unreadable model.
+func (fb *flowBuilder) moduleExists(name string) bool {
+	if mod, err := fb.backend.GetModuleByName(name); err == nil {
+		return mod != nil
+	}
+	mods, err := fb.backend.ListModules()
+	if err != nil {
+		return true
+	}
+	for _, m := range mods {
+		if m != nil && m.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveMemberChange determines whether a member name is an association or attribute
 // and sets the appropriate field on the MemberChange. It queries the domain model
 // to check if the name matches an association on the entity; if no metadata is
@@ -2331,6 +2353,21 @@ func (fb *flowBuilder) resolveMemberChange(mc *microflows.MemberChange, memberNa
 		// qualifiedName is already set to the full memberName
 	} else {
 		qualifiedName = moduleName + "." + memberName
+	}
+
+	// A one-dot member whose qualifier is NOT a module (`Assoc.Attr`) is a
+	// member reached through an association. Mendix's ChangeActionItem cannot
+	// represent that at all — the slot holds either an attribute of the changed
+	// entity or an association reference — and writing the name verbatim (the
+	// fallback below) ships a project mxbuild rejects with CE1613 a whole build
+	// later. Refuse with the working idiom instead, but only when the module
+	// list answers confidently: an unreadable model keeps the old silent
+	// fallback rather than guessing.
+	// (docs/12-bug-reports/2026-10-16-change-member-through-association.md)
+	if fb.backend != nil && strings.Count(memberName, ".") == 1 && !fb.moduleExists(lookupModule) {
+		fb.addError("member %q on entity %s: %q is not a module, so this is a member reached through an association — a change item cannot set it. Retrieve the associated object and change that instead: `retrieve $obj from $var/%s;` then `change $obj (%s = ...)`",
+			memberName, entityQN, lookupModule, lookupModule, bareName)
+		return
 	}
 
 	// Query the authored (or target) module's domain model first. When the

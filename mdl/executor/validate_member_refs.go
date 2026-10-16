@@ -124,6 +124,27 @@ func resolveMemberOnEntity(ctx *ExecContext, entityQN, memberName string) member
 // associationNamedInModule reports whether the domain model has an association
 // of this bare name. A qualified member is handled by the caller; this covers
 // the unqualified spelling, which resolves in the entity's own module.
+// backendRefusesModule reports whether the project's module list answers,
+// confidently, that no module of this name exists. A list that cannot be read
+// is NOT absence — this file's rule is silence over a guess
+// (TestResolveMemberOnEntity_SilentWhenTheModelCannotBeRead).
+func backendRefusesModule(ctx *ExecContext, qualifier string) bool {
+	b, ok := ctx.Backend.(entityLookupBackend)
+	if !ok {
+		return false
+	}
+	mods, err := b.ListModules()
+	if err != nil {
+		return false
+	}
+	for _, m := range mods {
+		if m != nil && m.Name == qualifier {
+			return false
+		}
+	}
+	return true
+}
+
 func associationNamedInModule(dm *domainmodel.DomainModel, name string) bool {
 	for _, a := range dm.Associations {
 		if a != nil && a.Name == name {
@@ -426,10 +447,24 @@ func checkMembers(ctx *ExecContext, sc *scriptContext, authored map[string]bool,
 		if name == "" {
 			continue
 		}
-		// A qualified member is a different question with a different answer,
-		// and exec already refuses the one-qualifier form that cannot be an
-		// attribute (FINDINGS #51). Left alone here rather than second-guessed.
-		if strings.Contains(name, ".") {
+		// Qualified members are a different question with a different answer.
+		// `Module.Assoc` (one dot over a real module) is a legal association-set
+		// — exec's #51 refusal covers the association-less case — and
+		// `Module.Entity.Attribute` (two dots) a legal qualified attribute. But
+		// one dot over a NON-module qualifier (`Assoc.Attr`) is a member reached
+		// through an association, which Mendix's ChangeActionItem cannot
+		// represent: exec writes the name verbatim and mxbuild rejects the
+		// project with CE1613. Report it here so check and build agree; the
+		// writer refuses the same shape.
+		// (docs/12-bug-reports/2026-10-16-change-member-through-association.md)
+		if dot := strings.Index(name, "."); dot >= 0 {
+			if strings.Count(name, ".") == 1 && backendRefusesModule(ctx, name[:dot]) {
+				out = append(out, fmt.Sprintf(
+					"%s: %q on %s is a member reached through an association — a change item cannot set it. "+
+						"Retrieve the associated object and change that instead (`retrieve $obj from $var/%s;` then `change $obj (%s = ...)`); "+
+						"mxbuild rejects this form with CE1613",
+					flowQN, name, entityQN, name[:dot], name[dot+1:]))
+			}
 			continue
 		}
 		if authored[strings.ToLower(entityQN+"."+name)] {
