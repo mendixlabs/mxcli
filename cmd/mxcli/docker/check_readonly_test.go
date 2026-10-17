@@ -273,3 +273,82 @@ func TestCopyProjectForCheck_MissingProject(t *testing.T) {
 		t.Error("want an error for a project file that does not exist")
 	}
 }
+
+// TestWithProjectCopy_WritesStayOnTheCopy: fn gets a copy it may write into, the
+// original is untouched, and the copy is gone once fn returns.
+func TestWithProjectCopy_WritesStayOnTheCopy(t *testing.T) {
+	proj := t.TempDir()
+	mpr := filepath.Join(proj, "App.mpr")
+	if err := os.WriteFile(mpr, []byte("model"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var seen string
+	err := WithProjectCopy(mpr, func(work string) error {
+		seen = work
+		if work == mpr {
+			t.Error("fn was handed the original project")
+		}
+		return os.WriteFile(filepath.Join(filepath.Dir(work), "theme-cache.txt"), []byte("mx wrote this"), 0o644)
+	})
+	if err != nil {
+		t.Fatalf("WithProjectCopy: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(proj, "theme-cache.txt")); err == nil {
+		t.Error("a write into the copy reached the original project")
+	}
+	if _, err := os.Stat(seen); err == nil {
+		t.Errorf("the copy %s was not removed", seen)
+	}
+	if err := WithProjectCopy(filepath.Join(proj, "nope.mpr"), func(string) error { return nil }); err == nil {
+		t.Error("want an error for a project file that does not exist")
+	}
+}
+
+// TestWithProjectCopy_SkipsNamedFoldersButNeverTheProject: a folder inside the
+// project that the caller names is left out of the copy; naming the project's own
+// folder (an output directory of ".") skips nothing.
+func TestWithProjectCopy_SkipsNamedFoldersButNeverTheProject(t *testing.T) {
+	proj := t.TempDir()
+	mpr := filepath.Join(proj, "App.mpr")
+	for p, content := range map[string]string{
+		"App.mpr":             "model",
+		"dist/Old.mpk":        "earlier package",
+		"widgets/w.mpk":       "a widget",
+		"userlib/dist/ok.jar": "a deeper folder of the same name",
+	} {
+		full := filepath.Join(proj, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exists := func(work, rel string) bool {
+		_, err := os.Stat(filepath.Join(filepath.Dir(work), filepath.FromSlash(rel)))
+		return err == nil
+	}
+
+	err := WithProjectCopy(mpr, func(work string) error {
+		if exists(work, "dist/Old.mpk") {
+			t.Error("the skipped folder was copied")
+		}
+		if !exists(work, "widgets/w.mpk") || !exists(work, "userlib/dist/ok.jar") || !exists(work, "App.mpr") {
+			t.Error("something outside the skipped folder was not copied")
+		}
+		return nil
+	}, filepath.Join(proj, "dist"), filepath.Join(t.TempDir(), "elsewhere"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = WithProjectCopy(mpr, func(work string) error {
+		if !exists(work, "App.mpr") || !exists(work, "dist/Old.mpk") {
+			t.Error("naming the project folder itself must skip nothing")
+		}
+		return nil
+	}, proj)
+	if err != nil {
+		t.Fatal(err)
+	}
+}

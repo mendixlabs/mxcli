@@ -27,7 +27,7 @@ import (
 // Only what mx reads is copied: build output, caches and VCS metadata are skipped
 // (copyProjectTree), so the cost is the model plus the widget, theme and source
 // folders. cleanup removes the copy; it is never nil and safe to defer.
-func copyProjectToTemp(mprPath string) (workMpr string, cleanup func(), err error) {
+func copyProjectToTemp(mprPath string, skip ...string) (workMpr string, cleanup func(), err error) {
 	cleanup = func() {}
 	abs, err := filepath.Abs(mprPath)
 	if err != nil {
@@ -46,7 +46,7 @@ func copyProjectToTemp(mprPath string) (workMpr string, cleanup func(), err erro
 
 	projectDir := filepath.Dir(abs)
 	dst := filepath.Join(tmp, filepath.Base(projectDir))
-	if err := copyProjectTree(projectDir, dst); err != nil {
+	if err := copyProjectTree(projectDir, dst, skip...); err != nil {
 		cleanup()
 		return "", func() {}, err
 	}
@@ -73,10 +73,18 @@ var checkCopySkipAnywhere = map[string]bool{
 	"node_modules": true,
 }
 
-// copyProjectTree copies src to dst, skipping the folders above. A symlinked
-// file is copied as a file, so a tool writing to the copy cannot write through
-// it into the original; a symlinked folder is recreated as a link.
-func copyProjectTree(src, dst string) error {
+// copyProjectTree copies src to dst, skipping the folders above and any folder
+// named in skip (compared as the same directory, so spelling and case do not
+// matter; src itself is never skipped). A symlinked file is copied as a file, so a
+// tool writing to the copy cannot write through it into the original; a symlinked
+// folder is recreated as a link.
+func copyProjectTree(src, dst string, skip ...string) error {
+	var skipInfos []fs.FileInfo
+	for _, s := range skip {
+		if info, err := os.Stat(s); err == nil && info.IsDir() {
+			skipInfos = append(skipInfos, info)
+		}
+	}
 	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -93,6 +101,15 @@ func copyProjectTree(src, dst string) error {
 			}
 			if rel != "." && (checkCopySkipAnywhere[d.Name()] || (!strings.ContainsRune(rel, filepath.Separator) && checkCopySkipRoot[rel])) {
 				return filepath.SkipDir
+			}
+			if rel != "." && len(skipInfos) > 0 {
+				if info, err := d.Info(); err == nil {
+					for _, s := range skipInfos {
+						if os.SameFile(info, s) {
+							return filepath.SkipDir
+						}
+					}
+				}
 			}
 			return os.MkdirAll(target, 0o755)
 		}
@@ -166,4 +183,30 @@ func (r *pathRewriter) rewrite(s string) string {
 		s = strings.ReplaceAll(s, f, r.to)
 	}
 	return s
+}
+
+// WithProjectCopy runs fn with the path of a temporary copy of the project that
+// holds mprPath, and removes the copy afterwards. It is for callers that run an
+// mx command which writes into the project it is given (theme-cache/,
+// deployment/sass/, a module's themesource/ folder) but must leave the user's
+// project alone — the same copy Check and MxCheckOnCopy use.
+//
+// Folders named in skip are left out of the copy — an output folder inside the
+// project, whose earlier contents mx has no use for. Naming the project's own
+// folder skips nothing.
+//
+// Output naming the copy should be reported against the project: replace
+// filepath.Dir(workMpr) with the project's directory.
+func WithProjectCopy(mprPath string, fn func(workMpr string) error, skip ...string) error {
+	abs, err := filepath.Abs(mprPath)
+	if err != nil {
+		return err
+	}
+	workMpr, cleanup, err := copyProjectToTemp(abs, skip...)
+	if err != nil {
+		return fmt.Errorf("copy the project to a temporary directory: %w\n"+
+			"  set TMPDIR to a disk with room for the project", err)
+	}
+	defer cleanup()
+	return fn(workMpr)
 }

@@ -28,7 +28,9 @@ Requires a Personal Access Token (PAT). Run 'mxcli auth login' first.
 'marketplace download' fetches a content version's .mpk to disk;
 'marketplace install --file <package.mpk>' installs a .mpk from disk — a downloaded
 one, or any package distributed as a file — through the same writer as an online
-install, with no PAT.`,
+install, with no PAT.
+'marketplace package <module>' is the reverse: it exports a module of a project
+as a .mpk.`,
 }
 
 var marketplaceSearchCmd = &cobra.Command{

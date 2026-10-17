@@ -37,6 +37,7 @@ These are **CLI commands**, not MDL statements.
 - User wants to upgrade a module that is already installed
 - User asks whether a marketplace module has been edited locally, or what an upgrade would overwrite
 - User asks to download a specific `.mpk` (e.g. for CI, or to import in Studio Pro)
+- User asks to export a module of their own project as a `.mpk`
 - User asks which versions of a marketplace item are compatible with their Mendix version
 - User reports `CE0463` or `CE6087` right after installing or updating a module
 
@@ -447,6 +448,28 @@ Four things this run established, none of them obvious from the command list:
 
 The ids are a convenience, not an authority: confirm with `search`/`info` rather than
 trusting them from memory, and note that the listing name never matches the module name.
+
+## Package a module of the project (`marketplace package`)
+
+The reverse of `install --file`: export a module as a `.mpk`. No PAT is needed.
+
+```bash
+mxcli marketplace package MyModule -p app.mpr                 # ./MyModule.mpk
+mxcli marketplace package MyModule -p app.mpr -o ./dist --json   # {path, sizeBytes, files, foreignEntries}
+mxcli marketplace install --file ./dist/MyModule.mpk -p other.mpr   # and back in
+```
+
+- Only the module's own required `userlib/` JARs go in; `--all-libs` bundles every JAR.
+- `mx` still exports the whole `resources/` folder (another module's `resources/EventLog/` came
+  along in a measured export). mxcli warns about each such file in `resources/`, `javasource/` or
+  `themesource/` and prints the `--exclude` pattern
+  that drops it, e.g. `--exclude '^resources.EventLog.'`. `--exclude` takes **one** regex (join
+  with `|`) and the separator must be written `.`: `[/\\]` makes `mx` write nothing.
+- The `mx` used must be the project's Mendix version (read from the `mx` itself): a mismatch, or an
+  `mx` of unknown version, is refused with both versions named. Fix: `mxcli setup mxbuild --version X`
+  (an `mx` on PATH is used first). `--mxbuild-path` is the override: a mismatch then only warns on stderr.
+- `mx` writes into the project it is given, so mxcli runs it on a temporary copy; the project on
+  disk is unchanged. A Studio Pro lock file beside the project does not stop the export.
 
 ## Notes
 
