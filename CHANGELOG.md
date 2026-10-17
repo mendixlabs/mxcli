@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`mxcli test tests` finds test files in subfolders** (mendixlabs/mxcli#1363) — `mxcli test tests --list` printed `Found 0 test(s)` when the suites live in `tests/<Module>/*.test.mdl`, while `mxcli test tests/Sales --list` found them: a directory argument only read the files directly inside it. It now reads `*.test.mdl` and `*.test.md` at any depth, in path order, skipping hidden folders (`.git`, `.mxcli`) and folders starting with `_` (the Go convention, so a positive-control suite can sit in `tests/unit/_control` outside the default run; the folder you name is always read, so `mxcli test tests/unit/_control` runs it). Skipped `_` folders are named after the `Found N test(s)` line of a run and at the end of a `--list`, so they do not disappear silently, and `--list` over a tree with no tests now says why on stderr (it still exits 0; a run with no tests still exits 1). A file that cannot be parsed is still reported on its own and does not stop the others; neither does a subfolder that cannot be read (a locked folder, a root-owned one in a mounted volume), which is reported by name and turns the run red while the tests in the other folders still run. The "no tests found" hint now also names misnamed `.mdl` / `.md` files in subfolders and the `_` folders that were skipped.
+
 ## [0.27.0] - 2026-10-15
 
 Headline: **`exec` is all or nothing: when a statement fails at write time, the whole run is rolled back, so a script never leaves a project half-changed.** Alongside it: a wave of `describe` → `check` → `exec` fixes from round-trip runs over real apps (the Siemens FSM template, the GenAI showcase, Marketplace modules), Mendix 9 projects can take microflows, nanoflows and pluggable widgets again, `check -p` resolves many more of the references `exec` and the build would refuse, the classic `filemanager` widget and role-based `Visible: roles (…)` are in MDL, and the companion draws a module's domain model. The MongoDB driver is upgraded for the October 2026 BSON advisories.

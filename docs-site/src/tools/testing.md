@@ -26,7 +26,8 @@ Tests execute against a real Mendix runtime. **Docker is one way to get one, not
 ## Quick Start
 
 ```bash
-# Run all tests in a directory
+# Run all tests in a directory, including its subfolders (folders starting
+# with _ are skipped; name one to run it: mxcli test tests/unit/_control)
 mxcli test tests/ -p app.mpr
 
 # Run a specific test file

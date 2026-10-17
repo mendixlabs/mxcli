@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -182,6 +183,9 @@ func Run(opts RunOptions) (*SuiteResult, error) {
 		return nil, fmt.Errorf("parsing test files: %w", err)
 	}
 	fmt.Fprintf(w, "  Found %d test(s) in %d file(s)\n", len(suite.Tests), suite.FilesRead)
+	if line := skippedDirsLine(suite.SkippedDirs); line != "" {
+		fmt.Fprintln(w, line)
+	}
 	for _, fe := range suite.FileErrors {
 		fmt.Fprintf(w, "  ERROR %s: %v\n", fe.Path, fe.Err)
 	}
@@ -190,7 +194,7 @@ func Run(opts RunOptions) (*SuiteResult, error) {
 		// A directory whose every file is malformed is not an empty directory,
 		// and must not be reported as one (#903).
 		if len(suite.FileErrors) > 0 {
-			return nil, fmt.Errorf("no tests could be parsed: %d file(s) failed to parse", len(suite.FileErrors))
+			return nil, noTestsParsedError(suite.FileErrors)
 		}
 		return nil, emptySuiteError(opts.TestFiles)
 	}
@@ -448,13 +452,27 @@ func writeJUnit(opts RunOptions, result *SuiteResult, w io.Writer) error {
 }
 
 // ListTests parses test files and prints the test names without executing.
-func ListTests(files []string, w io.Writer) error {
+//
+// When nothing was found it also says why, on hints (stderr for the command, so
+// a script reading the listing on w is unaffected; nil discards it). The exit
+// status does not change: listing an empty tree is not an error, a run of one is
+// (#1363).
+func ListTests(files []string, w, hints io.Writer) error {
 	suite, err := parseTestFiles(files)
 	if err != nil {
 		return err
 	}
 
 	fmt.Fprintf(w, "Found %d test(s):\n", len(suite.Tests))
+	if len(suite.Tests) == 0 && hints != nil {
+		// Same decision as Run: a directory whose every file is malformed is not
+		// an empty one.
+		if len(suite.FileErrors) > 0 {
+			fmt.Fprintf(hints, "%v\n", noTestsParsedError(suite.FileErrors))
+		} else {
+			fmt.Fprintf(hints, "%v\n", emptySuiteError(files))
+		}
+	}
 	for _, tc := range suite.Tests {
 		fmt.Fprintf(w, "  %s: %s\n", tc.ID, tc.Name)
 		for _, flow := range tc.Setups {
@@ -480,21 +498,55 @@ func ListTests(files []string, w io.Writer) error {
 			fmt.Fprintf(w, "    (no assertions — this test can only report that the body did not throw)\n")
 		}
 	}
+	// After the list, so the colon of the Found line still introduces the tests.
+	if line := skippedDirsLine(suite.SkippedDirs); line != "" {
+		fmt.Fprintln(w, line)
+	}
 	return reportFileErrors(suite.FileErrors, w)
 }
 
-// reportFileErrors prints the files that could not be parsed and returns an
-// error when there were any, so listing a partly-readable directory exits
-// non-zero instead of looking like a clean listing.
+// reportFileErrors prints the files that could not be parsed and the folders
+// that could not be read, and returns an error when there were any, so listing a
+// partly-readable directory exits non-zero instead of looking like a clean
+// listing.
 func reportFileErrors(errs []FileError, w io.Writer) error {
 	if len(errs) == 0 {
 		return nil
 	}
-	fmt.Fprintf(w, "\n%d file(s) could not be parsed:\n", len(errs))
+	summary := failureSummary(errs)
+	fmt.Fprintf(w, "\n%s:\n", summary)
 	for _, fe := range errs {
 		fmt.Fprintf(w, "  ERROR %s: %v\n", fe.Path, fe.Err)
 	}
-	return fmt.Errorf("%d test file(s) could not be parsed", len(errs))
+	return errors.New(summary)
+}
+
+// failureSummary counts what discovery could not use, in words that fit each
+// kind: a test file fails to parse, a folder fails to be read. Calling an
+// unreadable folder a parse failure sends the reader looking for a syntax error
+// that is not there.
+func failureSummary(errs []FileError) string {
+	files, dirs := countFailures(errs)
+	var parts []string
+	if files > 0 {
+		parts = append(parts, fmt.Sprintf("%d test file(s) could not be parsed", files))
+	}
+	if dirs > 0 {
+		parts = append(parts, fmt.Sprintf("%d folder(s) could not be read", dirs))
+	}
+	return strings.Join(parts, " and ")
+}
+
+// countFailures splits errs into unparseable test files and unreadable folders.
+func countFailures(errs []FileError) (files, dirs int) {
+	for _, fe := range errs {
+		if fe.Dir {
+			dirs++
+		} else {
+			files++
+		}
+	}
+	return files, dirs
 }
 
 // suiteFileErrorResults turns unparseable files into ERROR results so they are
@@ -504,8 +556,12 @@ func reportFileErrors(errs []FileError, w io.Writer) error {
 func suiteFileErrorResults(errs []FileError) []TestResult {
 	out := make([]TestResult, 0, len(errs))
 	for _, fe := range errs {
+		what := "file could not be parsed"
+		if fe.Dir {
+			what = "folder could not be read"
+		}
 		out = append(out, TestResult{
-			Name:       fmt.Sprintf("%s (file could not be parsed)", filepath.Base(fe.Path)),
+			Name:       fmt.Sprintf("%s (%s)", filepath.Base(fe.Path), what),
 			Status:     StatusError,
 			Message:    fe.Err.Error(),
 			SourceFile: fe.Path,
@@ -537,6 +593,7 @@ func parseTestFiles(paths []string) (*TestSuite, error) {
 			combined.Tests = append(combined.Tests, dirSuite.Tests...)
 			combined.FileErrors = append(combined.FileErrors, dirSuite.FileErrors...)
 			combined.FilesRead += dirSuite.FilesRead
+			combined.SkippedDirs = append(combined.SkippedDirs, dirSuite.SkippedDirs...)
 		} else {
 			combined.FilesRead++
 			fileSuite, err := ParseTestFile(path)
@@ -553,6 +610,8 @@ func parseTestFiles(paths []string) (*TestSuite, error) {
 			combined.Tests = append(combined.Tests, fileSuite.Tests...)
 		}
 	}
+
+	combined.SkippedDirs = sortedUnique(combined.SkippedDirs)
 
 	// Re-number test IDs to be globally unique
 	for i := range combined.Tests {
@@ -1016,42 +1075,113 @@ func runCompose(dockerDir string, args ...string) error {
 // always the intended test under the wrong name, and printing it turns a dead end
 // into a rename.
 func emptySuiteError(paths []string) error {
-	var skipped []string
+	var skipped, skippedDirs []string
 	for _, path := range paths {
 		info, err := os.Stat(path)
 		if err != nil || !info.IsDir() {
 			continue
 		}
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if e.IsDir() || isTestFile(e.Name()) {
-				continue
+		// Same walk as ParseTestDir, so a misnamed file in tests/Sales/ is
+		// named too.
+		dirs, _ := walkTestTree(path, func(file string, d fs.DirEntry) {
+			if isTestFile(d.Name()) {
+				return
 			}
-			if l := strings.ToLower(e.Name()); strings.HasSuffix(l, ".mdl") || strings.HasSuffix(l, ".md") {
-				skipped = append(skipped, filepath.Join(path, e.Name()))
+			if l := strings.ToLower(d.Name()); strings.HasSuffix(l, ".mdl") || strings.HasSuffix(l, ".md") {
+				skipped = append(skipped, file)
 			}
-		}
+		}, nil)
+		skippedDirs = append(skippedDirs, dirs...)
 	}
 	sort.Strings(skipped)
+	skippedDirs = sortedUnique(skippedDirs)
 
+	var msg string
 	if len(skipped) == 0 {
-		return fmt.Errorf("no tests found: a test file is named *.test.mdl or *.test.md, " +
-			"and holds one or more `/** @test ... */` blocks")
+		msg = "no tests found: a test file is named *.test.mdl or *.test.md, " +
+			"and holds one or more `/** @test ... */` blocks"
+	} else {
+		named, more := capNamed(skipped)
+		msg = fmt.Sprintf("no tests found: discovery matches on the file NAME, so these were not read%s:\n"+
+			"  %s\n"+
+			"Rename one to *.test.mdl (or *.test.md) to have it picked up",
+			more, strings.Join(named, "\n  "))
 	}
-	const maxNamed = 5
-	named := skipped
+	if len(skippedDirs) > 0 {
+		// The suites may sit in a folder that was left out on purpose.
+		named, more := capNamed(slashed(skippedDirs))
+		msg += fmt.Sprintf("\nFolders starting with _ are skipped below the folder you name%s; name one to run it:\n  %s",
+			more, strings.Join(named, "\n  "))
+	}
+	return errors.New(msg)
+}
+
+// noTestsParsedError is the run's answer when files or folders were found and
+// none yielded a test: not an empty directory, so not emptySuiteError.
+func noTestsParsedError(errs []FileError) error {
+	files, dirs := countFailures(errs)
+	var parts []string
+	if files > 0 {
+		parts = append(parts, fmt.Sprintf("%d file(s) failed to parse", files))
+	}
+	if dirs > 0 {
+		parts = append(parts, fmt.Sprintf("%d folder(s) could not be read", dirs))
+	}
+	if files == 0 {
+		return fmt.Errorf("no tests could be read: %s", strings.Join(parts, " and "))
+	}
+	return fmt.Errorf("no tests could be parsed: %s", strings.Join(parts, " and "))
+}
+
+// maxNamed is how many paths a report names before "and N more".
+const maxNamed = 5
+
+// capNamed returns at most maxNamed of items and, when some were left out, the
+// text " (and N more)" to append to the sentence that lists them.
+func capNamed(items []string) (named []string, more string) {
+	named = items
 	if len(named) > maxNamed {
 		named = named[:maxNamed]
 	}
-	more := ""
-	if len(skipped) > len(named) {
-		more = fmt.Sprintf(" (and %d more)", len(skipped)-len(named))
+	if len(items) > len(named) {
+		more = fmt.Sprintf(" (and %d more)", len(items)-len(named))
 	}
-	return fmt.Errorf("no tests found: discovery matches on the file NAME, so these were not read%s:\n"+
-		"  %s\n"+
-		"Rename one to *.test.mdl (or *.test.md) to have it picked up",
-		more, strings.Join(named, "\n  "))
+	return named, more
+}
+
+// skippedDirsLine is the one line that says discovery left folders out. The run
+// and --list both print it after "Found N test(s)", so nothing disappears
+// silently. Empty when there is nothing to say.
+func skippedDirsLine(dirs []string) string {
+	if len(dirs) == 0 {
+		return ""
+	}
+	named, more := capNamed(slashed(dirs))
+	return fmt.Sprintf("  Skipped folder(s) starting with _: %s%s (name one explicitly to run it)",
+		strings.Join(named, ", "), more)
+}
+
+// slashed returns paths with forward slashes, so a line reads the same on every
+// platform.
+func slashed(paths []string) []string {
+	out := make([]string, len(paths))
+	for i, p := range paths {
+		out[i] = filepath.ToSlash(p)
+	}
+	return out
+}
+
+// sortedUnique sorts items in place and returns the distinct values.
+func sortedUnique(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	sort.Strings(items)
+	out := items[:1]
+	for _, it := range items[1:] {
+		if it != out[len(out)-1] {
+			out = append(out, it)
+		}
+	}
+	return out
 }

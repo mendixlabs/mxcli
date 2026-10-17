@@ -82,7 +82,7 @@ first call only stages the change.
 ## Basic Usage
 
 ```bash
-# Run all tests in a directory
+# Run all tests in a directory, including its subfolders
 mxcli test tests/ -p app.mpr
 
 # Run a specific test file
@@ -91,6 +91,42 @@ mxcli test tests/sales.test.mdl -p app.mpr
 # Run markdown test files
 mxcli test tests/integration.test.md -p app.mpr
 ```
+
+Discovery walks the directory and every subfolder, in path order. Below the
+folder you name it skips folders starting with `.` (`.git`, `.mxcli`) and folders
+starting with `_`, the Go convention. Use `_` for a suite that should stay out of
+the default run, such as a positive control that is meant to fail:
+
+```text
+tests/unit/Sales/orders.test.mdl      # run by `mxcli test tests/`
+tests/unit/_control/control.test.mdl  # skipped, and named in the output
+```
+
+```bash
+# Run the control on its own: the folder you name is always read
+mxcli test tests/unit/_control -p app.mpr
+```
+
+Skipped `_` folders are named in the output (after the `Found N test(s)` line of
+a run, at the end of a `--list`), so they do not disappear silently. A run that
+finds no tests exits 1. `--list` exits 0 even when it finds none, and then prints
+the reason, including any `_` folders it skipped, on stderr.
+
+Discovery is fully recursive and has no other skip list, so point `mxcli test` at
+the folder that holds your tests (`tests/`), not at the project root. From the
+project root, `mxcli test .` searches `deployment/`, `node_modules/`, `javasource/`, `vendorlib/`
+and every other folder, which is slow, and runs any stray `*.test.mdl` it finds
+there.
+
+Two more rules follow from the walk:
+
+- A symlinked folder **below** the folder you name is not followed (the walk
+  reports it as a file, so it is ignored without a message). A symlinked folder
+  you name yourself is followed, and errors and listings show the path you typed.
+- A folder that cannot be read (a locked folder, a root-owned folder in a mounted
+  volume) is reported by name as "could not be read", the run exits non-zero, and
+  the tests in the other folders still run. Only a root that cannot be read stops
+  the run.
 
 ## Choosing a mode
 

@@ -165,7 +165,7 @@ func TestListTestsReportsFileErrorsAndFails(t *testing.T) {
 	writeBytes(t, dir, "b_bad.test.mdl", badTestB)
 
 	var out strings.Builder
-	err := ListTests([]string{dir}, &out)
+	err := ListTests([]string{dir}, &out, nil)
 	if err == nil {
 		t.Fatal("ListTests returned nil, want an error so the command exits non-zero")
 	}

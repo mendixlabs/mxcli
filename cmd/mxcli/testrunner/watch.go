@@ -5,9 +5,9 @@ package testrunner
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -169,7 +169,10 @@ func watchMTime(opts RunOptions) time.Time {
 //
 // A directory is walked rather than stat'ed: on Linux a directory's own mtime
 // changes when an entry is created or removed but *not* when an existing file is
-// edited in place, which is the common case this loop exists to catch.
+// edited in place, which is the common case this loop exists to catch. It is
+// walked by walkTestTree, the walk the parser uses, so the two cannot disagree
+// about which files are tests (hidden and "_" folders below the root, and the
+// root itself, are treated alike).
 func testFilesMTime(paths []string) time.Time {
 	var newest time.Time
 	for _, p := range paths {
@@ -183,15 +186,16 @@ func testFilesMTime(paths []string) time.Time {
 			}
 			continue
 		}
-		filepath.WalkDir(p, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !isTestFile(d.Name()) {
-				return nil //nolint:nilerr // an unreadable entry is not a change
+		// An unreadable entry is not a change: no onErr, and the root's own error
+		// leaves newest as it was.
+		_, _ = walkTestTree(p, func(path string, d fs.DirEntry) {
+			if !isTestFile(d.Name()) {
+				return
 			}
 			if fi, err := d.Info(); err == nil && fi.ModTime().After(newest) {
 				newest = fi.ModTime()
 			}
-			return nil
-		})
+		}, nil)
 		// Catch a deletion too: the directory's own mtime moves when an entry
 		// goes away, and the walk above cannot see a file that is no longer there.
 		if info.ModTime().After(newest) {
