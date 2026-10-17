@@ -782,9 +782,21 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 				return mdlerrors.NewNotFound("module", s.Name.Module)
 			}
 		}
+		// A bare `returns Module.Name` that names an enumeration is one: exec
+		// retypes it the same way before it validates the rule. One that names
+		// nothing is reported as that, not as "not a Boolean or an enumeration".
+		ruleReturn := s.ReturnType
+		if ruleReturn != nil && ctx.Connected() {
+			r := newDeclaredTypeResolver(ctx, sc)
+			if retyped, ok := r.bareEnumeration(ruleReturn.Type); ok {
+				ruleReturn = &ast.MicroflowReturnType{Type: retyped, Variable: ruleReturn.Variable}
+			} else if msg := r.check(ruleReturn.Type, "return type of rule "+s.Name.String()); msg != "" {
+				return mdlerrors.NewValidationf("rule '%s' has reference errors:\n  - %s", s.Name.String(), msg)
+			}
+		}
 		// The same validateRule the executor calls, so `check` and `exec` cannot
 		// disagree about what a rule may contain.
-		if errMsg := validateRule(s.Name.String(), s.Body, s.ReturnType); errMsg != "" {
+		if errMsg := validateRule(s.Name.String(), s.Body, ruleReturn); errMsg != "" {
 			return mdlerrors.NewValidationf("%s", strings.TrimRight(errMsg, "\n"))
 		}
 		if validationErrors := ValidateRuleBody(s); len(validationErrors) > 0 {

@@ -117,6 +117,17 @@ RETURN $Order;
 RETURN $FilteredOrders;
 ```
 
+### Returning an Enumeration
+
+Declare the type in the signature with `returns enum Module.Name`; `returns Enumeration(Module.Name)` is the same. A bare `returns Module.Name` is also accepted when no entity has that name and an enumeration does. If an entity and an enumeration share the name, the entity wins, so write `enum` when a name could be either. Nanoflows and rules take the same spellings, and a rule must return a Boolean or an enumeration.
+
+```sql
+CREATE MICROFLOW Shop.SUB_Pick () RETURNS enum Shop.Variant AS $Variant
+BEGIN
+  RETURN Shop.Variant.Original;
+END;
+```
+
 ### Returning Nothing
 
 If the microflow returns nothing (void), you can omit the `RETURN` or use:

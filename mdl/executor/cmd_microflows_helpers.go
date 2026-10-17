@@ -70,6 +70,22 @@ func convertASTToMicroflowDataType(dt ast.DataType, entityResolver func(ast.Qual
 	}
 }
 
+// bareEnumerationType resolves the entity/enumeration ambiguity of a declared
+// type. The parser cannot tell an entity from an enumeration for a bare
+// `Module.Name` and always records an entity reference, so a caller that has
+// found no entity of that name asks here whether an enumeration has it. It
+// returns dt retyped as that enumeration, or false when none does.
+//
+// Parameters and return types of microflows, nanoflows and rules all resolve
+// through this, so the three kinds accept the same spellings; `check` makes the
+// same decision for a project that is not yet written in declaredTypeResolver.
+func bareEnumerationType(ctx *ExecContext, dt ast.DataType) (ast.DataType, bool) {
+	if dt.EntityRef == nil || findEnumeration(ctx, dt.EntityRef.Module, dt.EntityRef.Name) == nil {
+		return dt, false
+	}
+	return ast.DataType{Kind: ast.TypeEnumeration, EnumRef: dt.EntityRef}, true
+}
+
 // The Mendix expression renderer lives in mdl/mendixexpr, where the visitor
 // can reach it too (fmt --upgrade, ako/mxcli#804). These names are the
 // executor's handles on it.

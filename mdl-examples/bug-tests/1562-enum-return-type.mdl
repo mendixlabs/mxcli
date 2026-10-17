@@ -1,0 +1,72 @@
+mdl 1;
+-- ============================================================================
+-- A bare `returns Module.Name` that names an enumeration
+-- ============================================================================
+--
+-- POSITIVE TEST: `mxcli check` (with and without -p --references) and `exec`
+-- MUST accept it.
+--
+-- The parser cannot tell an entity from an enumeration for a bare qualified
+-- name, so it records an entity reference. `exec` resolved that for PARAMETERS
+-- (entity first, then enumeration) but not for RETURN TYPES, while `check`
+-- resolved both the same way: a script `check` passed failed at exec with
+-- "entity 'Shop.Variant' not found for return type". For a rule, check refused
+-- it too, with a misleading "a rule must return a Boolean or an enumeration,
+-- not Entity".
+--
+-- A microflow, a nanoflow and a rule now accept the bare name, and store exactly
+-- what `returns enum Module.Name` stores. A name that is both an entity and an
+-- enumeration stays the entity, as it does for a parameter.
+--
+-- Measured on mxbuild 11.12.5: this script execs and the app checks at 0 errors.
+
+CREATE MODULE EnumReturn;
+
+CREATE OR MODIFY ENUMERATION EnumReturn.Variant (
+  Original 'Original',
+  Released 'Released',
+  None 'None'
+);
+
+CREATE OR MODIFY PERSISTENT ENTITY EnumReturn.Customer (
+  "Name": String(50)
+);
+
+-- The bare name, as a parameter (already worked) and as a return type.
+CREATE OR MODIFY MICROFLOW EnumReturn.SUB_Pick ($Current: EnumReturn.Variant)
+RETURNS EnumReturn.Variant AS $Variant
+BEGIN
+  RETURN EnumReturn.Variant.Original;
+END;
+
+CREATE OR MODIFY NANOFLOW EnumReturn.NF_Pick ()
+RETURNS EnumReturn.Variant AS $Variant
+BEGIN
+  RETURN EnumReturn.Variant.Released;
+END;
+
+CREATE OR MODIFY RULE EnumReturn.RL_Pick ($Customer: EnumReturn.Customer)
+RETURNS EnumReturn.Variant AS $Variant
+BEGIN
+  RETURN EnumReturn.Variant.None;
+END;
+
+-- The explicit spellings, which always worked, store the same thing.
+CREATE OR MODIFY MICROFLOW EnumReturn.SUB_PickExplicit ()
+RETURNS enum EnumReturn.Variant AS $Variant
+BEGIN
+  RETURN EnumReturn.Variant.Original;
+END;
+
+CREATE OR MODIFY MICROFLOW EnumReturn.SUB_PickFunction ()
+RETURNS Enumeration(EnumReturn.Variant) AS $Variant
+BEGIN
+  RETURN EnumReturn.Variant.Original;
+END;
+
+-- A bare entity name is still an entity.
+CREATE OR MODIFY MICROFLOW EnumReturn.SUB_PickCustomer ()
+RETURNS EnumReturn.Customer AS $Customer
+BEGIN
+  RETURN empty;
+END;

@@ -91,11 +91,31 @@ func (r *declaredTypeResolver) check(dt ast.DataType, where string) string {
 	if r.entityExists(*qn) || r.enumExists(*qn) {
 		return ""
 	}
-	msg := fmt.Sprintf("%s: entity %s does not exist", where, qn.String())
+	// A bare scalar name may have meant an enumeration, so the message names both.
+	kind := "entity"
+	if dt.Kind == ast.TypeEntity {
+		kind = "entity or enumeration"
+	}
+	msg := fmt.Sprintf("%s: %s %s does not exist", where, kind, qn.String())
 	if hint := entityNameHint(*qn); hint != "" {
 		msg += ". " + hint
 	}
 	return msg
+}
+
+// bareEnumeration is the check-side twin of bareEnumerationType: a bare
+// `Module.Name` that names no entity but names an enumeration, as exec's
+// create handlers read it. It returns dt retyped as that enumeration, or false
+// when dt is anything else — including a name both an entity and an
+// enumeration have, which exec keeps as the entity.
+func (r *declaredTypeResolver) bareEnumeration(dt ast.DataType) (ast.DataType, bool) {
+	if dt.Kind != ast.TypeEntity || dt.EntityRef == nil || isBuiltinModuleEntity(dt.EntityRef.Module) {
+		return dt, false
+	}
+	if r.entityExists(*dt.EntityRef) || !r.enumExists(*dt.EntityRef) {
+		return dt, false
+	}
+	return ast.DataType{Kind: ast.TypeEnumeration, EnumRef: dt.EntityRef}, true
 }
 
 // flowSignatureErrors resolves a microflow's, nanoflow's or rule's parameter

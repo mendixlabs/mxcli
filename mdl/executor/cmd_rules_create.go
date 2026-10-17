@@ -168,12 +168,12 @@ func execCreateRule(ctx *ExecContext, s *ast.CreateRuleStmt) error {
 			if entityID == "" {
 				// Bare qualified name in microflow context is treated as TypeEntity by the
 				// visitor, but it may actually be an enumeration. Try enum lookup before failing.
-				if found := findEnumeration(ctx, p.Type.EntityRef.Module, p.Type.EntityRef.Name); found != nil {
-					s.Parameters[i].Type = ast.DataType{Kind: ast.TypeEnumeration, EnumRef: p.Type.EntityRef}
+				if retyped, ok := bareEnumerationType(ctx, p.Type); ok {
+					s.Parameters[i].Type = retyped
 					p = s.Parameters[i]
 				} else {
 					return mdlerrors.NewNotFoundMsg("entity", p.Type.EntityRef.Module+"."+p.Type.EntityRef.Name,
-						fmt.Sprintf("entity '%s.%s' not found for parameter '%s'", p.Type.EntityRef.Module, p.Type.EntityRef.Name, p.Name))
+						fmt.Sprintf("entity or enumeration '%s.%s' not found for parameter '%s'", p.Type.EntityRef.Module, p.Type.EntityRef.Name, p.Name))
 				}
 			}
 		}
@@ -200,8 +200,13 @@ func execCreateRule(ctx *ExecContext, s *ast.CreateRuleStmt) error {
 		if s.ReturnType.Type.EntityRef != nil && !isBuiltinModuleEntity(s.ReturnType.Type.EntityRef.Module) {
 			entityID := entityResolver(*s.ReturnType.Type.EntityRef)
 			if entityID == "" {
-				return mdlerrors.NewNotFoundMsg("entity", s.ReturnType.Type.EntityRef.Module+"."+s.ReturnType.Type.EntityRef.Name,
-					fmt.Sprintf("entity '%s.%s' not found for return type", s.ReturnType.Type.EntityRef.Module, s.ReturnType.Type.EntityRef.Name))
+				// A bare qualified name may be an enumeration, as for parameters above.
+				if retyped, ok := bareEnumerationType(ctx, s.ReturnType.Type); ok && s.ReturnType.Type.Kind == ast.TypeEntity {
+					s.ReturnType.Type = retyped
+				} else {
+					return mdlerrors.NewNotFoundMsg("entity", s.ReturnType.Type.EntityRef.Module+"."+s.ReturnType.Type.EntityRef.Name,
+						fmt.Sprintf("entity or enumeration '%s.%s' not found for return type", s.ReturnType.Type.EntityRef.Module, s.ReturnType.Type.EntityRef.Name))
+				}
 			}
 		}
 		if s.ReturnType.Type.Kind == ast.TypeEnumeration && s.ReturnType.Type.EnumRef != nil {

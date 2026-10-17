@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A bare `returns Module.Name` that names an enumeration is accepted by `exec`, as `check` already said** (mendixlabs/mxcli#1562) — `create microflow M.F () returns M.Variant as $V` (and the nanoflow and rule forms) passed `check -p --references` and was then refused by `exec` with "entity 'M.Variant' not found for return type". The parser cannot tell an entity from an enumeration for a bare qualified name; `exec` resolved that for parameters (the entity first, then an enumeration) but not for return types. All three kinds now do, and store exactly what `returns enum M.Variant` stores. A rule's `check` refused the bare form too, with a misleading "a rule must return a Boolean or an enumeration, not Entity". A name that is both an entity and an enumeration stays the entity, as for a parameter, and a name that is neither now says "entity or enumeration" in `check` and in `exec`, for return types and parameters alike, where it used to say only "entity". `returns enum M.Variant` and `Enumeration(M.Variant)` always worked and are what `describe` prints.
+
 ## [0.27.0] - 2026-10-15
 
 Headline: **`exec` is all or nothing: when a statement fails at write time, the whole run is rolled back, so a script never leaves a project half-changed.** Alongside it: a wave of `describe` → `check` → `exec` fixes from round-trip runs over real apps (the Siemens FSM template, the GenAI showcase, Marketplace modules), Mendix 9 projects can take microflows, nanoflows and pluggable widgets again, `check -p` resolves many more of the references `exec` and the build would refuse, the classic `filemanager` widget and role-based `Visible: roles (…)` are in MDL, and the companion draws a module's domain model. The MongoDB driver is upgraded for the October 2026 BSON advisories.
