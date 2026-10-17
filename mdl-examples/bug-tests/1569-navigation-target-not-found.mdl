@@ -1,0 +1,57 @@
+mdl 1;
+-- A navigation profile and a menu document name pages and microflows
+-- (mendixlabs/mxcli#1569).
+--
+-- A navigation statement points at documents in six places: the home page
+-- (also one per user role), a home flow, the login page, the not-found page and
+-- every menu item at any depth. None of them was resolved: `check -p` said
+-- "Check passed!", `exec` wrote the profile, and `mx check` was the first to
+-- object:
+--
+--   [CE1613] "The selected page 'Shop.NoSuchHome' no longer exists."
+--
+-- once for the home page and once per menu item with a missing page or flow.
+--
+-- This file is the shape that must PASS: every target exists by the time it is
+-- needed, or is created by this script (a navigation written BEFORE the page it
+-- names is accepted too, as a call to a flow created further down is: the target
+-- is stored by name and a run that rolls back leaves nothing dangling). A target
+-- that exists nowhere is only visible with a project, and `make check-mdl` runs
+-- without one, so the refused cases are Go tests:
+-- mdl/executor/validate_navigation_targets_test.go.
+
+create module Zz2;
+
+create page Zz2.Landing (
+  Title: 'Landing',
+  Layout: Atlas_Core.Atlas_Default
+) {
+  dynamictext heading (Content: 'Landing', RenderMode: H1)
+};
+
+create microflow Zz2.ACT_Open ()
+begin
+  log info 'open';
+end;
+
+-- Created further down than the navigation that opens it.
+create or modify navigation Responsive
+  home page Zz2.Landing
+{
+  menu item 'Landing' ( OnClick: show page Zz2.Landing, Icon: glyph 57377 )
+  menu 'Tools' ( Icon: glyph 57377 ) {
+    menu item 'Open' ( OnClick: call microflow Zz2.ACT_Open, Icon: glyph 57377 )
+    menu item 'Later' ( OnClick: show page Zz2.Later, Icon: glyph 57377 )
+  }
+};
+
+create page Zz2.Later (
+  Title: 'Later',
+  Layout: Atlas_Core.Atlas_Default
+) {
+  dynamictext heading (Content: 'Later', RenderMode: H1)
+};
+
+create or modify menu Zz2.Main_Menu {
+  menu item 'Landing' ( OnClick: show page Zz2.Landing, Icon: glyph 57377 )
+};

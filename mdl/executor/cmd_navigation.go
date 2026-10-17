@@ -31,6 +31,13 @@ func execAlterNavigation(ctx *ExecContext, s *ast.AlterNavigationStmt) error {
 		return err
 	}
 
+	// Resolve the pages and flows it names, for the same reason: this statement
+	// replaces the whole profile, so a target that does not exist would cost the
+	// stored menu and be reported only by the next build (CE1613).
+	if err := validateNavigationTargetsForExec(ctx, s); err != nil {
+		return err
+	}
+
 	nav, err := ctx.Backend.GetNavigation()
 	if err != nil {
 		return mdlerrors.NewBackend("get navigation", err)

@@ -261,6 +261,7 @@ type Executor struct {
 	// scriptFlows then holds every flow the program being run declares.
 	forwardFlowCalls bool
 	scriptFlows      map[string]*selfFlow
+	scriptTargets    map[defKey]bool // pages and flows the program declares, same run
 	settings         map[string]any
 	cache            *executorCache
 	catalog          *catalog.Catalog
@@ -539,10 +540,14 @@ func (e *Executor) enterScriptFlows(prog *ast.Program) func() {
 	if !e.forwardFlowCalls {
 		return func() {}
 	}
-	prev := e.scriptFlows
+	prev, prevTargets := e.scriptFlows, e.scriptTargets
 	flows := make(map[string]*selfFlow, len(prev))
 	for k, v := range prev {
 		flows[k] = v
+	}
+	targets := make(map[defKey]bool, len(prevTargets))
+	for k, v := range prevTargets {
+		targets[k] = v
 	}
 	for _, stmt := range prog.Statements {
 		switch s := stmt.(type) {
@@ -551,9 +556,16 @@ func (e *Executor) enterScriptFlows(prog *ast.Program) func() {
 		case *ast.CreateNanoflowStmt:
 			declareScriptFlow(flows, true, s.Name, s.ReturnType)
 		}
+		// What a navigation target may name, wherever the declaration stands.
+		if key, _ := definedBy(stmt); key.name != "" {
+			switch key.kind {
+			case defPage, defMicroflow, defNanoflow:
+				targets[key] = true
+			}
+		}
 	}
-	e.scriptFlows = flows
-	return func() { e.scriptFlows = prev }
+	e.scriptFlows, e.scriptTargets = flows, targets
+	return func() { e.scriptFlows, e.scriptTargets = prev, prevTargets }
 }
 
 // enterLanguage runs the following statements under a program's language

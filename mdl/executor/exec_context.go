@@ -64,6 +64,12 @@ type ExecContext struct {
 	// flow the script creates further down is accepted (mendixlabs/mxcli#1405).
 	forwardFlowCalls bool
 
+	// scriptTargets are the pages, microflows and nanoflows the program being
+	// run declares, set under the same all-or-nothing run as scriptFlows
+	// (Executor.enterScriptFlows). A navigation target is stored by name, so one
+	// the script creates further down resolves there, as a flow call does.
+	scriptTargets map[defKey]bool
+
 	// Format controls output formatting (table, json, etc.).
 	Format OutputFormat
 

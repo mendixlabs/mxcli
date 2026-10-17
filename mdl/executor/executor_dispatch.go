@@ -105,6 +105,7 @@ func (e *Executor) newExecContext(ctx context.Context) *ExecContext {
 		LanguageVersion:  e.langVersion,
 		forwardFlowCalls: e.forwardFlowCalls,
 		scriptFlows:      e.scriptFlows,
+		scriptTargets:    e.scriptTargets,
 		describeLang:     e.describeLang,
 		SqlMgr:           e.sqlMgr,
 		ThemeRegistry:    e.themeRegistry,

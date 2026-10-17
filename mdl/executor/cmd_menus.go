@@ -70,6 +70,15 @@ func execCreateMenu(ctx *ExecContext, s *ast.CreateMenuStmt) error {
 		return mdlerrors.NewAlreadyExists("menu", s.Name.String())
 	}
 
+	// Resolve the pages and flows its items name before anything is written, a
+	// folder included. An excluded document is not validated by Mendix and keeps
+	// its dangling targets, as an excluded page does.
+	if existing == nil || !existing.Excluded {
+		if err := validateNavigationTargetsForExec(ctx, s); err != nil {
+			return err
+		}
+	}
+
 	var existingContainer model.ID
 	if existing != nil {
 		existingContainer = existing.ContainerID

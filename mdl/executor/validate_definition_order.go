@@ -66,7 +66,19 @@ type defRef struct {
 	// stored by name, so a run that rolls back on failure resolves it against
 	// the whole script (mendixlabs/mxcli#1405); see flowCallRefs.
 	flowCall bool
+	// byName marks a reference stored by name that is only resolved by looking
+	// it up when the statement runs: a navigation profile's or menu document's
+	// page, microflow or nanoflow. Like a flow call, one the script creates
+	// further down is accepted by a run that rolls back (forwardFlowCalls) and
+	// refused by one that cannot; unlike a call, it is not a call, so
+	// forwardByNameRefusal words the refusal.
+	byName bool
 }
+
+// forwardByNameRefusal is why a run that cannot roll back refuses a navigation
+// target the script creates further down.
+const forwardByNameRefusal = "the target is stored by name and looked up when the statement runs, and this run cannot be rolled back (--continue-on-error, the REPL, -c), so a later failure would leave it dangling. " +
+	"Create the target first; plain `mxcli exec`, which rolls back, accepts the script as it is"
 
 // flowCallRefs marks refs as flow-call targets.
 func flowCallRefs(refs []defRef) []defRef {
@@ -124,7 +136,7 @@ func ValidateScriptDefinitionOrder(prog *ast.Program) []linter.Violation {
 			// Whether a flow call may run ahead of its callee depends on how
 			// the script runs, which this tier cannot know: the project tier
 			// (validateForwardDefRefs) and exec decide (mendixlabs/mxcli#1405).
-			if ref.flowCall {
+			if ref.flowCall || ref.byName {
 				continue
 			}
 			kind, at, ok := laterPlainCreate(plain, created, ref)
@@ -274,6 +286,11 @@ func eagerDefRefs(stmt ast.Statement) []defRef {
 		return oneDefRef(s.Nanoflow, defNanoflow, "grant execute on nanoflow "+s.Nanoflow.String())
 	case *ast.GrantPageAccessStmt:
 		return oneDefRef(s.Page, defPage, "grant view on page "+s.Page.String())
+
+	case *ast.AlterNavigationStmt, *ast.CreateMenuStmt:
+		// The home, login and not-found pages and every menu item's target,
+		// which the handler resolves before it writes the profile or menu.
+		return navigationDefRefs(stmt)
 	}
 	return nil
 }
@@ -495,7 +512,7 @@ func validateForwardDefRefs(ctx *ExecContext, prog *ast.Program) []error {
 					break
 				}
 			}
-			if resolved || (ref.flowCall && ctx.forwardFlowCalls) {
+			if resolved || ((ref.flowCall || ref.byName) && ctx.forwardFlowCalls) {
 				continue
 			}
 			for _, k := range ref.kinds {
@@ -507,6 +524,11 @@ func validateForwardDefRefs(ctx *ExecContext, prog *ast.Program) []error {
 				if ref.flowCall {
 					errs = append(errs, fmt.Errorf("statement %d: %s calls %s %s before it is created (statement %d): %s",
 						i+1, ref.site, k, ref.name, at+1, forwardFlowCallRefusal))
+					break
+				}
+				if ref.byName {
+					errs = append(errs, fmt.Errorf("statement %d: %s references %s %s before it is created (statement %d): %s",
+						i+1, ref.site, k, ref.name, at+1, forwardByNameRefusal))
 					break
 				}
 				if _, isPlain := plain[key]; isPlain {

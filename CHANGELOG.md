@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`check -p` and `exec` refuse a navigation profile or menu document that names a page or flow that does not exist** (mendixlabs/mxcli#1569) — `create or modify navigation` with a home page, role home, login page, not-found page or menu item (at any depth, in both the deprecated and the `mdl 1` spelling) pointing at a missing page, microflow or nanoflow passed `check -p` ("Check passed!") and `exec` ("Navigation profile 'Responsive' updated."), and only `mx check` objected: CE1613 "The selected page 'Shop.NoSuchHome' no longer exists.", once for the home page and once per menu item. A page's own `show page` and `call microflow` and an icon name were already resolved; a navigation statement was not, and it rewrites the whole profile. `check -p` now reports each unresolved target with the profile or menu document, the menu item path (`menu item 'Admin' > 'Users'`) and the missing name, and `exec` refuses the statement before it writes anything. A target the script creates resolves, wherever it stands in a run that rolls back (plain `exec`, `check`), as a call to a flow created further down does (mendixlabs/mxcli#1405); `exec --continue-on-error`, the REPL and `-c` refuse one created further down. A standalone `create menu` document is covered, and one stored as excluded only warns, as an excluded page does.
+
 ## [0.27.0] - 2026-10-15
 
 Headline: **`exec` is all or nothing: when a statement fails at write time, the whole run is rolled back, so a script never leaves a project half-changed.** Alongside it: a wave of `describe` → `check` → `exec` fixes from round-trip runs over real apps (the Siemens FSM template, the GenAI showcase, Marketplace modules), Mendix 9 projects can take microflows, nanoflows and pluggable widgets again, `check -p` resolves many more of the references `exec` and the build would refuse, the classic `filemanager` widget and role-based `Visible: roles (…)` are in MDL, and the companion draws a module's domain model. The MongoDB driver is upgraded for the October 2026 BSON advisories.

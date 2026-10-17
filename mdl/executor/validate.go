@@ -450,6 +450,11 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// worse than the two above: a module-qualified role here makes the project
 	// unloadable rather than merely failing the build (mendixlabs/mxcli#1001).
 	errors = append(errors, validateNavigationRoles(ctx, prog)...)
+	// Resolve the pages and flows a navigation profile or menu document names:
+	// home, login and not-found pages and every menu item. Written by name and
+	// unchecked, so a typo was CE1613 at build time, after the whole menu had
+	// been rewritten.
+	errors = append(errors, validateNavigationTargets(ctx, prog, sc)...)
 	// Resolve what a GRANT / REVOKE, a user role and a demo user name: the
 	// entity, document or member, and the module and user roles. exec refuses
 	// the grants after the statements before them are written, and writes the
