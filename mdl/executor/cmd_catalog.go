@@ -1091,9 +1091,12 @@ func preWarmCache(ctx *ExecContext) {
 	describeDefaultLanguage(ctx)
 }
 
-// SearchOptions harden a search. The zero value is what the SEARCH statement
-// uses.
+// SearchOptions narrow or harden a search. The zero value is what the SEARCH
+// statement uses.
 type SearchOptions struct {
+	// ExcludeMarketplace drops hits in modules downloaded from the Marketplace,
+	// so an audit of the app's own text does not report a vendor's.
+	ExcludeMarketplace bool
 	// Strict returns the index's error for a query it cannot run (an FTS5 syntax
 	// error, say) instead of reporting "no matches". A caller that gates on the
 	// absence of hits needs the difference: "nothing found" and "could not look"
@@ -1101,15 +1104,31 @@ type SearchOptions struct {
 	Strict bool
 }
 
+// marketplaceModuleFilter is the WHERE fragment that keeps a search to modules
+// the project owns. A module's Source is empty unless it came from the
+// Marketplace (see the modules table).
+//
+// Only the current snapshot's modules count: the modules view holds a row per
+// snapshot, and a module that came from the Marketplace in an older one would
+// otherwise be left out of every later search. The current snapshot is the
+// latest one recorded, as AddGraphAnalysis reads it.
+const marketplaceModuleFilter = " and ModuleName not in (select Name from modules" +
+	" where COALESCE(Source, '') <> ''" +
+	" and SnapshotId = (select SnapshotId from snapshots order by rowid desc limit 1))"
+
 // searchSQL returns the strings-index and source-index queries for a search.
-func searchSQL(query string) (stringsSQL, sourceSQL string) {
+func searchSQL(query string, opts SearchOptions) (stringsSQL, sourceSQL string) {
+	filter := ""
+	if opts.ExcludeMarketplace {
+		filter = marketplaceModuleFilter
+	}
 	q := escapeFTSQuery(query)
 	stringsSQL = fmt.Sprintf(
-		"select QualifiedName, ObjectType, snippet(strings, 2, '>>>', '<<<', '...', 32) as Match, StringContext, ModuleName from strings where strings match '%s' limit 50",
-		q)
+		"select QualifiedName, ObjectType, snippet(strings, 2, '>>>', '<<<', '...', 32) as Match, StringContext, ModuleName from strings where strings match '%s'%s limit 50",
+		q, filter)
 	sourceSQL = fmt.Sprintf(
-		"select QualifiedName, ObjectType, snippet(source, 2, '>>>', '<<<', '...', 48) as Match, ModuleName from source where source match '%s' limit 50",
-		q)
+		"select QualifiedName, ObjectType, snippet(source, 2, '>>>', '<<<', '...', 48) as Match, ModuleName from source where source match '%s'%s limit 50",
+		q, filter)
 	return stringsSQL, sourceSQL
 }
 
@@ -1145,7 +1164,7 @@ func searchTable(ctx *ExecContext, query string, opts SearchOptions) (int, error
 		return 0, err
 	}
 
-	stringsSQL, sourceSQL := searchSQL(query)
+	stringsSQL, sourceSQL := searchSQL(query, opts)
 	hits := 0
 
 	// Search strings table
@@ -1261,7 +1280,7 @@ func searchWith(ctx *ExecContext, query, format string, opts SearchOptions) (int
 	var allResults []searchResult
 	seen := make(map[string]bool) // For deduplicating names format
 
-	stringsSQL, sourceSQL := searchSQL(query)
+	stringsSQL, sourceSQL := searchSQL(query, opts)
 
 	// Search strings table
 	strResult, err := runSearchQuery(ctx, stringsSQL, opts)

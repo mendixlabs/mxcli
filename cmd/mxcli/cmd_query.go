@@ -231,18 +231,11 @@ Searches across string literals (captions, labels, messages), the documentation
 of project elements, and MDL source definitions. Requires at least a FULL
 catalog build (done automatically).
 
-What is searched, besides captions, labels and messages, is the documentation of:
-  entities; attributes; associations; enumerations; constants; pages, snippets,
-  layouts, building blocks and page templates; microflows, nanoflows, rules and
-  workflows; Java and JavaScript actions; microflow and Java action parameters;
-  consumed and published REST services and business event services; import and
-  export mappings, JSON structures and data transformers; scheduled events, task
-  queues, regular expressions, image and icon collections and menus; agents, AI
-  models, knowledge bases and consumed MCP services; and a module's domain model
-  documentation. That is every document type whose catalog table carries a
-  documentation text.
-  Not searched: documentation of an enumeration value (Mendix has no such
-  field) and the summary text of a remote service's contract.
+Besides captions, labels and messages, it searches the documentation of every
+element the catalog records (entities, attributes, constants, pages, microflows,
+Java actions, REST services, ... and a module's domain model documentation).
+Not searched: the documentation of an enumeration value (Mendix has no such
+field) and the summary text of a remote service's contract.
 A hit names the element (qualified name, type) and the field: the context
 column says "documentation" for a documentation hit.
 
@@ -263,12 +256,18 @@ Gating on a word:
                     index cannot run, or any other error, exits 2 so that 1
                     always means "something matched".
 
+Marketplace modules:
+  --exclude-marketplace
+                    leave out hits inside modules downloaded from the
+                    Marketplace. Off by default: every module is searched.
+
 Examples:
   mxcli search -p app.mpr "validation"
   mxcli search -p app.mpr "Customer" --json | jq '.[].qualifiedName'
   mxcli search -p app.mpr "Customer" --format names
   mxcli search -p app.mpr "error" -q --format names | xargs -I {} mxcli describe -p app.mpr microflow {}
   mxcli search -p app.mpr "TODO" --fail-on-match
+  mxcli search -p app.mpr "TODO" --exclude-marketplace
 `,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -276,6 +275,7 @@ Examples:
 		format := resolveFormat(cmd, "table")
 		quiet, _ := cmd.Flags().GetBool("quiet")
 		failOnMatch, _ := cmd.Flags().GetBool("fail-on-match")
+		excludeMarketplace, _ := cmd.Flags().GetBool("exclude-marketplace")
 
 		// Under --fail-on-match, exit status 1 means "something matched", so a
 		// search that could not run says so with 2 rather than with 1.
@@ -315,6 +315,7 @@ Examples:
 		// Execute search with format option
 		query := strings.ReplaceAll(args[0], "'", "''")
 		hits, err := exec.SearchWith(query, format, executor.SearchOptions{
+			ExcludeMarketplace: excludeMarketplace,
 			// A gate must not read "the index refused the query" as "no match".
 			Strict: failOnMatch,
 		})

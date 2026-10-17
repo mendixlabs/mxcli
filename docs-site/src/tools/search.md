@@ -41,6 +41,9 @@ mxcli search -p app.mpr "validation" --json
 
 # Exit 1 when anything matches (0 when nothing does)
 mxcli search -p app.mpr "validation" --fail-on-match
+
+# Leave out Marketplace modules
+mxcli search -p app.mpr "validation" --exclude-marketplace
 ```
 
 ## Output Formats
@@ -121,6 +124,10 @@ mxcli search -p app.mpr "TODO" --fail-on-match --json
 ```
 
 Without the flag a hit exits `0`, as before.
+
+## Marketplace modules
+
+By default every module is searched, Marketplace modules included, so existing results do not change. `--exclude-marketplace` leaves out hits inside modules downloaded from the Marketplace, which is what an audit of the app's own text usually wants: the vendor's documentation is not yours to edit. A Marketplace module's own documentation and domain model documentation are left out with the rest of it.
 
 ## Comparison with Catalog Queries
 
