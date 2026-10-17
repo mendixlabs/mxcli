@@ -589,22 +589,25 @@ func applyConditionalSettings(widget pages.Widget, w *ast.WidgetV3) {
 	}
 
 	if editableIf := w.GetStringProp("EditableIf"); editableIf != "" {
-		bw.ConditionalEditability = &pages.ConditionalEditabilitySettings{
-			BaseElement: model.BaseElement{
-				ID:       model.ID(types.GenerateID()),
-				TypeName: "Forms$ConditionalEditabilitySettings",
-			},
-			Expression: editableIf,
-		}
-	} else if editable, ok := pages.CanonicalEditability(w.GetStringProp("Editable")); ok {
+		bw.ConditionalEditability = newConditionalEditability(editableIf)
+	} else if enum, expr, ok := staticEditability(w); ok {
 		// `Editable: Never` — parsed and validated (MDL-WIDGET20 checks the widget
 		// TYPE) and then dropped, because nothing carried it to the writers, which
 		// hardcoded "Always". Same shape as the `Visible: false` case above.
 		//
+		// A string that is not an enum word is the condition, exactly as for
+		// Visible: `Editable: '$currentObject/Locked = false'` is the quoted
+		// spelling of the bare expression. It used to be skipped here, so the
+		// widget stayed Always.
+		//
 		// EDITABLE IF wins when both are given: the conditional settings element is
 		// what makes the enum "Conditional", so honouring a plain `Editable` too
 		// would write an enum contradicting the element beside it.
-		bw.Editable = editable
+		if expr != "" {
+			bw.ConditionalEditability = newConditionalEditability(expr)
+		} else {
+			bw.Editable = enum
+		}
 	}
 }
 

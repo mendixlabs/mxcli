@@ -144,7 +144,9 @@ Input widgets can be conditionally editable:
 TEXTBOX txtStatus (Label: 'Status', Attribute: Status, Editable: $currentObject/Status != 'Closed')
 ```
 
-Static values: `Editable: Never`, `Editable: Always`.
+Static values: `Editable: Never`, `Editable: Always`; `Editable: false` and `Editable: true` mean `Never` and `Always`.
+
+The condition may also be written as a quoted string, exactly as for `Visible:` — `Editable: '$currentObject/Status != ''Closed'''` stores the same condition as the bare form above (a quote inside the string is doubled). Any other value, such as a misspelt `Neever`, is refused by `mxcli check` (`MDL-WIDGET19`) instead of leaving the field editable.
 
 ### Pluggable Widgets
 

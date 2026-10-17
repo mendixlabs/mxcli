@@ -1,0 +1,55 @@
+mdl 1;
+-- A quoted `Editable: '<expression>'` was dropped on write (mendixlabs/mxcli#1567).
+--
+-- `Visible: '$currentObject/Locked = false'` was stored as a conditional
+-- visibility, because pages.StaticVisibleExpression returns any string that is not
+-- true/false as the condition. Editable shares the grammar slot but not the
+-- consumer: pages.CanonicalEditability knew only Always | Never | Conditional and
+-- the builder skipped every other string without a word. The widget was stored
+-- `Editable: Always` with no ConditionalEditabilitySettings, so a field meant to
+-- be locked stayed editable -- `check` clean, `exec` reporting "Created page",
+-- `mx check` at 0 errors.
+--
+-- Now the quoted spelling is the bare expression's twin: both store
+-- `Editable: Conditional` plus the condition, and `describe page` prints either
+-- as the bare form. `Editable: false` / `true` (also dropped before) store
+-- Never / Always.
+--
+-- Verify: exec this script, then `describe page QEdit.Item_Edit` -- the first four
+-- inputs print their condition bare (`Editable: $currentObject/Locked = false`,
+-- the `!= 'x'` form, ...), txtNever and txtFalse print `Editable: Never`, and the
+-- stored page passes `mx check`. Values that cannot be stored are refused by
+-- `check` instead: see 1567-quoted-editable-expression.fail.mdl.
+
+create entity if not exists QEdit.Item (
+  Code: String(50),
+  Note: String(200),
+  Locked: Boolean default false
+);
+
+create or modify page QEdit.Item_Edit (
+  Title: 'Item',
+  Layout: Atlas_Core.Atlas_Default,
+  Params: ( $Item: QEdit.Item )
+) {
+  layoutgrid lg {
+    row {
+      column (DesktopWidth: AutoFill) {
+        dataview dv (Datasource: $Item) {
+          -- Quoted and bare spellings of the same condition store the same thing.
+          textbox txtQuoted (Attribute: Code, Editable: '$currentObject/Locked = false')
+          textbox txtBare (Attribute: Code, Editable: $currentObject/Locked = false)
+          -- A string literal inside the quoted expression has its quotes doubled.
+          textarea txtLiteral (Attribute: Note, Editable: '$currentObject/Code != ''x''')
+          checkbox cbLocked (Attribute: Locked, Editable: '$currentObject/Code = empty')
+          -- The enum words keep their meaning, quoted or not.
+          textbox txtNever (Attribute: Code, Editable: 'Never')
+          textbox txtFalse (Attribute: Code, Editable: false)
+          textbox txtAlways (Attribute: Code, Editable: 'Always')
+        }
+      }
+    }
+  }
+};
+
+describe page QEdit.Item_Edit;

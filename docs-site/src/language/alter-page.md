@@ -50,7 +50,7 @@ ALTER PAGE Module.EditPage {
 | `Class` | CSS class names | `SET (Class: 'card p-3') ON cMain` |
 | `Style` | Inline CSS | `SET (Style: 'margin: 8px;') ON cBox` |
 | `DynamicClasses` | Runtime-computed CSS classes | `SET (DynamicClasses: if $currentObject/IsActive then 'is-active' else '') ON cMain` |
-| `Editable` | Editability mode | `SET (Editable: ReadOnly) ON txtEmail` |
+| `Editable` | Editability: `Always`, `Never`, or a bare condition expression (the quoted form is refused in `SET`) | `SET (Editable: Never) ON txtEmail` |
 | `Visible` | Visibility expression | `SET (Visible: '$showField') ON txtPhone` |
 | `Name` | Widget name | `SET (Name: 'txtFullName') ON txtName` |
 

@@ -1,0 +1,28 @@
+mdl 1;
+-- Negative companion of 1567-quoted-editable-expression.mdl: `check` must refuse every
+-- Editable value that cannot be stored, naming the accepted spellings, instead of
+-- letting the widget stay editable. Each statement below is refused on its own.
+-- mendixlabs/mxcli#1567.
+
+create entity if not exists QEdit.Item (Code: String(50), Locked: Boolean default false);
+
+-- A misspelt enum word (MDL-WIDGET19).
+create or modify page QEdit.Bad_Word (Title: 'Bad', Layout: Atlas_Core.Atlas_Default, Params: ( $Item: QEdit.Item )) {
+  layoutgrid lg { row { column (DesktopWidth: AutoFill) {
+    dataview dv (Datasource: $Item) { textbox txtA (Attribute: Code, Editable: 'Neever') }
+  } } }
+};
+
+-- A quoted expression that is not an expression (MDL-WIDGET19).
+create or modify page QEdit.Bad_Syntax (Title: 'Bad', Layout: Atlas_Core.Atlas_Default, Params: ( $Item: QEdit.Item )) {
+  layoutgrid lg { row { column (DesktopWidth: AutoFill) {
+    dataview dv (Datasource: $Item) { textbox txtB (Attribute: Code, Editable: '$currentObject/Locked = = false') }
+  } } }
+};
+
+-- A quoted expression that follows an association (MDL-WIDGET13, CE0117).
+create or modify page QEdit.Bad_Assoc (Title: 'Bad', Layout: Atlas_Core.Atlas_Default, Params: ( $Item: QEdit.Item )) {
+  layoutgrid lg { row { column (DesktopWidth: AutoFill) {
+    dataview dv (Datasource: $Item) { textbox txtC (Attribute: Code, Editable: '$currentObject/QEdit.Item_Item/Code = ''x''') }
+  } } }
+};

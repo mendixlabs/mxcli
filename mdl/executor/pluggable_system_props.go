@@ -64,8 +64,8 @@ func widgetAsksEditability(w *ast.WidgetV3) bool {
 	if w.GetStringProp("EditableIf") != "" {
 		return true
 	}
-	e, ok := pages.CanonicalEditability(w.GetStringProp("Editable"))
-	return ok && e != "Always"
+	enum, expr, ok := staticEditability(w)
+	return ok && (expr != "" || enum != "Always")
 }
 
 // systemPropsOfType returns the system properties a CustomWidgetType declares,

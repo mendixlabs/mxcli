@@ -99,6 +99,28 @@ func TestMDLWIDGET31_ListViewInputsNotEditable(t *testing.T) {
 			want: 0,
 		},
 		{
+			// `editable: false` and the quoted spellings are Never as well: the
+			// author already made these inputs read-only, so there is nothing to warn about.
+			name: "control: inputs marked editable false or 'Never'",
+			src: `create page M.P (title: 'P', layout: Atlas_Core.Atlas_Default) {
+  listview lv (datasource: database M.Thing) {
+    textbox t (label: 'N', attribute: Name, editable: false)
+    textbox u (label: 'M', attribute: Name, editable: 'Never')
+  }
+}`,
+			want: 0,
+		},
+		{
+			// A condition is not Never: the input can still be editable, so the list view still decides.
+			name: "an input with a quoted condition is still warned about",
+			src: `create page M.P (title: 'P', layout: Atlas_Core.Atlas_Default) {
+  listview lv (datasource: database M.Thing) {
+    textbox t (label: 'N', attribute: Name, editable: '$currentObject/Name = empty')
+  }
+}`,
+			want: 1,
+		},
+		{
 			// A nested list view's inputs are governed by the NESTED list
 			// view's Editable, so the outer one is not the one to report.
 			name: "nested editable list view owns its own inputs",

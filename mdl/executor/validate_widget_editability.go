@@ -101,7 +101,11 @@ func validateWidgetEditability(w *ast.WidgetV3, locationPrefix string) []linter.
 	// (lowered to EditableIf, and riding on ConditionalEditabilitySettings these
 	// types do not have) is not. Only the second is worth reporting.
 	if plainEditableWidgetTypes[typ] && !strings.EqualFold(key, "editableif") {
-		return nil
+		// A quoted condition is the bracket form's twin: it is the part of
+		// `Editable:` these types have no place for.
+		if _, expr, ok := staticEditability(w); !ok || expr == "" {
+			return nil
+		}
 	}
 	return []linter.Violation{{
 		RuleID:   "MDL-WIDGET20",

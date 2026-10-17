@@ -132,6 +132,12 @@ func checkOwnContainerName(w *ast.WidgetV3, nearest, locationPrefix string) []li
 			flag(p.written+" expression", v, "CE0117")
 		}
 	}
+	// A quoted `Editable: '<expr>'` is the same condition as the bare one.
+	if _, routed := w.Properties["EditableIf"]; !routed {
+		if expr, ok := editableCondition(w); ok {
+			flag("Editable expression", expr, "CE0117")
+		}
+	}
 	return out
 }
 

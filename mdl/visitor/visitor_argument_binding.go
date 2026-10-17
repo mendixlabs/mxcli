@@ -197,6 +197,17 @@ func BareExpression(expr string) bool {
 	return bareArgumentText(ctx.(parser.IExpressionContext)) == expr
 }
 
+// ParsesAsExpression reports whether text is one MDL expression, read with the
+// same grammar rule as a bare `Visible: <expr>` / `Editable: <expr>`. check asks
+// it of a quoted condition, whose text the parser otherwise never sees.
+func ParsesAsExpression(text string) bool {
+	if strings.TrimSpace(text) == "" {
+		return false
+	}
+	_, ok := parseRule(text, func(p *parser.MDLParser) antlr.ParserRuleContext { return p.Expression() })
+	return ok
+}
+
 // bareArgumentText is the expression a bare workflow argument stores: its
 // source text, as the Mendix expression editor would hold it. Unlike a
 // microflow expression stored as written (buildSourceExpression), a string in

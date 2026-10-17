@@ -183,6 +183,49 @@ func CanonicalEditability(v string) (string, bool) {
 	}
 }
 
+// StaticEditability resolves a static `Editable:` value, the counterpart of
+// StaticVisibleExpression for the property that shares its grammar slot. A
+// value is exactly one of:
+//
+//   - an enum word (Always | Never | Conditional, any case), returned canonical
+//     as enum;
+//   - a boolean, or the string "true"/"false": `true` is Always and `false` is
+//     Never. Visible has no plain form and stores a constant condition for
+//     `false`; editability has one, which is what Studio Pro writes for "Never";
+//   - anything else non-empty, which is the client expression of a conditional
+//     editability, verbatim (the caller roots it in $currentObject if it wants
+//     that, as for Visible).
+//
+// ok is false for an empty value and for a type that is none of these. A caller
+// must treat "not ok" as "nothing authored", never as "something unreadable":
+// every non-empty string and boolean lands in one of the three.
+func StaticEditability(v any) (enum, expr string, ok bool) {
+	switch t := v.(type) {
+	case bool:
+		if t {
+			return "Always", "", true
+		}
+		return "Never", "", true
+	case string:
+		s := strings.TrimSpace(t)
+		if s == "" {
+			return "", "", false
+		}
+		if canon, isEnum := CanonicalEditability(s); isEnum {
+			return canon, "", true
+		}
+		switch strings.ToLower(s) {
+		case "true":
+			return "Always", "", true
+		case "false":
+			return "Never", "", true
+		}
+		return "", s, true
+	default:
+		return "", "", false
+	}
+}
+
 // WidgetEditability is the value a writer should store for a widget: the
 // conditional settings element wins, then an explicit `editable:`, then Mendix's
 // own default.

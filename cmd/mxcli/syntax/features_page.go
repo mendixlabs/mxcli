@@ -166,6 +166,9 @@ LIST IMPACT OF htmlelement;
 			"-- written (name attributes as $currentObject/Attr). A plain value is static.\n" +
 			"TEXTBOX name (Attribute: Attr, Visible: $currentObject/IsActive, Editable: $currentObject/Status != 'Closed')\n" +
 			"TEXTBOX name (Attribute: Attr, Visible: false, Editable: Never)\n" +
+			"--   A condition may also be a quoted string holding the same expression; Editable:\n" +
+			"--   false / true mean Never / Always.\n" +
+			"TEXTBOX name (Attribute: Attr, Editable: '$currentObject/Status != ''Closed''')\n" +
 			"--   The bracketed Visible: [IsActive] (attributes rooted for you) is the deprecated\n" +
 			"--   spelling, MDL-DEPR081.\n\n" +
 			"-- Actions\nACTIONBUTTON name (Caption: 'C', Action: SAVE CHANGES, ButtonStyle: Primary)\nLINKBUTTON name (Caption: 'C', Action: ...)\n\n" +

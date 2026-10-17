@@ -76,7 +76,9 @@ func firstEditableInput(widgets []*ast.WidgetV3, registry *WidgetRegistry) *ast.
 		if typ == "listview" {
 			continue
 		}
-		never := strings.EqualFold(c.GetStringProp("Editable"), "Never")
+		// `editable: false` is Never too, quoted or not (pages.StaticEditability).
+		enum, _, hasStatic := staticEditability(c)
+		never := hasStatic && enum == "Never"
 		if editableWidgetTypes[typ] && typ != "dataview" && !never {
 			return c
 		}

@@ -1196,7 +1196,24 @@ func validateConsumableConditional(w *ast.WidgetV3, locationPrefix string) []lin
 		}
 		switch v.(type) {
 		case bool, string:
-			continue // a static form StaticVisibleExpression consumes
+			// A static form StaticVisibleExpression / StaticEditability consumes.
+			// Visible takes any string as its condition; Editable takes an enum
+			// word, a boolean or a condition, and refuses what is none of them
+			// here, because the writer has nowhere to put it.
+			if p.plain == "Editable" {
+				if problem := editableValueProblem(w); problem != "" {
+					out = append(out, linter.Violation{
+						RuleID:   "MDL-WIDGET19",
+						Severity: linter.SeverityError,
+						Message: fmt.Sprintf(
+							"%s: %s: %s — Editable takes Always, Never (or true / false), or a condition "+
+								"expression such as `Editable: $currentObject/Locked = false`, bare or in quotes; "+
+								"anything else cannot be stored and would leave the widget editable",
+							locationPrefix, widgetLabel(w.Name, w.Type), problem),
+					})
+				}
+			}
+			continue
 		}
 		out = append(out, linter.Violation{
 			RuleID:   "MDL-WIDGET19",
@@ -1312,6 +1329,13 @@ func validateWidgetExpressionAssociations(w *ast.WidgetV3, locationPrefix string
 	var out []linter.Violation
 	for _, key := range expressionWidgetProps {
 		expr, ok := lookupWidgetProp(w, key)
+		shown := key
+		if key == "EditableIf" && (!ok || expr == "") {
+			// A quoted `Editable: '<expr>'` is the same condition.
+			if e, quoted := editableCondition(w); quoted {
+				expr, ok, shown = e, true, "Editable"
+			}
+		}
 		if !ok || expr == "" {
 			continue
 		}
@@ -1321,7 +1345,7 @@ func validateWidgetExpressionAssociations(w *ast.WidgetV3, locationPrefix string
 				Severity: linter.SeverityError,
 				Message: fmt.Sprintf(
 					"%s: widget `%s` property `%s` expression traverses association `%s` — Mendix expressions cannot follow associations (CE0117). Bind the value via a data binding (contentparams/attribute) or precompute it onto the bound entity (e.g. a calculated attribute).",
-					locationPrefix, w.Name, key, m[1],
+					locationPrefix, w.Name, shown, m[1],
 				),
 			})
 		}

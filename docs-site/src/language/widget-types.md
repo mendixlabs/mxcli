@@ -259,7 +259,7 @@ All input widgets share common properties:
 |----------|-------------|---------|
 | `Label` | Field label text | `Label: 'Customer Name'` |
 | `Attribute` | Entity attribute to bind to | `Attribute: Name` |
-| `Editable` | Editability mode | `Editable: ReadOnly` |
+| `Editable` | Editability: `Always`, `Never`, `true`/`false`, or a condition expression (bare or quoted) | `Editable: Never` |
 | `Visible` | Visibility expression | `Visible: '$showField'` |
 
 Each input widget takes only some attribute types. Measured with mxbuild 11.14.0,
@@ -641,7 +641,7 @@ These properties are shared across many widget types:
 | `DynamicClasses` | Runtime-computed CSS classes (expression; stacks on `Class`) | `DynamicClasses: if $currentObject/IsActive then 'is-active' else ''` |
 | `DesignProperties` | Atlas design properties | `DesignProperties: ('Spacing top': 'Large', 'Full width': ON)` |
 | `Visible` | Visibility expression | `Visible: '$showSection'` |
-| `Editable` | Editability mode | `Editable: ReadOnly` |
+| `Editable` | Editability: `Always`, `Never`, `true`/`false`, or a condition expression (bare or quoted) | `Editable: Never` |
 
 ## See Also
 
