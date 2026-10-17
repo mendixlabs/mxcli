@@ -5,6 +5,8 @@ package javaactions
 import (
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // GenerateJavaScriptSource renders the .js stub Studio Pro writes for a
@@ -42,7 +44,7 @@ func GenerateJavaScriptSource(actionName string, userCode string, params []*Java
 	// JSDoc: one @param per parameter, then the @returns.
 	sb.WriteString("/**\n")
 	for _, p := range params {
-		sb.WriteString(fmt.Sprintf(" * @param {%s} %s\n", jsDocType(p.ParameterType), p.Name))
+		sb.WriteString(fmt.Sprintf(" * @param {%s} %s\n", jsDocType(p.ParameterType), JavaScriptParameterName(p.Name)))
 	}
 	sb.WriteString(fmt.Sprintf(" * @returns {%s}\n", jsDocReturnType(returnType)))
 	sb.WriteString(" */\n")
@@ -50,7 +52,7 @@ func GenerateJavaScriptSource(actionName string, userCode string, params []*Java
 	// Exported async function with the action's parameters.
 	names := make([]string, 0, len(params))
 	for _, p := range params {
-		names = append(names, p.Name)
+		names = append(names, JavaScriptParameterName(p.Name))
 	}
 	sb.WriteString(fmt.Sprintf("export async function %s(%s) {\n", actionName, strings.Join(names, ", ")))
 	sb.WriteString("\t// BEGIN USER CODE\n")
@@ -65,6 +67,31 @@ func GenerateJavaScriptSource(actionName string, userCode string, params []*Java
 	sb.WriteString("}\n")
 
 	return sb.String()
+}
+
+// JavaScriptParameterName returns the identifier a parameter has in the .js
+// file: the model name with its first character lower-cased and the rest
+// untouched. This is the rule mxbuild and Studio Pro apply when they regenerate
+// the signature and the JSDoc of a JavaScript action, keeping only the user
+// code and the EXTRA CODE section. The model name itself is never changed.
+//
+// Measured with mxbuild 11.12.5 on an action declaring URL, MyID, Some_Name, A,
+// XMLData, _Lead, Obj2Name and Eid, which it regenerated as uRL, myID,
+// some_Name, a, xMLData, _Lead, obj2Name and eid: only the first character is
+// lowered (URL is not url), underscores and later capitals are left alone, and
+// a leading underscore has no case. Studio Pro-authored actions agree: the model
+// parameters PhoneNumber and Address, GeocodingProvider, ProviderApiKey are
+// phoneNumber and address, geocodingProvider, providerApiKey in their .js.
+//
+// A body written against the declared case therefore throws a ReferenceError
+// once mxbuild regenerates the signature, and nothing warns. The signature must
+// be generated here the way mxbuild would, so the body sees what will run.
+func JavaScriptParameterName(name string) string {
+	r, size := utf8.DecodeRuneInString(name)
+	if r == utf8.RuneError {
+		return name // empty, or not valid UTF-8: leave it as it is
+	}
+	return string(unicode.ToLower(r)) + name[size:]
 }
 
 // jsDocType maps a parameter type to a JSDoc type annotation (best-effort).

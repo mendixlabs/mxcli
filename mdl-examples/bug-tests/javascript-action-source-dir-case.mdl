@@ -43,7 +43,7 @@ create or modify javascript action JsDirCase.JsDirCase_Echo(
 as $$
 // MXCLI_MARKER — if this text is missing from the deployed bundle, the source
 // was written to a directory Mendix does not read.
-return Promise.resolve(Value);
+return Promise.resolve(value);
 $$;
 
 create or modify nanoflow JsDirCase.ACT_Echo()

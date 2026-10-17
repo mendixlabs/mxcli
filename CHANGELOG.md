@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A JavaScript action's parameters are written with the names mxbuild generates** (mendixlabs/mxcli#1560) — `create javascript action … (Url: String, ReadOnly: Boolean)` wrote `export async function JS_Open(Url, ReadOnly)`, while mxbuild and Studio Pro regenerate the signature with the first character of each parameter lower-cased, `JS_Open(url, readOnly)`, and keep the body. A body using the declared `Url` then threw `ReferenceError` the first time the action ran, with `check`, `mx check` and the build all clean. The signature and the JSDoc `@param` names now carry that name (only the first character changes: `URL` is `uRL`, `MyID` is `myID`, `_Lead` stays), measured against mxbuild 11.12.5, so what `exec` writes is what a build leaves. The same rewrite used to break a Studio Pro-authored action on its first edit through MDL: `Geocode(address, …)` became `Geocode(Address, …)` over a body that still read `address`. The model keeps the declared parameter names, `describe` prints them as declared, and bodies are not rewritten, so a body reads `readOnly`, not `ReadOnly`.
+
 ## [0.27.0] - 2026-10-15
 
 Headline: **`exec` is all or nothing: when a statement fails at write time, the whole run is rolled back, so a script never leaves a project half-changed.** Alongside it: a wave of `describe` → `check` → `exec` fixes from round-trip runs over real apps (the Siemens FSM template, the GenAI showcase, Marketplace modules), Mendix 9 projects can take microflows, nanoflows and pluggable widgets again, `check -p` resolves many more of the references `exec` and the build would refuse, the classic `filemanager` widget and role-based `Visible: roles (…)` are in MDL, and the companion draws a module's domain model. The MongoDB driver is upgraded for the October 2026 BSON advisories.

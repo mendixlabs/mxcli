@@ -39,7 +39,7 @@ create javascript action JsTest.Add(
   B: Integer not null
 ) returns Integer
 as $$
-return Promise.resolve(A + B);
+return Promise.resolve(a + b);
 $$;
 
 -- MARK: Exposed (toolbox) action targeting native
@@ -51,7 +51,7 @@ create javascript action JsTest.ShowToast(
 exposed as 'Show Toast' in 'UI'
 platform Native
 as $$
-console.log(Message);
+console.log(message);
 return Promise.resolve(true);
 $$;
 
@@ -63,7 +63,7 @@ create or modify javascript action JsTest.Add(
   C: Integer
 ) returns Integer
 as $$
-return Promise.resolve(A + B + (C || 0));
+return Promise.resolve(a + b + (c || 0));
 $$;
 
 -- MARK: Enumeration parameter (issue #680)
@@ -82,14 +82,14 @@ create javascript action JsTest.FormatSeverity(
   Level: Enumeration(JsTest.Severity) not null
 ) returns String
 as $$
-return Promise.resolve(String(Level));
+return Promise.resolve(String(level));
 $$;
 
 create javascript action JsTest.NextSeverity(
   Current: ENUM JsTest.Severity not null
 ) returns Enumeration(JsTest.Severity)
 as $$
-return Promise.resolve(Current);
+return Promise.resolve(current);
 $$;
 
 -- MARK: Inspect

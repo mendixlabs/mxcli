@@ -72,15 +72,15 @@ as $$
 var root = document.documentElement;
 root.classList.remove("theme-light", "theme-dark");
 try {
-    if (Theme === "light" || Theme === "dark") {
-        root.classList.add("theme-" + Theme);
-        window.localStorage.setItem("mxcli-theme", Theme);
+    if (theme === "light" || theme === "dark") {
+        root.classList.add("theme-" + theme);
+        window.localStorage.setItem("mxcli-theme", theme);
     } else {
         window.localStorage.removeItem("mxcli-theme");
     }
 } catch (e) {
-    if (Theme === "light" || Theme === "dark") {
-        root.classList.add("theme-" + Theme);
+    if (theme === "light" || theme === "dark") {
+        root.classList.add("theme-" + theme);
     }
 }
 return Promise.resolve(true);

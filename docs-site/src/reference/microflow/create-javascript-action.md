@@ -32,6 +32,16 @@ If `OR MODIFY` is specified and the action already exists, its parameters, retur
 type, exposed-as settings, platform, and body are updated in place; the UUID is
 preserved.
 
+### Parameter names in the body
+
+The model keeps a parameter's name as declared, but the generated `.js` file uses
+the name Studio Pro and mxbuild generate: the **first character lower-cased**,
+nothing else. The body is written against that name. `ReadOnly` is `readOnly`,
+`Url` is `url`, `URL` is `uRL` (not `url`), `MyID` is `myID`, `_Lead` stays
+`_Lead`. mxcli writes the signature this way and does not rewrite the body, so a
+body that uses the declared spelling (`ReadOnly`) throws a `ReferenceError` when
+the action runs. `DESCRIBE` still prints the declared names.
+
 ### Platform
 
 The optional `PLATFORM` clause restricts where the action runs: `Web`, `Native`,
@@ -96,7 +106,7 @@ CREATE JAVASCRIPT ACTION MyModule.JSA_Add (
     B: Integer NOT NULL
 ) RETURNS Integer
 AS $$
-    return Promise.resolve(A + B);
+    return Promise.resolve(a + b);
 $$;
 ```
 
@@ -110,7 +120,7 @@ CREATE JAVASCRIPT ACTION MyModule.JSA_ShowToast (
 EXPOSED AS 'Show Toast' IN 'UI'
 PLATFORM Native
 AS $$
-    console.log(Message);
+    console.log(message);
     return Promise.resolve(true);
 $$;
 ```
@@ -124,7 +134,7 @@ CREATE OR MODIFY JAVASCRIPT ACTION MyModule.JSA_Add (
     C: Integer
 ) RETURNS Integer
 AS $$
-    return Promise.resolve(A + B + (C || 0));
+    return Promise.resolve(a + b + (c || 0));
 $$;
 ```
 

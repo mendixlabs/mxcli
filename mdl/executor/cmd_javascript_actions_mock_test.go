@@ -269,3 +269,50 @@ func TestJavaScriptActionRewrite_CarriesParameterDescription(t *testing.T) {
 		t.Errorf("Fresh: description %q, category %q — a new parameter inherited a description", p.Description, p.Category)
 	}
 }
+
+// Only the identifiers in the generated .js are lower-cased, the way mxbuild
+// regenerates them. The parameter names in the model are what the author
+// declared, so describe prints them unchanged and re-running its output is
+// stable.
+func TestCreateJavaScriptAction_ModelKeepsDeclaredParameterCase(t *testing.T) {
+	mod := mkModule("WebMod")
+	h := mkHierarchy(mod)
+
+	var created *types.JavaScriptAction
+	var written []*types.JavaActionParameter
+	mb := &mock.MockBackend{
+		IsConnectedFunc:           func() bool { return true },
+		ListModulesFunc:           func() ([]*model.Module, error) { return []*model.Module{mod}, nil },
+		ListJavaScriptActionsFunc: func() ([]*types.JavaScriptAction, error) { return nil, nil },
+		CreateJavaScriptActionFunc: func(jsa *types.JavaScriptAction) error {
+			created = jsa
+			return nil
+		},
+		WriteJavaScriptSourceFileFunc: func(_, _, _ string, params []*types.JavaActionParameter, _ types.CodeActionReturnType) error {
+			written = params
+			return nil
+		},
+	}
+	ctx, _ := newMockCtx(t, withBackend(mb), withHierarchy(h))
+	assertNoError(t, execCreateJavaScriptAction(ctx, &ast.CreateJavaScriptActionStmt{
+		Name: ast.QualifiedName{Module: "WebMod", Name: "JS_Open"},
+		Parameters: []ast.JavaActionParam{
+			{Name: "Url", Type: ast.DataType{Kind: ast.TypeString}},
+			{Name: "ReadOnly", Type: ast.DataType{Kind: ast.TypeBoolean}},
+		},
+		ReturnType:     ast.DataType{Kind: ast.TypeString},
+		JavaScriptCode: "return url;",
+	}))
+
+	if created == nil || len(created.Parameters) != 2 {
+		t.Fatalf("action = %+v", created)
+	}
+	for i, want := range []string{"Url", "ReadOnly"} {
+		if created.Parameters[i].Name != want {
+			t.Errorf("model parameter %d = %q, want %q", i, created.Parameters[i].Name, want)
+		}
+		if len(written) == 2 && written[i].Name != want {
+			t.Errorf("parameter %d handed to the .js writer = %q, want the model name %q", i, written[i].Name, want)
+		}
+	}
+}

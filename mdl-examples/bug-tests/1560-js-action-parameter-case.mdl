@@ -1,0 +1,68 @@
+mdl 1;
+-- ============================================================================
+-- Bug: a JavaScript action's body threw ReferenceError for its own parameters
+-- ============================================================================
+--
+-- Symptom
+--   An action declared with `Url: String, ReadOnly: Boolean` and a body that
+--   uses `Url` and `ReadOnly` was written with
+--
+--     export async function JS_Open(Url, ReadOnly)
+--
+--   `mxcli check` passed and so did `mx check`. After a build, mxbuild had
+--   regenerated the signature as `JS_Open(url, readOnly)` and kept the body, so
+--   `Url` and `ReadOnly` no longer existed and the action threw a
+--   ReferenceError when a user clicked it. Nothing warned. The same happened to
+--   an action authored in Studio Pro the first time it was changed through
+--   `create or modify`: `Geocode(address, ...)` became `Geocode(Address, ...)`
+--   with a body that still read `address`.
+--
+-- Cause
+--   mxbuild and Studio Pro lower-case the FIRST character of each parameter name
+--   in the generated .js (signature and JSDoc @param); the model keeps the
+--   declared name. mxcli wrote the declared name, so the file it wrote was not
+--   the file the build produces.
+--
+-- Fix
+--   mxcli writes the name mxbuild writes: only the first character is
+--   lower-cased (URL -> uRL, MyID -> myID, _Lead -> _Lead). The model parameter
+--   keeps its declared name, so `describe` prints it as declared. Bodies are not
+--   rewritten: a body sees the lower-first name.
+--
+-- Verify
+--   mxcli exec mdl-examples/bug-tests/1560-js-action-parameter-case.mdl -p app.mpr
+--
+--   Then the signature in the file is what a build will produce:
+--
+--     grep -q "export async function JsParamCase_Open(url, readOnly)" \
+--       javascriptsource/jsparamcase/actions/JsParamCase_Open.js
+--
+--   and `describe javascript action JsParamCase.JsParamCase_Open` still prints
+--   `Url: String` and `ReadOnly: Boolean`.
+--
+--   Running mxbuild on the project must leave that signature as it is; before
+--   the fix it rewrote it to lower-first and broke the body.
+-- ============================================================================
+
+create module JsParamCase;
+
+create or modify javascript action JsParamCase.JsParamCase_Open(
+  Url: String,
+  ReadOnly: Boolean
+) returns String
+as $$
+// The body uses the names mxbuild generates: first character lower-cased.
+return Promise.resolve(url + (readOnly ? " (read only)" : ""));
+$$;
+
+create or modify javascript action JsParamCase.JsParamCase_Names(
+  URL: String,
+  MyID: String,
+  Some_Name: String,
+  XMLData: String,
+  _Lead: String,
+  Obj2Name: String
+) returns String
+as $$
+return Promise.resolve(uRL + myID + some_Name + xMLData + _Lead + obj2Name);
+$$;

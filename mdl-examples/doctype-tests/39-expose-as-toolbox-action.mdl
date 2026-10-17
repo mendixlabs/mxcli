@@ -130,7 +130,7 @@ exposed as 'Slugify' in 'Toolbox demo'
   icon 'assets/toolbox-icon-64.png'
 platform Web
 as $$
-return Promise.resolve(String(Input).toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+return Promise.resolve(String(input).toLowerCase().replace(/[^a-z0-9]+/g, '-'));
 $$;
 
 -- =============================================================================
