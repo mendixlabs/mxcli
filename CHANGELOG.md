@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`mxcli run --local --detach` no longer opens a console window per child process on Windows** (mendixlabs/mxcli#1484) — a detached run on Windows made several terminal windows pop up during a boot, one for each console program it started (Java, MxBuild, Gradle). The run was created without a console (`DETACHED_PROCESS`), so Windows gave each console child a new, visible one. It is now created with a console of its own that has no window (`CREATE_NO_WINDOW`), which its children share. Measured on Mendix 11.12.5: v0.26.0 showed 4 new visible windows during a boot, this build 0. Closing the launching terminal still does not end the run, and `run stop` is unchanged.
+
 ## [0.27.0] - 2026-10-15
 
 Headline: **`exec` is all or nothing: when a statement fails at write time, the whole run is rolled back, so a script never leaves a project half-changed.** Alongside it: a wave of `describe` → `check` → `exec` fixes from round-trip runs over real apps (the Siemens FSM template, the GenAI showcase, Marketplace modules), Mendix 9 projects can take microflows, nanoflows and pluggable widgets again, `check -p` resolves many more of the references `exec` and the build would refuse, the classic `filemanager` widget and role-based `Visible: roles (…)` are in MDL, and the companion draws a module's domain model. The MongoDB driver is upgraded for the October 2026 BSON advisories.
