@@ -17,6 +17,12 @@ type PropertyTypeIDEntry struct {
 	DefaultValue   string // Default value from the template's ValueType
 	ValueType      string // Type of value (Boolean, Integer, String, DataSource, etc.)
 	Required       bool   // Whether this property is required
+	// SelectionTypes lists the selection kinds a Selection-typed property offers,
+	// as the widget declares them (<selectionTypes> in widget.xml, the template's
+	// ValueType.SelectionTypes): None, Single and/or Multi. Empty for every other
+	// type, and where the template carries none — a caller then falls back to the
+	// full set rather than guessing a narrower one.
+	SelectionTypes []string
 	// DefaultTranslations are the widget-shipped <translations> for this property.
 	// A REQUIRED TextTemplate the author leaves unset must be serialized WITH this
 	// text: a null there is CE0463 "the definition of this widget has changed",

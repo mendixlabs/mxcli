@@ -1,0 +1,28 @@
+mdl 1;
+-- ============================================================================
+-- (mendixlabs/mxcli#1618) — a selection property given a value it cannot hold
+-- ============================================================================
+--
+-- NEGATIVE TEST: this script must FAIL `mxcli check` (MDL-WIDGET50).
+--
+-- Both gallery statements below used to pass check and exec. `itemSelection:
+-- Bogus` was stored as a primitive nothing reads; `Selection: Single` together
+-- with `itemSelection: Multi` stored Single in one field and Multi in another.
+-- The widget declares three selections (None, Single, Multi), and the keyword and
+-- the key name ONE property, so a value outside the three, or two values for it,
+-- is refused instead of guessed at.
+
+create module BugIselFail;
+create persistent entity BugIselFail.Ord ( Code: String(20) );
+
+create page BugIselFail.Invalid ( Title: 'Invalid', Layout: Atlas_Core.Atlas_Default ) {
+  gallery galBogus ( DataSource: database BugIselFail.Ord, itemSelection: Bogus ) {
+    template { dynamictext txtBogus (Content: 'x') }
+  }
+};
+
+create page BugIselFail.Conflict ( Title: 'Conflict', Layout: Atlas_Core.Atlas_Default ) {
+  gallery galBoth ( DataSource: database BugIselFail.Ord, Selection: Single, itemSelection: Multi ) {
+    template { dynamictext txtBoth (Content: 'x') }
+  }
+};

@@ -264,6 +264,12 @@ func validateWidgetTreeIn(widgets []*ast.WidgetV3, registry *WidgetRegistry, loc
 		out = append(out, validateWidgetActionSlot(w, locationPrefix)...)
 		// #842: a Gallery row click the widget itself calls ambiguous.
 		out = append(out, validateGalleryClickAmbiguity(w, locationPrefix)...)
+		// A selection property given a value its widget does not offer, or two
+		// spellings that disagree (`Selection:` and `itemSelection:`).
+		out = append(out, validateSelectionProperties(w, lookupWidgetDef(w, registry), locationPrefix)...)
+		// A definition constant the script overrides by key, on a widget with no such
+		// property: the builder drops it, and exec refuses (refuseUndeclaredMappedKey).
+		out = append(out, validateAuthoredConstantUndeclared(w, lookupWidgetDef(w, registry), registry.projectPath, locationPrefix)...)
 		// #928: contentparams with no `{N}` placeholder to consume them.
 		if lookupWidgetDef(w, registry) != nil {
 			out = append(out, validatePluggableContentParams(w, locationPrefix)...)

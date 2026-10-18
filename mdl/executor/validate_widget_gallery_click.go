@@ -33,6 +33,10 @@ func validateGalleryClickAmbiguity(w *ast.WidgetV3, locationPrefix string) []lin
 	selection := "Single"
 	if v, ok := lookupProperty(w.Properties, "Selection"); ok {
 		selection = stringifyAny(v)
+	} else if v, ok := lookupProperty(w.Properties, "itemSelection"); ok {
+		// The property's own key stores the same selection as the keyword; reading
+		// only the keyword called a `itemSelection: None` gallery a selecting one.
+		selection = stringifyAny(v)
 	}
 	trigger := "single"
 	if v, ok := lookupProperty(w.Properties, "onClickTrigger"); ok {

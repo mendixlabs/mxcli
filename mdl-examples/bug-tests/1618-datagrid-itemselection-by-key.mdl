@@ -1,0 +1,62 @@
+mdl 1;
+-- ============================================================================
+-- (mendixlabs/mxcli#1618) — a selection property written by its widget key
+-- ============================================================================
+--
+-- `itemSelection: Single` on a Data grid 2 passed check, exec reported
+-- "Created page" and mx check found nothing, but the grid had no selection:
+-- the stored property read PrimitiveValue 'Single' and Selection 'None'. A
+-- selection-typed property keeps its value in `Selection`; only the mapped
+-- keyword (`Selection: Single`) wrote it there. The key fell through to the
+-- scalar route and was written as a primitive the widget never reads.
+--
+-- Expected now: each pair below stores the SAME bytes (ids aside) — by key and
+-- by keyword — with Selection Single / Multi and an empty PrimitiveValue. A
+-- gallery's `itemSelection: None` turns off the Single it selects by default.
+--
+-- Verify against a project (-p), then read the stored value:
+--   mxcli exec 1618-datagrid-itemselection-by-key.mdl -p app.mpr
+--   mxcli bson dump -p app.mpr --type page --object "BugIsel.ByKey" --format json
+--     -> the itemSelection property: Selection 'Single' / 'Multi', PrimitiveValue ''
+--   mx check app.mpr  -> 0 errors
+--
+-- Refused, by check and exec (MDL-WIDGET50) — see
+-- 1618-datagrid-itemselection-by-key.fail.mdl:
+--   itemSelection: Bogus                       (not one of None, Single, Multi)
+--   Selection: Single, itemSelection: Multi    (two spellings that disagree)
+
+create module BugIsel;
+create persistent entity BugIsel.Ord ( Code: String(20) );
+
+create page BugIsel.ByKey ( Title: 'By key', Layout: Atlas_Core.Atlas_Default ) {
+  datagrid dgSingle ( DataSource: database BugIsel.Ord, itemSelection: Single ) {
+    column (Attribute: Code)
+  }
+  datagrid dgMulti ( DataSource: database BugIsel.Ord, itemSelection: Multi ) {
+    column (Attribute: Code)
+  }
+  gallery galNone ( DataSource: database BugIsel.Ord, itemSelection: None ) {
+    template { dynamictext txtNone (Content: 'none') }
+  }
+  gallery galMulti ( DataSource: database BugIsel.Ord, itemSelection: Multi ) {
+    template { dynamictext txtMulti (Content: 'multi') }
+  }
+};
+
+-- The mapped keyword: the control the key must equal.
+create page BugIsel.ByKeyword ( Title: 'By keyword', Layout: Atlas_Core.Atlas_Default ) {
+  datagrid dgSingle ( DataSource: database BugIsel.Ord, Selection: Single ) {
+    column (Attribute: Code)
+  }
+  datagrid dgMulti ( DataSource: database BugIsel.Ord, Selection: Multiple ) {
+    column (Attribute: Code)
+  }
+  gallery galNone ( DataSource: database BugIsel.Ord, Selection: None ) {
+    template { dynamictext txtNone (Content: 'none') }
+  }
+  gallery galMulti ( DataSource: database BugIsel.Ord, Selection: Multiple ) {
+    template { dynamictext txtMulti (Content: 'multi') }
+  }
+};
+
+describe page BugIsel.ByKey;

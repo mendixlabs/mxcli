@@ -415,6 +415,7 @@ func jsonToBSONWithMappingAndObjectType(data map[string]any, idMapping map[strin
 			Required:           required,
 			IsLinked:           isLinked,
 			DataSourceProperty: dataSourceProp,
+			SelectionTypes:     SelectionTypesOf(data["ValueType"]),
 		}
 		if nestedObjectTypeID != "" {
 			entry.ObjectTypeID = nestedObjectTypeID
@@ -1085,6 +1086,25 @@ func ListAvailableTemplates() []string {
 		result = append(result, widgetID)
 	}
 	return result
+}
+
+// SelectionTypesOf reads a template ValueType's SelectionTypes — the selection
+// kinds (None, Single, Multi) a Selection-typed property offers. The array is
+// marker-prefixed like every Mendix list in a template ([1, "None", "Single"]),
+// so only its strings count. Nil for a ValueType that has none.
+func SelectionTypesOf(valueType any) []string {
+	vt, ok := valueType.(map[string]any)
+	if !ok {
+		return nil
+	}
+	items, _ := vt["SelectionTypes"].([]any)
+	var out []string
+	for _, it := range items {
+		if s, ok := it.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // readPropertyTranslations reads a template ValueType's widget-shipped
