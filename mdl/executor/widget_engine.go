@@ -248,7 +248,11 @@ type BuildContext struct {
 	// ImageEntity is the entity an image-typed property binds to when it was
 	// written `$currentObject` rather than as a collection entry (#1476).
 	ImageEntity string
-	pageBuilder *pageBuilder
+	// ScriptAuthored says PrimitiveVal came from the script rather than from the
+	// definition's own constant: a mapping with a `value` writes that constant
+	// unless the script names the property by its key.
+	ScriptAuthored bool
+	pageBuilder    *pageBuilder
 }
 
 // =============================================================================
@@ -602,8 +606,29 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	for _, s := range slots {
 		mappedKeys[s.MDLContainer] = true
 	}
+	// mappedKeys holds the mappings' SOURCE keywords, but the loop below looks a
+	// name up as the author wrote it — and an author who writes a widget's own
+	// property key (`itemSelection:`) matches no keyword. A set of "already
+	// handled" names has to be keyed the way the lookup that consults it is, or a
+	// name the mapping pass DID consume is written a second time here, by whatever
+	// the property's value type falls to.
+	//
+	// A selection mapping reads the key (resolveMapping → resolveSelection), so the
+	// key it consumed is recorded under that name, lower-cased as lookupProperty
+	// compares. Other operations keep their old route through this pass: they do
+	// not all read the key, and one that does not would lose the value.
+	selectionKeys := make(map[string]bool)
+	for _, m := range mappings {
+		if m.Operation != "selection" {
+			continue
+		}
+		selectionKeys[strings.ToLower(m.PropertyKey)] = true
+		for _, a := range m.MdlAliases {
+			selectionKeys[strings.ToLower(a)] = true
+		}
+	}
 	for propName, propVal := range w.Properties {
-		if mappedKeys[propName] || isBuiltinPropName(propName) {
+		if mappedKeys[propName] || selectionKeys[strings.ToLower(propName)] || isBuiltinPropName(propName) {
 			continue
 		}
 		entry, ok := propertyTypeIDs[propName]
@@ -658,6 +683,18 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 				break
 			}
 			builder.SetTextTemplateWithParams(propName, strVal, e.entityContextFor(propName))
+		case "Selection":
+			// A selection-typed property no mapping reaches (a hand-edited or
+			// older definition). Its value lives in the WidgetValue's Selection
+			// field; the scalar route below writes PrimitiveValue, which the widget
+			// never reads. Mapped ones are consumed by the mapping pass and skipped
+			// above.
+			val, problem := resolveSelectionValue(w, widgetLabelForError(w),
+				PropertyMapping{PropertyKey: propName, Operation: "selection"}, entry.SelectionTypes, false)
+			if problem != nil {
+				return nil, problem.execError()
+			}
+			builder.SetSelection(propName, val)
 		case "Attribute":
 			// The property's own scope, as the mapping pass uses — this pass
 			// re-applies a property authored by its schema key AFTER every
@@ -1023,8 +1060,15 @@ func singleAttributeOverflowMessage(w *ast.WidgetV3, m PropertyMapping, attrs []
 // (`value` in the .def.json) is not checked: it is the definition's default, not
 // the user's data, and an older widget version lacking the key is not the
 // script's fault.
+//
+// The exemption ends where the script takes the constant over. `advanced: true`
+// on a Gallery names the mapped property by its key, so the mapping writes the
+// author's value in place of the constant — and a Gallery 3.x declares no
+// `advanced`, so the value vanished with nothing said. An authored value equal
+// to the constant is still exempt: it drops nothing the definition would not
+// have written anyway.
 func refuseUndeclaredMappedKey(builder backend.WidgetObjectBuilder, def *WidgetDefinition, mapping PropertyMapping, ctx *BuildContext, w *ast.WidgetV3) error {
-	if mapping.Value != "" || !ctx.carriesValue() {
+	if constantOnly := mapping.Value != "" && (!ctx.ScriptAuthored || ctx.PrimitiveVal == mapping.Value); constantOnly || !ctx.carriesValue() {
 		return nil
 	}
 	declarer, ok := builder.(backend.WidgetPropertyDeclarer)
@@ -1441,8 +1485,40 @@ func (e *PluggableWidgetEngine) recordDataSourceEntity(propertyKey, entityName s
 }
 
 // resolveMapping resolves a PropertyMapping's source into a BuildContext.
+// resolveSelection reads a selection-typed property from the mapped keyword and
+// from its own key, validated against the selection kinds the loaded template
+// declares for it. "" means the script wrote neither. See
+// widget_selection_value.go.
+func (e *PluggableWidgetEngine) resolveSelection(mapping PropertyMapping, w *ast.WidgetV3) (string, error) {
+	val, problem := resolveSelectionValue(w, widgetLabelForError(w), mapping,
+		e.currentPropertyTypeIDs[mapping.PropertyKey].SelectionTypes,
+		selectionKeywordShared(e.currentDef, mapping.Source))
+	if problem != nil {
+		return "", problem.execError()
+	}
+	return val, nil
+}
+
 func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.WidgetV3) (*BuildContext, error) {
 	ctx := &BuildContext{pageBuilder: e.pageBuilder}
+
+	// A selection-typed property reads from the mapped keyword AND from the
+	// property's own key, and validates both (widget_selection_value.go). It comes
+	// first because its constant, if any, is only the fallback.
+	if mapping.Operation == "selection" {
+		val, err := e.resolveSelection(mapping, w)
+		if err != nil {
+			return nil, err
+		}
+		if val == "" {
+			val = mapping.Value
+		}
+		if val == "" {
+			val = mapping.Default
+		}
+		ctx.PrimitiveVal = val
+		return ctx, nil
+	}
 
 	if mapping.Value != "" {
 		ctx.PrimitiveVal = mapping.Value
@@ -1456,6 +1532,7 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 				return nil, err
 			}
 			ctx.PrimitiveVal = val
+			ctx.ScriptAuthored = true
 		}
 		return ctx, nil
 	}
@@ -1621,13 +1698,6 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 				}
 			}
 		}
-
-	case "Selection":
-		val := w.GetSelection()
-		if val == "" && mapping.Default != "" {
-			val = mapping.Default
-		}
-		ctx.PrimitiveVal = val
 
 	case "CaptionAttribute":
 		if captionAttr := w.GetStringProp("CaptionAttribute"); captionAttr != "" {

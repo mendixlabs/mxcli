@@ -11,12 +11,12 @@ import (
 
 // explicitPassWritableTypes are the property value types the widget engine's
 // explicit-property pass (PluggableWidgetEngine.Build, step 4.6) writes by
-// storage key: Expression, TextTemplate and Attribute through their own
-// setters, and the scalar types as a primitive. A value of any other type
+// storage key: Expression, TextTemplate, Attribute and Selection through their
+// own setters, and the scalar types as a primitive. A value of any other type
 // (objects, widgets, icons, images, actions, datasources…) has no correct
 // route there, so MDL-WIDGET06 stays true for it.
 var explicitPassWritableTypes = map[string]bool{
-	"expression": true, "texttemplate": true, "attribute": true,
+	"expression": true, "texttemplate": true, "attribute": true, "selection": true,
 	"string": true, "boolean": true, "integer": true, "decimal": true, "enumeration": true,
 }
 

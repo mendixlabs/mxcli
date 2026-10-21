@@ -652,6 +652,11 @@ gallery cards (datasource: database Module.Product, selection: Single, onClickTr
 ```
 `onSelectionChange:` and `onConfigurationChange:` take an action the same way.
 
+**Selection by key.** `selection:` is the keyword for the widget's `itemSelection`
+property, on a gallery and on a data grid 2 alike; `itemSelection: Multi` names the
+same property and stores the same thing. Write one of the two: a value that is not
+`None`, `Single` or `Multi`, or two spellings that disagree, is refused (MDL-WIDGET50).
+
 ### Filter Widgets
 
 A filter widget lives in one of two places: **inside a DATA GRID column's own braces**,
