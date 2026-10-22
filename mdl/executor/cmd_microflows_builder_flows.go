@@ -326,33 +326,85 @@ func (fb *flowBuilder) rewritePendingErrorHandlers(rewrite func(pendingErrorHand
 	fb.setActivePendingErrorHandler(active)
 }
 
+// branchErrorHandlerScope holds the handlers still pending when a branch of a
+// split starts: they belong to the activities before the split, not to it.
+type branchErrorHandlerScope struct {
+	active pendingErrorHandlerState
+	queued []pendingErrorHandlerState
+}
+
+// enterBranchErrorHandlers sets the pending handlers aside while a branch is
+// built, so the branch settles its own handlers on its own flows, as the top
+// level does. A fall-through handler in a branch was left pending past the
+// branch and rejoined on the flow INTO the split (a retry loop when the call
+// assigns a variable) or ended the microflow (mendixlabs/mxcli#1565).
+func (fb *flowBuilder) enterBranchErrorHandlers() branchErrorHandlerScope {
+	outer := branchErrorHandlerScope{active: fb.activePendingErrorHandler(), queued: fb.pendingErrorHandlers}
+	fb.setActivePendingErrorHandler(pendingErrorHandlerState{})
+	fb.pendingErrorHandlers = nil
+	return outer
+}
+
+// takeBranchErrorHandlers restores the handlers set aside and returns those of
+// the branch it could not settle.
+func (fb *flowBuilder) takeBranchErrorHandlers(outer branchErrorHandlerScope) []pendingErrorHandlerState {
+	inner := fb.pendingErrorHandlers
+	if active := fb.activePendingErrorHandler(); !active.activeIsEmpty() {
+		inner = append(inner, active)
+	}
+	fb.pendingErrorHandlers = outer.queued
+	fb.setActivePendingErrorHandler(outer.active)
+	return inner
+}
+
+// queueBranchErrorHandlersAt queues the handlers the branches of a split could
+// not settle, to rejoin on the flow that leaves the split from exitID — its
+// merge, or the last activity of its one continuing branch — which the parent
+// draws later. A handler with a result settles on whatever flow comes next,
+// and the next flow the parent draws is the one INTO the split: a loop.
+func (fb *flowBuilder) queueBranchErrorHandlersAt(handlers []pendingErrorHandlerState, exitID model.ID) {
+	for _, state := range handlers {
+		if state.skipVar != "" && state.tailFrom != "" {
+			state.skipVar = ""
+			state.source = exitID
+		}
+		fb.pendingErrorHandlers = append(fb.pendingErrorHandlers, state)
+	}
+}
+
+// settleBranchErrorHandlersOn settles handlers a branch left pending on the
+// flow that leaves it, originID → destinationID, which must already be drawn:
+// a handler on the branch's last activity rejoins there. It returns those it
+// could not settle.
+func (fb *flowBuilder) settleBranchErrorHandlersOn(handlers []pendingErrorHandlerState, originID, destinationID model.ID) []pendingErrorHandlerState {
+	if len(handlers) == 0 {
+		return nil
+	}
+	outer := fb.enterBranchErrorHandlers()
+	fb.pendingErrorHandlers = handlers
+	fb.addPendingErrorHandlerFlowForStatement(originID, destinationID, nil)
+	return fb.takeBranchErrorHandlers(outer)
+}
+
+// addBranchErrorHandlerFlowForStatement settles the branch's handlers on a flow
+// drawn inside the branch, as addPendingErrorHandlerFlowForStatement does at the
+// top level. In a branch that ends in a return, a handler on an activity with a
+// result is left for the code after the split: it is the shared error path of a
+// branch whose remaining statements build on the result
+// (TestBuildFlowGraph_OutputHandlerInReturningBranchSkipsDerivedSuccessTail).
+func (fb *flowBuilder) addBranchErrorHandlerFlowForStatement(branchReturns bool, originID, destinationID model.ID, stmt ast.MicroflowStatement, futureReferencesSkipVar bool) {
+	fb.rewritePendingErrorHandlers(func(state pendingErrorHandlerState) pendingErrorHandlerState {
+		if branchReturns && state.skipVar != "" {
+			return state
+		}
+		return fb.addPendingErrorHandlerFlowForState(state, originID, destinationID, stmt, futureReferencesSkipVar)
+	})
+}
+
 func (fb *flowBuilder) addPendingErrorHandlerFlowForStatement(originID, destinationID model.ID, stmt ast.MicroflowStatement, futureReferencesSkipVar ...bool) {
 	futureReferences := len(futureReferencesSkipVar) > 0 && futureReferencesSkipVar[0]
 	fb.rewritePendingErrorHandlers(func(state pendingErrorHandlerState) pendingErrorHandlerState {
 		return fb.addPendingErrorHandlerFlowForState(state, originID, destinationID, stmt, futureReferences)
-	})
-}
-
-func (fb *flowBuilder) addPendingErrorHandlerFlowTo(destinationID model.ID) {
-	if destinationID == "" {
-		return
-	}
-	fb.rewritePendingErrorHandlers(func(state pendingErrorHandlerState) pendingErrorHandlerState {
-		if state.emptyFrom != "" {
-			fb.addEmptyErrorHandlerRejoinFlowFrom(state.emptyFrom, state.emptyFrom, destinationID)
-			state.emptyFrom = ""
-		}
-		if state.source != "" && state.tailFrom != "" {
-			fb.addErrorHandlerRejoinFlowForState(state, state.source, destinationID)
-			state.source = ""
-			state.tailFrom = ""
-			state.skipVar = ""
-			state.tailCase = ""
-			state.tailAnchor = nil
-			state.tailIsSource = false
-			state.returnValue = ""
-		}
-		return state
 	})
 }
 

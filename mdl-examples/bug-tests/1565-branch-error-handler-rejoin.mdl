@@ -1,0 +1,92 @@
+mdl 1;
+-- ============================================================================
+-- mendixlabs/mxcli#1565: a fall-through error handler inside a branch
+-- ============================================================================
+--
+-- A custom error handler that does not end in `return` or `raise error`
+-- continues with the statement after the failing activity. Inside a branch
+-- (IF, CASE, split type) it was left pending past the branch:
+--
+--   * with a result variable it rejoined on the flow INTO the split, so a
+--     failing call re-ran the decision and called again: a loop for as long
+--     as the call kept failing (DESCRIBE: `merge rejoin1;` before the `if`);
+--   * without one it ended the microflow at an end event of its own, so the
+--     rest of the branch and everything after it never ran (DESCRIBE: a
+--     `return;` in the handler that the script did not contain);
+--   * in a branch ending in `return`, it rejoined after the IF instead.
+--
+-- `mx check` reports 0 errors for all three, so only the flow shows it. After
+-- the fix, DESCRIBE prints each handler without `return;` or `join`, with the
+-- rejoin merge folded onto the failing call as `@merge(x, y)`, and re-running
+-- the DESCRIBE output changes nothing.
+
+create module BugTest1565;
+
+create enumeration BugTest1565.Color (Red 'Red', Green 'Green');
+
+create microflow BugTest1565.Sub () returns Integer
+begin
+  return 1;
+end;
+
+create microflow BugTest1565.SubNoResult ()
+begin
+  log info node 'BugTest1565' 'sub';
+end;
+
+-- Rejoins at 'after call'; no loop back to the split.
+create microflow BugTest1565.WithResult ($Flag: Boolean)
+begin
+  log info node 'BugTest1565' 'before';
+  if $Flag then
+    $N = call microflow BugTest1565.Sub() on error without rollback begin
+      log warning node 'BugTest1565' 'failed';
+    end error;
+    log info node 'BugTest1565' 'after call';
+  end if;
+  log info node 'BugTest1565' 'end';
+end;
+
+-- Rejoins at 'after call'; one end event.
+create microflow BugTest1565.WithoutResult ($Flag: Boolean)
+begin
+  log info node 'BugTest1565' 'before';
+  if $Flag then
+    call microflow BugTest1565.SubNoResult() on error without rollback begin
+      log warning node 'BugTest1565' 'failed';
+    end error;
+    log info node 'BugTest1565' 'after call';
+  end if;
+  log info node 'BugTest1565' 'end';
+end;
+
+-- Rejoins at 'after call', inside the branch that returns.
+create microflow BugTest1565.ReturningBranch ($Flag: Boolean) returns Boolean
+begin
+  if $Flag then
+    call microflow BugTest1565.SubNoResult() on error without rollback begin
+      log warning node 'BugTest1565' 'failed';
+    end error;
+    log info node 'BugTest1565' 'after call';
+    return true;
+  else
+    log info node 'BugTest1565' 'else';
+  end if;
+  log info node 'BugTest1565' 'end';
+  return false;
+end;
+
+-- Rejoins at 'after call' in the CASE branch.
+create microflow BugTest1565.CaseBranch ($C: BugTest1565.Color)
+begin
+  case $C
+    when Red then
+      call microflow BugTest1565.SubNoResult() on error without rollback begin
+        log warning node 'BugTest1565' 'failed';
+      end error;
+      log info node 'BugTest1565' 'after call';
+    when Green, (empty) then
+      log info node 'BugTest1565' 'green';
+  end case;
+  log info node 'BugTest1565' 'end';
+end;

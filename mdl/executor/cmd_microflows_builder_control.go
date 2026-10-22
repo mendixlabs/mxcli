@@ -34,8 +34,6 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 	hasElseBody := s.HasElse || len(s.ElseBody) > 0
 	elseReturns := hasElseBody && lastStmtIsReturn(s.ElseBody)
 	bothReturn := hasElseBody && thenReturns && elseReturns
-	thenNeedsErrorMerge := thenReturns && bodyHasContinuingCustomErrorHandler(s.ThenBody)
-	elseNeedsErrorMerge := elseReturns && bodyHasContinuingCustomErrorHandler(s.ElseBody)
 
 	// The last statement of a loop body: an IF/ELSE whose branches both carry
 	// on there joins nothing, since both end the iteration, and a loop-body
@@ -136,7 +134,9 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 	needMerge := false
 	if !bothReturn && !tailWithoutMerge {
 		if hasElseBody {
-			needMerge = (!thenReturns && !elseReturns) || thenNeedsErrorMerge || elseNeedsErrorMerge
+			// A fall-through handler in a returning branch rejoins inside that
+			// branch, after its failing activity, so it needs no merge here.
+			needMerge = !thenReturns && !elseReturns
 		} else {
 			needMerge = !thenReturns // THEN continues + FALSE path → 2 inputs
 		}
@@ -158,6 +158,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 
 	thenStartX := splitX + SplitWidth + HorizontalSpacing/2
 	var noMergeExitID model.ID
+	var branchHandlers []pendingErrorHandlerState
 	var noMergeExitCase string
 	var noMergeExitAnchor *ast.FlowAnchors
 
@@ -171,6 +172,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 		var prevThenAnchor *ast.FlowAnchors
 		var pendingThenCase string
 		var pendingThenAnchor *ast.FlowAnchors
+		outerHandlers := fb.enterBranchErrorHandlers()
 		for i, stmt := range s.ThenBody {
 			thisAnchor := stmtOwnAnchor(stmt)
 			fb.atBodyTail = tailWithoutMerge && i == len(s.ThenBody)-1
@@ -207,9 +209,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 					}
 					applyUserAnchors(flow, originAnchor, destAnchor)
 					fb.flows = append(fb.flows, flow)
-					if fb.emptyErrorHandlerFrom == lastThenID {
-						fb.addPendingErrorHandlerFlowForStatement(lastThenID, actID, stmt, statementsReferenceVar(s.ThenBody[i+1:], fb.errorHandlerSkipVar))
-					}
+					fb.addBranchErrorHandlerFlowForStatement(thenReturns, lastThenID, actID, stmt, statementsReferenceVar(s.ThenBody[i+1:], fb.errorHandlerSkipVar))
 				}
 				prevThenAnchor = thisAnchor
 				// For nested compound statements, use their exit point
@@ -245,6 +245,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 				}
 				applyUserAnchors(flow, originAnchor, destAnchor)
 				fb.flows = append(fb.flows, flow)
+				fb.addPendingErrorHandlerFlowForStatement(lastThenID, mergeID, nil)
 			} else {
 				// Empty THEN body - connect split directly to merge with true case.
 				// Pass trueBranchAnchor as destination too so the @anchor(true: (..., to: Y))
@@ -253,9 +254,8 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 				applyUserAnchors(flow, trueBranchAnchor, trueBranchAnchor)
 				fb.flows = append(fb.flows, flow)
 			}
-		} else if thenReturns && needMerge {
-			fb.addPendingErrorHandlerFlowTo(mergeID)
 		}
+		branchHandlers = fb.takeBranchErrorHandlers(outerHandlers)
 
 		// Process ELSE body (below the THEN path)
 		thenH := max(thenBounds.Height, ActivityHeight)
@@ -269,6 +269,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 		var prevElseAnchor *ast.FlowAnchors
 		var pendingElseCase string
 		var pendingElseAnchor *ast.FlowAnchors
+		outerHandlers = fb.enterBranchErrorHandlers()
 		for i, stmt := range s.ElseBody {
 			thisAnchor := stmtOwnAnchor(stmt)
 			fb.atBodyTail = tailWithoutMerge && i == len(s.ElseBody)-1
@@ -314,9 +315,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 					}
 					applyUserAnchors(flow, originAnchor, destAnchor)
 					fb.flows = append(fb.flows, flow)
-					if fb.emptyErrorHandlerFrom == lastElseID {
-						fb.addPendingErrorHandlerFlowForStatement(lastElseID, actID, stmt, statementsReferenceVar(s.ElseBody[i+1:], fb.errorHandlerSkipVar))
-					}
+					fb.addBranchErrorHandlerFlowForStatement(elseReturns, lastElseID, actID, stmt, statementsReferenceVar(s.ElseBody[i+1:], fb.errorHandlerSkipVar))
 				}
 				prevElseAnchor = thisAnchor
 				// For nested compound statements, use their exit point
@@ -352,6 +351,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 				}
 				applyUserAnchors(flow, originAnchor, destAnchor)
 				fb.flows = append(fb.flows, flow)
+				fb.addPendingErrorHandlerFlowForStatement(lastElseID, mergeID, nil)
 			} else {
 				// Explicit empty ELSE body: the split still needs a configured
 				// false case when both branches converge at the merge.
@@ -359,9 +359,8 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 				applyUserAnchors(flow, falseBranchAnchor, falseBranchAnchor)
 				fb.flows = append(fb.flows, flow)
 			}
-		} else if elseReturns && needMerge {
-			fb.addPendingErrorHandlerFlowTo(mergeID)
 		}
+		branchHandlers = append(branchHandlers, fb.takeBranchErrorHandlers(outerHandlers)...)
 		if !needMerge {
 			if thenReturns && !elseReturns {
 				if lastElseID != "" {
@@ -419,7 +418,8 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 		var prevThenAnchor *ast.FlowAnchors
 		var pendingThenCase string
 		var pendingThenAnchor *ast.FlowAnchors
-		for _, stmt := range s.ThenBody {
+		outerHandlers := fb.enterBranchErrorHandlers()
+		for i, stmt := range s.ThenBody {
 			thisAnchor := stmtOwnAnchor(stmt)
 			actID := fb.addStatement(stmt)
 			if fb.takeBranchJoin(lastThenID, splitID, "true", pendingThenCase, prevThenAnchor, trueBranchAnchor) {
@@ -450,6 +450,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 					}
 					applyUserAnchors(flow, originAnchor, destAnchor)
 					fb.flows = append(fb.flows, flow)
+					fb.addBranchErrorHandlerFlowForStatement(thenReturns, lastThenID, actID, stmt, statementsReferenceVar(s.ThenBody[i+1:], fb.errorHandlerSkipVar))
 				}
 				prevThenAnchor = thisAnchor
 				// For nested compound statements, use their exit point
@@ -485,6 +486,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 				}
 				applyUserAnchors(flow, originAnchor, destAnchor)
 				fb.flows = append(fb.flows, flow)
+				fb.addPendingErrorHandlerFlowForStatement(lastThenID, mergeID, nil)
 			} else {
 				// Empty THEN body - connect split directly to merge going down and back up.
 				// Pass trueBranchAnchor as destination too so @anchor(true: (..., to: Y))
@@ -494,12 +496,25 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 				fb.flows = append(fb.flows, flow)
 			}
 		}
+		branchHandlers = fb.takeBranchErrorHandlers(outerHandlers)
 		if !needMerge {
 			noMergeExitID = splitID
 			noMergeExitCase = "false"
 			noMergeExitAnchor = falseBranchAnchor
 		}
 	}
+
+	// A handler a branch could not settle — one with a result, in a branch that
+	// returns — rejoins on the flow leaving the IF. When both branches return
+	// nothing leaves it, and the split never starts another flow, so the
+	// handler ends at an end event as before.
+	exitID := noMergeExitID
+	if needMerge {
+		exitID = mergeID
+	} else if exitID == "" {
+		exitID = splitID
+	}
+	fb.queueBranchErrorHandlersAt(branchHandlers, exitID)
 
 	// If both branches end with RETURN, the flow terminates here
 	if bothReturn {
