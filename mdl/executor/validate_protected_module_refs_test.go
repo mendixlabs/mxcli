@@ -269,6 +269,28 @@ func TestValidateProtectedModuleRefs(t *testing.T) {
 		{"open module hidden attribute", "create microflow MyFirstModule.C ($e: Open.E) begin change $e (Inner = 'x'); end;", nil},
 		{"untyped variable is silent", "create microflow MyFirstModule.C () begin change $nobody (Inner = 'x'); end;", nil},
 
+		// --- CE1406 on the entity of a create or a database retrieve (#1652) ---
+		{"retrieve of hidden entity",
+			"create microflow MyFirstModule.R () begin retrieve $l from MyAddOn.Request; end;",
+			[]string{"CE1406", "retrieve $l is not allowed to use entity 'MyAddOn.Request'", "app modules cannot reference hidden elements"}},
+		{"retrieve of hidden entity with where",
+			"create microflow MyFirstModule.R () begin retrieve $l from MyAddOn.Request where Payload = 'x'; end;",
+			[]string{"CE1406", "entity 'MyAddOn.Request'"}},
+		{"retrieve of usable entity", "create microflow MyFirstModule.R () begin retrieve $l from MyAddOn.Pub; end;", nil},
+		{"bare create of hidden entity",
+			"create microflow MyFirstModule.C () begin $r = create MyAddOn.Request; end;",
+			[]string{"CE1406", "create MyAddOn.Request is not allowed to use entity 'MyAddOn.Request'"}},
+		{"create of usable entity", "create microflow MyFirstModule.C () begin $p = create MyAddOn.Pub (Shown = 'x'); end;", nil},
+		{"retrieve of hidden entity made usable by the script",
+			"alter entity MyAddOn.Request set export level api;\ncreate microflow MyFirstModule.R () begin retrieve $l from MyAddOn.Request; end;", nil},
+		{"retrieve of hidden entity in a nanoflow",
+			"create nanoflow MyFirstModule.NF () begin retrieve $l from MyAddOn.Request; end;",
+			[]string{"CE1406", "entity 'MyAddOn.Request'"}},
+		{"add-on module retrieves its own hidden entity",
+			"create microflow MyAddOn.Own () begin retrieve $l from MyAddOn.Request; $r = create MyAddOn.Request; end;", nil},
+		{"open module retrieve and create of hidden entity",
+			"create microflow MyFirstModule.C () begin retrieve $l from Open.E; $e = create Open.E; end;", nil},
+
 		// --- controls: an ordinary module hides nothing ---
 		{"open module page", "create or modify navigation Responsive home page Open.P;", nil},
 		{"open module hidden microflow", "create microflow MyFirstModule.C () begin call microflow Open.MF(); end;", nil},

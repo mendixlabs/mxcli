@@ -24,6 +24,11 @@ import (
 //	retrieve … where Payload = …       Retrieve … attribute (and an association step)
 //	return $r/Payload, $i/AddOn.Assoc  End event … attribute / association
 //
+// The entity of a create and of a database retrieve is checked here too: a
+// Hidden entity is refused by both (Create object activity / Retrieve object(s)
+// activity … is not allowed to use entity), even with no member named
+// (mendixlabs/mxcli#1652).
+//
 // A member is reported only when it is established: its variable's entity is
 // known, the member resolves on it (an association hop through
 // associationTargetFrom), and its level is known — a level the script states,
@@ -55,6 +60,7 @@ func (r *protectedRefResolver) checkFlowMembers(name ast.QualifiedName, params [
 		switch s := st.(type) {
 		case *ast.CreateObjectStmt:
 			who := "create " + s.EntityType.String()
+			out = appendNonEmpty(out, r.entityRef(who, s.EntityType, "app modules"))
 			for _, ch := range s.Changes {
 				m, ok := r.changeMember(s.EntityType.String(), ch.Attribute)
 				report(who, m, ok)
@@ -71,7 +77,12 @@ func (r *protectedRefResolver) checkFlowMembers(name ast.QualifiedName, params [
 			who := "retrieve $" + s.Variable
 			if s.StartVariable != "" {
 				report(who, protectedMember{kind: "association", qn: s.Source.String()}, s.Source.Module != "")
-			} else if s.Where != nil {
+				break
+			}
+			// A database retrieve names the entity itself, so a Hidden one is
+			// refused with or without a where clause.
+			out = appendNonEmpty(out, r.entityRef(who, s.Source, "app modules"))
+			if s.Where != nil {
 				for _, steps := range xpathMemberPaths(s.Where) {
 					for _, m := range r.pathMembers(s.Source.String(), steps) {
 						report(who, m, true)
