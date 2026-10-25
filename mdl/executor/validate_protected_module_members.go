@@ -51,7 +51,8 @@ func (r *protectedRefResolver) checkFlowMembers(name ast.QualifiedName, params [
 		}
 	}
 
-	walkTypedFlow(r.ctx, params, body, func(st ast.MicroflowStatement, vars map[string]string) {
+	scriptFlows := func(qn string) bool { _, defined := r.scriptFlows[qn]; return defined }
+	walkTypedFlow(r.ctx, params, body, scriptFlows, func(st ast.MicroflowStatement, vars map[string]string) {
 		switch s := st.(type) {
 		case *ast.CreateObjectStmt:
 			who := "create " + s.EntityType.String()

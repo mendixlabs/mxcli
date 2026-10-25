@@ -42,6 +42,11 @@ func protectedModuleFixture(t *testing.T, settingsErr error) *ExecContext {
 		mf(addOn, "API_MF", "API"),
 		mf(open, "MF", "Hidden"),
 	}
+	// A Usable microflow returning the Usable entity Pub, for the members of a
+	// call result (#1654).
+	getPub := mf(addOn, "API_GetPub", "API")
+	getPub.ReturnType = &microflows.ObjectType{EntityQualifiedName: "MyAddOn.Pub"}
+	flows = append(flows, getPub)
 	// Members, for the CE1406 member cases: Pub and Pub2 are Usable entities
 	// with one Usable and one Hidden attribute each, joined by a Hidden and a
 	// Usable association. Open.E holds a Hidden attribute too — the control.
@@ -268,6 +273,15 @@ func TestValidateProtectedModuleRefs(t *testing.T) {
 			"create microflow MyAddOn.Inner ($p: MyAddOn.Pub) begin change $p (Inner = 'x'); retrieve $q from $p/MyAddOn.Pub_Pub2; end;", nil},
 		{"open module hidden attribute", "create microflow MyFirstModule.C ($e: Open.E) begin change $e (Inner = 'x'); end;", nil},
 		{"untyped variable is silent", "create microflow MyFirstModule.C () begin change $nobody (Inner = 'x'); end;", nil},
+		// --- a member of a call result (#1654) ---
+		{"hidden attribute on a call result",
+			"create microflow MyFirstModule.G () returns String begin $p = call microflow MyAddOn.API_GetPub(); return $p/Inner; end;",
+			[]string{"CE1406", "the end event is not allowed to use attribute 'MyAddOn.Pub.Inner'"}},
+		{"hidden attribute on a call result, in a declare",
+			"create microflow MyFirstModule.G () begin $p = call microflow MyAddOn.API_GetPub(); declare $s String = $p/Inner; end;",
+			[]string{"CE1406", "declare $s is not allowed to use attribute 'MyAddOn.Pub.Inner'"}},
+		{"usable attribute on a call result",
+			"create microflow MyFirstModule.G () returns String begin $p = call microflow MyAddOn.API_GetPub(); return $p/Shown; end;", nil},
 
 		// --- controls: an ordinary module hides nothing ---
 		{"open module page", "create or modify navigation Responsive home page Open.P;", nil},

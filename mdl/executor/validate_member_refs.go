@@ -9,6 +9,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
 // `check --references` resolved the DOCUMENT and the ENTITY a statement names,
@@ -346,7 +347,8 @@ func checkFlowMembers(ctx *ExecContext, sc *scriptContext, authored map[string]b
 	flowQN string, params []ast.MicroflowParam, body []ast.MicroflowStatement) []string {
 
 	var out []string
-	walkTypedFlow(ctx, params, body, func(st ast.MicroflowStatement, vars map[string]string) {
+	scriptFlows := func(qn string) bool { return sc != nil && sc.microflows[qn] }
+	walkTypedFlow(ctx, params, body, scriptFlows, func(st ast.MicroflowStatement, vars map[string]string) {
 		switch s := st.(type) {
 		case *ast.CreateObjectStmt:
 			out = append(out, checkMembers(ctx, sc, authored, flowQN,
@@ -373,8 +375,13 @@ func checkFlowMembers(ctx *ExecContext, sc *scriptContext, authored map[string]b
 // (checkFlowMembers, the Protected-module member check): two copies of it would
 // drift on which statements type a variable, and a check that loses a variable
 // goes silent rather than wrong.
+//
+// scriptFlows names the microflows the script itself creates or rewrites: the
+// output of a call to one of those is left untyped, because the stored return
+// type may be the one the script is replacing, and a stale type would turn a
+// valid member into a false refusal.
 func walkTypedFlow(ctx *ExecContext, params []ast.MicroflowParam, body []ast.MicroflowStatement,
-	visit func(st ast.MicroflowStatement, vars map[string]string)) {
+	scriptFlows func(qn string) bool, visit func(st ast.MicroflowStatement, vars map[string]string)) {
 
 	vars := map[string]string{}
 	for _, p := range params {
@@ -417,6 +424,15 @@ func walkTypedFlow(ctx *ExecContext, params []ast.MicroflowParam, body []ast.Mic
 						if to, ok := associationTargetFrom(ctx, s.Source.String(), from); ok {
 							vars[s.Variable] = to
 						}
+					}
+				}
+			case *ast.CallMicroflowStmt:
+				// The output holds the callee's return entity (an object, or a
+				// list of it); without this a member read on a call result
+				// resolves no entity and every check on it is silent (#1654).
+				if s.OutputVariable != "" && !scriptFlows(s.MicroflowName.String()) {
+					if qn, ok := storedMicroflowReturnEntity(ctx, s.MicroflowName); ok {
+						vars[s.OutputVariable] = qn
 					}
 				}
 			case *ast.IfStmt:
@@ -653,4 +669,31 @@ func nearMembers(ctx *ExecContext, entityQN string) string {
 			strings.Join(names[:max], ", "), len(names)-max)
 	}
 	return fmt.Sprintf(" — it has %s", strings.Join(names, ", "))
+}
+
+// storedMicroflowReturnEntity is the entity a stored microflow returns, as an
+// object or a list of it. ok is false for any other return type and for a
+// microflow that resolves nowhere.
+func storedMicroflowReturnEntity(ctx *ExecContext, qn ast.QualifiedName) (string, bool) {
+	h, err := getHierarchy(ctx)
+	if err != nil {
+		return "", false
+	}
+	mfs, err := microflowsNamed(ctx, qn.Name)
+	if err != nil {
+		return "", false
+	}
+	for _, mf := range mfs {
+		if h.GetModuleName(h.FindModuleID(mf.ContainerID)) != qn.Module {
+			continue
+		}
+		switch t := mf.ReturnType.(type) {
+		case *microflows.ObjectType:
+			return t.EntityQualifiedName, t.EntityQualifiedName != ""
+		case *microflows.ListType:
+			return t.EntityQualifiedName, t.EntityQualifiedName != ""
+		}
+		return "", false
+	}
+	return "", false
 }

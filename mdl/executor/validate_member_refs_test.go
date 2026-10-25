@@ -11,6 +11,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/backend/mock"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
+	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
 // `CHANGE $Order ("IsArchived" = true)` — no such attribute — passed
@@ -370,6 +371,50 @@ func TestValidateMemberReferences_TypesALoopIterator(t *testing.T) {
 	msgs := validateMemberReferences(ctx, prog, newScriptContext())
 	if len(msgs) != 1 || !strings.Contains(msgs[0], "Bogus") {
 		t.Errorf("a CHANGE on a loop iterator went unchecked: %v", msgs)
+	}
+}
+
+// The output of `call microflow` holds the callee's return entity, so a member
+// on it resolves like one on a parameter (mendixlabs/mxcli#1654). A list return
+// types the list, so a LOOP over it types its iterator. A callee the script
+// itself (re)creates is left untyped: its stored return type may be the one
+// the script replaces.
+func TestValidateMemberReferences_TypesACallMicroflowResult(t *testing.T) {
+	ctx := memberFixture(t)
+	shop, _ := ctx.Backend.GetModuleByName("Shop")
+	getOrder := mkMicroflow(shop.ID, "Order_Get")
+	getOrder.ReturnType = &microflows.ObjectType{EntityQualifiedName: "Shop.Order"}
+	listOrders := mkMicroflow(shop.ID, "Order_List")
+	listOrders.ReturnType = &microflows.ListType{EntityQualifiedName: "Shop.Order"}
+	ctx.Backend.(*mock.MockBackend).ListMicroflowsFunc = func() ([]*microflows.Microflow, error) {
+		return []*microflows.Microflow{getOrder, listOrders}, nil
+	}
+	call := func(out, name string) *ast.CallMicroflowStmt {
+		return &ast.CallMicroflowStmt{OutputVariable: out, MicroflowName: ast.QualifiedName{Module: "Shop", Name: name}}
+	}
+
+	msgs := validateMemberReferences(ctx, flowProgram(nil, call("O", "Order_Get"), changeStmt("O", `"Bogus"`)), newScriptContext())
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "Shop.Order") || !strings.Contains(msgs[0], "Bogus") {
+		t.Errorf("a CHANGE on a call result went unchecked: %v", msgs)
+	}
+
+	msgs = validateMemberReferences(ctx, flowProgram(nil, call("Orders", "Order_List"),
+		&ast.LoopStmt{LoopVariable: "O", ListVariable: "Orders",
+			Body: []ast.MicroflowStatement{changeStmt("O", `"Bogus"`)}}), newScriptContext())
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "Bogus") {
+		t.Errorf("a CHANGE on the iterator over a list call result went unchecked: %v", msgs)
+	}
+
+	// CONTROL: a real member stays silent, so the entity is the callee's.
+	if msgs := validateMemberReferences(ctx, flowProgram(nil, call("O", "Order_Get"), changeStmt("O", `"OrderNo"`)), newScriptContext()); len(msgs) != 0 {
+		t.Errorf("a real member of the call result was refused: %v", msgs)
+	}
+
+	// CONTROL: the script rewrites the callee, so its stored type is not trusted.
+	sc := newScriptContext()
+	sc.microflows["Shop.Order_Get"] = true
+	if msgs := validateMemberReferences(ctx, flowProgram(nil, call("O", "Order_Get"), changeStmt("O", `"Bogus"`)), sc); len(msgs) != 0 {
+		t.Errorf("typed a call result from the stored type of a microflow the script rewrites: %v", msgs)
 	}
 }
 
