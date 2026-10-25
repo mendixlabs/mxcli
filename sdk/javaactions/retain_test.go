@@ -94,7 +94,7 @@ func TestRetainSections_MergesWithWhatTheStatementSaid(t *testing.T) {
 func TestGenerateSource_WithRetainedSectionsKeepsTheHelper(t *testing.T) {
 	imports, extra := RetainSections(studioProSource, nil, "")
 	src := GenerateSource("FeedbackModule", "XSS_Sanitizer", "return sanitize(stringToSanitize);",
-		nil, &StringType{}, imports, extra)
+		nil, &StringType{}, imports, extra, "")
 	for _, want := range []string{
 		"import java.util.regex.Pattern;",
 		"public static String sanitize(String input) {",

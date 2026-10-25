@@ -64,9 +64,9 @@ func (m *MockBackend) DeleteJavaAction(id model.ID) error {
 	return nil
 }
 
-func (m *MockBackend) WriteJavaSourceFile(moduleName, actionName string, javaCode string, params []*javaactions.JavaActionParameter, returnType javaactions.CodeActionReturnType, extraImports []string, extraCode string) error {
+func (m *MockBackend) WriteJavaSourceFile(moduleName, actionName string, javaCode string, params []*javaactions.JavaActionParameter, returnType javaactions.CodeActionReturnType, extraImports []string, extraCode string, documentation string) error {
 	if m.WriteJavaSourceFileFunc != nil {
-		return m.WriteJavaSourceFileFunc(moduleName, actionName, javaCode, params, returnType, extraImports, extraCode)
+		return m.WriteJavaSourceFileFunc(moduleName, actionName, javaCode, params, returnType, extraImports, extraCode, documentation)
 	}
 	return nil
 }

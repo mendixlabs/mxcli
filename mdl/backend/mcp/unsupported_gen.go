@@ -1450,7 +1450,7 @@ func (unsupportedBackend) WriteJavaScriptSourceFile(_ string, _ string, _ string
 	return
 }
 
-func (unsupportedBackend) WriteJavaSourceFile(_ string, _ string, _ string, _ []*types.JavaActionParameter, _ types.CodeActionReturnType, _ []string, _ string) (err0 error) {
+func (unsupportedBackend) WriteJavaSourceFile(_ string, _ string, _ string, _ []*types.JavaActionParameter, _ types.CodeActionReturnType, _ []string, _ string, _ string) (err0 error) {
 	err0 = errUnsupported("WriteJavaSourceFile")
 	return
 }

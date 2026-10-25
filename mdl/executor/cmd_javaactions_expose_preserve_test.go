@@ -71,7 +71,7 @@ func exposeRewriteCtx(t *testing.T, stored *javaactions.JavaAction, mod *model.M
 			return nil
 		},
 		WriteJavaSourceFileFunc: func(string, string, string, []*javaactions.JavaActionParameter,
-			javaactions.CodeActionReturnType, []string, string) error {
+			javaactions.CodeActionReturnType, []string, string, string) error {
 			return nil
 		},
 	}

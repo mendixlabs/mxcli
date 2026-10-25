@@ -63,7 +63,7 @@ func TestCreateJavaAction_WritesStatedParameterDescriptionAndReturnName(t *testi
 			return nil
 		},
 		WriteJavaSourceFileFunc: func(string, string, string, []*javaactions.JavaActionParameter,
-			javaactions.CodeActionReturnType, []string, string) error {
+			javaactions.CodeActionReturnType, []string, string, string) error {
 			return nil
 		},
 	}

@@ -29,11 +29,13 @@ const (
 // is its proxy enum — measured on 10.24.27 and 11.14.0, which write the same
 // bytes (testdata/mxbuild).
 //
+// documentation is the action's documentation, written as the class javadoc.
+//
 // imports is the import list to keep, in order — the existing file's, see
 // RetainSections. The imports the generated code needs and the list lacks are
 // appended, sorted. That is what mxbuild does: it never reorders or drops an
 // import, so for a new file it writes just the needed ones, sorted.
-func GenerateSource(moduleName, actionName string, userCode string, params []*JavaActionParameter, returnType CodeActionReturnType, imports []string, extraCode string) string {
+func GenerateSource(moduleName, actionName string, userCode string, params []*JavaActionParameter, returnType CodeActionReturnType, imports []string, extraCode string, documentation string) string {
 	moduleNameLower := strings.ToLower(moduleName)
 	returnTypeStr := javaReturnType(returnType)
 
@@ -56,6 +58,7 @@ func GenerateSource(moduleName, actionName string, userCode string, params []*Ja
 	}
 	sb.WriteString("\n")
 
+	writeClassJavadoc(&sb, documentation)
 	sb.WriteString(fmt.Sprintf("public class %s extends UserAction<%s>\n", actionName, returnTypeStr))
 	sb.WriteString("{\n")
 
@@ -152,6 +155,23 @@ func GenerateSource(moduleName, actionName string, userCode string, params []*Ja
 	// file again. User and extra code may arrive with either ending.
 	src := strings.ReplaceAll(sb.String(), "\r\n", "\n")
 	return strings.ReplaceAll(src, "\n", "\r\n")
+}
+
+// writeClassJavadoc writes the action's documentation as the javadoc block
+// mxbuild puts directly above the class: `/**`, one ` * <line>` per line (an
+// empty line is ` * `, trailing space included), ` */`. No documentation, no
+// block (mendixlabs/mxcli#1653).
+func writeClassJavadoc(sb *strings.Builder, documentation string) {
+	if documentation == "" {
+		return
+	}
+	sb.WriteString("/**\n")
+	for line := range strings.SplitSeq(documentation, "\n") {
+		sb.WriteString(" * ")
+		sb.WriteString(strings.TrimSuffix(line, "\r"))
+		sb.WriteString("\n")
+	}
+	sb.WriteString(" */\n")
 }
 
 // completeImports returns imports, deduplicated, with the ones the generated

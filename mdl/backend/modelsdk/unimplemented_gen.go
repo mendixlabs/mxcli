@@ -1292,7 +1292,7 @@ func (unimplemented) WriteJavaScriptSourceFile(_ string, _ string, _ string, _ [
 	return errUnimplemented("WriteJavaScriptSourceFile")
 }
 
-func (unimplemented) WriteJavaSourceFile(_ string, _ string, _ string, _ []*types.JavaActionParameter, _ types.CodeActionReturnType, _ []string, _ string) error {
+func (unimplemented) WriteJavaSourceFile(_ string, _ string, _ string, _ []*types.JavaActionParameter, _ types.CodeActionReturnType, _ []string, _ string, _ string) error {
 	return errUnimplemented("WriteJavaSourceFile")
 }
 

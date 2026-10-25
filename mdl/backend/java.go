@@ -20,7 +20,7 @@ type JavaBackend interface {
 	CreateJavaAction(ja *javaactions.JavaAction) error
 	UpdateJavaAction(ja *javaactions.JavaAction) error
 	DeleteJavaAction(id model.ID) error
-	WriteJavaSourceFile(moduleName, actionName string, javaCode string, params []*javaactions.JavaActionParameter, returnType javaactions.CodeActionReturnType, extraImports []string, extraCode string) error
+	WriteJavaSourceFile(moduleName, actionName string, javaCode string, params []*javaactions.JavaActionParameter, returnType javaactions.CodeActionReturnType, extraImports []string, extraCode string, documentation string) error
 	DeleteJavaSourceFile(moduleName, actionName string) error
 	RenameJavaSourceFile(moduleName, oldName, newName string) error
 	ReadJavaSourceFile(moduleName, actionName string) (string, error)

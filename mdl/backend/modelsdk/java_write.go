@@ -92,7 +92,7 @@ func (b *Backend) UpdateJavaAction(ja *javaactions.JavaAction) error {
 // WriteJavaSourceFile writes the .java stub for a java action under
 // javasource/<module>/actions/<Action>.java, using the shared generator so the
 // output is byte-identical to the legacy engine.
-func (b *Backend) WriteJavaSourceFile(moduleName, actionName string, javaCode string, params []*javaactions.JavaActionParameter, returnType javaactions.CodeActionReturnType, extraImports []string, extraCode string) error {
+func (b *Backend) WriteJavaSourceFile(moduleName, actionName string, javaCode string, params []*javaactions.JavaActionParameter, returnType javaactions.CodeActionReturnType, extraImports []string, extraCode string, documentation string) error {
 	if b.path == "" {
 		return fmt.Errorf("WriteJavaSourceFile: no project path")
 	}
@@ -107,7 +107,7 @@ func (b *Backend) WriteJavaSourceFile(moduleName, actionName string, javaCode st
 	// into Java that does not compile (ako/mxcli#705).
 	existing, _ := os.ReadFile(path)
 	extraImports, extraCode = javaactions.RetainSections(string(existing), extraImports, extraCode)
-	source := javaactions.GenerateSource(moduleName, actionName, javaCode, params, returnType, extraImports, extraCode)
+	source := javaactions.GenerateSource(moduleName, actionName, javaCode, params, returnType, extraImports, extraCode, documentation)
 	changed, err := javaactions.WriteSourceIfChanged(path, source)
 	b.noteFileWrite(changed)
 	if err != nil {

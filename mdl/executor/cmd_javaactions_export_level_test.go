@@ -58,7 +58,7 @@ func TestCreateJavaActionWritesStudioProDefaults(t *testing.T) {
 			return nil
 		},
 		WriteJavaSourceFileFunc: func(string, string, string, []*javaactions.JavaActionParameter,
-			javaactions.CodeActionReturnType, []string, string) error {
+			javaactions.CodeActionReturnType, []string, string, string) error {
 			return nil
 		},
 	}
@@ -160,7 +160,7 @@ func TestJavaActionBody_PlaceholderIsNotWritten(t *testing.T) {
 	ctx, _ := exposeRewriteCtx(t, stored, mod)
 	wrote := false
 	ctx.Backend.(*mock.MockBackend).WriteJavaSourceFileFunc = func(string, string, string, []*javaactions.JavaActionParameter,
-		javaactions.CodeActionReturnType, []string, string) error {
+		javaactions.CodeActionReturnType, []string, string, string) error {
 		wrote = true
 		return nil
 	}
