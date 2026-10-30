@@ -23,8 +23,9 @@ var gitDoctorCmd = &cobra.Command{
 
 Checked:
   1. Local git config: core.autocrlf=False (a checkout must not rewrite line
-     endings inside .mxunit files), mendix.commits-since-gc and
-     mendix.lineEndingResetDone (Studio Pro's own bookkeeping). --fix sets them.
+     endings inside .mxunit files; --fix rewrites any other value), and the
+     mendix.* keys (Studio Pro's own bookkeeping) backfilled when missing —
+     a value Studio Pro wrote stays.
   2. The remote URL, as configured. Studio Pro can only use HTTPS; an SSH
      remote (git@host:org/app.git or ssh://…) is rewritten to HTTPS by --fix.
      Other non-HTTPS URLs are reported without being changed. A

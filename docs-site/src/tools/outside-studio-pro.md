@@ -233,6 +233,58 @@ ContentsHash drift, which it does not repair — a dry run writes nothing),
 and reports what it would commit without committing. It stages into a copy of
 the index, so whatever you had staged is left exactly as it was.
 
+## Merging branches: `mxcli git merge`
+
+`git merge` cannot merge Mendix models: the `.mpr` is SQLite and every
+`.mxunit` is BSON, so two sides changing the model always meet a binary
+`CONFLICT (content)` — there is nothing for git's textual merge to work on.
+Studio Pro's *Merge Changes Here* resolves it with a model-aware merge, and
+that engine ships as a command: `mx merge BASE MINE THEIRS` over three
+project folders (it runs on Linux devcontainers too; the older `mx git-merge`
+file form is Windows-bound).
+
+`mxcli git merge <ref>` puts the two together:
+
+```bash
+mxcli git merge feature/orders -p app.mpr
+mxcli git merge origin/main -p app.mpr --push
+```
+
+`git merge <ref>` runs first; a merge git resolves itself (disjoint files,
+a fast-forward) is annotated with the mx_metadata note like `mxcli git
+commit` does. On a model-file conflict the base and theirs revisions are
+checked out into temporary worktrees and the three project folders go to
+`mx merge` (resolved for the project's Mendix version); the engine writes
+its result into the working tree and owns the `.mpr`:
+
+- what the engine auto-resolves is staged, hash-checked and committed as the
+  normal two-parent merge commit, with the note attached. The engine's
+  `.mpr` carries both sides' document sets, so a unit one side added while
+  the other changed existing ones is kept, not dropped;
+- a conflict the engine reports as `ManualResolutionRequired` (exit 2) is
+  never merged silently: the merge is aborted, and **both sides' changes are
+  printed for review** — at property level, from `mx diff` ("New type >
+  Length: 100 → 150" on ours, "→ 200" on theirs). Then decide:
+  `--plan <file>` resolves **per unit** from the plan template written beside
+  the .mpr (`<mpr>.merge-plan.json`, which `mxcli git commit` never stages):
+  set `"take"` to `ours`/`theirs` per unit, and the `.mpr` index is repaired
+  from the mixed files (modified-on-both units only; added/deleted/moved
+  conflicts go to Studio Pro). `--ours` or `--theirs` takes one side of every
+  conflicted unit, hash-gated: when the sides' document sets differ (one side
+  added or deleted a unit), committing a whole side would orphan the other
+  side's documents, so the commit is refused and the merge aborted. Any other
+  engine exit is mx failing, not a decision: it is reported and the merge is
+  aborted cleanly. Resolutions that must mix both sides *inside* one unit
+  stay in Studio Pro (*Version Control › Merge Changes Here*);
+- a conflict in non-model files (text sources) is left in place for manual
+  resolution, like plain git: resolve them, `git add` them, and re-run the
+  command — it finishes the merge (model conflicts included) and commits.
+
+Merging is still never done by plain `git merge` on a Mendix repository: use
+`mxcli git merge` or Studio Pro, never a textual merge of `mprcontents/`.
+Like every mxcli write, the command is refused while Studio Pro has the
+project open.
+
 ## Auditing a repository: `mxcli git doctor`
 
 A repository that has known only plain git misses several things Studio Pro
@@ -247,7 +299,7 @@ mxcli git doctor --fix --version 10.21.0
 
 | Check | `--fix` |
 |-------|---------|
-| local git config: `core.autocrlf=False` (a checkout must not rewrite line endings inside `.mxunit` files), `mendix.commits-since-gc`, `mendix.lineEndingResetDone` | sets them |
+| local git config: `core.autocrlf=False` (a checkout must not rewrite line endings inside `.mxunit` files; any other value is rewritten), `mendix.commits-since-gc`, `mendix.lineEndingResetDone` — the `mendix.*` values are Studio Pro's own bookkeeping and are only backfilled when missing | sets/backs them |
 | the remote URL as configured: Studio Pro can only use HTTPS | rewrites SSH (`git@host:org/app.git`, `ssh://…`) to HTTPS; other non-HTTPS URLs are reported unchanged. A `url.<base>.insteadOf` rule in your git config that makes git use another URL is reported, and left alone |
 | the remote's `refs/notes/mx_metadata` | reported only — push the notes ref together with the branch |
 | the local `refs/notes/mx_metadata` holds the remote's notes: `git clone` and a plain `git fetch` never fetch them, so a fresh clone or a CI checkout has none | fetches them, as a fast-forward only; refused when the local ref has notes the remote does not |

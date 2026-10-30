@@ -152,16 +152,22 @@ func commitRun(mprPath, message string, push, dryRun bool, out io.Writer) error 
 		fmt.Fprintln(out, "nothing to commit, working tree clean")
 		return nil
 	}
-	fmt.Fprintf(out, "Staged %d file(s):\n", len(staged)-len(junk))
-	kept := staged
-	if len(kept) > 10 {
-		kept = kept[:10]
+	kept := make([]string, 0, len(staged)-len(junk))
+	for _, f := range staged {
+		if !isJunkPath(f, projDir) {
+			kept = append(kept, f)
+		}
 	}
-	for _, f := range kept {
+	fmt.Fprintf(out, "Staged %d file(s):\n", len(kept))
+	shown := kept
+	if len(shown) > 10 {
+		shown = shown[:10]
+	}
+	for _, f := range shown {
 		fmt.Fprintf(out, "  %s\n", f)
 	}
-	if len(staged)-len(junk) > 10 {
-		fmt.Fprintf(out, "  … and %d more\n", len(staged)-len(junk)-10)
+	if len(kept) > 10 {
+		fmt.Fprintf(out, "  … and %d more\n", len(kept)-10)
 	}
 
 	if dryRun {
@@ -184,16 +190,7 @@ func commitRun(mprPath, message string, push, dryRun bool, out io.Writer) error 
 		return fmt.Errorf("committed %s, but attaching the note failed (%v) — run 'mxcli git note -p %s --write' to attach it", shortCommit(head), err, mprPath)
 	}
 
-	if push {
-		if branch == "" {
-			return errors.New("detached HEAD; cannot push — check out a branch and push manually")
-		}
-		if _, err := gitOutIn(root, nil, "push", "origin", branch, mxMetadataRef); err != nil {
-			return fmt.Errorf("push %s and %s: %w", branch, mxMetadataRef, err)
-		}
-		fmt.Fprintf(out, "Pushed %s and %s to origin.\n", branch, mxMetadataRef)
-	}
-	return nil
+	return pushBranchAndNotes(out, root, branch, push)
 }
 
 // indexCopy copies the repository's index to a temporary file, for a
@@ -263,6 +260,10 @@ func isJunkPath(rel, projDir string) bool {
 	case strings.EqualFold(base, "project-settings.user.json"):
 		return true
 	case strings.HasSuffix(strings.ToLower(base), ".mpr.lock"), strings.HasSuffix(strings.ToLower(base), ".mpr.bak"):
+		return true
+	// `mxcli git merge` writes the plan template beside the .mpr for the
+	// human to edit; it is working material, never project content.
+	case strings.HasSuffix(strings.ToLower(base), ".merge-plan.json"):
 		return true
 	}
 	inProject := f
