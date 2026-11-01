@@ -33,11 +33,8 @@ of routing through MCP, see
 |---|---|
 | `--mcp <url>` | Enable the MCP backend. The URL is what the **server** must see; its host drives the `Host` header and must stay `localhost` — e.g. `http://localhost/mcp`. |
 | `--mcp-dial <addr>` | The TCP address mxcli actually connects to, independent of the URL host. From a devcontainer this is typically `host.docker.internal:<port>`. |
-| `--mcp-concord <url>` | Optional second MCP server ("Concord") for operations PED lacks: **delete**, **save**, **validate**, **run** (default port `7783`). |
-| `--mcp-concord-dial <addr>` | Dial override for Concord. |
-| `--mcp-save` | After the command, save all changes in Studio Pro (requires `--mcp-concord`). |
-| `--mcp-check` | After the command, run Studio Pro's consistency check and print the report (requires `--mcp-concord`). |
-| `--mcp-run` | After the command, start the app in Studio Pro and print its URL (requires `--mcp-concord`). |
+| `--mcp-check` | After the command, run Studio Pro's project-wide error check (`ped_check_errors`) and print the report. Needs Studio Pro 11.15+. |
+| `--mcp-run` | After the command, start the app in Studio Pro (the `mendix_app` handler) and print its URL. Needs Studio Pro 11.16+. |
 | `--mcp-verbose` | Print each PED tool call the backend makes (to stderr). |
 | `--mcp-trace` | Print each MDL command with the PED tool calls it makes (implies `--mcp-verbose`). |
 
@@ -125,23 +122,25 @@ see what actually goes over the wire — for debugging, or just to understand th
   This makes the statement-to-tool-call mapping (and surprises like a read-back
   reconstructing a dirty module) visible at runtime.
 
-## Adding Concord (optional)
+## Delete, check and run
 
-PED cannot delete documents, save, validate, or run the app. A companion server,
-**Concord**, fills those gaps (default port `7783`, usually reachable directly from
-the container — no bridge needed):
+Studio Pro's own MCP server covers what used to need a second server:
+
+- **Saving** needs nothing: PED writes each change to disk as it lands.
+- **`DROP`** of a standalone document (enumeration, constant, microflow, nanoflow,
+  page, workflow, business-event service) calls `ped_delete_document`, which
+  Studio Pro 11.16 added. An older Studio Pro gets an error naming the version.
+- **`--mcp-check`** runs `ped_check_errors` over the whole project (11.15+).
+- **`--mcp-run`** starts the app through the `mendix_app` handler (11.16+), waits
+  up to two minutes and prints its URL. A project with model errors is not run;
+  the refusal is printed instead. The runtime log is `read_file /app-logs/app.log`
+  on the same server.
 
 ```bash
 mxcli exec changes.mdl -p app.mpr \
   --mcp http://localhost/mcp --mcp-dial host.docker.internal:7784 \
-  --mcp-concord http://localhost:7783/mcp \
-  --mcp-save --mcp-check
+  --mcp-check --mcp-run
 ```
-
-Here mxcli applies the script through PED, then asks Concord to **save** the
-project and run a **consistency check**, printing the report. `DROP` of standalone
-documents (enumerations, microflows, pages, …) also requires `--mcp-concord`,
-because the delete tool lives on Concord.
 
 ## Same machine as Studio Pro
 
@@ -172,8 +171,8 @@ connected version supports. See also
 |---|---|
 | `connection refused` on dial | The bridge isn't running, or the port is wrong. Re-run `socat` on the host and confirm PED's port with `lsof` (it changes per session). |
 | Request rejected / 403-style error | The `Host` header guard. Keep the **URL host `localhost`** (`http://localhost/mcp`) and redirect the connection with `--mcp-dial` — never put the container/host address in the URL itself. |
-| Reads don't reflect a change you just made | Expected for some edits until the project is saved — reads of an *unchanged* doc come from the local `.mpr`. A module you just wrote is reconstructed live; other doc types may need a save (`--mcp-save`) to appear locally. |
-| `DROP` / save / check / run fails or is rejected | Those need Concord — add `--mcp-concord` (and `--mcp-save` / `--mcp-check` / `--mcp-run`). |
+| Reads don't reflect a change you just made | Expected for some edits until the project is saved — reads of an *unchanged* doc come from the local `.mpr`. A module you just wrote is reconstructed live. |
+| `DROP` / `--mcp-check` / `--mcp-run` reports it needs a newer Studio Pro | `DROP` and `--mcp-run` need Studio Pro 11.16+, `--mcp-check` 11.15+. On 11.16.0, `ped_delete_document` fails with `Session 'mcp-server' not found` for callers outside Studio Pro's own agent session; delete the document in Studio Pro. |
 | Intermittent timeouts | The transport can be flaky across a bridge; a timed-out write may still have applied. Re-run `mxcli mcp capabilities` to re-establish, and prefer idempotent scripts. |
 
 ## See also

@@ -729,7 +729,7 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 			{PropertyKey: "attribute", Operation: "attribute", AttributePath: "Mod.Ent.Foo"},
 		},
 	}
-	applyColumnHeaderFallback(spec1, "col1", true)
+	applyColumnHeaderFallback(spec1, true)
 	if len(spec1.Properties) != 2 {
 		t.Errorf("Case 1 (header present): expected 2 properties, got %d", len(spec1.Properties))
 	}
@@ -741,7 +741,7 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 			{PropertyKey: "staticName", Operation: "primitive", PrimitiveVal: "x"},
 		},
 	}
-	applyColumnHeaderFallback(spec2, "series1", false)
+	applyColumnHeaderFallback(spec2, false)
 	if len(spec2.Properties) != 1 {
 		t.Errorf("Case 2 (no header slot): expected 1 property, got %d", len(spec2.Properties))
 	}
@@ -752,7 +752,7 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 			{PropertyKey: "attribute", Operation: "attribute", AttributePath: "Mod.Ent.OrderNumber"},
 		},
 	}
-	applyColumnHeaderFallback(spec3, "col3", true)
+	applyColumnHeaderFallback(spec3, true)
 	if len(spec3.Properties) != 2 {
 		t.Fatalf("Case 3 (fallback): expected 2 properties, got %d", len(spec3.Properties))
 	}
@@ -767,7 +767,7 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 			{PropertyKey: "attribute", Operation: "attribute", AttributePath: "BareName"},
 		},
 	}
-	applyColumnHeaderFallback(spec4, "col4", true)
+	applyColumnHeaderFallback(spec4, true)
 	if len(spec4.Properties) != 2 || spec4.Properties[1].TextTemplate != "BareName" {
 		t.Errorf("Case 4: fallback for unqualified path = %v", spec4.Properties)
 	}
@@ -783,7 +783,7 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 			{PropertyKey: "attribute", Operation: "attribute", AttributePath: "Mod.Ent.Amount"},
 		},
 	}
-	applyColumnHeaderFallback(spec5, "col5", true)
+	applyColumnHeaderFallback(spec5, true)
 	if len(spec5.Properties) != 2 {
 		t.Fatalf("Case 5 (empty caption): expected 2 properties (no duplicate), got %d", len(spec5.Properties))
 	}
@@ -799,38 +799,42 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 			{PropertyKey: "attribute", Operation: "attribute", AttributePath: "Mod.Ent.Amount"},
 		},
 	}
-	applyColumnHeaderFallback(spec6, "col6", true)
+	applyColumnHeaderFallback(spec6, true)
 	if spec6.Properties[0].TextTemplate != "" {
 		t.Errorf("Case 6: param-bearing header must not be overwritten, got TextTemplate=%q", spec6.Properties[0].TextTemplate)
 	}
 
-	// Case 7 (ledger #54, custom-content column): no attribute, empty header —
-	// fall back to the COLUMN NAME in place (a custom-content column has nothing
-	// to derive a header from, and an empty header is CE0463).
+	// Case 7 (ako/mxcli#535): a custom-content column with `Caption: ''` and no
+	// attribute gets an EMPTY header, never the column's name. Mendix stores no
+	// name for a column, and Data grid 2 renders an empty header blank — so
+	// writing the name put an internal identifier ("colTriage") in front of end
+	// users. The empty header is the empty Forms$ClientTemplate update-widgets
+	// writes (ChipCoV8 #11), which mx check accepts (0 errors on 11.15.0, the
+	// keyword `datagrid` path has always written it).
 	spec7 := &backend.ObjectListItemSpec{
 		Properties: []backend.ObjectListItemProperty{
 			{PropertyKey: "header", Operation: "texttemplate", TextTemplate: ""},
 			{PropertyKey: "showContentAs", Operation: "primitive", PrimitiveVal: "customContent"},
 		},
 	}
-	applyColumnHeaderFallback(spec7, "colActions", true)
-	if h := spec7.Properties[0]; h.PropertyKey != "header" || h.TextTemplate != "colActions" {
-		t.Errorf("Case 7: empty custom-content header not filled with column name: %+v", spec7.Properties[0])
+	applyColumnHeaderFallback(spec7, true)
+	if h := spec7.Properties[0]; h.PropertyKey != "header" || h.TextTemplate != "" || !h.EmptyTemplate {
+		t.Errorf("Case 7: empty custom-content header = %+v, want an empty texttemplate with EmptyTemplate=true (not the column name)", spec7.Properties[0])
 	}
 
-	// Case 8 (ledger #54): custom-content column with NO header prop at all —
-	// append a header carrying the column name (absent header is CE0463 too).
+	// Case 8 (ako/mxcli#535): custom-content column with NO header prop at all —
+	// append an empty header, the same as Case 7.
 	spec8 := &backend.ObjectListItemSpec{
 		Properties: []backend.ObjectListItemProperty{
 			{PropertyKey: "showContentAs", Operation: "primitive", PrimitiveVal: "customContent"},
 		},
 	}
-	applyColumnHeaderFallback(spec8, "colActions", true)
+	applyColumnHeaderFallback(spec8, true)
 	if len(spec8.Properties) != 2 {
 		t.Fatalf("Case 8 (absent custom-content header): expected 2 properties, got %d", len(spec8.Properties))
 	}
-	if h := spec8.Properties[1]; h.PropertyKey != "header" || h.TextTemplate != "colActions" {
-		t.Errorf("Case 8: appended header = %+v, want TextTemplate=colActions", spec8.Properties[1])
+	if h := spec8.Properties[1]; h.PropertyKey != "header" || h.TextTemplate != "" || !h.EmptyTemplate {
+		t.Errorf("Case 8: appended header = %+v, want an empty texttemplate with EmptyTemplate=true", spec8.Properties[1])
 	}
 
 	// Case 9 (ChipCoV8 #11): an UNNAMED column with no caption and no attribute
@@ -844,7 +848,7 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 			{PropertyKey: "showContentAs", Operation: "primitive", PrimitiveVal: "customContent"},
 		},
 	}
-	applyColumnHeaderFallback(spec9, "", true)
+	applyColumnHeaderFallback(spec9, true)
 	if len(spec9.Properties) != 2 {
 		t.Fatalf("Case 9 (unnamed, empty caption): expected 2 properties (no duplicate), got %d", len(spec9.Properties))
 	}
@@ -859,7 +863,7 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 			{PropertyKey: "showContentAs", Operation: "primitive", PrimitiveVal: "customContent"},
 		},
 	}
-	applyColumnHeaderFallback(spec10, "", true)
+	applyColumnHeaderFallback(spec10, true)
 	if len(spec10.Properties) != 2 {
 		t.Fatalf("Case 10 (unnamed, absent header): expected 2 properties, got %d", len(spec10.Properties))
 	}
@@ -874,7 +878,7 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 			{PropertyKey: "staticName", Operation: "texttemplate", TextTemplate: ""},
 		},
 	}
-	applyColumnHeaderFallback(spec11, "", false)
+	applyColumnHeaderFallback(spec11, false)
 	if len(spec11.Properties) != 1 || spec11.Properties[0].EmptyTemplate {
 		t.Errorf("Case 11 (no header slot): must be untouched, got %+v", spec11.Properties)
 	}

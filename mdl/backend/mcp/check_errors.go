@@ -4,6 +4,7 @@ package mcp
 
 import (
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -68,7 +69,9 @@ func (b *Backend) checkDocumentNow(docType, docName string) error {
 	}
 
 	for attempt := 0; ; attempt++ {
-		problems, stale, err := b.collectCheckErrors(base, docType, docName)
+		problems, stale, err := b.collectCheckErrors(base, docName, func(text string) []string {
+			return scopeCheckListing(text, docType, docName)
+		})
 		if err != nil {
 			return err
 		}
@@ -86,9 +89,10 @@ func (b *Backend) checkDocumentNow(docType, docName string) error {
 }
 
 // collectCheckErrors runs one complete check (first response plus every page) and
-// returns the problems listed for the document itself. stale reports that a page
-// window went stale and the whole check must be asked again.
-func (b *Backend) collectCheckErrors(base map[string]any, docType, docName string) (problems []string, stale bool, err error) {
+// returns the problem lines scope keeps from each listing page. docName names what
+// was checked in errors. stale reports that a page window went stale and the
+// whole check must be asked again.
+func (b *Backend) collectCheckErrors(base map[string]any, docName string, scope func(string) []string) (problems []string, stale bool, err error) {
 	res, err := b.client.CallTool("ped_check_errors", base)
 	if err != nil {
 		return nil, false, err
@@ -111,7 +115,7 @@ func (b *Backend) collectCheckErrors(base map[string]any, docType, docName strin
 	to, _ := strconv.Atoi(m[2])
 	total, _ := strconv.Atoi(m[3])
 	checkID, _ := strconv.Atoi(m[4])
-	problems = scopeCheckListing(trimmed, docType, docName)
+	problems = scope(trimmed)
 
 	for offset := to; offset < total; {
 		args := make(map[string]any, len(base)+1)
@@ -137,7 +141,7 @@ func (b *Backend) collectCheckErrors(base map[string]any, docType, docName strin
 			break
 		}
 		next, _ := strconv.Atoi(pm[2])
-		problems = append(problems, scopeCheckListing(page, docType, docName)...)
+		problems = append(problems, scope(page)...)
 		if next <= offset {
 			break // no progress; never loop
 		}
@@ -170,4 +174,51 @@ func scopeCheckListing(text, docType, docName string) []string {
 		}
 	}
 	return out
+}
+
+// CheckProject runs ped_check_errors over the whole project (--mcp-check) and
+// returns its listing: each unit header followed by that unit's problems. Only
+// the 11.15+ shape can ask project-wide — the older `documents` argument is
+// required and names the documents to check.
+func (b *Backend) CheckProject() ([]string, error) {
+	if b.client == nil || !b.client.SupportsToolArg("ped_check_errors", "filters") {
+		return nil, fmt.Errorf("a project-wide check needs Studio Pro 11.15+ (ped_check_errors filters)")
+	}
+	for attempt := 0; ; attempt++ {
+		problems, stale, err := b.collectCheckErrors(map[string]any{}, "the project", projectCheckListing)
+		if err != nil {
+			return nil, err
+		}
+		if !stale {
+			return problems, nil
+		}
+		if attempt >= checkErrorsMaxRefetch {
+			return nil, fmt.Errorf("the project check did not settle: Studio Pro's error list kept changing between pages")
+		}
+	}
+}
+
+// projectCheckListing keeps every line of an 11.15 listing but its page header.
+func projectCheckListing(text string) []string {
+	var out []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if checkListingHeader.MatchString(line) || strings.TrimSpace(line) == "" {
+			continue
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+// writeCheckReport prints a project check's listing, or that it is clean.
+func writeCheckReport(w io.Writer, listing []string) {
+	if len(listing) == 0 {
+		fmt.Fprintln(w, "model check: no errors found")
+		return
+	}
+	fmt.Fprintln(w, "model check:")
+	for _, line := range listing {
+		fmt.Fprintf(w, "  %s\n", line)
+	}
 }

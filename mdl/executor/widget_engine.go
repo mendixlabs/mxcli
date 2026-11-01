@@ -2299,11 +2299,10 @@ func (e *PluggableWidgetEngine) buildObjectListItem(mapping *ObjectListMapping, 
 
 	// DataGrid column header convention: when the user provides no Caption,
 	// fall back to the bound attribute name — or, for a custom-content column
-	// with no attribute, the column's own name. Mirrors buildDataGrid2ColumnObject
-	// in datagrid_builder.go. Without this, an empty/absent column header trips
-	// Studio Pro's CE0463 (ledger #54). Only applies to items whose template has
-	// a `header` slot (datagrid columns), never to header-less object-list items
-	// like chart series.
+	// with no attribute, an empty header. Mirrors the keyword path
+	// (datagrid_column.go). Only applies to items whose template has a `header`
+	// slot (datagrid columns), never to header-less object-list items like chart
+	// series.
 	hasHeaderSlot := false
 	for _, ip := range mapping.ItemProperties {
 		if strings.EqualFold(ip.PropertyKey, "header") {
@@ -2311,7 +2310,7 @@ func (e *PluggableWidgetEngine) buildObjectListItem(mapping *ObjectListMapping, 
 			break
 		}
 	}
-	applyColumnHeaderFallback(&spec, child.Name, hasHeaderSlot)
+	applyColumnHeaderFallback(&spec, hasHeaderSlot)
 
 	// DataGrid column sortable convention: attribute-less columns (typical
 	// "Actions" custom-content columns) default to sortable=false, since
@@ -2400,12 +2399,20 @@ func (e *PluggableWidgetEngine) buildObjectListItem(mapping *ObjectListMapping, 
 // item: the slot keyed "content" if present, otherwise the first slot.
 // Returns "" if there are no widgets-typed slots.
 // applyColumnHeaderFallback synthesizes a texttemplate spec for the `header`
-// property when the spec has an attribute binding but no header text. Mirrors
-// the keyword path's `if caption == "" { caption = col.Attribute }` fallback
-// in datagrid_builder.go. The check is conservative: only fires when the
-// header slot is genuinely empty, so it's safe to call for any object-list
-// item kind.
-func applyColumnHeaderFallback(spec *backend.ObjectListItemSpec, columnName string, hasHeaderSlot bool) {
+// property when the spec has no header text: the bound attribute's leaf name, or
+// — for a column with no attribute — an empty header. Mirrors the keyword path's
+// `if caption == "" { caption = col.Attribute }` in datagrid_column.go. The check
+// is conservative: only fires when the header slot is genuinely empty, so it's
+// safe to call for any object-list item kind.
+//
+// A custom-content column used to fall back to the column's own NAME (ledger
+// #54 round 2), on the belief that an empty header is CE0463. It is not: the
+// CE0463 was a null TextTemplate, and the empty Forms$ClientTemplate that
+// update-widgets writes builds clean (ChipCoV8 #11; 0 errors on 11.15.0, where
+// the keyword path writes exactly that). The name, meanwhile, is one Mendix
+// does not store for a column, and Data grid 2 renders the header text as is —
+// so `Caption: ”` showed end users "colTriage" (ako/mxcli#535).
+func applyColumnHeaderFallback(spec *backend.ObjectListItemSpec, hasHeaderSlot bool) {
 	// Only items whose template has a `header` slot (datagrid columns) get a
 	// header fallback; header-less object-list items (chart series, accordion
 	// groups) are left untouched.
@@ -2420,10 +2427,7 @@ func applyColumnHeaderFallback(spec *backend.ObjectListItemSpec, columnName stri
 		case "header":
 			headerIdx = i
 			// An explicit `Caption: ''` reaches here as a texttemplate with no
-			// text and no params. Studio Pro rejects an empty column header with
-			// CE0463 "widget definition changed" (ledger #54) — the same failure
-			// an absent header would cause without this fallback. Treat empty as
-			// absent so the fallback applies either way.
+			// text and no params; treat it like an absent header.
 			headerEmpty = p.Operation == "texttemplate" && p.TextTemplate == "" && len(p.Parameters) == 0
 		case "attribute":
 			attrPath = p.AttributePath
@@ -2433,23 +2437,17 @@ func applyColumnHeaderFallback(spec *backend.ObjectListItemSpec, columnName stri
 	if headerIdx >= 0 && !headerEmpty {
 		return
 	}
-	// Fallback header text: the bound attribute's leaf name (Module.Entity.Attr →
-	// Attr), or — for a custom-content / action column with no attribute — the
-	// column's own name. Every datagrid column needs a NON-empty header; an empty
-	// or absent one is CE0463 (ledger #54), and a custom-content column has no
-	// attribute to derive one from, so the column name is the sensible default.
+	// Fallback header text: the bound attribute's leaf name
+	// (Module.Entity.Attr → Attr).
 	fallback := attrPath
 	if idx := strings.LastIndex(fallback, "."); idx >= 0 {
 		fallback = fallback[idx+1:]
 	}
 	if fallback == "" {
-		fallback = columnName
-	}
-	if fallback == "" {
-		// An unnamed column with no caption and no attribute has nothing to
-		// derive a header from. It must still not serialize as TextTemplate:
-		// null — `mx update-widgets` writes an empty Forms$ClientTemplate for
-		// the header, so null is CE0463 (ChipCoV8 #11). Flag the header
+		// No attribute to name the column after: an empty header, which Data
+		// grid 2 renders blank. It must not serialize as TextTemplate: null —
+		// `mx update-widgets` writes an empty Forms$ClientTemplate for the
+		// header, so null is CE0463 (ChipCoV8 #11). Flag the header
 		// EmptyTemplate; scoped by the hasHeaderSlot gate above to datagrid
 		// columns, never to other texttemplates.
 		if headerIdx >= 0 {

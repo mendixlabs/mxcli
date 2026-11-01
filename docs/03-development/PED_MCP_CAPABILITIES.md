@@ -564,7 +564,7 @@ behaviour change, not an error.
 | **Changed** | Workflows constructor (`ped_get_schema`) | `Workflows$Workflow`'s constructor renamed `caption` to **`title`**; `eventSubProcesses` gained a default `[]`; the `EventSubProcess` constructor no longer lists `persistentId` (reads still return it, so the boundary-event lookup by `persistentId` is unaffected). **Neither release's constructor applies the title or `workflowName` it is given** — both store the document name — so DISPLAY was lost over MCP before 11.15 too. **Fixed:** the probe picks the key, and `workflowCreateLeafOps` sets `/title` and `/workflowName/text` after the create, which both releases accept. |
 | **Removed** | `read_skill` | Skills are files under `/skills` (`glob`/`read_file`). Unused by mxcli. |
 | **Removed** | `install_marketplace_module`, `search_mendix_knowledge_base` | Now **handlers**, reached through `query_handlers` / `execute_handler`. Unused by mxcli. |
-| **New** | `query_handlers`, `execute_handler` | A handler registry: `install_marketplace_module`, `search_mendix_knowledge_base`, `mendix_app` (run / stop / status of the runtime), `vc_commit`, `vc_push`, the translation tools (`batch_translate`, `check_translation_status`, `find_text_usages`, `list_text_containers`, `reset_translations`) and marketplace search. `mendix_app` and `vc_commit` overlap what Concord supplies today (`--mcp-run`; and a commit is a save point) — not wired yet. |
+| **New** | `query_handlers`, `execute_handler` | A handler registry: `install_marketplace_module`, `search_mendix_knowledge_base`, `mendix_app` (run / stop / status of the runtime), `vc_commit`, `vc_push`, the translation tools (`batch_translate`, `check_translation_status`, `find_text_usages`, `list_text_containers`, `reset_translations`) and marketplace search. `mendix_app` backs `--mcp-run` (see Delete, check and run); `vc_commit` is not wired. |
 | **Changed** | `read_file`, `write_file` | `startLine/endLine` → `offset/limit`; `newContent`+`span` → `oldString`/`newString`. Unused by mxcli (see the tool matrix). |
 | **Changed** | `glob` | New `/app-logs` file domain. |
 
@@ -673,15 +673,15 @@ The right-hand column carries the latest measured status, not the 11.11 one.
 |-----|-----------------------------|-------------------------------|
 | **No delete-document tool** | `DROP` of any *standalone document* (enum, microflow, page) is impossible. Only entities/associations delete, via a `ped_update_document` remove op on the domain-model array. Test docs created via MCP cannot be cleaned up — they persist until the user closes Studio Pro without saving. | Watch for a `ped_delete_document` / equivalent. |
 | **No list-modules tool** ⟶ **CLOSED in 11.12** | PED cannot enumerate modules. The backend must read modules/structure from the local mounted `.mpr` (hybrid model); `-p` must be the same project Studio Pro has open. | **11.12 adds `list_modules`** (`[{moduleName, writable, fromMarketplace}]`) → pure-MCP module enumeration is now possible; the local-`.mpr` dependency for *module listing* can be lifted on 11.12+. Other reads (structure, IDs) still use the hybrid model. |
-| **No save/flush tool** | `ped_update_document` edits stay in Studio Pro's in-memory model; the on-disk `.mpr` is stale until the user saves. Drives the dirty-set read router. **Refined on 11.12 (observed live, test8):** *created* documents (`ped_create_document`, `pg_patch_page` page-create) flush to `mprcontents/` immediately — no Concord `save_all` needed for them — but *update* ops still stay in memory (an `alter entity add attribute` was visible to `ped_check_errors` yet absent on disk → CE1613 on an `mx check` of a mid-session disk copy). (`ped_create_module` already flushed immediately on 11.11.) | Watch for a save tool / autosave; recheck the create-flush behavior each version. |
+| **No save/flush tool** | `ped_update_document` edits stay in Studio Pro's in-memory model; the on-disk `.mpr` is stale until the user saves. Drives the dirty-set read router. **Refined on 11.12 (observed live, test8):** *created* documents (`ped_create_document`, `pg_patch_page` page-create) flush to `mprcontents/` immediately — but *update* ops still stay in memory (an `alter entity add attribute` was visible to `ped_check_errors` yet absent on disk → CE1613 on an `mx check` of a mid-session disk copy). (`ped_create_module` already flushed immediately on 11.11.) | Watch for a save tool / autosave; recheck the create-flush behavior each version. |
 | **Reads omit `$ID`** | Reads expose `$QualifiedName` only. Association refs need entity GUIDs, recovered from the local reader (= live `$ID` for saved entities). Reconstructed reads use synthetic IDs mapped to names. | Recheck whether reads expose `$ID`. |
 | **Array reads omit primitive types** | A `/entities/N/attributes` read gives attribute names (`$QualifiedName`) but not their primitive type or documentation — those need a per-*leaf* read (`/entities/N/attributes/M/type` → a `DomainModels$*AttributeType` constructor; `/…/documentation` → string). Reconstruction recovers them with a single **batched** leaf read (`enrichReconstructedEntities`) so a dirty/session module reports real types (correct DESCRIBE + a reliable ALTER diff); it falls back to placeholder `String` only if the read fails. | **11.14 — partially CLOSED.** An attributes-array read now carries each attribute's `type.$Type`, `value.$Type` and `documentation` inline (`{"$Type":"DomainModels$Attribute","$QualifiedName":"…Title","type":{"$Type":"DomainModels$StringAttributeType"},"value":{"$Type":"DomainModels$StoredValue"},"name":"Title","documentation":""}`). But the type's **parameters are still dropped**: the same attribute's leaf read returns `{"$Type":"DomainModels$StringAttributeType","length":200}` — `length` appears **only** in the leaf read. So `enrichReconstructedEntities` is still required for `length` / enumeration refs, but the type *kind* is now free. Not yet exploited; measured on one String attribute, so widen the sample before relying on it. |
 | **No in-place attribute-type change** | `set /entities/N/attributes/M/type` is rejected (`"only allowed to set primitive or reference properties directly"` — the type is a nested element), and a whole-attribute replace is rejected too (`"only allowed to update elements …"`). The only route to a new type is remove+add, which drops the attribute's `$ID` → **drops the column data**. So `ALTER ENTITY … MODIFY ATTRIBUTE <type>` is rejected over MCP; do it against a local `.mpr` (Studio Pro does an in-place migration PED can't). | **11.14 — the structural refusal is GONE.** 11.14's `set` explicitly *"can set or replace element-valued properties"*. Probed with a deliberately invalid value so it could not land: `set /entities/0/attributes/0/type` = `{"$Type":"DomainModels$NoSuchAttributeType"}` is now rejected as a **value validation** error (`"Type … is not a valid concrete subtype of DomainModels$AttributeType."`), not with 11.13's structural *"only allowed to set primitive or reference properties directly"*. That means the operation now reaches validation — i.e. a **valid** subtype would plausibly be accepted. **Not confirmed:** proving it needs a successful mutation against a throwaway project, and the data-safety question behind the gap (does an in-place type change migrate the column, or drop it?) is unanswered and is the *real* gate on `ALTER ENTITY … MODIFY ATTRIBUTE`. `capabilities.yaml` therefore still reports it unauthorable. |
 | **Two write protocols** | Pages **must** use `pg_*`; everything else uses `ped_*`. The system prompt forbids PED for pages. | Stable, but reconfirm. |
-| **`ped_create_document` doc-type whitelist** | The create tool accepts only certain document types; some model documents are rejected even though they have a `$constructor` schema. Confirmed off the whitelist: **`Microflows$Nanoflow`** (`"… Did you mean: Microflows$Microflow?"`), **`Projects$Folder`** (empty folders), and **`BusinessEvents$BusinessEventService`** (a `$element`, not a `$constructor` — its CREATE/ALTER are rejected in `businessevent.go`, but SHOW/DESCRIBE read the `.mpr`, DROP goes via Concord, and the published-event entities/constants it relies on are creatable). So nanoflows aren't creatable over MCP (CREATE/ALTER rejected — `nanoflow.go`; DROP works via Concord), and an *empty* folder can't be created. **But `ped_create_document` accepts a `folderPath` per document, which auto-creates the whole folder path** — so a document is placed in a (possibly nested) folder at create time (`folder.go`/`resolveDocContainer`). What you can't do: re-parent an *existing* document — `/folderPath` is not a settable property (so `MOVE`/`DROP FOLDER`/`MOVE FOLDER` are rejected), and pages can't be foldered (`pg_write_page` takes no folderPath). | Re-probe the create whitelist each version. |
+| **`ped_create_document` doc-type whitelist** | The create tool accepts only certain document types; some model documents are rejected even though they have a `$constructor` schema. Confirmed off the whitelist: **`Microflows$Nanoflow`** (`"… Did you mean: Microflows$Microflow?"`), **`Projects$Folder`** (empty folders), and **`BusinessEvents$BusinessEventService`** (a `$element`, not a `$constructor` — its CREATE/ALTER are rejected in `businessevent.go`, but SHOW/DESCRIBE read the `.mpr`, DROP uses `ped_delete_document` (11.16+), and the published-event entities/constants it relies on are creatable). So nanoflows aren't creatable over MCP (CREATE/ALTER rejected — `nanoflow.go`; DROP uses `ped_delete_document`, 11.16+), and an *empty* folder can't be created. **But `ped_create_document` accepts a `folderPath` per document, which auto-creates the whole folder path** — so a document is placed in a (possibly nested) folder at create time (`folder.go`/`resolveDocContainer`). What you can't do: re-parent an *existing* document — `/folderPath` is not a settable property (so `MOVE`/`DROP FOLDER`/`MOVE FOLDER` are rejected), and pages can't be foldered (`pg_write_page` takes no folderPath). | Re-probe the create whitelist each version. |
 | **No Java action document creation** | `ped_create_document` rejects `JavaActions$JavaAction` outright (`"Document type 'JavaActions$JavaAction' cannot be created."`) — a Java action is backed by a `.java` source file Studio Pro generates/manages, so the model document can't be created standalone. `CREATE/ALTER JAVA ACTION` are rejected with an actionable error (`mdl/backend/mcp/javaaction.go`); *calling* a Java action from a microflow is unaffected. | Watch for a Java-action create tool. |
 | **No mapping document ops** | PED's `ped_read/find/update_document` reject `ImportMappings$ImportMapping` and `ExportMappings$ExportMapping` ("Unknown document type" / "not supported"), while `ped_get_schema` returns full `element` **and** `constructor` schemas and `ped_list_folder` lists them — the security-document shape exactly. The constructor is `{ $Type, name }` only, so even a whitelisted create would yield an empty shell with no way to populate it. mxcli's MCP backend matches: all ten mapping methods are `unsupportedBackend` stubs (`unsupported_gen.go`). `JsonStructures$JsonStructure` — the mapping's *source* — **is** fully supported, and `ped_check_errors` **does** accept a mapping by name, so an on-disk-authored mapping can still be error-checked by Studio Pro. Re-probed 11.13.0, 2026-08-24. | Watch for the mapping types appearing in `ped_read_document`. |
-| **No security document ops** | PED's `ped_find/read/update/create_document` reject every security type (`Security$ModuleSecurity`, `Security$ProjectSecurity`, …) as "Unknown document type" — only `ped_get_schema` knows them as nested *elements*. Concord exposes only security *reads* (`audit_security`, `read_entity_access_rules`, `read_microflow_security`, `read_security_info`). So the security **documents** cannot be authored via MCP (module/user roles, demo users, project security level) — neither server has a write path. **Entity access rules are the exception and are authorable**: a `DomainModels$AccessRule` lives on the domain model, not the security document, so `GRANT` works (ADD-only — PED refuses to remove a rule or a member access, so `REVOKE` and replacing a rule in place are rejected). Security **reads** are served from the local `.mpr` by the backend's reader, so `SHOW MODULE ROLES` / `USER ROLES` / `PROJECT SECURITY` work over `--mcp` and `GRANT` can validate the role it references — routing that read to PED instead is what made every `GRANT --mcp` abort before its first tool call (#900). Determine support with `ped_read_document`, NOT `ped_find_document`: `find` also reports the (supported) nameless `DomainModels$DomainModel` as "Unknown", so it is not a reliable probe. | **11.14 — still sealed, and now actively mis-advertised.** The tool descriptions name `Settings$ProjectSettings`, `Security$ProjectSecurity` and `Security$ModuleSecurity` as supported and `ped_get_schema` returns ten fully documented security element types, but every document-API call is refused (`Unknown document type` / `Document type … is not supported.`), against a `Navigation$NavigationDocument` control that reaches the operation layer in the same probe. No security type declares a **method**, so the new `call` op opens nothing. **One thing did move:** replacing an existing `DomainModels$AccessRule` in place no longer needs member removal — 11.14's `set` replaces a non-null element, and the probe clears shape validation and fails only at reference resolution. So re-GRANT looks reachable while **REVOKE is still unmeasured** (bounds and writability checks both mask removability). See the 11.14 delta for the probes and the control. |
+| **No security document ops** | PED's `ped_find/read/update/create_document` reject every security type (`Security$ModuleSecurity`, `Security$ProjectSecurity`, …) as "Unknown document type" — only `ped_get_schema` knows them as nested *elements*. So the security **documents** cannot be authored via MCP (module/user roles, demo users, project security level) — there is no write path. **Entity access rules are the exception and are authorable**: a `DomainModels$AccessRule` lives on the domain model, not the security document, so `GRANT` works (ADD-only — PED refuses to remove a rule or a member access, so `REVOKE` and replacing a rule in place are rejected). Security **reads** are served from the local `.mpr` by the backend's reader, so `SHOW MODULE ROLES` / `USER ROLES` / `PROJECT SECURITY` work over `--mcp` and `GRANT` can validate the role it references — routing that read to PED instead is what made every `GRANT --mcp` abort before its first tool call (#900). Determine support with `ped_read_document`, NOT `ped_find_document`: `find` also reports the (supported) nameless `DomainModels$DomainModel` as "Unknown", so it is not a reliable probe. | **11.14 — still sealed, and now actively mis-advertised.** The tool descriptions name `Settings$ProjectSettings`, `Security$ProjectSecurity` and `Security$ModuleSecurity` as supported and `ped_get_schema` returns ten fully documented security element types, but every document-API call is refused (`Unknown document type` / `Document type … is not supported.`), against a `Navigation$NavigationDocument` control that reaches the operation layer in the same probe. No security type declares a **method**, so the new `call` op opens nothing. **One thing did move:** replacing an existing `DomainModels$AccessRule` in place no longer needs member removal — 11.14's `set` replaces a non-null element, and the probe clears shape validation and fails only at reference resolution. So re-GRANT looks reachable while **REVOKE is still unmeasured** (bounds and writability checks both mask removability). See the 11.14 delta for the probes and the control. |
 
 ## Transport (per environment, not per version)
 
@@ -731,8 +731,7 @@ documentation field** (dropped). CREATE OR MODIFY sets the `defaultValue` and
 `exposedToClient` leaves in place; a *type* change is rejected because the model's
 `type` is a nested `DataTypes$*Type` element PED can't set directly (same constraint
 as an attribute's type — `UpdateConstant` reads the live type and refuses a
-mismatch). DROP goes through Concord's `delete_document` (no PED delete tool), like
-enumerations.
+mismatch). DROP uses `ped_delete_document` (Studio Pro 11.16+), like enumerations.
 
 **CREATE MICROFLOW** maps a broad set of actions (variable/object/list changes,
 create/commit/delete/rollback, aggregate, list operations, retrieve, call
@@ -1040,159 +1039,25 @@ the duplicate source-document create. See `mdl/backend/mcp/` and the
 return a clear "not supported by the MCP backend" error via the generated
 `unsupportedBackend` base.
 
-## Concord (optional second client — gap-filler)
+## Delete, check and run
 
-> **Concord is Windows-only — it does not run on macOS** (confirmed 2026-08-11 on
-> the 11.13 Mac host). On macOS every Concord-backed capability is simply absent,
-> so `DROP` of a standalone document (enumeration, microflow, page) has **no path
-> at all**: PED has no delete tool and Concord is the only gap-filler. `check_model`
-> is likewise unavailable; `ped_check_errors` remains for per-document validation.
-> This also means MCP-authored test documents cannot be cleaned up on macOS —
-> remove them in Studio Pro, or close without saving.
+mxcli once paired PED with a second MCP server, Concord (a Studio Pro extension),
+for delete, save, validate and run. That support is removed: Studio Pro's own
+server covers each of them, and Concord's save and run were keystroke and button
+automations that reported success without taking effect. The Concord measurements
+are in this file's git history.
 
-Some deployments run a second MCP server, **Concord** (a Studio Pro extension;
-`concord-mcp`), alongside the built-in PED server. Concord is **not** an authoring
-server — it has none of the `ped_*`/`pg_*` create tools — but it provides
-operational/refactor capabilities PED lacks. The backend uses **PED for authoring
-by default** and reaches for Concord **only** for these gaps. Configure it with
-`--mcp-concord` / `--mcp-concord-dial` (a second `Client`, dialed independently);
-it stays `nil` when not configured, and every Concord-backed op errors clearly if
-it's missing.
+| Operation | Tool | Studio Pro | Notes |
+|---|---|---|---|
+| Save | — | all | Nothing to do. PED writes each change to disk as it lands (measured on 11.12.0 and 11.16.0; Save All then writes 0 files). |
+| `DROP` of a standalone document | `ped_delete_document` | 11.16+ | `deleteDocument` (`delete.go`), gated on the tool's presence. An older server gets an error naming 11.16+. **On 11.16.0 the tool fails for every caller outside Studio Pro's own agent session** (`Error executing tool handler: Session 'mcp-server' not found`, `isError:false`), so its success reply is unmeasured and an unrecognised reply is settled with `ped_find_document`. |
+| `--mcp-check` | `ped_check_errors`, no filters | 11.15+ | `CheckProject` (`check_errors.go`): the whole project's listing, every page. Up to 11.14 the tool requires `documents`, so there is no project-wide form. |
+| `--mcp-run` | `execute_handler` `mendix_app` `{action: run, timeoutSeconds: 120}` | 11.16+ | `RunApp` (`app.go`). Presence is asked once with `query_handlers {operation: getDetails, names: [mendix_app]}`; 11.12 has neither tool. `status` answers `{"running":false,"launching":false,"appUrl":"http://localhost:8080/"}` from outside Studio Pro (measured 2026-11-01). The `run` reply is unmeasured: one that is not a status is settled by asking `status`. A project with model errors is refused, not run. Runtime log: `read_file /app-logs/app.log`. |
 
-Wired so far:
-- **`delete_document`** — real `DROP` of standalone documents (enumeration,
-  microflow, page), which PED cannot delete at all. `DROP ENUMERATION/MICROFLOW/
-  PAGE` resolves the document's module + name and calls
-  `delete_document {module_name, document_name}`. Unlike `save_all` this is
-  **model-based, not keystroke automation**, so it is robust. (Entities and
-  associations still delete via PED's array-element removal — no Concord needed.)
-- **`check_model`** (`--mcp-check`) — domain-model consistency check after writes
-  (PED has no validation for the live model). Parses `{success, healthy, summary
-  {errorCount, warningCount, …}, errors[], warnings[]}` and prints a report to
-  stderr on Disconnect. Model-based (robust). Note: `healthy: true` means zero
-  *errors*, not zero warnings — the report shows both.
-- **`save_all`** (`--mcp-save`) — PED has no save tool, so writes live only in
-  Studio Pro's in-memory model until the user saves. `--mcp-save` flushes via
-  Concord's `save_all` on Disconnect. **Unreliable — keystroke automation.**
-  Concord's `save_all` synthesizes a macOS Cmd+S (osascript → System Events), with
-  two failure modes observed against 11.11 Beta:
-  1. **Permission.** Needs macOS **Accessibility** on the *responsible* process.
-     If Studio Pro is launched from a shell that exec's the binary directly, the
-     responsible process is the **terminal**, not Studio Pro — relaunch via
-     `open -n -a "<app>" --args …` (launchd → app is its own responsible process)
-     and grant Studio Pro Accessibility. Otherwise it fails `osascript is not
-     allowed to send keystrokes (1002)`.
-  2. **The keystroke does not save, and hangs Studio Pro — confirmed broken in
-     11.11 Beta (2026-06-08).** First observed from a devcontainer
-     (`{"status":"save_command_sent"}`, no disk change). Then re-tested the
-     authoritative way — from Claude Code in the Concord terminal, **single active
-     Studio Pro instance, app frontmost** — and it still did **not** persist *and*
-     **hung Studio Pro** while Concord tried to drive the save. So it is **not**
-     the two-instance ambiguity; it is a genuine **Concord/Studio Pro `save_all`
-     bug** (the synthetic Cmd-S hangs the IDE). **Do not rely on `--mcp-save`;
-     save manually (Cmd-S) in Studio Pro, and report `save_all` upstream to the
-     Concord/Studio Pro team.** The backend wiring is correct and will work
-     unchanged once `save_all` is fixed; a silently-no-op `save_command_sent` it
-     cannot detect. Model-based gap-closers (`delete_document`, `check_model`) are
-     unaffected — they do not use keystroke automation.
-
-- **`get_app_status`** — the API call works and returns well-formed
-  `{data:{running, runningUrl, projectName, …}}` (exposed as `GetAppStatus()`,
-  printed by `--mcp-run`). **But `running`/`runningUrl` are effectively a
-  port/process probe**, not the current session's console-managed runtime: it
-  reported `running | :8080` while the Studio Pro runtime console was empty —
-  because an **orphaned runtime from a previous run** was still bound to `:8080`
-  (restarting Studio Pro doesn't kill the separate runtime process; `:8080` was
-  confirmed listening). So trust the API shape, but treat `running: running` as
-  "something is bound to the runtime port," which may be stale.
-- **`run_app` / `stop_app`** (`--mcp-run` starts the app) — ⚠️ **same
-  UI-automation failure as `save_all`.** They are "click the Run/Stop button"
-  automations: `stop_app` returned `{"status":"command_sent"}` but the app stayed
-  running across repeated `get_app_status` polls (2026-06-08, 11.11 Beta). So like
-  `save_all` they report success without taking effect; `run_app` almost certainly
-  behaves the same. Wired correctly (will work once Concord's UI automation is
-  fixed), but **don't rely on `--mcp-run`/`stop_app` — start/stop the app manually
-  in Studio Pro.** Report upstream.
-
-**Pattern (important):** Concord's **model-editing** tools work (`delete_document`,
-`check_model`); its **UI-automation** tools that synthesize button clicks /
-keystrokes do **not** in this environment (`save_all`, `stop_app`, `run_app` all
-return a `*_command_sent` status with no actual effect, and `save_all` can hang
-Studio Pro). `get_app_status` is read-only and returns valid data but reflects raw
-port state (can be a stale runtime). Net: only `delete_document` and
-`check_model` are dependable today.
-
-### Full tool inventory (44 tools, captured 2026-06-15)
-
-Concord identity: `concord-mcp` (proto `2025-03-26`), port 7783 (directly
-container-reachable; no socat). **Two behaviors to know:**
-
-- **`tools/list` is context-curated.** After `concord__set_task_context`, a
-  subsequent `tools/list` returns only a *curated subset* relevant to the declared
-  task. The full 44 below come from a fresh `tools/list` with no task context set.
-  Always re-probe without a task context to see everything.
-- **No Maia / agent-invoke tool.** Like PED, Concord exposes *tools an agent uses*,
-  not a "run the Maia agent" entrypoint. The `concord__*` tools are agent **self-
-  management** helpers (calibration, friction journal, tool discovery), not Maia.
-
-Wired/tested status: ✅ dependable · ⚠️ UI-automation, unreliable (see above) ·
-○ present, not yet wired/vetted. `R` = readOnlyHint.
-
-| Category | Tool | R/W | Status / note |
-|----------|------|-----|---------------|
-| Domain model | `rename_entity` | W | ○ in-place, identity-preserving rename (PED only does `set /name`) |
-| Domain model | `rename_attribute` | W | ○ identity-preserving |
-| Domain model | `rename_association` | W | ○ identity-preserving |
-| Domain model | `rename_module` | W | ○ identity-preserving |
-| Domain model | `rename_document` | W | ○ identity-preserving |
-| Domain model | `set_documentation` | W | ○ set element documentation |
-| Domain model | `arrange_domain_model` | W | ○ auto-layout entities/associations |
-| Domain model | `delete_model_element` | W | ○ delete entity/attribute/association (PED already removes these via array op) |
-| Constants/enums | `rename_enumeration_value` | W | ○ identity-preserving |
-| Microflows | `modify_microflow_activity` | W | ○ mutate an activity by 1-based position |
-| Microflows | `insert_before_activity` | W | ○ sequence an activity |
-| Microflows | `set_microflow_url` | W | ○ |
-| Pages | `delete_document` | W | ✅ real `DROP` of standalone docs (wired) |
-| Pages | `exclude_document` | W | ○ |
-| Pages | `generate_overview_pages` | W | ○ CRUD list + new-edit pages |
-| Navigation | `manage_navigation` | W | ○ menu structure, home page, role gating (Concord convenience; mxcli now authors web-profile nav directly via generic `ped_update_document` on `Navigation$NavigationDocument` — see below) |
-| Project settings | `read_configurations` | R | ○ |
-| Project settings | `set_configuration` | W | ○ |
-| Project settings | `read_runtime_settings` | R | ○ |
-| Project settings | `set_runtime_settings` | W | ○ |
-| Project settings | `get_active_run_configuration` | R | ○ which run config will run |
-| Validation/diag | `check_model` | R | ✅ domain-model consistency check (wired, `--mcp-check`) |
-| Validation/diag | `check_project_errors` | R | ○ full-project "Check All Errors" — reported stubbed in Concord |
-| Validation/diag | `analyze_project_patterns` | R | ○ architectural pattern/anti-pattern scan |
-| Validation/diag | `get_last_error` | R | ○ |
-| Validation/diag | `get_studio_pro_logs` | R | ○ |
-| Security (read) | `audit_security` | R | ○ full security audit (intended) |
-| Security (read) | `read_entity_access_rules` | R | ○ |
-| Security (read) | `read_microflow_security` | R | ○ |
-| Security (read) | `read_security_info` | R | ○ project security overview |
-| App runtime | `get_app_status` | R | ✅ valid data, but raw port probe (can be a stale runtime) |
-| App runtime | `run_app` | W | ⚠️ UI automation — `command_sent`, no effect |
-| App runtime | `stop_app` | W | ⚠️ UI automation — `command_sent`, app stays running |
-| App runtime | `save_all` | W | ⚠️ UI automation — does not persist and **hangs Studio Pro**; save manually |
-| Project | `refresh_project` | W | ○ force re-scan of project dir for external file changes |
-| Concord meta | `concord__session_context` | R | ○ session-start briefing (call once) |
-| Concord meta | `concord__set_task_context` | W | ○ declares task → curates subsequent `tools/list` |
-| Concord meta | `concord__find_tool` | R | ○ free-text "which tool for this task" |
-| Concord meta | `concord__verify` | R | ○ verify a high-level workflow (e.g. `entity_created`) actually applied |
-| Concord meta | `concord__diagnose_project` | R | ○ parallel project-state probes (SP running? .mpr locked?) |
-| Concord meta | `concord__calibration_summary` | R | ○ C4 calibration journal summary |
-| Concord meta | `concord__record_calibration` | W | ○ append (claimed, actual) calibration entry |
-| Concord meta | `concord__silence_friction` | W | ○ suppress friction-wire emission for a tool |
-| Concord meta | `concord__tried_approaches` | R | ○ prior friction occurrences for a pattern/tool |
-
-**Highest-value unwired gap-closers** (would fill PED limits the matrix currently
-marks unsupported, pending probe + identity-preservation vetting per
-[ADR-0002](../13-decisions/0002-backend-abstraction.md) and the "don't fake
-identity ops" rule): the `rename_*` family (true renames vs PED's `set /name`).
-(Navigation is no longer in this list — mxcli authors web-profile navigation
-directly over PED; see the navigation note below.) `check_project_errors` and
-`refresh_project` are also candidates. `delete_model_element` is low priority (PED
-already removes entities/associations).
+**Playwright** is reachable the same way: `playwright_status` answered "Playwright
+is available; use the browser_* handlers to check the UI." on 11.16.0, and the
+`mcp_studio-pro-playwright_browser_*` handlers (navigate, snapshot, click, type,
+wait_for, …) drive the running app. mxcli does not call them yet.
 
 ## Onboarding a new Studio Pro version
 

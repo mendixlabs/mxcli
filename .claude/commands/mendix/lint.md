@@ -44,12 +44,13 @@ mxcli lint -p app.mpr --baseline lint-baseline.json
 | MPR005 | quality | ImageSource - IMAGE widgets with no source configured |
 | MPR006 | quality | EmptyContainer - Empty layout containers |
 | MPR007 | security | PageNavigationSecurity - Navigation pages need allowed roles (CE0557); every user role must be able to open its home page (at Production security, else CE2729 per widget) |
-| MPR012 | correctness | LegacyImageWidget - staticimage/dynamicimage are unsupported by the React client (CE0582; info on the classic client) |
+| MPR012 | correctness | ReactUnsupportedWidget - static/dynamic image, drop-down, legacy data grid and reference selector are unsupported by the React client (CE0582; info on the classic client) |
 | MPR013 | correctness | SnippetCallAppearance - Class/Style/DynamicClasses/design properties on a snippet call never reach the page (it renders no element) |
 | SEC001 | security | NoEntityAccessRules - Persistent entities need access rules |
 | SEC002 | security | WeakPasswordPolicy - Password minimum length should be 8+ |
 | SEC003 | security | DemoUsersActive - Demo users should be off at Production security |
 | SEC010 | security | PageEntityNotReadable - A page data widget lists an entity the user roles that open the page cannot read; at Production it renders empty, silently (info when only row-scoped) |
+| SEC011 | security | XPathAssociationNotReadable - A page data source's XPath crosses an association a role that opens the page may not read; at Production the page fails to open ("No access rights for …") |
 | CONV011 | performance | NoCommitInLoop - Commits inside loops (commit actions, or create/change with commit) cause N+1 issues |
 | CONV012 | quality | ExclusiveSplitCaption - Exclusive splits need meaningful captions |
 | CONV013 | quality | ErrorHandlingOnCalls - External calls (REST/WS/Java) need custom error handling |

@@ -30,10 +30,12 @@ Built-in rules check for:
   - Empty containers (MPR006) - layout containers with no children
   - Navigation page security (MPR007) - pages in navigation need allowed roles, and every user role must be able to open its home page
   - Gallery selection listener (MPR009) - DataView 'DataSource: selection X' needs gallery 'ItemSelectionMode: toggle' (Studio Pro CE3637)
+  - React-unsupported widgets (MPR012) - static/dynamic image, drop-down, legacy data grid, reference selector are CE0582 under the React client
   - Entity access rules (SEC001) - persistent entities need access rules
   - Password policy (SEC002) - password minimum length should be 8+
   - Demo users (SEC003) - demo users should be off at Production security
   - Unreadable page data (SEC010) - a data widget's entity must be readable by the roles that open its page (at Production it renders empty)
+  - XPath through an unreadable association (SEC011) - a page data source's XPath may cross only associations the roles opening the page can read (at Production the page fails)
   - Un-describable branch structure (MDL-FLOW01) - decision branches that do not nest, so DESCRIBE cannot render them faithfully
 
 Bundled Starlark rules (in .claude/lint-rules/):
@@ -475,7 +477,7 @@ func builtinLintRules() []linter.Rule {
 		rules.NewDomainModelSizeRule(),
 		rules.NewValidationFeedbackRule(),
 		rules.NewImageSourceRule(),
-		rules.NewLegacyImageWidgetRule(),
+		rules.NewReactUnsupportedWidgetRule(),
 		rules.NewSnippetCallAppearanceRule(),
 		rules.NewEmptyContainerRule(),
 		rules.NewGallerySelectionListenerRule(),
@@ -485,10 +487,11 @@ func builtinLintRules() []linter.Rule {
 		rules.NewNoEntityAccessRulesRule(),
 		rules.NewWeakPasswordPolicyRule(),
 		rules.NewDemoUsersActiveRule(),
-		rules.NewPageEntityReadAccessRule(),  // SEC010 - full catalog (widgets, permissions)
-		rules.NewOverlappingActivitiesRule(), // MPR008 - requires BSON inspection
-		rules.NewLoopChildContainmentRule(),  // MPR011 - requires BSON inspection
-		rules.NewNoCommitInLoopRule(),        // CONV011-CONV014 - require BSON inspection
+		rules.NewPageEntityReadAccessRule(),   // SEC010 - full catalog (widgets, permissions)
+		rules.NewXPathAssociationAccessRule(), // SEC011 - full catalog (xpath_expressions, permissions)
+		rules.NewOverlappingActivitiesRule(),  // MPR008 - requires BSON inspection
+		rules.NewLoopChildContainmentRule(),   // MPR011 - requires BSON inspection
+		rules.NewNoCommitInLoopRule(),         // CONV011-CONV014 - require BSON inspection
 		rules.NewExclusiveSplitCaptionRule(),
 		rules.NewErrorHandlingOnCallsRule(),
 		rules.NewNoContinueErrorHandlingRule(),

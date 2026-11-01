@@ -84,9 +84,9 @@ func TestListEnumerations_SessionTakesPrecedence(t *testing.T) {
 	}
 }
 
-func TestDeleteEnumeration_RequiresConcord(t *testing.T) {
-	// DROP routes to Concord's delete_document; without --mcp-concord it must
-	// give an actionable error (not "no delete tool ever"). Use a session module
+func TestDeleteEnumeration_NeedsNativeDelete(t *testing.T) {
+	// DROP routes to ped_delete_document; without a connected server that has it,
+	// it must give an actionable error naming the version. Use a session module
 	// + enum so the resolve path needs no local reader.
 	b := &Backend{}
 	mod := &model.Module{Name: "M"}
@@ -99,7 +99,7 @@ func TestDeleteEnumeration_RequiresConcord(t *testing.T) {
 	b.sessionEnums = append(b.sessionEnums, enum)
 
 	err := b.DeleteEnumeration(enum.ID)
-	if err == nil || !strings.Contains(err.Error(), "Concord") {
-		t.Fatalf("DROP without Concord should error pointing at --mcp-concord, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "11.16+") {
+		t.Fatalf("DROP without ped_delete_document should name Studio Pro 11.16+, got: %v", err)
 	}
 }

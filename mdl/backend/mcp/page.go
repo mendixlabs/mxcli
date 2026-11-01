@@ -105,8 +105,8 @@ func (b *Backend) ListPages() ([]*pages.Page, error) {
 	return out, nil
 }
 
-// DeletePage drops a page via deleteDocument: ped_delete_document where Studio Pro has it (11.16+), else
-// Concord (--mcp-concord).
+// DeletePage drops a page via deleteDocument: ped_delete_document
+// (Studio Pro 11.16+).
 func (b *Backend) DeletePage(id model.ID) error {
 	page, err := b.GetPage(id)
 	if err != nil {

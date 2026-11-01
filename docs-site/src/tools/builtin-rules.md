@@ -30,6 +30,7 @@ The **lint rules** below run with `mxcli lint`. There is also a separate group o
 | **SEC002** | Password policy -- Checks for secure password configuration |
 | **SEC003** | Demo users -- Warns about demo users in production security level |
 | **SEC010** | Unreadable page data -- A data grid, gallery, list view or combo box lists an entity that a user role allowed on the page cannot read (including its generalizations and specializations). At Production security it renders empty for that role and nothing else reports it. Info when the role reads only through an XPath-constrained rule; System entities use access measured from a deployed model, so a combo box over System.User gets its own message (it lists only the current user) |
+| **SEC011** | XPath through an unreadable association -- A page data source's XPath crosses an association that a user role allowed on the page may not read on the entity the step starts from (an association is a member of its FROM entity's rules, and of its TO entity's when the owner is Both). At Production security the page fails to open with "No access rights for Module$Entity/Module.Association", while mxbuild reports nothing. Error. Entity access-rule XPaths are not checked: the runtime does not apply member access there (measured, 11.15) |
 
 ## Convention Rules
 

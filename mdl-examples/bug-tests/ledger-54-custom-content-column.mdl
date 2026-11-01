@@ -9,13 +9,16 @@ mdl 1;
 -- still failed `mx check` with CE0463. A custom-content column requires a
 -- non-empty header, and the first fix had no attribute name to fall back to.
 --
--- After fix: the header falls back to the COLUMN'S OWN NAME when there is no
--- bound attribute. The fallback is gated on the item template having a `header`
--- slot, so header-less object-list items (chart series, accordion groups) are
--- never given a spurious header.
+-- After fix: the header falls back to the bound attribute's name; a column with
+-- no attribute gets an EMPTY header (an empty Forms$ClientTemplate, the shape
+-- update-widgets writes), which Data grid 2 renders blank. Round 2 used the
+-- column's own name instead, which showed end users "colActionsEmpty" — Mendix
+-- stores no name for a column (ako/mxcli#535). The fallback is gated on the item
+-- template having a `header` slot, so header-less object-list items (chart
+-- series, accordion groups) are never given a spurious header.
 --
--- Verified: `mx check` → 0 errors on Mendix 11.12.1 for both the empty-caption
--- and no-caption custom-content columns (previously CE0463).
+-- Verified: `mx check` → 0 errors on Mendix 11.12.1 (column-name header) and
+-- 11.15.0 (empty header) for both the empty-caption and no-caption columns.
 --
 -- NOTE: requires the project's generated widget defs (`mxcli widget init`), so
 -- this is exercised via exec/mx-check, not just syntax check.
@@ -43,11 +46,11 @@ create or modify page L54c.Grid (
     DataSource: database from L54c.Thing
   ) {
     column colName (Attribute: Name, Caption: 'Name')
-    -- Custom-content column, empty caption → header falls back to the column name
+    -- Custom-content column, empty caption → empty header (#535)
     column colActionsEmpty (Caption: '') {
       actionbutton btnA (Caption: 'Go', Action: call microflow L54c.RowAction(Thing = $currentObject))
     }
-    -- Custom-content column, no caption → header falls back to the column name
+    -- Custom-content column, no caption → empty header (#535)
     column colActionsBare {
       actionbutton btnB (Caption: 'Go2', Action: call microflow L54c.RowAction(Thing = $currentObject))
     }
