@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - **`dateFormat: custom` on a dynamic-text parameter is stored as Custom** (ako/mxcli#1864, mendixlabs/mxcli#1706) — `check` accepts a parameter's `dateFormat` and `enumFormat` in any case, but the writer stored the value as written, and `"custom"` is not a value Mendix knows, so the runtime showed the default format. The values are now stored in Mendix's spelling (`Custom`, `DateTime`, `Image`) on dynamic text and on Data grid 2 column templates.
+- **A doc comment above `alter entity … add attribute` is stored on the attribute** (ako/mxcli#1863, mendixlabs/mxcli#1705) — `/** Why */` written above the statement was read by nothing: exec reported "Added attribute" and the attribute had no documentation, with only a later `check` warning MDL089. It now documents the attribute the statement adds, as it does above a `create entity` attribute, for `alter entities` too. When the statement adds two attributes, or the attribute has its own comment, the comment is still not stored and `check` still warns.
 
 ## [0.30.0] - 2026-11-02
 
