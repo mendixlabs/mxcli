@@ -242,3 +242,18 @@ func TestEndpointCleanupRestoreIsAlwaysFirst(t *testing.T) {
 		}
 	}
 }
+
+// The test-flow script runs after the endpoint script, which creates the MxTest
+// module — and under --watch and --attach into a project that already holds it.
+// A `CREATE MODULE` of its own is never needed, and exec answers it with
+// "Module 'MxTest' already exists", which every `mxcli test --local` printed on
+// a project that had no such module before the run (ako/mxcli#1856).
+func TestGenerateTestFlowsDoesNotCreateTheModule(t *testing.T) {
+	suite := &TestSuite{Tests: []TestCase{{ID: "test_1", Name: "a", MDL: "$r = CALL MICROFLOW Mod.A();"}}}
+	if mdl := GenerateTestFlows(suite); strings.Contains(strings.ToUpper(mdl), "CREATE MODULE") {
+		t.Errorf("test-flow script creates the module the endpoint script already created:\n%s", mdl)
+	}
+	if !strings.Contains(GenerateEndpointMDL(""), "CREATE MODULE "+mxTestModule+";") {
+		t.Error("the endpoint script no longer creates the module; the test-flow script depends on it")
+	}
+}
