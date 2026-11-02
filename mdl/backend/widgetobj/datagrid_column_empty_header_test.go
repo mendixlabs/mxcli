@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/mendixlabs/mxcli/mdl/backend"
+	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
@@ -75,5 +76,44 @@ func TestDataGridColumn_EmptyTemplateHeaderEncodesEmptyClientTemplate(t *testing
 	spec.Properties[1].EmptyTemplate = false
 	if tt := headerTemplate(t, spec); tt != nil {
 		t.Errorf("unflagged empty header = %v, want null", tt)
+	}
+}
+
+// A column header the statement leaves empty is written as ONE empty
+// translation in the authoring language, not as a template with none. With none,
+// `create or replace` carried the stored caption back (canon.CarryTranslations
+// adds every language a rebuilt text did not write), so `Caption: ”` could
+// never clear 'Triage'.
+func TestDataGridColumn_EmptyTextHeaderWritesAnEmptyTranslation(t *testing.T) {
+	spec := backend.ObjectListItemSpec{Properties: []backend.ObjectListItemProperty{
+		{PropertyKey: "showContentAs", Operation: "primitive", PrimitiveVal: "customContent"},
+		{PropertyKey: "header", Operation: "texttemplate", EmptyText: true},
+	}}
+	tt, ok := headerTemplate(t, spec).(bson.D)
+	if !ok {
+		t.Fatalf("header TextTemplate = %v, want a Forms$ClientTemplate", headerTemplate(t, spec))
+	}
+	var template bson.D
+	for _, e := range tt {
+		if e.Key == "Template" {
+			template, _ = e.Value.(bson.D)
+		}
+	}
+	var items bson.A
+	for _, e := range template {
+		if e.Key == "Items" {
+			items, _ = e.Value.(bson.A)
+		}
+	}
+	if len(items) != 2 {
+		t.Fatalf("Template items = %v, want the list marker and one translation", items)
+	}
+	tr, _ := items[1].(bson.D)
+	m := map[string]any{}
+	for _, e := range tr {
+		m[e.Key] = e.Value
+	}
+	if m["LanguageCode"] != model.AuthoringLanguage() || m["Text"] != "" {
+		t.Errorf("translation = %v, want (%s, \"\")", m, model.AuthoringLanguage())
 	}
 }

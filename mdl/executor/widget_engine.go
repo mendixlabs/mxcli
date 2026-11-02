@@ -2447,18 +2447,21 @@ func applyColumnHeaderFallback(spec *backend.ObjectListItemSpec, hasHeaderSlot b
 		// No attribute to name the column after: an empty header, which Data
 		// grid 2 renders blank. It must not serialize as TextTemplate: null —
 		// `mx update-widgets` writes an empty Forms$ClientTemplate for the
-		// header, so null is CE0463 (ChipCoV8 #11). Flag the header
-		// EmptyTemplate; scoped by the hasHeaderSlot gate above to datagrid
-		// columns, never to other texttemplates.
+		// header, so null is CE0463 (ChipCoV8 #11). It is written as ONE empty
+		// translation (EmptyText), not none: a text with no translation reads to
+		// `create or replace` as one MDL could not express, and the stored
+		// caption was carried back, so `Caption: ''` could not clear one. Scoped
+		// by the hasHeaderSlot gate above to datagrid columns, never to other
+		// texttemplates.
 		if headerIdx >= 0 {
 			spec.Properties[headerIdx].Operation = "texttemplate"
-			spec.Properties[headerIdx].EmptyTemplate = true
+			spec.Properties[headerIdx].EmptyText = true
 			return
 		}
 		spec.Properties = append(spec.Properties, backend.ObjectListItemProperty{
-			PropertyKey:   "header",
-			Operation:     "texttemplate",
-			EmptyTemplate: true,
+			PropertyKey: "header",
+			Operation:   "texttemplate",
+			EmptyText:   true,
 		})
 		return
 	}

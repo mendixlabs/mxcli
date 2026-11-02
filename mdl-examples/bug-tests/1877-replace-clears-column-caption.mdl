@@ -1,0 +1,34 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#1877: create or replace page could not clear a column caption
+-- ============================================================================
+--
+-- Symptom: the second statement below (`create or modify`, which `create or
+-- replace` is a deprecated spelling of) reported "Unchanged page" and the
+-- column kept its 'Triage' header. The rebuilt empty header carried no
+-- translation, so the translation carry added the stored one back.
+--
+-- After fix: the second statement replaces the page, describe prints
+-- `Caption: ''`, and running the second statement again is "Unchanged".
+
+create module Bug1877;
+
+create persistent entity Bug1877.Ticket (Title: String(100));
+
+create page Bug1877.Tickets (Title: 'Tickets', Layout: Atlas_Core.Atlas_Default) {
+  datagrid dgTickets (DataSource: database from Bug1877.Ticket) {
+    column (Attribute: Title, Caption: 'Title')
+    column (Caption: 'Triage') {
+      dynamictext dtTriage (Content: 'triage')
+    }
+  }
+};
+
+create or modify page Bug1877.Tickets (Title: 'Tickets', Layout: Atlas_Core.Atlas_Default) {
+  datagrid dgTickets (DataSource: database from Bug1877.Ticket) {
+    column (Attribute: Title, Caption: 'Title')
+    column (Caption: '') {
+      dynamictext dtTriage (Content: 'triage')
+    }
+  }
+};

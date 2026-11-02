@@ -808,9 +808,8 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 	// attribute gets an EMPTY header, never the column's name. Mendix stores no
 	// name for a column, and Data grid 2 renders an empty header blank — so
 	// writing the name put an internal identifier ("colTriage") in front of end
-	// users. The empty header is the empty Forms$ClientTemplate update-widgets
-	// writes (ChipCoV8 #11), which mx check accepts (0 errors on 11.15.0, the
-	// keyword `datagrid` path has always written it).
+	// users. The empty header is written as one empty translation (EmptyText),
+	// which mx check accepts (0 errors on 11.15.0).
 	spec7 := &backend.ObjectListItemSpec{
 		Properties: []backend.ObjectListItemProperty{
 			{PropertyKey: "header", Operation: "texttemplate", TextTemplate: ""},
@@ -818,8 +817,8 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 		},
 	}
 	applyColumnHeaderFallback(spec7, true)
-	if h := spec7.Properties[0]; h.PropertyKey != "header" || h.TextTemplate != "" || !h.EmptyTemplate {
-		t.Errorf("Case 7: empty custom-content header = %+v, want an empty texttemplate with EmptyTemplate=true (not the column name)", spec7.Properties[0])
+	if h := spec7.Properties[0]; h.PropertyKey != "header" || h.TextTemplate != "" || !h.EmptyText {
+		t.Errorf("Case 7: empty custom-content header = %+v, want an empty texttemplate with EmptyText=true (not the column name)", spec7.Properties[0])
 	}
 
 	// Case 8 (ako/mxcli#535): custom-content column with NO header prop at all —
@@ -833,15 +832,15 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 	if len(spec8.Properties) != 2 {
 		t.Fatalf("Case 8 (absent custom-content header): expected 2 properties, got %d", len(spec8.Properties))
 	}
-	if h := spec8.Properties[1]; h.PropertyKey != "header" || h.TextTemplate != "" || !h.EmptyTemplate {
-		t.Errorf("Case 8: appended header = %+v, want an empty texttemplate with EmptyTemplate=true", spec8.Properties[1])
+	if h := spec8.Properties[1]; h.PropertyKey != "header" || h.TextTemplate != "" || !h.EmptyText {
+		t.Errorf("Case 8: appended header = %+v, want an empty texttemplate with EmptyText=true", spec8.Properties[1])
 	}
 
 	// Case 9 (ChipCoV8 #11): an UNNAMED column with no caption and no attribute
 	// (`column (Caption: '') { … }`, or bare `column { … }`) has nothing to fall
-	// back to. Its header must still serialize as an empty Forms$ClientTemplate
-	// — the shape update-widgets writes — not TextTemplate: null, which is
-	// CE0463. Flagged EmptyTemplate, filled in place.
+	// back to. Its header must still serialize as a Forms$ClientTemplate, not
+	// TextTemplate: null, which is CE0463 — and as one empty translation
+	// (EmptyText), so a rewrite can clear a stored caption (ako/mxcli#1877).
 	spec9 := &backend.ObjectListItemSpec{
 		Properties: []backend.ObjectListItemProperty{
 			{PropertyKey: "header", Operation: "texttemplate", TextTemplate: ""},
@@ -852,12 +851,12 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 	if len(spec9.Properties) != 2 {
 		t.Fatalf("Case 9 (unnamed, empty caption): expected 2 properties (no duplicate), got %d", len(spec9.Properties))
 	}
-	if h := spec9.Properties[0]; h.PropertyKey != "header" || h.Operation != "texttemplate" || h.TextTemplate != "" || !h.EmptyTemplate {
-		t.Errorf("Case 9: header = %+v, want an empty texttemplate with EmptyTemplate=true", h)
+	if h := spec9.Properties[0]; h.PropertyKey != "header" || h.Operation != "texttemplate" || h.TextTemplate != "" || !h.EmptyText {
+		t.Errorf("Case 9: header = %+v, want an empty texttemplate with EmptyText=true", h)
 	}
 
 	// Case 10: unnamed column with NO header prop at all — append an
-	// EmptyTemplate header.
+	// EmptyText header.
 	spec10 := &backend.ObjectListItemSpec{
 		Properties: []backend.ObjectListItemProperty{
 			{PropertyKey: "showContentAs", Operation: "primitive", PrimitiveVal: "customContent"},
@@ -867,8 +866,8 @@ func TestApplyColumnHeaderFallback(t *testing.T) {
 	if len(spec10.Properties) != 2 {
 		t.Fatalf("Case 10 (unnamed, absent header): expected 2 properties, got %d", len(spec10.Properties))
 	}
-	if h := spec10.Properties[1]; h.PropertyKey != "header" || h.Operation != "texttemplate" || !h.EmptyTemplate {
-		t.Errorf("Case 10: appended header = %+v, want an empty texttemplate with EmptyTemplate=true", h)
+	if h := spec10.Properties[1]; h.PropertyKey != "header" || h.Operation != "texttemplate" || !h.EmptyText {
+		t.Errorf("Case 10: appended header = %+v, want an empty texttemplate with EmptyText=true", h)
 	}
 
 	// Case 11: no header slot, unnamed — still untouched (the EmptyTemplate
