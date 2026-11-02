@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -36,10 +38,12 @@ type LocalAppOptions struct {
 	// EnsureDB provisions the local Postgres + database when missing instead of
 	// only checking reachability.
 	EnsureDB bool
-	// FreshFileDB removes the built-in file database's data before the boot, so
-	// the runtime creates it empty. For a caller whose database is its own
-	// scratch (the test runner), never for one holding the developer's data.
-	FreshFileDB bool
+	// FreshDB empties the database before the boot, so the runtime starts on
+	// none of a previous run's data: the file database's files are removed, and
+	// a PostgreSQL database is emptied in place (emptyPostgresDatabase). For a
+	// caller whose database is its own scratch (the test runner), never for one
+	// holding the developer's data.
+	FreshDB bool
 	// SkipBuild boots against whatever is already in DeployDir.
 	SkipBuild bool
 	// RuntimeLogPath tees the runtime JVM output and the runtime's own
@@ -164,14 +168,15 @@ func (o *LocalAppOptions) applyDefaults() {
 // prepareLocalAppDatabase makes the configured database usable before the boot:
 // provisioning it with EnsureDB, otherwise checking that its server answers.
 // The built-in file database needs neither: the runtime creates its files —
-// afresh when FreshFileDB removed the previous ones.
+// afresh when FreshDB removed the previous ones. With FreshDB, a PostgreSQL
+// database is emptied once it is known to be usable.
 func prepareLocalAppDatabase(opts *LocalAppOptions, w io.Writer) error {
 	if opts.DB.IsFileBased() {
 		if opts.EnsureDB {
 			return fmt.Errorf("EnsureDB provisions PostgreSQL; the built-in file database " +
 				"needs no provisioning")
 		}
-		if opts.FreshFileDB {
+		if opts.FreshDB {
 			return removeFileDatabase(opts.DeployDir, opts.DB.Name, w)
 		}
 		return nil
@@ -180,14 +185,56 @@ func prepareLocalAppDatabase(opts *LocalAppOptions, w io.Writer) error {
 		if err := EnsureDatabase(&opts.DB, w); err != nil {
 			return fmt.Errorf("ensuring database: %w", err)
 		}
-		return nil
-	}
-	if err := pingTCP(opts.DB.Host, 3*time.Second); err != nil {
+	} else if err := pingTCP(opts.DB.Host, 3*time.Second); err != nil {
 		return fmt.Errorf("database not reachable at %s: %w\n"+
 			"  Pass --ensure-db to provision it, or start Postgres and create the %q database (user %q).",
 			opts.DB.Host, err, opts.DB.Name, opts.DB.User)
 	}
+	if opts.FreshDB {
+		return emptyPostgresDatabase(opts.DB, w)
+	}
 	return nil
+}
+
+// emptyPostgresDatabase removes everything the app role owns inside db, so the
+// runtime boots on an empty database and creates its schema afresh.
+//
+// In place, as the app role, connected to db itself: `DROP OWNED BY
+// CURRENT_USER` reaches only objects in the current database, so the database
+// stays, and every other database the role owns — the dev loop's, beside the
+// test runner's `_test` one — is untouched. Dropping and recreating the
+// database instead would need CREATEDB at the point its data is already gone,
+// and a superuser path that a machine provisioned by hand may not have.
+// Measured on PostgreSQL 15 against a database the runtime had booted on: 88
+// relations to 0, and the role can still create in public afterwards (public
+// belongs to pg_database_owner, which DROP OWNED leaves alone).
+func emptyPostgresDatabase(db DBConfig, w io.Writer) error {
+	cmd, err := emptyPostgresDatabaseCommand(db)
+	if err != nil {
+		return err
+	}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("emptying database %q: %w\n%s", db.Name, err, strings.TrimSpace(string(out)))
+	}
+	fmt.Fprintf(w, "  Emptied database %q; the runtime creates its schema afresh\n", db.Name)
+	return nil
+}
+
+// emptyPostgresDatabaseCommand builds the psql call emptyPostgresDatabase runs.
+// The names are checked like EnsureDatabase checks them, and the password
+// reaches psql through PGPASSWORD, never argv.
+func emptyPostgresDatabaseCommand(db DBConfig) (*exec.Cmd, error) {
+	if !pgIdent.MatchString(db.Name) {
+		return nil, fmt.Errorf("refusing to empty database %q (expected %s)", db.Name, pgIdent)
+	}
+	if !pgIdent.MatchString(db.User) {
+		return nil, fmt.Errorf("refusing to empty database as user %q (expected %s)", db.User, pgIdent)
+	}
+	host, port := splitHostPort(db.Host)
+	cmd := exec.Command("psql", "-X", "-w", "-v", "ON_ERROR_STOP=1", "-h", host, "-p", port,
+		"-U", db.User, "-d", db.Name, "-c", "DROP OWNED BY CURRENT_USER")
+	cmd.Env = append(os.Environ(), "PGPASSWORD="+db.Password, "PGCONNECT_TIMEOUT=5")
+	return cmd, nil
 }
 
 // removeFileDatabase deletes the runtime's file database called name, which

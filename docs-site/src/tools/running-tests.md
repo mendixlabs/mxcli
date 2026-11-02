@@ -29,10 +29,14 @@ runtime's built-in file database instead: no server and no provisioning. It
 takes the same values as `run --local --db-type` (`postgresql`, the default, or
 `hsqldb`), keeps the `<project>_test` scratch name so it never shares files with
 a `run --local --db-type hsqldb` dev loop, and is refused with `--attach` and on
-the Docker path, which do not boot a database of their own. Each run starts on an
-**empty** file database: the previous run's `<project>_test` files are removed
-before the boot, so data an after-startup flow seeded under an earlier model
-cannot make an idempotent init skip seeding.
+the Docker path, which do not boot a database of their own.
+
+Either way, each `--local` run starts on an **empty** `<project>_test` database:
+the file database's files are removed before the boot, and on PostgreSQL
+everything the app role owns inside `<project>_test` is dropped (`DROP OWNED BY
+CURRENT_USER`, run in that database only — the dev loop's `<project>` database is
+untouched). Data a previous run committed, or an after-startup flow seeded under
+an earlier model, therefore cannot make an idempotent init skip seeding.
 
 ```bash
 mxcli test tests/ -p app.mpr --local --db-type hsqldb

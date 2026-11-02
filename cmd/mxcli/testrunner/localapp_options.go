@@ -37,11 +37,11 @@ func localAppOptions(opts RunOptions, logPath string, env []string, w io.Writer)
 		DB: db,
 		// Provisioning is PostgreSQL's; the file database is created by the runtime.
 		EnsureDB: !db.IsFileBased(),
-		// The file database is this run's scratch, so it starts empty. Kept
-		// between runs, data a previous run's after-startup seeded under an
-		// earlier model made an idempotent init skip seeding, and the tests
-		// failed on stale data (ako/mxcli#1853).
-		FreshFileDB:       db.IsFileBased(),
+		// The database is this run's scratch, so it starts empty. Kept between
+		// runs, data a previous run committed or seeded under an earlier model
+		// made an idempotent init skip seeding, and the tests failed on stale
+		// data (ako/mxcli#1853) — on PostgreSQL as on the file database.
+		FreshDB:           true,
 		SkipBuild:         opts.SkipBuild,
 		Env:               env,
 		ConstantOverrides: opts.ConstantOverrides,

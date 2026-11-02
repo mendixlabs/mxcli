@@ -92,16 +92,15 @@ func TestResolveTestDBType(t *testing.T) {
 	}
 }
 
-// A test run's file database is its own scratch, so it starts empty: kept
-// between runs, data an earlier run's after-startup seeded made an idempotent
-// init skip seeding and the tests fail on it (ako/mxcli#1853).
-func TestLocalAppOptions_HSQLDBStartsFresh(t *testing.T) {
-	got := localAppOptions(RunOptions{ProjectPath: "/tmp/app/App.mpr", DBType: docker.DBTypeHSQLDB},
-		"log", nil, io.Discard)
-	if !got.FreshFileDB {
-		t.Error("FreshFileDB is false; the run boots on the previous run's data")
-	}
-	if pg := localAppOptions(RunOptions{ProjectPath: "/tmp/app/App.mpr"}, "log", nil, io.Discard); pg.FreshFileDB {
-		t.Error("FreshFileDB set for PostgreSQL, where it means nothing")
+// A test run's database is its own scratch, so it starts empty on either
+// type: kept between runs, data an earlier run committed or seeded made an
+// idempotent init skip seeding and the tests fail on it (ako/mxcli#1853 for the
+// file database, the same carry-over measured on PostgreSQL).
+func TestLocalAppOptions_TestDatabaseStartsFresh(t *testing.T) {
+	for _, dbType := range []string{docker.DBTypeHSQLDB, docker.DBTypePostgreSQL, ""} {
+		got := localAppOptions(RunOptions{ProjectPath: "/tmp/app/App.mpr", DBType: dbType}, "log", nil, io.Discard)
+		if !got.FreshDB {
+			t.Errorf("DBType %q: FreshDB is false; the run boots on the previous run's data", dbType)
+		}
 	}
 }
