@@ -70,6 +70,10 @@ type SuiteResult struct {
 	Tests    []TestResult
 	Duration time.Duration
 	Started  time.Time
+	// BuildFailed is set when MxBuild rejected a generated test microflow, so no
+	// test ran: the ERROR rows carry the build errors and every other row is a
+	// SKIP. PrintResults repeats those errors above the summary.
+	BuildFailed bool
 }
 
 // PassCount returns the number of passing tests.
@@ -393,6 +397,8 @@ func PrintResults(w io.Writer, result *SuiteResult, color bool) {
 			"Run with --require-assertions to make that an error.\n", n)
 	}
 
+	printBuildFailure(w, result)
+
 	fmt.Fprintf(w, "%s\n", strings.Repeat("-", 60))
 	errors := result.ErrorCount()
 	fmt.Fprintf(w, "Total: %d  Passed: %d  Failed: %d",
@@ -418,6 +424,38 @@ func PrintResults(w io.Writer, result *SuiteResult, color bool) {
 		} else {
 			fmt.Fprintf(w, "Some tests failed.\n")
 		}
+	}
+}
+
+// printBuildFailure repeats a failed build's errors directly above the summary.
+//
+// The ERROR rows already carry them, but a suite with one test that does not
+// build has every other test as a SKIP row, and the error was one line among a
+// hundred identical "not run" lines: the run ended in "Passed: 0, Errors: 1,
+// Skipped: 108" and read as if every test had failed for no reason
+// (ako/mxcli#1834). The summary is where the reader's eye lands, so the cause
+// goes right above it.
+func printBuildFailure(w io.Writer, result *SuiteResult) {
+	if !result.BuildFailed {
+		return
+	}
+	var failed []TestResult
+	for _, t := range result.Tests {
+		if t.Status == StatusError {
+			failed = append(failed, t)
+		}
+	}
+	if len(failed) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "%s\n", strings.Repeat("-", 60))
+	fmt.Fprintf(w, "Build failed: MxBuild rejected %d test(s), so no test ran.\n", len(failed))
+	for _, t := range failed {
+		where := t.Name
+		if t.SourceFile != "" {
+			where += " (" + t.SourceFile + ")"
+		}
+		fmt.Fprintf(w, "  %s\n    %s\n", where, strings.TrimPrefix(t.Message, buildProblemPrefix))
 	}
 }
 
