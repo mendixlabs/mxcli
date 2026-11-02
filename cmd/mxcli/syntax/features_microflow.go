@@ -602,8 +602,68 @@ func init() {
 			"trace", "critical", "node", "message template",
 			"stacktrace", "stack trace", "include latest stack trace",
 		},
-		Syntax:  "LOG [LEVEL] [NODE 'Name'] 'message';\nLOG [LEVEL] 'template {1}' WITH ({1} = $value);\nLOG [LEVEL] 'message' [WITH ({1} = $value)] WITH STACKTRACE;\n\n-- Levels: INFO, WARNING, ERROR, DEBUG, TRACE, CRITICAL\n-- Defaults: level INFO, node 'Application'. DESCRIBE leaves both out.\n-- WITH STACKTRACE ticks \"Include latest stack trace\"; absent is unticked, the\n-- default, and DESCRIBE prints it only when ticked. It follows the template\n-- parameters, which also open with WITH.\n-- A line break is written into the literal: under `mdl 1;` a template literal\n-- that spans lines is still the template text (without the header: MDL-V1-TEMPLATE).\n-- An expression message (LOG $Msg;) is stored as '{1}' with it as the parameter,\n-- so an expression followed by WITH (...) has no {n} to fill and is refused\n-- (MDL-TEMPLATE01) — as for SHOW MESSAGE, VALIDATION FEEDBACK and SEND EMAIL.",
+		Syntax:  "LOG [LEVEL] [NODE 'Name'] 'message';\nLOG [LEVEL] 'template {1}' WITH ({1} = $value);\nLOG [LEVEL] 'message' [WITH ({1} = $value)] WITH STACKTRACE;\n\n-- Levels: INFO, WARNING, ERROR, DEBUG, TRACE, CRITICAL\n-- Defaults: level INFO, node 'Application'. DESCRIBE leaves both out.\n-- WITH STACKTRACE ticks \"Include latest stack trace\"; absent is unticked, the\n-- default, and DESCRIBE prints it only when ticked. It follows the template\n-- parameters, which also open with WITH.\n-- A line break is written into the literal: under `mdl 1;` a template literal\n-- that spans lines is still the template text (without the header: MDL-V1-TEMPLATE).\n-- An expression message (LOG $Msg;) is stored as '{1}' with it as the parameter,\n-- so an expression followed by WITH (...) has no {n} to fill and is refused\n-- (MDL-TEMPLATE01) — as for SHOW MESSAGE, VALIDATION FEEDBACK and SEND EMAIL.\n-- In a template a `{` opens a numbered placeholder ({1}, {2}, ...) or is\n-- escaped as `{{`; a `}` needs no escape. 'Item {number}' fails the build with\n-- CE0712 (MDL-TEMPLATE02): write 'Item {1}' WITH ({1} = $Number).",
 		Example: "LOG INFO NODE 'OrderService' 'Order created successfully';\nLOG WARNING 'Customer not found';\nLOG ERROR 'Failed to process {1}' WITH (\n  {1} = $OrderNumber\n);\nLOG ERROR NODE 'OrderService' 'Failed: {1}' WITH ({1} = $latestError/Message) WITH STACKTRACE;",
+	})
+
+	Register(SyntaxFeature{
+		Path:    "microflow.expressions",
+		Summary: "Expressions: string literals and backslashes, regular-expression functions, the *Between functions, template braces",
+		Keywords: []string{
+			"expression", "expressions", "string literal", "backslash", "escape", "escaping",
+			"replaceAll", "replaceFirst", "isMatch", "regex", "regular expression",
+			"secondsBetween", "minutesBetween", "hoursBetween", "daysBetween", "between",
+			"absolute", "json escape", "brace", "braces", "placeholder", "template",
+		},
+		Syntax: "-- String literals: '...' with '' for an apostrophe ('it''s'). Under `mdl 1;` a\n" +
+			"-- backslash is an ordinary character, as in a Mendix expression: the text is\n" +
+			"-- stored exactly as written. Without the header (mdl 0) it escapes: '\\\\' is ONE\n" +
+			"-- backslash and '\\n' a newline (MDL-V1-ESCAPE). Examples below assume `mdl 1;`.\n" +
+			"\n" +
+			"replaceAll(text, regex, replacement)    -- every match\n" +
+			"replaceFirst(text, regex, replacement)  -- the first match\n" +
+			"isMatch(text, regex)                    -- does the whole text match\n" +
+			"\n" +
+			"-- The regex is a regular expression (Java's in a microflow, JavaScript's in a\n" +
+			"-- nanoflow): '\\\\' matches one backslash, '\\.' one dot. The replacement is\n" +
+			"-- LITERAL text — a \\ or $ in it is inserted as written, never a group reference\n" +
+			"-- (measured on the 10.24, 11.13 and 11.15 runtimes and the 11.13 client):\n" +
+			"--   replaceAll('a\"b', '\"', '\\\"')   ->  a\\\"b\n" +
+			"--   replaceAll('a\\b', '\\\\', '\\\\')  ->  a\\\\b\n" +
+			"-- Escaping for JSON by hand: backslashes first, then quotes. A regex that ends\n" +
+			"-- in a lone backslash ('\\', 'x\\') builds and fails every time it runs\n" +
+			"-- (PatternSyntaxException \"Unescaped trailing backslash\"): check warns\n" +
+			"-- MDL-REGEX01.\n" +
+			"\n" +
+			"millisecondsBetween(a, b)  secondsBetween(a, b)  minutesBetween(a, b)\n" +
+			"hoursBetween(a, b)  daysBetween(a, b)  weeksBetween(a, b)\n" +
+			"\n" +
+			"-- Each returns the ABSOLUTE difference: secondsBetween($End, $Start) equals\n" +
+			"-- secondsBetween($Start, $End). Compare the dates ($End > $Start) for the\n" +
+			"-- direction. The result is a Decimal (an Integer target needs round/floor/ceil,\n" +
+			"-- MDL041), and its fraction can run to dozens of digits: toString() of it can\n" +
+			"-- be too long for a short String attribute — round it first.\n" +
+			"\n" +
+			"-- A template (log, show message, validation feedback, send email, a REST call's\n" +
+			"-- URL and body, a Java action's text template, workflow texts, a dynamic text,\n" +
+			"-- a button caption) is not an expression: a `{` in it opens a numbered\n" +
+			"-- placeholder or is escaped as `{{` (CE0712, MDL-TEMPLATE02). In an expression's\n" +
+			"-- string literal a brace is just a character.",
+		Example: "mdl 1;\n" +
+			"create microflow Mod.ToJsonString ($Text: String) returns String\n" +
+			"begin\n" +
+			"  -- backslashes first, then quotes; a brace in an expression is plain text\n" +
+			"  declare $Escaped String = replaceAll($Text, '\\\\', '\\\\');\n" +
+			"  set $Escaped = replaceAll($Escaped, '\"', '\\\"');\n" +
+			"  return '{\"text\": \"' + $Escaped + '\"}';\n" +
+			"end;\n" +
+			"\n" +
+			"create microflow Mod.ElapsedMinutes ($Start: DateTime, $End: DateTime) returns Integer\n" +
+			"begin\n" +
+			"  -- absolute, whichever date comes first; rounded for an Integer\n" +
+			"  return round(minutesBetween($Start, $End));\n" +
+			"end;",
+		SeeAlso: []string{"microflow.logging", "microflow.variables", "regular-expression"},
 	})
 
 	Register(SyntaxFeature{

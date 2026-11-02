@@ -53,6 +53,8 @@ func validateNanoflowWith(stmt *ast.CreateNanoflowStmt, voids *voidCodeActions) 
 	// MDL-TEMPLATE01: a nanoflow's log, show message and validation feedback
 	// store the same templates (ako/mxcli#1683).
 	v.checkMessageTemplates(stmt.Body)
+	// MDL-TEMPLATE02: and the same template grammar (ako/mxcli#1397).
+	v.checkTemplateGrammar(stmt.Body)
 	v.checkVoidCallOutputUse(v.params, stmt.Body)
 	// MDL-SET01: a nanoflow's Change variable is as primitive-only (CE7247).
 	v.checkSetOnObjectVariable(v.params, stmt.Body)

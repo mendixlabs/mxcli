@@ -22,6 +22,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/mendixlabs/mxcli/mdl/texttemplate"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 )
@@ -1595,7 +1596,14 @@ func validateStaticWidget(w *ast.WidgetV3, locationPrefix string) []linter.Viola
 	// parameter binding is an orphaned ClientTemplate — MxBuild fails with CE0720
 	// and Studio Pro throws a NullReferenceException when the widget is opened
 	// (issue #650). Catch it at check time.
-	if v := validateDynamicTextPlaceholders(w, locationPrefix); v != nil {
+	//
+	// The text itself has the grammar of every Mendix template: a brace opens a
+	// numbered placeholder or is escaped as {{ (MDL-TEMPLATE02, CE0712…,
+	// ako/mxcli#1397). mxbuild reports one problem per text, the grammar
+	// before the count, and so does this.
+	if g := validateClientTemplateGrammar(w, locationPrefix); g != nil {
+		out = append(out, *g)
+	} else if v := validateDynamicTextPlaceholders(w, locationPrefix); v != nil {
 		out = append(out, *v)
 	}
 
@@ -1689,8 +1697,6 @@ func validateWidgetExpressionAssociations(w *ast.WidgetV3, locationPrefix string
 // left to refuse (isTemplateExpression, ako/mxcli#823 option C). The code is
 // not reused.
 
-var templatePlaceholderRe = regexp.MustCompile(`\{(\d+)\}`)
-
 // validateDynamicTextPlaceholders flags a dynamictext whose Content template has
 // a placeholder index higher than the number of bound parameters. Parameter
 // sources mirror buildDynamicTextV3: explicit ContentParams, a single Attribute
@@ -1756,14 +1762,36 @@ func validateButtonCaptionPlaceholders(w *ast.WidgetV3, locationPrefix string) *
 	}
 }
 
+// maxTemplatePlaceholder is the highest placeholder template uses. An escaped
+// `{{1}}` is the text "{1}", no placeholder — mxbuild builds it with no
+// parameter, which a `\{(\d+)\}` match counted as an orphan (ako/mxcli#1397).
 func maxTemplatePlaceholder(template string) int {
-	maxIdx := 0
-	for _, m := range templatePlaceholderRe.FindAllStringSubmatch(template, -1) {
-		if n, err := strconv.Atoi(m[1]); err == nil && n > maxIdx {
-			maxIdx = n
+	return texttemplate.MaxPlaceholder(template)
+}
+
+// validateClientTemplateGrammar reports a dynamic text's content or an action
+// or link button's caption whose braces mxbuild refuses (MDL-TEMPLATE02), the
+// grammar every Mendix template has — measured on these two slots with the
+// others on 10.24.24, 11.13.0 and 11.15.0. A label or any other widget's
+// caption is plain text, where a brace is just a character.
+func validateClientTemplateGrammar(w *ast.WidgetV3, locationPrefix string) *linter.Violation {
+	var text, what string
+	switch {
+	case isButtonKeyword(w.Type):
+		text, what = w.GetCaption(), "caption"
+	case strings.EqualFold(w.Type, "dynamictext"):
+		text, what = w.GetContent(), "content"
+		if len(w.GetContentParams()) == 0 && isDynamicTextVariableRef(text) {
+			return nil // stored as '{1}' with the variable as its parameter
 		}
+	default:
+		return nil
 	}
-	return maxIdx
+	if _, p := texttemplate.Placeholders(text); p == nil {
+		return nil
+	}
+	msg, fix := templateTextRefusal(fmt.Sprintf("%s: %s %s", locationPrefix, widgetLabel(w.Name, strings.ToLower(w.Type)), what), text, 0)
+	return &linter.Violation{RuleID: templateGrammarRule, Severity: linter.SeverityError, Message: msg, Suggestion: fix}
 }
 
 // validatePluggableWidgetProperties checks every AST property key on a

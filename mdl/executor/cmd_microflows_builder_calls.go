@@ -47,6 +47,9 @@ func (fb *flowBuilder) addLogMessageAction(s *ast.LogStmt) model.ID {
 	// that also states `with (…)` has no template for the parameters to fill;
 	// its source text used to become the template (ako/mxcli#1683).
 	fb.refuseMessageTemplates(s)
+	// MDL-TEMPLATE02: a template text whose braces mxbuild refuses (CE0712…,
+	// ako/mxcli#1397). Same function `mxcli check` runs.
+	fb.refuseTemplateGrammar(s)
 
 	if len(s.Template) > 0 {
 		// Use provided template parameters
@@ -1292,6 +1295,9 @@ func (fb *flowBuilder) addShowMessageAction(s *ast.ShowMessageStmt) model.ID {
 	// the expression and then the parameters, which no placeholder read
 	// (ako/mxcli#1683).
 	fb.refuseMessageTemplates(s)
+	// MDL-TEMPLATE02: a template text whose braces mxbuild refuses (CE0712…,
+	// ako/mxcli#1397). Same function `mxcli check` runs.
+	fb.refuseTemplateGrammar(s)
 
 	if lit, ok := s.Message.(*ast.LiteralExpr); ok && lit.Kind == ast.LiteralString {
 		templateText = fmt.Sprintf("%v", lit.Value)
@@ -1500,6 +1506,9 @@ func (fb *flowBuilder) addValidationFeedbackAction(s *ast.ValidationFeedbackStmt
 
 	// MDL-TEMPLATE01, as show message (ako/mxcli#1683).
 	fb.refuseMessageTemplates(s)
+	// MDL-TEMPLATE02: a template text whose braces mxbuild refuses (CE0712…,
+	// ako/mxcli#1397). Same function `mxcli check` runs.
+	fb.refuseTemplateGrammar(s)
 
 	if lit, ok := s.Message.(*ast.LiteralExpr); ok && lit.Kind == ast.LiteralString {
 		// Simple string literal - use raw value directly as template text
@@ -1627,6 +1636,9 @@ func (fb *flowBuilder) addRestCallAction(s *ast.RestCallStmt) model.ID {
 	if err := checkRestCallTemplatesStmt(s); err != nil {
 		fb.addError("%v", err)
 	}
+	// MDL-TEMPLATE02: a URL or body text whose braces mxbuild refuses — a JSON
+	// body's `{` is written `{{` (ako/mxcli#1397).
+	fb.refuseTemplateGrammar(s)
 
 	// Set URL template. An expression URL is the template '{1}' with the
 	// expression as its parameter, not its own source text (ako/mxcli#1444).
@@ -2342,6 +2354,9 @@ func (fb *flowBuilder) addSendEmailAction(s *ast.SendEmailStmt) model.ID {
 	// MDL-TEMPLATE01: a subject or body written as an expression with
 	// `with (…)` (ako/mxcli#1683).
 	fb.refuseMessageTemplates(s)
+	// MDL-TEMPLATE02: a template text whose braces mxbuild refuses (CE0712…,
+	// ako/mxcli#1397). Same function `mxcli check` runs.
+	fb.refuseTemplateGrammar(s)
 	action := &microflows.SendEmailAction{
 		BaseElement:         model.BaseElement{ID: model.ID(types.GenerateID())},
 		ErrorHandlingType:   microflows.ErrorHandlingTypeRollback,

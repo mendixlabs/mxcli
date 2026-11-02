@@ -131,7 +131,7 @@ Worked example — the REST call, migrated:
 $Customer = call rest service post 'https://api.example.com/customers/{1}' with ({1} = $Id) (
   Headers: ('Content-Type': 'application/json'),
   Authentication: basic (Username: @Shop.ApiUser, Password: @Shop.ApiPassword),
-  Body: template '{"name": "{1}"}' with ({1} = $Name),
+  Body: template '{{"name": "{1}"}' with ({1} = $Name),
   Timeout: 30,
 ) returns mapping Shop.IMM_Customer as Shop.Customer
   on error rollback;

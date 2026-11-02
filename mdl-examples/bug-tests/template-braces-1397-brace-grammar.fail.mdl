@@ -1,0 +1,103 @@
+mdl 1;
+-- ============================================================================
+-- Regression: ako/mxcli#1397 (mendixlabs/mxcli#1515) - a template's braces
+-- passed check and failed the build
+-- ============================================================================
+--
+-- Symptom (reported on Mendix 11.12.5 and 11.15):
+--   log info node 'Mod' 'Item {number} not found';
+--   `mxcli check` printed "Check passed!"; mx check reported
+--   [CE0712] "Brace should be followed by a number of digits or another brace."
+--   at Log message activity 'Log message (info)'. A REST POST's
+--   `Body: template '{}'` failed the same way.
+--
+-- Every slot that stores a Mendix text template reads it with one grammar: a
+-- `{` opens a numbered placeholder `{1}` or is escaped as `{{`. Measured with
+-- mx check on 10.24.24, 11.13.0 and 11.15.0, one document per text in twelve
+-- slots (log in a microflow and a nanoflow, show message, validation feedback,
+-- REST URL and body, Java action text template, send email subject and body,
+-- workflow display, dynamic text, button caption): every slot gave the same
+-- code for every input. See mdl/texttemplate for the table.
+--
+-- After fix:
+--   `mxcli check` (no project needed) reports MDL-TEMPLATE02 on every document
+--   below, each with the CE code mxbuild gives it; exec refuses the flows even
+--   with --no-check. Built with a build that skips the check
+--   (exec --no-check), mx check 11.13.0 reports exactly the code in each
+--   comment: 10 errors, one per document.
+--
+-- Usage:
+--   mxcli check mdl-examples/bug-tests/template-braces-1397-brace-grammar.fail.mdl
+--   Expect 10 errors, all MDL-TEMPLATE02. The controls, which must stay clean,
+--   are in template-braces-1397-brace-grammar.mdl.
+-- ============================================================================
+
+create module Tpl1397;
+
+create persistent entity Tpl1397.Item (Name: String(200));
+
+-- CE0712: the report.
+create microflow Tpl1397.Bad_LogName ($Number: String)
+begin
+  log info node 'Mod' 'Item {number} not found';
+end;
+
+-- CE0712: the REST body of the report.
+create microflow Tpl1397.Bad_RestEmptyBody ()
+begin
+  $R = call rest service post 'https://example.com/x' (Body: template '{}') returns String on error continue;
+end;
+
+-- CE0712: a JSON body whose opening brace is not escaped.
+create microflow Tpl1397.Bad_RestJsonBody ($Name: String)
+begin
+  $R = call rest service post 'https://example.com/x' (Body: template '{"name": "{1}"}' with ({1} = $Name)) returns String on error continue;
+end;
+
+-- CE0712: a space after the brace.
+create microflow Tpl1397.Bad_ShowSpaced ($Name: String)
+begin
+  show message 'Hello { 1 }' with ({1} = $Name);
+end;
+
+-- CE0714: digits, then not a closing brace.
+create microflow Tpl1397.Bad_FeedbackDigitLetter ($Item: Tpl1397.Item)
+begin
+  validation feedback $Item/Name message 'Bad {1x}' with ({1} = $Item/Name);
+end;
+
+-- CE0720: a placeholder with no parameter.
+create microflow Tpl1397.Bad_LogUnfilled ()
+begin
+  log info node 'Mod' 'Item {1} not found';
+end;
+
+-- CE0716: placeholders count from {1}.
+create microflow Tpl1397.Bad_LogZero ($Name: String)
+begin
+  log info node 'Mod' 'Item {0}' with ({1} = $Name);
+end;
+
+-- CE0712: in a nanoflow too.
+create nanoflow Tpl1397.Bad_NanoflowLog ()
+begin
+  log info node 'Mod' 'Item {number}';
+end;
+
+-- CE0712: a dynamic text's content.
+create page Tpl1397.Bad_DynamicText (
+  Title: 'Bad', Layout: Atlas_Core.Atlas_Default, Params: ( $Item: Tpl1397.Item )
+) {
+  dataview dv1 (DataSource: $Item) {
+    dynamictext t1 (Content: 'Item {number}')
+  }
+};
+
+-- CE0712: a button caption.
+create page Tpl1397.Bad_ButtonCaption (
+  Title: 'Bad', Layout: Atlas_Core.Atlas_Default, Params: ( $Item: Tpl1397.Item )
+) {
+  dataview dv1 (DataSource: $Item) {
+    actionbutton b1 (Caption: 'Go { now }', Action: close page)
+  }
+};

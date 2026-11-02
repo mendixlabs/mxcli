@@ -524,6 +524,49 @@ declare $Label string = 'Customer: ' + $Customer/Name;
 declare $Label string = if $Customer/Name != empty then 'Customer: ' + $Customer/Name else 'Customer: ';
 ```
 
+### 19. A Brace in a Template Is a Placeholder or `{{`
+
+In a template's text a `{` opens a numbered placeholder or is escaped as `{{`; a `}`
+needs no escape. `{number}`, `{}`, `{ 1 }` and an unescaped JSON object fail the build
+with CE0712 (CE0713/0714/0716/0717/0720 for the other malformed placeholders), in every
+template slot — log, show message, validation feedback, send email, a REST call's URL and
+body, a Java action's text template, workflow texts, a dynamic text and a button caption.
+`check` reports it as MDL-TEMPLATE02 with mxbuild's code (ako/mxcli#1397).
+
+```mdl
+-- ❌ WRONG: CE0712 — a name is not a placeholder, and the JSON brace is not escaped
+log info node 'Orders' 'Item {number} not found';
+$R = call rest service post 'https://example.com/x' (Body: template '{"name": "{1}"}' with ({1} = $Name)) returns String;
+
+-- ✅ CORRECT
+log info node 'Orders' 'Item {1} not found' with ({1} = $Number);
+$R = call rest service post 'https://example.com/x' (Body: template '{{"name": "{1}"}' with ({1} = $Name)) returns String;
+```
+
+An expression is not a template: in `'{name} = ' + $Name` the brace is plain text.
+
+### 20. `replaceAll`'s Pattern Is a Regex; Its Replacement Is Plain Text
+
+The second argument of `replaceAll`, `replaceFirst` and `isMatch` is a regular
+expression; the replacement is inserted as written — a `\` or `$` in it is literal
+(measured on the Mendix runtime and the nanoflow client). Under `mdl 1;` a string
+literal is stored as written; without the header `\\` is one backslash.
+
+```mdl
+mdl 1;
+-- escape a text for JSON — backslashes first, then quotes
+create microflow Mod.ToJsonString ($S: String) returns String
+begin
+  declare $T String = replaceAll($S, '\\', '\\');  -- regex \\ matches one \, inserts \\
+  return replaceAll($T, '"', '\"');                 -- inserts \"
+end;
+```
+
+A regex that ends in a lone backslash (`'\'`) builds and fails every time it runs
+(PatternSyntaxException); `check` warns MDL-REGEX01. The `*Between` functions
+(`secondsBetween`, `minutesBetween`, …) return the absolute difference, whichever date
+comes first — compare the dates for the direction.
+
 ## Implicit Variable Creation (CE0111 Duplicate Variable)
 
 These statements **implicitly create a new variable** with the name on the left side:

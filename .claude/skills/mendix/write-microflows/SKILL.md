@@ -411,7 +411,7 @@ log error 'Error message';
 
 -- With node name
 log info node 'OrderService' 'Processing order';
-log warning node 'ValidationService' 'Invalid data detected';
+log warning node 'ValidationService' 'Item {1} is invalid' with ({1} = $Nr);  -- a { is {n} or {{ (CE0712, pitfalls §19)
 
 -- With variables (use concatenation)
 log info node 'OrderService' 'Order processed: ' + $OrderNumber;

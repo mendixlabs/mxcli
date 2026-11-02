@@ -487,3 +487,44 @@ func TestValidateComboBoxAssociation(t *testing.T) {
 		})
 	}
 }
+
+// ako/mxcli#1397: a dynamic text's content and a button's caption are client
+// templates with the grammar of every Mendix template (mdl/texttemplate,
+// measured on 10.24.24, 11.13.0 and 11.15.0). `{{1}}` is the escaped text "{1}",
+// which builds with no parameter; MDL-WIDGET04 counted it as a placeholder.
+func TestValidateClientTemplateGrammar(t *testing.T) {
+	w := func(typ, key, text string) *ast.WidgetV3 {
+		return &ast.WidgetV3{Type: typ, Name: "w", Properties: map[string]any{key: text}}
+	}
+	cases := []struct {
+		name   string
+		widget *ast.WidgetV3
+		rule   string
+		want   string
+	}{
+		{"dynamictext name in braces", w("dynamictext", "Content", "Item {number}"), templateGrammarRule, "CE0712"},
+		{"button caption with a space", w("actionbutton", "Caption", "Go { 1 }"), templateGrammarRule, "CE0712"},
+		{"linkbutton caption unterminated", w("linkbutton", "Caption", "Go {1"), templateGrammarRule, "CE0713"},
+		{"dynamictext escaped placeholder", w("dynamictext", "Content", "literally {{1}}"), "", ""},
+		{"button escaped braces", w("actionbutton", "Caption", "{{ go }}"), "", ""},
+		{"dynamictext orphan still MDL-WIDGET04", w("dynamictext", "Content", "{1}"), "MDL-WIDGET04", "{1}"},
+		// A label's caption is plain text, not a template: braces are text.
+		{"textbox label is no template", w("textbox", "Label", "Item {number}"), "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var got []linter.Violation
+			for _, v := range validateStaticWidget(c.widget, "page X") {
+				if v.RuleID == templateGrammarRule || v.RuleID == "MDL-WIDGET04" {
+					got = append(got, v)
+				}
+			}
+			switch {
+			case c.want == "" && len(got) > 0:
+				t.Errorf("reported a template mxbuild accepts: %v", got)
+			case c.want != "" && (len(got) != 1 || got[0].RuleID != c.rule || !strings.Contains(got[0].Message, c.want)):
+				t.Errorf("want one %s naming %q, got %v", c.rule, c.want, got)
+			}
+		})
+	}
+}

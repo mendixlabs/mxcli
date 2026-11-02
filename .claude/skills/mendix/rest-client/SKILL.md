@@ -356,7 +356,7 @@ $response = call rest service get 'https://api.example.com/users/{1}' with (
 -- POST with body
 $response = call rest service post 'https://api.example.com/items' (
   Headers: ('Content-Type': 'application/json'),
-  Body: template '{"name": "test"}',
+  Body: template '{{"name": "test"}',  -- a literal { is written {{
 ) returns string;
 
 -- With basic auth

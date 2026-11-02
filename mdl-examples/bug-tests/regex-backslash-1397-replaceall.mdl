@@ -1,0 +1,58 @@
+mdl 1;
+-- ============================================================================
+-- Regression: ako/mxcli#1397 (mendixlabs/mxcli#1515) - backslashes in
+-- replaceAll
+-- ============================================================================
+--
+-- Reported: "a lone \ in replaceAll was stored as an unterminated or wrong
+-- regex and failed at runtime ('Failed to evaluate expression'); a JSON escape
+-- needs the 4-backslash and 8-backslash forms because replaceAll is a regex
+-- replace."
+--
+-- Measured instead of assumed:
+--   * Under `mdl 1;` a string literal is stored as written; without the header
+--     `\\` is one backslash (MDL-V1-ESCAPE). Dumped with `mxcli bson dump`.
+--   * The Mendix runtime's own replaceAll (called directly, 10.24.24, 11.13.0,
+--     11.15.0) is text.replaceAll(regex, Matcher.quoteReplacement(replacement)):
+--     only the SECOND argument is a regex. The replacement is literal text, so
+--     '\"' inserts a backslash and a quote, and a lone '\' inserts a backslash.
+--     The nanoflow client escapes `$` and calls String.replace: also literal.
+--   * A regex that ends in a lone backslash throws PatternSyntaxException
+--     "Unescaped trailing backslash" every time it runs (the client: "\ at end
+--     of pattern"), and mx check 11.13.0 builds it at 0 errors.
+--
+-- So the 4/8-backslash forms are what mdl 0's escaping does to the 2/4 that
+-- are right: with the header, '\\' matches one backslash and '\\' as the
+-- replacement inserts two.
+--
+-- After fix: `mxcli check` warns MDL-REGEX01 on Rx1397.Warn_TrailingBackslash
+-- (a warning: the build accepts it) and on nothing else in this file.
+--
+-- Usage:
+--   mxcli check mdl-examples/bug-tests/regex-backslash-1397-replaceall.mdl
+--   Expect: Check passed, with one MDL-REGEX01 warning.
+-- ============================================================================
+
+create module Rx1397;
+
+-- Escape a text for a JSON string by hand: backslashes first, then quotes.
+-- 'a"b\c' becomes 'a\"b\\c'.
+create microflow Rx1397.Ok_JsonEscape ($Text: String) returns String
+begin
+  declare $Escaped String = replaceAll($Text, '\\', '\\');
+  set $Escaped = replaceAll($Escaped, '"', '\"');
+  return $Escaped;
+end;
+
+-- The replacement is literal text: a lone backslash or a $ is inserted as is.
+create microflow Rx1397.Ok_LiteralReplacement ($Text: String) returns String
+begin
+  return replaceAll(replaceAll($Text, '/', '\'), '#', '$1');
+end;
+
+-- MDL-REGEX01: the regex ends in a lone backslash. It builds, and fails each
+-- time it runs.
+create microflow Rx1397.Warn_TrailingBackslash ($Path: String) returns String
+begin
+  return replaceAll($Path, '\', '/');
+end;
