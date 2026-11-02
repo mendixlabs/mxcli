@@ -2,6 +2,7 @@ package codec
 
 import (
 	"reflect"
+	"sort"
 	"sync"
 
 	"github.com/mendixlabs/mxcli/modelsdk/element"
@@ -42,6 +43,20 @@ func (r *TypeRegistry) Lookup(typeName string) (func() element.Element, bool) {
 	f, ok := r.factories[typeName]
 	r.mu.RUnlock()
 	return f, ok
+}
+
+// TypeNames returns every registered $Type name, aliases included, sorted. It
+// exists for whole-registry audits — a property rule that must hold for every
+// gen type is only checked once each type is reached.
+func (r *TypeRegistry) TypeNames() []string {
+	r.mu.RLock()
+	names := make([]string, 0, len(r.factories))
+	for name := range r.factories {
+		names = append(names, name)
+	}
+	r.mu.RUnlock()
+	sort.Strings(names)
+	return names
 }
 
 // TypeNameOf returns the canonical BSON $Type name for the given Go reflect.Type.

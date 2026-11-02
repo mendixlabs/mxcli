@@ -39,7 +39,27 @@ func (p *Primitive[T]) Set(v T) {
 }
 
 // BSONValue returns the current value for BSON serialization.
-func (p *Primitive[T]) BSONValue() any { return p.Get() }
+//
+// An int32 is widened to int64. modelsdk/gen binds the metamodel's Integer type
+// as Primitive[int32], but Studio Pro stores every Integer property as BSON
+// int64: across 15,354 Studio Pro-authored units (nine projects, Mendix 10.6.4
+// to 11.13.0) there are 208,038 integer property values and not one is int32,
+// and each of the 137 gen Integer properties found there is int64-only. The only
+// int32 in a Mendix document is the typed-array marker at the head of a list,
+// which the encoder writes itself and never through a Primitive. mx check
+// accepts either width, so narrowing went unnoticed: a codec-created page
+// differed from a Studio Pro one, and from the page mutator's ALTER, only in
+// the BSON type of its canvas and pop-up dimensions (ako/mxcli#1264).
+//
+// The read side already accepts every width (DecodeInt32), so the Go-facing
+// type stays int32 and only the stored width changes.
+func (p *Primitive[T]) BSONValue() any {
+	v := p.Get()
+	if i, ok := any(v).(int32); ok {
+		return int64(i)
+	}
+	return v
+}
 
 // --- Decode functions for common types ---
 

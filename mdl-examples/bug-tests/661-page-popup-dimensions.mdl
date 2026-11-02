@@ -13,9 +13,9 @@ mdl 1;
 --   * CREATE PAGE accepts PopupWidth / PopupHeight / PopupResizable in the
 --     header (case-sensitive; omitting them keeps the 600/600/false defaults).
 --   * ALTER PAGE's page-level SET understands the same properties.
---   * The values are written to the top level of the Forms$Page document; the
---     legacy engine writes int64 (matching Studio Pro), the modelsdk codec
---     writes int32 (tolerated by mx check, like its canvas dimensions).
+--   * The values are written to the top level of the Forms$Page document as
+--     int64, matching Studio Pro. (The modelsdk codec wrote int32 until
+--     ako/mxcli#1264; mx check tolerated it, like its canvas dimensions.)
 --   * DESCRIBE PAGE emits the non-default values back in the header so it
 --     round-trips.
 --

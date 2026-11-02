@@ -70,11 +70,13 @@ func TestIconToGen_EncodesEachElement(t *testing.T) {
 				if err != nil {
 					t.Fatalf("no Code on a glyph icon — the only thing identifying it: %v", err)
 				}
-				got, ok := val.Int32OK()
+				// int64 is what Studio Pro stores: 570 of 570 Forms$GlyphIcon
+				// codes across nine Studio Pro-authored projects (ako/mxcli#1264).
+				got, ok := val.Int64OK()
 				if !ok {
-					t.Fatalf("Code is %v, want an int32", val.Type)
+					t.Fatalf("Code is %v, want an int64", val.Type)
 				}
-				if got != tc.wantCode {
+				if got != int64(tc.wantCode) {
 					t.Errorf("Code = %d, want %d", got, tc.wantCode)
 				}
 			}

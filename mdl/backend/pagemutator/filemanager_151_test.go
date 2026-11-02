@@ -25,13 +25,16 @@ func fileManagerDoc(maxFileSize any) bson.D {
 		{Key: "MaxFileSize", Value: maxFileSize},
 		{Key: "Name", Value: "fileManager1"},
 		{Key: "ShowFileInBrowser", Value: false},
-		{Key: "TabIndex", Value: int32(0)},
+		{Key: "TabIndex", Value: int64(0)},
 		{Key: "Type", Value: "Upload"},
 	}
 }
 
 func TestSetFileManagerProperties(t *testing.T) {
-	raw := makeRawPage(fileManagerDoc(int32(5)))
+	// int64 is the width Studio Pro stores MaxFileSize at (26 of 26 across nine
+	// Studio Pro-authored projects, ako/mxcli#1264); the int32 case below is a
+	// document an older mxcli wrote.
+	raw := makeRawPage(fileManagerDoc(int64(5)))
 	m := &Mutator{rawData: raw, widgetFinder: findBsonWidget}
 	for prop, value := range map[string]any{
 		"MaxFileSize":       20,
@@ -44,8 +47,8 @@ func TestSetFileManagerProperties(t *testing.T) {
 		}
 	}
 	w := findBsonWidget(raw, "fileManager1").widget
-	if got := bsonnav.DGet(w, "MaxFileSize"); got != int32(20) {
-		t.Errorf("MaxFileSize = %#v, want int32(20) — the stored width kept", got)
+	if got := bsonnav.DGet(w, "MaxFileSize"); got != int64(20) {
+		t.Errorf("MaxFileSize = %#v, want int64(20) — the stored width kept", got)
 	}
 	if got := bsonnav.DGetString(w, "AllowedExtensions"); got != ".xlsx;.xls" {
 		t.Errorf("AllowedExtensions = %q", got)
@@ -58,16 +61,28 @@ func TestSetFileManagerProperties(t *testing.T) {
 	}
 }
 
-// A stored int64 stays int64: replacing one width with the other is a change
-// of its own, as for a FormattingInfo's DecimalPrecision.
-func TestSetFileManagerMaxFileSize_KeepsInt64(t *testing.T) {
-	raw := makeRawPage(fileManagerDoc(int64(5)))
-	m := &Mutator{rawData: raw, widgetFinder: findBsonWidget}
-	if err := m.SetWidgetProperty("fileManager1", "MaxFileSize", 7); err != nil {
-		t.Fatalf("set: %v", err)
-	}
-	if got := bsonnav.DGet(findBsonWidget(raw, "fileManager1").widget, "MaxFileSize"); got != int64(7) {
-		t.Errorf("MaxFileSize = %#v, want int64(7)", got)
+// The stored width is kept: replacing one width with the other is a change of
+// its own, as for a FormattingInfo's DecimalPrecision. int64 is Studio Pro's;
+// int32 is what mxcli's codec wrote before ako/mxcli#1264.
+func TestSetFileManagerMaxFileSize_KeepsStoredWidth(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stored any
+		want   any
+	}{
+		{"int64 (Studio Pro)", int64(5), int64(7)},
+		{"int32 (older mxcli)", int32(5), int32(7)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := makeRawPage(fileManagerDoc(tc.stored))
+			m := &Mutator{rawData: raw, widgetFinder: findBsonWidget}
+			if err := m.SetWidgetProperty("fileManager1", "MaxFileSize", 7); err != nil {
+				t.Fatalf("set: %v", err)
+			}
+			if got := bsonnav.DGet(findBsonWidget(raw, "fileManager1").widget, "MaxFileSize"); got != tc.want {
+				t.Errorf("MaxFileSize = %#v, want %#v", got, tc.want)
+			}
+		})
 	}
 }
 
