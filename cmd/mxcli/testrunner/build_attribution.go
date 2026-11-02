@@ -64,7 +64,7 @@ func resultsForBuildFailure(err error, suite *TestSuite) (*SuiteResult, error) {
 		return nil, err
 	}
 	if results := resultsFromFailedBuild(bf.BuildErrors(), suite); results != nil {
-		return &SuiteResult{Name: suite.Name, Tests: results, Started: time.Now()}, nil
+		return &SuiteResult{Name: suite.Name, Tests: results, Started: time.Now(), BuildFailed: true}, nil
 	}
 	_, other := attributeBuildProblems(bf.BuildErrors(), suite)
 	return nil, fmt.Errorf("%w%s", err, buildFailureHint(other))
@@ -138,8 +138,11 @@ func buildProblemMessage(problems []docker.BuildProblem) string {
 		}
 		parts = append(parts, msg)
 	}
-	return "the assertion could not be built: " + strings.Join(parts, "; ")
+	return buildProblemPrefix + strings.Join(parts, "; ")
 }
+
+// buildProblemPrefix starts the message of a test MxBuild rejected.
+const buildProblemPrefix = "the assertion could not be built: "
 
 // resultsFromFailedBuild turns a failed build into one result per test, so a run
 // that cannot boot still reports something per test instead of nothing at all.

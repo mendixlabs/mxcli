@@ -93,6 +93,9 @@ func diffLocalAfter(t *testing.T, setup, change string, opts DiffOptions) string
 		if len(args) > 0 && args[0] == "diff" {
 			return exec.Command("cat", listing)
 		}
+		if len(args) > 0 && args[0] == "ls-files" { // the listing already has the new units
+			return exec.Command("true")
+		}
 		if len(args) == 2 && args[0] == "show" {
 			if f, ok := files[args[1]]; ok {
 				return exec.Command("cat", f)

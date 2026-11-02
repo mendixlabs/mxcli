@@ -169,20 +169,38 @@ func TestGeneratorsHonourTheHeader(t *testing.T) {
 	}
 }
 
-// A headerless suite's scripts are unchanged: no header, and the `/` lines
-// mdl 0 has always had.
-func TestGeneratorsHeaderlessSuiteUnchanged(t *testing.T) {
+// A headerless suite's scripts get no header, and draw nothing about text the
+// runner wrote itself. They used to end every microflow with a `/` line and
+// open it with `create or replace`, so `mxcli test` printed an MDL-V1-SLASH and
+// an MDL-DEPR001 per test — 104 warnings for a 52-test suite — about a script
+// the author never saw (ako/mxcli#1855). The bodies here are valid under both
+// versions, so any note is the generator's.
+func TestGeneratorsHeaderlessSuiteDrawsNoNotes(t *testing.T) {
 	tests, err := parseMDLTests(strings.TrimPrefix(headeredTestFile, "mdl 1;\n"), "h.test.mdl")
 	if err != nil {
 		t.Fatal(err)
 	}
 	suite := &TestSuite{Name: "h", Tests: tests}
-	for _, script := range []string{GenerateTestRunner(suite), GenerateTestFlows(suite)} {
+	for name, script := range map[string]string{
+		"GenerateTestRunner": GenerateTestRunner(suite),
+		"GenerateTestFlows":  GenerateTestFlows(suite),
+	} {
 		if strings.HasPrefix(script, "mdl ") {
-			t.Errorf("headerless suite got a header:\n%s", script)
+			t.Errorf("%s: headerless suite got a header:\n%s", name, script)
 		}
-		if _, errs := visitor.Build(script); len(errs) > 0 {
-			t.Errorf("output does not parse: %v", errs)
+		prog, errs := visitor.Build(script)
+		if len(errs) > 0 {
+			t.Errorf("%s output does not parse: %v\n%s", name, errs, script)
+			continue
+		}
+		if prog.LanguageVersion != langver.V0 {
+			t.Errorf("%s output parses as mdl %d, want mdl 0", name, prog.LanguageVersion)
+		}
+		for _, n := range prog.LanguageNotes {
+			t.Errorf("%s draws %s at line %d: %s", name, n.Code, n.Line, n.Message)
+		}
+		for _, d := range prog.Deprecations {
+			t.Errorf("%s writes the deprecated spelling %s at line %d", name, d.Code, d.Line)
 		}
 	}
 }

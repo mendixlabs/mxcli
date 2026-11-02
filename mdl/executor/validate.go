@@ -2132,6 +2132,9 @@ var execEnforcedMicroflowRules = map[string]bool{
 	// System.changedBy is CE1050 "Unknown association", measured on 11.12.5
 	// for every entity shape, microflow and nanoflow (mendixlabs/mxcli#1612).
 	"MDL-CHANGE01": true,
+	// MDL-IFOPERAND01: an if-expression as an operator's operand without
+	// parentheses is CE0117, measured on 11.12.2 (mendixlabs/mxcli#1710).
+	"MDL-IFOPERAND01": true,
 }
 
 // validateMicroflowRules runs the MDL0xx microflow rule set (ValidateMicroflow)
