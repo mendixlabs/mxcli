@@ -40,7 +40,7 @@ func (b *Builder) exitStatementDocs(ctx *parser.StatementContext) {
 		return // nothing built: a syntax error, reported already
 	}
 	head, line := statementHead(ctx)
-	stores := storesDocumentation(ctx, built)
+	stores := storesDocumentation(ctx, built) || adoptsAddedAttributeDoc(ctx, built)
 	if stores {
 		for _, d := range b.detachedDocs[b.docsAwaitingNext:] {
 			d.Next, d.NextLine = head, line
@@ -68,8 +68,8 @@ func (b *Builder) detachedDocComments() []ast.DetachedDocComment {
 
 // storesDocumentation reports whether a statement keeps its doc comment: it is
 // a create, and what it builds has a documentation property the comment sets.
-// No other statement reads the statement's doc comment (an `alter entity …
-// add attribute` reads the one written inside the alter, before `add`).
+// No other statement reads the statement's doc comment, except an alter that
+// adds one attribute (adoptsAddedAttributeDoc).
 func storesDocumentation(ctx *parser.StatementContext, built []ast.Statement) bool {
 	ddl := ctx.DdlStatement()
 	if ddl == nil || ddl.CreateStatement() == nil {
@@ -90,6 +90,40 @@ func storesDocumentation(ctx *parser.StatementContext, built []ast.Statement) bo
 		}
 	}
 	return false
+}
+
+// adoptsAddedAttributeDoc gives the statement's doc comment to the attribute an
+// `alter entity` / `alter entities` adds, as a comment above a create entity
+// attribute documents it (ako/mxcli#1863). Only when the statement adds exactly
+// one attribute that has no comment of its own: with two, which one the text
+// was written for is a guess, and an attribute's own comment wins — both stay
+// detached, so check still warns (MDL089).
+func adoptsAddedAttributeDoc(ctx *parser.StatementContext, built []ast.Statement) bool {
+	doc := ctx.DocComment()
+	if doc == nil {
+		return false
+	}
+	var added []*ast.Attribute
+	collect := func(s *ast.AlterEntityStmt) {
+		if s.Operation == ast.AlterEntityAddAttribute && s.Attribute != nil {
+			added = append(added, s.Attribute)
+		}
+	}
+	for _, s := range built {
+		switch st := s.(type) {
+		case *ast.AlterEntityStmt:
+			collect(st)
+		case *ast.AlterEntitiesStmt:
+			for _, a := range st.Actions {
+				collect(a)
+			}
+		}
+	}
+	if len(added) != 1 || added[0].Documentation != "" {
+		return false
+	}
+	added[0].Documentation = extractDocComment(doc.GetText())
+	return true
 }
 
 // statementHead is the start of the statement as written — its keywords and
