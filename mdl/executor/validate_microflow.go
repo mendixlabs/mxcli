@@ -604,6 +604,7 @@ func (v *microflowValidator) checkExprFunctions(label string, expr ast.Expressio
 	// The one per-expression hook shared by microflows and nanoflows, so the
 	// JSON-number check rides along rather than keeping a third list of sites.
 	v.checkLocaleNumberInJSON(label, expr)
+	v.checkIfOperand(label, expr)
 	src := microflowExprSource(expr)
 	if src == "" {
 		return
