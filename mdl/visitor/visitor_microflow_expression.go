@@ -144,7 +144,49 @@ func buildComparisonExpression(ctx parser.IComparisonExpressionContext) ast.Expr
 		}
 	}
 
+	// LIKE / BETWEEN / IN / MATCH are OQL; the rule admits them because the
+	// expression grammar is shared with OQL, but neither a Mendix expression nor
+	// an XPath constraint has them. Returning only `left` here dropped the
+	// operator and its operands without a word: `where Name like 'A-%'` was
+	// stored as `[Name]` and failed the build with CE0161 while check passed
+	// (mendixlabs/mxcli#1686). Keep the operator so the check can refuse it —
+	// see oqlOnlyComparisons. The comparison is kept as written: Right is the
+	// first operand after the operator (the pattern, or BETWEEN's low bound) and
+	// nil for IN, so the source is what any writer stores.
+	if op := oqlOnlyComparisonOperator(compCtx); op != "" {
+		var right ast.Expression
+		if len(addExprs) >= 2 {
+			right = buildAdditiveExpression(addExprs[1])
+		}
+		var cmp ast.Expression = &ast.BinaryExpr{Left: left, Operator: op, Right: right}
+		if src := strings.TrimSpace(extractExpressionText(compCtx)); src != "" {
+			cmp = &ast.SourceExpr{Expression: cmp, Source: src}
+		}
+		return cmp
+	}
+
 	return left
+}
+
+// oqlOnlyComparisonOperator names the OQL comparison a comparisonExpression
+// carries — "like", "not like", "between", "not between", "in" or "match" —
+// or "" when it carries none of them.
+func oqlOnlyComparisonOperator(c *parser.ComparisonExpressionContext) string {
+	not := ""
+	if c.NOT() != nil {
+		not = "not "
+	}
+	switch {
+	case c.LIKE() != nil:
+		return not + "like"
+	case c.BETWEEN() != nil:
+		return not + "between"
+	case c.IN() != nil:
+		return "in"
+	case c.MATCH() != nil:
+		return "match"
+	}
+	return ""
 }
 
 // buildAdditiveExpression handles + and - expressions.
