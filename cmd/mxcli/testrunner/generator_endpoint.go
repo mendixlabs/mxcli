@@ -39,11 +39,17 @@ const (
 //   - Every test gets its own variable scope, so the suffix-renaming the
 //     monolith needs to keep `$result` in test 1 from colliding with `$result`
 //     in test 2 is simply not required here.
+//
+// The script does not create the MxTest module: every caller runs it into a
+// project that already holds one — straight after GenerateEndpointMDL, or under
+// --watch and --attach into a project hosting the endpoint. A `CREATE MODULE`
+// here made exec print "Module 'MxTest' already exists" on every run, on a
+// project that had no MxTest module before it (ako/mxcli#1856).
 func GenerateTestFlows(suite *TestSuite) string {
 	var b strings.Builder
 	v := suiteVersion(suite)
 	writeScriptHeader(&b, v)
-	b.WriteString("CREATE MODULE " + mxTestModule + ";\n\n")
+	b.WriteString("\n")
 	for _, tc := range suite.Tests {
 		// A test with an uncompilable @expect gets no microflow. The runner
 		// reports it as an ERROR from the parse message, which is more useful
@@ -60,7 +66,7 @@ func GenerateTestFlows(suite *TestSuite) string {
 // writeTestFlow writes one test's microflow.
 func writeTestFlow(b *strings.Builder, tc TestCase, v langver.Version) {
 	fmt.Fprintf(b, "/** %s */\n", escapeMDLComment(tc.Name))
-	fmt.Fprintf(b, "%s %s ()\n", createFlow(v), testFlowName(tc))
+	fmt.Fprintf(b, "%s %s ()\n", createFlow, testFlowName(tc))
 	b.WriteString("RETURNS String AS $Verdict\n")
 	b.WriteString("BEGIN\n")
 	fmt.Fprintf(b, "  DECLARE $Verdict String = '%s';\n", verdictPass)
@@ -76,7 +82,7 @@ func writeTestFlow(b *strings.Builder, tc TestCase, v langver.Version) {
 	}
 
 	b.WriteString("  RETURN $Verdict;\n")
-	writeFlowEnd(b, v)
+	writeFlowEnd(b)
 }
 
 // writeSetupCalls writes the @setup microflow calls that precede a test's body.
@@ -370,7 +376,7 @@ func attachOnError(lines []string, v langver.Version, handler []string) []string
 func bodyParsePrefix(v langver.Version) string {
 	var wrap strings.Builder
 	writeScriptHeader(&wrap, v)
-	wrap.WriteString(createFlow(v) + " " + mxTestModule + ".Body ()\nBEGIN\n")
+	wrap.WriteString(createFlow + " " + mxTestModule + ".Body ()\nBEGIN\n")
 	return wrap.String()
 }
 

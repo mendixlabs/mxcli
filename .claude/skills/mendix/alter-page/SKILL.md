@@ -227,8 +227,8 @@ so a silent write would build cleanly and then fail to open.
 | `Title` | Page-level only (case-sensitive) | String | `set (Title: 'Edit Customer')` |
 | `Documentation` | Page-level only (case-sensitive) | String (`''` clears) | `set (Documentation: 'Coordinator triage step.')` |
 | `layout` | Page-level only | Qualified name | `set layout = Atlas_Core.Atlas_Default` |
-| `PopupWidth` | Page-level only (case-sensitive) | Positive integer (pixels) | `set (PopupWidth: 800)` |
-| `PopupHeight` | Page-level only (case-sensitive) | Positive integer (pixels) | `set (PopupHeight: 480)` |
+| `PopupWidth` | Page-level only (case-sensitive) | Integer ≥ 0 (pixels; 0 = auto-size) | `set (PopupWidth: 800)` |
+| `PopupHeight` | Page-level only (case-sensitive) | Integer ≥ 0 (pixels; 0 = auto-size) | `set (PopupHeight: 480)` |
 | `PopupResizable` | Page-level only (case-sensitive) | Boolean | `set (PopupResizable: true)` |
 | `Class` | Page-level (case-sensitive, no ON) | CSS class string | `set (Class: 'container-fluid bg-light')` |
 | `Style` | Page-level (case-sensitive, no ON) | Inline CSS string | `set (Style: 'min-height: 100vh')` |

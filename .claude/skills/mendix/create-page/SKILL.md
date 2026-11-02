@@ -12,15 +12,15 @@ description: "CREATE PAGE syntax reference — parameters, variables, layouts, a
 |---|---|
 | 28-43 | Reference files |
 | 44-46 | Overview |
-| 47-220 | Syntax |
-| 221-291 | Basic Examples |
-| 292-316 | Modifying Existing Pages |
-| 317-420 | Conditional Visibility and Editability |
-| 421-585 | Known Limitations |
-| 586-594 | Tips |
-| 595-621 | Related Commands |
-| 622-646 | PLUGGABLEWIDGET Escape Hatch |
-| 647-650 | See Also |
+| 47-222 | Syntax |
+| 223-293 | Basic Examples |
+| 294-318 | Modifying Existing Pages |
+| 319-422 | Conditional Visibility and Editability |
+| 423-587 | Known Limitations |
+| 588-596 | Tips |
+| 597-623 | Related Commands |
+| 624-648 | PLUGGABLEWIDGET Escape Hatch |
+| 649-652 | See Also |
 
 <!-- /skill-index -->
 # CREATE PAGE - MDL Syntax Guide
@@ -73,7 +73,9 @@ pages.
 
 **Pop-up dimensions** (`PopupWidth` / `PopupHeight` / `PopupResizable`) apply when the
 page is opened in a pop-up. They are optional — omitting them uses the Mendix defaults
-(600 × 600, not resizable). Unlike the other header keywords, these property names are
+(0 × 0, which is auto-size, and not resizable). `describe page` prints the width and
+height of a page on a pop-up layout even when they are 0, so a reviewer can tell an
+auto-size pop-up from one whose size was never checked. Unlike the other header keywords, these property names are
 **case-sensitive** and must be written exactly as shown. They can also be changed later
 with `alter page … { set (PopupWidth: …); }` (see the alter-page skill).
 
