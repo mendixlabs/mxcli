@@ -81,6 +81,8 @@ func describePage(ctx *ExecContext, name ast.QualifiedName) error {
 		}
 	}
 
+	popupLayout := layoutTypeByName(ctx, layoutName) == pages.LayoutTypeModalPopup
+
 	// @excluded annotation
 	if foundPage.Excluded {
 		fmt.Fprintln(ctx.Output, "@excluded")
@@ -102,16 +104,8 @@ func describePage(ctx *ExecContext, name ast.QualifiedName) error {
 	if foundPage.URL != "" {
 		props = append(props, fmt.Sprintf("Url: %s", mdlQuote(ctx, foundPage.URL)))
 	}
-	// Pop-up dimensions (issues #661, #713) — emit only non-default values so
-	// the CREATE PAGE header round-trips. Studio Pro's default is 0/0 (auto-size);
-	// an explicit non-zero value (e.g. 600) is emitted so it round-trips.
 	if rawData != nil {
-		if w := toInt(rawData["PopupWidth"]); w != 0 {
-			props = append(props, fmt.Sprintf("PopupWidth: %d", w))
-		}
-		if hgt := toInt(rawData["PopupHeight"]); hgt != 0 {
-			props = append(props, fmt.Sprintf("PopupHeight: %d", hgt))
-		}
+		props = append(props, popupDimensionProps(rawData, popupLayout)...)
 		if r, ok := rawData["PopupResizable"].(bool); ok && r {
 			props = append(props, "PopupResizable: true")
 		}
@@ -635,6 +629,49 @@ func getBsonArrayMaps(v any) []map[string]any {
 	default:
 		return nil
 	}
+}
+
+// popupDimensionProps renders a page's pop-up width and height for the CREATE
+// PAGE header (issues #661, #713). On a pop-up layout they are always printed,
+// 0 included: 0 is Studio Pro's auto-size, and leaving it out made a page set
+// to auto-size read the same as one never looked at (mendixlabs/mxcli#1713).
+// Elsewhere the dimensions do nothing, so only a non-default value is printed.
+func popupDimensionProps(rawData map[string]any, popupLayout bool) []string {
+	var props []string
+	if w := toInt(rawData["PopupWidth"]); w != 0 || popupLayout {
+		props = append(props, fmt.Sprintf("PopupWidth: %d", w))
+	}
+	if h := toInt(rawData["PopupHeight"]); h != 0 || popupLayout {
+		props = append(props, fmt.Sprintf("PopupHeight: %d", h))
+	}
+	return props
+}
+
+// layoutTypeByName returns the type of the layout with this qualified name,
+// or "" when it cannot be read. A page stores its layout as FormCall.Form, a
+// qualified name, so the layout is found by name rather than by ID.
+func layoutTypeByName(ctx *ExecContext, qualifiedName string) pages.LayoutType {
+	if qualifiedName == "" {
+		return ""
+	}
+	layouts, err := layoutHeaders(ctx.Backend)
+	if err != nil {
+		return ""
+	}
+	h, err := getHierarchy(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, l := range layouts {
+		if h.GetQualifiedName(l.ContainerID, l.Name) != qualifiedName {
+			continue
+		}
+		if layout, err := ctx.Backend.GetLayout(l.ID); err == nil && layout != nil {
+			return layout.LayoutType
+		}
+		return ""
+	}
+	return ""
 }
 
 // resolveLayoutName resolves a layout ID to its qualified name.
