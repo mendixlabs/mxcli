@@ -29,6 +29,51 @@ permissions:
   contents: read
 
 jobs:
+  # Checks that need no generated parser and no compile, run first and gating
+  # every other job (ako/mxcli#1887). An unformatted file used to fail ~24 min
+  # into build-and-test while all the integration legs ran anyway, ~100
+  # runner-minutes for a known-red result, and at the 20-concurrent-job cap that
+  # also delayed every other PR. Each check takes about a second; the job's cost
+  # is runner start-up, so it saves no setup it does not need: no submodules, no
+  # Go module or build cache (gofmt reads source only), no ANTLR.
+  #
+  # Only checks proven to run on a bare checkout belong here: `go vet` and
+  # check-tunnel-deps load the package graph, which includes the generated
+  # parser, so they stay in build-and-test.
+  quick-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          # The toolchain matters: gofmt's output differs between Go releases
+          # (the mismatch fixed in #1759), so this must match the other jobs.
+          go-version: '1.27.3'
+          cache: false
+      - name: Check gofmt
+        run: make fmt-check
+      - name: Check bug findings
+        # One JSON object per line, an area, a date, and either the four
+        # structured fields or a raw row. DuckDB rejects a whole file on one bad
+        # line, so a typo in an appended finding takes out every query over that
+        # area. Also prints how far docs-wiki/bug-patterns/ has fallen behind.
+        run: make check-findings
+      - name: Check wiki page list
+        # The table of contents must describe the wiki, both directions. It
+        # drifted for three months before anyone noticed.
+        run: make check-wiki-pages
+      - name: Check the skill section indexes
+        # Each SKILL.md opens with a generated line-numbered index so an agent
+        # can read one section instead of the file — measured on BENCH-001 as
+        # ~68% of a session's re-read cost. A hand-kept table of contents is
+        # the drift this repo has paid for twice, so the generator owns it.
+        run: make check-skill-index
+      - name: Check every go test sets -timeout
+        # Without one Go applies 10m per test binary, and a package that passes
+        # in seconds alone can exceed it under `./...` load (mendixlabs/mxcli#1291).
+        run: make check-test-timeouts
+
   # The tunnel seam has a !linux half (stub + its tests) that the ubuntu job can
   # only compile, never run. This job actually executes it on real Windows and
   # macOS runners, so "--hub fails with an actionable message" is a tested claim
@@ -37,6 +82,7 @@ jobs:
   # Neither package depends on the generated ANTLR parser, so this needs no
   # grammar step and stays fast.
   tunnel-seam-cross-platform:
+    needs: quick-checks
     strategy:
       fail-fast: false
       matrix:
@@ -96,6 +142,7 @@ jobs:
   # blocked. This job runs the Windows-only regression tests on a real Windows
   # runner so neither half can come back.
   windows-process-regression:
+    needs: quick-checks
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -136,6 +183,7 @@ jobs:
           fi
 
   build-and-test:
+    needs: quick-checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -159,6 +207,10 @@ jobs:
           ANTLR4_TOOLS_ANTLR_VERSION: '4.13.2'
       - name: Build
         run: make build
+      - name: Vet
+        # Before Test, which takes ~12 min. gofmt runs in quick-checks; vet
+        # needs the generated parser, so it is the first thing after the build.
+        run: make vet
       - name: Test
         run: make test
       - name: Check tunnel stays Linux-only
@@ -180,26 +232,8 @@ jobs:
         # #574 case: the widget must attach the session's CSRF token to
         # same-origin fetches and never to any other host.
         run: make check-skill-pack-js
-      - name: Check bug findings
-        # One JSON object per line, an area, a date, and either the four
-        # structured fields or a raw row. DuckDB rejects a whole file on one bad
-        # line, so a typo in an appended finding takes out every query over that
-        # area. Also prints how far docs-wiki/bug-patterns/ has fallen behind.
-        run: make check-findings
-      - name: Check wiki page list
-        # The table of contents must describe the wiki, both directions. It
-        # drifted for three months before anyone noticed.
-        run: make check-wiki-pages
-      - name: Check the skill section indexes
-        # Each SKILL.md opens with a generated line-numbered index so an agent
-        # can read one section instead of the file — measured on BENCH-001 as
-        # ~68% of a session's re-read cost. A hand-kept table of contents is
-        # the drift this repo has paid for twice, so the generator owns it.
-        run: make check-skill-index
-      - name: Check every go test sets -timeout
-        # Without one Go applies 10m per test binary, and a package that passes
-        # in seconds alone can exceed it under `./...` load (mendixlabs/mxcli#1291).
-        run: make check-test-timeouts
+      # check-findings, check-wiki-pages, check-skill-index and
+      # check-test-timeouts run in quick-checks.
       - name: Check skill MDL blocks
         run: ./scripts/check-skill-mdl.sh ./bin/mxcli .claude/skills/mendix
       - name: Check docs-site MDL blocks
@@ -220,9 +254,8 @@ jobs:
         # The tables on docs-site/src/language/versions.md are generated from
         # the language-change and deprecation registries (ako/mxcli#714).
         run: make check-migration-reference
-      # The integration tests are the `integration` job below.
-      - name: Lint Go
-        run: make lint-go
+      # The integration tests are the `integration` job below. Lint Go was here:
+      # its fmt-check is in quick-checks and its vet runs before Test.
       - name: Vulnerability scan
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -250,6 +283,7 @@ jobs:
   # tag — `make test` in build-and-test runs those.
   integration:
     name: integration (${{ matrix.suite }}${{ matrix.shard && format(' {0}', matrix.shard) || '' }})
+    needs: quick-checks
     runs-on: ubuntu-latest
     # Each suite's go test has its own -timeout (Makefile); this is the job's
     # backstop, with room for the setup steps.
@@ -318,6 +352,9 @@ jobs:
   # `concurrency` above) could not end until this job got a runner — and the
   # concurrency group held the replacement run pending meanwhile: ~5 min on
   # PR #1885 (run 41406249166), at the 20-job cap (ako/mxcli#1886).
+  #
+  # When quick-checks fails, the integration legs are skipped, and this gate
+  # then fails on `integration: skipped` — red, never a vacuous pass.
   integration-passed:
     if: ${{ !cancelled() }}
     needs: integration
