@@ -199,3 +199,18 @@ func TestXPathAssociationAccess_SecondHopStartsOnTheIntermediateEntity(t *testin
 		t.Errorf("message = %q, want the hop from Shop.Order", v.Message)
 	}
 }
+
+// The catalog's XPath row names the widget that owns the data source (#1879),
+// so a page with two data widgets over the entity still says which one fails.
+// Before, the widget was guessed from "the only data widget over the entity on
+// the page", and with two the message read "A data source".
+func TestXPathAssociationAccess_NamesTheWidgetTheRowRecords(t *testing.T) {
+	f := shopFixture(t, security.SecurityLevelProduction)
+	f.widget("Shop.Portal", "dgClosed", dataGrid, "Shop.Account")
+	f.exec(`UPDATE xpath_expressions_data SET WidgetName = 'dgOrders'`)
+
+	v := oneViolation(t, f.checkXPathAccess())
+	if !strings.HasPrefix(v.Message, "The data source of 'dgOrders' on page Shop.Portal") {
+		t.Errorf("message = %q, want it to name dgOrders", v.Message)
+	}
+}

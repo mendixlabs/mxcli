@@ -65,6 +65,12 @@ func (fb *flowBuilder) javaActionTemplateValue(actionQN string, arg ast.CallArgu
 	text, params := restCallTemplate(javaActionArgumentValue(arg.Value), arg.TemplateParams)
 	s, _ := restTemplateText(text)
 	value.TypedTemplate.Text = s
+	// MDL-TEMPLATE02 (ako/mxcli#1397): the text's braces, judged by the
+	// function check uses. Check sees a template only where `with (…)` says so;
+	// here the parameter's type says so for a plain string too.
+	if msg, fix := templateTextRefusal(javaActionTemplateWhere(actionQN, arg.Name), s, len(orderedTemplateParams(params))); msg != "" {
+		return value, msg + "\n  " + fix
+	}
 	for i, p := range orderedTemplateParams(params) {
 		if p == nil {
 			return value, fmt.Sprintf("call java action %s: parameter %s: the template has no {%d} argument "+

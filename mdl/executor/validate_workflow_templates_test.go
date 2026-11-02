@@ -134,3 +134,32 @@ end workflow;`)
 		t.Errorf("task name = %q %q", task.TaskName, task.TaskNameParams)
 	}
 }
+
+// ako/mxcli#1397: a workflow text is a template with the grammar every other
+// template has (mdl/texttemplate): `{x}` is CE0712 on 11.13.0 and 11.15.0, and
+// `{{1}}` is the escaped text "{1}" — no placeholder — which mxbuild accepts
+// with no parameters and MDL-WF21 used to refuse as an unfilled {1}.
+func TestWorkflowTemplates_BraceGrammar(t *testing.T) {
+	cases := []struct{ name, src, rule, want string }{
+		{"a name in braces (CE0712)",
+			wfTemplateHead + "display 'Doc {Title}' begin user task R 'R' outcomes 'Done' { }; end workflow;",
+			templateGrammarRule, "CE0712"},
+		{"an unterminated placeholder in a task description (CE0713)",
+			wfTemplateHead + "begin user task R 'R' description 'Due {1' with ({1} = $WorkflowContext/Name) outcomes 'Done' { }; end workflow;",
+			templateGrammarRule, "CE0713"},
+		{"an escaped placeholder needs no parameter", wfTemplateHead + "display 'Doc {{1}}' begin user task R 'R' outcomes 'Done' { }; end workflow;", "", ""},
+		{"escaped braces around a placeholder", wfTemplateHead + "display 'Doc {{{1}}}' with ({1} = $WorkflowContext/Name) begin user task R 'R' outcomes 'Done' { }; end workflow;", "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			all := ValidateWorkflow(parseWorkflowStmt(t, c.src))
+			got := append(wfRuleViolations(all, wfTemplateRule), wfRuleViolations(all, templateGrammarRule)...)
+			switch {
+			case c.want == "" && len(got) > 0:
+				t.Errorf("reported a template mxbuild accepts: %v", got)
+			case c.want != "" && (len(got) != 1 || got[0].RuleID != c.rule || !strings.Contains(got[0].Message, c.want)):
+				t.Errorf("want one %s naming %q, got %v", c.rule, c.want, got)
+			}
+		})
+	}
+}

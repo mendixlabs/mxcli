@@ -1,0 +1,80 @@
+mdl 1;
+-- ============================================================================
+-- Regression: ako/mxcli#1397 (mendixlabs/mxcli#1515) - controls for the
+-- template brace grammar
+-- ============================================================================
+--
+-- The negative cases are in template-braces-1397-brace-grammar.fail.mdl. Every
+-- template below builds at 0 errors on mx check 11.13.0 (and the same inputs on
+-- 10.24.24 and 11.15.0), so `mxcli check` must pass this file: the grammar
+-- check may not refuse any of them.
+--
+-- `{{` is a literal brace; a `}` needs no escape; a `{` that ends the text is
+-- text; `{01}` is `{1}`. The last two documents were refused before this fix:
+-- `{{1}}` is the escaped TEXT "{1}", not a placeholder, and MDL-WF21 and
+-- MDL-WIDGET04 counted it as an unfilled {1} (CE0720) although mxbuild builds
+-- it with no parameter.
+--
+-- Usage:
+--   mxcli check mdl-examples/bug-tests/template-braces-1397-brace-grammar.mdl
+--   Expect: Check passed.
+--   mxcli exec  mdl-examples/bug-tests/template-braces-1397-brace-grammar.mdl -p app.mpr
+--   mx check -p app.mpr                    -- 0 errors (11.13.0)
+-- ============================================================================
+
+create module Tpl1397Ok;
+
+create persistent entity Tpl1397Ok.Item (Name: String(200), Title: String(200));
+
+create microflow Tpl1397Ok.Ok_Log ($Number: String)
+begin
+  log info node 'Mod' 'Item {1} not found' with ({1} = $Number);
+  log info node 'Mod' 'literal braces: {{ and }} and } and {{1}}';
+  log info node 'Mod' 'a brace at the very end {';
+  log info node 'Mod' 'a leading zero {01}' with ({1} = $Number);
+end;
+
+create microflow Tpl1397Ok.Ok_RestJsonBody ($Name: String)
+begin
+  $R = call rest service post 'https://example.com/x' (Body: template '{{"name": "{1}"}' with ({1} = $Name)) returns String on error continue;
+end;
+
+create microflow Tpl1397Ok.Ok_RestEmptyObject ()
+begin
+  $R = call rest service post 'https://example.com/x' (Body: template '{{}') returns String on error continue;
+end;
+
+create microflow Tpl1397Ok.Ok_ExpressionText ($Name: String)
+begin
+  -- An expression is no template: it is stored as '{1}' with it as the
+  -- parameter, so a brace in its string literal is plain text.
+  log info node 'Mod' '{name} = ' + $Name;
+end;
+
+create page Tpl1397Ok.Ok_DynamicText (
+  Title: 'Ok', Layout: Atlas_Core.Atlas_Default, Params: ( $Item: Tpl1397Ok.Item )
+) {
+  dataview dv1 (DataSource: $Item) {
+    dynamictext t1 (Content: 'literally {{1}}')
+    actionbutton b1 (Caption: '{{ go }}', Action: close page)
+  }
+};
+
+create page Tpl1397Ok.WF_Review (
+  params: ( $WorkflowUserTask: System.WorkflowUserTask ),
+  title: 'Review',
+  layout: Atlas_Core.Atlas_Default
+) {
+  dataview dvTask (DataSource: $WorkflowUserTask) {
+    actionbutton btnDone (Caption: 'Done', Action: complete task 'Done')
+  }
+};
+
+create workflow Tpl1397Ok.Approval
+  parameter $WorkflowContext: Tpl1397Ok.Item
+  display 'Approval {{1}}'
+begin
+  user task Review 'Review'
+    page Tpl1397Ok.WF_Review
+    outcomes 'Done' { };
+end workflow;

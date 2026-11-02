@@ -3609,8 +3609,9 @@ func setWidgetFormattingMut(widget bson.D, propName string, value any) error {
 		if !ok || n < 0 {
 			return fmt.Errorf("DecimalPrecision is a non-negative integer, not %v", value)
 		}
-		// Keep the stored width: Studio Pro writes an int64, mxcli's codec an
-		// int32, and replacing one with the other is a change of its own.
+		// Keep the stored width: Studio Pro writes an int64 (as does the codec
+		// since ako/mxcli#1264); a document an older mxcli wrote holds an int32,
+		// and replacing one with the other is a change of its own.
 		if _, isInt32 := bsonnav.DGet(fi, "DecimalPrecision").(int32); isInt32 {
 			bsonnav.DSet(fi, "DecimalPrecision", int32(n))
 		} else {
@@ -3643,11 +3644,13 @@ func setWidgetFileManagerMut(widget bson.D, propName string, value any) error {
 		if !ok || n < 0 {
 			return fmt.Errorf("MaxFileSize is a whole number of megabytes, 0 or more, not %v", value)
 		}
-		// Keep the stored width, as for DecimalPrecision.
-		if _, isInt64 := bsonnav.DGet(widget, "MaxFileSize").(int64); isInt64 {
-			bsonnav.DSet(widget, "MaxFileSize", int64(n))
-		} else {
+		// Keep the stored width, as for DecimalPrecision: int64 is Studio Pro's
+		// (and the codec's since ako/mxcli#1264); int32 only survives in a
+		// document an older mxcli wrote, and is not narrowed further here.
+		if _, isInt32 := bsonnav.DGet(widget, "MaxFileSize").(int32); isInt32 {
 			bsonnav.DSet(widget, "MaxFileSize", int32(n))
+		} else {
+			bsonnav.DSet(widget, "MaxFileSize", int64(n))
 		}
 	case "allowedextensions":
 		s, ok := value.(string)

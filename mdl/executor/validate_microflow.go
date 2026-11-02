@@ -129,6 +129,9 @@ func (v *microflowValidator) validate(body []ast.MicroflowStatement) {
 	// MDL-TEMPLATE01: a message written as an expression with `with (…)`
 	// (ako/mxcli#1683). Same function exec calls.
 	v.checkMessageTemplates(body)
+	// MDL-TEMPLATE02: a template text whose braces mxbuild refuses
+	// (ako/mxcli#1397). Same function exec calls.
+	v.checkTemplateGrammar(body)
 	v.checkRetrieveOverSystemAssociation(body)
 	v.checkSetOnObjectVariable(v.params, body)
 	v.checkSystemMemberChange(body)
@@ -638,6 +641,7 @@ func (v *microflowValidator) checkExprFunctions(label string, expr ast.Expressio
 	for _, h := range exprcheck.BuiltinCallHints(src, v.varKinds) {
 		v.addViolation(h.Code, linter.SeverityError, label+": "+h.Problem, h.Fix)
 	}
+	v.checkRegexTrailingBackslash(label, src)
 }
 
 // checkDivisionSlash flags `/` used as an arithmetic division operator, which

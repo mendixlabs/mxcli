@@ -43,8 +43,10 @@ func TestFileManagerToGen_WritesPropertySet(t *testing.T) {
 	if v := doc.Lookup("Type").StringValue(); v != "Upload" {
 		t.Errorf("Type = %q, want Upload", v)
 	}
-	if v, ok := doc.Lookup("MaxFileSize").Int32OK(); !ok || v != 10 {
-		t.Errorf("MaxFileSize = %v, want int32 10", doc.Lookup("MaxFileSize"))
+	// int64 is what Studio Pro stores: 26 of 26 Forms$FileManager.MaxFileSize
+	// values across nine Studio Pro-authored projects (ako/mxcli#1264).
+	if v, ok := doc.Lookup("MaxFileSize").Int64OK(); !ok || v != 10 {
+		t.Errorf("MaxFileSize = %v, want int64 10", doc.Lookup("MaxFileSize"))
 	}
 	if v := doc.Lookup("AllowedExtensions").StringValue(); v != ".xlsx" {
 		t.Errorf("AllowedExtensions = %q", v)

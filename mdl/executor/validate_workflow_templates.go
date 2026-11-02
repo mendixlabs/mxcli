@@ -4,13 +4,12 @@ package executor
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/mendixlabs/mxcli/mdl/texttemplate"
 )
 
 // MDL-WF21: a workflow text whose placeholders its parameters do not fill
@@ -23,6 +22,8 @@ import (
 //	'Review {0}'                           CE0716 "Place holder indices start at one (1)."
 //	'Review' with one parameter            clean (an unused parameter)
 //	'Review {1} {1}' with one              clean
+//	'Review {{1}}' with none               clean: {{ escapes, so it is the text "{1}"
+//	'Review {Title}'                       CE0712, as in every template (MDL-TEMPLATE02, ako/mxcli#1397)
 //
 // The parameters are stored by position, so `with ({1} = …, {3} = …)` has no
 // meaning to write: a numbering other than {1} to {n}, each once, is refused
@@ -35,8 +36,6 @@ type wfTemplateSite struct {
 	text   string
 	params []ast.WorkflowTemplateParam
 }
-
-var wfPlaceholderRe = regexp.MustCompile(`\{(\d+)\}`)
 
 // checkWorkflowTemplates reports each template whose placeholders and
 // parameters do not match.
@@ -63,13 +62,25 @@ func checkWorkflowTemplates(sites []wfTemplateSite, loc linter.Location) []linte
 				break
 			}
 		}
+		// The text's own grammar first, as mxbuild reads it: one problem per
+		// text, and the count only for a text that has none (ako/mxcli#1397).
+		// An escaped `{{1}}` is the text "{1}", no placeholder.
+		refs, p := texttemplate.Placeholders(s.text)
+		if p != nil && p.Code == "CE0716" {
+			report(fmt.Sprintf("%s has the placeholder {0} — MxBuild rejects it (CE0716 \"Place holder indices start at one (1).\")", s.where),
+				"Number the placeholders from {1}.")
+			continue
+		}
+		if p != nil {
+			msg, fix := templateTextRefusal(s.where, s.text, n)
+			out = append(out, linter.Violation{
+				RuleID: templateGrammarRule, Severity: linter.SeverityError, Location: loc,
+				Message: msg, Suggestion: fix,
+			})
+			continue
+		}
 		maxRef := 0
-		for _, m := range wfPlaceholderRe.FindAllStringSubmatch(s.text, -1) {
-			idx, _ := strconv.Atoi(m[1])
-			if idx == 0 {
-				report(fmt.Sprintf("%s has the placeholder {0} — MxBuild rejects it (CE0716 \"Place holder indices start at one (1).\")", s.where),
-					"Number the placeholders from {1}.")
-			}
+		for _, idx := range refs {
 			if idx > maxRef {
 				maxRef = idx
 			}

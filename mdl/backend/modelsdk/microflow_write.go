@@ -1191,7 +1191,10 @@ func addBool(b *element.Base, name string, val bool) {
 	p.Set(val)
 }
 
-// addInt32 adds a dirty int32 property (BSON key = name) to a bare element.
+// addInt32 adds a dirty Integer property (BSON key = name) to a bare element.
+// It is stored as BSON int64, like every Integer property Studio Pro writes —
+// the widening is property.Primitive's (ako/mxcli#1264) — so this and addInt64
+// produce the same document; the int32 parameter is only the Go-side type.
 func addInt32(b *element.Base, name string, val int32) {
 	p := property.NewPrimitive[int32](name, property.DecodeInt32)
 	b.AddProperty(p, uint(len(b.Properties())))

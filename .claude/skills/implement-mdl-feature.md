@@ -140,7 +140,7 @@ Example design for REST call:
 $response = call rest service get 'http://api.example.com/data' (
   Headers: ('Content-Type': 'application/json', 'Accept': 'application/json'),
   Authentication: basic (Username: $username, Password: $password),
-  Body: template '{"key": "{1}"}' with ({1} = $value),
+  Body: template '{{"key": "{1}"}' with ({1} = $value),
   Timeout: 30,
 ) returns string
   on error rollback;

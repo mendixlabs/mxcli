@@ -240,7 +240,10 @@ func init() {
 			"-- template '{1}' with the expression as its parameter — what Studio Pro\n" +
 			"-- stores — and describe prints that form. An expression has no {n} to\n" +
 			"-- fill, so one followed by WITH (...) is refused (MDL-REST05).\n" +
-			"-- `Body: TEMPLATE '$Payload'` is the literal text $Payload.\n\n" +
+			"-- `Body: TEMPLATE '$Payload'` is the literal text $Payload.\n" +
+			"-- In a template a `{` opens a numbered placeholder or is escaped as `{{`;\n" +
+			"-- a JSON body is '{{\"name\": \"{1}\"}' (a `}` needs no escape). '{\"a\": 1}'\n" +
+			"-- and '{}' fail the build with CE0712 — check reports MDL-TEMPLATE02.\n\n" +
 			"RETURNS String                          -- the response body as a string\n" +
 			"RETURNS response                        -- the whole System.HttpResponse object\n" +
 			"RETURNS Module.MyFile                   -- store the body in a file document\n" +

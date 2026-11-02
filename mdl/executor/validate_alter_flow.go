@@ -37,6 +37,7 @@ func ValidateAlterFlow(s *ast.AlterFlowStmt) []linter.Violation {
 		// One statement at a time, so a fragment is judged as a whole flow
 		// is (MDL-TEMPLATE01, ako/mxcli#1683).
 		v.checkMessageTemplates(op.Body)
+		v.checkTemplateGrammar(op.Body) // MDL-TEMPLATE02, ako/mxcli#1397
 	}
 	return v.violations
 }
