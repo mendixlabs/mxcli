@@ -1,0 +1,17 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#1863 (mendixlabs/mxcli#1705) — a doc comment above
+-- `alter entity … add attribute` was not stored. Exec reported "Added
+-- attribute 'Reason'" and the attribute had no documentation; only `check`
+-- warned (MDL089).
+--
+-- After the fix `describe entity Bug1863.Ticket` prints `/** Why it was
+-- closed */` above Reason, and `check` reports no MDL089.
+-- ============================================================================
+
+create module Bug1863;
+
+create persistent entity Bug1863.Ticket (Title: String(200));
+
+/** Why it was closed */
+alter entity Bug1863.Ticket add attribute Reason: String(200);

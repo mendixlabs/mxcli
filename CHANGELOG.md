@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A doc comment above `alter entity … add attribute` is stored on the attribute** (ako/mxcli#1863, mendixlabs/mxcli#1705) — `/** Why */` written above the statement was read by nothing: exec reported "Added attribute" and the attribute had no documentation, with only a later `check` warning MDL089. It now documents the attribute the statement adds, as it does above a `create entity` attribute, for `alter entities` too. When the statement adds two attributes, or the attribute has its own comment, the comment is still not stored and `check` still warns.
+
 ## [0.30.0] - 2026-11-02
 
 Headline: **Catch before the build what fails at build time or in production, and merge Mendix models from the command line.** New security lint rules report mxbuild's CE2729 and the page data sources that fail for a role at Production security, `lint --baseline` reports only new findings, and `mxcli git merge` runs Studio Pro's own merge engine and lets you review each conflict before it lands. Alongside it: optional page parameters, a configurable microflow layout, `--mcp` working through Studio Pro's own MCP server alone, and faster catalog refreshes and describes on large projects.
