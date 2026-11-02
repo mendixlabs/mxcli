@@ -454,8 +454,9 @@ check-widget-versions: build
 # Lint all code (Go + TypeScript)
 lint: lint-go lint-ts check-conformance check-test-timeouts
 
-# What the build-and-test job in .github/workflows/push-test.yml runs, in its
-# order, so a push is proven against the gate it will meet rather than against
+# What the quick-checks and build-and-test jobs in .github/workflows/push-test.yml
+# run, in their order (the no-compile checks first, then vet before test --
+# ako/mxcli#1887), so a push is proven against the gate it will meet rather than against
 # `build test lint`, which covers less of it: check-mdl, check-findings,
 # check-skill-index and the rest run only in CI unless someone remembers them.
 # check-skill-mdl is a superset of the job's three skill/docs MDL steps.
@@ -463,9 +464,9 @@ lint: lint-go lint-ts check-conformance check-test-timeouts
 # Left out: govulncheck (the job installs it @latest, over the network) and the
 # integration jobs, which need mxbuild -- `make test-integration` runs those.
 # A step added to the job belongs here too.
-ci-local: build test check-tunnel-deps check-mdl check-skill-pack-js check-findings \
-		check-wiki-pages check-skill-index check-test-timeouts check-skill-mdl \
-		check-conformance check-migration-reference lint-go
+ci-local: fmt-check check-findings check-wiki-pages check-skill-index check-test-timeouts \
+		build vet test check-tunnel-deps check-mdl check-skill-pack-js check-skill-mdl \
+		check-conformance check-migration-reference
 	@echo "ci-local passed (build-and-test, without govulncheck)"
 
 # Lint Go code
