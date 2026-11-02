@@ -372,8 +372,8 @@ func (b *Backend) ListMicroflows() ([]*microflows.Microflow, error) {
 	return out, nil
 }
 
-// DeleteMicroflow drops a microflow via deleteDocument: ped_delete_document where Studio Pro has it (11.16+), else
-// Concord (--mcp-concord).
+// DeleteMicroflow drops a microflow via deleteDocument: ped_delete_document
+// (Studio Pro 11.16+).
 func (b *Backend) DeleteMicroflow(id model.ID) error {
 	mf, err := b.GetMicroflow(id)
 	if err != nil {

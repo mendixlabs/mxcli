@@ -102,8 +102,8 @@ func (b *Backend) liveConstantType(qn string) (string, error) {
 	return k, nil
 }
 
-// DeleteConstant drops a constant via deleteDocument: ped_delete_document where Studio Pro has it (11.16+), else
-// Concord (--mcp-concord).
+// DeleteConstant drops a constant via deleteDocument: ped_delete_document
+// (Studio Pro 11.16+).
 func (b *Backend) DeleteConstant(id model.ID) error {
 	c, err := b.GetConstant(id)
 	if err != nil {

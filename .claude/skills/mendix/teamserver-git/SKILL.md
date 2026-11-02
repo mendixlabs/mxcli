@@ -14,9 +14,9 @@ description: "Commit, branch and push a Mendix project in git the way Studio Pro
 | 42-55 | Branches: create them on the server |
 | 56-101 | Commit from the agent |
 | 102-116 | Push the branch and the notes together, and soon |
-| 117-129 | Never rewrite or merge model history with git |
-| 130-140 | Reading what Studio Pro recorded |
-| 141-149 | Checklist |
+| 117-138 | Never rewrite or merge model history with git |
+| 139-149 | Reading what Studio Pro recorded |
+| 150-158 | Checklist |
 
 <!-- /skill-index -->
 # Working with Git on a Mendix Team Server Project
@@ -116,11 +116,20 @@ git push origin <branch> refs/notes/mx_metadata
 
 ## Never rewrite or merge model history with git
 
-- **No `git merge`, `rebase` or `cherry-pick` of model changes.** The `.mpr` is
-  a SQLite file; git cannot merge it, and a textual merge of `mprcontents/`
-  leaves an index that does not match the files. Studio Pro has a model-aware
-  merge: **Version Control › Merge Changes Here** (*Merge feature branch* or
-  *Cherry Pick*). Studio Pro's history on Team Server is linear for that reason.
+- **No plain `git merge`, `rebase` or `cherry-pick` of model changes.** The
+  `.mpr` is a SQLite file; git cannot merge it (every two-sided model change
+  is a binary conflict), and a textual merge of `mprcontents/` leaves an
+  index that does not match the files. Model-aware merging exists in two
+  forms: **`mxcli git merge <ref>`** from the command line (it hands the
+  conflict to `mx merge` over the three revisions' project files — Studio
+  Pro's own engine, Linux devcontainers included — and commits the resolved
+  model as a normal merge commit with the note), and **Version
+  Control › Merge Changes Here** in Studio Pro (*Merge feature branch* or
+  *Cherry Pick*) — which is also where the conflicts mx cannot auto-resolve
+  go. A conflict `mxcli git merge` cannot resolve — and an engine failure —
+  aborts the merge cleanly; nothing is left half-done.
+  Studio Pro's history on Team Server is linear for a reason: do not "fix"
+  a conflicted model merge by hand-editing files.
 - **No `--amend` or force-push of a pushed commit.** Before pushing, an amend is
   fine: the `notes.rewriteRef` Studio Pro puts in `.git/config` carries the
   note. Re-run `mxcli git note --write` anyway; it is cheap.

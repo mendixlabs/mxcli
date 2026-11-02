@@ -38,9 +38,6 @@ Example:
 			os.Exit(1)
 		}
 		b := mcpbackend.New(globalMCPURL, globalMCPDial).WithTracer(mcpTracer())
-		if globalMCPConcord != "" {
-			b = b.WithConcord(mcpbackend.ConcordConfig{URL: globalMCPConcord, Dial: globalMCPConcordDial})
-		}
 		if err := b.Connect(projectPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)

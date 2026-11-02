@@ -45,20 +45,13 @@ type Backend struct {
 	path   string
 	server ServerInfo
 
-	// concord is an optional second MCP client to the Concord extension server,
-	// used ONLY for capabilities the built-in PED server lacks (delete, save,
-	// validate, run). nil unless configured via WithConcord. PED stays the
-	// authoring path; Concord is the gap-filler.
-	concordURL  string
-	concordDial string
-	concord     *Client
-	// On-Disconnect Concord actions (the gap-fillers PED lacks). saveOnExit flushes
-	// via save_all (--mcp-save), checkOnExit validates via check_model
-	// (--mcp-check), runOnExit starts the app via run_app and prints its URL
-	// (--mcp-run).
-	saveOnExit  bool
+	// On-Disconnect actions. checkOnExit runs a project-wide ped_check_errors
+	// (--mcp-check); runOnExit starts the app through the mendix_app handler and
+	// prints its URL (--mcp-run).
 	checkOnExit bool
 	runOnExit   bool
+	// handlers caches query_handlers getDetails answers by handler name.
+	handlers map[string]bool
 
 	// schemaFetched records element types already fetched via ped_get_schema
 	// this session (the contract asks for a schema fetch before create/add).
@@ -173,14 +166,10 @@ func New(mcpURL, dial string) *Backend {
 	}
 }
 
-// ConcordConfig configures the optional second MCP client to the Concord
-// extension server (gap-filler for capabilities PED lacks) and which of its
-// on-Disconnect actions to run.
-type ConcordConfig struct {
-	URL, Dial   string
-	SaveOnExit  bool // run save_all   (--mcp-save)
-	CheckOnExit bool // run check_model (--mcp-check)
-	RunOnExit   bool // run run_app    (--mcp-run)
+// ExitActions selects what Disconnect runs after the command's writes.
+type ExitActions struct {
+	Check bool // project-wide ped_check_errors (--mcp-check)
+	Run   bool // execute_handler mendix_app run (--mcp-run)
 }
 
 // WithTracer attaches a tool-call tracer (--mcp-verbose / --mcp-trace). The same
@@ -191,13 +180,10 @@ func (b *Backend) WithTracer(t *backend.Tracer) *Backend {
 	return b
 }
 
-// WithConcord enables the Concord client. Returns the receiver for chaining.
-func (b *Backend) WithConcord(cfg ConcordConfig) *Backend {
-	b.concordURL = cfg.URL
-	b.concordDial = cfg.Dial
-	b.saveOnExit = cfg.SaveOnExit
-	b.checkOnExit = cfg.CheckOnExit
-	b.runOnExit = cfg.RunOnExit
+// WithExitActions sets what Disconnect runs. Returns the receiver for chaining.
+func (b *Backend) WithExitActions(a ExitActions) *Backend {
+	b.checkOnExit = a.Check
+	b.runOnExit = a.Run
 	return b
 }
 
@@ -229,19 +215,6 @@ func (b *Backend) Connect(path string) error {
 	b.server = si
 	b.path = path
 
-	// Optional Concord gap-filler client. A failure here is fatal only because the
-	// user explicitly asked for it (--mcp-concord); PED authoring already succeeded.
-	if b.concordURL != "" {
-		cc, err := NewClient(ClientOptions{URL: b.concordURL, Dial: b.concordDial})
-		if err != nil {
-			return fmt.Errorf("create Concord client: %w", err)
-		}
-		cc.trace = b.tracer
-		if _, err := cc.Initialize(); err != nil {
-			return fmt.Errorf("connect to Concord MCP server %q: %w", b.concordURL, err)
-		}
-		b.concord = cc
-	}
 	return nil
 }
 
@@ -253,37 +226,31 @@ func (b *Backend) ServerInfo() ServerInfo { return b.server }
 // ---------------------------------------------------------------------------
 
 func (b *Backend) Disconnect() error {
-	// Persist PED's in-memory writes via Concord before tearing down (PED has no
-	// save tool). A save failure must not be silent — surface it on stderr — but
-	// it does not block teardown (the writes still live in Studio Pro's memory).
-	if b.saveOnExit && b.concord != nil {
-		if err := b.SaveAll(); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: --mcp-save failed, changes remain unsaved in Studio Pro: %v\n", err)
-		}
-	}
-	// Validate the (in-memory) model after writes if requested. Diagnostic, so it
-	// prints to stderr and never blocks teardown.
-	if b.checkOnExit && b.concord != nil {
-		if r, err := b.CheckModel(""); err != nil {
+	// PED persists every write to disk as it lands (measured on 11.12.0 and
+	// 11.16.0), so there is nothing to save here.
+	//
+	// Validate the model after writes if requested. Diagnostic, so it prints to
+	// stderr and never blocks teardown.
+	if b.checkOnExit && b.client != nil {
+		if problems, err := b.CheckProject(); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: --mcp-check failed: %v\n", err)
 		} else {
-			writeCheckReport(os.Stderr, r)
+			writeCheckReport(os.Stderr, problems)
 		}
 	}
 	// Start the app (build + deploy current model) and report its URL, for a
 	// change-then-run loop.
-	if b.runOnExit && b.concord != nil {
-		if err := b.RunApp(); err != nil {
+	if b.runOnExit && b.client != nil {
+		if s, err := b.RunApp(0); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: --mcp-run failed: %v\n", err)
-		} else if s, err := b.GetAppStatus(); err == nil && s.Data.RunningURL != "" {
-			fmt.Fprintf(os.Stderr, "app running at %s\n", s.Data.RunningURL)
+		} else {
+			writeAppStatus(os.Stderr, s)
 		}
 	}
 	if b.reader != nil {
 		err := b.reader.Disconnect()
 		b.reader = nil
 		b.client = nil
-		b.concord = nil
 		b.path = ""
 		return err
 	}

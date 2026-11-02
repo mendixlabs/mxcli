@@ -15,9 +15,9 @@ description: "Configure Mendix security in MDL — module and user roles, access
 | 44-120 | The System-module ceiling — decide the role model around this FIRST |
 | 121-560 | Syntax Reference |
 | 561-575 | Starlark Lint Rule APIs |
-| 576-628 | Common Workflow: Setting Up Module Security |
-| 629-638 | Common Mistakes |
-| 639-648 | Validation |
+| 576-637 | Common Workflow: Setting Up Module Security |
+| 638-647 | Common Mistakes |
+| 648-657 | Validation |
 
 <!-- /skill-index -->
 # Security Management Skill
@@ -625,6 +625,15 @@ Audit members are the one case where naming a member cannot change its rights:
 `grant write *, read (createdDate) on entity M.E to R` is refused, because Mendix has no
 member access to write for it and a rule that carries one fails CE0066. Let the
 rule's default cover it, or change the default.
+
+**A page data source's XPath needs the association member too.** At Production the
+runtime checks member access on every association step of a data-source XPath, on the
+entity the step starts from: `database from M.Account where [M.Order_Account/M.Order/IsActive
+= true()]` with `M.Order_Account` at None in Account's rule (owner Both) opens to an error
+dialog, `No access rights for M$Account/M.Order_Account`, while mxbuild reports nothing.
+A step from an entity the association is not a member of (the TO side of an `OWNER
+Default` association) is not checked, and neither is an XPath inside an access rule
+(measured, 11.15). `mxcli lint` reports it as SEC011.
 
 ## Common Mistakes
 
