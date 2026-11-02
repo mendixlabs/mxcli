@@ -60,7 +60,7 @@ func GenerateTestFlows(suite *TestSuite) string {
 // writeTestFlow writes one test's microflow.
 func writeTestFlow(b *strings.Builder, tc TestCase, v langver.Version) {
 	fmt.Fprintf(b, "/** %s */\n", escapeMDLComment(tc.Name))
-	fmt.Fprintf(b, "%s %s ()\n", createFlow(v), testFlowName(tc))
+	fmt.Fprintf(b, "%s %s ()\n", createFlow, testFlowName(tc))
 	b.WriteString("RETURNS String AS $Verdict\n")
 	b.WriteString("BEGIN\n")
 	fmt.Fprintf(b, "  DECLARE $Verdict String = '%s';\n", verdictPass)
@@ -76,7 +76,7 @@ func writeTestFlow(b *strings.Builder, tc TestCase, v langver.Version) {
 	}
 
 	b.WriteString("  RETURN $Verdict;\n")
-	writeFlowEnd(b, v)
+	writeFlowEnd(b)
 }
 
 // writeSetupCalls writes the @setup microflow calls that precede a test's body.
@@ -370,7 +370,7 @@ func attachOnError(lines []string, v langver.Version, handler []string) []string
 func bodyParsePrefix(v langver.Version) string {
 	var wrap strings.Builder
 	writeScriptHeader(&wrap, v)
-	wrap.WriteString(createFlow(v) + " " + mxTestModule + ".Body ()\nBEGIN\n")
+	wrap.WriteString(createFlow + " " + mxTestModule + ".Body ()\nBEGIN\n")
 	return wrap.String()
 }
 

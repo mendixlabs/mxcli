@@ -32,17 +32,12 @@ func writeScriptHeader(b *strings.Builder, v langver.Version) {
 	}
 }
 
-// createFlow is the statement that (re)defines a generated microflow. Under
-// mdl 0 it stays `CREATE OR REPLACE`, the spelling the generators have always
-// written; mdl 1 spells the same thing `CREATE OR MODIFY` (`or replace` is
-// the deprecated alias MDL-DEPR001 there), and a generated script should not
-// warn about a spelling its author never wrote.
-func createFlow(v langver.Version) string {
-	if v >= langver.V1 {
-		return "CREATE OR MODIFY MICROFLOW"
-	}
-	return "CREATE OR REPLACE MICROFLOW"
-}
+// createFlow is the statement that (re)defines a generated microflow:
+// `CREATE OR MODIFY` under every version. Under mdl 1 `or replace` is the
+// deprecated alias (MDL-DEPR001), and mdl 0 reads both spellings the same way
+// but warns on the old one too — so writing it made `mxcli test` print a
+// warning per test about a script the author never wrote (ako/mxcli#1855).
+const createFlow = "CREATE OR MODIFY MICROFLOW"
 
 // writeBodyLines writes a test body's lines into a generated flow, indented —
 // except a line that starts inside a string literal, whose leading whitespace
@@ -95,14 +90,13 @@ func scanLiteralState(line string, inString, inComment bool, v langver.Version) 
 	return inString, inComment
 }
 
-// writeFlowEnd closes a generated microflow. Under mdl 0 that is `END;` and
-// the `/` line the generators have always written; mdl 1 refuses the `/`
-// (MDL-V1-SLASH), and `;` alone ends the statement.
-func writeFlowEnd(b *strings.Builder, v langver.Version) {
+// writeFlowEnd closes a generated microflow with `END;` alone. `;` ends the
+// statement under every version; a `/` after it is refused under mdl 1 and drew
+// an MDL-V1-SLASH warning under mdl 0, once per generated microflow — the test
+// format's own separator, reported back to its author as if they had written
+// it as a terminator (ako/mxcli#1855).
+func writeFlowEnd(b *strings.Builder) {
 	b.WriteString("END;\n")
-	if v < langver.V1 {
-		b.WriteString("/\n")
-	}
 }
 
 // GenerateTestRunner generates the MDL for a TestRunner microflow from parsed test cases.
@@ -118,7 +112,7 @@ func GenerateTestRunner(suite *TestSuite) string {
 	// Module creation (idempotent — only if MxTest module doesn't exist)
 	b.WriteString("CREATE MODULE MxTest;\n\n")
 
-	b.WriteString(createFlow(v) + " MxTest.TestRunner ()\n")
+	b.WriteString(createFlow + " MxTest.TestRunner ()\n")
 	b.WriteString("RETURNS Boolean AS $AllPassed\n")
 	b.WriteString("BEGIN\n")
 	b.WriteString("  DECLARE $AllPassed Boolean = true;\n")
@@ -140,7 +134,7 @@ func GenerateTestRunner(suite *TestSuite) string {
 
 	b.WriteString(fmt.Sprintf("  LOG INFO NODE 'MXTEST' 'MXTEST:END:%s';\n", escapeMDLString(suite.Name)))
 	b.WriteString("  RETURN $AllPassed;\n")
-	writeFlowEnd(&b, v)
+	writeFlowEnd(&b)
 
 	return b.String()
 }
