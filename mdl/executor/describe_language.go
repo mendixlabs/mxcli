@@ -70,16 +70,26 @@ func selectTranslationText(items []any, preferredLang string) string {
 // page Title, enumeration value Caption).
 // As there, a preferred language that is present but empty wins.
 func pickTextTranslation(t *model.Text, preferredLang string) string {
+	if lang, ok := pickTextLanguage(t, preferredLang); ok {
+		return t.Translations[lang]
+	}
+	return ""
+}
+
+// pickTextLanguage is pickTextTranslation's choice as a language code, for a
+// caller that must also name the languages it did not print. ok is false when
+// no translation qualifies.
+func pickTextLanguage(t *model.Text, preferredLang string) (string, bool) {
 	if t == nil || len(t.Translations) == 0 {
-		return ""
+		return "", false
 	}
 	if preferredLang != "" {
-		if v, ok := t.Translations[preferredLang]; ok {
-			return v
+		if _, ok := t.Translations[preferredLang]; ok {
+			return preferredLang, true
 		}
 	}
-	if v := t.Translations[fallbackLanguageCode]; v != "" {
-		return v
+	if t.Translations[fallbackLanguageCode] != "" {
+		return fallbackLanguageCode, true
 	}
 	// Last resort: any stored translation beats reporting a caption Studio Pro
 	// plainly shows as empty. Pick it by sorted language code — iterating the map
@@ -91,11 +101,11 @@ func pickTextTranslation(t *model.Text, preferredLang string) string {
 	}
 	sort.Strings(langs)
 	for _, lang := range langs {
-		if v := t.Translations[lang]; v != "" {
-			return v
+		if t.Translations[lang] != "" {
+			return lang, true
 		}
 	}
-	return ""
+	return "", false
 }
 
 // authoringLanguage is the language a bare MDL string (Caption:, Title:,

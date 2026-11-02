@@ -1377,7 +1377,7 @@ func execCreateDemoUser(ctx *ExecContext, s *ast.CreateDemoUserStmt) error {
 			if !s.CreateOrModify {
 				return mdlerrors.NewAlreadyExists("demo user", s.UserName)
 			}
-			// Additive: merge roles, update password. Drop and re-create with merged roles.
+			// Additive: merge roles, update password, in place.
 			mergedRoles := du.UserRoles
 			existingSet := make(map[string]bool)
 			for _, r := range mergedRoles {
@@ -1400,9 +1400,9 @@ func execCreateDemoUser(ctx *ExecContext, s *ast.CreateDemoUserStmt) error {
 				reportUnchanged(ctx, "demo user: "+s.UserName)
 				return nil
 			}
-			if err := ctx.Backend.RemoveDemoUser(ps.ID, s.UserName); err != nil {
-				return mdlerrors.NewBackend("update demo user", err)
-			}
+			// AddDemoUser updates an existing user in place. Removing it first
+			// moved it to the end of the list, so every user after it shifted
+			// an index and showed up in the diff (mendixlabs/mxcli#1701).
 			if err := ctx.Backend.AddDemoUser(ps.ID, s.UserName, password, entity, mergedRoles); err != nil {
 				return mdlerrors.NewBackend("update demo user", err)
 			}

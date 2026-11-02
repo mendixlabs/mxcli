@@ -101,7 +101,7 @@ func GenerateEndpointMDL(chainAfterStartup string) string {
 
 	b.WriteString("/** Registers the mxcli test endpoint at boot. Runs no tests. */\n")
 	b.WriteString("@applyentityaccess\n")
-	b.WriteString(createFlow(langver.V1) + " " + endpointStartupFlow + " ()\n")
+	b.WriteString(createFlow + " " + endpointStartupFlow + " ()\n")
 	b.WriteString("RETURNS Boolean AS $Registered\n")
 	b.WriteString("BEGIN\n")
 	b.WriteString("  $Registered = CALL JAVA ACTION " + endpointRegisterAction + "();\n")
@@ -112,7 +112,7 @@ func GenerateEndpointMDL(chainAfterStartup string) string {
 		b.WriteString("  $Chained = CALL MICROFLOW " + chainAfterStartup + "();\n")
 	}
 	b.WriteString("  RETURN $Registered;\n")
-	writeFlowEnd(&b, langver.V1)
+	writeFlowEnd(&b)
 
 	return b.String()
 }

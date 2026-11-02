@@ -1,0 +1,20 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#1864 (mendixlabs/mxcli#1706) — `dateFormat: custom` on a
+-- dynamic-text parameter. Check accepts the value in any case, but it was
+-- stored as written: "DateFormat": "custom" is not a Mendix value, so the
+-- runtime showed the default format.
+--
+-- After the fix `mxcli bson dump --type page --object Bug1864.Shift_View`
+-- shows "DateFormat": "Custom" (before: "custom").
+-- ============================================================================
+
+create module Bug1864;
+
+create persistent entity Bug1864.Shift (Starts: DateTime);
+
+create page Bug1864.Shift_View (Title: 'Shift', Layout: Atlas_Core.Atlas_Default, Params: ($Shift: Bug1864.Shift)) {
+  dataview dvShift (DataSource: $Shift) {
+    dynamictext textStarts (Content: '{1}', ContentParams: ({1} = Starts format (dateFormat: custom, customDateFormat: 'd MMM yyyy, HH:mm')))
+  }
+};

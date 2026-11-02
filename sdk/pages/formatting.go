@@ -20,6 +20,16 @@ func CanonicalDateFormat(s string) (string, bool) {
 	return v, ok
 }
 
+// enumFormats maps a lowercase EnumFormat value to the stored enum value.
+var enumFormats = map[string]string{"text": "Text", "image": "Image"}
+
+// CanonicalEnumFormat returns the stored spelling of a FormattingInfo
+// EnumFormat value (Text, Image), matched case-insensitively.
+func CanonicalEnumFormat(s string) (string, bool) {
+	v, ok := enumFormats[strings.ToLower(s)]
+	return v, ok
+}
+
 // formattingProperties lists, per widget storage type, the FormattingInfo
 // fields MDL sets on it, in canonical spelling and describe order.
 //

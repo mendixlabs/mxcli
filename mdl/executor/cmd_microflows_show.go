@@ -327,7 +327,7 @@ func describeMicroflowMode(ctx *ExecContext, name ast.QualifiedName, opts descri
 	// them while `diff-local` printed all three. That is duplicate-resolver
 	// drift in one file; every header property added from here on has to go
 	// through a shared helper, or the next one diverges the same way.
-	lines = append(lines, microflowDocumentPropertyLines(targetMf)...)
+	lines = append(lines, microflowDocumentPropertyLines(ctx, targetMf)...)
 
 	// BEGIN block
 	lines = append(lines, "begin")
@@ -685,7 +685,7 @@ func renderMicroflowMDL(
 
 	lines = append(lines, exposeClauseLines(mf)...)
 	if flowType == "microflow" {
-		lines = append(lines, microflowDocumentPropertyLines(mf)...)
+		lines = append(lines, microflowDocumentPropertyLines(ctx, mf)...)
 	} else if flowType == "nanoflow" && mf.ExportLevel == types.ExportLevelAPI {
 		// A nanoflow has an export level and nothing else of the three: the
 		// wrapped Microflow's zero AllowConcurrentExecution would otherwise
@@ -1710,7 +1710,7 @@ func microflowBodyWarnings(
 // gave: every document in every marketplace module measured stores "Hidden" and
 // allows concurrent execution, so emitting them unconditionally would add three
 // lines to every describe in order to say nothing.
-func microflowDocumentPropertyLines(mf *microflows.Microflow) []string {
+func microflowDocumentPropertyLines(ctx *ExecContext, mf *microflows.Microflow) []string {
 	var lines []string
 	if mf.URL != "" {
 		lines = append(lines, fmt.Sprintf("url '%s'", escapeMDLString(mf.URL)))
@@ -1739,7 +1739,7 @@ func microflowDocumentPropertyLines(mf *microflows.Microflow) []string {
 			// dropping it would describe a microflow that fails CE4899 — and
 			// flag the languages a replay would not carry, the same honesty rule
 			// DESCRIBE applies to a range bounded by another attribute.
-			text, langs := describableMessage(mf.ConcurrencyErrorMessage)
+			text, langs := describableMessage(mf.ConcurrencyErrorMessage, describeDefaultLanguage(ctx))
 			line += fmt.Sprintf(" error message '%s'", escapeMDLString(text))
 			if len(langs) > 0 {
 				line += fmt.Sprintf("  -- also translated into %s; replaying this line keeps only the one shown",
@@ -1753,16 +1753,22 @@ func microflowDocumentPropertyLines(mf *microflows.Microflow) []string {
 
 // describableMessage returns the text DESCRIBE prints and the other languages
 // the stored message carries, sorted.
-func describableMessage(t *model.Text) (string, []string) {
+//
+// The text is chosen by pickTextLanguage, the rule every other described
+// text follows (#702): the project's default language, else en_US, else the
+// first non-empty one. Taking the alphabetically first language printed de_DE
+// on an en_US project, and a rebuild from that line stored the German text under
+// en_US (#1869).
+func describableMessage(t *model.Text, defaultLang string) (string, []string) {
+	shown, _ := pickTextLanguage(t, defaultLang)
 	var langs []string
 	for lang := range t.Translations {
-		langs = append(langs, lang)
+		if lang != shown {
+			langs = append(langs, lang)
+		}
 	}
 	sort.Strings(langs)
-	if len(langs) == 0 {
-		return "", nil
-	}
-	return t.Translations[langs[0]], langs[1:]
+	return t.Translations[shown], langs
 }
 
 // allDeclared reports whether every id is a crossed merge the description

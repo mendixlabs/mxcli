@@ -12,18 +12,18 @@ description: "Write and run MDL-based microflow tests with `mxcli test` — anno
 |---|---|
 | 33-39 | Reference files |
 | 40-50 | When to Use This Skill |
-| 51-180 | Prerequisites |
-| 181-223 | Test File Formats |
-| 224-239 | string Operations |
-| 240-263 | Running Tests |
-| 264-457 | How It Works |
-| 458-496 | Check a test file before you run it |
-| 497-618 | Writing Good Tests |
-| 619-633 | Test File Organization |
-| 634-646 | Interpreting Failures |
-| 647-668 | CI Integration |
-| 669-675 | Related Skills |
-| 676-678 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
+| 51-184 | Prerequisites |
+| 185-227 | Test File Formats |
+| 228-243 | string Operations |
+| 244-267 | Running Tests |
+| 268-461 | How It Works |
+| 462-500 | Check a test file before you run it |
+| 501-622 | Writing Good Tests |
+| 623-637 | Test File Organization |
+| 638-650 | Interpreting Failures |
+| 651-672 | CI Integration |
+| 673-679 | Related Skills |
+| 680-682 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
 
 <!-- /skill-index -->
 # Test Microflows Skill
@@ -81,8 +81,12 @@ mxcli test tests/ -p app.mpr --local --db-type hsqldb
 
 It is still a scratch database (`<project>_test`), separate from the one
 `run --local --db-type hsqldb` uses, so a dev loop on the file database keeps its
-data and its file lock. `--db-type` applies only to `--local`; it is refused with
-`--attach` (which uses the attached app's database) and on the Docker path.
+data and its file lock. On either database type each run starts the
+`<project>_test` database **empty** — the file database's files are removed, and on
+PostgreSQL the app role's objects in that one database are dropped — so committed
+or seeded data never carries over between runs.
+`--db-type` applies only to `--local`; it is refused with `--attach` (which uses
+the attached app's database) and on the Docker path.
 
 The **deployment directory is shared**, and not by choice: mxbuild always writes
 it to `<app dir>/deployment` and has no option to move it. That used to blank the

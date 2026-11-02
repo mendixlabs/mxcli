@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/sdk/pages"
 )
 
 // TestFormattingInfoFromParamFormat: a format block starts from the Mendix
@@ -40,6 +41,33 @@ func TestFormattingInfoFromParamFormat(t *testing.T) {
 	}})
 	if dt.DateFormat != "Custom" || dt.CustomDateFormat != "dd-MM-yyyy" {
 		t.Errorf("custom date: %q / %q", dt.DateFormat, dt.CustomDateFormat)
+	}
+}
+
+// TestFormattingInfoFromParamFormat_EnumCase: check accepts the enum keys in
+// any case (MDL-WIDGET18 lowercases before looking them up), so the converter
+// must store Mendix's spelling. `dateFormat: custom` was stored as "custom",
+// which Mendix does not read as Custom: the runtime showed the default format
+// and every rerun diffed as modified (ako/mxcli#1864, mendixlabs/mxcli#1706).
+func TestFormattingInfoFromParamFormat_EnumCase(t *testing.T) {
+	tests := []struct {
+		key, value, want string
+		got              func(fi *pages.FormattingInfo) string
+	}{
+		{"dateformat", "custom", "Custom", func(fi *pages.FormattingInfo) string { return fi.DateFormat }},
+		{"dateformat", "datetime", "DateTime", func(fi *pages.FormattingInfo) string { return fi.DateFormat }},
+		{"dateformat", "TIME", "Time", func(fi *pages.FormattingInfo) string { return fi.DateFormat }},
+		{"enumformat", "image", "Image", func(fi *pages.FormattingInfo) string { return fi.EnumFormat }},
+		// Control: the canonical spelling passes through unchanged.
+		{"dateformat", "Custom", "Custom", func(fi *pages.FormattingInfo) string { return fi.DateFormat }},
+	}
+	for _, tt := range tests {
+		fi := formattingInfoFromParamFormat(&ast.ParamFormatV3{Props: []ast.ParamFormatProp{
+			{Key: tt.key, Value: tt.value}, {Key: "customdateformat", Value: "d MMM yyyy, HH:mm"},
+		}})
+		if got := tt.got(fi); got != tt.want {
+			t.Errorf("%s: %s stored as %q, want %q", tt.key, tt.value, got, tt.want)
+		}
 	}
 }
 
