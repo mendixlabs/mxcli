@@ -39,11 +39,17 @@ const (
 //   - Every test gets its own variable scope, so the suffix-renaming the
 //     monolith needs to keep `$result` in test 1 from colliding with `$result`
 //     in test 2 is simply not required here.
+//
+// The script does not create the MxTest module: every caller runs it into a
+// project that already holds one — straight after GenerateEndpointMDL, or under
+// --watch and --attach into a project hosting the endpoint. A `CREATE MODULE`
+// here made exec print "Module 'MxTest' already exists" on every run, on a
+// project that had no MxTest module before it (ako/mxcli#1856).
 func GenerateTestFlows(suite *TestSuite) string {
 	var b strings.Builder
 	v := suiteVersion(suite)
 	writeScriptHeader(&b, v)
-	b.WriteString("CREATE MODULE " + mxTestModule + ";\n\n")
+	b.WriteString("\n")
 	for _, tc := range suite.Tests {
 		// A test with an uncompilable @expect gets no microflow. The runner
 		// reports it as an ERROR from the parse message, which is more useful
