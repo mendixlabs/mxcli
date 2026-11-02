@@ -394,7 +394,14 @@ func demoUserCtx(t *testing.T, users ...*security.DemoUser) (*ExecContext, *byte
 			ps.DemoUsers = kept
 			return nil
 		},
+		// Adds, or updates by user name in place — the backend's contract.
 		AddDemoUserFunc: func(_ model.ID, name, pw, entity string, roles []string) error {
+			for _, du := range ps.DemoUsers {
+				if strings.EqualFold(du.UserName, name) {
+					du.Password, du.Entity, du.UserRoles = pw, entity, roles
+					return nil
+				}
+			}
 			ps.DemoUsers = append(ps.DemoUsers, &security.DemoUser{UserName: name, Password: pw, Entity: entity, UserRoles: roles})
 			return nil
 		},
