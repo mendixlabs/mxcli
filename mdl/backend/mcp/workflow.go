@@ -281,8 +281,8 @@ func (b *Backend) upsertSessionWorkflow(wf *workflows.Workflow) {
 	b.sessionWorkflows = append(b.sessionWorkflows, wf)
 }
 
-// DeleteWorkflow drops a workflow via deleteDocument: ped_delete_document where Studio Pro has it (11.16+), else
-// Concord (--mcp-concord).
+// DeleteWorkflow drops a workflow via deleteDocument: ped_delete_document
+// (Studio Pro 11.16+).
 func (b *Backend) DeleteWorkflow(id model.ID) error {
 	wf, err := b.GetWorkflow(id)
 	if err != nil {

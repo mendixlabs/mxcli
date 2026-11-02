@@ -22,7 +22,7 @@ import (
 // mxcli can author both (it must: a project being converted up already contains
 // them), and nothing told the author they were reaching for a widget their app
 // cannot build. This rule is that telling.
-func TestLegacyImageWidget_NamesBothTypesAndTheReplacement(t *testing.T) {
+func TestReactUnsupportedWidget_NamesTheImageTypesAndTheReplacement(t *testing.T) {
 	cases := []struct {
 		widgetType string
 		wantTerm   string
@@ -33,7 +33,7 @@ func TestLegacyImageWidget_NamesBothTypesAndTheReplacement(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.widgetType, func(t *testing.T) {
-			got, ok := LegacyImageWidget(c.widgetType)
+			got, ok := ReactUnsupportedWidget(c.widgetType)
 			if !ok {
 				t.Fatalf("%s not recognised as a legacy image widget", c.widgetType)
 			}
@@ -49,11 +49,11 @@ func TestLegacyImageWidget_NamesBothTypesAndTheReplacement(t *testing.T) {
 	}
 }
 
-// The CONTROL, and the reason this is a deny-list of two rather than anything
+// The CONTROL, and the reason this is a deny-list rather than anything
 // broader: every other widget must be silent. A rule that fires on the
 // PLUGGABLE image — the widget it tells people to move TO — would be worse than
 // no rule at all.
-func TestLegacyImageWidget_IsSilentOnEverythingElse(t *testing.T) {
+func TestReactUnsupportedWidget_IsSilentOnTheReplacements(t *testing.T) {
 	for _, widgetType := range []string{
 		"CustomWidgets$CustomWidget", // the pluggable image lives here
 		"Forms$DynamicText",
@@ -61,8 +61,8 @@ func TestLegacyImageWidget_IsSilentOnEverythingElse(t *testing.T) {
 		"DocumentTemplates$StaticImageViewer", // a document template, not a page
 		"",
 	} {
-		if got, ok := LegacyImageWidget(widgetType); ok {
-			t.Errorf("%q was reported as a legacy image widget (%+v)", widgetType, got)
+		if got, ok := ReactUnsupportedWidget(widgetType); ok {
+			t.Errorf("%q was reported as React-unsupported (%+v)", widgetType, got)
 		}
 	}
 }
@@ -70,8 +70,8 @@ func TestLegacyImageWidget_IsSilentOnEverythingElse(t *testing.T) {
 // The rule's identity is part of its contract: an ID that collides with another
 // rule's silently shadows it in the config, and the category decides what
 // `--category` filters it into.
-func TestLegacyImageWidgetRule_Identity(t *testing.T) {
-	r := NewLegacyImageWidgetRule()
+func TestReactUnsupportedWidgetRule_Identity(t *testing.T) {
+	r := NewReactUnsupportedWidgetRule()
 	if r.ID() != "MPR012" {
 		t.Errorf("ID = %q, want MPR012", r.ID())
 	}
@@ -90,7 +90,7 @@ func TestLegacyImageWidgetRule_Identity(t *testing.T) {
 // platform is what tells them apart — note that the native layout lives in a
 // Marketplace module (Atlas_Core), so the lookup must not apply the
 // platform-module filter the iterators use. The web page is the control.
-func TestLegacyImageWidgetRule_SkipsNativePages(t *testing.T) {
+func TestReactUnsupportedWidgetRule_SkipsNativePages(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +122,7 @@ func TestLegacyImageWidgetRule_SkipsNativePages(t *testing.T) {
 			t.Fatalf("%s: %v", stmt, err)
 		}
 	}
-	violations := NewLegacyImageWidgetRule().Check(linter.NewLintContextFromDB(catalog.WrapSqlDB(db)))
+	violations := NewReactUnsupportedWidgetRule().Check(linter.NewLintContextFromDB(catalog.WrapSqlDB(db)))
 	if len(violations) != 1 || violations[0].Location.DocumentName != "Logboek_Images" {
 		var got []string
 		for _, v := range violations {

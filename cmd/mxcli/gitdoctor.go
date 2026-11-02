@@ -31,11 +31,23 @@ import (
 
 var errDoctorIssuesRemain = errors.New("issues remain (re-run with --fix to repair)")
 
-// mxConfigKeys is the local git config Studio Pro writes and expects.
-var mxConfigKeys = [][2]string{
-	{"core.autocrlf", "False"},
-	{"mendix.commits-since-gc", "0"},
-	{"mendix.lineEndingResetDone", "True"},
+// mxConfigKey is one entry of the local git config Studio Pro writes.
+// fallback is what a missing key is backfilled with. presentValuePasses marks
+// the keys whose value is Studio Pro's own bookkeeping — measured on a real
+// checkout (the mx-git-lab lab, S0), commits-since-gc counts up between gc
+// runs and lineEndingResetDone comes back in any case, so only a MISSING key
+// is an issue there. core.autocrlf is judged: true (or input) makes a
+// checkout rewrite line endings inside .mxunit files on Windows.
+type mxConfigKey struct {
+	key                string
+	fallback           string
+	presentValuePasses bool
+}
+
+var mxConfigKeys = []mxConfigKey{
+	{"core.autocrlf", "False", false},
+	{"mendix.commits-since-gc", "0", true},
+	{"mendix.lineEndingResetDone", "True", true},
 }
 
 var (
@@ -52,25 +64,32 @@ func doctorRun(root, mprPath, remoteOverride, version string, fix bool, out io.W
 	found, fixed := 0, 0
 
 	fmt.Fprintln(out, "Git local config")
-	for _, kv := range mxConfigKeys {
-		key, want := kv[0], kv[1]
+	for _, ck := range mxConfigKeys {
+		key, want := ck.key, ck.fallback
 		current := gitConfigLocal(root, key)
-		if strings.EqualFold(current, want) {
-			fmt.Fprintf(out, "  [x] %s = %s\n", key, current)
-			continue
-		}
-		found++
-		if current == "" {
+		switch {
+		case current == "":
+			found++
 			fmt.Fprintf(out, "  [ ] %s — missing (expected %s)\n", key, want)
-		} else {
-			fmt.Fprintf(out, "  [ ] %s = %s (expected %s)\n", key, current, want)
-		}
-		if fix {
-			if _, err := gitOut(root, "config", "--local", key, want); err != nil {
-				return fmt.Errorf("set %s: %w", key, err)
+			if fix {
+				if _, err := gitOut(root, "config", "--local", key, want); err != nil {
+					return fmt.Errorf("set %s: %w", key, err)
+				}
+				fixed++
+				fmt.Fprintf(out, "      set to %s\n", want)
 			}
-			fixed++
-			fmt.Fprintf(out, "      set to %s\n", want)
+		case ck.presentValuePasses || strings.EqualFold(current, "false"):
+			fmt.Fprintf(out, "  [x] %s = %s\n", key, current)
+		default:
+			found++
+			fmt.Fprintf(out, "  [ ] %s = %s (expected %s)\n", key, current, want)
+			if fix {
+				if _, err := gitOut(root, "config", "--local", key, want); err != nil {
+					return fmt.Errorf("set %s: %w", key, err)
+				}
+				fixed++
+				fmt.Fprintf(out, "      set to %s\n", want)
+			}
 		}
 	}
 

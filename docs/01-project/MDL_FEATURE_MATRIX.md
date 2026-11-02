@@ -17,42 +17,41 @@ sits above both axes — how the whole Maia/mxcli spectrum compares.)
 
 ## Agent × tooling at a glance (Maia vs mxcli)
 
-One-slide comparison of how a Mendix app can be edited by an AI agent across five
+One-slide comparison of how a Mendix app can be edited by an AI agent across four
 setups: **Maia** (Studio Pro's built-in agent — reads/writes the model through
 Studio Pro's *internal* model APIs) → **Maia + MCP** (those same APIs now exposed
-via the PED MCP server) → **Maia + MCP + Concord** (plus the Concord extension's
-tools) → **mxcli** (external CLI, file-based on the on-disk `.mpr`, project closed) →
-**mxcli + MCP + Concord** (external CLI driving the **live** model while Studio Pro
-is open).
+via the PED MCP server) → **mxcli** (external CLI, file-based on the on-disk `.mpr`,
+project closed) → **mxcli + MCP** (external CLI driving the **live** model while
+Studio Pro is open).
 
-The first three columns share Maia's **native reach** — MCP/Concord don't change
+The first two columns share Maia's **native reach** — MCP doesn't change
 *what Maia can do*; they expose that reach to **external** agents (the bottom
 *drivable externally* row). PED is exactly that exposure of Studio Pro's model APIs,
-and mxcli (cols 4–5) is the external agent consuming it. The capability rows show
+and mxcli (cols 3–4) is the external agent consuming it. The capability rows show
 each setup's *own* reach; a Maia–vs–mxcli-live gap on a row is either a PED-subset
 limit or just where each agent's implementation has gotten to.
 
 Legend: ✓ full · ◑ partial / subset · ✗ none · — n/a.
 
-| Capability | Maia | Maia + MCP | Maia + MCP + Concord | mxcli (file) | mxcli + MCP + Concord |
-|------------|:----:|:----------:|:--------------------:|:------------:|:---------------------:|
-| **Authoring** | | | | | |
-| Domain model — entities, view entities, enums, associations, constraints | ✓ | ✓ | ✓ | ✓ | ◑¹ |
-| Pages (incl. pluggable widgets) | ◑² | ◑² | ◑² | ✓ | ◑² |
-| Microflows | ◑³ | ◑³ | ◑³ | ✓ | ◑³ |
-| Workflows | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Theming / styling | ✓ | ✓ | ✓ | ◑⁴ | ◑⁴ |
-| Integrations — REST/OData/SOAP, business events, mappings, mobile | ✗ | ✗ | ✗ | ◑⁵ | ✗ |
-| Security — roles & access | ✗ | ✗ | ✗ | ✓ | ✗ |
-| Java / JS / CSS source | ✓⁶ | ✓⁶ | ✓⁶ | ✓ | ✓ |
-| **Search & analysis** | | | | | |
-| Impact / lint / catalog SQL / full-text | ✗ | ✗ | ✗ | ✓ | ✓ |
-| Mendix KB search / NL→OQL | ✓ | ✓ | ✓ | ✗ | ✗ |
-| **Reach & workflow** | | | | | |
-| Validation before writing | ◑⁷ | ◑⁷ | ◑⁷ | ✓ | ✓ |
-| Batch / scriptable / CI | ✗ | ✗ | ✗ | ✓ | ✓ |
-| Live edits in the open IDE | ✓ | ✓ | ✓ | ✗⁸ | ✓ |
-| Drivable by an external agent (headless) | ✗ | ◑⁹ | ✓ | ✓ | ✓ |
+| Capability | Maia | Maia + MCP | mxcli (file) | mxcli + MCP |
+|------------|:----:|:----------:|:------------:|:-----------:|
+| **Authoring** | | | | |
+| Domain model — entities, view entities, enums, associations, constraints | ✓ | ✓ | ✓ | ◑¹ |
+| Pages (incl. pluggable widgets) | ◑² | ◑² | ✓ | ◑² |
+| Microflows | ◑³ | ◑³ | ✓ | ◑³ |
+| Workflows | ✓ | ✓ | ✓ | ✓ |
+| Theming / styling | ✓ | ✓ | ◑⁴ | ◑⁴ |
+| Integrations — REST/OData/SOAP, business events, mappings, mobile | ✗ | ✗ | ◑⁵ | ✗ |
+| Security — roles & access | ✗ | ✗ | ✓ | ✗ |
+| Java / JS / CSS source | ✓⁶ | ✓⁶ | ✓ | ✓ |
+| **Search & analysis** | | | | |
+| Impact / lint / catalog SQL / full-text | ✗ | ✗ | ✓ | ✓ |
+| Mendix KB search / NL→OQL | ✓ | ✓ | ✗ | ✗ |
+| **Reach & workflow** | | | | |
+| Validation before writing | ◑⁷ | ◑⁷ | ✓ | ✓ |
+| Batch / scriptable / CI | ✗ | ✗ | ✓ | ✓ |
+| Live edits in the open IDE | ✓ | ✓ | ✗⁸ | ✓ |
+| Drivable by an external agent (headless) | ✗ | ◑⁹ | ✓ | ✓ |
 
 ¹ mxcli over MCP can't author indexes or entity validation rules (file mode can);
 Maia does constraints, not indexes. &nbsp; ² Pluggable widgets: Maia not yet; mxcli
@@ -65,8 +64,9 @@ reads. &nbsp; ⁶ Maia via the `write_file` virtual FS; mxcli edits source on di
 directly (any mode). &nbsp; ⁷ Maia: live, reactive validation in the IDE; mxcli:
 static pre-flight (`mxcli check`) *before* writing. &nbsp; ⁸ File mode edits the
 on-disk `.mpr`; reopen Studio Pro to see changes. &nbsp; ⁹ MCP exposes Maia's
-read + authoring surface (the PED subset) to external agents; Concord additionally
-exposes delete + save / build-run. Maia performs all of this natively in-IDE — its
+read + authoring surface (the PED subset) to external agents; Studio Pro 11.16
+adds delete (`ped_delete_document`) and run (the `mendix_app` handler), though on
+11.16.0 delete fails for callers outside Studio Pro's own agent session. Maia performs all of this natively in-IDE — its
 column is about *external* reach.
 
 **Takeaway:** Maia has broad **native** authoring (domain model, pages, microflows,
@@ -74,7 +74,7 @@ workflows, theming, source), and **MCP is what exposes that surface to external
 agents** — the architectural point. mxcli is that external agent: **mxcli (file)** is
 the only setup with *full* authoring (indexes, security, integrations) plus analysis
 + pre-flight validation + batch/CI, at the cost of the project being closed;
-**mxcli + MCP + Concord** keeps the analysis / validation / scripting while editing
+**mxcli + MCP** keeps the analysis / validation / scripting while editing
 the **live** model (authoring capped to the PED subset, which differs slightly from
 Maia's — pluggable widgets yes, theming/source via disk). Maia owns the
 conversational + Mendix-KB experience and in-IDE liveness. (Maia capabilities per the
@@ -110,19 +110,19 @@ live distinction is **MPR vs MCP**.
 | **Modules** | Y | Y | Y | P | CREATE only (flushes to disk); no module DROP |
 | **Entities** | Y | Y | Y | Y | CREATE/DROP; ALTER add/drop/rename/docs — MODIFY *type* rejected (PED can't migrate) |
 | **Associations** | Y | Y | Y | P | Within-module CREATE/DROP; no custom delete behavior; cross-module / external N |
-| **Enumerations** | Y | Y | Y | P | CREATE; DROP via `ped_delete_document` (Studio Pro 11.16+) or Concord; ALTER (modify values) N |
+| **Enumerations** | Y | Y | Y | P | CREATE; DROP via `ped_delete_document` (Studio Pro 11.16+); ALTER (modify values) N |
 | **Microflows** | Y | Y | Y | P | Broad CREATE (most actions + control flow); rejects show-page, cast, retrieve sort/range, inheritance/rule splits |
-| **Nanoflows** | Y | Y | Y | N | **Not creatable** — PED's `ped_create_document` rejects `Microflows$Nanoflow` (create whitelist covers microflows, not nanoflows); CREATE/ALTER rejected with a clear error. DROP of an existing nanoflow works via Concord. |
+| **Nanoflows** | Y | Y | Y | N | **Not creatable** — PED's `ped_create_document` rejects `Microflows$Nanoflow` (create whitelist covers microflows, not nanoflows); CREATE/ALTER rejected with a clear error. DROP of an existing nanoflow uses `ped_delete_document` (Studio Pro 11.16+). |
 | **Pages** | Y | Y | Y | P | CREATE + ALTER via `pg_*`; widget/data-source coverage grows one type at a time |
 | **Snippets** | Y | Y | Y | P | ALTER via the page mutator; CREATE not wired |
 | **Layouts** | Y | Y | Y | N | Not wired (reads delegate to the local `.mpr`) |
 | **View Entities** | Y | Y | Y | P | CREATE; CREATE OR REPLACE fails (no delete-document); DROP orphans the source doc |
 | **Workflows** | Y | Y | Y | Y | **Complete** — CREATE / CREATE OR REPLACE / DROP / ALTER, all activity types & ops, any nesting depth |
 | **Java Actions** | Y | Y | Y | N | **Not authorable** — PED refuses to create `JavaActions$JavaAction` (backed by a `.java` source the IDE manages); CREATE/ALTER rejected with a clear error. *Calling* a Java action from a microflow IS supported. |
-| **Constants** | Y | Y | Y | P | CREATE / CREATE OR MODIFY (value + exposed-to-client) / DROP (via Concord); type limited to String/Integer/Decimal/Boolean/DateTime; in-place type change rejected; documentation not carried |
+| **Constants** | Y | Y | Y | P | CREATE / CREATE OR MODIFY (value + exposed-to-client) / DROP (`ped_delete_document`, Studio Pro 11.16+); type limited to String/Integer/Decimal/Boolean/DateTime; in-place type change rejected; documentation not carried |
 | **OData Clients / Services** | Y | Y | Y | N | Not wired |
 | **External Entities** | Y | Y | Y | N | Not wired |
-| **Business Events** | Y | Y | Y | P | SHOW/DESCRIBE read the local `.mpr`; DROP via `ped_delete_document` (Studio Pro 11.16+) or Concord. **CREATE/ALTER blocked** — PED won't create `BusinessEvents$BusinessEventService` (off the create whitelist). The supporting domain model (published-event entities `extends BusinessEvents.PublishedBusinessEvent`, constants) IS creatable. |
+| **Business Events** | Y | Y | Y | P | SHOW/DESCRIBE read the local `.mpr`; DROP via `ped_delete_document` (Studio Pro 11.16+). **CREATE/ALTER blocked** — PED won't create `BusinessEvents$BusinessEventService` (off the create whitelist). The supporting domain model (published-event entities `extends BusinessEvents.PublishedBusinessEvent`, constants) IS creatable. |
 | **Navigation** | Y | Y | Y | N | Not wired |
 | **Project Settings** | Y | Y | Y | N | Not wired |
 
@@ -130,7 +130,7 @@ live distinction is **MPR vs MCP**.
 
 | Feature | Mendix | MDL | MPR | MCP | MCP notes |
 |---------|:------:|:---:|:---:|:---:|-----------|
-| **Module / user roles, demo users, project security, entity / microflow / nanoflow / page access** | Y | Y | Y | N | **Not authorable via MCP** — PED's document tools reject every `Security$*` type and Concord exposes security *reads* only; neither server has a write path. |
+| **Module / user roles, demo users, project security, entity / microflow / nanoflow / page access** | Y | Y | Y | N | **Not authorable via MCP** — PED's document tools reject every `Security$*` type; there is no write path. |
 
 ### Project organization
 

@@ -661,6 +661,12 @@ func overlayItemValue(value bson.D, entry pages.PropertyTypeIDEntry, spec backen
 			value = setBSONField(value, "TextTemplate", BuildEmptyClientTemplate())
 			break
 		}
+		// A text the statement states as empty: one empty translation, so a
+		// rewrite does not carry the stored text back (EmptyText).
+		if spec.TextTemplate == "" && spec.EmptyText {
+			value = setBSONField(value, "TextTemplate", BuildClientTemplateWithTextAndParams("", nil))
+			break
+		}
 		// Skip when the spec carries no text — leave the value's existing
 		// TextTemplate untouched (null, set by createDefaultWidgetValue).
 		// Inserting a placeholder ClientTemplate here causes Studio Pro

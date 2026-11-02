@@ -14,9 +14,9 @@ description: "Change the model through mxcli while Studio Pro has the project op
 | 36-42 | How it works (hybrid: local reads, live writes) |
 | 43-61 | Connect |
 | 62-91 | What you can change via MCP — check first |
-| 92-104 | Two MCP servers — use the built-in one by default |
-| 105-114 | Caveats |
-| 115-122 | Verify your change |
+| 92-99 | The MCP server |
+| 100-112 | Caveats |
+| 113-120 | Verify your change |
 
 <!-- /skill-index -->
 # Live-Editing an Open Studio Pro Project with mxcli (MCP)
@@ -89,26 +89,24 @@ New modules and their dependents resolve within the same run, so
 document in a folder at create time (`create microflow X.MF folder 'A/B'`), since
 MOVE can't re-parent over MCP.
 
-## Two MCP servers — use the built-in one by default
+## The MCP server
 
-The machine may run two MCP servers:
-
-- **Studio Pro built-in (port 7782 by default)** — model authoring. **Use this by
-  default.** From **11.13** Studio Pro **auto-selects a free port** when 7782 is
-  taken, so multiple instances can run side by side. The active port is shown in
-  Studio Pro's **status bar** (and set under Preferences > AI > MCP Server) — read
-  it there rather than assuming 7782, and pass it to `--mcp-dial`.
-- **Concord (port 7783)** — a temporary gap-filler with operational/refactor tools
-  (`delete_document`, `save_all`, `run_app`, `check_model`). **Only** reach for
-  Concord when the built-in server lacks the capability you need.
+Studio Pro's built-in MCP server (port 7782 by default) is the only one mxcli
+uses. From **11.13** Studio Pro **auto-selects a free port** when 7782 is taken, so
+multiple instances can run side by side. The active port is shown in Studio Pro's
+**status bar** (and set under Preferences > AI > MCP Server) — read it there rather
+than assuming 7782, and pass it to `--mcp-dial`.
 
 ## Caveats
 
-- **Writes are unsaved.** They land in Studio Pro's in-memory model (shown as
-  unsaved). Save in Studio Pro to persist to disk.
-- **No DROP of standalone documents** (enumeration / microflow / page) through the
-  built-in server — it has no delete tool. Remove them in Studio Pro (or via
-  Concord's `delete_document`).
+- **Writes are saved as they land.** PED writes each change to disk immediately
+  (measured on 11.12.0 and 11.16.0), so there is no save step.
+- **DROP of standalone documents needs Studio Pro 11.16+** (`ped_delete_document`).
+  On 11.16.0 that tool fails with `Session 'mcp-server' not found` for callers
+  outside Studio Pro's own agent session; delete the document in Studio Pro then.
+- **`--mcp-check`** runs Studio Pro's project-wide error check (11.15+), and
+  **`--mcp-run`** starts the app through the `mendix_app` handler and prints its URL
+  (11.16+).
 - **`-p` must match the open project.** A mismatched `-p` silently reads the wrong
   model.
 

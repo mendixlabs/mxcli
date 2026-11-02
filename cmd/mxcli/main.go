@@ -178,9 +178,6 @@ beta language; --mdl 0 starts them in the alpha language, and in the REPL an
 		globalJSONFlag, _ = cmd.Flags().GetBool("json")
 		globalMCPURL, _ = cmd.Flags().GetString("mcp")
 		globalMCPDial, _ = cmd.Flags().GetString("mcp-dial")
-		globalMCPConcord, _ = cmd.Flags().GetString("mcp-concord")
-		globalMCPConcordDial, _ = cmd.Flags().GetString("mcp-concord-dial")
-		globalMCPSave, _ = cmd.Flags().GetBool("mcp-save")
 		globalMCPCheck, _ = cmd.Flags().GetBool("mcp-check")
 		globalMCPRun, _ = cmd.Flags().GetBool("mcp-run")
 		globalMCPVerbose, _ = cmd.Flags().GetBool("mcp-verbose")
@@ -248,15 +245,12 @@ var globalJSONFlag bool
 // routes model writes to a live Studio Pro while reads come from the local
 // .mpr given by -p. See docs/11-proposals/PROPOSAL_mcp_backend.md.
 var (
-	globalMCPURL         string
-	globalMCPDial        string
-	globalMCPConcord     string
-	globalMCPConcordDial string
-	globalMCPSave        bool
-	globalMCPCheck       bool
-	globalMCPRun         bool
-	globalMCPVerbose     bool
-	globalMCPTrace       bool
+	globalMCPURL     string
+	globalMCPDial    string
+	globalMCPCheck   bool
+	globalMCPRun     bool
+	globalMCPVerbose bool
+	globalMCPTrace   bool
 )
 
 // resolveFormat returns the effective output format for a command.
@@ -356,11 +350,8 @@ func init() {
 	rootCmd.PersistentFlags().Bool("json", false, "Output in JSON format")
 	rootCmd.PersistentFlags().String("mcp", "", "Route model writes to a live Studio Pro MCP server (e.g. http://localhost:7782/mcp); reads come from -p")
 	rootCmd.PersistentFlags().String("mcp-dial", "", "Override the TCP address dialed for --mcp (e.g. host.docker.internal:7782 from a devcontainer)")
-	rootCmd.PersistentFlags().String("mcp-concord", "", "Optional second MCP server (Concord) for capabilities the built-in server lacks: delete, save, validate, run (e.g. http://localhost:7783/mcp)")
-	rootCmd.PersistentFlags().String("mcp-concord-dial", "", "Override the TCP address dialed for --mcp-concord")
-	rootCmd.PersistentFlags().Bool("mcp-save", false, "After the command, save all changes in Studio Pro via Concord (requires --mcp-concord; the built-in server has no save tool)")
-	rootCmd.PersistentFlags().Bool("mcp-check", false, "After the command, run Studio Pro's model consistency check via Concord and print the report (requires --mcp-concord)")
-	rootCmd.PersistentFlags().Bool("mcp-run", false, "After the command, start the app in Studio Pro via Concord (run_app) and print its URL (requires --mcp-concord)")
+	rootCmd.PersistentFlags().Bool("mcp-check", false, "After the command, run Studio Pro's project-wide error check (ped_check_errors, Studio Pro 11.15+) and print the report")
+	rootCmd.PersistentFlags().Bool("mcp-run", false, "After the command, start the app in Studio Pro (mendix_app handler, Studio Pro 11.16+) and print its URL")
 	rootCmd.PersistentFlags().Bool("mcp-verbose", false, "Print each PED tool call the MCP backend makes (requires --mcp)")
 	rootCmd.PersistentFlags().Bool("mcp-trace", false, "Print each MDL command with the PED tool calls it makes (implies --mcp-verbose; requires --mcp)")
 	rootCmd.PersistentFlags().String("engine", "", "Deprecated and ignored: there is one model engine. Kept so scripts pinning the old one keep running.")

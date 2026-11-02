@@ -1,6 +1,29 @@
 name: Build, Test & Lint
 
-on: [push, pull_request]
+# One run per commit (ako/mxcli#1886). With `[push, pull_request]` every push to
+# a PR branch ran this workflow twice, ~102 runner-minutes each, and the pair kept
+# the account at its 20-concurrent-job limit for most of a busy window. The
+# pull_request run is the one kept: it tests the merge result, not the branch.
+#
+# A branch without a PR no longer gets CI on push; start one by hand with
+# workflow_dispatch (Actions tab, or `gh workflow run push-test.yml --ref <branch>`).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to a PR cancels that PR's run still in progress: the superseded
+# commit's result is never read, and it held its runners until it finished.
+#
+# Only PR runs share a group. Everything else (main, workflow_dispatch) gets a
+# group of its own via run_id, because a shared group cancels even with
+# cancel-in-progress false: GitHub keeps at most ONE pending run per group, so a
+# third push to main would silently drop the queued second one, and main's
+# commits must each be tested.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

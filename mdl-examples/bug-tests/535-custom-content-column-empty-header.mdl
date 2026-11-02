@@ -1,0 +1,36 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#535: a custom-content column with an empty caption showed its MDL
+-- column name as the header
+-- ============================================================================
+--
+-- Symptom: `column colTriage (Caption: '') { … }` in a Data grid 2 written
+-- through the generic `pluggablewidget` form rendered "colTriage" in the column
+-- header. mx check, check and lint all passed; only a browser showed it.
+--
+-- Cause: the writer filled an empty header on an attribute-less column with the
+-- column's name. Mendix stores no name for a column, and Data grid 2 renders the
+-- header text as is (`header.trim() || ' '` in Datagrid.mjs, 11.15.0).
+--
+-- The generic form needs a name on every column (MDL-WIDGET35), which is how a
+-- name was there to leak.
+--
+-- After fix: both custom-content columns below store an empty header, as the keyword
+-- `datagrid` path already did; `describe page` prints `Caption: ''` for each,
+-- and mx check reports 0 errors (11.15.0).
+
+create module Bug535;
+
+create persistent entity Bug535.Ticket (Title: String(100));
+
+create page Bug535.Tickets (Title: 'Tickets', Layout: Atlas_Core.Atlas_Default) {
+  pluggablewidget 'com.mendix.widget.web.datagrid.Datagrid' dgTickets (DataSource: database from Bug535.Ticket) {
+    column colTitle (Attribute: Title, Caption: 'Title')
+    column colTriage (Caption: '') {
+      dynamictext dtTriage (Content: 'triage')
+    }
+    column colNoCaption {
+      dynamictext dtNoCaption (Content: 'nocap')
+    }
+  }
+};

@@ -16,7 +16,7 @@ func TestDeleteDocument_NativeWhenAdvertised(t *testing.T) {
 		return "unexpected", true
 	})
 	f.tools = map[string][]string{"ped_delete_document": {"documents"}}
-	b := &Backend{client: f.connectClient(t)} // no Concord: native must not need it
+	b := &Backend{client: f.connectClient(t)}
 
 	if err := b.deleteDocument(constantDocType, "MyFirstModule", "Gone"); err != nil {
 		t.Fatalf("deleteDocument: %v", err)
@@ -80,33 +80,14 @@ func TestDeleteDocument_NativeFailureSurfaces(t *testing.T) {
 	}
 }
 
-func TestDeleteDocument_NativeFailureFallsBackToConcord(t *testing.T) {
-	ped := newFakePED(t, func(name string, _ map[string]any) (string, bool) {
-		if name == "ped_find_document" {
-			return `{"foundDocuments":[{"qualifiedName":"MyFirstModule.Gone"}]}`, false
-		}
-		return handlerSessionError, false
-	})
-	ped.tools = map[string][]string{"ped_delete_document": {"documents"}}
-	concord := newFakePED(t, func(string, map[string]any) (string, bool) { return `{"success":true}`, false })
-	b := &Backend{client: ped.connectClient(t), concord: concord.connectClient(t)}
-
-	if err := b.deleteDocument(constantDocType, "MyFirstModule", "Gone"); err != nil {
-		t.Fatalf("deleteDocument should succeed through Concord: %v", err)
-	}
-	if _, ok := concord.callByName("delete_document"); !ok {
-		t.Fatal("Concord delete_document was not called after the native delete failed")
-	}
-}
-
-func TestDeleteDocument_NoNativeToolNeedsConcord(t *testing.T) {
+func TestDeleteDocument_NoNativeToolNeeds1116(t *testing.T) {
 	f := newFakePED(t, nil)
 	f.tools = map[string][]string{"ped_create_document": {"documents"}} // pre-11.16 surface
 	b := &Backend{client: f.connectClient(t)}
 
 	err := b.deleteDocument(constantDocType, "MyFirstModule", "Gone")
-	if err == nil || !strings.Contains(err.Error(), "--mcp-concord") {
-		t.Fatalf("without ped_delete_document the error should point at --mcp-concord, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "needs Studio Pro 11.16+ (ped_delete_document)") {
+		t.Fatalf("without ped_delete_document the error should name the version it needs, got: %v", err)
 	}
 	if _, ok := f.callByName("ped_delete_document"); ok {
 		t.Error("ped_delete_document must not be called when the server does not advertise it")

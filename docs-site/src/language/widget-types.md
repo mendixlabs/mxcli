@@ -352,7 +352,11 @@ The classic drop-down (`DROPDOWN`, stored as `Forms$DropDown`) is not supported 
 the React client: on a project whose Web UI setting is `OptimizedClient: Yes`
 (`show settings`), mxbuild reports CE0582 and `check --references` reports
 **MDL-WIDGET40**. Use `COMBOBOX` over the same attribute. Under `No` and
-`MigrationMode` the drop-down builds, and nothing is reported.
+`MigrationMode` the drop-down builds, and nothing is reported. A drop-down the
+project already holds is reported by `mxcli lint` as **MPR012**, together with
+the other built-in widgets that are CE0582 under the React client: the static and
+dynamic image, the legacy data grid and the reference selector (measured on
+11.16; the template grid and the reference set selectors are not yet measured).
 
 ### TEXTBOX
 
