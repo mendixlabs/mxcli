@@ -311,8 +311,15 @@ jobs:
 
   # One stable check name for "every integration suite passed", whatever the
   # matrix above becomes — a branch rule can require this instead of each leg.
+  #
+  # `!cancelled()`, not `always()`: it still runs (and fails) when a suite failed
+  # or was skipped, so the gate never passes vacuously, but it is skipped when the
+  # run is cancelled. `always()` jobs run even then, so a superseded PR run (see
+  # `concurrency` above) could not end until this job got a runner — and the
+  # concurrency group held the replacement run pending meanwhile: ~5 min on
+  # PR #1885 (run 41406249166), at the 20-job cap (ako/mxcli#1886).
   integration-passed:
-    if: always()
+    if: ${{ !cancelled() }}
     needs: integration
     runs-on: ubuntu-latest
     steps:
