@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **SEC011 names the widget whose data source fails on every page** — it uses the catalog's new `WidgetName` (ako/mxcli#1879) instead of guessing; before, a page with two data widgets over the same entity was reported as "A data source on page …" with no way to tell which grid to fix.
 - **Concord support is removed; `--mcp-check` and `--mcp-run` use Studio Pro's own MCP server** — the optional second MCP server (Concord) and the `--mcp-concord`, `--mcp-concord-dial` and `--mcp-save` flags are gone. PED writes each change to disk as it lands, so there is nothing to save. `--mcp-check` runs a project-wide `ped_check_errors` (Studio Pro 11.15+), and `--mcp-run` starts the app through the `mendix_app` handler and prints its URL (11.16+).
 - **The first command on a project says it is building the unit index** (ako/mxcli#1806) — after an upgrade to the `unit-index-2.idx` format, or on a fresh clone, one command opens every unit file to build the index, which on Windows is a visible stall. It now prints one line on stderr (`Building the unit index for this project's N units (once; …)`); `-q` / `MXCLI_QUIET` keep it silent.
 

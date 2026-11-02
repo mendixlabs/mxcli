@@ -185,9 +185,12 @@ func (r *XPathAssociationAccessRule) Check(ctx *linter.LintContext) []linter.Vio
 func (r *XPathAssociationAccessRule) violation(x linter.XPathExpressionEntry, h hop, blind, widgets []string) linter.Violation {
 	sort.Strings(blind)
 	source := "A data source"
-	if len(widgets) == 1 {
-		// Named only when the page has exactly one data widget over the entity;
-		// the catalog does not tie an XPath to its widget.
+	switch {
+	case x.WidgetName != "":
+		source = fmt.Sprintf("The data source of '%s'", x.WidgetName)
+	case len(widgets) == 1:
+		// A row without a widget name (a nameless widget): named when the page
+		// has exactly one data widget over the entity.
 		source = fmt.Sprintf("The data source of '%s'", widgets[0])
 	}
 	entityName := h.entity[strings.LastIndex(h.entity, ".")+1:]
