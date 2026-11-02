@@ -79,7 +79,10 @@ func TestAnnotationFlowToGen_WritesTheChosenSides(t *testing.T) {
 			t.Fatalf("encode: %v", err)
 		}
 		r := bson.Raw(raw)
-		return r.Lookup("OriginConnectionIndex").Int32(), r.Lookup("DestinationConnectionIndex").Int32()
+		// Width-agnostic: the sides are what this test is about. The stored
+		// width (int64, as Studio Pro writes it) is pinned for every Integer
+		// property by codec.TestEncoder_EveryIntegerPropertyIsInt64.
+		return int32(r.Lookup("OriginConnectionIndex").AsInt64()), int32(r.Lookup("DestinationConnectionIndex").AsInt64())
 	}
 	below := &microflows.AnnotationFlow{OriginID: "ann-1", DestinationID: "act-1",
 		Sides: &microflows.ConnectionSides{Origin: 0, Destination: 2}}

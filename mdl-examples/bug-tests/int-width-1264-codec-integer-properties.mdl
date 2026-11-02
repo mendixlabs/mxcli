@@ -1,0 +1,122 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#1264 (mendixlabs/mxcli#675): the codec wrote Integer properties as
+-- BSON int32 where Studio Pro writes int64
+-- ============================================================================
+--
+-- Symptom (before fix), on a fresh 11.11.0 project dumped with
+-- `mxcli bson dump --format bson`:
+--
+--   Field                       Studio Pro / legacy writer   modelsdk codec
+--   CanvasWidth / CanvasHeight  int64                        int32
+--   PopupWidth / PopupHeight    int64                        int32
+--
+-- and within one page, CREATE (codec, int32) disagreed with ALTER (the page
+-- mutator, int64). Not only pages: every Integer property the codec writes —
+-- flow connection indices, tab indices, layout-grid weights, list-view page
+-- sizes, text-area line counts, decimal precision — came out int32.
+--
+-- mx check reports 0 errors either way, so the build is no evidence here. The
+-- evidence is the stored BSON type. Studio Pro's own documents are the
+-- reference: 208,038 integer values across 15,354 Studio Pro-authored units
+-- (nine projects, Mendix 10.6.4 to 11.13.0) and not one int32 among them
+-- (the typed-array marker at the head of a list is the only int32, and it is
+-- not a property value).
+--
+-- After fix: every Integer property is written as int64.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/int-width-1264-codec-integer-properties.mdl -p app.mpr
+--   mxcli bson dump -p app.mpr --type page --object "BugTest1264.P_Popup" --format bson > p.mxunit
+--   → CanvasWidth, CanvasHeight, PopupWidth, PopupHeight are BSON int64 (type 0x12),
+--     as on any page Studio Pro created (e.g. Atlas_Core's).
+--   mxcli docker check -p app.mpr → 0 errors.
+-- ============================================================================
+
+create module BugTest1264;
+
+create persistent entity BugTest1264.Order (
+  Reference: String(40),
+  Notes: String(unlimited),
+  Amount: Decimal
+);
+
+-- (1) A pop-up page with explicit dimensions: CanvasWidth/Height and
+--     PopupWidth/Height on the Forms$Page document.
+create page BugTest1264.P_Popup
+(
+  Title: 'Order (pop-up)',
+  Layout: Atlas_Core.PopupLayout,
+  PopupWidth: 720,
+  PopupHeight: 460,
+  Params: ( $Order: BugTest1264.Order )
+)
+{
+  dataview dvOrder (DataSource: $Order) {
+    textbox tbReference (Label: 'Reference', Attribute: Reference)
+    textarea taNotes (Label: 'Notes', Attribute: Notes)
+    textbox tbAmount (Label: 'Amount', Attribute: Amount)
+  }
+};
+
+-- (2) The same dimensions set by ALTER (the page mutator). The two pages must
+--     store them at the same width.
+create page BugTest1264.P_PopupAlter
+(
+  Title: 'Order (pop-up, altered)',
+  Layout: Atlas_Core.PopupLayout,
+  Params: ( $Order: BugTest1264.Order )
+)
+{
+  dataview dvOrder (DataSource: $Order) {
+    textbox tbReference (Label: 'Reference', Attribute: Reference)
+  }
+};
+
+alter page BugTest1264.P_PopupAlter {
+  set (PopupWidth: 720);
+  set (PopupHeight: 460);
+};
+
+-- (3) Layout-grid weights, list-view page size and tab indices.
+create page BugTest1264.P_Overview
+(
+  Title: 'Orders',
+  Layout: Atlas_Core.Atlas_Default
+)
+{
+  layoutgrid lgMain {
+    row {
+      column (desktopwidth: 8) {
+        listview lvOrders (DataSource: database BugTest1264.Order) {
+          dynamictext txtReference (content: 'Order')
+        }
+      }
+      column (desktopwidth: autofill) {
+        dynamictext txtSide (content: 'Side panel')
+      }
+    }
+  }
+};
+
+-- (4) A snippet: its own canvas dimensions.
+create snippet BugTest1264.S_Header
+{
+  dynamictext txtHeader (content: 'Orders', rendermode: H2)
+};
+
+-- (5) Sequence-flow connection indices.
+create microflow BugTest1264.ACT_Classify (
+  $Order: BugTest1264.Order
+)
+returns Boolean
+begin
+  if $Order/Reference = empty then
+    return false;
+  else
+    return true;
+  end if;
+end;
+
+describe page BugTest1264.P_Popup;
+describe page BugTest1264.P_PopupAlter;

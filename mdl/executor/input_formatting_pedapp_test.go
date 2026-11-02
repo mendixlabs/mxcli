@@ -97,7 +97,10 @@ func TestInputFormatting_WrittenDescribedAndRoundTripped(t *testing.T) {
 		"dpDateTime": {"DateFormat": "DateTime", "CustomDateFormat": ""},
 		"dpCustom":   {"DateFormat": "Custom", "CustomDateFormat": "dd-MM-yyyy H:mm"},
 		"dpStale":    {"DateFormat": "DateTime", "CustomDateFormat": "dd/MM/yyyy HH:mm"},
-		"tbAmount":   {"DecimalPrecision": int32(4), "GroupDigits": true},
+		// int64: the width Studio Pro stores DecimalPrecision at, and the
+		// codec's since ako/mxcli#1264 (the comparison is on an interface, so
+		// it pins the width as well as the value).
+		"tbAmount": {"DecimalPrecision": int64(4), "GroupDigits": true},
 	} {
 		for k, v := range want {
 			if got[name][k] != v {
@@ -165,8 +168,10 @@ func TestInputFormatting_AlterPageSet(t *testing.T) {
 	if got["dpDateTime"]["DateFormat"] != "Time" {
 		t.Errorf("dpDateTime = %v, want Time", got["dpDateTime"])
 	}
-	if got["tbAmount"]["DecimalPrecision"] != int32(0) || got["tbAmount"]["GroupDigits"] != false {
-		t.Errorf("tbAmount = %v, want precision 0 (same int32 width), no grouping", got["tbAmount"])
+	// The page was created by the codec, which writes Integer properties as
+	// int64 like Studio Pro (ako/mxcli#1264); ALTER keeps the stored width.
+	if got["tbAmount"]["DecimalPrecision"] != int64(0) || got["tbAmount"]["GroupDigits"] != false {
+		t.Errorf("tbAmount = %v, want precision 0 (same int64 width), no grouping", got["tbAmount"])
 	}
 
 	for _, c := range []struct{ stmt, want string }{

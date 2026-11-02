@@ -388,9 +388,12 @@ func customHandlerFromRaw(raw bson.Raw) *model.MappingMicroflowCall {
 			continue // the typed-array marker
 		}
 		jsonPath, _ := pd.Lookup("JsonValueElementPath").StringValueOK()
+		// Width-agnostic: Studio Pro stores LevelOfParent as int64 (120 of 120
+		// in the ako/mxcli#1264 census), and so does the codec since that fix.
+		// Reading Int32OK alone turned every ancestor binding into "parent".
 		level := -1
-		if l, ok := pd.Lookup("LevelOfParent").Int32OK(); ok {
-			level = int(l)
+		if l, ok := rawInteger(pd, "LevelOfParent"); ok {
+			level = l
 		}
 		param, _ := pd.Lookup("Parameter").StringValueOK()
 		mp := &model.MappingMicroflowParameter{

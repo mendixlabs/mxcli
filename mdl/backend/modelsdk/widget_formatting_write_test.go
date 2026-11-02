@@ -53,12 +53,15 @@ func TestTextBoxFormattingInfoWritten(t *testing.T) {
 	tb := &pages.TextBox{BaseWidget: pages.BaseWidget{Name: "tb"}, AttributePath: "M.Booking.Amount",
 		FormattingInfo: &pages.FormattingInfo{DateFormat: "Date", DecimalPrecision: 4, GroupDigits: true, EnumFormat: "Text"}}
 	got := formattingOf(t, encodeWidget(t, tb))
-	if got["DecimalPrecision"] != int32(4) || got["GroupDigits"] != true {
+	// int64, the width Studio Pro stores DecimalPrecision at (4,856 of 4,856
+	// across nine Studio Pro-authored projects, ako/mxcli#1264). The comparison
+	// is on an interface, so it pins the width as well as the value.
+	if got["DecimalPrecision"] != int64(4) || got["GroupDigits"] != true {
 		t.Errorf("FormattingInfo DecimalPrecision/GroupDigits = %v/%v, want 4/true", got["DecimalPrecision"], got["GroupDigits"])
 	}
 	// Control: no FormattingInfo keeps the defaults byte-for-byte.
 	def := formattingOf(t, encodeWidget(t, &pages.TextBox{BaseWidget: pages.BaseWidget{Name: "tb"}, AttributePath: "M.Booking.Amount"}))
-	if def["DecimalPrecision"] != int32(2) || def["GroupDigits"] != false || def["DateFormat"] != "Date" {
+	if def["DecimalPrecision"] != int64(2) || def["GroupDigits"] != false || def["DateFormat"] != "Date" {
 		t.Errorf("default FormattingInfo = %v, want precision 2, no grouping, Date", def)
 	}
 }

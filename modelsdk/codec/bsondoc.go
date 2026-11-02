@@ -54,12 +54,19 @@ func (d *BSONDocument) GetString(key string) string {
 	return getString(d.doc, key)
 }
 
-// GetInt32 returns an int32 field value, or 0 if not found.
+// GetInt32 returns an integer field value, or 0 if not found. The stored width
+// is not assumed: Studio Pro — and the codec, since ako/mxcli#1264 — write
+// Integer properties as int64, so an int32-only assertion would read 0.
 func (d *BSONDocument) GetInt32(key string) int32 {
 	for _, e := range d.doc {
 		if e.Key == key {
-			if v, ok := e.Value.(int32); ok {
+			switch v := e.Value.(type) {
+			case int32:
 				return v
+			case int64:
+				return int32(v)
+			case float64:
+				return int32(v)
 			}
 		}
 	}
