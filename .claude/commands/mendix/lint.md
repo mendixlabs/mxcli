@@ -51,6 +51,7 @@ mxcli lint -p app.mpr --baseline lint-baseline.json
 | SEC003 | security | DemoUsersActive - Demo users should be off at Production security |
 | SEC010 | security | PageEntityNotReadable - A page data widget lists an entity the user roles that open the page cannot read; at Production it renders empty, silently (info when only row-scoped) |
 | SEC011 | security | XPathAssociationNotReadable - A page data source's XPath crosses an association a role that opens the page may not read; at Production the page fails to open ("No access rights for …") |
+| SEC012 | security | ReachablePageNotReadable - A page a user role can reach shows an attribute or lists an entity the role may not read (mxbuild CE2729), found before a build |
 | CONV011 | performance | NoCommitInLoop - Commits inside loops (commit actions, or create/change with commit) cause N+1 issues |
 | CONV012 | quality | ExclusiveSplitCaption - Exclusive splits need meaningful captions |
 | CONV013 | quality | ErrorHandlingOnCalls - External calls (REST/WS/Java) need custom error handling |

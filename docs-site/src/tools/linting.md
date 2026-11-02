@@ -17,7 +17,7 @@ The linting system provides:
 | Category | Prefix | Focus |
 |----------|--------|-------|
 | MDL | MDL001-MDL007 | Naming conventions, empty microflows, domain model size |
-| Security | SEC001-SEC011 | Access rules, password policy, demo users, PII exposure |
+| Security | SEC001-SEC012 | Access rules, password policy, demo users, PII exposure |
 | Convention | CONV001-CONV021 | Best practice conventions, error handling |
 | Quality | QUAL001-QUAL004 | Complexity, documentation, long microflows |
 | Architecture | ARCH001-ARCH003 | Cross-module data, entity business keys |
