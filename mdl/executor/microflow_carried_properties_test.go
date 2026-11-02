@@ -192,3 +192,39 @@ func TestDescribeMicroflow_FlagsUntranslatableMessage(t *testing.T) {
 		t.Errorf("describe did not flag the language a replay would drop:\n%s", got)
 	}
 }
+
+// TestDescribeMicroflow_MessageInDefaultLanguage: the concurrency message is
+// described in the PROJECT's default language, as every other text is (#702).
+// Picking the alphabetically first one printed de_DE on an en_US project, and a
+// drop + create from that output wrote the German text under en_US, so the
+// English message was gone with nothing reporting it (#1869).
+//
+// Both projects store the same two languages; only the default differs. The
+// second case is the control: a describer that always prints en_US passes the
+// first and fails it.
+func TestDescribeMicroflow_MessageInDefaultLanguage(t *testing.T) {
+	for _, tc := range []struct {
+		defaultLang, want, other string
+	}{
+		{"en_US", "Another save is running.", "de_DE"},
+		{"de_DE", "Ein anderes Speichern läuft.", "en_US"},
+	} {
+		t.Run(tc.defaultLang, func(t *testing.T) {
+			got := renderMicroflowMDL(ctxWithDefaultLanguage(tc.defaultLang), "microflow", &microflows.Microflow{
+				Name:                     "SaveOrder",
+				AllowConcurrentExecution: false,
+				ConcurrencyErrorMessage: &model.Text{Translations: map[string]string{
+					"en_US": "Another save is running.",
+					"de_DE": "Ein anderes Speichern läuft.",
+				}},
+			}, ast.QualifiedName{Module: "MyModule", Name: "SaveOrder"}, nil, nil, nil)
+
+			if !strings.Contains(got, "error message '"+tc.want+"'") {
+				t.Errorf("describe did not print the %s message %q:\n%s", tc.defaultLang, tc.want, got)
+			}
+			if !strings.Contains(got, "also translated into "+tc.other) {
+				t.Errorf("describe did not flag %s as the other language:\n%s", tc.other, got)
+			}
+		})
+	}
+}
