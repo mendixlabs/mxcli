@@ -248,7 +248,7 @@ func StartLocalApp(opts LocalAppOptions) (*LocalApp, error) {
 		}
 		app.serve = serve
 
-		build, err := serve.Build(BuildRequest{Target: TargetDeploy, ProjectFilePath: opts.ProjectPath})
+		build, err := buildRetryingServeTimeout(serve, BuildRequest{Target: TargetDeploy, ProjectFilePath: opts.ProjectPath}, w)
 		if err != nil {
 			app.Stop()
 			return nil, fmt.Errorf("build: %w", err)
