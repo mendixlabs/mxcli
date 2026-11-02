@@ -1195,12 +1195,19 @@ func formattingInfoFromParamFormat(f *ast.ParamFormatV3) *pages.FormattingInfo {
 			}
 		case "groupdigits":
 			fi.GroupDigits = strings.EqualFold(p.Value, "true")
+		// Check accepts the enums in any case, so store Mendix's spelling:
+		// a stored "custom" is not Custom, and the runtime shows the default
+		// format (ako/mxcli#1864).
 		case "dateformat":
-			fi.DateFormat = p.Value
+			if v, ok := pages.CanonicalDateFormat(p.Value); ok {
+				fi.DateFormat = v
+			}
 		case "customdateformat":
 			fi.CustomDateFormat = p.Value
 		case "enumformat":
-			fi.EnumFormat = p.Value
+			if v, ok := pages.CanonicalEnumFormat(p.Value); ok {
+				fi.EnumFormat = v
+			}
 		}
 	}
 	return fi
