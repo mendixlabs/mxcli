@@ -1236,6 +1236,11 @@ type XPathExpressionEntry struct {
 	IsParameterized       bool   // true when XPath contains $variable references
 	UsageType             string // RETRIEVE, SECURITY, DATASOURCE
 	ModuleName            string
+	// WidgetID and WidgetName name the widget a page or snippet data source
+	// belongs to, by the id the widgets table records (ako/mxcli#1879); empty
+	// for flows and access rules.
+	WidgetID   string
+	WidgetName string
 }
 
 // XPathExpressions returns an iterator over all XPath expression entries in the catalog.
@@ -1245,7 +1250,8 @@ func (ctx *LintContext) XPathExpressions() iter.Seq[XPathExpressionEntry] {
 			SELECT Id, DocumentType, DocumentId, DocumentQualifiedName,
 			       ComponentType, ComponentId, ComponentName,
 			       XPathExpression, TargetEntity, ReferencedEntities,
-			       IsParameterized, UsageType, ModuleName
+			       IsParameterized, UsageType, ModuleName,
+			       COALESCE(WidgetId, ''), COALESCE(WidgetName, '')
 			FROM xpath_expressions
 			ORDER BY ModuleName, DocumentQualifiedName
 		`)
@@ -1264,6 +1270,7 @@ func (ctx *LintContext) XPathExpressions() iter.Seq[XPathExpressionEntry] {
 				&e.ComponentType, &e.ComponentID, &componentName,
 				&e.XPathExpression, &targetEntity, &refEntities,
 				&isParam, &e.UsageType, &moduleName,
+				&e.WidgetID, &e.WidgetName,
 			)
 			if err != nil {
 				ctx.recordQueryError("XPathExpressions (row scan)", err)
