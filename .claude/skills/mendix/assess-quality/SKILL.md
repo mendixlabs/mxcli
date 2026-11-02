@@ -12,14 +12,14 @@ description: "Audit a Mendix project against best practices for naming, security
 |---|---|
 | 29-36 | When to Use This Skill |
 | 37-96 | Assessment Workflow |
-| 97-355 | Quality Guidelines Reference |
-| 356-366 | Assessment Report Template |
-| 367-379 | Executive Summary |
-| 380-390 | project Metrics |
-| 391-403 | Automated Findings |
-| 404-423 | Manual Review Findings |
-| 424-439 | Recommendations |
-| 440-450 | Sources |
+| 97-356 | Quality Guidelines Reference |
+| 357-367 | Assessment Report Template |
+| 368-380 | Executive Summary |
+| 381-391 | project Metrics |
+| 392-404 | Automated Findings |
+| 405-424 | Manual Review Findings |
+| 425-440 | Recommendations |
+| 441-451 | Sources |
 
 <!-- /skill-index -->
 # Assess Mendix Project Quality
@@ -161,6 +161,7 @@ After reviewing automated results, assess the following areas manually. The guid
 | All persistent entities must have access rules | SEC001 | Critical |
 | Every role that opens a page can read the entities its grids, galleries and combo boxes list (else it renders empty at Production) | SEC010 | High |
 | Every association a page data source's XPath crosses is readable by the roles that open the page, on the entity the step starts from (else the page fails to open at Production) | SEC011 | High |
+| Every page a user role can reach shows only attributes and entities that role may read (else mxbuild fails with CE2729) | SEC012 | High |
 | Do not grant Create or Delete rights on entity access rules | CONV006 | High |
 | All entity access rules should have XPath constraints | CONV007 | High |
 | Set default access rights to None | Manual check | High |

@@ -126,8 +126,14 @@ func CarryTranslations(contents, stored []byte) []byte {
 		var order []string
 		if byPath {
 			want, order = textTranslationElems(storedByPath[path]), textLanguageOrder(storedByPath[path])
+			if dropUnmatchedEmpty(text, want) {
+				changed = true
+			}
 		} else if stored, ok := storedByElement[newElementOf[path]]; ok {
 			want, order = textTranslationElems(stored), textLanguageOrder(stored)
+			if dropUnmatchedEmpty(text, want) {
+				changed = true
+			}
 		} else {
 			want, order = matchBySource(textTranslations(text), sets)
 		}
@@ -296,6 +302,46 @@ func storedTranslationSets(doc bson.D) map[string]*translationSet {
 	}
 	walk(doc)
 	return out
+}
+
+// dropUnmatchedEmpty removes from a rebuilt text each empty translation in a
+// language its stored counterpart has no translation in, reporting whether it
+// removed any.
+//
+// A text the statement states as empty is written as one empty translation in
+// the authoring language, so that this carry leaves it empty instead of adding
+// the stored text back (a data grid column's `Caption: ”` could not clear a
+// stored caption). Studio Pro, though, stores an empty pluggable caption with no
+// translation at all, and keeping the rebuild's ("en_US", "") over it would make
+// every rewrite of such a page a write. Where the stored text has nothing in
+// that language, the empty translation says nothing it does not, so it goes.
+func dropUnmatchedEmpty(text bson.D, stored map[string]bson.D) bool {
+	items, ok := docLookup(text, "Items").(bson.A)
+	if !ok {
+		return false
+	}
+	kept := make(bson.A, 0, len(items))
+	dropped := false
+	for _, it := range items {
+		if d, ok := it.(bson.D); ok {
+			lang, _ := docLookup(d, "LanguageCode").(string)
+			txt, _ := docLookup(d, "Text").(string)
+			if _, has := stored[lang]; lang != "" && txt == "" && !has {
+				dropped = true
+				continue
+			}
+		}
+		kept = append(kept, it)
+	}
+	if !dropped {
+		return false
+	}
+	for i, e := range text {
+		if e.Key == "Items" {
+			text[i].Value = kept
+		}
+	}
+	return true
 }
 
 // mergeText appends the languages a rebuilt text is missing, reporting whether

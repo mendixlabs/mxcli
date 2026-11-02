@@ -217,6 +217,23 @@ func (w *Writer) BeginWriteTransaction() (*WriteTransaction, error) {
 	}, nil
 }
 
+// storedBytes reads a unit as this transaction sees it, which is what a write
+// in it has to be reconciled against. On v1 that is a read through wt.tx: the
+// pool's one connection is the one wt.tx holds, so reading through the reader
+// waited for it forever, and the transaction's own reads see its writes. On v2
+// the transaction's own write sits in a temp file until Commit, so the latest
+// pending file for the unit comes first; reconciling against the committed
+// .mxunit instead elided A → B → A's second write and committed B.
+func (wt *WriteTransaction) storedBytes(unitID string) ([]byte, error) {
+	blob := uuidToBlob(unitID)
+	for i := len(wt.pendingFiles) - 1; i >= 0; i-- {
+		if pf := wt.pendingFiles[i]; bytes.Equal(uuidToBlob(pf.unitID), blob) {
+			return os.ReadFile(pf.tempPath)
+		}
+	}
+	return wt.writer.reader.rawUnitBytes(wt.tx, unitID)
+}
+
 // WriteUnit writes a unit within the transaction.
 // The actual file write is deferred until Commit.
 func (wt *WriteTransaction) WriteUnit(unitID string, contents []byte) error {
@@ -225,11 +242,8 @@ func (wt *WriteTransaction) WriteUnit(unitID string, contents []byte) error {
 	// out would mean the codec engine's own document writes kept churning while
 	// UpdateRawUnit's stopped — a difference no caller could reason about.
 	//
-	// The stored bytes are read through the transaction. On v1 they are in the
-	// database, and the pool's one connection is the one wt.tx holds: reading
-	// through the reader waited for it forever.
-	stored := func(id string) ([]byte, error) { return wt.writer.reader.rawUnitBytes(wt.tx, id) }
-	contents, unchanged, err := wt.writer.reconcileAgainst(unitID, contents, stored)
+	// The stored bytes are the transaction's view of the unit (storedBytes).
+	contents, unchanged, err := wt.writer.reconcileAgainst(unitID, contents, wt.storedBytes)
 	if err != nil {
 		return err
 	}
