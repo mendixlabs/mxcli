@@ -36,6 +36,10 @@ type LocalAppOptions struct {
 	// EnsureDB provisions the local Postgres + database when missing instead of
 	// only checking reachability.
 	EnsureDB bool
+	// FreshFileDB removes the built-in file database's data before the boot, so
+	// the runtime creates it empty. For a caller whose database is its own
+	// scratch (the test runner), never for one holding the developer's data.
+	FreshFileDB bool
 	// SkipBuild boots against whatever is already in DeployDir.
 	SkipBuild bool
 	// RuntimeLogPath tees the runtime JVM output and the runtime's own
@@ -159,12 +163,16 @@ func (o *LocalAppOptions) applyDefaults() {
 
 // prepareLocalAppDatabase makes the configured database usable before the boot:
 // provisioning it with EnsureDB, otherwise checking that its server answers.
-// The built-in file database needs neither: the runtime creates its files.
+// The built-in file database needs neither: the runtime creates its files —
+// afresh when FreshFileDB removed the previous ones.
 func prepareLocalAppDatabase(opts *LocalAppOptions, w io.Writer) error {
 	if opts.DB.IsFileBased() {
 		if opts.EnsureDB {
 			return fmt.Errorf("EnsureDB provisions PostgreSQL; the built-in file database " +
 				"needs no provisioning")
+		}
+		if opts.FreshFileDB {
+			return removeFileDatabase(opts.DeployDir, opts.DB.Name, w)
 		}
 		return nil
 	}
@@ -179,6 +187,27 @@ func prepareLocalAppDatabase(opts *LocalAppOptions, w io.Writer) error {
 			"  Pass --ensure-db to provision it, or start Postgres and create the %q database (user %q).",
 			opts.DB.Host, err, opts.DB.Name, opts.DB.User)
 	}
+	return nil
+}
+
+// removeFileDatabase deletes the runtime's file database called name, which
+// lives under <deployDir>/data/database/hsqldb/<name>.
+//
+// The name must be a single path element: it is joined onto the deployment
+// directory and the result removed recursively, so anything else is refused
+// rather than resolved. A database that does not exist yet is not an error.
+func removeFileDatabase(deployDir, name string, w io.Writer) error {
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
+		return fmt.Errorf("refusing to reset file database %q: the name must be a single path element", name)
+	}
+	dir := filepath.Join(deployDir, "data", "database", "hsqldb", name)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return nil
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("resetting file database %s: %w", dir, err)
+	}
+	fmt.Fprintf(w, "  Removed the previous run's file database %q; the runtime creates it empty\n", name)
 	return nil
 }
 

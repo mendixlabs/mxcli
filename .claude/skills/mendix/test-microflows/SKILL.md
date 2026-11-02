@@ -12,18 +12,18 @@ description: "Write and run MDL-based microflow tests with `mxcli test` — anno
 |---|---|
 | 33-39 | Reference files |
 | 40-50 | When to Use This Skill |
-| 51-180 | Prerequisites |
-| 181-223 | Test File Formats |
-| 224-239 | string Operations |
-| 240-263 | Running Tests |
-| 264-457 | How It Works |
-| 458-496 | Check a test file before you run it |
-| 497-618 | Writing Good Tests |
-| 619-633 | Test File Organization |
-| 634-646 | Interpreting Failures |
-| 647-668 | CI Integration |
-| 669-675 | Related Skills |
-| 676-678 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
+| 51-182 | Prerequisites |
+| 183-225 | Test File Formats |
+| 226-241 | string Operations |
+| 242-265 | Running Tests |
+| 266-459 | How It Works |
+| 460-498 | Check a test file before you run it |
+| 499-620 | Writing Good Tests |
+| 621-635 | Test File Organization |
+| 636-648 | Interpreting Failures |
+| 649-670 | CI Integration |
+| 671-677 | Related Skills |
+| 678-680 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
 
 <!-- /skill-index -->
 # Test Microflows Skill
@@ -81,8 +81,10 @@ mxcli test tests/ -p app.mpr --local --db-type hsqldb
 
 It is still a scratch database (`<project>_test`), separate from the one
 `run --local --db-type hsqldb` uses, so a dev loop on the file database keeps its
-data and its file lock. `--db-type` applies only to `--local`; it is refused with
-`--attach` (which uses the attached app's database) and on the Docker path.
+data and its file lock. Each run starts it **empty** — the previous run's files are
+removed before the boot — so seeded data never carries over between runs.
+`--db-type` applies only to `--local`; it is refused with `--attach` (which uses
+the attached app's database) and on the Docker path.
 
 The **deployment directory is shared**, and not by choice: mxbuild always writes
 it to `<app dir>/deployment` and has no option to move it. That used to blank the
