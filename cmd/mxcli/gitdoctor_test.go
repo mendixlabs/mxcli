@@ -95,6 +95,44 @@ func TestGitDoctor_FixWritesConfigAndPasses(t *testing.T) {
 	}
 }
 
+// Measured on a real Studio Pro checkout (the mx-git-lab lab, S0): Studio Pro
+// writes core.autocrlf=false in lowercase, counts commits-since-gc up between
+// garbage collections (2 after two commits) and writes lineendingresetdone in
+// lowercase. A healthy Studio Pro checkout must pass untouched.
+func TestGitDoctor_StudioProValuesPass(t *testing.T) {
+	dir := t.TempDir()
+	doctorEnv(t, dir)
+	gitIn(t, dir, "init", "-q", "-b", "main")
+	gitIn(t, dir, "config", "--local", "core.autocrlf", "false")
+	gitIn(t, dir, "config", "--local", "mendix.commits-since-gc", "2")
+	gitIn(t, dir, "config", "--local", "mendix.lineendingresetdone", "true")
+
+	var out bytes.Buffer
+	if err := doctorRun(dir, "", "", "", false, &out); err != nil {
+		t.Fatalf("a healthy Studio Pro checkout must pass: %v\n%s", err, out.String())
+	}
+	if strings.Contains(out.String(), "mendix.commits-since-gc — ") {
+		t.Errorf("the gc counter must not be judged:\n%s", out.String())
+	}
+}
+
+// core.autocrlf=true is the one config value that damages a Mendix checkout:
+// a checkout rewrites line endings inside .mxunit files on Windows.
+func TestGitDoctor_AutoCRLFTrueIsFixed(t *testing.T) {
+	dir := t.TempDir()
+	doctorEnv(t, dir)
+	gitIn(t, dir, "init", "-q", "-b", "main")
+	gitIn(t, dir, "config", "--local", "core.autocrlf", "true")
+
+	var out bytes.Buffer
+	if err := doctorRun(dir, "", "", "", true, &out); err != nil {
+		t.Fatalf("--fix must repair autocrlf=true: %v\n%s", err, out.String())
+	}
+	if got := configLocal(t, dir, "core.autocrlf"); !strings.EqualFold(got, "false") {
+		t.Errorf("core.autocrlf = %q, want false", got)
+	}
+}
+
 // --- doctor: remote URL scheme ----------------------------------------------
 
 func TestGitDoctor_SSHRemoteRewrittenByFix(t *testing.T) {
@@ -153,7 +191,7 @@ func TestGitDoctor_InsteadOfRewriteIsNotAnSSHRemote(t *testing.T) {
 	t.Setenv("GIT_SSH_COMMAND", "false") // the rewritten URL is SSH: never reach the network
 	gitIn(t, dir, "init", "-q", "-b", "main")
 	for _, kv := range mxConfigKeys {
-		gitIn(t, dir, "config", "--local", kv[0], kv[1])
+		gitIn(t, dir, "config", "--local", kv.key, kv.fallback)
 	}
 	gitIn(t, dir, "config", "--local", "url.git@git.example.com:.insteadOf", "https://git.example.com/")
 	gitIn(t, dir, "remote", "add", "origin", "https://git.example.com/org/app.git")
@@ -197,10 +235,20 @@ func TestGitDoctor_ConfiguredSSHRemoteFoundBehindRewrite(t *testing.T) {
 
 // doctorNoteRepo makes a two-commit repository holding an MPR v2 project:
 // the base commit, then a page retitle. Returns dir and the .mpr path.
+//
+// The fixture's git is hermetic: no system or global config leaks in from the
+// machine this runs on (runner images, developer setups and CI images differ),
+// bytes are committed exactly as written, and no repository above the temp
+// dir is discovered. Without this, git-merge fixtures see a different merge
+// on each machine and fail with the merge's own evidence thrown away.
 func doctorNoteRepo(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
 	gitIn(t, dir, "init", "-q", "-b", "feature")
+	gitIn(t, dir, "config", "core.autocrlf", "false")
 	units := baseUnits(t)
 	writeProject(t, dir, "11.13.0", units)
 	gitIn(t, dir, "add", "-A")
@@ -284,7 +332,7 @@ func TestGitDoctor_UnfetchedNotesAreNotMissing(t *testing.T) {
 	clone := filepath.Join(t.TempDir(), "clone")
 	gitIn(t, filepath.Dir(clone), "clone", "-q", "-b", "feature", remote, clone)
 	for _, kv := range mxConfigKeys {
-		gitIn(t, clone, "config", "--local", kv[0], kv[1])
+		gitIn(t, clone, "config", "--local", kv.key, kv.fallback)
 	}
 	mprPath := filepath.Join(clone, "App.mpr")
 	head := strings.TrimSpace(gitOutOr(clone, "rev-parse", "HEAD"))
@@ -557,6 +605,12 @@ func TestGitCommit_NothingToCommit(t *testing.T) {
 func gitInE(t *testing.T, dir string, args ...string) (string, error) {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	// The same fixed identity gitIn commits with: `git merge` needs one even
+	// when it stops on a conflict, and a host whose name gives git nothing to
+	// guess from (a bare "vm", no domain) refused the fixture's merge.
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
 	b, err := cmd.CombinedOutput()
 	return string(b), err
 }
@@ -744,6 +798,32 @@ func TestGitCommit_DryRunLeavesHashDriftUntouched(t *testing.T) {
 	var out2 bytes.Buffer
 	if err := fixHashes(mprPath, false, &out2); !errors.Is(err, errHashIssuesRemain) {
 		t.Errorf("the dry run repaired the hashes (err %v):\n%s", err, out2.String())
+	}
+}
+
+// The staged-files summary must list what the commit will hold, not the junk
+// that was just unstaged (measured on the mx-git-lab lab: the list opened with
+// 10 .mxcli/ paths while the commit held 2 model files).
+func TestGitCommit_StagedListOmitsJunk(t *testing.T) {
+	dir, mprPath := doctorNoteRepo(t)
+	doctorEnv(t, dir)
+	units := baseUnits(t)
+	units[tPage] = tUnit{tFolder, unitDoc(t, "Forms$Page", "Home", bson.E{Key: "Title", Value: "List"})}
+	writeProject(t, dir, "11.13.0", units)
+	if err := os.WriteFile(filepath.Join(dir, "project-settings.user.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := commitRun(mprPath, "clean list", false, false, &out); err != nil {
+		t.Fatalf("commitRun: %v\n%s", err, out.String())
+	}
+	section := out.String()[strings.Index(out.String(), "Staged"):]
+	if strings.Contains(section, "project-settings.user.json") {
+		t.Errorf("the staged list names junk that was left out:\n%s", section)
+	}
+	if !strings.Contains(section, "App.mpr") {
+		t.Errorf("the staged list must name the model files:\n%s", section)
 	}
 }
 

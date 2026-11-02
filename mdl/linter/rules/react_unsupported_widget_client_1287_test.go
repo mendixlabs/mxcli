@@ -25,7 +25,7 @@ func (r settingsReader) GetProjectSettings() (*model.ProjectSettings, error) { r
 // on an app at 0 errors (mendixlabs/mxcli#1226, ako/mxcli#1287). Measured on 11.14.0 for the same CE0582 on a classic
 // drop-down: an error under "Yes", clean under "No" and "MigrationMode"
 // (usesReactClient in mdl/executor).
-func TestLegacyImageWidgetRule_FollowsTheProjectsWebClient(t *testing.T) {
+func TestReactUnsupportedWidgetRule_FollowsTheProjectsWebClient(t *testing.T) {
 	cat, err := catalog.New()
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +45,7 @@ func TestLegacyImageWidgetRule_FollowsTheProjectsWebClient(t *testing.T) {
 	}
 	check := func(reader linter.LintReader) linter.Violation {
 		t.Helper()
-		vs := NewLegacyImageWidgetRule().Check(linter.NewLintContext(cat, reader))
+		vs := NewReactUnsupportedWidgetRule().Check(linter.NewLintContext(cat, reader))
 		if len(vs) != 1 {
 			t.Fatalf("want one MPR012 for img1, got %d: %v", len(vs), vs)
 		}

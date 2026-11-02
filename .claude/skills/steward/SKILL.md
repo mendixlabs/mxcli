@@ -10,11 +10,11 @@ description: Drive an mxcli pull request Claude opened to green and merge it. Co
 
 | lines | section |
 |---|---|
-| 27-54 | Merge on green is the default |
-| 55-72 | Before every push: `make ci-local` |
-| 73-87 | Reading a red CI job |
-| 88-103 | Conflicts this repo keeps hitting |
-| 104-121 | The AI PR Review comment |
+| 27-55 | Merge on green is the default |
+| 56-73 | Before every push: `make ci-local` |
+| 74-88 | Reading a red CI job |
+| 89-104 | Conflicts this repo keeps hitting |
+| 105-122 | The AI PR Review comment |
 
 <!-- /skill-index -->
 # Steward: Driving a PR to Merged
@@ -33,10 +33,11 @@ The user reviews a change **in the session, before the PR exists**. So:
 - Once it is open, merge it without asking again as soon as all of these hold
   on the **current head**:
   - every job of `Build, Test & Lint` (`.github/workflows/push-test.yml`) is
-    green, `integration-passed` included. A push to the PR branch runs that
-    workflow twice on the same commit, for the push and the pull_request
-    event; a job that passed in one run and was cancelled before it got a
-    runner in the other counts as green;
+    green, `integration-passed` included. That workflow runs once per commit,
+    on the pull_request event only (#1886), and a new push cancels the
+    previous commit's run: a **cancelled** run on an older head is expected and
+    never blocks — only the current head's run counts. A branch push with no
+    PR gets no run; trigger one with `workflow_dispatch` if you need it;
   - GitHub reports no merge conflict;
   - no human review thread or changes-requested review is open;
   - no Critical item from the AI PR Review comment is unanswered (see below).

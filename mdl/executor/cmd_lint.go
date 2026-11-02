@@ -35,7 +35,7 @@ func execLint(ctx *ExecContext, s *ast.LintStmt) error {
 		rules.NewDomainModelSizeRule(),
 		rules.NewValidationFeedbackRule(),
 		rules.NewImageSourceRule(),
-		rules.NewLegacyImageWidgetRule(),
+		rules.NewReactUnsupportedWidgetRule(),
 		rules.NewSnippetCallAppearanceRule(),
 		rules.NewMissingTranslationsRule(),
 		rules.NewRequiredCaptionDefaultLanguageRule(),
@@ -153,7 +153,7 @@ func listLintRules(ctx *ExecContext) error {
 	lint.AddRule(rules.NewDomainModelSizeRule())
 	lint.AddRule(rules.NewValidationFeedbackRule())
 	lint.AddRule(rules.NewImageSourceRule())
-	lint.AddRule(rules.NewLegacyImageWidgetRule())
+	lint.AddRule(rules.NewReactUnsupportedWidgetRule())
 	lint.AddRule(rules.NewSnippetCallAppearanceRule())
 	lint.AddRule(rules.NewMissingTranslationsRule())
 	lint.AddRule(rules.NewRequiredCaptionDefaultLanguageRule())

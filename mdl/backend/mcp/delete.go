@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/mendixlabs/mxcli/model"
 )
 
 // The document types DROP addresses that no create path names.
@@ -18,23 +20,23 @@ const (
 // deleteDocument drops a standalone named document (constant, enumeration,
 // microflow, nanoflow, page, workflow, business-event service).
 //
-// Studio Pro 11.16 added ped_delete_document, so a server that advertises it is
-// asked directly; older servers have no delete tool and need Concord. A native
-// failure falls back to Concord when one is connected: on 11.16.0 the tool fails
-// for every call made outside Studio Pro's own agent session ("Session
-// 'mcp-server' not found"), measured live.
+// Studio Pro 11.16 added ped_delete_document; older servers have no delete tool,
+// so DROP over --mcp needs 11.16+. On 11.16.0 the tool fails for every call made
+// outside Studio Pro's own agent session ("Session 'mcp-server' not found"),
+// measured live — that failure is surfaced, not retried elsewhere.
 func (b *Backend) deleteDocument(docType, moduleName, docName string) error {
 	if b.client == nil || !b.client.HasTool("ped_delete_document") {
-		return b.concordDeleteDocument(moduleName, docName)
+		return fmt.Errorf("DROP of %s.%s needs Studio Pro 11.16+ (ped_delete_document); this Studio Pro's MCP server has no delete tool — delete it in Studio Pro", moduleName, docName)
 	}
-	err := b.pedDeleteDocument(docType, moduleName, docName)
-	if err == nil || b.concord == nil {
-		return err
-	}
-	if cerr := b.concordDeleteDocument(moduleName, docName); cerr != nil {
-		return fmt.Errorf("%w; Concord fallback: %v", err, cerr)
-	}
-	return nil
+	return b.pedDeleteDocument(docType, moduleName, docName)
+}
+
+// moduleNameForContainer resolves a container (module) ID to its module name,
+// session-aware so freshly created modules resolve too.
+func (b *Backend) moduleNameForContainer(containerID model.ID) (string, error) {
+	// Folder-aware: a document's container may be a folder, not the module directly.
+	name, _, err := b.resolveDocContainer(containerID)
+	return name, err
 }
 
 // pedDeleteDocument calls ped_delete_document for one document. Its success

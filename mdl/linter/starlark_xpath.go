@@ -178,5 +178,7 @@ func xpathExpressionEntryToStarlark(e XPathExpressionEntry) starlark.Value {
 		"is_parameterized":        starlark.Bool(e.IsParameterized),
 		"usage_type":              starlark.String(e.UsageType),
 		"module_name":             starlark.String(e.ModuleName),
+		"widget_id":               starlark.String(e.WidgetID),
+		"widget_name":             starlark.String(e.WidgetName),
 	})
 }

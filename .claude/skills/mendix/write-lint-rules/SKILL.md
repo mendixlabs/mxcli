@@ -12,10 +12,10 @@ description: "Write custom Starlark lint rules in .claude/lint-rules/ that run b
 |---|---|
 | 25-67 | Rule File Structure |
 | 68-163 | Available Query Functions |
-| 164-543 | Object Properties |
-| 544-557 | Helper Functions |
-| 558-644 | Common Patterns |
-| 645-653 | Validation |
+| 164-545 | Object Properties |
+| 546-559 | Helper Functions |
+| 560-646 | Common Patterns |
+| 647-655 | Validation |
 
 <!-- /skill-index -->
 # Writing Custom Starlark Lint Rules
@@ -402,7 +402,7 @@ Returned by `xpath_expressions()`. Each row represents one XPath constraint used
 | `document_id` | string | Owning document UUID |
 | `document_qualified_name` | string | `"MyApp.GetActiveItems"` |
 | `component_type` | string | `"RETRIEVE_ACTION"`, `"ACCESS_RULE"`, `"WIDGET"` |
-| `component_id` | string | Component UUID |
+| `component_id` | string | Component GUID (the data source, retrieve or access rule the expression is stored on) |
 | `component_name` | string | Activity/rule name (may be empty) |
 | `xpath_expression` | string | Raw XPath string, may include outer `[ ]` |
 | `target_entity` | string | Qualified name of entity being queried, e.g. `"MyApp.Order"` |
@@ -410,6 +410,8 @@ Returned by `xpath_expressions()`. Each row represents one XPath constraint used
 | `is_parameterized` | bool | True when the XPath contains `$variable` references |
 | `usage_type` | string | `"RETRIEVE"`, `"SECURITY"`, `"DATASOURCE"` |
 | `module_name` | string | `"MyApp"` |
+| `widget_id` | string | For a page or snippet data source, the widget it belongs to — the `id` `widgets()` gives it; `""` otherwise |
+| `widget_name` | string | That widget's name, e.g. `"dgOrders"`; `""` otherwise |
 
 ### expr
 

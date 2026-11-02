@@ -7,6 +7,10 @@ package catalog
 //
 // History:
 //
+//	32 (xpath widget): xpath_expressions gains WidgetId and WidgetName, and
+//	    ComponentId is written as a GUID instead of a Go byte dump
+//	    (ako/mxcli#1879) — a cached catalog keeps the dump and lacks the
+//	    columns the linter selects.
 //	31 (access rule id): permissions gains AccessRuleId and AccessRuleIndex,
 //	    which the linter selects — against a cached catalog without them every
 //	    permission query fails and the security rules report nothing
@@ -170,7 +174,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "31"
+const CatalogSchemaVersion = "32"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -848,6 +852,10 @@ func (c *Catalog) createTables() error {
 			ModuleName TEXT,
 			Folder TEXT,
 			Description TEXT,
+			-- The widget a page or snippet data source belongs to, by the id the
+			-- widgets table records for it; empty for flows and access rules.
+			WidgetId TEXT,
+			WidgetName TEXT,
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,

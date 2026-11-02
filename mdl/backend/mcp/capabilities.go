@@ -52,10 +52,9 @@ type Capability struct {
 // the user's Studio Pro preferences and configured MCP servers, not just with
 // versions (ADR-0006 Revision).
 type Capabilities struct {
-	ServerName       string
-	ServerVersion    string
-	ProjectVersion   string
-	ConcordConnected bool
+	ServerName     string
+	ServerVersion  string
+	ProjectVersion string
 	// Tools are the Studio Pro tools present, from the live probe.
 	Tools []string
 	// FederatedTools are tools Studio Pro proxies from MCP servers the user has
@@ -184,7 +183,7 @@ func errCreatePathUnbuilt(kind, name string) error {
 
 // capabilities builds the effective capability set: the table resolved against
 // the project's Mendix version, narrowed by the live tool probe, plus live
-// identity/Concord.
+// identity.
 //
 // Cached for the session: every authoring gate calls this, and the probe is a
 // network round-trip. tools.listChanged means the surface *can* move mid-session,
@@ -195,9 +194,8 @@ func (b *Backend) capabilities() Capabilities {
 		return *b.capsCache
 	}
 	caps := Capabilities{
-		ServerName:       b.server.Name,
-		ServerVersion:    b.server.Version,
-		ConcordConnected: b.concord != nil,
+		ServerName:    b.server.Name,
+		ServerVersion: b.server.Version,
 	}
 	var pv *types.ProjectVersion
 	if b.reader != nil {
@@ -242,14 +240,21 @@ func (b *Backend) CapabilityReport() string {
 	sb.WriteString("========================\n")
 	fmt.Fprintf(&sb, "Studio Pro MCP server : %s %s\n", orUnknown(caps.ServerName), orUnknown(caps.ServerVersion))
 	fmt.Fprintf(&sb, "Project Mendix version: %s\n", orUnknown(caps.ProjectVersion))
-	concord := "not connected — DROP of standalone docs (enum/microflow/page/…) is unavailable"
+	drop := "unavailable — needs Studio Pro 11.16+ (ped_delete_document)"
 	if slices.Contains(caps.Tools, "ped_delete_document") {
-		concord = "not connected — DROP of standalone docs uses ped_delete_document"
+		drop = "ped_delete_document"
 	}
-	if caps.ConcordConnected {
-		concord = "connected"
+	fmt.Fprintf(&sb, "DROP of documents     : %s\n", drop)
+	check := "unavailable — needs Studio Pro 11.15+ (ped_check_errors filters)"
+	if b.client != nil && b.client.SupportsToolArg("ped_check_errors", "filters") {
+		check = "ped_check_errors, project-wide"
 	}
-	fmt.Fprintf(&sb, "Concord gap-filler    : %s\n\n", concord)
+	fmt.Fprintf(&sb, "--mcp-check           : %s\n", check)
+	run := "unavailable — needs Studio Pro 11.16+ (execute_handler mendix_app)"
+	if slices.Contains(caps.Tools, "execute_handler") {
+		run = "execute_handler mendix_app"
+	}
+	fmt.Fprintf(&sb, "--mcp-run             : %s\n\n", run)
 
 	sb.WriteString("Authorable over MCP:\n")
 	for _, c := range caps.Features {
