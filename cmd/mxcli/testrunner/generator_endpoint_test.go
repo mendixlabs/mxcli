@@ -18,14 +18,14 @@ func TestGenerateTestFlowsOneMicroflowPerTest(t *testing.T) {
 	mdl := GenerateTestFlows(suite)
 
 	for _, want := range []string{
-		"CREATE OR REPLACE MICROFLOW MxTest.Test_test_1 ()",
-		"CREATE OR REPLACE MICROFLOW MxTest.Test_test_2 ()",
+		"CREATE OR MODIFY MICROFLOW MxTest.Test_test_1 ()",
+		"CREATE OR MODIFY MICROFLOW MxTest.Test_test_2 ()",
 	} {
 		if !strings.Contains(mdl, want) {
 			t.Errorf("generated MDL is missing %q", want)
 		}
 	}
-	if n := strings.Count(mdl, "CREATE OR REPLACE MICROFLOW"); n != 2 {
+	if n := strings.Count(mdl, "CREATE OR MODIFY MICROFLOW"); n != 2 {
 		t.Errorf("got %d microflows, want one per test (2)", n)
 	}
 }
@@ -168,7 +168,7 @@ func TestGenerateTestFlowsEscapesNameInComment(t *testing.T) {
 	}}}
 	mdl := GenerateTestFlows(suite)
 
-	head := mdl[:strings.Index(mdl, "CREATE OR REPLACE MICROFLOW")]
+	head := mdl[:strings.Index(mdl, "CREATE OR MODIFY MICROFLOW")]
 	if strings.Count(head, "*/") != 1 {
 		t.Errorf("the test name closed the javadoc block early:\n%s", head)
 	}
@@ -240,5 +240,20 @@ func TestEndpointCleanupRestoreIsAlwaysFirst(t *testing.T) {
 		if !strings.HasPrefix(cmds[0], "ALTER SETTINGS RUNTIME (AfterStartupMicroflow") {
 			t.Errorf("state %+v: first command is %q, want the after-startup restore", st, cmds[0])
 		}
+	}
+}
+
+// The test-flow script runs after the endpoint script, which creates the MxTest
+// module — and under --watch and --attach into a project that already holds it.
+// A `CREATE MODULE` of its own is never needed, and exec answers it with
+// "Module 'MxTest' already exists", which every `mxcli test --local` printed on
+// a project that had no such module before the run (ako/mxcli#1856).
+func TestGenerateTestFlowsDoesNotCreateTheModule(t *testing.T) {
+	suite := &TestSuite{Tests: []TestCase{{ID: "test_1", Name: "a", MDL: "$r = CALL MICROFLOW Mod.A();"}}}
+	if mdl := GenerateTestFlows(suite); strings.Contains(strings.ToUpper(mdl), "CREATE MODULE") {
+		t.Errorf("test-flow script creates the module the endpoint script already created:\n%s", mdl)
+	}
+	if !strings.Contains(GenerateEndpointMDL(""), "CREATE MODULE "+mxTestModule+";") {
+		t.Error("the endpoint script no longer creates the module; the test-flow script depends on it")
 	}
 }
