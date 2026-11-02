@@ -178,6 +178,22 @@ func findChangedMxunitFiles(_ *ExecContext, projectDir, contentsName, ref string
 		})
 	}
 
+	// Against the working tree, a unit git has not been told about is still a
+	// new document: `git diff <ref>` lists tracked files only, so a module
+	// added without `git add` was missing from "new" (mendixlabs/mxcli#1709).
+	// A range compares two commits and has no working tree to look at.
+	if _, _, isRange, _ := parseRefRange(ref); !isRange {
+		untracked, err := gitInProject(projectDir, "ls-files", "--others", "--exclude-standard", "--", contentsName).Output()
+		if err != nil {
+			return nil, mdlerrors.NewBackend("git ls-files", err)
+		}
+		for line := range strings.SplitSeq(string(untracked), "\n") {
+			if filePath := strings.TrimSpace(line); strings.HasSuffix(filePath, ".mxunit") {
+				changes = append(changes, gitChange{Status: "A", FilePath: filePath})
+			}
+		}
+	}
+
 	return changes, nil
 }
 
