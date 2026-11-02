@@ -18,14 +18,14 @@ func TestGenerateTestFlowsOneMicroflowPerTest(t *testing.T) {
 	mdl := GenerateTestFlows(suite)
 
 	for _, want := range []string{
-		"CREATE OR REPLACE MICROFLOW MxTest.Test_test_1 ()",
-		"CREATE OR REPLACE MICROFLOW MxTest.Test_test_2 ()",
+		"CREATE OR MODIFY MICROFLOW MxTest.Test_test_1 ()",
+		"CREATE OR MODIFY MICROFLOW MxTest.Test_test_2 ()",
 	} {
 		if !strings.Contains(mdl, want) {
 			t.Errorf("generated MDL is missing %q", want)
 		}
 	}
-	if n := strings.Count(mdl, "CREATE OR REPLACE MICROFLOW"); n != 2 {
+	if n := strings.Count(mdl, "CREATE OR MODIFY MICROFLOW"); n != 2 {
 		t.Errorf("got %d microflows, want one per test (2)", n)
 	}
 }
@@ -168,7 +168,7 @@ func TestGenerateTestFlowsEscapesNameInComment(t *testing.T) {
 	}}}
 	mdl := GenerateTestFlows(suite)
 
-	head := mdl[:strings.Index(mdl, "CREATE OR REPLACE MICROFLOW")]
+	head := mdl[:strings.Index(mdl, "CREATE OR MODIFY MICROFLOW")]
 	if strings.Count(head, "*/") != 1 {
 		t.Errorf("the test name closed the javadoc block early:\n%s", head)
 	}

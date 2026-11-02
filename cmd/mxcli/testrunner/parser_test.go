@@ -172,8 +172,8 @@ func TestGenerateTestRunner(t *testing.T) {
 	mdl := GenerateTestRunner(suite)
 
 	// Check that it contains key patterns
-	if !contains(mdl, "CREATE OR REPLACE MICROFLOW MxTest.TestRunner") {
-		t.Error("Missing CREATE OR REPLACE MICROFLOW")
+	if !contains(mdl, "CREATE OR MODIFY MICROFLOW MxTest.TestRunner") {
+		t.Error("Missing CREATE OR MODIFY MICROFLOW")
 	}
 	if !contains(mdl, "RETURNS Boolean") {
 		t.Error("Missing RETURNS Boolean")
