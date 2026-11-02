@@ -428,6 +428,7 @@ func (v *microflowValidator) walkBody(body []ast.MicroflowStatement) {
 				v.checkXPathAssociationEmpty(stmt.Variable, xp)
 				v.checkXPathFunctionNames(stmt.Variable, xp)
 				v.checkXPathFunctionArgumentOperators(stmt.Variable, stmt.Where)
+				v.checkXPathOQLComparisons(stmt.Variable, stmt.Where)
 				v.checkXPathIdConstraint(stmt.Variable, xp)
 				v.checkXPathVariableTraversal(stmt.Variable, xp)
 			}
@@ -605,6 +606,7 @@ func (v *microflowValidator) checkExprFunctions(label string, expr ast.Expressio
 	// JSON-number check rides along rather than keeping a third list of sites.
 	v.checkLocaleNumberInJSON(label, expr)
 	v.checkIfOperand(label, expr)
+	v.checkExpressionOQLComparisons(label, expr)
 	src := microflowExprSource(expr)
 	if src == "" {
 		return
