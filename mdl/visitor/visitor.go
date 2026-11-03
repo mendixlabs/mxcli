@@ -50,7 +50,7 @@ func (l *errorListener) SyntaxError(rec antlr.Recognizer, sym any, line, column 
 	if word, ok := unknownStatementWord(rec, sym, msg); ok {
 		msg = unknownStatementMessage(word)
 	}
-	site := errorSite{routineHeader: inRoutineHeader(rec), backslashEscapes: l.backslashEscapes}
+	site := errorSite{routineHeader: inRoutineHeader(rec), backslashEscapes: l.backslashEscapes, line: line}
 	enhancedMsg := l.deduplicateHint(enhanceErrorMessageAt(msg, offending, site), line)
 	l.errors = append(l.errors, fmt.Errorf("line %d:%d %s", line, column, enhancedMsg))
 	l.lines[line] = true
@@ -133,6 +133,9 @@ type errorSite struct {
 	// backslashEscapes: the script is mdl 0, where `\'` escapes an apostrophe.
 	// The zero value is mdl 1's rule, where a backslash is an ordinary character.
 	backslashEscapes bool
+	// line is the 1-based line the error is on, 0 when unknown; a hint that
+	// points elsewhere on the line names its own line:column with it.
+	line int
 }
 
 // inRoutineHeader reports whether the parser was inside the header of a create
@@ -459,6 +462,12 @@ func enhanceErrorMessageAt(msg, offendingLine string, site errorSite) string {
 				"    alter entity Module.Entity add attribute %s: <type>;   (correct)\n"+
 				"    alter entity Module.Entity add %s: <type>;             (wrong)", msg, m[1], m[1])
 		}
+	}
+
+	// A malformed flow argument list in a widget property: ANTLR reports it at
+	// the property keyword, so name the argument (ako/mxcli#533).
+	if hint := flowArgumentHint(msg, offendingLine, site.line); hint != "" {
+		return msg + "\n\n" + hint
 	}
 
 	// Nothing matched a specific pattern — the location is precise but the fix

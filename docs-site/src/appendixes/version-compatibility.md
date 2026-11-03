@@ -64,7 +64,7 @@ The tables below show exactly which features are available on each Mendix versio
 | Loop in branches | `LOOP inside IF/ELSE` | Yes | Yes | Yes | Yes |
 | Loops over a list, while loops | `LOOP $Item IN $List ...`, `WHILE ...` | 9.0.4+ | Yes | Yes | Yes |
 | Show page with arguments | `SHOW PAGE Module.Page (Param = $Value)` | 9.7+ | Yes | Yes | Yes |
-| Calls in a task queue | `CALL MICROFLOW ... IN QUEUE ...`, `CALL JAVA ACTION ... IN QUEUE ...` | 9.10+ | Yes | Yes | Yes |
+| Calls in a task queue | `CALL MICROFLOW ... IN QUEUE ... [RETRY FIXED (...)], [RETRY EXPONENTIAL (...)]`, `CALL JAVA ACTION ... IN QUEUE ... [RETRY ...]` | 9.10+ | Yes | Yes | Yes |
 | Find and filter by expression | `FIND $List WHERE ...`, `FILTER $List WHERE ...` | 9.0.3+ | Yes | Yes | Yes |
 | Call external action | `CALL EXTERNAL ACTION Module.Service.Action (...)` | 9.19+ (with arguments: --) | Yes (with arguments: 10.2+) | Yes | Yes |
 | Range of a list | `RANGE $List OFFSET ... LIMIT ...` | 9.24+ | Yes | Yes | Yes |

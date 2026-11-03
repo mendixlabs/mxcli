@@ -1,0 +1,9 @@
+-- ako/mxcli#1911 (mendixlabs/mxcli#1716): DROP ASSOCIATION parsed and executed
+-- but `mxcli syntax` documented it nowhere a reader would look. The statements
+-- below are spelled exactly as the new `mxcli syntax drop` topic lists them.
+mdl 1;
+DROP ASSOCIATION IF EXISTS BugTest.Order_Customer;
+DROP ENTITY IF EXISTS BugTest.OrderLine;
+DROP MICROFLOW IF EXISTS BugTest.ACT_Old;
+DROP NANOFLOW IF EXISTS BugTest.NF_Old;
+DROP SNIPPET IF EXISTS BugTest.SN_Old;

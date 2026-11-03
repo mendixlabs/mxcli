@@ -602,7 +602,20 @@ callMicroflowStatement
 // on the call activity). Valid on CALL MICROFLOW and CALL JAVA ACTION only;
 // Mendix has no queued nanoflow or JavaScript action.
 queueClause
-    : IN QUEUE qualifiedName
+    : IN QUEUE qualifiedName queueRetryClause?
+    ;
+
+// RETRY FIXED (Retries: 5, Interval: 10, IntervalType: Minutes)
+// RETRY EXPONENTIAL (Retries: 20, InitialInterval: 1, MaximumInterval: 60, IntervalType: Minutes)
+// The retry policy of a queued call (Queues$QueueFixedRetry /
+// Queues$QueueExponentialRetry, mendixlabs/mxcli#1729). FIXED / EXPONENTIAL and
+// the property names are words, checked by the visitor, so they reserve nothing.
+queueRetryClause
+    : RETRY identifierOrKeyword LPAREN queueRetryProperty (COMMA queueRetryProperty)* RPAREN
+    ;
+
+queueRetryProperty
+    : identifierOrKeyword COLON (NUMBER_LITERAL | identifierOrKeyword)
     ;
 
 callNanoflowStatement

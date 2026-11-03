@@ -633,8 +633,9 @@ func describeMessageMembers(ctx *ExecContext, members []*model.MessageDefinition
 		}
 		switch {
 		case m.Kind == "Attribute":
-			fmt.Fprintf(ctx.Output, "%s%s%s%s%s\n", indent, m.OriginalName,
-				exposedClause(m, m.OriginalName), exampleClause(m), sep)
+			name := memberAttributeName(m)
+			fmt.Fprintf(ctx.Output, "%s%s%s%s%s\n", indent, name,
+				exposedClause(m, name), exampleClause(m), sep)
 		case len(m.Children) == 0:
 			fmt.Fprintf(ctx.Output, "%s%s/%s%s { }%s\n", indent, m.Association, m.Entity,
 				exposedClause(m, shortEntityName(m.Entity)), sep)
@@ -645,6 +646,24 @@ func describeMessageMembers(ctx *ExecContext, members []*model.MessageDefinition
 			fmt.Fprintf(ctx.Output, "%s}%s\n", indent, sep)
 		}
 	}
+}
+
+// memberAttributeName is the attribute an Attribute member is printed by: the
+// last segment of the stored attribute reference, which is what create resolves
+// the member against. OriginalName is the element's own stored name and lags a
+// rename — `rename attribute` updates the reference and leaves the element name
+// for Studio Pro's refresh, which is CE6524 until then (mendixlabs/mxcli#1733).
+// Printing OriginalName made describe emit an attribute that no longer exists;
+// printing the reference with the stored ExposedName as `as '…'` round-trips
+// and keeps the exposed name, i.e. the message contract, unchanged.
+func memberAttributeName(m *model.MessageDefinitionElement) string {
+	if m.Attribute == "" {
+		return m.OriginalName
+	}
+	if i := strings.LastIndex(m.Attribute, "."); i >= 0 {
+		return m.Attribute[i+1:]
+	}
+	return m.Attribute
 }
 
 // exampleClause emits `example '...'`, the one authored field besides the name.
@@ -910,10 +929,13 @@ func availableChildren(n *model.MessageDefinitionElement) string {
 }
 
 // findChildByName matches on the member's OWN name — the attribute's or the
-// target entity's — which is what `add`/`drop`/`set member X` names.
+// target entity's — which is what `add`/`drop`/`set member X` names. For an
+// attribute that is the attribute it references, which is how describe prints
+// it; the stored element name is accepted too, since it lags a rename until
+// Studio Pro refreshes the definition (mendixlabs/mxcli#1733).
 func findChildByName(n *model.MessageDefinitionElement, name string) *model.MessageDefinitionElement {
 	for _, c := range n.Children {
-		if c.OriginalName == name {
+		if c.OriginalName == name || (c.Kind == "Attribute" && memberAttributeName(c) == name) {
 			return c
 		}
 	}

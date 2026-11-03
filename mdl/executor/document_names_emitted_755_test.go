@@ -48,7 +48,7 @@ func TestContractExternalEntityUsesStudioProName(t *testing.T) {
 func TestMissingQueueAdviceUsesStudioProName(t *testing.T) {
 	mb := &mock.MockBackend{ListQueuesFunc: func() ([]*types.Queue, error) { return nil, nil }}
 	fb := &flowBuilder{backend: mb}
-	fb.buildQueueSettings(&ast.QualifiedName{Module: "Ops", Name: "Jobs"}, "call microflow")
+	fb.buildQueueSettings(&ast.QualifiedName{Module: "Ops", Name: "Jobs"}, nil, "call microflow")
 	if len(fb.errors) != 1 {
 		t.Fatalf("errors = %v, want one", fb.errors)
 	}
