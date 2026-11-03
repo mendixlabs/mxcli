@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **A module's version and module type from MDL** (ako/mxcli#1921) — the General tab of Studio Pro's *Module settings* dialog: `create or modify module Inventory (Version: '2.3.1', ModuleType: addon)` and `alter module Inventory set (Version: '2.4.0')`. `describe module` prints the settings that differ from a new module's (App, 1.0.0), and the location as a comment when it is *Marketplace modules*; `list modules` gains `Version` and `Type` columns. The version must be SemVer, the type `app` or `addon` (Mendix 9.12+), and a statement that restates the stored settings writes nothing. Measured on 11.16: the type is the settings' `ExportLevel` (`Source` / `Protected`), not `ProtectedModuleType`, which is `AddOn` on every module.
+
 ### Fixed
 
 - **A jar dependency change keeps the module's Module ID and Marketplace checksum** (ako/mxcli#1920) — `alter module … add | set | drop jar dependency` rebuilt the module's settings from the keys mxcli models, so the rest came back as defaults: the Module ID (`PackageId`) and a Marketplace module's `Checksum` were wiped, and detailed troubleshooting was switched on. The change is now written onto the stored settings, and only the jar dependencies change.

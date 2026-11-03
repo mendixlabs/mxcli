@@ -291,6 +291,7 @@ alterStatement
     | ALTER KNOWLEDGE BASE qualifiedName SET agentEditorAlterAssignment (COMMA agentEditorAlterAssignment)*
     | ALTER CONSUMED MCP SERVICE qualifiedName SET agentEditorAlterAssignment (COMMA agentEditorAlterAssignment)*
     | ALTER AGENT qualifiedName alterAgentAction+
+    | alterModuleSetStatement
     | alterModuleJarDepStatement
     ;
 

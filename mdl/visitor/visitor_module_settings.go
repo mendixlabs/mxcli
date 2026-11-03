@@ -3,6 +3,8 @@
 package visitor
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
@@ -129,4 +131,92 @@ func parseJarDepAction(ctx *parser.AlterModuleJarDepActionContext) ast.JarDepAct
 	}
 
 	return nil
+}
+
+// moduleSettingKeys are the keys of a module's settings list, named after the
+// fields of Studio Pro's Module settings dialog (ako/mxcli#1921).
+var moduleSettingKeys = []string{"Version", "ModuleType"}
+
+// moduleSettingsVersion is the dialog's rule for a module version: SemVer
+// major.minor.patch, with an optional pre-release and build suffix.
+var moduleSettingsVersion = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
+
+// moduleSettings reads a `( Version: '…', ModuleType: … )` list. An unknown
+// key, a repeated key or a value of the wrong shape is an error here, so check
+// and exec refuse the same statements.
+func (b *Builder) moduleSettings(what string, body parser.IModuleSettingsBodyContext) ast.ModuleSettingsClause {
+	var out ast.ModuleSettingsClause
+	bc, ok := body.(*parser.ModuleSettingsBodyContext)
+	if !ok || bc == nil {
+		return out
+	}
+	seen := map[string]bool{}
+	for _, p := range bc.AllModuleSettingProperty() {
+		pc, ok := p.(*parser.ModuleSettingPropertyContext)
+		if !ok || pc == nil || pc.IdentifierOrKeyword(0) == nil {
+			continue
+		}
+		line := pc.GetStart().GetLine()
+		key := identifierOrKeywordText(pc.IdentifierOrKeyword(0))
+		canonical := canonicalKey(key, moduleSettingKeys)
+		if canonical == "" {
+			b.addError(unknownKeyError(line, what, key, moduleSettingKeys))
+			continue
+		}
+		if seen[canonical] {
+			b.addError(fmt.Errorf("line %d: %s sets %s twice", line, what, canonical))
+			continue
+		}
+		seen[canonical] = true
+		switch canonical {
+		case "Version":
+			lit := pc.STRING_LITERAL()
+			if lit == nil {
+				b.addError(fmt.Errorf("line %d: %s: Version takes a string, as in Version: '1.2.0'", line, what))
+				continue
+			}
+			v := unquoteStringLit(lit)
+			if !moduleSettingsVersion.MatchString(v) {
+				b.addError(fmt.Errorf("line %d: %s: Version '%s' is not a SemVer version: Studio Pro takes major.minor.patch, as in '1.2.0'", line, what, v))
+				continue
+			}
+			out.Version = &v
+		case "ModuleType":
+			var t string
+			if pc.STRING_LITERAL() == nil && pc.IdentifierOrKeyword(1) != nil {
+				t = strings.ToLower(identifierOrKeywordText(pc.IdentifierOrKeyword(1)))
+			}
+			if t != "app" && t != "addon" {
+				b.addError(fmt.Errorf("line %d: %s: ModuleType takes app or addon, not %s", line, what, nodeText(pc.GetChild(2))))
+				continue
+			}
+			out.ModuleType = &t
+		}
+	}
+	return out
+}
+
+// ExitAlterModuleSetStatement handles ALTER MODULE name SET ( Key: value, … ).
+func (b *Builder) ExitAlterModuleSetStatement(ctx *parser.AlterModuleSetStatementContext) {
+	var moduleName string
+	if qn := ctx.QualifiedName(); qn != nil {
+		moduleName = getQualifiedNameText(qn)
+	} else if id := ctx.IDENTIFIER(); id != nil {
+		moduleName = id.GetText()
+	}
+	if moduleName == "" {
+		return
+	}
+	stmt := &ast.AlterModuleSetStmt{ModuleName: moduleName}
+	body := ctx.ModuleSettingsBody()
+	if bc, ok := body.(*parser.ModuleSettingsBodyContext); ok && bc != nil && len(bc.AllModuleSettingProperty()) == 0 {
+		b.addError(fmt.Errorf("line %d: alter module %s set () names no setting: it takes %s",
+			ctx.GetStart().GetLine(), moduleName, strings.Join(moduleSettingKeys, ", ")))
+		return
+	}
+	stmt.Settings = b.moduleSettings("module "+moduleName, body)
+	if stmt.Settings.IsEmpty() {
+		return // every key was refused above
+	}
+	b.statements = append(b.statements, stmt)
 }

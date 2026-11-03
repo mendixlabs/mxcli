@@ -175,6 +175,27 @@ var documentTypeGates = []statementTypeGate{
 		},
 	},
 	{
+		// An add-on module is ExportLevel Protected with ProtectedModuleType
+		// AddOn; below 9.12 there is no ProtectedModuleType to write
+		// (ako/mxcli#1921).
+		typeGate: typeGate{
+			versionGate: versionGate{"modules", "module_type", "ModuleType: addon on a module",
+				"this version has no add-on modules (Projects$ModuleSettings.ProtectedModuleType): leave the module an app module, or upgrade the project"},
+			types:      []string{"Projects$ModuleSettings"},
+			properties: []string{"Projects$ModuleSettings.ProtectedModuleType"},
+		},
+		applies: func(stmt ast.Statement) bool {
+			var c ast.ModuleSettingsClause
+			switch s := stmt.(type) {
+			case *ast.CreateModuleStmt:
+				c = s.Settings
+			case *ast.AlterModuleSetStmt:
+				c = s.Settings
+			}
+			return c.ModuleType != nil && *c.ModuleType == "addon"
+		},
+	},
+	{
 		typeGate: typeGate{
 			versionGate: versionGate{"modules", "jar_dependencies", "add jar dependency",
 				"this version stores no JAR dependencies on a module (Projects$JarDependency): put the JAR in userlib/, or upgrade the project"},

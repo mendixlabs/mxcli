@@ -1,6 +1,6 @@
 ---
 title: Module settings — describe and set the module version and module type
-status: proposed
+status: partial
 date: 2026-11-03
 author: Generated with Claude Code
 issue: ako/mxcli#1921
@@ -10,7 +10,7 @@ depends-on: ako/mxcli#1920
 
 # Proposal: Module settings — describe and set the module version and module type
 
-**Status:** Proposed
+**Status:** Partial — Version and ModuleType implemented (ako/mxcli#1921); Location is the later step.
 **Date:** 2026-11-03
 
 ## Problem Statement

@@ -881,8 +881,9 @@ end;
   removes both.
 - **`export level api | hidden`** decides whether the microflow is part of the
   module's public surface when the module is exported. It bites in a
-  **Protected (add-on) module** — `describe module` prints
-  `-- export level: Protected …` and `show modules` says `Protected AddOn`:
+  **Protected (add-on) module** — `describe module` prints `ModuleType: addon`
+  (set it with `alter module M set (ModuleType: addon)`) and `show modules`
+  says `Protected AddOn`:
   another module or the navigation referencing a Hidden microflow, entity,
   attribute, association or any page there is **CE1406**, and an `api`
   microflow whose parameter or return type is a Hidden entity or enumeration of

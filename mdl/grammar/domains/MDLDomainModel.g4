@@ -369,7 +369,25 @@ alterEnumerationAction
 // =============================================================================
 
 createModuleStatement
-    : MODULE ifNotExists? identifierOrKeyword moduleOptions?
+    : MODULE ifNotExists? identifierOrKeyword moduleOptions? moduleSettingsBody?
+    ;
+
+// The General tab of Studio Pro's Module settings dialog, as a property list:
+// `( Version: '2.3.1', ModuleType: addon )` (ako/mxcli#1921). The visitor
+// holds the key table; `alter module … set ( … )` takes the same keys.
+moduleSettingsBody
+    : LPAREN (moduleSettingProperty (COMMA moduleSettingProperty)* COMMA?)? RPAREN
+    ;
+
+// NUMBER_LITERAL only so `Version: 2.0` gets the visitor's message, not a
+// parse error.
+moduleSettingProperty
+    : identifierOrKeyword COLON (STRING_LITERAL | NUMBER_LITERAL | identifierOrKeyword)
+    ;
+
+// ALTER MODULE name SET ( Version: '…', ModuleType: app | addon )
+alterModuleSetStatement
+    : ALTER MODULE (qualifiedName | IDENTIFIER) SET moduleSettingsBody
     ;
 
 // =============================================================================

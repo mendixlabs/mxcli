@@ -1,0 +1,39 @@
+mdl 1;
+-- An add-on module writes Projects$ModuleSettings.ProtectedModuleType, which
+-- exists from Mendix 9.12; mxcli refuses `ModuleType: addon` below it.
+-- @version: 9.12+
+-- ============================================================================
+-- Module Settings Examples (ako/mxcli#1921)
+-- ============================================================================
+--
+-- The General tab of Studio Pro's Module settings dialog: the module version
+-- and the module type. Stored in Projects$ModuleSettings as Version and
+-- ExportLevel (Source = App module, Protected = Add-on module).
+--
+-- Features demonstrated:
+--   - CREATE OR MODIFY MODULE ... ( Version: ..., ModuleType: ... )
+--   - ALTER MODULE ... SET ( ... )
+--   - DESCRIBE MODULE (prints the settings that differ from App / 1.0.0)
+--   - LIST MODULES (Version and Type columns)
+--
+-- ============================================================================
+
+-- A new module with its settings
+create or modify module SettingsTest (
+  Version: '2.3.1',
+  ModuleType: addon,
+);
+
+describe module SettingsTest;
+
+-- Change one setting; the other keeps its value
+alter module SettingsTest set (Version: '2.4.0');
+
+-- Back to an app module
+alter module SettingsTest set (ModuleType: app);
+
+-- Restating the stored settings writes nothing
+create or modify module SettingsTest (Version: '2.4.0');
+
+describe module SettingsTest;
+list modules;

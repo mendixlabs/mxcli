@@ -168,6 +168,7 @@ func allKnownStatements() []ast.Statement {
 		&ast.AlterEnumerationStmt{},
 		&ast.AlterKnowledgeBaseStmt{},
 		&ast.AlterModelStmt{},
+		&ast.AlterModuleSetStmt{},
 		&ast.AlterModuleJarDepStmt{},
 		&ast.CreateNavigationStmt{},
 		&ast.AlterNavigationStmt{},

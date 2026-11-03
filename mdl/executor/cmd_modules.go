@@ -35,12 +35,20 @@ func execCreateModule(ctx *ExecContext, s *ast.CreateModuleStmt) error {
 		if m.Name == s.Name {
 			// A plain create of an existing module stays the no-op it always
 			// was; `or modify` applies the documentation the statement states.
-			if s.CreateOrModify && s.DocumentationSet {
-				return setModuleDocumentation(ctx, m, s.Documentation)
+			if s.CreateOrModify {
+				if err := setModuleSettings(ctx, m, s.Settings); err != nil {
+					return err
+				}
+				if s.DocumentationSet {
+					return setModuleDocumentation(ctx, m, s.Documentation)
+				}
+				if !s.Settings.IsEmpty() {
+					return nil
+				}
 			}
-			if s.DocumentationSet {
-				fmt.Fprintf(ctx.Output, "Module '%s' already exists; documentation unchanged "+
-					"(create or modify module sets it)\n", s.Name)
+			if s.DocumentationSet || !s.Settings.IsEmpty() {
+				fmt.Fprintf(ctx.Output, "Module '%s' already exists; documentation and settings unchanged "+
+					"(create or modify module sets them)\n", s.Name)
 				return nil
 			}
 			fmt.Fprintf(ctx.Output, "Module '%s' already exists\n", s.Name)
@@ -61,6 +69,13 @@ func execCreateModule(ctx *ExecContext, s *ast.CreateModuleStmt) error {
 	invalidateModuleCache(ctx)
 
 	fmt.Fprintf(ctx.Output, "Created module: %s\n", s.Name)
+	if !s.Settings.IsEmpty() {
+		// The new module's settings unit holds the defaults; the stated ones
+		// are written onto it, so its PackageId and the rest are kept.
+		if err := setModuleSettings(ctx, module, s.Settings); err != nil {
+			return err
+		}
+	}
 	if s.DocumentationSet && s.Documentation != "" {
 		return setModuleDocumentation(ctx, module, s.Documentation)
 	}
@@ -533,6 +548,8 @@ func listModules(ctx *ExecContext) error {
 	type row struct {
 		name        string
 		source      string
+		version     string
+		moduleType  string
 		entities    int
 		enums       int
 		pages       int
@@ -550,6 +567,14 @@ func listModules(ctx *ExecContext) error {
 	}
 	var rows []row
 	protections := moduleProtections(ctx)
+	// Version and Type are the General tab of the Module settings dialog
+	// (ako/mxcli#1921).
+	settingsByModule := map[model.ID]*types.ModuleSettings{}
+	if all, err := ctx.Backend.ListModuleSettings(); err == nil {
+		for _, ms := range all {
+			settingsByModule[ms.ContainerID] = ms
+		}
+	}
 
 	for _, m := range modules {
 		// Determine source (AppStore with version or local)
@@ -570,9 +595,23 @@ func listModules(ctx *ExecContext) error {
 			source += "Protected " + kind
 		}
 
+		version, moduleType := "", ""
+		if ms := settingsByModule[m.ID]; ms != nil {
+			version = ms.Version
+			switch moduleTypeOf(ms) {
+			case moduleTypeApp:
+				moduleType = "App"
+			case moduleTypeAddOn:
+				moduleType = "Add-on"
+			default:
+				moduleType = ms.ProtectedModuleType
+			}
+		}
 		r := row{
 			name:        m.Name,
 			source:      source,
+			version:     version,
+			moduleType:  moduleType,
 			entities:    entityCounts[m.ID],
 			enums:       enumCounts[m.ID],
 			pages:       pageCounts[m.ID],
@@ -593,11 +632,11 @@ func listModules(ctx *ExecContext) error {
 
 	// Build TableResult
 	result := &TableResult{
-		Columns: []string{"Module", "Source", "Entities", "Enums", "Pages", "Snippets", "Microflows", "Nanoflows", "Workflows", "Constants", "JavaActions", "PubREST", "PubOData", "ConOData", "BizEvents", "ExtDB"},
+		Columns: []string{"Module", "Source", "Version", "Type", "Entities", "Enums", "Pages", "Snippets", "Microflows", "Nanoflows", "Workflows", "Constants", "JavaActions", "PubREST", "PubOData", "ConOData", "BizEvents", "ExtDB"},
 		Summary: fmt.Sprintf("(%d modules)", len(modules)),
 	}
 	for _, r := range rows {
-		result.Rows = append(result.Rows, []any{r.name, r.source, r.entities, r.enums, r.pages, r.snippets, r.microflows, r.nanoflows, r.workflows, r.constants, r.javaActions, r.pubRest, r.pubOData, r.conOData, r.bizEvents, r.extDb})
+		result.Rows = append(result.Rows, []any{r.name, r.source, r.version, r.moduleType, r.entities, r.enums, r.pages, r.snippets, r.microflows, r.nanoflows, r.workflows, r.constants, r.javaActions, r.pubRest, r.pubOData, r.conOData, r.bizEvents, r.extDb})
 	}
 	return writeResult(ctx, result)
 }
@@ -631,11 +670,29 @@ func describeModule(ctx *ExecContext, moduleName string, withAll bool) error {
 	if dm, err := ctx.Backend.GetDomainModel(targetModule.ID); err == nil && dm != nil && dm.Documentation != "" {
 		fmt.Fprintf(ctx.Output, "/**\n * %s\n */\n", strings.ReplaceAll(dm.Documentation, "\n", "\n * "))
 	}
-	fmt.Fprintf(ctx.Output, "create or modify module %s;\n", targetModule.Name)
+	// Listed rather than got by module: the same read moduleProtection makes.
+	var settings *types.ModuleSettings
+	if all, err := ctx.Backend.ListModuleSettings(); err == nil {
+		for _, ms := range all {
+			if ms.ContainerID == targetModule.ID {
+				settings = ms
+			}
+		}
+	}
+	fmt.Fprintf(ctx.Output, "create or modify module %s%s;\n", targetModule.Name, moduleSettingsMDL(ctx, settings))
+	// Location has no key yet (PROPOSAL_module_settings.md, "Later: Location").
+	if targetModule.FromAppStore {
+		fmt.Fprintln(ctx.Output, "-- location: Marketplace modules (set in Studio Pro)")
+	}
 	// A Protected (add-on / solution) module hides every element not marked
-	// Usable from the rest of the app (CE1406). MDL has no syntax for the
-	// module's export level, so it prints as a comment (mendixlabs/mxcli#1498).
-	if kind := moduleProtection(ctx, string(targetModule.ID)); kind != "" {
+	// Usable from the rest of the app (CE1406), which nothing else printed
+	// says (mendixlabs/mxcli#1498). An add-on is `ModuleType: addon` above; a
+	// solution module has no MDL spelling, so it is a comment only.
+	switch kind := moduleProtection(ctx, string(targetModule.ID)); kind {
+	case "":
+	case "AddOn":
+		fmt.Fprintln(ctx.Output, "-- add-on module: elements not marked Usable cannot be referenced from other modules")
+	default:
 		fmt.Fprintf(ctx.Output, "-- export level: Protected (%s module) — set in Studio Pro; elements not marked Usable cannot be referenced from other modules\n", kind)
 	}
 
