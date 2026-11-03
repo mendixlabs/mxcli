@@ -63,12 +63,10 @@ func buildMicroflowStatement(ctx parser.IMicroflowStatementContext) ast.Microflo
 		stmt = buildCommitStatement(commit)
 	} else if del := mfCtx.DeleteObjectStatement(); del != nil {
 		stmt = buildDeleteObjectStatement(del)
-	} else if send := mfCtx.SendExternalObjectStatement(); send != nil {
-		stmt = buildSendExternalObjectStatement(send)
-	} else if del := mfCtx.DeleteExternalObjectStatement(); del != nil {
-		stmt = buildDeleteExternalObjectStatement(del)
 	} else if rollback := mfCtx.RollbackStatement(); rollback != nil {
 		stmt = buildRollbackStatement(rollback)
+	} else if ext := mfCtx.ExternalObjectStatement(); ext != nil {
+		stmt = buildExternalObjectStatement(ext)
 	} else if retr := mfCtx.RetrieveStatement(); retr != nil {
 		stmt = buildRetrieveStatement(retr)
 	} else if ifStmt := mfCtx.IfStatement(); ifStmt != nil {
@@ -1378,34 +1376,20 @@ func buildDeleteObjectStatement(ctx parser.IDeleteObjectStatementContext) *ast.D
 	return stmt
 }
 
-// buildSendExternalObjectStatement converts SEND EXTERNAL OBJECT.
-func buildSendExternalObjectStatement(ctx parser.ISendExternalObjectStatementContext) *ast.SendExternalObjectStmt {
-	c, ok := ctx.(*parser.SendExternalObjectStatementContext)
-	if !ok || c == nil {
+// buildExternalObjectStatement converts SEND/DELETE EXTERNAL OBJECT to an
+// ExternalObjectStmt.
+func buildExternalObjectStatement(ctx parser.IExternalObjectStatementContext) *ast.ExternalObjectStmt {
+	if ctx == nil {
 		return nil
 	}
-	stmt := &ast.SendExternalObjectStmt{RefreshInClient: c.REFRESH() != nil}
+	c := ctx.(*parser.ExternalObjectStatementContext)
+	stmt := &ast.ExternalObjectStmt{Delete: c.DELETE() != nil}
 	if v := c.VARIABLE(); v != nil {
 		stmt.Variable = strings.TrimPrefix(v.GetText(), "$")
 	}
-	if e := c.OnErrorClause(); e != nil {
-		stmt.ErrorHandling = buildOnErrorClause(e)
-	}
-	return stmt
-}
-
-// buildDeleteExternalObjectStatement converts DELETE EXTERNAL OBJECT.
-func buildDeleteExternalObjectStatement(ctx parser.IDeleteExternalObjectStatementContext) *ast.DeleteExternalObjectStmt {
-	c, ok := ctx.(*parser.DeleteExternalObjectStatementContext)
-	if !ok || c == nil {
-		return nil
-	}
-	stmt := &ast.DeleteExternalObjectStmt{RefreshInClient: c.REFRESH() != nil}
-	if v := c.VARIABLE(); v != nil {
-		stmt.Variable = strings.TrimPrefix(v.GetText(), "$")
-	}
-	if e := c.OnErrorClause(); e != nil {
-		stmt.ErrorHandling = buildOnErrorClause(e)
+	stmt.RefreshInClient = c.REFRESH() != nil
+	if errClause := c.OnErrorClause(); errClause != nil {
+		stmt.ErrorHandling = buildOnErrorClause(errClause)
 	}
 	return stmt
 }

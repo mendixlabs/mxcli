@@ -1,19 +1,38 @@
--- ako/mxcli#1939 (mendixlabs/mxcli#1735): no MDL for Send / Delete external
--- object, so an OData write flow could not be authored, and a drop + create of
--- a flow holding one deleted it silently. Measured on mxbuild 11.12.6 against
--- an updatable external entity: these build clean; `on error continue` is
--- CE6035 on both, and either one in a nanoflow is CE0009.
 mdl 1;
-create module BugTest1939;
-create entity BugTest1939.District (Name: String(100));
-create microflow BugTest1939.ACT_District_Save ($District: BugTest1939.District)
+-- ako/mxcli#1939 (mendixlabs/mxcli#1735): Studio Pro's "Send external object"
+-- and "Delete external object" activities had no MDL. A flow that saves an
+-- external (OData) object could not be written — a plain commit on one is a
+-- Studio Pro error — and describe printed `-- Unsupported action:
+-- Microflows$SendExternalObject`, so the drop + create rebuild that
+-- MDL-V1-REBUILD recommends deleted the activity silently.
+--
+-- Run: mxcli exec 1939-send-delete-external-object.mdl -p app.mpr
+-- Then: describe microflow OdataSend1939.ACT_Save prints the send; drop it and
+-- create it from that description and it is still there; mx check: 0 errors
+-- (measured on 11.12.6). `on error continue` on either statement is MDL076
+-- (CE6035).
+--
+-- The contract's Definition set is updatable but not deletable, so a
+-- `delete external object` on it is CE9435 — not exercised here.
+
+create or modify module OdataSend1939;
+
+create or modify constant OdataSend1939.SvcUrl
+  ( Type: string, DefaultValue: 'https://example.com/odata/v4/App/' );
+
+create or modify consumed odata service OdataSend1939.App (
+  ODataVersion: 'OData4',
+  MetadataUrl: './contracts/key-updatable-metadata.xml',
+  ServiceUrl: '@OdataSend1939.SvcUrl'
+);
+
+create or modify external entities from OdataSend1939.App into OdataSend1939 entities (Definition);
+
+create or modify microflow OdataSend1939.ACT_Save ($Definition: OdataSend1939.Definition)
 begin
-  change $District (Name = 'Closed');
-  send external object $District refresh;
+  change $Definition (Label = 'renamed');
+  send external object $Definition refresh;
+  return;
 end;
-create microflow BugTest1939.ACT_District_Remove ($District: BugTest1939.District)
-begin
-  delete external object $District on error begin
-    log error node 'Crm' 'delete failed';
-  end error;
-end;
+
+describe microflow OdataSend1939.ACT_Save;

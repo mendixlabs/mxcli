@@ -282,10 +282,9 @@ microflowStatement
     | annotation* createObjectStatement SEMICOLON
     | annotation* changeObjectStatement SEMICOLON
     | annotation* commitStatement SEMICOLON
-    | annotation* deleteExternalObjectStatement SEMICOLON
     | annotation* deleteObjectStatement SEMICOLON
-    | annotation* sendExternalObjectStatement SEMICOLON
     | annotation* rollbackStatement SEMICOLON
+    | annotation* externalObjectStatement SEMICOLON
     | annotation* retrieveStatement SEMICOLON
     | annotation* ifStatement SEMICOLON
     | annotation* loopStatement SEMICOLON
@@ -456,20 +455,17 @@ deleteObjectStatement
     : DELETE VARIABLE REFRESH? onErrorClause?
     ;
 
-// SEND EXTERNAL OBJECT $Customer [REFRESH]; — save an external (OData) object;
-// a commit of one is refused by Studio Pro (mendixlabs/mxcli#1735).
-sendExternalObjectStatement
-    : SEND EXTERNAL OBJECT VARIABLE REFRESH? onErrorClause?
-    ;
-
-// DELETE EXTERNAL OBJECT $Customer [REFRESH];
-deleteExternalObjectStatement
-    : DELETE EXTERNAL OBJECT VARIABLE REFRESH? onErrorClause?
-    ;
-
 // ROLLBACK $Product; or ROLLBACK $Product REFRESH;
 rollbackStatement
     : ROLLBACK VARIABLE REFRESH? onErrorClause?
+    ;
+
+// SEND EXTERNAL OBJECT $District [REFRESH]; and DELETE EXTERNAL OBJECT $District
+// [REFRESH]; — Studio Pro's "Send external object" and "Delete external object"
+// (mendixlabs/mxcli#1735). A plain commit or delete on an external entity is a
+// Studio Pro error; these are how an OData write is saved or removed.
+externalObjectStatement
+    : (SEND | DELETE) EXTERNAL OBJECT VARIABLE REFRESH? onErrorClause?
     ;
 
 // RETRIEVE $Product FROM MfTest.Product WHERE Code = $SearchCode SORT BY Name ASC FIRST;

@@ -918,9 +918,7 @@ func statementErrorHandling(stmt ast.MicroflowStatement) *ast.ErrorHandlingClaus
 		return s.ErrorHandling
 	case *ast.DeleteObjectStmt:
 		return s.ErrorHandling
-	case *ast.SendExternalObjectStmt:
-		return s.ErrorHandling
-	case *ast.DeleteExternalObjectStmt:
+	case *ast.ExternalObjectStmt:
 		return s.ErrorHandling
 	case *ast.CallMicroflowStmt:
 		return s.ErrorHandling

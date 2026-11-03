@@ -69,12 +69,6 @@ func checkDisallowedNanoflowAction(stmt ast.MicroflowStatement) string {
 		return "REST calls are not allowed in nanoflows"
 	case *ast.SendRestRequestStmt:
 		return "REST requests are not allowed in nanoflows"
-	case *ast.SendExternalObjectStmt:
-		// Measured on mxbuild 11.12.6: CE0009 "This action is not supported in
-		// nanoflows." on both external-object activities (mendixlabs/mxcli#1735).
-		return "send external object is not allowed in nanoflows"
-	case *ast.DeleteExternalObjectStmt:
-		return "delete external object is not allowed in nanoflows"
 	case *ast.SendEmailStmt:
 		return "SEND EMAIL is not allowed in nanoflows — mail is sent over SMTP from the server"
 	case *ast.ImportFromMappingStmt:

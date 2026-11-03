@@ -58,6 +58,11 @@ var continueUnsupportedOn = map[string]string{
 	"close page":          "Close page activity",
 	"show message":        "Show message activity",
 	"validation feedback": "Validation feedback activity",
+	// Measured on 11.12.6, one microflow per project: Continue is CE6035 on
+	// both; the default, and a custom handler with or without rollback, are
+	// accepted (mendixlabs/mxcli#1735).
+	"send external object":   "Send external object activity",
+	"delete external object": "Delete external object activity",
 	// mendixlabs/mxcli#175, measured on 11.14.0 in ako/TestApp: continue is
 	// CE6035 on a Call workflow activity; no clause, rollback and both custom
 	// handlers build.
@@ -73,11 +78,6 @@ var continueUnsupportedOn = map[string]string{
 	"remove":         "Change list activity",
 	"cast":           "Cast object activity",
 	"show home page": "Show home page action activity",
-	// mendixlabs/mxcli#1735, measured on mxbuild 11.12.6 against an updatable
-	// external entity, one microflow per cell: rollback, custom and custom
-	// without rollback build on both; continue is CE6035 on both.
-	"send external object":   "Send external object activity",
-	"delete external object": "Delete external object activity",
 }
 
 // checkErrorHandlingContinueSupported reports `ON ERROR CONTINUE` on a statement
@@ -120,10 +120,6 @@ func continueUnsupportedStatement(stmt ast.MicroflowStatement) (keyword, activit
 	switch s := stmt.(type) {
 	case *ast.CreateObjectStmt:
 		keyword = "create"
-	case *ast.SendExternalObjectStmt:
-		keyword = "send external object"
-	case *ast.DeleteExternalObjectStmt:
-		keyword = "delete external object"
 	case *ast.MfCommitStmt:
 		keyword = "commit"
 	case *ast.ChangeObjectStmt:
@@ -161,6 +157,11 @@ func continueUnsupportedStatement(stmt ast.MicroflowStatement) (keyword, activit
 		keyword = "cast"
 	case *ast.ShowHomePageStmt:
 		keyword = "show home page"
+	case *ast.ExternalObjectStmt:
+		keyword = "send external object"
+		if s.Delete {
+			keyword = "delete external object"
+		}
 	default:
 		// DeclareStmt and MfSetStmt are deliberately absent: create-variable and
 		// change-variable accept Continue on 11.14.0. So is RollbackStmt, on

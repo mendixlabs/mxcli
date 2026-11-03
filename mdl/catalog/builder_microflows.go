@@ -709,10 +709,6 @@ func describeAction(action microflows.MicroflowAction, varEntity map[string]stri
 		r.actionRef = a.JavaScriptAction
 	case *microflows.DeleteObjectAction:
 		r.entityRef = varEntity[strings.TrimPrefix(a.DeleteVariable, "$")]
-	case *microflows.SendExternalObjectAction:
-		r.entityRef = varEntity[strings.TrimPrefix(a.Variable, "$")]
-	case *microflows.DeleteExternalObjectAction:
-		r.entityRef = varEntity[strings.TrimPrefix(a.Variable, "$")]
 	case *microflows.CreateObjectAction:
 		r.entityRef = a.EntityQualifiedName
 		r.commitType = string(a.Commit)

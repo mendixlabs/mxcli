@@ -196,11 +196,9 @@ func StatementErrorHandling(stmt ast.MicroflowStatement) *ast.ErrorHandlingClaus
 		return s.ErrorHandling
 	case *ast.DeleteObjectStmt:
 		return s.ErrorHandling
-	case *ast.SendExternalObjectStmt:
-		return s.ErrorHandling
-	case *ast.DeleteExternalObjectStmt:
-		return s.ErrorHandling
 	case *ast.MfCommitStmt:
+		return s.ErrorHandling
+	case *ast.ExternalObjectStmt:
 		return s.ErrorHandling
 	case *ast.RetrieveStmt:
 		return s.ErrorHandling

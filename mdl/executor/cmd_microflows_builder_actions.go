@@ -265,47 +265,6 @@ func (fb *flowBuilder) addCommitAction(s *ast.MfCommitStmt) model.ID {
 	return activity.ID
 }
 
-// addExternalObjectAction creates a SEND / DELETE EXTERNAL OBJECT activity
-// (mendixlabs/mxcli#1735). Both are an action on one external object with a
-// refresh flag and the usual error handling, so they share the activity shape.
-func (fb *flowBuilder) addExternalObjectAction(action microflows.MicroflowAction, eh *ast.ErrorHandlingClause) model.ID {
-	activityX := fb.posX
-	activity := &microflows.ActionActivity{
-		BaseActivity: microflows.BaseActivity{
-			BaseMicroflowObject: microflows.BaseMicroflowObject{
-				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
-				Position:    model.Point{X: fb.posX, Y: fb.posY},
-				Size:        model.Size{Width: ActivityWidth, Height: ActivityHeight},
-			},
-			AutoGenerateCaption: true,
-			ErrorHandlingType:   fb.ehType(eh),
-		},
-		Action: action,
-	}
-	fb.objects = append(fb.objects, activity)
-	fb.posX += fb.spacing
-	fb.finishCustomErrorHandler(activity.ID, activityX, eh, "")
-	return activity.ID
-}
-
-func (fb *flowBuilder) addSendExternalObjectAction(s *ast.SendExternalObjectStmt) model.ID {
-	return fb.addExternalObjectAction(&microflows.SendExternalObjectAction{
-		BaseElement:       model.BaseElement{ID: model.ID(types.GenerateID())},
-		Variable:          s.Variable,
-		RefreshInClient:   s.RefreshInClient,
-		ErrorHandlingType: explicitErrorHandling(fb, s.ErrorHandling),
-	}, s.ErrorHandling)
-}
-
-func (fb *flowBuilder) addDeleteExternalObjectAction(s *ast.DeleteExternalObjectStmt) model.ID {
-	return fb.addExternalObjectAction(&microflows.DeleteExternalObjectAction{
-		BaseElement:       model.BaseElement{ID: model.ID(types.GenerateID())},
-		Variable:          s.Variable,
-		RefreshInClient:   s.RefreshInClient,
-		ErrorHandlingType: explicitErrorHandling(fb, s.ErrorHandling),
-	}, s.ErrorHandling)
-}
-
 // addDeleteAction creates a DELETE statement.
 func (fb *flowBuilder) addDeleteAction(s *ast.DeleteObjectStmt) model.ID {
 	action := &microflows.DeleteObjectAction{
@@ -325,6 +284,39 @@ func (fb *flowBuilder) addDeleteAction(s *ast.DeleteObjectStmt) model.ID {
 			},
 			AutoGenerateCaption: true,
 			ErrorHandlingType:   fb.ehType(s.ErrorHandling),
+		},
+		Action: action,
+	}
+
+	fb.objects = append(fb.objects, activity)
+	fb.posX += fb.spacing
+
+	fb.finishCustomErrorHandler(activity.ID, activityX, s.ErrorHandling, "")
+
+	return activity.ID
+}
+
+// addExternalObjectAction creates a SEND or DELETE EXTERNAL OBJECT activity
+// (mendixlabs/mxcli#1735).
+func (fb *flowBuilder) addExternalObjectAction(s *ast.ExternalObjectStmt) model.ID {
+	activityX := fb.posX
+	var action microflows.MicroflowAction
+	id := model.BaseElement{ID: model.ID(types.GenerateID())}
+	eh := explicitErrorHandling(fb, s.ErrorHandling)
+	if s.Delete {
+		action = &microflows.DeleteExternalObjectAction{BaseElement: id, Variable: s.Variable, RefreshInClient: s.RefreshInClient, ErrorHandlingType: eh}
+	} else {
+		action = &microflows.SendExternalObjectAction{BaseElement: id, Variable: s.Variable, RefreshInClient: s.RefreshInClient, ErrorHandlingType: eh}
+	}
+
+	activity := &microflows.ActionActivity{
+		BaseActivity: microflows.BaseActivity{
+			BaseMicroflowObject: microflows.BaseMicroflowObject{
+				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
+				Position:    model.Point{X: fb.posX, Y: fb.posY},
+				Size:        model.Size{Width: ActivityWidth, Height: ActivityHeight},
+			},
+			AutoGenerateCaption: true,
 		},
 		Action: action,
 	}
@@ -1517,7 +1509,10 @@ func (fb *flowBuilder) addRetrieveAction(s *ast.RetrieveStmt) model.ID {
 				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 				RangeType:   microflows.RangeTypeFirst,
 			}
-		} else if s.Limit != "" {
+		} else if s.Limit != "" || s.Offset != "" {
+			// An offset alone is a Custom range too; testing the limit only
+			// wrote `offset 5000` as the "all" range, and the retrieve
+			// returned the first objects instead (mendixlabs/mxcli#1737).
 			dbSource.Range = &microflows.Range{
 				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 				RangeType:   microflows.RangeTypeCustom,

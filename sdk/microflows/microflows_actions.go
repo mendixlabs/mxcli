@@ -84,9 +84,9 @@ type RollbackObjectAction struct {
 
 func (RollbackObjectAction) isMicroflowAction() {}
 
-// SendExternalObjectAction sends an external (OData) object's changes to its
-// service (Microflows$SendExternalObject, Mendix 9.6+). It is how an external
-// entity is saved: Studio Pro refuses a commit of one (mendixlabs/mxcli#1735).
+// SendExternalObjectAction is Studio Pro's "Send external object"
+// (Microflows$SendExternalObject): it saves a changed external (OData) object
+// through its consumed service, which a plain commit on one cannot do.
 type SendExternalObjectAction struct {
 	model.BaseElement
 	Variable          string            `json:"variable"`
@@ -96,8 +96,8 @@ type SendExternalObjectAction struct {
 
 func (SendExternalObjectAction) isMicroflowAction() {}
 
-// DeleteExternalObjectAction deletes an external (OData) object at its service
-// (Microflows$DeleteExternalObject, Mendix 9.12+).
+// DeleteExternalObjectAction is Studio Pro's "Delete external object"
+// (Microflows$DeleteExternalObject).
 type DeleteExternalObjectAction struct {
 	model.BaseElement
 	Variable          string            `json:"variable"`
