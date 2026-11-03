@@ -19,8 +19,8 @@ description: "Share data between Mendix apps over OData — published services, 
 | 194-226 | API Versioning |
 | 227-272 | Folder Organization |
 | 273-284 | Module Organization Conventions |
-| 285-306 | Checklist |
-| 307-334 | Exploration Commands |
+| 285-311 | Checklist |
+| 312-339 | Exploration Commands |
 
 <!-- /skill-index -->
 # OData Data Sharing Between Mendix Apps
@@ -303,6 +303,11 @@ Before consuming:
 - [ ] OData client uses `ServiceUrl: Module.Constant` for runtime endpoint
 - [ ] External entities match the published exposed names and types
 - [ ] Module role created and granted on external entities (READ, optionally CREATE/WRITE/DELETE)
+- [ ] Writes to an external entity use `send external object $Obj;` (save) and
+      `delete external object $Obj;` — never `commit` / `delete`, which Studio Pro
+      refuses on an external entity. Microflows only (CE0009 in a nanoflow), no
+      `on error continue` (CE6035), and the entity must be Updatable / Deletable
+      in the contract (CE9435). `mxcli syntax microflow object-operations`.
 
 ## Exploration Commands
 

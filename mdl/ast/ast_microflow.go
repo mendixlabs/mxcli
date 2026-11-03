@@ -627,6 +627,28 @@ type RollbackStmt struct {
 
 func (s *RollbackStmt) isMicroflowStatement() {}
 
+// SendExternalObjectStmt represents: SEND EXTERNAL OBJECT $Var [REFRESH] [ON ERROR …]
+// (Microflows$SendExternalObject, mendixlabs/mxcli#1735).
+type SendExternalObjectStmt struct {
+	Variable        string
+	RefreshInClient bool
+	Annotations     *ActivityAnnotations
+	ErrorHandling   *ErrorHandlingClause
+}
+
+func (s *SendExternalObjectStmt) isMicroflowStatement() {}
+
+// DeleteExternalObjectStmt represents: DELETE EXTERNAL OBJECT $Var [REFRESH] [ON ERROR …]
+// (Microflows$DeleteExternalObject, mendixlabs/mxcli#1735).
+type DeleteExternalObjectStmt struct {
+	Variable        string
+	RefreshInClient bool
+	Annotations     *ActivityAnnotations
+	ErrorHandling   *ErrorHandlingClause
+}
+
+func (s *DeleteExternalObjectStmt) isMicroflowStatement() {}
+
 // RetrieveStmt represents: RETRIEVE $Var FROM Entity [WHERE condition] [SORT BY ...] [FIRST | [LIMIT n] [OFFSET n]] [ON ERROR ...]
 // or: RETRIEVE $Var FROM $Parent/Module.Association (association retrieve)
 type RetrieveStmt struct {

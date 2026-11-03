@@ -1,0 +1,19 @@
+-- ako/mxcli#1939 (mendixlabs/mxcli#1735): no MDL for Send / Delete external
+-- object, so an OData write flow could not be authored, and a drop + create of
+-- a flow holding one deleted it silently. Measured on mxbuild 11.12.6 against
+-- an updatable external entity: these build clean; `on error continue` is
+-- CE6035 on both, and either one in a nanoflow is CE0009.
+mdl 1;
+create module BugTest1939;
+create entity BugTest1939.District (Name: String(100));
+create microflow BugTest1939.ACT_District_Save ($District: BugTest1939.District)
+begin
+  change $District (Name = 'Closed');
+  send external object $District refresh;
+end;
+create microflow BugTest1939.ACT_District_Remove ($District: BugTest1939.District)
+begin
+  delete external object $District on error begin
+    log error node 'Crm' 'delete failed';
+  end error;
+end;

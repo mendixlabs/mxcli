@@ -84,6 +84,29 @@ type RollbackObjectAction struct {
 
 func (RollbackObjectAction) isMicroflowAction() {}
 
+// SendExternalObjectAction sends an external (OData) object's changes to its
+// service (Microflows$SendExternalObject, Mendix 9.6+). It is how an external
+// entity is saved: Studio Pro refuses a commit of one (mendixlabs/mxcli#1735).
+type SendExternalObjectAction struct {
+	model.BaseElement
+	Variable          string            `json:"variable"`
+	RefreshInClient   bool              `json:"refreshInClient"`
+	ErrorHandlingType ErrorHandlingType `json:"errorHandlingType,omitempty"`
+}
+
+func (SendExternalObjectAction) isMicroflowAction() {}
+
+// DeleteExternalObjectAction deletes an external (OData) object at its service
+// (Microflows$DeleteExternalObject, Mendix 9.12+).
+type DeleteExternalObjectAction struct {
+	model.BaseElement
+	Variable          string            `json:"variable"`
+	RefreshInClient   bool              `json:"refreshInClient"`
+	ErrorHandlingType ErrorHandlingType `json:"errorHandlingType,omitempty"`
+}
+
+func (DeleteExternalObjectAction) isMicroflowAction() {}
+
 // MemberChange represents a change to a member (attribute or association).
 type MemberChange struct {
 	model.BaseElement

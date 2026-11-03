@@ -474,6 +474,7 @@ func init() {
 			"with events", "refresh", "commit flag", "without events",
 			"reference set", "referenceset", "many-to-many", "add to association",
 			"remove from association", "CE0033", "+=", "-=",
+			"send external object", "delete external object", "external entity", "odata", "save external",
 		},
 		Syntax: "$Obj = CREATE Module.Entity (Attr = value) [COMMIT [WITHOUT EVENTS]] [REFRESH];\n" +
 			"CHANGE $Obj (Attr = value) [COMMIT [WITHOUT EVENTS]] [REFRESH];\n" +
@@ -483,6 +484,13 @@ func init() {
 			"COMMIT $Obj [WITHOUT EVENTS] [REFRESH];\n" +
 			"DELETE $Obj [REFRESH];\n" +
 			"ROLLBACK $Obj [REFRESH];\n\n" +
+			"-- An EXTERNAL (OData) entity is saved and deleted at its service, not with\n" +
+			"-- COMMIT / DELETE (Studio Pro refuses a commit of one):\n" +
+			"SEND EXTERNAL OBJECT $Obj [REFRESH];     -- Mendix 9.7+\n" +
+			"DELETE EXTERNAL OBJECT $Obj [REFRESH];   -- Mendix 9.12+\n" +
+			"-- Microflows only (CE0009 in a nanoflow); ON ERROR CONTINUE is CE6035 on\n" +
+			"-- both, rollback and custom handlers build. The entity must be Updatable\n" +
+			"-- / Deletable in its contract (CE9435).\n\n" +
 			"-- An omitted modifier always means Mendix's own default, so a bare\n" +
 			"-- statement is exactly what Studio Pro gives you for a fresh activity:\n" +
 			"--\n" +

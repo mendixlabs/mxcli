@@ -1262,6 +1262,10 @@ func stmtActivityName(stmt ast.MicroflowStatement) string {
 		return "create"
 	case *ast.DeleteObjectStmt:
 		return "delete"
+	case *ast.SendExternalObjectStmt:
+		return "send external object"
+	case *ast.DeleteExternalObjectStmt:
+		return "delete external object"
 	case *ast.MfCommitStmt:
 		return "commit"
 	case *ast.RetrieveStmt:
@@ -1600,6 +1604,10 @@ func referencedVars(stmt ast.MicroflowStatement) []string {
 	case *ast.MfCommitStmt:
 		refs = append(refs, s.Variable)
 	case *ast.DeleteObjectStmt:
+		refs = append(refs, s.Variable)
+	case *ast.SendExternalObjectStmt:
+		refs = append(refs, s.Variable)
+	case *ast.DeleteExternalObjectStmt:
 		refs = append(refs, s.Variable)
 	case *ast.AddToListStmt:
 		if s.Value != nil {

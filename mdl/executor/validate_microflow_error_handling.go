@@ -73,6 +73,11 @@ var continueUnsupportedOn = map[string]string{
 	"remove":         "Change list activity",
 	"cast":           "Cast object activity",
 	"show home page": "Show home page action activity",
+	// mendixlabs/mxcli#1735, measured on mxbuild 11.12.6 against an updatable
+	// external entity, one microflow per cell: rollback, custom and custom
+	// without rollback build on both; continue is CE6035 on both.
+	"send external object":   "Send external object activity",
+	"delete external object": "Delete external object activity",
 }
 
 // checkErrorHandlingContinueSupported reports `ON ERROR CONTINUE` on a statement
@@ -115,6 +120,10 @@ func continueUnsupportedStatement(stmt ast.MicroflowStatement) (keyword, activit
 	switch s := stmt.(type) {
 	case *ast.CreateObjectStmt:
 		keyword = "create"
+	case *ast.SendExternalObjectStmt:
+		keyword = "send external object"
+	case *ast.DeleteExternalObjectStmt:
+		keyword = "delete external object"
 	case *ast.MfCommitStmt:
 		keyword = "commit"
 	case *ast.ChangeObjectStmt:

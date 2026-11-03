@@ -282,7 +282,9 @@ microflowStatement
     | annotation* createObjectStatement SEMICOLON
     | annotation* changeObjectStatement SEMICOLON
     | annotation* commitStatement SEMICOLON
+    | annotation* deleteExternalObjectStatement SEMICOLON
     | annotation* deleteObjectStatement SEMICOLON
+    | annotation* sendExternalObjectStatement SEMICOLON
     | annotation* rollbackStatement SEMICOLON
     | annotation* retrieveStatement SEMICOLON
     | annotation* ifStatement SEMICOLON
@@ -452,6 +454,17 @@ commitStatement
 // DELETE $Product; or DELETE $Product REFRESH;
 deleteObjectStatement
     : DELETE VARIABLE REFRESH? onErrorClause?
+    ;
+
+// SEND EXTERNAL OBJECT $Customer [REFRESH]; — save an external (OData) object;
+// a commit of one is refused by Studio Pro (mendixlabs/mxcli#1735).
+sendExternalObjectStatement
+    : SEND EXTERNAL OBJECT VARIABLE REFRESH? onErrorClause?
+    ;
+
+// DELETE EXTERNAL OBJECT $Customer [REFRESH];
+deleteExternalObjectStatement
+    : DELETE EXTERNAL OBJECT VARIABLE REFRESH? onErrorClause?
     ;
 
 // ROLLBACK $Product; or ROLLBACK $Product REFRESH;

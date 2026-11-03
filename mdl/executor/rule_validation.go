@@ -45,6 +45,10 @@ func checkDisallowedRuleAction(stmt ast.MicroflowStatement) string {
 		return "a rule cannot change objects"
 	case *ast.DeleteObjectStmt:
 		return "a rule cannot delete objects"
+	case *ast.SendExternalObjectStmt:
+		return "a rule cannot send external objects"
+	case *ast.DeleteExternalObjectStmt:
+		return "a rule cannot delete external objects"
 	case *ast.MfCommitStmt:
 		return "a rule cannot commit objects"
 	case *ast.RollbackStmt:

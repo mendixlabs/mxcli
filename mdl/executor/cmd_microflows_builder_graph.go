@@ -347,6 +347,14 @@ func collectListInputVariables(stmts []ast.MicroflowStatement) map[string]bool {
 				if s.ErrorHandling != nil {
 					walk(s.ErrorHandling.Body)
 				}
+			case *ast.SendExternalObjectStmt:
+				if s.ErrorHandling != nil {
+					walk(s.ErrorHandling.Body)
+				}
+			case *ast.DeleteExternalObjectStmt:
+				if s.ErrorHandling != nil {
+					walk(s.ErrorHandling.Body)
+				}
 			case *ast.RestCallStmt:
 				if s.ErrorHandling != nil {
 					walk(s.ErrorHandling.Body)
@@ -703,6 +711,10 @@ func (fb *flowBuilder) addStatement(stmt ast.MicroflowStatement) model.ID {
 		return fb.addCommitAction(s)
 	case *ast.DeleteObjectStmt:
 		return fb.addDeleteAction(s)
+	case *ast.SendExternalObjectStmt:
+		return fb.addSendExternalObjectAction(s)
+	case *ast.DeleteExternalObjectStmt:
+		return fb.addDeleteExternalObjectAction(s)
 	case *ast.RollbackStmt:
 		return fb.addRollbackAction(s)
 	case *ast.IfStmt:

@@ -63,6 +63,10 @@ func buildMicroflowStatement(ctx parser.IMicroflowStatementContext) ast.Microflo
 		stmt = buildCommitStatement(commit)
 	} else if del := mfCtx.DeleteObjectStatement(); del != nil {
 		stmt = buildDeleteObjectStatement(del)
+	} else if send := mfCtx.SendExternalObjectStatement(); send != nil {
+		stmt = buildSendExternalObjectStatement(send)
+	} else if del := mfCtx.DeleteExternalObjectStatement(); del != nil {
+		stmt = buildDeleteExternalObjectStatement(del)
 	} else if rollback := mfCtx.RollbackStatement(); rollback != nil {
 		stmt = buildRollbackStatement(rollback)
 	} else if retr := mfCtx.RetrieveStatement(); retr != nil {
@@ -1371,6 +1375,38 @@ func buildDeleteObjectStatement(ctx parser.IDeleteObjectStatementContext) *ast.D
 		stmt.ErrorHandling = buildOnErrorClause(errClause)
 	}
 
+	return stmt
+}
+
+// buildSendExternalObjectStatement converts SEND EXTERNAL OBJECT.
+func buildSendExternalObjectStatement(ctx parser.ISendExternalObjectStatementContext) *ast.SendExternalObjectStmt {
+	c, ok := ctx.(*parser.SendExternalObjectStatementContext)
+	if !ok || c == nil {
+		return nil
+	}
+	stmt := &ast.SendExternalObjectStmt{RefreshInClient: c.REFRESH() != nil}
+	if v := c.VARIABLE(); v != nil {
+		stmt.Variable = strings.TrimPrefix(v.GetText(), "$")
+	}
+	if e := c.OnErrorClause(); e != nil {
+		stmt.ErrorHandling = buildOnErrorClause(e)
+	}
+	return stmt
+}
+
+// buildDeleteExternalObjectStatement converts DELETE EXTERNAL OBJECT.
+func buildDeleteExternalObjectStatement(ctx parser.IDeleteExternalObjectStatementContext) *ast.DeleteExternalObjectStmt {
+	c, ok := ctx.(*parser.DeleteExternalObjectStatementContext)
+	if !ok || c == nil {
+		return nil
+	}
+	stmt := &ast.DeleteExternalObjectStmt{RefreshInClient: c.REFRESH() != nil}
+	if v := c.VARIABLE(); v != nil {
+		stmt.Variable = strings.TrimPrefix(v.GetText(), "$")
+	}
+	if e := c.OnErrorClause(); e != nil {
+		stmt.ErrorHandling = buildOnErrorClause(e)
+	}
 	return stmt
 }
 

@@ -15,6 +15,19 @@ import "github.com/mendixlabs/mxcli/mdl/ast"
 // by the nanoflow validation; matching it here as well costs nothing.
 var flowActionGates = []typeGate{
 	{
+		versionGate: versionGate{"microflows", "delete_external_object", "delete external object",
+			"this version has no Microflows$DeleteExternalObject: upgrade the project"},
+		types: []string{"Microflows$DeleteExternalObject"},
+		match: func(st ast.MicroflowStatement) bool { _, ok := st.(*ast.DeleteExternalObjectStmt); return ok },
+	},
+	{
+		versionGate: versionGate{"microflows", "send_external_object", "send external object",
+			"this version has no Microflows$SendExternalObject.RefreshInClient, which the write stores: upgrade the project"},
+		types:      []string{"Microflows$SendExternalObject"},
+		properties: []string{"Microflows$SendExternalObject.RefreshInClient"},
+		match:      func(st ast.MicroflowStatement) bool { _, ok := st.(*ast.SendExternalObjectStmt); return ok },
+	},
+	{
 		versionGate: versionGate{"microflows", "transform_json", "transform … with (a data transformer)",
 			"this version has no Microflows$TransformJsonAction: map the JSON with an import mapping, or upgrade the project"},
 		types: []string{"Microflows$TransformJsonAction"},

@@ -130,6 +130,14 @@ features:
       min_version: "9.10.0"
       mdl: "CALL MICROFLOW Module.Flow() IN QUEUE Module.Queue; CALL JAVA ACTION Module.Action() IN QUEUE Module.Queue;"
       notes: "Queues$QueueSettings and the calls' QueueSettings introduced in 9.10.0 (mendixmodelsdk 4.117.0; ako/mxcli#1811)."
+    send_external_object:
+      min_version: "9.7.0"
+      mdl: "SEND EXTERNAL OBJECT $Customer [REFRESH];"
+      notes: "Microflows$SendExternalObject introduced in 9.6.0, its RefreshInClient in 9.7.0, which the write always stores (mendixmodelsdk 4.117.0; mendixlabs/mxcli#1735)."
+    delete_external_object:
+      min_version: "9.12.0"
+      mdl: "DELETE EXTERNAL OBJECT $Customer [REFRESH];"
+      notes: "Microflows$DeleteExternalObject introduced in 9.12.0 (mendixmodelsdk 4.117.0; mendixlabs/mxcli#1735)."
 
   pages:
     basic:

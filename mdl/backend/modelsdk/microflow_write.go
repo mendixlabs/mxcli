@@ -588,6 +588,22 @@ func microflowActionToGen(action microflows.MicroflowAction) element.Element {
 		g.SetDeleteVariableName(a.DeleteVariable)
 		g.SetRefreshInClient(a.RefreshInClient)
 		return g
+	case *microflows.SendExternalObjectAction:
+		// Every property of the type is written (canon.CompletePropertySets);
+		// ErrorHandlingType falls back to the metamodel default, Rollback.
+		g := genMf.NewSendExternalObject()
+		g.SetID(element.ID(a.ID))
+		g.SetErrorHandlingType(orDefault(string(a.ErrorHandlingType), "Rollback"))
+		g.SetVariableNameToBeSent(a.Variable)
+		g.SetRefreshInClient(a.RefreshInClient)
+		return g
+	case *microflows.DeleteExternalObjectAction:
+		g := genMf.NewDeleteExternalObject()
+		g.SetID(element.ID(a.ID))
+		g.SetErrorHandlingType(orDefault(string(a.ErrorHandlingType), "Rollback"))
+		g.SetDeleteVariableName(a.Variable)
+		g.SetRefreshInClient(a.RefreshInClient)
+		return g
 	case *microflows.RollbackObjectAction:
 		g := genMf.NewRollbackAction()
 		g.SetID(element.ID(a.ID))
