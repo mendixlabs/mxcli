@@ -934,8 +934,19 @@ CALL JAVA ACTION (see: mxcli syntax microflow.call):
   CALL MICROFLOW Ops.ACT_Process(Order = $Order) IN QUEUE Ops.OrderProcessing;
 
 A rewrite that does NOT restate a stored binding is refused, because it would
-drop it silently. A retry policy on a queued call has no MDL spelling and is
-also refused rather than reset — change those in Studio Pro.`,
+drop it silently.
+
+A queued call's retry policy (Mendix 9.10+) follows the queue:
+
+  CALL MICROFLOW Ops.POST_Message(Body = $Body) IN QUEUE Ops.SendQueue
+    RETRY EXPONENTIAL (Retries: 20, InitialInterval: 1, MaximumInterval: 60, IntervalType: Minutes);
+  CALL JAVA ACTION Ops.Refresh(Url = $Url) IN QUEUE Ops.SendQueue
+    RETRY FIXED (Retries: 5, Interval: 10, IntervalType: Minutes);
+
+Every property is required (IntervalType: Seconds | Minutes | Hours); Retries
+must be at least 1 (CE7044). DESCRIBE prints a stored retry, so it round-trips.
+A rewrite that still calls into the queue but leaves the retry out is refused
+rather than reset: restate it, or state a new one.`,
 		Example: `mdl 1;
 CREATE TASK QUEUE Ops.OrderProcessing (
   Parallelism: 3,

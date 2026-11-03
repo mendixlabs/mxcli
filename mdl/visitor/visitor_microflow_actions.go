@@ -417,8 +417,9 @@ func buildCallMicroflowStatement(ctx parser.ICallMicroflowStatementContext) *ast
 		stmt.Arguments = buildCallArgumentList(argList)
 	}
 
-	// IN QUEUE Module.Name — runs the call on a task queue.
+	// IN QUEUE Module.Name [RETRY …] — runs the call on a task queue.
 	stmt.Queue = buildQueueClause(callCtx.QueueClause())
+	stmt.QueueRetry = buildQueueRetry(callCtx.QueueClause())
 
 	// Check for ON ERROR clause
 	if errClause := callCtx.OnErrorClause(); errClause != nil {
@@ -486,8 +487,9 @@ func buildCallJavaActionStatement(ctx parser.ICallJavaActionStatementContext) *a
 		stmt.Arguments = buildCallArgumentList(argList)
 	}
 
-	// IN QUEUE Module.Name — runs the call on a task queue.
+	// IN QUEUE Module.Name [RETRY …] — runs the call on a task queue.
 	stmt.Queue = buildQueueClause(callCtx.QueueClause())
+	stmt.QueueRetry = buildQueueRetry(callCtx.QueueClause())
 
 	// Check for ON ERROR clause
 	if errClause := callCtx.OnErrorClause(); errClause != nil {

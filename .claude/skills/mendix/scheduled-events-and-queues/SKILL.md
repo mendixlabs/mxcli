@@ -14,13 +14,13 @@ description: "Scheduled events (Mendix's cron) and task queues in MDL — the ei
 | 39-143 | Scheduled Events |
 | 144-168 | Task Queues |
 | 169-178 | Common Mistakes |
-| 179-270 | Binding a Call to a Queue — `IN QUEUE` |
-| 271-285 | Placing Them in Folders |
-| 286-300 | Validation Checklist |
-| 301-322 | Querying and Linting |
-| 323-328 | Related |
-| 329-332 | Scheduled events — Mendix's cron (LIST/DESCRIBE/CREATE [OR MODIFY]/DROP). `Repeat:` names one of the eight `ScheduledEvents$*Schedule` variants and only that variant's fields are accepted; a field from another repeat is refused by `mxcli check` (MDL-SCHED01) and by exec, which call the same function. The document shape is pinned by re-serializing three whole Studio Pro-authored events (Workflow Commons 4.11.0, OIDC SSO 4.6.0, SAML 4.2.1) element by element — `modelsdk/gen` is **wrong** about two properties here |
-| 333-335 | Task queues (LIST/DESCRIBE/CREATE [OR MODIFY]/DROP TASK QUEUE). `Config.ParallelismExpression` is a **string** and the sibling int32 `Parallelism` is not written — matching all four Studio Pro queues in Business Events 3.12.1. Binding a *call* to a queue is not yet authorable, so `CREATE OR REPLACE|MODIFY MICROFLOW` is **refused** when the stored microflow has a queued call (guard-don't-drop, ADR-0005) |
+| 179-282 | Binding a Call to a Queue — `IN QUEUE` |
+| 283-297 | Placing Them in Folders |
+| 298-312 | Validation Checklist |
+| 313-334 | Querying and Linting |
+| 335-340 | Related |
+| 341-344 | Scheduled events — Mendix's cron (LIST/DESCRIBE/CREATE [OR MODIFY]/DROP). `Repeat:` names one of the eight `ScheduledEvents$*Schedule` variants and only that variant's fields are accepted; a field from another repeat is refused by `mxcli check` (MDL-SCHED01) and by exec, which call the same function. The document shape is pinned by re-serializing three whole Studio Pro-authored events (Workflow Commons 4.11.0, OIDC SSO 4.6.0, SAML 4.2.1) element by element — `modelsdk/gen` is **wrong** about two properties here |
+| 345-347 | Task queues (LIST/DESCRIBE/CREATE [OR MODIFY]/DROP TASK QUEUE). `Config.ParallelismExpression` is a **string** and the sibling int32 `Parallelism` is not written — matching all four Studio Pro queues in Business Events 3.12.1. Binding a *call* to a queue is not yet authorable, so `CREATE OR REPLACE|MODIFY MICROFLOW` is **refused** when the stored microflow has a queued call (guard-don't-drop, ADR-0005) |
 
 <!-- /skill-index -->
 # Scheduled Events and Task Queues
@@ -249,15 +249,27 @@ refusal the binding was written back as null and the project then looked
 *healthier* than before — `mx check` stopped reporting CE1613, because the
 configuration the error was about had been deleted.
 
-One thing is still refused: a **retry policy** on a queued call
-(`Queues$QueueFixedRetry` / `Queues$QueueExponentialRetry`). MDL has no syntax
-for it, so a rewrite cannot preserve it — change that microflow in Studio Pro.
+A queued call's **retry policy** (`Queues$QueueFixedRetry` /
+`Queues$QueueExponentialRetry`, Mendix 9.10+) follows the queue:
+
+```sql
+call microflow Ops.POST_Message(Body = $Body) in queue Ops.SendQueue
+  retry exponential (Retries: 20, InitialInterval: 1, MaximumInterval: 60, IntervalType: Minutes);
+call java action Ops.Refresh(Url = $Url) in queue Ops.SendQueue
+  retry fixed (Retries: 5, Interval: 10, IntervalType: Minutes);
+```
+
+Every property is required, `IntervalType` is `Seconds`, `Minutes` or `Hours`,
+and `Retries` must be at least 1 (mxbuild: CE7044). `describe` prints a stored
+retry, so a flow with one stays editable from MDL. A `create or modify` that
+still calls into the queue but leaves the retry out is **refused**, not reset —
+restate it (copy it from `describe`) or state the new one.
 
 ### When a Java Action Is the Better Tool
 
-The activity property gives queueing and nothing else. The runtime API, reachable
-from a Java action, gives queueing *and* retry, and can queue a Java action
-directly with no wrapper microflow:
+The activity property gives queueing and a retry policy. The runtime API,
+reachable from a Java action, adds per-call control (a retry decided at run time)
+and can queue a Java action directly with no wrapper microflow:
 
 ```java
 Core.userActionCall("Ops.RefreshData")

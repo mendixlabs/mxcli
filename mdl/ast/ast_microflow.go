@@ -752,12 +752,30 @@ type CallArgument struct {
 	TemplateParams []TemplateParam
 }
 
+// QueueRetry is the retry policy of a queued call (mendixlabs/mxcli#1729):
+//
+//	IN QUEUE Mod.Q RETRY FIXED (Retries: 5, Interval: 10, IntervalType: Minutes)
+//	IN QUEUE Mod.Q RETRY EXPONENTIAL (Retries: 20, InitialInterval: 1,
+//	                                  MaximumInterval: 60, IntervalType: Minutes)
+//
+// Kind is "Fixed" or "Exponential"; IntervalType is Seconds, Minutes or Hours.
+// The visitor requires every property of the kind, so nothing is defaulted.
+type QueueRetry struct {
+	Kind            string
+	Retries         int
+	Interval        int
+	InitialInterval int
+	MaximumInterval int
+	IntervalType    string
+}
+
 // CallMicroflowStmt represents: [$Result =] CALL MICROFLOW Name (args) [ON ERROR ...]
 type CallMicroflowStmt struct {
 	OutputVariable string               // Optional output variable
 	MicroflowName  QualifiedName        // Microflow to call
 	Arguments      []CallArgument       // Arguments
 	Queue          *QualifiedName       // Optional IN QUEUE clause (task queue to run the call on)
+	QueueRetry     *QueueRetry          // Optional RETRY clause after IN QUEUE
 	ErrorHandling  *ErrorHandlingClause // Optional ON ERROR clause
 	Annotations    *ActivityAnnotations // Optional @position, @caption, @color, @annotation
 }
@@ -781,6 +799,7 @@ type CallJavaActionStmt struct {
 	ActionName     QualifiedName        // Java action name
 	Arguments      []CallArgument       // Arguments
 	Queue          *QualifiedName       // Optional IN QUEUE clause (task queue to run the call on)
+	QueueRetry     *QueueRetry          // Optional RETRY clause after IN QUEUE
 	ErrorHandling  *ErrorHandlingClause // Optional ON ERROR clause
 	Annotations    *ActivityAnnotations // Optional @position, @caption, @color, @annotation
 }
