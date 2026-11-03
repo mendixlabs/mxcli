@@ -27,6 +27,28 @@ func HasStrictEscapes(in antlr.CharStream) bool {
 	return ok
 }
 
+// followsMemberSeparator reports whether the token about to be matched comes
+// straight after a `/` or `.` member separator on the same line (spaces and
+// tabs between them skipped), as `Error` does in `Obj/Error`. A block comment's
+// closing `*/` is not a separator, and neither is a line break: a line comment
+// ending in a full stop (`-- see the docs.`) must not swallow the `error
+// message` clause on the next line. It is a left-edge predicate, so LA(-1) is
+// the character before the token.
+func (l *MDLLexer) followsMemberSeparator() bool {
+	in := l.GetInputStream()
+	for i := -1; ; i-- {
+		switch in.LA(i) {
+		case ' ', '\t':
+			continue
+		case '.':
+			return true
+		case '/':
+			return in.LA(i-1) != '*'
+		}
+		return false
+	}
+}
+
 // isTrailingComma reports whether the ',' just matched ends a bracketed list:
 // the next significant character closes a (), {} or [] (whitespace and
 // comments skipped), and the one before it neither opens a list nor is another
@@ -194,9 +216,15 @@ RESTRICT: R E S T R I C T;
 //
 // `error message` is the one spelling (R8, ako/mxcli#752); the other two are
 // aliases, and so are `error`, `feedback` where a rule takes a message.
-ERROR_MESSAGE: E R R O R WS+ M E S S A G E
+//
+// Never right after a `/` or `.` member separator: there `Error` is a member's
+// name, so `validation feedback $E/Error message 'x'` — what describe writes
+// for an attribute called Error — is the attribute and then the MESSAGE
+// keyword, not this clause (mendixlabs/mxcli#1720).
+ERROR_MESSAGE: {!p.followsMemberSeparator()}? ( E R R O R WS+ M E S S A G E
              | E R R O R '_' M E S S A G E /* @alias MDL-DEPR021 */
-             | E R R O R M E S S A G E /* @alias MDL-DEPR021 */;
+             | E R R O R M E S S A G E /* @alias MDL-DEPR021 */
+             );
 CASCADE: C A S C A D E;
 PREVENT: P R E V E N T;
 
