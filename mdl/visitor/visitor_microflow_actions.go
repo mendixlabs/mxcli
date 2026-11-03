@@ -730,7 +730,7 @@ func buildCallArgumentList(ctx parser.ICallArgumentListContext) []ast.CallArgume
 		}
 		if arg.NOTHING() != nil {
 			// `Param = nothing`: a blank argument, stored as "" (ExitCallArgument
-			// refuses it outside call microflow / call nanoflow).
+			// refuses it outside call microflow / call nanoflow / call external action).
 			ca.Value = &ast.BlankExpr{}
 		} else if expr := arg.Expression(); expr != nil {
 			value := buildSourceExpression(expr)

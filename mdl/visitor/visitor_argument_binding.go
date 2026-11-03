@@ -38,10 +38,10 @@ func (b *Builder) ExitCallArgument(ctx *parser.CallArgumentContext) {
 		b.recordColonArgument(ctx.ParameterName(), ctx.COLON(), ctx.Expression())
 		return
 	}
-	if n := ctx.NOTHING(); n != nil && !isFlowCallArgument(ctx) {
+	if n := ctx.NOTHING(); n != nil && !isBlankableCallArgument(ctx) {
 		tok := n.GetSymbol()
-		b.addError(fmt.Errorf("line %d:%d `= nothing` (a blank argument) is only valid in call microflow and "+
-			"call nanoflow; bind the parameter to a value, or to `empty`",
+		b.addError(fmt.Errorf("line %d:%d `= nothing` (a blank argument) is only valid in call microflow, "+
+			"call nanoflow and call external action; bind the parameter to a value, or to `empty`",
 			tok.GetLine(), tok.GetColumn()))
 	}
 	if tp := ctx.TemplateParams(); tp != nil && !isJavaActionCallArgument(ctx) {
@@ -65,17 +65,20 @@ func isJavaActionCallArgument(ctx *parser.CallArgumentContext) bool {
 	return ok
 }
 
-// isFlowCallArgument reports whether a call argument belongs to a call
-// microflow or call nanoflow — the two calls whose parameter mappings store a
-// bare expression, where a blank one (`Argument: ""`) is a state Studio Pro
-// writes when an argument field is left empty.
-func isFlowCallArgument(ctx *parser.CallArgumentContext) bool {
+// isBlankableCallArgument reports whether a call argument belongs to a call
+// whose parameter mappings store a bare expression, where a blank one
+// (`Argument: ""`) is a state Studio Pro writes when an argument field is left
+// empty: call microflow, call nanoflow, and call external action — Studio Pro
+// 11.16 stores an optional OData action parameter left blank that way
+// (ako/mxcli#1915).
+func isBlankableCallArgument(ctx *parser.CallArgumentContext) bool {
 	list := ctx.GetParent()
 	if list == nil {
 		return false
 	}
 	switch list.GetParent().(type) {
-	case *parser.CallMicroflowStatementContext, *parser.CallNanoflowStatementContext:
+	case *parser.CallMicroflowStatementContext, *parser.CallNanoflowStatementContext,
+		*parser.CallExternalActionStatementContext:
 		return true
 	}
 	return false

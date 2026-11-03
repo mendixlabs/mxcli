@@ -1,0 +1,25 @@
+mdl 1;
+-- ako/mxcli#1915: describe microflow printed an unbound `call external action`
+-- argument (Studio Pro 11.16 stores an optional OData parameter left blank as
+-- `Argument: ""`) as `additional = )`, which does not parse, so every `mdl 1;`
+-- create or modify of such a microflow was refused (MDL-V1-REBUILD "the
+-- description does not parse").
+--
+-- The blank is now described, and accepted, as `= nothing` — the spelling
+-- call microflow / call nanoflow already use for the same stored state.
+-- `= empty` is a different state (11.14's, the Mendix value `empty`) and still
+-- round-trips as itself.
+--
+-- Needs a consumed OData service Odata.Bug1914 whose action CreateBuffer has a
+-- required `command` and a nullable `additional`; `mxcli check` without -p
+-- checks the syntax only.
+
+create microflow Odata.IncludeAssociationsBlank ($Cmd: String)
+begin
+  call external action Odata.Bug1914.CreateBuffer(command = $Cmd, additional = nothing);
+end;
+
+create microflow Odata.IncludeAssociationsEmpty ($Cmd: String)
+begin
+  call external action Odata.Bug1914.CreateBuffer(command = $Cmd, additional = empty);
+end;

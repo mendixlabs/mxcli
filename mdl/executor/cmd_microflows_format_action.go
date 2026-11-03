@@ -133,7 +133,8 @@ func refreshModifier(refresh bool) string {
 //
 // Widget and workflow expressions are not microflow expressions: they are
 // stored as written in both languages, so their describers only trim.
-// describeCallArgument renders a call microflow / call nanoflow argument. A
+// describeCallArgument renders a call microflow / call nanoflow / call external
+// action argument. A
 // blank stored argument — the mapping is present, its expression empty, which
 // is what Studio Pro writes for an argument field left empty — is `nothing`.
 // Printing it through describeExpr gave `Param = ,` / `Param = )`, which does
@@ -907,7 +908,11 @@ func formatAction(
 
 		var params []string
 		for _, pm := range a.ParameterMappings {
-			params = append(params, fmt.Sprintf("%s = %s", pm.ParameterName, describeExpr(ctx, pm.Argument)))
+			// describeCallArgument, not describeExpr: Studio Pro 11.16 stores an
+			// optional parameter left blank as `Argument: ""`, which printed as
+			// `name = )` and did not parse (ako/mxcli#1915). `nothing` is the
+			// blank; `empty` (11.14's spelling of the same field) stays a value.
+			params = append(params, fmt.Sprintf("%s = %s", pm.ParameterName, describeCallArgument(ctx, pm.Argument)))
 		}
 
 		paramStr := ""
