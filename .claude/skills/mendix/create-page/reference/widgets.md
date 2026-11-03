@@ -423,6 +423,8 @@ column (caption: 'Actions') {
 
 > **A view entity's association is one-way for a page.** The association a view entity derives from its OQL (`select c.ID as Stats_Customer`) can be followed from the view entity only. A data source that follows it from the entity it points at, in any widget and at any hop (`database from $currentObject/M.Stats_Customer/M.Stats`, `$currentObject/M.Stats_Customer`), is CE8812 "Entity 'M.Customer' has no association 'M.Stats_Customer'". Query the view entity instead: `datasource: database M.Stats where [M.Stats_Customer = $currentObject]`. `check` reports it as MDL-ASSOCDS02. A microflow `retrieve … from $Cust/M.Stats_Customer` is accepted.
 
+> **Each hop starts where the path is.** The first association must have the context entity (or a generalization of it) at one end, and each later one the entity the previous hop arrives at. `$Order/M.Flag_Account/M.Flag` from an Order names an association between Flag and Account, which cannot be followed from an Order; `check` reports it as MDL-ASSOCDS03 and `exec` refuses it.
+
 **With WHERE and SORT BY (inline in DataSource):**
 ```sql
 datagrid dgActive (

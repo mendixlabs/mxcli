@@ -1246,11 +1246,22 @@ func (pb *pageBuilder) resolveAssociationHops(reference, fromEntity string) (hop
 						"so an association declared elsewhere must be named in full",
 					assoc, reference, at)
 			}
+			// The hop must start where the path is: an association joining two
+			// other entities has both ends, so the destination check below
+			// passes it, and the step it writes cannot be followed from `at`
+			// (ako/mxcli#834). A derived destination needs no such check —
+			// resolveAssociationDestination finds none off the association.
+			if at != "" && !pb.isEndOrSpecialization(at, from, to) {
+				return nil, "", mdlerrors.NewValidationf(
+					"association %q in datasource %q does not start at %s — its ends are %s and %s; "+
+						"each hop must follow an association of the entity the previous one arrives at",
+					assoc, reference, at, from, to)
+			}
 			// Neither the next association nor an end of this one: a misspelled
 			// association read as an entity, or an entity off the path. Either
 			// way the step would name an entity the hop does not arrive at.
 			// Studio Pro may store a specialization of an end, so accept that.
-			if dest != from && dest != to && !pb.isSpecializationOf(dest, from) && !pb.isSpecializationOf(dest, to) {
+			if !pb.isEndOrSpecialization(dest, from, to) {
 				return nil, "", mdlerrors.NewValidationf(
 					"%q in datasource %q is neither an association nor an end of association %q (%s, %s) — "+
 						"each hop is `Module.Assoc` or `Module.Assoc/Module.DestinationEntity`",
@@ -1277,6 +1288,12 @@ func (pb *pageBuilder) resolveAssociationHops(reference, fromEntity string) (hop
 		at = dest
 	}
 	return hops, at, nil
+}
+
+// isEndOrSpecialization reports whether entity is one of an association's ends
+// (from, to) or a specialization of one.
+func (pb *pageBuilder) isEndOrSpecialization(entity, from, to string) bool {
+	return entity == from || entity == to || pb.isSpecializationOf(entity, from) || pb.isSpecializationOf(entity, to)
 }
 
 // isAssociationSegment reports whether a path segment following an association
