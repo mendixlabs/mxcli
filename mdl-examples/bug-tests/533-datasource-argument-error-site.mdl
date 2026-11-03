@@ -1,0 +1,9 @@
+-- ako/mxcli#533: a malformed page data-source argument was reported only at
+-- the `datasource` keyword ("no viable alternative at input 'datasource'").
+-- The parse error now also names the argument and its own line:column, e.g.
+--   microflow M.DS_X(Param = )  ->  "at line 3:48: `Param` has no value".
+-- The well-formed spelling, which parses:
+mdl 1;
+create page BugTest533.P (title: 'x', layout: Atlas_Core.Atlas_Default) {
+  dataview DVMain (datasource: microflow BugTest533.DS_X(Param = $Value)) { }
+};
