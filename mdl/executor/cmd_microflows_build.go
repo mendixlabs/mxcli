@@ -225,6 +225,11 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 		if err := checkNoQueuedCalls(ctx, existingID, qualifiedName, s); err != nil {
 			return nil, err
 		}
+		// A whole-flow rebuild writes only what the statement says, so an
+		// activity MDL cannot express is lost (mendixlabs/mxcli#1735).
+		if types := unsupportedActionTypes(existingObjects); len(types) > 0 {
+			return nil, unsupportedActionLossError("microflow", qualifiedName, "rebuilding it from this statement", types)
+		}
 		// Same reasoning for a REST body the writer cannot express: the rebuild
 		// would drop it, DESCRIBE would not show it missing, and the app would
 		// still build.
@@ -570,6 +575,14 @@ func buildNanoflowFromStmt(ctx *ExecContext, s *ast.CreateNanoflowStmt, opts bui
 		// A rewrite that carried no doc comment keeps the stored one (#1018).
 		existingDocumentation = existing.Documentation
 		preserveDocumentation = true
+		// As for a microflow: a whole-flow rebuild loses an activity MDL cannot
+		// express (mendixlabs/mxcli#1735).
+		if opts.AllowCreate {
+			if types := unsupportedActionTypes(existing.ObjectCollection); len(types) > 0 {
+				return nil, unsupportedActionLossError("nanoflow", s.Name.Module+"."+s.Name.Name,
+					"rebuilding it from this statement", types)
+			}
+		}
 	}
 
 	// For CREATE OR REPLACE/MODIFY, reuse the existing ID to preserve references
