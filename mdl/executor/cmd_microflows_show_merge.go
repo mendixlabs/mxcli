@@ -458,7 +458,7 @@ func droppedMergeWarningsIn(ctx *ExecContext, oc *microflows.MicroflowObjectColl
 				"it joins no decision and no error handler. `create or modify` from this MDL leaves it in place, "+
 				"but anything that rebuilds the flow from it (`create or replace`, an mdl 0 fallback) removes it. "+
 				"The microflow behaves the same either way (a merge with one incoming path is a no-op), "+
-				"but the node disappears from the diagram (mxcli #923)",
+				"but the node disappears from the diagram (mendixlabs/mxcli#923)",
 			p.X, p.Y))
 	}
 

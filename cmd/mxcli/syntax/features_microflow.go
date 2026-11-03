@@ -343,7 +343,7 @@ func init() {
 			"-- (MDL-FLOW01). NORMALIZED instead folds the branch guards into a single\n" +
 			"-- condition, which is equivalent and duplicates nothing.\n" +
 			"--\n" +
-			"-- The graph from mxcli #923:\n" +
+			"-- The graph from mendixlabs/mxcli#923:\n" +
 			"--   split1: true -> split2      false -> merge1\n" +
 			"--   split2: true -> merge1      false -> merge2\n" +
 			"-- The activity on merge1 runs on `not(c1) or c2`. Default DESCRIBE renders\n" +
