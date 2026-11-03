@@ -1476,7 +1476,10 @@ func (fb *flowBuilder) addRetrieveAction(s *ast.RetrieveStmt) model.ID {
 				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 				RangeType:   microflows.RangeTypeFirst,
 			}
-		} else if s.Limit != "" {
+		} else if s.Limit != "" || s.Offset != "" {
+			// An offset alone is a Custom range too; testing the limit only
+			// wrote `offset 5000` as the "all" range, and the retrieve
+			// returned the first objects instead (mendixlabs/mxcli#1737).
 			dbSource.Range = &microflows.Range{
 				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 				RangeType:   microflows.RangeTypeCustom,
