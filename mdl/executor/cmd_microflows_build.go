@@ -174,6 +174,8 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 	var existingDocumentation string
 	preserveDocumentation := false
 	var existingActionInfo, existingWorkflowInfo *types.MicroflowActionInfo
+	// The stored flow, for what its activities hold that MDL cannot restate.
+	var existingObjects *microflows.MicroflowObjectCollection
 	existingMicroflows, err := microflowsNamed(ctx, s.Name.Name)
 	if err != nil {
 		return nil, mdlerrors.NewBackend("check existing microflows", err)
@@ -211,6 +213,7 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 		existingDocumentation = existing.Documentation
 		preserveDocumentation = true
 		existingWorkflowInfo = existing.WorkflowActionInfo
+		existingObjects = existing.ObjectCollection
 	}
 
 	// For CREATE OR REPLACE/MODIFY, reuse the existing ID to preserve references
@@ -463,6 +466,9 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 			errMsg.WriteString(fmt.Sprintf("  - %s\n", err))
 		}
 		return nil, fmt.Errorf("%s", errMsg.String())
+	}
+	if err := carryIncludedAssociations(mf.ObjectCollection, existingObjects, qualifiedName); err != nil {
+		return nil, err
 	}
 	return &builtFlow{
 		Microflow:           mf,
