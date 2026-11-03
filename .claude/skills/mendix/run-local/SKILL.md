@@ -12,27 +12,27 @@ description: "The warm Docker-free dev loop, `mxcli run --local` — model chang
 |---|---|
 | 40-47 | Overview |
 | 48-60 | When to Use This Skill |
-| 61-128 | Usage |
-| 129-141 | How apply is chosen |
-| 142-232 | Prerequisites |
-| 233-250 | The intended loop |
-| 251-278 | Editing themes (SCSS) — rebuild, never clear caches |
-| 279-305 | `--watch` waits for a write to finish before it builds |
-| 306-334 | "My edit didn't show up" — stale process, not stale cache |
-| 335-365 | Flags |
-| 366-419 | Metrics and OpenTelemetry |
-| 420-477 | Pages render in the browser |
-| 478-495 | Pixel-perfect page loop |
-| 496-516 | Debugging a server-side error |
-| 517-540 | "Sign in failed" that is not about the password |
-| 541-573 | The same licence also stops the app after a few hours |
-| 574-653 | External browser preview (`--hub`) |
-| 654-662 | Validation checklist |
-| 663-719 | Constant values come from a configuration |
-| 720-723 | Warm local dev loop (`mxcli run --local [--watch] [--screenshot]`) |
-| 724-727 | External browser preview (`mxcli run --hub <url>` + `mxcli tunnel-hub`) |
-| 728-731 | Tunnel-hub GitHub authentication (opt-in, gated on `--github-oauth-client-id`; absent = today's open hub) |
-| 732-734 | Runtime metrics + settings passthrough (`mxcli run --local --metrics` / `--runtime-setting Key=Value`) |
+| 61-127 | Usage |
+| 128-140 | How apply is chosen |
+| 141-231 | Prerequisites |
+| 232-249 | The intended loop |
+| 250-277 | Editing themes (SCSS) — rebuild, never clear caches |
+| 278-304 | `--watch` waits for a write to finish before it builds |
+| 305-333 | "My edit didn't show up" — stale process, not stale cache |
+| 334-364 | Flags |
+| 365-418 | Metrics and OpenTelemetry |
+| 419-476 | Pages render in the browser |
+| 477-494 | Pixel-perfect page loop |
+| 495-515 | Debugging a server-side error |
+| 516-539 | "Sign in failed" that is not about the password |
+| 540-572 | The same licence also stops the app after a few hours |
+| 573-652 | External browser preview (`--hub`) |
+| 653-661 | Validation checklist |
+| 662-718 | Constant values come from a configuration |
+| 719-722 | Warm local dev loop (`mxcli run --local [--watch] [--screenshot]`) |
+| 723-726 | External browser preview (`mxcli run --hub <url>` + `mxcli tunnel-hub`) |
+| 727-730 | Tunnel-hub GitHub authentication (opt-in, gated on `--github-oauth-client-id`; absent = today's open hub) |
+| 731-733 | Runtime metrics + settings passthrough (`mxcli run --local --metrics` / `--runtime-setting Key=Value`) |
 
 <!-- /skill-index -->
 # Warm Local Dev Loop — `mxcli run --local`
@@ -112,9 +112,8 @@ What each one does, precisely:
 - **`run stop`** asks the run to shut down (it removes `--test-endpoint`, turns the
   debugger off), waits until it is gone, then sweeps the run's process session, so an
   orphaned `runtimelauncher` or mxbuild JVM is stopped too — including the leftovers of
-  a run that was killed with `-9`. A `--test-endpoint` such a run could not remove
-  (on Windows the stop is always forced) is taken out of the project by `run stop`
-  itself. Stopping when nothing runs is a no-op (exit 0).
+  a run that was killed with `-9` (and its `--test-endpoint`, as on Windows, where the
+  stop is always forced). Stopping when nothing runs is a no-op (exit 0).
 - **`run restart`** reuses the arguments recorded in the state file; to change a flag,
   `run stop` and `--detach` again.
 
