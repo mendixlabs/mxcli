@@ -154,6 +154,17 @@ same expression, not two readings of the same intent — otherwise they drift on
 the first edit to either. This is the [[duplicate-resolver-drift]] class pointed
 at mxbuild.
 
+**A builder side effect the definition does not state is invisible to check.**
+The pluggable-widget check reads only the `.def.json`; when a builder setter also
+writes a *second* property — filling a filter's `attributes` list flips
+`attrChoice` to "linked" — the check evaluates the widget's visibility rules
+against a configuration nobody stores, and calls the authored list hidden. The
+fix is to state the side effect as a mode constant, so both read one source; and
+because the drop-down filter got that fix while its three siblings kept the
+constant, grep every definition for the same key when fixing one. These only
+show with a project (the rules are lifted from the installed `.mpk`), so a
+no-project test passes against the bug.
+
 **Better still, run the real operation against a throwaway copy.** The vocabulary
 of an `ALTER … SET` is partly a switch in the mutator and partly the *stored*
 widget's own PropertyTypes, which belong to whatever package the project
