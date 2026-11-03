@@ -918,6 +918,23 @@ type ExternalActionParameterMapping struct {
 	// type-checked against a parameter that has no type (mendixlabs/mxcli#1020).
 	ParameterDataType string `json:"parameterDataType,omitempty"`
 	ParameterEntity   string `json:"parameterEntity,omitempty"`
+	// IncludedAssociations is Studio Pro's "Associations to include" for an
+	// object parameter: the associations whose objects are sent with it in the
+	// OData request. It is a tree, not a flag — an association ticked under
+	// another is stored nested in it. Without it the request carries only the
+	// object's own attributes (#1914).
+	IncludedAssociations []*IncludedAssociation `json:"includedAssociations,omitempty"`
+}
+
+// IncludedAssociation is one ticked association under an external action
+// parameter (Microflows$IncludedAssociation).
+type IncludedAssociation struct {
+	model.BaseElement
+	Association string `json:"association,omitempty"` // BY_NAME reference
+	// IsParent is true when the object on this side of the tree is the
+	// association's owner (its ParentPointer, the FROM entity).
+	IsParent             bool                   `json:"isParent,omitempty"`
+	IncludedAssociations []*IncludedAssociation `json:"includedAssociations,omitempty"`
 }
 
 // WebServiceCallAction calls a web service.
