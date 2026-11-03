@@ -119,7 +119,8 @@ func init() {
 			"  MDL-MF03  DISALLOW needs an error message or microflow         (CE4899)\n" +
 			"and with a project, a URL another microflow already owns         (CE0570).\n\n" +
 			"`Mark as used` still has no clause and is carried, as all of these were\n" +
-			"before they were authorable (mendixlabs/mxcli#1120).",
+			"before they were authorable (mendixlabs/mxcli#1120).\n\n" +
+			"DROP MICROFLOW [IF EXISTS] Module.Name;   -- every DROP: see `mxcli syntax drop`",
 		Example: "CREATE MICROFLOW MyModule.ACT_CreateOrder (\n  $CustomerCode: String,\n  $Quantity: Integer\n)\nRETURNS MyModule.Order AS $NewOrder\nFOLDER 'Orders'\nEXPOSED AS MICROFLOW ACTION 'Create order' IN 'Orders'\n  ICON 'assets/order-64.png'\nBEGIN\n  $NewOrder = CREATE MyModule.Order (\n    OrderNumber = 'ORD-001',\n    Quantity = $Quantity\n  );\n  COMMIT $NewOrder;\n  RETURN $NewOrder;\nEND;",
 		SeeAlso: []string{"microflow.nanoflow", "microflow.variables"},
 	})

@@ -110,6 +110,90 @@ func init() {
 		SeeAlso: []string{"microflow", "domain-model.entity", "page", "document-folder", "create-if-not-exists"},
 	})
 
+	// Every DROP statement, in one place. They used to be spread over the topic of
+	// each document type, and several (DROP ENTITY, DROP MICROFLOW, DROP NANOFLOW,
+	// DROP SNIPPET) were in none: `mxcli syntax drop` found three unrelated
+	// topics, and DROP ASSOCIATION could only be found by trial (#1716).
+	// drop_statements_drift_test.go holds this list to the grammar's
+	// dropStatement rule.
+	Register(SyntaxFeature{
+		Path:    "drop",
+		Summary: "DROP — remove a document (entity, association, microflow, page, …)",
+		Keywords: []string{
+			"drop", "delete", "remove", "destroy", "drop entity", "drop association",
+			"drop microflow", "drop nanoflow", "drop page", "drop snippet", "drop module",
+			"drop enumeration", "drop constant", "drop index", "drop annotation",
+		},
+		Syntax: "-- Domain model\n" +
+			"DROP ENTITY Module.Name;\n" +
+			"DROP EXTERNAL ENTITY Module.Name;\n" +
+			"DROP ASSOCIATION Module.Name;\n" +
+			"DROP ENUMERATION Module.Name;\n" +
+			"DROP CONSTANT Module.Name;\n" +
+			"DROP VALIDATION RULE FOR Module.Entity.Attribute [REGEX | RANGE];\n" +
+			"DROP REGULAR EXPRESSION Module.Name;\n" +
+			"DROP INDEX Module.IndexName ON Module.Entity;\n" +
+			"DROP ANNOTATION 'first line of the caption' IN Module;\n" +
+			"DROP ANNOTATION AT (x, y) IN Module;\n\n" +
+			"-- Logic\n" +
+			"DROP MICROFLOW Module.Name;\n" +
+			"DROP NANOFLOW Module.Name;\n" +
+			"DROP RULE Module.Name;\n" +
+			"DROP JAVA ACTION Module.Name;\n" +
+			"DROP JAVASCRIPT ACTION Module.Name;\n" +
+			"DROP WORKFLOW Module.Name;\n" +
+			"DROP TASK QUEUE Module.Name;\n" +
+			"DROP SCHEDULED EVENT Module.Name;\n\n" +
+			"-- Pages and resources\n" +
+			"DROP PAGE Module.Name;\n" +
+			"DROP SNIPPET Module.Name;\n" +
+			"DROP LAYOUT Module.Name;\n" +
+			"DROP MENU Module.Name;\n" +
+			"DROP IMAGE COLLECTION Module.Name;\n\n" +
+			"-- Integration\n" +
+			"DROP CONSUMED ODATA SERVICE Module.Name;\n" +
+			"DROP PUBLISHED ODATA SERVICE Module.Name;\n" +
+			"DROP CONSUMED REST SERVICE Module.Name;\n" +
+			"DROP PUBLISHED REST SERVICE Module.Name;\n" +
+			"DROP BUSINESS EVENT SERVICE Module.Name;\n" +
+			"DROP DATABASE CONNECTION Module.Name;\n" +
+			"DROP JSON STRUCTURE Module.Name;\n" +
+			"DROP MESSAGE DEFINITION COLLECTION Module.Name;\n" +
+			"DROP MESSAGE DEFINITION Module.Name;\n" +
+			"DROP IMPORT MAPPING Module.Name;\n" +
+			"DROP EXPORT MAPPING Module.Name;\n" +
+			"DROP DATA TRANSFORMER Module.Name;\n\n" +
+			"-- Agents\n" +
+			"DROP AI MODEL Module.Name;\n" +
+			"DROP CONSUMED MCP SERVICE Module.Name;\n" +
+			"DROP KNOWLEDGE BASE Module.Name;\n" +
+			"DROP AGENT Module.Name;\n\n" +
+			"-- Project structure\n" +
+			"DROP MODULE ModuleName;\n" +
+			"DROP FOLDER 'path' IN Module;\n" +
+			"DROP CONFIGURATION 'Name';\n\n" +
+			"-- Every form but INDEX and ANNOTATION takes IF EXISTS after the type\n" +
+			"-- (DROP ENTITY IF EXISTS Module.Name;) -- see drop-if-exists. Without it\n" +
+			"-- a missing target is an error, as in SQL.\n" +
+			"--\n" +
+			"-- Members of a document are removed with ALTER, not DROP:\n" +
+			"--   ALTER ENTITY … DROP ATTRIBUTE | DROP INDEX | DROP EVENT HANDLER\n" +
+			"--   ALTER ENUMERATION … DROP VALUE\n" +
+			"--   ALTER MESSAGE DEFINITION … DROP MEMBER\n" +
+			"--   ALTER PAGE / ALTER SNIPPET … DROP WIDGET\n" +
+			"--   ALTER WORKFLOW … DROP ACTIVITY | DROP OUTCOME | DROP PATH …\n" +
+			"-- Security has its own: DROP USER ROLE, DROP MODULE ROLE, DROP DEMO USER\n" +
+			"-- (see security).\n" +
+			"--\n" +
+			"-- DROP ASSOCIATION reconciles the entity access rules that named it, and is\n" +
+			"-- refused while a message definition still exposes it.",
+		Example: "mdl 1;\n" +
+			"DROP ASSOCIATION Shop.Order_Customer;\n" +
+			"DROP ENTITY Shop.OrderLine;\n" +
+			"DROP MICROFLOW IF EXISTS Shop.ACT_Old;",
+		SeeAlso: []string{"drop-if-exists", "domain-model.entity.alter", "security"},
+	})
+
 	// IF EXISTS sits on every document-level alternative of dropStatement, so it
 	// is documented once here for the same reason OR MODIFY is (#531).
 	Register(SyntaxFeature{
