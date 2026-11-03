@@ -121,7 +121,8 @@ describe icon collection Atlas_Core.Atlas_Filled;   -- every icon + its referenc
 - `action: save changes close page` - Save and close page
 - `action: cancel changes` - Cancel changes
 - `action: close page` - Close the page
-- `action: delete` - Delete object
+- `action: delete` - Delete the enclosing data container's object
+- `action: delete $grid1` - Delete grid1's selection: the form for a button in a data grid's `controlbar`, which has no context object (bare `delete` there is CE7005; check reports MDL-PAGEDEL01). The grid needs `itemSelection: Single` or `Multi`, or mx check reports CE7001. `delete $Param` deletes an object parameter of the page or snippet
 - `action: call microflow Module.MicroflowName` - Call microflow
 - `action: call microflow Module.MicroflowName(Param = $value)` - Call microflow with parameters
 - `action: call nanoflow Module.NanoflowName` - Call nanoflow (client-side)

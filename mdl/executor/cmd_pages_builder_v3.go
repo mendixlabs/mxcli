@@ -1816,6 +1816,10 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 		}, nil
 
 	case "delete":
+		source, err := pb.deleteSource(action.SourceVariable)
+		if err != nil {
+			return nil, err
+		}
 		return &pages.DeleteClientAction{
 			BaseElement: model.BaseElement{
 				ID:       model.ID(types.GenerateID()),
@@ -1824,7 +1828,8 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 			// The visitor sets it for `delete close page`; dropping it here
 			// turned a describe → exec round trip into a button that no longer
 			// closes its page (ako/mxcli#950).
-			ClosePage: action.ClosePage,
+			ClosePage:      action.ClosePage,
+			SourceVariable: source,
 		}, nil
 
 	case "create":
