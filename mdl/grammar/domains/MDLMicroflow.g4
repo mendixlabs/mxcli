@@ -284,6 +284,7 @@ microflowStatement
     | annotation* commitStatement SEMICOLON
     | annotation* deleteObjectStatement SEMICOLON
     | annotation* rollbackStatement SEMICOLON
+    | annotation* externalObjectStatement SEMICOLON
     | annotation* retrieveStatement SEMICOLON
     | annotation* ifStatement SEMICOLON
     | annotation* loopStatement SEMICOLON
@@ -457,6 +458,14 @@ deleteObjectStatement
 // ROLLBACK $Product; or ROLLBACK $Product REFRESH;
 rollbackStatement
     : ROLLBACK VARIABLE REFRESH? onErrorClause?
+    ;
+
+// SEND EXTERNAL OBJECT $District [REFRESH]; and DELETE EXTERNAL OBJECT $District
+// [REFRESH]; — Studio Pro's "Send external object" and "Delete external object"
+// (mendixlabs/mxcli#1735). A plain commit or delete on an external entity is a
+// Studio Pro error; these are how an OData write is saved or removed.
+externalObjectStatement
+    : (SEND | DELETE) EXTERNAL OBJECT VARIABLE REFRESH? onErrorClause?
     ;
 
 // RETRIEVE $Product FROM MfTest.Product WHERE Code = $SearchCode SORT BY Name ASC FIRST;

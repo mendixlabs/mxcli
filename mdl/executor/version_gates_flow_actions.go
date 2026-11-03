@@ -88,6 +88,24 @@ var flowActionGates = []typeGate{
 		},
 	},
 	{
+		versionGate: versionGate{"microflows", "send_external_object", "send external object",
+			"this version has no Microflows$SendExternalObject: upgrade the project"},
+		types: []string{"Microflows$SendExternalObject"},
+		match: func(st ast.MicroflowStatement) bool {
+			s, ok := st.(*ast.ExternalObjectStmt)
+			return ok && !s.Delete
+		},
+	},
+	{
+		versionGate: versionGate{"microflows", "delete_external_object", "delete external object",
+			"this version has no Microflows$DeleteExternalObject: upgrade the project"},
+		types: []string{"Microflows$DeleteExternalObject"},
+		match: func(st ast.MicroflowStatement) bool {
+			s, ok := st.(*ast.ExternalObjectStmt)
+			return ok && s.Delete
+		},
+	},
+	{
 		versionGate: versionGate{"microflows", "call_external_action", "call external action",
 			"this version has no Microflows$CallExternalAction: upgrade the project"},
 		types: []string{"Microflows$CallExternalAction"},

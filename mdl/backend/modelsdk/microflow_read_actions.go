@@ -109,6 +109,24 @@ func actionFromGen(el element.Element) microflows.MicroflowAction {
 		out.ID = model.ID(a.ID())
 		return out
 
+	case *genMf.SendExternalObject:
+		out := &microflows.SendExternalObjectAction{
+			Variable:          a.VariableNameToBeSent(),
+			RefreshInClient:   a.RefreshInClient(),
+			ErrorHandlingType: microflows.ErrorHandlingType(a.ErrorHandlingType()),
+		}
+		out.ID = model.ID(a.ID())
+		return out
+
+	case *genMf.DeleteExternalObject:
+		out := &microflows.DeleteExternalObjectAction{
+			Variable:          a.DeleteVariableName(),
+			RefreshInClient:   a.RefreshInClient(),
+			ErrorHandlingType: microflows.ErrorHandlingType(a.ErrorHandlingType()),
+		}
+		out.ID = model.ID(a.ID())
+		return out
+
 	case *genMf.RollbackAction:
 		out := &microflows.RollbackObjectAction{
 			RollbackVariable:  a.RollbackVariableName(),

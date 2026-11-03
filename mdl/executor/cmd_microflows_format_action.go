@@ -542,6 +542,12 @@ func formatAction(
 	case *microflows.RollbackObjectAction:
 		return fmt.Sprintf("rollback $%s%s;", a.RollbackVariable, refreshModifier(a.RefreshInClient))
 
+	case *microflows.SendExternalObjectAction:
+		return fmt.Sprintf("send external object $%s%s;", a.Variable, refreshModifier(a.RefreshInClient))
+
+	case *microflows.DeleteExternalObjectAction:
+		return fmt.Sprintf("delete external object $%s%s;", a.Variable, refreshModifier(a.RefreshInClient))
+
 	case *microflows.CreateListAction:
 		// Use EntityQualifiedName (BY_NAME_REFERENCE) or fall back to EntityID lookup
 		entityName := a.EntityQualifiedName

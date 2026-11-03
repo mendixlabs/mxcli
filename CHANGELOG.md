@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`send external object` and `delete external object`** (ako/mxcli#1939, mendixlabs/mxcli#1735) — Studio Pro's *Send external object* and *Delete external object* activities, which save and remove an external (OData) object, now have MDL: `send external object $Obj [refresh] [on error …];` and `delete external object $Obj [refresh] [on error …];`. `describe` prints them, so a flow that holds one survives a drop + create from its description, which used to delete it silently. `check` refuses `on error continue` on either (CE6035, MDL076). See `mxcli syntax odata.write`.
 - **A module's version and module type from MDL** (ako/mxcli#1921) — the General tab of Studio Pro's *Module settings* dialog: `create or modify module Inventory (Version: '2.3.1', ModuleType: addon)` and `alter module Inventory set (Version: '2.4.0')`. `describe module` prints the settings that differ from a new module's (App, 1.0.0), and the location as a comment when it is *Marketplace modules*; `list modules` gains `Version` and `Type` columns. The version must be SemVer, the type `app` or `addon` (Mendix 9.12+), and a statement that restates the stored settings writes nothing. Measured on 11.16: the type is the settings' `ExportLevel` (`Source` / `Protected`), not `ProtectedModuleType`, which is `AddOn` on every module.
 
 ### Fixed
