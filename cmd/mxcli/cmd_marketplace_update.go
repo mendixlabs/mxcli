@@ -3,10 +3,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/marketplace"
@@ -135,7 +135,7 @@ func runMarketplaceUpdate(cmd *cobra.Command, args []string) error {
 				"  downloadable. It is not, and --force does not help: there is nothing to compare against.\n"+
 				"  hint: re-run with --no-baseline to update without that check (local edits are lost silently)", berr)
 		}
-		baseRef, basePkgModule, rerr := referenceFor(ctx, client, base, mendixVersion, work, "b")
+		baseRef, basePkgModule, _, rerr := referenceFor(ctx, client, base, mendixVersion, work, "b")
 		if rerr != nil {
 			return rerr
 		}
@@ -167,19 +167,23 @@ func runMarketplaceUpdate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	targetRef, _, err := referenceFor(ctx, client, targetVersion, mendixVersion, work, "t")
+	// The bundled files and widgets are taken from the package rather than from
+	// the reference project, whose widgets/ also holds the blank template's. Its
+	// path is the one referenceFor downloaded to: this used to be spelled out
+	// here as target.mpk while the download was t.mpk, so every update dropped
+	// the module and then failed to open the package (ako/mxcli#1934).
+	targetRef, _, targetMpk, err := referenceFor(ctx, client, targetVersion, mendixVersion, work, "t")
 	if err != nil {
 		return err
 	}
-	// referenceFor downloaded the package into the work directory under this
-	// slot; the widgets are taken from it rather than from the reference project,
-	// whose widgets/ also holds the blank template's.
-	targetMpk := filepath.Join(work, "target.mpk")
 
 	fmt.Fprintf(out, "\nUpdating %s %s → %s...\n", moduleName, installedVersion, target)
 	res, err := marketplace.PerformUpdate(mprPath, targetRef, targetMpk, moduleName, installedVersion, target,
 		targetVersion.VersionID, newBackendFactory())
 	if err != nil {
+		if errors.Is(err, marketplace.ErrUpdateNotStarted) {
+			return err
+		}
 		return fmt.Errorf("%w\n\nThe project may be mid-update — %s could be missing. Restore from version control",
 			err, moduleName)
 	}
