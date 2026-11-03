@@ -588,6 +588,22 @@ func microflowActionToGen(action microflows.MicroflowAction) element.Element {
 		g.SetDeleteVariableName(a.DeleteVariable)
 		g.SetRefreshInClient(a.RefreshInClient)
 		return g
+	case *microflows.SendExternalObjectAction:
+		// Microflows$SendExternalObject (mendixlabs/mxcli#1735).
+		g := genMf.NewSendExternalObject()
+		g.SetID(element.ID(a.ID))
+		g.SetVariableNameToBeSent(a.Variable)
+		g.SetRefreshInClient(a.RefreshInClient)
+		g.SetErrorHandlingType(orDefault(string(a.ErrorHandlingType), "Rollback"))
+		return g
+	case *microflows.DeleteExternalObjectAction:
+		// Microflows$DeleteExternalObject (mendixlabs/mxcli#1735).
+		g := genMf.NewDeleteExternalObject()
+		g.SetID(element.ID(a.ID))
+		g.SetDeleteVariableName(a.Variable)
+		g.SetRefreshInClient(a.RefreshInClient)
+		g.SetErrorHandlingType(orDefault(string(a.ErrorHandlingType), "Rollback"))
+		return g
 	case *microflows.RollbackObjectAction:
 		g := genMf.NewRollbackAction()
 		g.SetID(element.ID(a.ID))

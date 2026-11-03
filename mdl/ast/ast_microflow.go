@@ -627,6 +627,19 @@ type RollbackStmt struct {
 
 func (s *RollbackStmt) isMicroflowStatement() {}
 
+// ExternalObjectStmt represents: SEND EXTERNAL OBJECT $Var [REFRESH] or
+// DELETE EXTERNAL OBJECT $Var [REFRESH] — Studio Pro's "Send external object"
+// and "Delete external object" activities (mendixlabs/mxcli#1735).
+type ExternalObjectStmt struct {
+	Delete          bool                 // DELETE EXTERNAL OBJECT; otherwise SEND
+	Variable        string               // The external object
+	RefreshInClient bool                 // Whether to refresh in client
+	Annotations     *ActivityAnnotations // Optional @position, @caption, @color, @annotation
+	ErrorHandling   *ErrorHandlingClause // Optional ON ERROR clause
+}
+
+func (s *ExternalObjectStmt) isMicroflowStatement() {}
+
 // RetrieveStmt represents: RETRIEVE $Var FROM Entity [WHERE condition] [SORT BY ...] [FIRST | [LIMIT n] [OFFSET n]] [ON ERROR ...]
 // or: RETRIEVE $Var FROM $Parent/Module.Association (association retrieve)
 type RetrieveStmt struct {

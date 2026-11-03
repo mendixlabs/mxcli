@@ -84,6 +84,29 @@ type RollbackObjectAction struct {
 
 func (RollbackObjectAction) isMicroflowAction() {}
 
+// SendExternalObjectAction is Studio Pro's "Send external object"
+// (Microflows$SendExternalObject): it saves a changed external (OData) object
+// through its consumed service, which a plain commit on one cannot do.
+type SendExternalObjectAction struct {
+	model.BaseElement
+	Variable          string            `json:"variable"`
+	RefreshInClient   bool              `json:"refreshInClient"`
+	ErrorHandlingType ErrorHandlingType `json:"errorHandlingType,omitempty"`
+}
+
+func (SendExternalObjectAction) isMicroflowAction() {}
+
+// DeleteExternalObjectAction is Studio Pro's "Delete external object"
+// (Microflows$DeleteExternalObject).
+type DeleteExternalObjectAction struct {
+	model.BaseElement
+	Variable          string            `json:"variable"`
+	RefreshInClient   bool              `json:"refreshInClient"`
+	ErrorHandlingType ErrorHandlingType `json:"errorHandlingType,omitempty"`
+}
+
+func (DeleteExternalObjectAction) isMicroflowAction() {}
+
 // MemberChange represents a change to a member (attribute or association).
 type MemberChange struct {
 	model.BaseElement
