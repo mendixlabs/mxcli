@@ -111,7 +111,9 @@ var flowActionGates = []typeGate{
 	{
 		versionGate: versionGate{"microflows", "queued_calls", "call … in queue",
 			"this version has no task queues on a call (Queues$QueueSettings): leave out `in queue`, or upgrade the project"},
-		types:      []string{"Queues$QueueSettings"},
+		// The retry types arrived with QueueSettings (9.10.0) and are only written
+		// under it, so the same gate covers `in queue … retry …` (#1931).
+		types:      []string{"Queues$QueueSettings", "Queues$QueueFixedRetry", "Queues$QueueExponentialRetry"},
 		properties: []string{"Microflows$MicroflowCall.QueueSettings", "Microflows$JavaActionCallAction.QueueSettings"},
 		match: func(st ast.MicroflowStatement) bool {
 			switch s := st.(type) {
