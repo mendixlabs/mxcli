@@ -207,8 +207,7 @@ func parseLexerGrammar(path string) ([]tokenEntry, error) {
 			}
 
 			// Try to reconstruct from the first alternative
-			firstAlt := strings.TrimSuffix(strings.TrimSpace(body), "|")
-			firstAlt = strings.TrimSpace(firstAlt)
+			firstAlt := firstAlternative(body)
 			text := reconstructKeyword(tokenName, firstAlt)
 			if text != "" {
 				entries = append(entries, tokenEntry{
@@ -221,6 +220,22 @@ func parseLexerGrammar(path string) ([]tokenEntry, error) {
 	}
 
 	return entries, scanner.Err()
+}
+
+// groupOpenRE matches the paren that opens a grouped rule body, as in
+// `ERROR_MESSAGE: ( E R R O R WS+ M E S S A G E` whose group carries a
+// right-edge predicate.
+var groupOpenRE = regexp.MustCompile(`^\(\s+`)
+
+// firstAlternative returns the keyword spelling on the first line of a
+// multi-line lexer rule: the body with a trailing `|` and an opening group
+// paren removed. Without the paren strip a predicated keyword silently dropped
+// out of the LSP completions (mendixlabs/mxcli#1720).
+func firstAlternative(body string) string {
+	alt := strings.TrimSpace(body)
+	alt = groupOpenRE.ReplaceAllString(alt, "")
+	alt = strings.TrimSuffix(alt, "|")
+	return strings.TrimSpace(alt)
 }
 
 // reconstructKeyword converts a token body (the RHS of the lexer rule) to user-facing text.

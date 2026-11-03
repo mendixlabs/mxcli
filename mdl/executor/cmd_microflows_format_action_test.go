@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend/mock"
 	mdltypes "github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
@@ -685,6 +686,35 @@ func TestFormatAction_ValidationFeedback(t *testing.T) {
 	want := "validation feedback $Customer/Email message 'Email is required';"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// What describe writes for a validation feedback on an attribute named Error
+// must parse back: `$E/Error message` used to lex as the `error message` clause
+// keyword, so describe output for such a microflow failed `check` with "missing
+// MESSAGE" (mendixlabs/mxcli#1720).
+func TestFormatAction_ValidationFeedback_MemberNamedErrorReparses(t *testing.T) {
+	e := newTestExecutor()
+	for _, attr := range []string{"Error", "error", "Message", "ErrorMessage"} {
+		action := &microflows.ValidationFeedbackAction{
+			ObjectVariable: "Entity2",
+			AttributeName:  "ExamplesModule.Entity2." + attr,
+			Template: &model.Text{
+				Translations: map[string]string{"en_US": "not good"},
+			},
+		}
+		line := e.formatAction(action, nil, nil)
+		src := "create or modify microflow ExamplesModule.ACT ($Entity2: ExamplesModule.Entity2)\nbegin\n  " +
+			line + "\n  return;\nend;"
+		prog, errs := visitor.Build(src)
+		if len(errs) > 0 {
+			t.Fatalf("%s: describe output does not parse: %v\n%s", attr, errs, src)
+		}
+		vf := prog.Statements[0].(*ast.CreateMicroflowStmt).Body[0].(*ast.ValidationFeedbackStmt)
+		segs := vf.AttributePath.Segments
+		if len(segs) != 1 || segs[0].Name != attr {
+			t.Errorf("%s: read back as %v", attr, segs)
+		}
 	}
 }
 
