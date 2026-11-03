@@ -8,15 +8,15 @@ import (
 	"testing"
 )
 
-// A keyword rule guarded by a left-edge predicate must still yield its
+// A grouped keyword rule guarded by a predicate must still yield its
 // completion: ERROR_MESSAGE gained one for mendixlabs/mxcli#1720 and the
-// generator, reading the predicate as the first alternative, dropped
+// generator, reading `( E R R O R …` as an unknown part, dropped
 // "ERROR MESSAGE" from the LSP keyword list.
 func TestPredicatedMultiLineRuleKeepsItsKeyword(t *testing.T) {
 	src := "lexer grammar L;\n" +
-		"ERROR_MESSAGE: {!p.followsMemberSeparator()}? ( E R R O R WS+ M E S S A G E\n" +
+		"ERROR_MESSAGE: ( E R R O R WS+ M E S S A G E\n" +
 		"             | E R R O R '_' M E S S A G E\n" +
-		"             );\n" +
+		"             ) {!p.followsMemberSeparator()}?;\n" +
 		"CASCADE: C A S C A D E;\n"
 	path := filepath.Join(t.TempDir(), "L.g4")
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {

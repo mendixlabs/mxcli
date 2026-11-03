@@ -222,18 +222,18 @@ func parseLexerGrammar(path string) ([]tokenEntry, error) {
 	return entries, scanner.Err()
 }
 
-// leadingPredicateRE matches a left-edge semantic predicate (`{...}?`) and the
-// group paren that follows it, as in
-// `ERROR_MESSAGE: {!p.followsMemberSeparator()}? ( E R R O R WS+ ...`.
-var leadingPredicateRE = regexp.MustCompile(`^\{[^}]*\}\?\s*\(?\s*`)
+// groupOpenRE matches the paren that opens a grouped rule body, as in
+// `ERROR_MESSAGE: ( E R R O R WS+ M E S S A G E` whose group carries a
+// right-edge predicate.
+var groupOpenRE = regexp.MustCompile(`^\(\s+`)
 
 // firstAlternative returns the keyword spelling on the first line of a
-// multi-line lexer rule: the body with a trailing `|`, and a leading predicate
-// and group paren, removed. Without the predicate strip a predicated keyword
-// silently dropped out of the LSP completions (mendixlabs/mxcli#1720).
+// multi-line lexer rule: the body with a trailing `|` and an opening group
+// paren removed. Without the paren strip a predicated keyword silently dropped
+// out of the LSP completions (mendixlabs/mxcli#1720).
 func firstAlternative(body string) string {
 	alt := strings.TrimSpace(body)
-	alt = leadingPredicateRE.ReplaceAllString(alt, "")
+	alt = groupOpenRE.ReplaceAllString(alt, "")
 	alt = strings.TrimSuffix(alt, "|")
 	return strings.TrimSpace(alt)
 }

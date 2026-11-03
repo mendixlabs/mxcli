@@ -111,7 +111,10 @@ so the lexer-driven quoting in describe passes `Error` unquoted. Fix it where th
 token is made: a lexer predicate on context (here "not after a `/` or `.`
 separator") covers every rule at once, but walking backwards over line breaks
 lets a comment ending in `.` or `/` pass for a separator. Put the comment cases in
-as controls.
+as controls. **Put the predicate on the right edge.** ANTLR evaluates a left-edge
+lexer predicate at every token start, which turns off the lexer's DFA cache. Here
+that doubled `check` time and timed out the corpus tests, while every unit test
+passed. Time a lexer change against a control binary.
 
 **Quoting is not one question.** Quoting escapes MDL's *parser* keywords. It does
 not escape Mendix's platform-reserved member names, and it does not help in an
