@@ -119,7 +119,8 @@ func init() {
 			"  MDL-MF03  DISALLOW needs an error message or microflow         (CE4899)\n" +
 			"and with a project, a URL another microflow already owns         (CE0570).\n\n" +
 			"`Mark as used` still has no clause and is carried, as all of these were\n" +
-			"before they were authorable (mendixlabs/mxcli#1120).",
+			"before they were authorable (mendixlabs/mxcli#1120).\n\n" +
+			"DROP MICROFLOW [IF EXISTS] Module.Name;   -- every DROP: see `mxcli syntax drop`",
 		Example: "CREATE MICROFLOW MyModule.ACT_CreateOrder (\n  $CustomerCode: String,\n  $Quantity: Integer\n)\nRETURNS MyModule.Order AS $NewOrder\nFOLDER 'Orders'\nEXPOSED AS MICROFLOW ACTION 'Create order' IN 'Orders'\n  ICON 'assets/order-64.png'\nBEGIN\n  $NewOrder = CREATE MyModule.Order (\n    OrderNumber = 'ORD-001',\n    Quantity = $Quantity\n  );\n  COMMIT $NewOrder;\n  RETURN $NewOrder;\nEND;",
 		SeeAlso: []string{"microflow.nanoflow", "microflow.variables"},
 	})
@@ -663,7 +664,7 @@ func init() {
 			"  -- absolute, whichever date comes first; rounded for an Integer\n" +
 			"  return round(minutesBetween($Start, $End));\n" +
 			"end;",
-		SeeAlso: []string{"microflow.logging", "microflow.variables", "regular-expression"},
+		SeeAlso: []string{"microflow.expressions.functions", "microflow.logging", "microflow.variables", "regular-expression"},
 	})
 
 	Register(SyntaxFeature{
@@ -768,7 +769,11 @@ func init() {
 			"sub-microflow", "java action", "parameter passing", "blank argument", "nothing",
 			"text template parameter", "stringtemplate", "document parameter", "agent parameter",
 		},
-		Syntax: "$Result = CALL MICROFLOW Module.Name (Param = value) [IN QUEUE Module.Queue];\n$Result = CALL JAVA ACTION Module.Name (Param = value) [IN QUEUE Module.Queue];\n\n" +
+		Syntax: "$Result = CALL MICROFLOW Module.Name (Param = value) [IN QUEUE Module.Queue [retry]];\n$Result = CALL JAVA ACTION Module.Name (Param = value) [IN QUEUE Module.Queue [retry]];\n\n" +
+			"-- retry (Mendix 9.10+; every property required, Retries >= 1):\n" +
+			"--   RETRY FIXED (Retries: n, Interval: n, IntervalType: Seconds|Minutes|Hours)\n" +
+			"--   RETRY EXPONENTIAL (Retries: n, InitialInterval: n, MaximumInterval: n, IntervalType: …)\n" +
+			"-- A rewrite that keeps a queued call but drops its stored retry is refused.\n\n" +
 			"-- A Java action parameter of type StringTemplate(Text|Sql) takes a template, filled\n" +
 			"-- like a log message: Param = 'text {1}' WITH ({1} = expression, ...). A plain string\n" +
 			"-- is the text; any other expression is the template '{1}' with it as the argument,\n" +
@@ -777,7 +782,7 @@ func init() {
 			"-- DateTime); an enumeration is refused — pass getKey(...) or getCaption(...).\n" +
 			"-- A document parameter (DESCRIBE JAVA ACTION shows Document(<type>), e.g. an\n" +
 			"-- agent-editor Agent) takes the document's name: Param = Module.Document.",
-		Example: "$IsValid = CALL MICROFLOW MyModule.ValidateOrder (\n  Order = $NewOrder\n);\n\n$Token = CALL JAVA ACTION MyModule.GenerateToken (\n  UserId = $User/Id\n);\n\n-- Run the call on a task queue (background execution). The queue must\n-- exist; a queued CALL JAVA ACTION must return Nothing, or the build fails\n-- with CE7038.\nCALL MICROFLOW MyModule.ACT_Refresh () IN QUEUE MyModule.RefreshQueue;\nCALL JAVA ACTION MyModule.RefreshData (Url = $Url) IN QUEUE MyModule.RefreshQueue;\n\n-- A blank argument: the mapping is kept, its expression left empty, as\n-- Studio Pro stores an argument field left blank. Not the same as `empty`\n-- (a Mendix value); CALL MICROFLOW, CALL NANOFLOW and CALL EXTERNAL ACTION\n-- take it. On a flow call Mendix reports it as CE0127 \"Missing argument\":\n-- it exists so DESCRIBE round-trips. On an external action it is how Studio\n-- Pro 11.16 stores an optional OData parameter left blank.\nCALL MICROFLOW MyModule.ACT_Log (Message = 'x', TraceId = nothing);\nCALL EXTERNAL ACTION MyModule.OrderService.CreateBuffer (command = $Cmd, additional = nothing);\n\n-- A text-template parameter, and a document parameter.\nCALL JAVA ACTION BusinessEvents.PublishBusinessEvent_V2 (\n  Subject = 'Order {1} shipped' WITH ({1} = $Order/OrderNumber),\n  BusinessEvent = $Event\n);\n$Response = CALL JAVA ACTION AgentEditorCommons.Agent_CallDocument_WithoutHistory (\n  Agent = MyModule.PaymentReminderAgent, OptionalContextObject = $Invoice\n);",
+		Example: "$IsValid = CALL MICROFLOW MyModule.ValidateOrder (\n  Order = $NewOrder\n);\n\n$Token = CALL JAVA ACTION MyModule.GenerateToken (\n  UserId = $User/Id\n);\n\n-- Run the call on a task queue (background execution). The queue must\n-- exist; a queued CALL JAVA ACTION must return Nothing, or the build fails\n-- with CE7038.\nCALL MICROFLOW MyModule.ACT_Refresh () IN QUEUE MyModule.RefreshQueue;\nCALL JAVA ACTION MyModule.RefreshData (Url = $Url) IN QUEUE MyModule.RefreshQueue;\n\n-- Retried with back-off when the receiver is down.\nCALL MICROFLOW MyModule.POST_Message (Body = $Body) IN QUEUE MyModule.RefreshQueue\n  RETRY EXPONENTIAL (Retries: 20, InitialInterval: 1, MaximumInterval: 60, IntervalType: Minutes);\n\n-- A blank argument: the mapping is kept, its expression left empty, as\n-- Studio Pro stores an argument field left blank. Not the same as `empty`\n-- (a Mendix value); CALL MICROFLOW, CALL NANOFLOW and CALL EXTERNAL ACTION\n-- take it. On a flow call Mendix reports it as CE0127 \"Missing argument\":\n-- it exists so DESCRIBE round-trips. On an external action it is how Studio\n-- Pro 11.16 stores an optional OData parameter left blank.\nCALL MICROFLOW MyModule.ACT_Log (Message = 'x', TraceId = nothing);\nCALL EXTERNAL ACTION MyModule.OrderService.CreateBuffer (command = $Cmd, additional = nothing);\n\n-- A text-template parameter, and a document parameter.\nCALL JAVA ACTION BusinessEvents.PublishBusinessEvent_V2 (\n  Subject = 'Order {1} shipped' WITH ({1} = $Order/OrderNumber),\n  BusinessEvent = $Event\n);\n$Response = CALL JAVA ACTION AgentEditorCommons.Agent_CallDocument_WithoutHistory (\n  Agent = MyModule.PaymentReminderAgent, OptionalContextObject = $Invoice\n);",
 		SeeAlso: []string{"java-action", "microflow.create", "queue", "microflow.workflow-actions"},
 	})
 

@@ -72,6 +72,26 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
+		Path:    "odata.write",
+		Summary: "Save or delete an external (OData) object from a microflow: SEND / DELETE EXTERNAL OBJECT",
+		Keywords: []string{
+			"send external object", "delete external object", "external object", "save external entity",
+			"odata write", "odata update", "odata delete", "commit external entity",
+		},
+		Syntax: "SEND EXTERNAL OBJECT $Obj [REFRESH] [ON ERROR …];\n" +
+			"DELETE EXTERNAL OBJECT $Obj [REFRESH] [ON ERROR …];\n\n" +
+			"-- Studio Pro's \"Send external object\" and \"Delete external object\"\n" +
+			"-- activities. An external entity is saved through its consumed service:\n" +
+			"-- a plain COMMIT or DELETE on one is a Studio Pro error. The entity set must\n" +
+			"-- allow the operation (Updatable / Deletable in the service's $metadata),\n" +
+			"-- or mxbuild reports CE9435.\n" +
+			"-- ON ERROR CONTINUE is CE6035 on both (MDL076); the default and a custom\n" +
+			"-- handler, with or without rollback, are accepted.",
+		Example: "mdl 1;\nCREATE OR MODIFY MICROFLOW MyModule.ACT_SaveCustomer ($Customer: MyModule.Customer)\nBEGIN\n  CHANGE $Customer (Name = 'Renamed');\n  SEND EXTERNAL OBJECT $Customer REFRESH;\n  RETURN;\nEND;",
+		SeeAlso: []string{"odata.consume", "microflow.object-operations", "microflow.error-handling"},
+	})
+
+	Register(SyntaxFeature{
 		Path:    "odata.publish",
 		Summary: "Publish entities as OData services with KEY, options, and navigation properties",
 		Keywords: []string{

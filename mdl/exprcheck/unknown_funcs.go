@@ -187,3 +187,25 @@ func SourceRejectedForIntegerTarget(src string, vars map[string]TypeKind) bool {
 	}
 	return false
 }
+
+// ToStringOfDecimal reports whether src is `toString(x)` with x provably a
+// Decimal: a Decimal-returning built-in such as minutesBetween(), Decimal
+// arithmetic, or a Decimal variable from vars. Mendix renders such a value with
+// its full fraction — 43 characters were seen at runtime for a minutesBetween —
+// so writing it to a short String attribute overflows (mendixlabs/mxcli#1515).
+// Unknown inference answers false.
+func ToStringOfDecimal(src string, vars map[string]TypeKind) bool {
+	if strings.TrimSpace(src) == "" {
+		return false
+	}
+	ctx := Context{}
+	if vars != nil {
+		ctx.Scope = mapScope(vars)
+	}
+	root, _ := (&parserImpl{}).Parse(src, ctx)
+	call, ok := unwrapParens(root).(*CallExpr)
+	if !ok || call.Name != "toString" || call.Qualified || len(call.Args) != 1 {
+		return false
+	}
+	return inferKind(call.Args[0], ctx) == KindDecimal
+}

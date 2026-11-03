@@ -133,7 +133,7 @@ func (fb *flowBuilder) addLogMessageAction(s *ast.LogStmt) model.ID {
 // activity rather than the script, which makes a typo here expensive to trace.
 //
 // `what` names the statement in the error (e.g. "CALL MICROFLOW").
-func (fb *flowBuilder) buildQueueSettings(q *ast.QualifiedName, what string) *microflows.QueueSettings {
+func (fb *flowBuilder) buildQueueSettings(q *ast.QualifiedName, retry *ast.QueueRetry, what string) *microflows.QueueSettings {
 	if q == nil {
 		return nil
 	}
@@ -141,10 +141,22 @@ func (fb *flowBuilder) buildQueueSettings(q *ast.QualifiedName, what string) *mi
 	if !fb.queueExists(q.Module, q.Name) {
 		fb.addError("%s ... IN QUEUE '%s': task queue not found in the project (create it with `create task queue %s (Parallelism: 1)`)", what, qn, qn)
 	}
-	return &microflows.QueueSettings{
+	qs := &microflows.QueueSettings{
 		BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 		Queue:       qn,
 	}
+	if retry != nil && retry.Kind != "" {
+		qs.RetryPolicy = &microflows.QueueRetry{
+			BaseElement:     model.BaseElement{ID: model.ID(types.GenerateID())},
+			Kind:            retry.Kind,
+			Retries:         retry.Retries,
+			Interval:        retry.Interval,
+			InitialInterval: retry.InitialInterval,
+			MaximumInterval: retry.MaximumInterval,
+			IntervalType:    retry.IntervalType,
+		}
+	}
+	return qs
 }
 
 // queueExists reports whether a Queues$Queue with the given module-qualified
@@ -198,7 +210,7 @@ func (fb *flowBuilder) addCallMicroflowAction(s *ast.CallMicroflowStmt) model.ID
 		BaseElement:       model.BaseElement{ID: model.ID(types.GenerateID())},
 		Microflow:         mfQN,
 		ParameterMappings: mappings,
-		QueueSettings:     fb.buildQueueSettings(s.Queue, "CALL MICROFLOW"),
+		QueueSettings:     fb.buildQueueSettings(s.Queue, s.QueueRetry, "CALL MICROFLOW"),
 	}
 	action := &microflows.MicroflowCallAction{
 		BaseElement:        model.BaseElement{ID: model.ID(types.GenerateID())},
@@ -441,7 +453,7 @@ func (fb *flowBuilder) addCallJavaActionAction(s *ast.CallJavaActionStmt) model.
 		ErrorHandlingType:  fb.ehType(s.ErrorHandling),
 		JavaAction:         actionQN,
 		ParameterMappings:  mappings,
-		QueueSettings:      fb.buildQueueSettings(s.Queue, "CALL JAVA ACTION"),
+		QueueSettings:      fb.buildQueueSettings(s.Queue, s.QueueRetry, "CALL JAVA ACTION"),
 		ResultVariableName: s.OutputVariable,
 		UseReturnVariable:  s.OutputVariable != "",
 	}

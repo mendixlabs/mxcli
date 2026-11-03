@@ -788,6 +788,8 @@ func errorHandlerStatementVarRefs(stmt ast.MicroflowStatement) []string {
 		refs = append(refs, s.Variable)
 	case *ast.DeleteObjectStmt:
 		refs = append(refs, s.Variable)
+	case *ast.ExternalObjectStmt:
+		refs = append(refs, s.Variable)
 	case *ast.DownloadFileStmt:
 		refs = append(refs, s.FileDocument)
 	case *ast.SynchronizeStmt:

@@ -308,7 +308,8 @@ func classifyAction(a *microflows.ActionActivity) string {
 	switch a.Action.(type) {
 	case *microflows.CreateObjectAction, *microflows.ChangeObjectAction,
 		*microflows.CommitObjectsAction, *microflows.DeleteObjectAction,
-		*microflows.RollbackObjectAction:
+		*microflows.RollbackObjectAction, *microflows.SendExternalObjectAction,
+		*microflows.DeleteExternalObjectAction:
 		return "object"
 	case *microflows.RetrieveAction:
 		return "retrieve"

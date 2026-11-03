@@ -771,6 +771,13 @@ func (a *alterFlowContext) splitCondition(ctx *ExecContext, op *ast.AlterFlowOpe
 	if missing := a.unscopedRefs(expr, target.ID); len(missing) > 0 {
 		return "", "", fmt.Errorf("the condition uses %s, which is not declared on the path to the decision", strings.Join(missing, ", "))
 	}
+	// The `if` states the condition as describe printed it. For a decision
+	// whose true path goes straight on, describe prints the negated condition
+	// with the paths swapped; the stored flows do not move, so storing the
+	// printed condition as it is would invert the decision (ako/mxcli#1930).
+	if decisionPrintedNegated(ctx, a.mf.ObjectCollection, target.ID) {
+		expr = negateExpression(expr)
+	}
 	caption = split.Caption
 	if caption == old.Expression {
 		caption = expr

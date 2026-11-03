@@ -543,6 +543,12 @@ func formatAction(
 	case *microflows.RollbackObjectAction:
 		return fmt.Sprintf("rollback $%s%s;", a.RollbackVariable, refreshModifier(a.RefreshInClient))
 
+	case *microflows.SendExternalObjectAction:
+		return fmt.Sprintf("send external object $%s%s;", a.Variable, refreshModifier(a.RefreshInClient))
+
+	case *microflows.DeleteExternalObjectAction:
+		return fmt.Sprintf("delete external object $%s%s;", a.Variable, refreshModifier(a.RefreshInClient))
+
 	case *microflows.CreateListAction:
 		// Use EntityQualifiedName (BY_NAME_REFERENCE) or fall back to EntityID lookup
 		entityName := a.EntityQualifiedName
@@ -2388,7 +2394,25 @@ func queueClauseMDL(qs *microflows.QueueSettings) string {
 	if qs == nil || qs.Queue == "" {
 		return ""
 	}
-	return " in queue " + qs.Queue
+	return " in queue " + qs.Queue + queueRetryClauseMDL(qs.RetryPolicy)
+}
+
+// queueRetryClauseMDL renders a queued call's retry policy, so a stored retry
+// round-trips (mendixlabs/mxcli#1729). Every property is printed: the clause
+// has no defaults.
+func queueRetryClauseMDL(r *microflows.QueueRetry) string {
+	if r == nil {
+		return ""
+	}
+	switch r.Kind {
+	case microflows.QueueRetryFixed:
+		return fmt.Sprintf(" retry fixed (Retries: %d, Interval: %d, IntervalType: %s)",
+			r.Retries, r.Interval, r.IntervalType)
+	case microflows.QueueRetryExponential:
+		return fmt.Sprintf(" retry exponential (Retries: %d, InitialInterval: %d, MaximumInterval: %d, IntervalType: %s)",
+			r.Retries, r.InitialInterval, r.MaximumInterval, r.IntervalType)
+	}
+	return ""
 }
 
 // mdlAggregateKeyword maps a Mendix aggregate function to the MDL keyword that

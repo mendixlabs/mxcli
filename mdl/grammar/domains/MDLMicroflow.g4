@@ -292,6 +292,7 @@ microflowStatement
     | annotation* commitStatement SEMICOLON
     | annotation* deleteObjectStatement SEMICOLON
     | annotation* rollbackStatement SEMICOLON
+    | annotation* externalObjectStatement SEMICOLON
     | annotation* retrieveStatement SEMICOLON
     | annotation* ifStatement SEMICOLON
     | annotation* loopStatement SEMICOLON
@@ -467,6 +468,14 @@ rollbackStatement
     : ROLLBACK VARIABLE REFRESH? onErrorClause?
     ;
 
+// SEND EXTERNAL OBJECT $District [REFRESH]; and DELETE EXTERNAL OBJECT $District
+// [REFRESH]; — Studio Pro's "Send external object" and "Delete external object"
+// (mendixlabs/mxcli#1735). A plain commit or delete on an external entity is a
+// Studio Pro error; these are how an OData write is saved or removed.
+externalObjectStatement
+    : (SEND | DELETE) EXTERNAL OBJECT VARIABLE REFRESH? onErrorClause?
+    ;
+
 // RETRIEVE $Product FROM MfTest.Product WHERE Code = $SearchCode SORT BY Name ASC FIRST;
 // RETRIEVE $Top FROM MfTest.Product SORT BY Price DESC LIMIT 10 OFFSET 20;
 //
@@ -610,7 +619,20 @@ callMicroflowStatement
 // on the call activity). Valid on CALL MICROFLOW and CALL JAVA ACTION only;
 // Mendix has no queued nanoflow or JavaScript action.
 queueClause
-    : IN QUEUE qualifiedName
+    : IN QUEUE qualifiedName queueRetryClause?
+    ;
+
+// RETRY FIXED (Retries: 5, Interval: 10, IntervalType: Minutes)
+// RETRY EXPONENTIAL (Retries: 20, InitialInterval: 1, MaximumInterval: 60, IntervalType: Minutes)
+// The retry policy of a queued call (Queues$QueueFixedRetry /
+// Queues$QueueExponentialRetry, mendixlabs/mxcli#1729). FIXED / EXPONENTIAL and
+// the property names are words, checked by the visitor, so they reserve nothing.
+queueRetryClause
+    : RETRY identifierOrKeyword LPAREN queueRetryProperty (COMMA queueRetryProperty)* RPAREN
+    ;
+
+queueRetryProperty
+    : identifierOrKeyword COLON (NUMBER_LITERAL | identifierOrKeyword)
     ;
 
 callNanoflowStatement

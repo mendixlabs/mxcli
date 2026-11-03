@@ -1,0 +1,27 @@
+-- ako/mxcli#1935 (mendixlabs/mxcli#1733): after RENAME ATTRIBUTE, describe of a
+-- message definition printed the member under the old attribute name, and exec
+-- of that output failed ("has no attribute"). Describe now names the attribute
+-- the member references and keeps the stored exposed name, as below; and
+-- check --references refuses a member naming an attribute the entity lacks.
+mdl 1;
+create module BugTest1935;
+create persistent entity BugTest1935.Booking (
+  Reference: String(200),
+  Code: String(200)
+);
+create message definition collection BugTest1935.MD_Booking
+{
+  definition BookingMessage for BugTest1935.Booking {
+    Reference,
+    Code
+  }
+};
+alter entity BugTest1935.Booking rename attribute Reference to CustomerReference;
+-- what describe prints now; re-executable, exposed name unchanged
+create or modify message definition collection BugTest1935.MD_Booking
+{
+  definition BookingMessage for BugTest1935.Booking {
+    CustomerReference as 'Reference',
+    Code
+  }
+};
