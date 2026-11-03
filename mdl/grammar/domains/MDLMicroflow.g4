@@ -65,14 +65,22 @@ createJavaActionStatement
       LPAREN javaActionParameterList? RPAREN
       javaActionReturnType?
       javaActionExposedClause?
-      AS DOLLAR_STRING javaActionExtraCode? SEMICOLON?
+      AS sourceCodeText javaActionExtraCode? SEMICOLON?
+    ;
+
+/** A Java or JavaScript action's source: `$$ … $$`, or a string literal for a
+ *  text holding `$$`, which no dollar-quoted literal can contain — describe
+ *  writes that form for it (ako/mxcli#1003). */
+sourceCodeText
+    : DOLLAR_STRING
+    | STRING_LITERAL
     ;
 
 /** The .java file's EXTRA CODE section — helper methods, constants and nested
  *  classes beside executeAction(), which a regeneration keeps. Omitted, the
  *  stored section is kept; `extra code $$ $$` clears it (ako/mxcli#1702). */
 javaActionExtraCode
-    : EXTRA CODE DOLLAR_STRING
+    : EXTRA CODE sourceCodeText
     ;
 
 javaActionParameterList
@@ -144,7 +152,7 @@ createJavaScriptActionStatement
       javaActionReturnType?
       javaActionExposedClause?
       javaScriptPlatformClause?
-      AS DOLLAR_STRING SEMICOLON?
+      AS sourceCodeText SEMICOLON?
     ;
 
 javaScriptPlatformClause
