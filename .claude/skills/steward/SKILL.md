@@ -12,9 +12,9 @@ description: Drive an mxcli pull request Claude opened to green and merge it. Co
 |---|---|
 | 27-55 | Merge on green is the default |
 | 56-73 | Before every push: `make ci-local` |
-| 74-88 | Reading a red CI job |
-| 89-104 | Conflicts this repo keeps hitting |
-| 105-122 | The AI PR Review comment |
+| 74-89 | Reading a red CI job |
+| 90-105 | Conflicts this repo keeps hitting |
+| 106-123 | The AI PR Review comment |
 
 <!-- /skill-index -->
 # Steward: Driving a PR to Merged
@@ -78,12 +78,13 @@ failures need reading differently.
 
 - **`build-and-test`:** reproduce with `make ci-local`.
 - **`integration (<suite>)`:** reproduce with `make test-integration-<suite>`.
-- **`tunnel-seam-cross-platform (macos-latest | windows-latest)`:** the one
-  known runner flake. The hosted macOS queue sometimes cancels the job before
-  it gets a runner (the job shows runner id 0 and no step ran). That is a job
-  that died before any test body ran: re-run the failed jobs **once**. A test
-  failure in this job is real: it runs the tunnel seam's own tests on that
-  platform (ADR-0009).
+- **`tunnel-seam-cross-platform (windows-latest | macos-latest)`:** runs the
+  tunnel seam's own tests on that platform (ADR-0009), so a test failure is
+  real. A PR runs only the Windows leg; macOS runs on `main` and nightly
+  (`tunnel-seam-macos`), because its hosted queue is the one known runner
+  flake: it sometimes cancels the job before it gets a runner (runner id 0, no
+  step ran). On `main` that is a job that died before any test body ran:
+  re-run the failed jobs **once**.
 - **`AI PR Review`** is always green: it posts a comment, it does not gate.
 
 ## Conflicts this repo keeps hitting

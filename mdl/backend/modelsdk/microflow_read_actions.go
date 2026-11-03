@@ -616,13 +616,24 @@ func actionFromGen(el element.Element) microflows.MicroflowAction {
 			ResultVariableName:   rawStr(raw, "VariableName"),
 		}
 		out.UseReturnVariable = out.ResultVariableName != ""
-		for _, md := range rawDocElements(raw, "ParameterMappings") {
+		genMappings := a.ParameterMappingsItems()
+		for i, md := range rawDocElements(raw, "ParameterMappings") {
 			pm := &microflows.ExternalActionParameterMapping{
 				ParameterName: rawStr(md, "ParameterName"),
 				Argument:      rawStr(md, "Argument"),
 			}
 			if b, ok := md.Lookup("CanBeEmpty").BooleanOK(); ok {
 				pm.CanBeEmpty = b
+			}
+			// The parameter's entity, so a rewrite can tell whether the stored
+			// IncludedAssociations still belong to the argument it binds.
+			if pt, ok := md.Lookup("ParameterType").DocumentOK(); ok {
+				pm.ParameterEntity = rawStr(pt, "Entity")
+			}
+			if i < len(genMappings) {
+				if gm, ok := genMappings[i].(*genMf.ExternalActionParameterMapping); ok {
+					pm.IncludedAssociations = includedAssociationsFromGen(gm.IncludedAssociationsItems())
+				}
 			}
 			out.ParameterMappings = append(out.ParameterMappings, pm)
 		}
@@ -1550,6 +1561,27 @@ func readWebServiceRequestBody(raw bson.Raw, out *microflows.WebServiceCallActio
 			})
 		}
 	}
+}
+
+// includedAssociationsFromGen reads a "call external action" parameter's
+// Associations to include, nested ones under the association they hang from,
+// keeping each element's $ID so a rewrite carries them unchanged (#1914).
+func includedAssociationsFromGen(items []element.Element) []*microflows.IncludedAssociation {
+	var out []*microflows.IncludedAssociation
+	for _, it := range items {
+		ia, ok := it.(*genMf.IncludedAssociation)
+		if !ok {
+			continue
+		}
+		a := &microflows.IncludedAssociation{
+			Association:          ia.AssociationQualifiedName(),
+			IsParent:             ia.IsParent(),
+			IncludedAssociations: includedAssociationsFromGen(ia.IncludedAssociationsItems()),
+		}
+		a.ID = model.ID(ia.ID())
+		out = append(out, a)
+	}
+	return out
 }
 
 func rawDocElements(raw bson.Raw, key string) []bson.Raw {

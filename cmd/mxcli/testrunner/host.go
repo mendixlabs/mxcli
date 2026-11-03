@@ -43,9 +43,21 @@ func InstallHostedEndpoint(projectPath string, w io.Writer) (*HostedEndpoint, er
 		return nil, err
 	}
 
+	// An endpoint an earlier run could not remove (a Windows `run stop`, a crash)
+	// comes out first: captured as the project's own state, its after-startup
+	// would be chained to and its module kept as the user's.
+	if _, err := RestoreAbandonedEndpoint(projectPath, w); err != nil {
+		return nil, err
+	}
+
 	state, err := captureProjectState(projectPath)
 	if err != nil {
 		return nil, fmt.Errorf("capturing project state: %w", err)
+	}
+	// Written before anything is installed, so a run that is killed from here on
+	// can still be undone by `run stop` (ako/mxcli#1917).
+	if err := writeRestoreRecord(projectPath, os.Getpid(), state); err != nil {
+		fmt.Fprintf(w, "Warning: could not record how to remove the test endpoint (%v); if this run is killed, `run stop` cannot remove it\n", err)
 	}
 
 	h := &HostedEndpoint{
@@ -118,5 +130,7 @@ func (h *HostedEndpoint) Remove() {
 	// Only past the error return above, so this never claims a project is
 	// unchanged while an injection is still in it.
 	restoreProjectFile(h.state, nil, h.out)
+	// Kept on the error path above, so `run stop` tries the removal again.
+	removeRestoreRecord(h.projectPath)
 	fmt.Fprintln(h.out, "  test endpoint removed; project restored")
 }

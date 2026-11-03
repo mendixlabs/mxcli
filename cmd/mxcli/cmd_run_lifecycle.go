@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
+	"github.com/mendixlabs/mxcli/cmd/mxcli/testrunner"
 	"github.com/spf13/cobra"
 )
 
@@ -92,7 +93,9 @@ and the web client bundler. It asks the run to shut down (so it tears down its
 own children and removes anything it installed, like --test-endpoint), waits
 until they are gone, and for a --detach run then checks the run's whole process
 session, so no orphaned runtimelauncher or mxbuild JVM is left behind — even
-from a run that was killed with -9 and never cleaned up.
+from a run that was killed with -9 and never cleaned up. A --test-endpoint the
+run could not remove itself (on Windows the stop is always a forced one) is
+removed from the project here, from what the run recorded when it installed it.
 
 Stopping when nothing runs is a no-op that exits 0.
 
@@ -661,6 +664,13 @@ func runStop(projectPath string, out io.Writer) int {
 
 	if left := remaining(st); len(left) > 0 {
 		fmt.Fprintf(out, "failed: %d process(es) of pid %d's run are still alive: %v\n", len(left), st.PID, left)
+		return runExitFailed
+	}
+	// A run stopped without its teardown — always on Windows, where the stop is
+	// taskkill /F, and after the SIGKILL fallback above — leaves --test-endpoint
+	// in the project; the run recorded how to take it out (ako/mxcli#1917).
+	if _, err := testrunner.RestoreAbandonedEndpoint(projectPath, out); err != nil {
+		fmt.Fprintf(out, "failed: %v\n", err)
 		return runExitFailed
 	}
 	extra := ""

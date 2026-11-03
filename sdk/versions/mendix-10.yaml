@@ -423,6 +423,10 @@ features:
       min_version: "10.12.0"
       mdl: "ALTER MODULE Module SET JAR DEPENDENCY 'group:artifact' ADD EXCLUSION '…'"
       notes: "Projects$JarDependencyExclusion introduced in 10.12.0 (mendixmodelsdk 4.117.0; ako/mxcli#1811)."
+    module_type:
+      min_version: "9.12.0"
+      mdl: "CREATE MODULE M ( ModuleType: addon ) / ALTER MODULE M SET ( ModuleType: addon )"
+      notes: "An add-on module is ModuleSettings.ExportLevel = Protected with ProtectedModuleType = AddOn; ProtectedModuleType introduced in 9.12.0 (mendixmodelsdk 4.117.0; ako/mxcli#1921)."
 
   scheduled_events:
     schedules:

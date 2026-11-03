@@ -86,7 +86,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        # macOS runs on main and workflow_dispatch only, and nightly
+        # (nightly.yml): on a PR, Windows already executes the same !linux stub,
+        # so macOS added only a darwin compile, while its hosted queue is the
+        # scarcest (5 concurrent on GitHub Free) and the one known flake, a job
+        # cancelled before it gets a runner. A darwin-only break is still caught
+        # on the merge to main.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["windows-latest"]' || '["windows-latest", "macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -95,43 +101,7 @@ jobs:
           go-version: '1.27.3'
       - name: Test the tunnel seam
         shell: bash
-        # Scoped with -run to the seam's own tests. The full test binaries are still
-        # COMPILED for this platform, so a Windows/macOS build break is still caught;
-        # only the !linux stub behaviour is executed.
-        #
-        # Running the whole packages here fails on Windows for reasons that predate
-        # this change and are unrelated to the tunnel: several tests assert POSIX file
-        # modes (0600) that Windows does not implement — os.Chmod only toggles the
-        # read-only bit, so Stat reports 666 — plus one path-separator assumption.
-        # Tracked separately in #897; widening this job is that issue's job, not this
-        # one's.
-        #
-        # -run can pass vacuously if the tests are renamed or deleted, so assert that
-        # the expected number actually ran.
-        #
-        # `tee` rather than a command substitution: the runner's shell is
-        # `bash -e -o pipefail`, so capturing into `out=$(go test ...)` aborts the
-        # step AT THE ASSIGNMENT when go test fails, and the `echo "$out"` below
-        # never runs. The log then holds nothing but "Process completed with exit
-        # code 1" — no test name, no failure message, no way to tell a real break
-        # from a flake. Write the output as it is produced, then judge it.
-        run: |
-          set +e
-          go test -v -count=1 -run 'Unsupported' ./cmd/mxcli/docker/... ./cmd/mxcli/tunnelhub/... 2>&1 | tee go-test-output.txt
-          status=${PIPESTATUS[0]}
-          set -e
-          n=$(grep -c '^--- PASS: Test.*Unsupported' go-test-output.txt || true)
-          echo "seam tests executed: $n"
-          if [ "$status" -ne 0 ]; then
-            echo "FAIL: go test exited $status. Its output is above."
-            exit "$status"
-          fi
-          if [ "$n" -lt 4 ]; then
-            echo "FAIL: expected at least 4 tunnel-seam tests to run, -run matched $n."
-            echo "      The !linux stubs in cmd/mxcli/docker and cmd/mxcli/tunnelhub"
-            echo "      must each keep a test whose name contains 'Unsupported'."
-            exit 1
-          fi
+        run: bash scripts/test-tunnel-seam.sh
 
   # The Windows process helpers (cmd/mxcli/docker/procgroup_windows.go) cannot be
   # exercised by the ubuntu job: Signal(0) succeeds on Linux and there is no

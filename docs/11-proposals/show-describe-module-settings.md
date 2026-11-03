@@ -1,9 +1,11 @@
 ---
 title: SHOW/DESCRIBE Module Settings
-status: proposed
+status: superseded
 ---
 
 # Proposal: SHOW/DESCRIBE Module Settings
+
+> **Status: SUPERSEDED** by [`PROPOSAL_module_settings.md`](./PROPOSAL_module_settings.md) (ako/mxcli#1921), which measures the storage on Mendix 11.16 and adds the write side. This proposal is retained for historical context only; its BSON notes are not reliable (`version` is stored as `Version`, and `ProtectedModuleType` is never `none`).
 
 ## Overview
 

@@ -311,6 +311,7 @@
   - [ALTER SETTINGS](reference/settings/alter-settings.md)
 - [Organization Statements](reference/organization/README.md)
   - [CREATE MODULE](reference/organization/create-module.md)
+  - [ALTER MODULE … SET](reference/organization/alter-module-set.md)
   - [CREATE FOLDER](reference/organization/create-folder.md)
   - [DROP FOLDER](reference/organization/drop-folder.md)
   - [MOVE](reference/organization/move.md)

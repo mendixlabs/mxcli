@@ -128,6 +128,22 @@ jobs:
         run: make test-integration
         timeout-minutes: 60
 
+  # The tunnel seam's !linux stub on macOS (ADR-0009). Per-PR CI runs it on
+  # Windows only; push-test.yml runs macOS on main, and this catches a
+  # darwin-only break within a day even when main is quiet. Like
+  # upgrade-full-corpus it does not gate the release: the hosted macOS queue is
+  # the one known runner flake, and a nightly is not held back by it.
+  tunnel-seam-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.3'
+      - name: Test the tunnel seam
+        run: bash scripts/test-tunnel-seam.sh
+
   # The upgrade property test over the WHOLE mdl-examples corpus, header-only
   # scripts included (MXCLI_UPGRADE_ALL). Per-PR CI executes only the scripts
   # the upgrade rewrites beyond the header and terminators; this is the run that

@@ -103,6 +103,19 @@ it either, since ANTLR's recovery consumed the stray bracket up to EOF and the
 EOF check passed. When relaxing a rule to accept repetition, the AST, every
 serializer and every rewriter change with it.
 
+**A multi-word token collides in pairs, which no keyword check sees.** The
+`error message` clause is one lexer token, so an attribute named `Error`
+followed by the `message` keyword (`validation feedback $E/Error message 'x'`,
+verbatim describe output) lexed as the clause. Neither word is a problem alone,
+so the lexer-driven quoting in describe passes `Error` unquoted. Fix it where the
+token is made: a lexer predicate on context (here "not after a `/` or `.`
+separator") covers every rule at once, but walking backwards over line breaks
+lets a comment ending in `.` or `/` pass for a separator. Put the comment cases in
+as controls. **Put the predicate on the right edge.** ANTLR evaluates a left-edge
+lexer predicate at every token start, which turns off the lexer's DFA cache. Here
+that doubled `check` time and timed out the corpus tests, while every unit test
+passed. Time a lexer change against a control binary.
+
 **Quoting is not one question.** Quoting escapes MDL's *parser* keywords. It does
 not escape Mendix's platform-reserved member names, and it does not help in an
 OQL alias. Three vocabularies stack, and a rule that conflates them produces

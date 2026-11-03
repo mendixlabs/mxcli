@@ -17,10 +17,16 @@ import (
 // server, so it must never stop them.
 type attachedApp struct {
 	client *endpointClient
-	serve  *docker.ServeServer
+	// builds go through the dev loop's serve server, falling back to a serve
+	// process of the attach's own when that one would leave the client bundle
+	// without its pages (ako/mxcli#1917). close stops only the attach's own.
+	builds *docker.AttachedServe
 	ctrl   *docker.RuntimeController
 	hs     *Handshake
 }
+
+// close stops what the attach started; the dev loop's processes are not its to stop.
+func (a *attachedApp) close() { a.builds.Close() }
 
 // attach connects to an app already hosting the test endpoint.
 func attach(opts RunOptions, w io.Writer) (*attachedApp, error) {
@@ -43,7 +49,7 @@ func attach(opts RunOptions, w io.Writer) (*attachedApp, error) {
 
 	return &attachedApp{
 		client: client,
-		serve:  &docker.ServeServer{Host: "127.0.0.1", Port: hs.ServePort},
+		builds: docker.NewAttachedServe(&docker.ServeServer{Host: "127.0.0.1", Port: hs.ServePort}, opts.ProjectPath, w),
 		// The admin password, not the endpoint token — different secrets.
 		ctrl: docker.NewRuntimeController(docker.M2EEOptions{
 			Host:  "127.0.0.1",
@@ -76,7 +82,7 @@ func (a *attachedApp) adminOptions() docker.M2EEOptions {
 }
 
 func (a *attachedApp) applyModelChange(projectPath string) (string, error) {
-	build, err := a.serve.Build(docker.BuildRequest{Target: docker.TargetDeploy, ProjectFilePath: projectPath})
+	build, err := a.builds.Build(docker.BuildRequest{Target: docker.TargetDeploy, ProjectFilePath: projectPath})
 	if err != nil {
 		return "", fmt.Errorf("rebuilding through the attached app's build server on port %d: %w", a.hs.ServePort, err)
 	}
@@ -112,6 +118,7 @@ func runAttached(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 	if err != nil {
 		return nil, err
 	}
+	defer app.close()
 
 	// Only the generated test microflows are ours to remove.
 	injected := suite

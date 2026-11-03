@@ -12,8 +12,8 @@ import (
 
 // mendixlabs/mxcli#1498: nothing mxcli printed said a module was Protected, nor
 // what an entity's export level was, so the reporter found both by a raw read.
-// MDL has no syntax for a module's, so it prints as a comment — the output
-// still re-runs, and a rewrite keeps the stored value. Only a Protected
+// A module's is `ModuleType: addon` since ako/mxcli#1921, with a comment on
+// what it means; the output still re-runs. Only a Protected
 // module's output changes; Open is the control.
 func TestDescribe_ProtectedModuleExportLevels(t *testing.T) {
 	ctx := protectedModuleFixture(t, nil)
@@ -31,7 +31,9 @@ func TestDescribe_ProtectedModuleExportLevels(t *testing.T) {
 	}
 
 	out := describe(func() error { return describeModule(ctx, "MyAddOn", false) })
-	if !strings.Contains(out, "-- export level: Protected (AddOn module)") {
+	// An add-on is a setting since ako/mxcli#1921, with the comment saying what
+	// it means for references.
+	if !strings.Contains(out, "ModuleType: addon") || !strings.Contains(out, "-- add-on module: elements not marked Usable") {
 		t.Errorf("describe module of a protected module does not say so:\n%s", out)
 	}
 	out = describe(func() error { return describeModule(ctx, "Open", false) })
