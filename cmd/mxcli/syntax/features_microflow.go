@@ -664,7 +664,7 @@ func init() {
 			"  -- absolute, whichever date comes first; rounded for an Integer\n" +
 			"  return round(minutesBetween($Start, $End));\n" +
 			"end;",
-		SeeAlso: []string{"microflow.logging", "microflow.variables", "regular-expression"},
+		SeeAlso: []string{"microflow.expressions.functions", "microflow.logging", "microflow.variables", "regular-expression"},
 	})
 
 	Register(SyntaxFeature{
