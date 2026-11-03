@@ -49,8 +49,14 @@ which is why 'brain plan' can report progress derived from the model instead of
 from a status column that goes stale the moment someone builds something.
 
 An agent captures; a person promotes. The queue is in .mxcli/ and is git-ignored,
-so nothing reaches a pull request until someone has looked at it.`,
+so nothing reaches a pull request until someone has looked at it.
+
+The brain can exist before the project. Name its directory with -C <dir>, or with
+-p <app.mpr> for the directory an .mpr is (or will be) in; neither needs the
+project to exist. 'mxcli new' into that directory adopts the brain, and from then
+on 'plan' and 'check' with the same -C count against the model.`,
 	Example: `  mxcli brain init -p app.mpr
+  mxcli brain init -C ./workspace          # before the project exists
   mxcli brain capture "Orders are committed by Finance, not Sales" -a @Sales.Order -a @Finance.ACT_Post -p app.mpr
   mxcli brain staged -p app.mpr
   mxcli brain promote a1b2c3 -p app.mpr
@@ -64,6 +70,9 @@ so nothing reaches a pull request until someone has looked at it.`,
 var brainInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Create docs/brain/ (refuses a docs/brain/ it did not write)",
+	// No arguments: the directory is -C. Accepting one and ignoring it wrote
+	// the store wherever -p pointed instead of where the caller asked.
+	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := brainProjectDir(cmd)
 		written, err := brain.NewStore(dir).Init()
@@ -334,8 +343,8 @@ The brain can exist before the project does. With no .mpr at the -p path,
 nothing is built: every anchored requirement counts as planned, and the output
 says the model is absent.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		projectPath := brainProjectPath(cmd)
-		store := brain.NewStore(filepath.Dir(projectPath))
+		loc := brainLocationOf(cmd)
+		store := brain.NewStore(loc.Dir)
 		sliceShards, err := store.ListSlices()
 		if err != nil {
 			brainFatal(err)
@@ -352,7 +361,7 @@ says the model is absent.`,
 			fmt.Println("  mxcli brain capture \"<requirement>\" --slice 01-<name> -a @Module.Element")
 			return
 		}
-		resolver, closeFn, err := openBrainResolverOrNoModel(projectPath)
+		resolver, closeFn, err := openBrainResolverOrNoModel(loc.MPR)
 		if err != nil {
 			brainFatal(err)
 		}
@@ -367,7 +376,7 @@ says the model is absent.`,
 			return
 		}
 		if rep.ModelAbsent {
-			printNoModel(rep, projectPath)
+			printNoModel(rep, loc)
 			fmt.Println()
 		}
 		printBrainPlan(rep.Slices)
@@ -478,8 +487,8 @@ anchors into other modules are fine, because a fact can genuinely span two.
 With no .mpr at the -p path there is nothing to resolve against: every anchor
 is UNVERIFIABLE, which is counted and reported once and does not fail.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		projectPath := brainProjectPath(cmd)
-		store := brain.NewStore(filepath.Dir(projectPath))
+		loc := brainLocationOf(cmd)
+		store := brain.NewStore(loc.Dir)
 		if !store.Exists() {
 			fmt.Println("No store yet. Create one with 'mxcli brain init'.")
 			return
@@ -489,7 +498,7 @@ is UNVERIFIABLE, which is counted and reported once and does not fail.`,
 			brainFatal(err)
 		}
 		if changed, _ := cmd.Flags().GetBool("changed"); changed {
-			shards, err = changedShards(filepath.Dir(projectPath), shards)
+			shards, err = changedShards(loc.Dir, shards)
 			if err != nil {
 				brainFatal(err)
 			}
@@ -499,7 +508,7 @@ is UNVERIFIABLE, which is counted and reported once and does not fail.`,
 			}
 		}
 
-		resolver, closeFn, err := openBrainResolverOrNoModel(projectPath)
+		resolver, closeFn, err := openBrainResolverOrNoModel(loc.MPR)
 		if err != nil {
 			brainFatal(err)
 		}
@@ -517,7 +526,7 @@ is UNVERIFIABLE, which is counted and reported once and does not fail.`,
 		case ci:
 			printBrainReportCI(rep)
 		default:
-			printBrainReport(rep, projectPath)
+			printBrainReport(rep, loc)
 		}
 		if rep.Failed() {
 			os.Exit(1)
@@ -552,16 +561,20 @@ func printBrainReportCI(rep brain.Report) {
 // printNoModel says, once, that nothing could be checked. Without it a plan of
 // "0 built" reads as "nothing has been done" when the truth is "there is no
 // project yet", and the two call for different actions.
-func printNoModel(rep brain.Report, projectPath string) {
+func printNoModel(rep brain.Report, loc brainLocation) {
 	if !rep.ModelAbsent {
 		return
 	}
-	fmt.Printf("No model at %s yet: %d anchor(s) not checked, so nothing counts as built.\n",
-		projectPath, rep.Unverifiable)
+	where := "at " + loc.MPR
+	if loc.MPR == "" {
+		where = "in " + loc.Dir
+	}
+	fmt.Printf("No model %s yet: %d anchor(s) not checked, so nothing counts as built.\n",
+		where, rep.Unverifiable)
 }
 
-func printBrainReport(rep brain.Report, projectPath string) {
-	printNoModel(rep, projectPath)
+func printBrainReport(rep brain.Report, loc brainLocation) {
+	printNoModel(rep, loc)
 	for _, m := range rep.Malformed {
 		fmt.Printf("MALFORMED   %s\n", m)
 	}
@@ -753,6 +766,9 @@ func brainCell(v any) string {
 // there but will not open is still an error, or a corrupt project would be
 // reported as merely unbuilt.
 func openBrainResolverOrNoModel(projectPath string) (brain.Resolver, func(), error) {
+	if projectPath == "" {
+		return brain.NoModel{}, func() {}, nil // -C on a directory with no .mpr yet
+	}
 	if _, err := os.Stat(projectPath); os.IsNotExist(err) {
 		return brain.NoModel{}, func() {}, nil
 	}
@@ -804,28 +820,86 @@ func shardLabel(shard string) string {
 	}
 }
 
-func brainProjectPath(cmd *cobra.Command) string {
-	p, _ := cmd.Flags().GetString("project")
-	if p == "" {
-		fmt.Fprintln(os.Stderr, "Error: --project (-p) is required")
-		os.Exit(1)
-	}
-	return p
+// brainLocation is where a brain lives and which model, if any, it is checked
+// against.
+//
+// The store is in Dir; the .mpr is only ever needed by plan and check. That
+// split is deliberate and load-bearing (ako/mxcli#1949): a brain is routinely
+// started before its project exists — requirements first, app second — so no
+// store command may open, or even stat, the .mpr. MPR is empty when -C names a
+// directory that holds no project yet.
+type brainLocation struct {
+	Dir string
+	MPR string
 }
 
-func brainProjectDir(cmd *cobra.Command) string { return filepath.Dir(brainProjectPath(cmd)) }
+// resolveBrainLocation turns -p / -C into a location.
+//
+//   - -p <app.mpr> is the shorthand: the directory that .mpr is (or will be)
+//     in. The file need not exist.
+//   - -C <dir> names the directory. The model is the one .mpr in it, if there
+//     is one, so the same command keeps working after `mxcli new` creates the
+//     project there; more than one is refused rather than guessed between.
+func resolveBrainLocation(project, dir string) (brainLocation, error) {
+	switch {
+	case project != "" && dir != "":
+		return brainLocation{}, fmt.Errorf("pass -p <app.mpr> or -C <dir>, not both")
+	case project != "":
+		return brainLocation{Dir: filepath.Dir(project), MPR: project}, nil
+	case dir != "":
+		matches, err := filepath.Glob(filepath.Join(dir, "*.mpr"))
+		if err != nil {
+			return brainLocation{}, err
+		}
+		switch len(matches) {
+		case 0:
+			return brainLocation{Dir: dir}, nil
+		case 1:
+			return brainLocation{Dir: dir, MPR: matches[0]}, nil
+		default:
+			names := make([]string, len(matches))
+			for i, m := range matches {
+				names[i] = filepath.Base(m)
+			}
+			return brainLocation{}, fmt.Errorf("%s holds more than one project (%s); name one with -p",
+				dir, strings.Join(names, ", "))
+		}
+	default:
+		return brainLocation{}, fmt.Errorf("say where the brain is: -p <app.mpr> or -C <dir>")
+	}
+}
+
+func brainLocationOf(cmd *cobra.Command) brainLocation {
+	project, _ := cmd.Flags().GetString("project")
+	dir, _ := cmd.Flags().GetString("dir")
+	loc, err := resolveBrainLocation(project, dir)
+	if err != nil {
+		brainFatal(err)
+	}
+	return loc
+}
+
+func brainProjectDir(cmd *cobra.Command) string { return brainLocationOf(cmd).Dir }
 
 func brainFatal(err error) {
 	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 	os.Exit(1)
 }
 
-func init() {
-	for _, c := range []*cobra.Command{
+// brainLocatedCommands is every brain command that needs to know where the
+// brain is — all of them, which is why -p and -C are registered from one list.
+func brainLocatedCommands() []*cobra.Command {
+	return []*cobra.Command{
 		brainInitCmd, brainCaptureCmd, brainStagedCmd, brainPromoteCmd,
-		brainDropCmd, brainShowCmd, brainCheckCmd,
-	} {
-		c.Flags().StringP("project", "p", "", "Path to the .mpr file")
+		brainDropCmd, brainShowCmd, brainCheckCmd, brainPlanCmd,
+		brainResolveCmd, brainBriefCmd,
+	}
+}
+
+func init() {
+	for _, c := range brainLocatedCommands() {
+		c.Flags().StringP("project", "p", "", "Path to the .mpr file (need not exist yet; the brain lives beside it)")
+		c.Flags().StringP("dir", "C", "", "Directory holding the brain; its one .mpr, if any, is the model")
 	}
 	brainCaptureCmd.Flags().StringSliceP("anchor", "a", nil,
 		"Anchor into the model (@Module, @Module.Element, @Module.Entity.Attribute); repeatable")
@@ -844,15 +918,12 @@ func init() {
 	brainCheckCmd.Flags().Bool("changed", false, "Only check shards touched by the working tree")
 	brainCheckCmd.Flags().Bool("ci", false, "Machine-friendly output for CI")
 
-	brainPlanCmd.Flags().StringP("project", "p", "", "Path to the .mpr file")
 	brainPlanCmd.Flags().String("slice", "",
 		"Report only this slice, instead of every slice in the plan")
-	brainBriefCmd.Flags().StringP("project", "p", "", "Path to the .mpr file")
 	brainBriefCmd.Flags().String("slice", "",
 		"The slice being worked; its modules are derived from its requirements' anchors")
 	brainBriefCmd.Flags().StringSlice("module", nil,
 		"Modules being worked, for a session with no slice; repeatable")
-	brainResolveCmd.Flags().StringP("project", "p", "", "Path to the .mpr file")
 	brainCmd.AddCommand(brainInitCmd, brainCaptureCmd, brainStagedCmd,
 		brainPromoteCmd, brainDropCmd, brainShowCmd, brainCheckCmd, brainPlanCmd,
 		brainResolveCmd, brainBriefCmd)

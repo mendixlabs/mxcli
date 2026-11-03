@@ -201,9 +201,18 @@ Misfiling is not checked for slices: a slice spans modules by design.
 
 ### Before there is a project
 
-The brain does not need a model to exist. `-p` names where the project *will*
-be, and every store command works before it does — capture requirements from a
-specification first, create the app afterwards.
+The brain does not need a model to exist: capture requirements from a
+specification first, create the app afterwards. Name the brain's directory with
+`-C`; no store command opens, or needs, the project.
+
+```bash
+mxcli brain init -C ./App
+mxcli brain capture "A planner can create a visit" -s 01-scheduling -a @Scheduling.Visit -C ./App
+mxcli brain plan -C ./App
+```
+
+`-p app.mpr` still works and means the directory that `.mpr` is — or will be —
+in. The two are alternatives; passing both is refused.
 
 `plan` and `check` then report what is true: nothing is built.
 
@@ -219,8 +228,24 @@ SLICE            BUILT  PLANNED   UNANCHORED
 Every anchor is **unverifiable** — neither *not found* (that would report the
 whole store as stale) nor built. `check` exits 0, and `--json` carries
 `"model_absent": true` and an `unverifiable` count. Only a *missing* `.mpr`
-means this: one that exists but will not open is still an error. Create the
-project at that path and the same requirements start counting as built.
+means this: one that exists but will not open is still an error.
+
+### Then create the project in the same directory
+
+```bash
+mxcli new App --version 11.12.1
+```
+
+`mxcli new` refuses a non-empty directory with one exception: a directory
+holding **only** a brain — `docs/brain/` written by mxcli and its queue in
+`.mxcli/brain/` — is adopted. The project is created around it, the store and
+the queue are left exactly as they were, and from then on `-C ./App` finds the
+one `.mpr` in the directory and counts the same requirements against it. Any
+other file in the directory, or a `docs/brain/` mxcli did not write, is still
+refused. A file the project would overwrite is reported before anything moves.
+
+So the brain lives where the project will live, not in a workspace above it:
+the directory is the project root from the first requirement onwards.
 
 ## Open questions
 
