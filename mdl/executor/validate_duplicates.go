@@ -107,7 +107,10 @@ func stmtCreateInfo(stmt ast.Statement) (docType, name string, idempotent bool) 
 func stmtCreateKind(stmt ast.Statement) (docType, name string, idempotent bool) {
 	switch s := stmt.(type) {
 	case *ast.CreateModuleStmt:
-		return "module", s.Name, false
+		// `or modify` applies the module's documentation and settings to a
+		// module that exists (ako/mxcli#1921), so restating it is not a
+		// redefinition.
+		return "module", s.Name, s.CreateOrModify
 	case *ast.CreateModuleRoleStmt:
 		// Not a document, which is why it was missed when the document types
 		// were swept (mendixlabs/mxcli#1067). exec refuses a plain CREATE of an

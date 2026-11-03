@@ -1481,6 +1481,30 @@ mxcli check script.mdl -p app.mpr --references  -- With reference validation`,
 	})
 
 	Register(SyntaxFeature{
+		Path:    "module.settings",
+		Summary: "A module's version and module type (Studio Pro's Module settings, General tab)",
+		Keywords: []string{
+			"module settings", "module version", "module type", "add-on module",
+			"addon", "app module", "semver", "export module",
+		},
+		Syntax: `CREATE [OR MODIFY] MODULE <name> ( Version: 'x.y.z', ModuleType: app | addon );
+ALTER MODULE <name> SET ( Version: 'x.y.z', ModuleType: app | addon );
+DESCRIBE MODULE <name>;   -- prints the settings that differ from App / 1.0.0`,
+		Example: `mdl 1;
+-- A versioned add-on module
+create or modify module Inventory (
+  Version: '2.3.1',
+  ModuleType: addon,
+);
+
+-- Bump the version before exporting it
+alter module Inventory set (Version: '2.4.0');
+
+-- An add-on hides elements not marked Usable from other modules (CE1406);
+-- check -p --references reports the references that breaks.`,
+	})
+
+	Register(SyntaxFeature{
 		Path:    "module.jar-dependencies",
 		Summary: "Manage Maven/JAR dependencies in a module's settings",
 		Keywords: []string{

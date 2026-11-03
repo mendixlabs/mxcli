@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **A module's version and module type from MDL** (ako/mxcli#1921) — the General tab of Studio Pro's *Module settings* dialog: `create or modify module Inventory (Version: '2.3.1', ModuleType: addon)` and `alter module Inventory set (Version: '2.4.0')`. `describe module` prints the settings that differ from a new module's (App, 1.0.0), and the location as a comment when it is *Marketplace modules*; `list modules` gains `Version` and `Type` columns. The version must be SemVer, the type `app` or `addon` (Mendix 9.12+), and a statement that restates the stored settings writes nothing. Measured on 11.16: the type is the settings' `ExportLevel` (`Source` / `Protected`), not `ProtectedModuleType`, which is `AddOn` on every module.
+
 ### Fixed
 
 - **`run stop` removes `--test-endpoint` from the project on Windows** (ako/mxcli#1917, mendixlabs/mxcli#1723) — a detached `run --local --test-endpoint` stopped with `run stop` left the `MxTest` module, its after-startup microflow, `themesource/mxtest/` and `javasource/mxtest/` in the project, because on Windows the stop ends the run without its teardown; the next build then failed with CE1613 once the module was dropped. The run now records how to remove the endpoint when it installs it, and `run stop` (or the next `--test-endpoint` run) removes it when the run could not, on any platform, leaving the project file byte-identical.

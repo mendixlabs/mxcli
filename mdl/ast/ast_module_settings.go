@@ -10,6 +10,27 @@ type AlterModuleJarDepStmt struct {
 
 func (s *AlterModuleJarDepStmt) isStatement() {}
 
+// ModuleSettingsClause is the General tab of Studio Pro's Module settings
+// dialog as MDL states it (ako/mxcli#1921). A nil field is a setting the
+// statement does not name, which keeps its stored value.
+type ModuleSettingsClause struct {
+	Version    *string // "2.3.1"; SemVer, checked by the visitor
+	ModuleType *string // "app" | "addon"
+}
+
+// IsEmpty reports whether the clause names no setting.
+func (c ModuleSettingsClause) IsEmpty() bool {
+	return c.Version == nil && c.ModuleType == nil
+}
+
+// AlterModuleSetStmt represents: ALTER MODULE name SET ( Key: value, … )
+type AlterModuleSetStmt struct {
+	ModuleName string
+	Settings   ModuleSettingsClause
+}
+
+func (s *AlterModuleSetStmt) isStatement() {}
+
 // JarDepAction is the common interface for JAR dependency sub-actions.
 type JarDepAction interface {
 	isJarDepAction()

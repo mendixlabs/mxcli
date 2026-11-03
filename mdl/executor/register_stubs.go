@@ -28,6 +28,9 @@ func registerModuleHandlers(r *Registry) {
 	r.Register(&ast.DropModuleStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
 		return execDropModule(ctx, stmt.(*ast.DropModuleStmt))
 	})
+	r.Register(&ast.AlterModuleSetStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
+		return execAlterModuleSet(ctx, stmt.(*ast.AlterModuleSetStmt))
+	})
 	r.Register(&ast.AlterModuleJarDepStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
 		return execAlterModuleJarDep(ctx, stmt.(*ast.AlterModuleJarDepStmt))
 	})

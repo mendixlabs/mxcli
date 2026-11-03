@@ -26,6 +26,8 @@ type CreateModuleStmt struct {
 	// DomainModels$DomainModel does (mendixlabs/mxcli#1314).
 	Documentation    string
 	DocumentationSet bool // see mendixlabs/mxcli#1018: absent preserves, empty clears
+	// Settings is the `( Version: …, ModuleType: … )` list (ako/mxcli#1921).
+	Settings ModuleSettingsClause
 }
 
 func (s *CreateModuleStmt) isStatement() {}

@@ -19,6 +19,9 @@ func (b *Builder) ExitCreateModuleStatement(ctx *parser.CreateModuleStatementCon
 	// The doc comment is the domain model's documentation, the only
 	// documentation a module has (mendixlabs/mxcli#1314).
 	stmt.Documentation, stmt.DocumentationSet = findDocComment(ctx)
+	if body := ctx.ModuleSettingsBody(); body != nil {
+		stmt.Settings = b.moduleSettings("module "+name, body)
+	}
 	b.statements = append(b.statements, stmt)
 }
 
