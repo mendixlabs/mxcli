@@ -1068,6 +1068,10 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 		}
 	case *ast.CreatePublishedRestServiceStmt:
 		return validatePublishedRestAuthMicroflow(ctx, s.Authentication, sc)
+	case *ast.CreateMessageDefinitionCollectionStmt:
+		return messageDefinitionMemberErrors(ctx, sc, s.Name.String(), s.Definitions...)
+	case *ast.CreateMessageDefinitionStmt:
+		return messageDefinitionMemberErrors(ctx, sc, s.Name.String(), s.Definition)
 	case *ast.AlterPublishedRestServiceStmt:
 		for _, a := range s.Actions {
 			if set, ok := a.(*ast.PublishedRestSetAction); ok {
