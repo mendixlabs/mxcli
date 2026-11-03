@@ -579,6 +579,9 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// CE0069, after exec wrote it (ako/mxcli#1645). Replayed in statement
 	// order, judged by the verdict exec gives.
 	errors = append(errors, validateMemberNameClashes(ctx, prog)...)
+	// toString(<Decimal>) into a String(n): builds, and overflows the attribute
+	// on commit (mendixlabs/mxcli#1515). Warns, never blocks.
+	validateToStringIntoShortAttribute(ctx, prog, sc)
 	return errors, sc.warnings
 }
 

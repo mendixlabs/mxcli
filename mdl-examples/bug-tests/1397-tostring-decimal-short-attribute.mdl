@@ -1,0 +1,15 @@
+-- ako/mxcli#1397 (mendixlabs/mxcli#1515): check passed expressions the build
+-- rejects or that misbehave at runtime. Status of each item on this branch:
+--   formatDecimal($d, 2)            -> E005 (CE0117)            [already on main]
+--   log '… {number} …'              -> MDL-TEMPLATE02 (CE0712)  [already on main]
+--   rest body template '{}'         -> MDL-TEMPLATE02 (CE0712)  [already on main]
+--   regex ending in a lone '\'      -> MDL-REGEX01              [already on main]
+--   toString(<Decimal>) into a String(n) attribute -> warning from
+--     `check -p … --references` (this fix); round it first, as below.
+mdl 1;
+create module BugTest1397;
+create persistent entity BugTest1397.Item (Lbl: String(10));
+create microflow BugTest1397.SetLabel ($a: DateTime, $b: DateTime, $i: BugTest1397.Item)
+begin
+  change $i (Lbl = toString(round(minutesBetween($a, $b))));
+end;
