@@ -176,6 +176,13 @@ data behind in the app you are looking at. It needs the dev loop to have been
 started with `--test-endpoint`, because the endpoint's handler is registered by
 the after-startup microflow and cannot be added to an app that is already up.
 
+On **Mendix 11.14.0** an attach is always refused. That version's
+`mxbuild --serve` fails every build after its first, even for an unchanged model,
+and says nothing about whether the runtime needs a restart. So the attach builds
+on a fresh serve process instead, and a fresh process's first build asks for a
+restart whatever changed — which an attach cannot do, the runtime being the other
+process's. Use `--local` on 11.14.0; 11.15.0 builds incrementally again.
+
 ## How tests execute
 
 **`--local` — the test endpoint.** One microflow is generated per test, plus a

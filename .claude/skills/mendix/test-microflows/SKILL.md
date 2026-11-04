@@ -16,14 +16,14 @@ description: "Write and run MDL-based microflow tests with `mxcli test` — anno
 | 185-227 | Test File Formats |
 | 228-243 | string Operations |
 | 244-267 | Running Tests |
-| 268-461 | How It Works |
-| 462-500 | Check a test file before you run it |
-| 501-622 | Writing Good Tests |
-| 623-637 | Test File Organization |
-| 638-650 | Interpreting Failures |
-| 651-672 | CI Integration |
-| 673-679 | Related Skills |
-| 680-682 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
+| 268-465 | How It Works |
+| 466-504 | Check a test file before you run it |
+| 505-626 | Writing Good Tests |
+| 627-641 | Test File Organization |
+| 642-654 | Interpreting Failures |
+| 655-676 | CI Integration |
+| 677-683 | Related Skills |
+| 684-686 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
 
 <!-- /skill-index -->
 # Test Microflows Skill
@@ -389,6 +389,10 @@ Three things to know before reaching for it:
 - **A change needing a runtime restart is refused** — a new entity or
   association. That runtime belongs to the other process. Restart it, or drop
   `--attach`.
+- **On Mendix 11.14.0 every attach is refused**, whatever the tests change: its
+  `mxbuild --serve` fails every build after its first, so the attach falls back
+  to a full build, and a full build asks for a runtime restart whatever changed.
+  Use `--local` there. (11.12.x, 11.13 and 11.15+ build incrementally.)
 
 | | Boot | Database | Owns the runtime |
 |---|---|---|---|

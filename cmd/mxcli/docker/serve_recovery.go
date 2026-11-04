@@ -77,6 +77,7 @@ type serveRecovery struct {
 }
 
 func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
+	freshProcess := r.restartPending
 	if r.restartPending {
 		fmt.Fprintln(r.out, "  starting mxbuild --serve (the last restart failed)...")
 		if err := r.restart(); err != nil {
@@ -88,6 +89,9 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 	res, err := r.serve.Build(req)
 	if err != nil {
 		return res, err
+	}
+	if freshProcess && res.OK() {
+		res.ColdRestart = true // the first build of the process just started
 	}
 	staleTheme := r.themeFailed && isThemeFailure(res)
 	r.observe(res)
@@ -122,7 +126,7 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 		// succeeded does, and its model is the one the cold build rewrote
 		// byte-for-byte; taking the cold answer would restart the runtime — and
 		// drop every browser session — on every change.
-		fresh.RestartRequired = res.RestartRequired
+		fresh.RestartRequired, fresh.ColdRestart = res.RestartRequired, false
 		return fresh, nil
 	}
 
@@ -130,13 +134,17 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 		fmt.Fprintln(r.out, "  mxbuild --serve cannot build this change incrementally (it wants client source its "+
 			"first build does not leave behind); restarting mxbuild --serve for a full build...")
 		// No incremental build succeeded, so the cold build's restartRequired
-		// is the only answer there is.
+		// is the only answer there is, and it is marked ColdRestart: a caller
+		// that cannot restart the runtime must not read it as "an entity
+		// changed".
 		return r.rebuildFresh(req)
 	}
 	return res, nil
 }
 
-// rebuildFresh replaces the serve process and builds once on the new one.
+// rebuildFresh replaces the serve process and builds once on the new one. Its
+// RestartRequired is a first build's, so it is marked ColdRestart; a caller
+// that has an incremental answer replaces both.
 func (r *serveRecovery) rebuildFresh(req BuildRequest) (*BuildResult, error) {
 	if err := r.restart(); err != nil {
 		return nil, err
@@ -144,6 +152,9 @@ func (r *serveRecovery) rebuildFresh(req BuildRequest) (*BuildResult, error) {
 	res, err := r.serve.Build(req)
 	if err == nil {
 		r.observe(res)
+		if res != nil && res.OK() {
+			res.ColdRestart = true
+		}
 	}
 	return res, err
 }

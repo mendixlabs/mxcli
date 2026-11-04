@@ -94,17 +94,34 @@ func (a *attachedApp) applyModelChange(projectPath string) (string, error) {
 		return "", buildFailure(build)
 	}
 	// No restart callback: the runtime belongs to the other process. A structural
-	// change is refused rather than half-applied — see the error below.
+	// change is refused rather than half-applied — see attachRestartRefusal.
 	action, err := a.ctrl.ApplyBuild(build, nil)
 	if err != nil {
 		return action.String(), err
 	}
 	if action == docker.ActionRestart {
-		return action.String(), fmt.Errorf("this change needs a runtime restart (an entity or association changed), " +
-			"which --attach cannot do — the runtime belongs to the 'mxcli run --local' process.\n" +
-			"  Restart that process, or drop --attach to run against a scratch runtime.")
+		return action.String(), attachRestartRefusal(build)
 	}
 	return action.String(), nil
+}
+
+// attachRestartRefusal is why an attach cannot apply a build that asks for a
+// runtime restart. The runtime belongs to the other process, so a structural
+// change is refused rather than half-applied.
+func attachRestartRefusal(build *docker.BuildResult) error {
+	if build.ColdRestart {
+		// Nothing says an entity changed: the serve process could not build
+		// incrementally (Mendix 11.14.0 fails every later build), and a first
+		// build asks for a restart whatever changed. Restarting the dev loop does
+		// not help either — the attach's build is again a later one in its serve.
+		return fmt.Errorf("mxbuild --serve could not build this change incrementally, and the full build it " +
+			"fell back to asks for a runtime restart whatever changed (it has no earlier build to compare with), " +
+			"which --attach cannot do — the runtime belongs to the 'mxcli run --local' process.\n" +
+			"  Drop --attach to run against a scratch runtime.")
+	}
+	return fmt.Errorf("this change needs a runtime restart (an entity or association changed), " +
+		"which --attach cannot do — the runtime belongs to the 'mxcli run --local' process.\n" +
+		"  Restart that process, or drop --attach to run against a scratch runtime.")
 }
 
 // runAttached injects the test microflows into the already-running app, runs the
