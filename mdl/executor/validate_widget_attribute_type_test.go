@@ -215,15 +215,17 @@ create page Sales.P2 (title: 'P', layout: Atlas_Core.Atlas_Default, params: ($Sh
 }
 
 // What the walk cannot place is not judged: an association data source, a page
-// variable, an attribute nobody declares.
+// variable. An attribute the entity does not have is not a TYPE error — there is
+// no type to judge — but it is the CE1613 of ako/mxcli#555, reported once.
 func TestCheck_AttributeTypeUnjudgedWhenUnknown(t *testing.T) {
 	ctx := typeCheckCtx(t, "Yes")
 	errs := typeErrs(t, ctx, `dataview dv (datasource: $Thing) {
     dataview dv2 (datasource: association Thing_Other) { textbox tb1 (label: 'x', attribute: Shade) }
     textbox tb2 (label: 'x', attribute: NoSuchAttribute)
   }`, nil)
-	if len(errs) != 0 {
-		t.Fatalf("want nothing judged, got %q", errs)
+	if len(errs) != 1 || !strings.Contains(errs[0], "widget `tb2`") ||
+		!strings.Contains(errs[0], "has no attribute NoSuchAttribute") || strings.Contains(errs[0], widgetAttributeTypeRule) {
+		t.Fatalf("want only tb2's missing-attribute CE1613, no type error, got %q", errs)
 	}
 }
 
