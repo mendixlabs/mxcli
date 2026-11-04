@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 // mendixlabs/mxcli#1684 (ako/mxcli#1833): "`mxcli exec <file.mdl> --mcp <url>`
@@ -35,7 +37,7 @@ const mcpProbeConstant = "create constant MyFirstModule.LiveProbe (Type: String,
 func mcpLockedProject(t *testing.T, lock bool) string {
 	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../testdata/expr-checker")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../testdata/expr-checker"); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	if lock {

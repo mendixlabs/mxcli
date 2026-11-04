@@ -4,10 +4,10 @@ package marketplace
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
@@ -26,7 +26,7 @@ const fixtureDir = "../../../testdata/expr-checker"
 func copyFixture(t *testing.T) string {
 	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS(fixtureDir)); err != nil {
+	if err := testutil.CopyFixture(dst, fixtureDir); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	return filepath.Join(dst, "minimal.mpr")

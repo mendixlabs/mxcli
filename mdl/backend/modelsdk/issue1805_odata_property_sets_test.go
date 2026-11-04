@@ -11,6 +11,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/modelsdk/codec"
 	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
@@ -166,7 +167,7 @@ func TestIssue1805_PublishedMicroflowWritesItsParametersWhenThereAreNone(t *test
 // name the elements of a type disagree on.
 func TestIssue1805_PublishedServiceCensusHasNoMixedNames(t *testing.T) {
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../../testdata/testapp-views")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../../testdata/testapp-views"); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	proj := filepath.Join(dst, "TestApp.mpr")
