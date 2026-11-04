@@ -700,15 +700,15 @@ func (b *Builder) ExitShowStatement(ctx *parser.ShowStatementContext) {
 		// SHOW FEATURES [IN area] | SHOW FEATURES FOR VERSION x.y | SHOW FEATURES ADDED SINCE x.y
 		stmt := &ast.ShowFeaturesStmt{}
 		if ctx.ADDED() != nil && ctx.SINCE() != nil {
-			if nl := ctx.NUMBER_LITERAL(); nl != nil {
-				stmt.AddedSince = nl.GetText()
+			if fv := ctx.FeatureVersion(); fv != nil {
+				stmt.AddedSince = fv.GetText()
 			}
 		} else if ctx.FOR() != nil && ctx.VERSION() != nil {
-			if nl := ctx.NUMBER_LITERAL(); nl != nil {
-				stmt.ForVersion = nl.GetText()
+			if fv := ctx.FeatureVersion(); fv != nil {
+				stmt.ForVersion = fv.GetText()
 			}
 		} else if ctx.IN() != nil {
-			if id := ctx.IDENTIFIER(); id != nil {
+			if id := ctx.IdentifierOrKeyword(); id != nil {
 				stmt.InArea = id.GetText()
 			}
 		}

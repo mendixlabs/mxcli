@@ -31,7 +31,7 @@ func TestGetDomainModel_ReadsOnlyItsModulesDomainModel(t *testing.T) {
 	}
 	stored := 0
 	for _, dm := range all {
-		if dm.ContainerID != buildSystemDomainModel().ContainerID {
+		if dm.ContainerID != buildSystemDomainModel(nil).ContainerID {
 			stored++
 		}
 	}

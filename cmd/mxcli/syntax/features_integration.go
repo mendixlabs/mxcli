@@ -32,8 +32,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "odata.consume",
-		Summary: "Create consumed OData services and external entities",
+		Path:     "odata.consume",
+		Features: []string{"integration/odata_client", "microflows/call_external_action", "microflows/call_external_action_arguments"},
+		Summary:  "Create consumed OData services and external entities",
 		Keywords: []string{
 			"create consumed odata service", "create odata client", "odata client", "consume odata", "external entity",
 			"metadata url", "odata4", "headers", "proxy",
@@ -92,8 +93,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "odata.publish",
-		Summary: "Publish entities as OData services with KEY, options, and navigation properties",
+		Path:     "odata.publish",
+		Features: []string{"integration/published_odata_service", "integration/odata_graphql"},
+		Summary:  "Publish entities as OData services with KEY, options, and navigation properties",
 		Keywords: []string{
 			"create published odata service", "create odata service", "publish entity", "publish odata",
 			"expose", "key", "navigation property", "association exposure",
@@ -230,8 +232,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "rest.call",
-		Summary: "CALL REST SERVICE activity inside a microflow, and its five RETURNS forms",
+		Path:     "rest.call",
+		Features: []string{"microflows/send_rest_request", "microflows/send_rest_request_parameters", "microflows/send_rest_request_output", "microflows/send_rest_request_body", "microflows/send_rest_query_params"},
+		Summary:  "CALL REST SERVICE activity inside a microflow, and its five RETURNS forms",
 		Keywords: []string{
 			"rest call", "call rest service", "http get", "http post",
 			"returns response", "returns string", "returns mapping",
@@ -354,8 +357,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "rest.consumed",
-		Summary: "Create consumed REST clients with operations, mappings, and authentication",
+		Path:     "rest.consumed",
+		Features: []string{"integration/rest_client_basic", "integration/rest_client_authentication", "integration/rest_client_headers", "integration/rest_client_operations", "integration/rest_client_query_params", "integration/rest_client_openapi"},
+		Summary:  "Create consumed REST clients with operations, mappings, and authentication",
 		Keywords: []string{
 			"create consumed rest service", "create rest client", "rest client", "consume rest", "rest operation",
 			"alter consumed rest service", "add operation", "modify operation", "drop operation",
@@ -369,8 +373,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "rest.published",
-		Summary: "Create and manage published REST services with resources and operations",
+		Path:     "rest.published",
+		Features: []string{"integration/published_rest_service", "integration/published_rest_alter", "integration/published_rest_grant_revoke"},
+		Summary:  "Create and manage published REST services with resources and operations",
 		Keywords: []string{
 			"create published rest", "publish rest", "rest resource",
 			"rest operation", "microflow", "path parameter",
@@ -479,8 +484,9 @@ func init() {
 	// ── OQL ───────────────────────────────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "oql",
-		Summary: "OQL query execution against a running Mendix runtime",
+		Path:     "oql",
+		Features: []string{"oql_functions/basic_select", "oql_functions/aggregate_functions", "oql_functions/join_types", "oql_functions/subqueries", "oql_functions/comments", "oql_functions/string_agg"},
+		Summary:  "OQL query execution against a running Mendix runtime",
 		Keywords: []string{
 			"oql", "query", "runtime", "m2ee",
 			"aggregate", "view entity", "mxcli oql",
@@ -493,8 +499,9 @@ func init() {
 	// ── External database connector ───────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "database-connection",
-		Summary: "External Database Connector — query another database from a microflow",
+		Path:     "database-connection",
+		Features: []string{"integration/database_connector_basic", "integration/database_connector_queries", "microflows/execute_database_query", "microflows/execute_database_query_runtime_connection", "integration/database_connector_execute"},
+		Summary:  "External Database Connector — query another database from a microflow",
 		Keywords: []string{
 			"database connection", "database connections", "external database",
 			"create database connection", "drop database connection",
@@ -607,8 +614,9 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 	// ── Business Events ───────────────────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "business-events",
-		Summary: "Business event services — publish and subscribe to events via Kafka",
+		Path:     "business-events",
+		Features: []string{"integration/business_events"},
+		Summary:  "Business event services — publish and subscribe to events via Kafka",
 		Keywords: []string{
 			"business event", "business events", "kafka",
 			"publish", "subscribe", "message", "event channel",
@@ -702,8 +710,9 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 	// ── JSON Structures ───────────────────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "message-definition",
-		Summary: "Message definition collections — a mapping source built from the domain model",
+		Path:     "message-definition",
+		Features: []string{"integration/message_definition_collection", "integration/message_definition_document"},
+		Summary:  "Message definition collections — a mapping source built from the domain model",
 		Keywords: []string{
 			"message definition", "message definition collection", "create message definition",
 			"exposed entity", "exposed attribute", "exposed association",
@@ -909,8 +918,9 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 	// ── Data Transformers ─────────────────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "data-transformer",
-		Summary: "Data transformers — JSLT/XSLT document transformations (Mendix 11.9+)",
+		Path:     "data-transformer",
+		Features: []string{"integration/data_transformer", "microflows/transform_json"},
+		Summary:  "Data transformers — JSLT/XSLT document transformations (Mendix 11.9+)",
 		Keywords: []string{
 			"data transformer", "create data transformer", "drop data transformer",
 			"list data transformers", "jslt", "xslt", "transform",
@@ -935,8 +945,9 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 	})
 
 	Register(SyntaxFeature{
-		Path:    "agents.model",
-		Summary: "CREATE/DROP AI MODEL documents for AI agents",
+		Path:     "agents.model",
+		Features: []string{"agent_documents/agent_model"},
+		Summary:  "CREATE/DROP AI MODEL documents for AI agents",
 		Keywords: []string{"create ai model", "drop ai model", "describe ai model", "list ai models",
 			"create model", "drop model", "describe model", "list models", "provider", "mxcloudgenai"},
 		Syntax:  "CREATE [OR MODIFY] AI MODEL Module.Name [FOLDER 'path'] (\n  Provider: MxCloudGenAI,\n  Key: @Module.ApiKeyConstant\n);\nDESCRIBE AI MODEL Module.Name;\nLIST AI MODELS [IN Module];\nDROP AI MODEL Module.Name;",
@@ -946,6 +957,7 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 
 	Register(SyntaxFeature{
 		Path:     "agents.knowledge-base",
+		Features: []string{"agent_documents/agent_knowledge_base"},
 		Summary:  "CREATE/DROP KNOWLEDGE BASE documents for AI agents",
 		Keywords: []string{"create knowledge base", "drop knowledge base", "knowledge base", "kb", "rag"},
 		Syntax:   "CREATE [OR MODIFY] KNOWLEDGE BASE Module.Name [FOLDER 'path'] (\n  Provider: MxCloudGenAI,\n  Key: @Module.KBApiKeyConstant\n);\nDESCRIBE KNOWLEDGE BASE Module.Name;\nLIST KNOWLEDGE BASES [IN Module];\nDROP KNOWLEDGE BASE Module.Name;",
@@ -955,6 +967,7 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 
 	Register(SyntaxFeature{
 		Path:     "agents.mcp-service",
+		Features: []string{"agent_documents/agent_consumed_mcp_service"},
 		Summary:  "CREATE/DROP CONSUMED MCP SERVICE documents for AI agents",
 		Keywords: []string{"consumed mcp service", "mcp", "mcp service", "protocol version"},
 		Syntax:   "CREATE [OR MODIFY] CONSUMED MCP SERVICE Module.Name [FOLDER 'path'] (\n  ProtocolVersion: v2025_03_26,\n  Version: '1.0',\n  ConnectionTimeoutSeconds: 30,\n  Documentation: 'description'\n);\nDESCRIBE CONSUMED MCP SERVICE Module.Name;\nLIST CONSUMED MCP SERVICES [IN Module];\nDROP CONSUMED MCP SERVICE Module.Name;",
@@ -963,8 +976,9 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 	})
 
 	Register(SyntaxFeature{
-		Path:    "agents.agent",
-		Summary: "CREATE/DROP AGENT documents with variables, tools, KB tools, and MCP service tools",
+		Path:     "agents.agent",
+		Features: []string{"agent_documents/agent"},
+		Summary:  "CREATE/DROP AGENT documents with variables, tools, KB tools, and MCP service tools",
 		Keywords: []string{
 			"create agent", "drop agent", "usagetype", "systemprompt", "userprompt",
 			"variables", "toolchoice", "temperature", "topp", "maxtokens",

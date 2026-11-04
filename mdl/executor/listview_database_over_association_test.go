@@ -130,7 +130,7 @@ func TestDatabaseOverAssociationRefusedOutsideListViewAndPluggable(t *testing.T)
 	if _, _, err := pb.buildDataSourceV3(ds); err == nil {
 		t.Error("buildDataSourceV3 accepted `database from $currentObject/…`")
 	}
-	if _, _, err := pb.buildPluggableDataSourceV3(ds); err != nil {
+	if _, _, err := pb.buildPluggableDataSourceV3(ds, ""); err != nil {
 		t.Errorf("a pluggable widget was refused: %v", err)
 	}
 }

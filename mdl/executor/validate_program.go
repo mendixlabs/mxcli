@@ -259,7 +259,9 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// assigned. TARGETING decides who may SEE a task; it does not assign it, and
 	// completing an unassigned one fails only at runtime, with the button
 	// appearing to do nothing.
-	violations = append(violations, ValidateTaskClaims(prog)...)
+	violations = append(violations, ValidateTaskClaimsIn(prog, func() func(major, minor int) bool {
+		return projectVersionAtLeast(project())
+	})...)
 
 	// Warn (MDL-WF20) when a user task's page has no button that completes one
 	// of its outcomes: the instance waits at the task and nothing reports it.

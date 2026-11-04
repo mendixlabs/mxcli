@@ -20,7 +20,11 @@ import (
 // mxbuild with CE1613 "no longer exists" — upstream #972, where every
 // specialization of System.Image inherited an access-rule member for
 // System.Thumbnail_Image. See meta.SystemEntityDef.RuntimeOnly.
-func buildSystemDomainModel() *domainmodel.DomainModel {
+//
+// atLeast is the project version's IsAtLeast, nil when it is unknown: the
+// System module differs between versions (ako/mxcli#1810), and a check against
+// the wrong one accepts a name the project's build then refuses.
+func buildSystemDomainModel(atLeast func(major, minor int) bool) *domainmodel.DomainModel {
 	dm := &domainmodel.DomainModel{ContainerID: model.ID(meta.SystemModuleID)}
 	dm.ID = model.ID(meta.SystemDomainModelID)
 	for _, e := range meta.ModelerSystemEntities() {
@@ -56,7 +60,7 @@ func buildSystemDomainModel() *domainmodel.DomainModel {
 	// association on the modelsdk engine (legacy already builds them via
 	// BuildSystemDomainModel). IDs are synthetic and match the entity ID scheme
 	// so the Parent/Child columns resolve to qualified names.
-	for _, a := range meta.ModelerSystemAssociations() {
+	for _, a := range meta.ModelerSystemAssociationsIn(atLeast) {
 		assoc := &domainmodel.Association{
 			Name:     a.Name,
 			ParentID: model.ID("System." + a.Parent),
@@ -94,4 +98,17 @@ func systemAttrType(a meta.SystemAttrDef) domainmodel.AttributeType {
 	default: // String and anything unmapped
 		return &domainmodel.StringAttributeType{Length: a.Length}
 	}
+}
+
+// systemVersionAtLeast is the project version's IsAtLeast, or nil when the
+// project version is not known.
+func (b *Backend) systemVersionAtLeast() func(major, minor int) bool {
+	if b == nil {
+		return nil
+	}
+	pv := b.ProjectVersion()
+	if pv == nil || pv.MajorVersion == 0 {
+		return nil
+	}
+	return pv.IsAtLeast
 }

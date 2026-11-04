@@ -4,8 +4,9 @@ package syntax
 
 func init() {
 	Register(SyntaxFeature{
-		Path:    "workflow",
-		Summary: "Multi-step business processes with user tasks, decisions, and parallel paths",
+		Path:     "workflow",
+		Features: []string{"workflows/basic"},
+		Summary:  "Multi-step business processes with user tasks, decisions, and parallel paths",
 		Keywords: []string{
 			"workflow", "business process", "approval", "review",
 			"user task", "decision", "parallel",
@@ -26,8 +27,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "workflow.create",
-		Summary: "Create a new workflow definition with activities and flow",
+		Path:     "workflow.create",
+		Features: []string{"workflows/annotations", "workflows/overview_page"},
+		Summary:  "Create a new workflow definition with activities and flow",
 		Keywords: []string{
 			"create workflow", "new workflow", "define workflow",
 			"parameter", "overview page", "due date",
@@ -60,8 +62,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "workflow.event-handlers",
-		Summary: "Run a microflow when workflow events happen (task started, workflow completed, ...)",
+		Path:     "workflow.event-handlers",
+		Features: []string{"workflows/event_handlers"},
+		Summary:  "Run a microflow when workflow events happen (task started, workflow completed, ...)",
 		Keywords: []string{
 			"event handler", "workflow event", "on workflow events", "any workflow event",
 			"audit", "on created", "on-created microflow", "WorkflowEvent", "OnWorkflowEvent",
@@ -114,8 +117,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "workflow.user-task",
-		Summary: "User task activity — assigns work to users with outcomes",
+		Path:     "workflow.user-task",
+		Features: []string{"workflows/user_task"},
+		Summary:  "User task activity — assigns work to users with outcomes",
 		Keywords: []string{
 			"user task", "human task", "assign", "assignee", "auto assign", "auto-assign",
 			"outcomes", "approve", "reject", "page",
@@ -190,13 +194,14 @@ func init() {
 			"-- Microflow targeting: the microflow takes the workflow AND its context object\n" +
 			"CREATE MICROFLOW HR.GetApprovers ($Workflow: System.Workflow, $Request: HR.Request)\nRETURNS List of System.User AS $Approvers\nBEGIN\n  RETRIEVE $Approvers FROM System.User;\n  RETURN $Approvers;\nEND;\n\n" +
 			"USER TASK Approve 'Approve request'\n  TARGETING MICROFLOW HR.GetApprovers\n  OUTCOMES 'Done' { };",
-		MinVersion: "9.0.0",
-		SeeAlso:    []string{"workflow.user-task", "workflow.multi-user-task"},
+		Features: []string{"workflows/user_task", "workflows/group_targeting"},
+		SeeAlso:  []string{"workflow.user-task", "workflow.multi-user-task"},
 	})
 
 	Register(SyntaxFeature{
-		Path:    "workflow.multi-user-task",
-		Summary: "Multi-user task — one activity that several users each act on",
+		Path:     "workflow.multi-user-task",
+		Features: []string{"workflows/multi_user_task", "workflows/multi_user_task_majority_threshold", "workflows/multi_user_task_await_all", "workflows/multi_user_task_microflow_rule"},
+		Summary:  "Multi-user task — one activity that several users each act on",
 		Keywords: []string{
 			"multi user task", "multi-user task", "several users", "multiple assignees",
 			"assessors", "voting", "parallel approval", "group approval",
@@ -267,8 +272,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "workflow.parallel-split",
-		Summary: "Parallel split — execute multiple paths concurrently",
+		Path:     "workflow.parallel-split",
+		Features: []string{"workflows/parallel_split"},
+		Summary:  "Parallel split — execute multiple paths concurrently",
 		Keywords: []string{
 			"parallel", "concurrent", "split", "fork", "join",
 			"parallel gateway", "AND",
@@ -304,8 +310,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "workflow.ai-agent-task",
-		Summary: "AI agent task — a workflow step that runs an agent through a microflow (Mendix 11.9+)",
+		Path:     "workflow.ai-agent-task",
+		Features: []string{"workflows/ai_agent_task"},
+		Summary:  "AI agent task — a workflow step that runs an agent through a microflow (Mendix 11.9+)",
 		Keywords: []string{
 			"ai agent task", "agent task", "call agent", "call agent microflow",
 			"agent", "llm", "genai", "AIAgentTaskActivity",
@@ -330,8 +337,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "workflow.call-workflow",
-		Summary: "Call a sub-workflow from within a workflow",
+		Path:     "workflow.call-workflow",
+		Features: []string{"workflows/call_workflow_activity", "workflows/call_workflow_parameter_mappings", "workflows/workflow_parameter"},
+		Summary:  "Call a sub-workflow from within a workflow",
 		Keywords: []string{
 			"call workflow", "sub-workflow", "nested workflow",
 		},
@@ -353,8 +361,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "workflow.jump-to",
-		Summary: "Jump to another activity — and the activity names it resolves against",
+		Path:     "workflow.jump-to",
+		Features: []string{"workflows/jump_to", "workflows/wait_for_timer"},
+		Summary:  "Jump to another activity — and the activity names it resolves against",
 		Keywords: []string{
 			"jump", "jump to", "goto", "loop back", "activity name",
 		},
@@ -422,8 +431,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "workflow.catalog",
-		Summary: "Query workflow metadata via catalog tables",
+		Path:     "workflow.catalog",
+		Features: []string{"workflows/groups"},
+		Summary:  "Query workflow metadata via catalog tables",
 		Keywords: []string{
 			"catalog", "query workflows", "workflow metadata",
 			"cross-reference", "callers", "callees",
@@ -446,10 +456,10 @@ func init() {
 		// 'Workflows$TimerBoundaryEvent' could not be found"). This entry showed
 		// the bare form, with 'P3D' — not a valid timer expression — as its delay.
 		// ako/view-entity-examples FINDINGS §7.
-		Syntax:     "-- inline, as a clause of a USER TASK or CALL MICROFLOW (after OUTCOMES),\n-- a CALL WORKFLOW or a WAIT FOR NOTIFICATION:\nBOUNDARY EVENT (INTERRUPTING | NON INTERRUPTING) TIMER <datetime-expression> [REPEAT EVERY <n> <unit> AT MOST <m> TIMES] [CAPTION '<caption>'] { <activities> }\nBOUNDARY EVENT (INTERRUPTING | NON INTERRUPTING) NOTIFICATION <name> ['<caption>'] { <activities> }\n\n-- A notification boundary event (Mendix 11.11+) is triggered by `notify workflow`\n-- targeting its name, so the name is unique in the workflow. ALTER cannot insert\n-- one yet; restate the workflow instead.\n\n-- or add a timer to an existing task:\nALTER WORKFLOW <wf> { INSERT INTO <task> { BOUNDARY EVENT (INTERRUPTING | NON INTERRUPTING) TIMER <datetime-expression> [CAPTION '<caption>'] { <activities> } } };\n\n-- REPEAT EVERY repeats a NON INTERRUPTING timer (a reminder): unit minute(s),\n-- hour(s), day(s), week(s) or month(s); the count includes the first firing\n-- and is at least 2. MDL-WF22 refuses what Studio Pro refuses (mx check does\n-- not): an interrupting timer, another unit, fewer than 2.\n\n-- Name the kind: a bare TIMER is refused on Mendix 11 (MDL-WF07) — it writes a\n-- type the runtime cannot load. The delay is an expression that yields a\n-- DateTime, e.g. addDays([%CurrentDateTime%], 3). mxcli ends every boundary\n-- path with Mendix's end-of-path marker, so a path may end in a call; use\n-- JUMP TO to return to the task instead.",
-		Example:    "user task ReviewTask 'Review'\n  page Module.WF_Review\n  outcomes 'Done' { }\n  boundary event interrupting timer addDays([%CurrentDateTime%], 3) caption 'Escalate' {\n    call microflow Module.WF_Escalate;\n  };",
-		MinVersion: "10.6.0",
-		SeeAlso:    []string{"workflow.user-task", "workflow.notification", "workflow.event-subprocess"},
+		Syntax:   "-- inline, as a clause of a USER TASK or CALL MICROFLOW (after OUTCOMES),\n-- a CALL WORKFLOW or a WAIT FOR NOTIFICATION:\nBOUNDARY EVENT (INTERRUPTING | NON INTERRUPTING) TIMER <datetime-expression> [REPEAT EVERY <n> <unit> AT MOST <m> TIMES] [CAPTION '<caption>'] { <activities> }\nBOUNDARY EVENT (INTERRUPTING | NON INTERRUPTING) NOTIFICATION <name> ['<caption>'] { <activities> }\n\n-- A notification boundary event (Mendix 11.11+) is triggered by `notify workflow`\n-- targeting its name, so the name is unique in the workflow. ALTER cannot insert\n-- one yet; restate the workflow instead.\n\n-- or add a timer to an existing task:\nALTER WORKFLOW <wf> { INSERT INTO <task> { BOUNDARY EVENT (INTERRUPTING | NON INTERRUPTING) TIMER <datetime-expression> [CAPTION '<caption>'] { <activities> } } };\n\n-- REPEAT EVERY repeats a NON INTERRUPTING timer (a reminder): unit minute(s),\n-- hour(s), day(s), week(s) or month(s); the count includes the first firing\n-- and is at least 2. MDL-WF22 refuses what Studio Pro refuses (mx check does\n-- not): an interrupting timer, another unit, fewer than 2.\n\n-- Name the kind: a bare TIMER is refused on Mendix 11 (MDL-WF07) — it writes a\n-- type the runtime cannot load. The delay is an expression that yields a\n-- DateTime, e.g. addDays([%CurrentDateTime%], 3). mxcli ends every boundary\n-- path with Mendix's end-of-path marker, so a path may end in a call; use\n-- JUMP TO to return to the task instead.",
+		Example:  "user task ReviewTask 'Review'\n  page Module.WF_Review\n  outcomes 'Done' { }\n  boundary event interrupting timer addDays([%CurrentDateTime%], 3) caption 'Escalate' {\n    call microflow Module.WF_Escalate;\n  };",
+		Features: []string{"workflows/timer_boundary_event", "workflows/interrupting_timer_boundary_event"},
+		SeeAlso:  []string{"workflow.user-task", "workflow.notification", "workflow.event-subprocess"},
 	})
 
 	Register(SyntaxFeature{
@@ -483,8 +493,8 @@ func init() {
 			"    call microflow HR.ACT_Remind;\n" +
 			"  };\n" +
 			"end workflow;",
-		MinVersion: "11.8.0",
-		SeeAlso:    []string{"workflow.notification", "workflow.boundary-event", "workflow.create"},
+		Features: []string{"workflows/event_subprocesses", "workflows/timer_event_subprocesses", "workflows/recurring_timer_event_subprocesses"},
+		SeeAlso:  []string{"workflow.notification", "workflow.boundary-event", "workflow.create"},
 	})
 
 	Register(SyntaxFeature{
@@ -497,9 +507,9 @@ func init() {
 			"-- The point a `notify workflow` action reaches (Workflows$NotificationActivity,\n" +
 			"-- Mendix 11.11+). `wait for notification` is the older activity for the same\n" +
 			"-- purpose and works on every version.",
-		Example:    "notification DocumentsReceived caption 'Documents received';",
-		MinVersion: "11.11.0",
-		SeeAlso:    []string{"workflow.event-subprocess", "workflow.boundary-event", "workflow.notify"},
+		Example:  "notification DocumentsReceived caption 'Documents received';",
+		Features: []string{"workflows/notification_events", "workflows/wait_for_notification", "workflows/interrupting_notification_event_subprocess"},
+		SeeAlso:  []string{"workflow.event-subprocess", "workflow.boundary-event", "workflow.notify"},
 	})
 
 	Register(SyntaxFeature{
@@ -515,9 +525,9 @@ func init() {
 			"-- a notification cannot reach (a timer start, a user task). The target is\n" +
 			"-- required: without one the build fails CE0166 (MDL-WF16). $Notified is a\n" +
 			"-- Boolean. Before Mendix 11.7 only a wait for notification can be named.",
-		Example:    "$Cancelled = notify workflow $Workflow target HR.Leave.espCancelStart;",
-		MinVersion: "11.7.0",
-		SeeAlso:    []string{"workflow.event-subprocess", "workflow.notification", "workflow.boundary-event"},
+		Example:  "$Cancelled = notify workflow $Workflow target HR.Leave.espCancelStart;",
+		Features: []string{"workflows/notify_workflow", "workflows/notify_target"},
+		SeeAlso:  []string{"workflow.event-subprocess", "workflow.notification", "workflow.boundary-event"},
 	})
 
 	Register(SyntaxFeature{

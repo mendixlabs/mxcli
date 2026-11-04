@@ -50,8 +50,15 @@ func writeFeatureDetail(w io.Writer, f SyntaxFeature) {
 	fmt.Fprintf(w, "%s\n\n", strings.Repeat("═", len(f.Path)))
 	fmt.Fprintf(w, "%s\n\n", f.Summary)
 
-	if f.MinVersion != "" {
-		fmt.Fprintf(w, "Requires: Mendix %s+\n\n", f.MinVersion)
+	switch {
+	case len(f.Requires) == 1:
+		fmt.Fprintf(w, "Requires: Mendix %s+\n\n", f.Requires[0].Since)
+	case len(f.Requires) > 1:
+		fmt.Fprintln(w, "Requires:")
+		for _, r := range f.Requires {
+			fmt.Fprintf(w, "  Mendix %-9s %s\n", r.Since+"+", r.Feature)
+		}
+		fmt.Fprintln(w)
 	}
 
 	if len(f.Keywords) > 0 {

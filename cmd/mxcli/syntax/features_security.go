@@ -16,8 +16,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "security.module-role",
-		Summary: "Create and manage module-level security roles",
+		Path:     "security.module-role",
+		Features: []string{"security/module_roles"},
+		Summary:  "Create and manage module-level security roles",
 		Keywords: []string{
 			"module role", "create role", "drop role",
 		},
@@ -27,8 +28,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "security.entity-access",
-		Summary: "Grant or revoke entity-level access (CRUD, attribute-level, XPath rules)",
+		Path:     "security.entity-access",
+		Features: []string{"security/entity_access"},
+		Summary:  "Grant or revoke entity-level access (CRUD, attribute-level, XPath rules)",
 		Keywords: []string{
 			"entity access", "grant", "revoke", "read", "write",
 			"create", "delete", "xpath", "row-level security",
@@ -129,8 +131,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "security.user-role",
-		Summary: "Create and manage application-level user roles that bundle module roles",
+		Path:     "security.user-role",
+		Features: []string{"security/user_roles"},
+		Summary:  "Create and manage application-level user roles that bundle module roles",
 		Keywords: []string{
 			"user role", "application role", "manage roles",
 			"add module roles", "remove module roles",
@@ -198,8 +201,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "security.demo-user",
-		Summary: "Create and manage demo users for testing",
+		Path:     "security.demo-user",
+		Features: []string{"security/demo_users"},
+		Summary:  "Create and manage demo users for testing",
 		Keywords: []string{
 			"demo user", "test user", "demo account",
 			"password", "login",

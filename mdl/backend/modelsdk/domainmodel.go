@@ -40,7 +40,7 @@ func (b *Backend) ListDomainModels() ([]*domainmodel.DomainModel, error) {
 	b.populateViewEntityOql(out)
 	// The System module is virtual (not stored in the project); inject its domain
 	// model so platform entities (System.WorkflowUserTask, User, …) resolve.
-	out = append(out, buildSystemDomainModel())
+	out = append(out, buildSystemDomainModel(b.systemVersionAtLeast()))
 	b.resolveInheritedPersistability(b.persistabilityIndexOf(units), out...)
 	return out, nil
 }
@@ -281,7 +281,7 @@ func (b *Backend) GetDomainModel(moduleID model.ID) (*domainmodel.DomainModel, e
 	// The System module is virtual — its domain model is not stored in the project,
 	// so serve the injected one (matching ListDomainModels) so DESCRIBE System.* and
 	// any lookup of a platform entity's domain model resolves instead of erroring.
-	if sys := buildSystemDomainModel(); sys.ContainerID == moduleID {
+	if sys := buildSystemDomainModel(b.systemVersionAtLeast()); sys.ContainerID == moduleID {
 		b.resolveInheritedPersistability(b.lazyPersistabilityIndex("", nil), sys)
 		return sys, nil
 	}

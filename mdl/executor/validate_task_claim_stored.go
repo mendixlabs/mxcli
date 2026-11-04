@@ -74,7 +74,7 @@ func storedChangeClaims(act *microflows.ChangeObjectAction) bool {
 			if i := strings.LastIndex(name, "."); i >= 0 {
 				name = name[i+1:]
 			}
-			if strings.EqualFold(name, assigneesAssociation) {
+			if isClaimAssociation(name) {
 				return true
 			}
 		}

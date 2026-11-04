@@ -39,6 +39,7 @@ Top-level topics:
   structure       - SHOW STRUCTURE command
   move            - MOVE command for relocating documents
   search          - Full-text SEARCH command
+  features        - LIST FEATURES: what a Mendix version supports, and since when
 
 Examples:
   mxcli syntax --json                          # Full index (LLM: cache this)

@@ -2,7 +2,10 @@
 
 package meta
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // System module constants — deterministic IDs for the virtual System module.
 const (
@@ -72,6 +75,36 @@ type SystemAssocDef struct {
 	Child  string // child entity name (without module prefix)
 	Type   string // "Reference" or "ReferenceSet"
 	Owner  string // "Default" or "Both"
+
+	// Introduced and Removed bound the Mendix versions whose System module has
+	// this association, as "major.minor" (Removed is the first version WITHOUT
+	// it); empty means unbounded. The list otherwise describes the current
+	// platform, so only MEASURED differences are recorded here — read from the
+	// modeler assembly of each version (ako/mxcli#1810).
+	Introduced string
+	Removed    string
+}
+
+// InVersion reports whether the association exists in a project whose Mendix
+// version satisfies atLeast(major, minor). A nil atLeast (version unknown)
+// answers for the current platform: everything not Removed.
+func (a SystemAssocDef) InVersion(atLeast func(major, minor int) bool) bool {
+	if atLeast == nil {
+		return a.Removed == ""
+	}
+	if a.Introduced != "" && !atLeast(parseMajorMinor(a.Introduced)) {
+		return false
+	}
+	if a.Removed != "" && atLeast(parseMajorMinor(a.Removed)) {
+		return false
+	}
+	return true
+}
+
+func parseMajorMinor(v string) (int, int) {
+	var major, minor int
+	fmt.Sscanf(v, "%d.%d", &major, &minor)
+	return major, minor
 }
 
 // SystemEntityDef defines a System entity with name, persistability, and attributes.
@@ -195,6 +228,12 @@ func ModelerSystemEntities() []SystemEntityDef {
 // in step, and the one that fell behind would put a dangling by-name reference
 // into a model — which is the failure this whole distinction exists to prevent.
 func ModelerSystemAssociations() []SystemAssocDef {
+	return ModelerSystemAssociationsIn(nil)
+}
+
+// ModelerSystemAssociationsIn is ModelerSystemAssociations for one project
+// version, given as its IsAtLeast; nil means the current platform.
+func ModelerSystemAssociationsIn(atLeast func(major, minor int) bool) []SystemAssocDef {
 	runtimeOnly := make(map[string]bool, len(SystemEntities))
 	for _, e := range SystemEntities {
 		if e.RuntimeOnly {
@@ -203,7 +242,7 @@ func ModelerSystemAssociations() []SystemAssocDef {
 	}
 	out := make([]SystemAssocDef, 0, len(SystemAssociations))
 	for _, a := range SystemAssociations {
-		if runtimeOnly[a.Parent] || runtimeOnly[a.Child] {
+		if runtimeOnly[a.Parent] || runtimeOnly[a.Child] || !a.InVersion(atLeast) {
 			continue
 		}
 		out = append(out, a)
@@ -554,7 +593,12 @@ var SystemAssociations = []SystemAssocDef{
 	{Name: "WorkflowUserTaskDefinition_WorkflowDefinition", Parent: "WorkflowUserTaskDefinition", Child: "WorkflowDefinition", Type: "Reference", Owner: "Default"},
 	{Name: "Workflow_WorkflowDefinition", Parent: "Workflow", Child: "WorkflowDefinition", Type: "Reference", Owner: "Default"},
 	{Name: "WorkflowUserTask_TargetUsers", Parent: "WorkflowUserTask", Child: "User", Type: "ReferenceSet", Owner: "Default"},
-	{Name: "WorkflowUserTask_Assignees", Parent: "WorkflowUserTask", Child: "User", Type: "ReferenceSet", Owner: "Default"},
+	// One association, renamed in 10.0 with the same GUID and ends: before it
+	// is WorkflowUserTask_Assignee, a Reference (one user). Read from the
+	// modeler assembly of 9.24.30 (Assignee), 10.0.0 and 11.12.6 (Assignees).
+	// A 9.x model naming Assignees is CE1613 "no longer exists" (ako/mxcli#1810).
+	{Name: "WorkflowUserTask_Assignees", Parent: "WorkflowUserTask", Child: "User", Type: "ReferenceSet", Owner: "Default", Introduced: "10.0"},
+	{Name: "WorkflowUserTask_Assignee", Parent: "WorkflowUserTask", Child: "User", Type: "Reference", Owner: "Default", Removed: "10.0"},
 	{Name: "WorkflowUserTask_Workflow", Parent: "WorkflowUserTask", Child: "Workflow", Type: "Reference", Owner: "Default"},
 	{Name: "WorkflowUserTask_WorkflowUserTaskDefinition", Parent: "WorkflowUserTask", Child: "WorkflowUserTaskDefinition", Type: "Reference", Owner: "Default"},
 	{Name: "WorkflowJumpToDetails_Workflow", Parent: "WorkflowJumpToDetails", Child: "Workflow", Type: "Reference", Owner: "Default"},
