@@ -1197,9 +1197,24 @@ func (pb *pageBuilder) applyDatabaseClausesV3(dbSource *pages.DatabaseSource, ds
 // exists"), and `A1/E1/A2/E2` as one step whose DestinationEntity was the
 // literal "E1/A2/E2" — the project would not load.
 func (pb *pageBuilder) resolveAssociationSourceHops(reference, fromEntity string) (entityPath, destEntity string, err error) {
+	hops, dest, err := pb.resolveAssociationHops(reference, fromEntity)
+	if err != nil {
+		return "", "", err
+	}
+	pairs := make([]string, 0, 2*len(hops))
+	for _, h := range hops {
+		pairs = append(pairs, h.Association, h.DestinationEntity)
+	}
+	return strings.Join(pairs, "/"), dest, nil
+}
+
+// resolveAssociationHops is resolveAssociationSourceHops' traversal: one step
+// per hop, and the entity the last one arrives at. The association source and
+// `database from $ctx/…` (buildDatabaseOverAssociationV3) both read a path
+// through it, so every spelling one accepts the other does (ako/mxcli#834).
+func (pb *pageBuilder) resolveAssociationHops(reference, fromEntity string) (hops []pages.AttributeRefStep, destEntity string, err error) {
 	segs := strings.Split(reference, "/")
 	at := fromEntity
-	var pairs []string
 	for i := 0; i < len(segs); {
 		// Both halves of an EntityRefStep are BY_NAME references, and Mendix
 		// resolves either one it cannot find to null — so the association half
@@ -1224,19 +1239,30 @@ func (pb *pageBuilder) resolveAssociationSourceHops(reference, fromEntity string
 				// association would sail through and be written
 				// qualified-but-nonexistent, which Mendix resolves to null just
 				// the same. Verify it exists.
-				return "", "", mdlerrors.NewValidationf(
+				return nil, "", mdlerrors.NewValidationf(
 					"association %q for datasource %q does not exist — "+
 						"writing it would produce a project Mendix cannot open; "+
 						"a bare name is qualified with the module of the context entity (%s), "+
 						"so an association declared elsewhere must be named in full",
 					assoc, reference, at)
 			}
+			// The hop must start where the path is: an association joining two
+			// other entities has both ends, so the destination check below
+			// passes it, and the step it writes cannot be followed from `at`
+			// (ako/mxcli#834). A derived destination needs no such check —
+			// resolveAssociationDestination finds none off the association.
+			if at != "" && !pb.isEndOrSpecialization(at, from, to) {
+				return nil, "", mdlerrors.NewValidationf(
+					"association %q in datasource %q does not start at %s — its ends are %s and %s; "+
+						"each hop must follow an association of the entity the previous one arrives at",
+					assoc, reference, at, from, to)
+			}
 			// Neither the next association nor an end of this one: a misspelled
 			// association read as an entity, or an entity off the path. Either
 			// way the step would name an entity the hop does not arrive at.
 			// Studio Pro may store a specialization of an end, so accept that.
-			if dest != from && dest != to && !pb.isSpecializationOf(dest, from) && !pb.isSpecializationOf(dest, to) {
-				return "", "", mdlerrors.NewValidationf(
+			if !pb.isEndOrSpecialization(dest, from, to) {
+				return nil, "", mdlerrors.NewValidationf(
 					"%q in datasource %q is neither an association nor an end of association %q (%s, %s) — "+
 						"each hop is `Module.Assoc` or `Module.Assoc/Module.DestinationEntity`",
 					dest, reference, assoc, from, to)
@@ -1252,16 +1278,22 @@ func (pb *pageBuilder) resolveAssociationSourceHops(reference, fromEntity string
 		// instead of writing a structurally invalid unit; the author can name the
 		// destination explicitly as `Assoc/Module.Entity`. (issuetracker #14)
 		if dest == "" {
-			return "", "", mdlerrors.NewValidationf(
+			return nil, "", mdlerrors.NewValidationf(
 				"cannot resolve the destination entity of association %q for datasource %q — "+
 					"writing it unresolved would produce a project Mendix cannot open; "+
 					"name the destination explicitly, e.g. `%s/Module.Entity`",
 				assoc, reference, assoc)
 		}
-		pairs = append(pairs, assoc, dest)
+		hops = append(hops, pages.AttributeRefStep{Association: assoc, DestinationEntity: dest})
 		at = dest
 	}
-	return strings.Join(pairs, "/"), at, nil
+	return hops, at, nil
+}
+
+// isEndOrSpecialization reports whether entity is one of an association's ends
+// (from, to) or a specialization of one.
+func (pb *pageBuilder) isEndOrSpecialization(entity, from, to string) bool {
+	return entity == from || entity == to || pb.isSpecializationOf(entity, from) || pb.isSpecializationOf(entity, to)
 }
 
 // isAssociationSegment reports whether a path segment following an association
@@ -1293,8 +1325,9 @@ func (pb *pageBuilder) buildListViewDataSourceV3(ds *ast.DataSourceV3) (pages.Da
 // IndirectEntityRef (ako/mxcli#721 L5). It keeps the XPath, sort and search an
 // association source (`$ctx/Assoc`) does not have.
 //
-// The path's segments pair up as association/destination. Describe prints every
-// destination, because Studio Pro may store a specialization of the
+// The path is read hop by hop as an association source's is
+// (resolveAssociationHops): a destination after an association is optional.
+// Describe prints every destination, because Studio Pro may store a specialization of the
 // association's own end (Administration.Account over System.User's
 // WorkflowUserTask_Assignees) and re-deriving it would write a different entity.
 // A trailing association with no destination is resolved as an association
@@ -1314,36 +1347,12 @@ func (pb *pageBuilder) buildDatabaseOverAssociationV3(ds *ast.DataSourceV3) (pag
 		}
 	}
 
-	segs := strings.Split(ds.AssociationPath, "/")
-	var steps []pages.AttributeRefStep
-	at := fromEntity
-	for i := 0; i < len(segs); i += 2 {
-		assoc := pb.resolveAssociationPathIn(segs[i], at)
-		if _, _, ok := pb.associationEndpoints(assoc); !ok {
-			return nil, "", mdlerrors.NewValidationf(
-				"association %q in datasource `database from $%s/%s` does not exist — "+
-					"writing it would produce a project Mendix cannot open",
-				assoc, ds.ContextVariable, ds.AssociationPath)
-		}
-		dest := ""
-		if i+1 < len(segs) {
-			dest = segs[i+1]
-			if _, err := pb.resolveEntity(ast.QualifiedName{Module: pb.extractModule(dest), Name: pb.extractName(dest)}); err != nil {
-				return nil, "", mdlerrors.NewValidationf(
-					"entity %q in datasource `database from $%s/%s` does not exist",
-					dest, ds.ContextVariable, ds.AssociationPath)
-			}
-		} else {
-			dest = pb.resolveAssociationDestination(assoc, at)
-		}
-		if dest == "" {
-			return nil, "", mdlerrors.NewValidationf(
-				"cannot resolve the entity association %q arrives at in datasource `database from $%s/%s` — "+
-					"name it after the association, e.g. `%s/Module.Entity`",
-				assoc, ds.ContextVariable, ds.AssociationPath, assoc)
-		}
-		steps = append(steps, pages.AttributeRefStep{Association: assoc, DestinationEntity: dest})
-		at = dest
+	// One traversal for both builders: the association source's, which takes
+	// the short form `A1/A2`, the full `A1/E1/A2/E2` and mixtures, and refuses a
+	// destination that is not an end of its association (ako/mxcli#834).
+	steps, at, err := pb.resolveAssociationHops(ds.AssociationPath, fromEntity)
+	if err != nil {
+		return nil, "", err
 	}
 
 	entityID, err := pb.resolveEntity(ast.QualifiedName{Module: pb.extractModule(at), Name: pb.extractName(at)})
@@ -1816,6 +1825,10 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 		}, nil
 
 	case "delete":
+		source, err := pb.deleteSource(action.SourceVariable)
+		if err != nil {
+			return nil, err
+		}
 		return &pages.DeleteClientAction{
 			BaseElement: model.BaseElement{
 				ID:       model.ID(types.GenerateID()),
@@ -1824,7 +1837,8 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 			// The visitor sets it for `delete close page`; dropping it here
 			// turned a describe → exec round trip into a button that no longer
 			// closes its page (ako/mxcli#950).
-			ClosePage: action.ClosePage,
+			ClosePage:      action.ClosePage,
+			SourceVariable: source,
 		}, nil
 
 	case "create":

@@ -110,7 +110,7 @@ func describeJsonStructure(ctx *ExecContext, name ast.QualifiedName) error {
 	if js.JsonSnippet != "" {
 		snippet := types.PrettyPrintJSON(js.JsonSnippet)
 		if strings.Contains(snippet, "'") || strings.Contains(snippet, "\n") {
-			fmt.Fprintf(ctx.Output, "\n  sample $$%s$$", snippet)
+			fmt.Fprintf(ctx.Output, "\n  sample %s", mdlDollarQuote(ctx, snippet))
 		} else {
 			fmt.Fprintf(ctx.Output, "\n  sample '%s'", snippet)
 		}

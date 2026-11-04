@@ -342,6 +342,10 @@ type ActionV3 struct {
 	LinkVariable  string
 	LinkAttribute string
 	OutcomeValue  string // For COMPLETE_TASK
+	// For DELETE $source: the object deleted when it is not the context
+	// object — a widget's selection or a page/snippet parameter, written
+	// without the "$" (ako/mxcli#1932). Empty is the context object.
+	SourceVariable string
 	// Settings is the action's `with ( … )` list, nil when none was written.
 	Settings *ActionSettingsV3
 	// Returns is a flow call's `returns ( … )` list: Studio Pro's "Return value

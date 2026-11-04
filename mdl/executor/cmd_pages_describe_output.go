@@ -1658,6 +1658,11 @@ func renderClientActionBaseMDL(ctx *ExecContext, action map[string]any) string {
 		return "close page"
 	case "Forms$DeleteClientAction", "Pages$DeleteClientAction":
 		result := "delete"
+		// A grid's selection (a control-bar button) or a page/snippet
+		// parameter; null is the context object (ako/mxcli#1932).
+		if src := flowArgVariableValue(action["SourceVariable"]); src != "" {
+			result += " " + src
+		}
 		if closePage, ok := action["ClosePage"].(bool); ok && closePage {
 			result += " close page"
 		}

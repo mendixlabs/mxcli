@@ -372,6 +372,11 @@ type DeleteClientAction struct {
 	model.BaseElement
 	ActionExecution
 	ClosePage bool `json:"closePage"`
+	// SourceVariable is the object deleted when it is not the context
+	// object: a widget's selection ({Widget: "grid1"}, a button in a grid's
+	// control bar) or a page/snippet parameter. nil is the context object,
+	// stored as a null SourceVariable (ako/mxcli#1932).
+	SourceVariable *WidgetVariable `json:"sourceVariable,omitempty"`
 }
 
 func (DeleteClientAction) isClientAction() {}

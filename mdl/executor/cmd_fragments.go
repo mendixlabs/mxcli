@@ -321,10 +321,14 @@ func formatActionV3(a *ast.ActionV3) string {
 	case "close":
 		return "close page"
 	case "delete":
-		if a.ClosePage {
-			return "delete close page"
+		out := "delete"
+		if a.SourceVariable != "" {
+			out += " $" + a.SourceVariable
 		}
-		return "delete"
+		if a.ClosePage {
+			out += " close page"
+		}
+		return out
 	case "param":
 		return "$" + a.Target
 	case "create":

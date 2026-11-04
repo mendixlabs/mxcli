@@ -121,7 +121,8 @@ describe icon collection Atlas_Core.Atlas_Filled;   -- every icon + its referenc
 - `action: save changes close page` - Save and close page
 - `action: cancel changes` - Cancel changes
 - `action: close page` - Close the page
-- `action: delete` - Delete object
+- `action: delete` - Delete the enclosing data container's object
+- `action: delete $grid1` - Delete grid1's selection: the form for a button in a data grid's `controlbar`, which has no context object (bare `delete` there is CE7005; check reports MDL-PAGEDEL01). The grid needs `itemSelection: Single` or `Multi`, or mx check reports CE7001. `delete $Param` deletes an object parameter of the page or snippet
 - `action: call microflow Module.MicroflowName` - Call microflow
 - `action: call microflow Module.MicroflowName(Param = $value)` - Call microflow with parameters
 - `action: call nanoflow Module.NanoflowName` - Call nanoflow (client-side)
@@ -421,6 +422,8 @@ column (caption: 'Actions') {
 > **A list widget needs an association that yields a list.** A list view, data grid or gallery over `$currentObject/M.Assoc` is CE8812 ("A grid association path must result in a list") when the association is a Reference followed from its FROM entity, or a Reference with owner Both from either end (one-to-one). Use a data view for the single object, or a ReferenceSet. `check` reports it as MDL-ASSOCDS01. The reverse of a default Reference (from the TO entity) is a list and fine.
 
 > **A view entity's association is one-way for a page.** The association a view entity derives from its OQL (`select c.ID as Stats_Customer`) can be followed from the view entity only. A data source that follows it from the entity it points at, in any widget and at any hop (`database from $currentObject/M.Stats_Customer/M.Stats`, `$currentObject/M.Stats_Customer`), is CE8812 "Entity 'M.Customer' has no association 'M.Stats_Customer'". Query the view entity instead: `datasource: database M.Stats where [M.Stats_Customer = $currentObject]`. `check` reports it as MDL-ASSOCDS02. A microflow `retrieve … from $Cust/M.Stats_Customer` is accepted.
+
+> **Each hop starts where the path is.** The first association must have the context entity (or a generalization of it) at one end, and each later one the entity the previous hop arrives at. `$Order/M.Flag_Account/M.Flag` from an Order names an association between Flag and Account, which cannot be followed from an Order; `check` reports it as MDL-ASSOCDS03 and `exec` refuses it.
 
 **With WHERE and SORT BY (inline in DataSource):**
 ```sql

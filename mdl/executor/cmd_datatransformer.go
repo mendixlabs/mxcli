@@ -86,13 +86,13 @@ func describeDataTransformer(ctx *ExecContext, name ast.QualifiedName) error {
 		fmt.Fprintln(w, "{")
 
 		for _, step := range dt.Steps {
-			if strings.Contains(step.Expression, "\n") {
+			if strings.Contains(step.Expression, "\n") && !strings.Contains(step.Expression, "$$") {
 				// Multi-line: use $$ quoting
 				fmt.Fprintf(w, "  %s $$\n%s\n  $$;\n", step.Technology, step.Expression)
 			} else {
-				// Single-line: use regular string
-				expr := strings.ReplaceAll(step.Expression, "'", "''")
-				fmt.Fprintf(w, "  %s '%s';\n", step.Technology, expr)
+				// Single-line, or holding `$$`, which ends a dollar-quoted
+				// literal early (ako/mxcli#1003): a regular string
+				fmt.Fprintf(w, "  %s %s;\n", step.Technology, mdlQuote(ctx, step.Expression))
 			}
 		}
 

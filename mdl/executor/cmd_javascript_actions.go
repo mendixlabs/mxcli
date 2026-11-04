@@ -137,13 +137,12 @@ func describeJavaScriptAction(ctx *ExecContext, name ast.QualifiedName) error {
 	// emit one; when the .js source can't be read (add-on modules without source
 	// on disk) emit a placeholder so the output still re-parses (cf. #637).
 	userCode, extraCode := readJavaScriptActionSource(ctx.MprPath, name.Module, name.Name)
-	sb.WriteString("\nas $$\n")
-	if userCode != "" {
-		sb.WriteString(userCode)
-	} else {
-		sb.WriteString(jsSourceOmittedBody)
+	if userCode == "" {
+		userCode = jsSourceOmittedBody
 	}
-	sb.WriteString("\n$$;")
+	sb.WriteString("\nas ")
+	sb.WriteString(mdlSourceBlock(ctx, userCode))
+	sb.WriteString(";")
 
 	stmt := sb.String()
 	if gap := jsTypeParameterGap(jsa); gap != "" {

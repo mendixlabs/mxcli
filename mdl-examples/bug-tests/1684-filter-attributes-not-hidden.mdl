@@ -1,0 +1,37 @@
+mdl 1;
+-- ako/mxcli#1684: `mxcli check -p … --references` warned MDL-WIDGET10
+--   property `attributes` is hidden when `attrChoice` is "auto" — the value will be ignored
+-- on every text/number/date filter that names attributes. False: exec's
+-- SetAttributeObjects stores attrChoice = "linked" whenever it fills the list.
+-- The definitions declared attrChoice as the constant "auto"; they now carry an
+-- `attributes` mode (attrChoice "linked") like the drop-down filter's
+-- `attribute` mode from mendixlabs/mxcli#1519, so check reads what exec writes.
+--
+-- The warning needs a project whose DataWidgets .mpk hides `attributes` under
+-- "auto" — the rule is lifted from the installed package.
+--
+--   mxcli check mdl-examples/bug-tests/1684-filter-attributes-not-hidden.mdl -p app.mpr --references
+--     -- no MDL-WIDGET10
+--   mxcli exec … ; describe page BugFilter1684.Sale_Overview
+--     -- the filters keep their Attributes; attrChoice is "linked" in the BSON
+
+create or modify module BugFilter1684;
+
+create persistent entity BugFilter1684.Sale (
+  Name: String(100),
+  Amount: Decimal,
+  SoldOn: DateTime
+);
+
+create page BugFilter1684.Sale_Overview (Title: 'Sales', Layout: Atlas_Core.Atlas_Default) {
+  datagrid dgSales (DataSource: database from BugFilter1684.Sale) {
+    controlbar {
+      textfilter tfName (Attributes: [Name])
+      numberfilter nfAmount (Attributes: [Amount])
+      datefilter dfSoldOn (Attributes: [SoldOn])
+    }
+    column (Attribute: Name, Caption: 'Name')
+    -- Control: a column filter with no attributes stays attrChoice "auto".
+    column (Attribute: Amount, Caption: 'Amount') { numberfilter nfCol }
+  }
+};

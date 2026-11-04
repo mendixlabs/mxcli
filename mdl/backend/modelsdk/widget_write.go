@@ -46,6 +46,13 @@ func init() {
 	// value, leaving the rest at Go's zero value, never marked dirty, and so
 	// omitted. Registering them here covers all three construction sites and
 	// any future one, which setting every field at each site would not.
+	// A Delete action that deletes its context object stores SourceVariable
+	// null — 13 of 13 in ako/TestApp — and mxcli omitted the key; one that
+	// deletes a grid's selection stores a PageVariable there (ako/mxcli#1932).
+	// The property is 10.4+; below that the null is stripped.
+	codec.RegisterTypeDefaults("Forms$DeleteClientAction", codec.TypeDefaults{
+		NullFields: []string{"SourceVariable"},
+	})
 	codec.RegisterTypeDefaults("Forms$PageVariable", codec.TypeDefaults{
 		EmptyStringFields: []string{"LocalVariable", "PageParameter", "SnippetParameter", "SubKey", "Widget"},
 		FalseFields:       []string{"UseAllPages"},
@@ -2324,6 +2331,13 @@ func clientActionToGen(a pages.ClientAction) (element.Element, error) {
 		g := genPg.NewDeleteClientAction()
 		assignID(g)
 		g.SetClosePage(x.ClosePage)
+		// A grid's selection is a PageVariable naming only the widget, as
+		// Studio Pro stores it for a control-bar Delete button; without it
+		// mx check reports CE7005 (ako/mxcli#1932). The property is 10.4+:
+		// canon.StripUndeclaredProperties refuses it on an older project.
+		if sv := x.SourceVariable; sv != nil {
+			g.SetSourceVariable(pageVariableToGen(sv.Widget, sv.Variable, sv.Kind))
+		}
 		g.SetDisabledDuringExecution(actionDisabledDuringExecution(x.ActionExecution))
 		return g, nil
 	case *pages.PageClientAction:
