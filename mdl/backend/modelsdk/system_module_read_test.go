@@ -12,7 +12,7 @@ import (
 // virtual System module's attributes must each have a unique, non-empty ID.
 // Empty IDs collide on attributes_data.Id and break every catalog query.
 func TestSystemDomainModel_UniqueAttrIDs(t *testing.T) {
-	dm := buildSystemDomainModel()
+	dm := buildSystemDomainModel(nil)
 	seen := map[string]string{}
 	for _, e := range dm.Entities {
 		for _, a := range e.Attributes {
@@ -53,7 +53,7 @@ func TestSystemDomainModel_StringLengthsReachTheModel(t *testing.T) {
 		"Error.Message": 0,
 	}
 
-	dm := buildSystemDomainModel()
+	dm := buildSystemDomainModel(nil)
 	seen := map[string]bool{}
 	for _, e := range dm.Entities {
 		for _, a := range e.Attributes {
@@ -86,7 +86,7 @@ func TestSystemDomainModel_StringLengthsReachTheModel(t *testing.T) {
 // System.FileDocument read as storing no owner and `[System.owner = …]` on any
 // of its specializations was refused at check time while mxbuild built it.
 func TestSystemDomainModel_SystemMemberFlagsReachTheModel(t *testing.T) {
-	dm := buildSystemDomainModel()
+	dm := buildSystemDomainModel(nil)
 	byName := map[string]*domainmodel.Entity{}
 	for _, e := range dm.Entities {
 		byName[e.Name] = e

@@ -20,7 +20,7 @@ func TestGetDomainModel_VirtualSystemModule(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = b.Disconnect() })
 
-	sys := buildSystemDomainModel()
+	sys := buildSystemDomainModel(nil)
 	dm, err := b.GetDomainModel(sys.ContainerID)
 	if err != nil {
 		t.Fatalf("GetDomainModel(System) errored: %v", err)
@@ -39,7 +39,7 @@ func TestGetDomainModel_VirtualSystemModule(t *testing.T) {
 // ASSOCIATIONS and DESCRIBE MODULE System silently omitted every System
 // association on the modelsdk engine.
 func TestSystemDomainModel_IncludesAssociations(t *testing.T) {
-	dm := buildSystemDomainModel()
+	dm := buildSystemDomainModel(nil)
 	if len(dm.Associations) != len(meta.ModelerSystemAssociations()) {
 		t.Fatalf("System associations: got %d, want %d", len(dm.Associations), len(meta.ModelerSystemAssociations()))
 	}
@@ -86,7 +86,7 @@ func TestSystemDomainModel_IncludesAssociations(t *testing.T) {
 // clean rule from the same script — the control that pins this to the list
 // rather than to the GRANT path reading it.
 func TestSystemDomainModel_OmitsRuntimeOnlyEntities(t *testing.T) {
-	dm := buildSystemDomainModel()
+	dm := buildSystemDomainModel(nil)
 
 	entities := make(map[string]bool, len(dm.Entities))
 	for _, e := range dm.Entities {

@@ -491,6 +491,17 @@ func checkMembers(ctx *ExecContext, sc *scriptContext, authored map[string]bool,
 						"Retrieve the associated object and change that instead (`retrieve $obj from $var/%s;` then `change $obj (%s = ...)`); "+
 						"mxbuild rejects this form with CE1613",
 					flowQN, name, entityQN, name[:dot], name[dot+1:]))
+			} else if strings.Count(name, ".") == 1 && moduleLacksAssociation(ctx, sc, name[:dot], name[dot+1:]) {
+				// `Module.Assoc` over a real module is an association, and only
+				// one: exec's builder refuses a name the module does not have,
+				// so check must too, or the two disagree (ako/mxcli#1810 — on a
+				// 9.x project, System.WorkflowUserTask_Assignees passed check
+				// and stopped exec; on a version-blind System model it wrote
+				// and failed the build with CE1613).
+				out = append(out, fmt.Sprintf(
+					"%s: %q on %s is not an association the project has (and a one-qualifier name cannot be "+
+						"an attribute) — mxbuild reports CE1613 \"no longer exists\"",
+					flowQN, name, entityQN))
 			}
 			continue
 		}
@@ -624,4 +635,41 @@ func nearMembers(ctx *ExecContext, entityQN string) string {
 		return ""
 	}
 	return nearMembersFor(b, entityQN)
+}
+
+// moduleLacksAssociation reports whether module provably has no association
+// named assoc: neither the project's domain model of that module nor the
+// script declares one. A module the project cannot be read for answers false
+// (could-not-establish stays silent).
+func moduleLacksAssociation(ctx *ExecContext, sc *scriptContext, module, assoc string) bool {
+	if sc != nil {
+		if qn, ok := sc.associations[assoc]; ok && strings.EqualFold(qn, module+"."+assoc) {
+			return false
+		}
+		if sc.modules[module] {
+			return false // created by the script: its domain model is not readable yet
+		}
+	}
+	if ctx == nil || ctx.Backend == nil || !ctx.Connected() {
+		return false
+	}
+	mod, err := ctx.Backend.GetModuleByName(module)
+	if err != nil || mod == nil {
+		return false
+	}
+	dm, err := ctx.Backend.GetDomainModel(mod.ID)
+	if err != nil || dm == nil {
+		return false
+	}
+	for _, a := range dm.Associations {
+		if a != nil && a.Name == assoc {
+			return false
+		}
+	}
+	for _, a := range dm.CrossAssociations {
+		if a != nil && a.Name == assoc {
+			return false
+		}
+	}
+	return true
 }
