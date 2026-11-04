@@ -36,15 +36,25 @@ type scriptContext struct {
 	// association endpoint check from refusing what exec will find (#555).
 	indirectEntities      map[string]bool
 	externalEntityModules map[string]bool
-	enumerations          map[string]bool // Enumerations created (Module.Enum)
-	microflows            map[string]bool // Microflows created (Module.Microflow)
-	nanoflows             map[string]bool // Nanoflows created (Module.Nanoflow)
-	pages                 map[string]bool // Pages created (Module.Page)
-	snippets              map[string]bool // Snippets created (Module.Snippet)
-	layouts               map[string]bool // Layouts created (Module.Layout)
-	menus                 map[string]bool // Menu documents created (Module.Menu)
-	constants             map[string]bool // Constants created (Module.Constant)
-	workflows             map[string]bool // Workflows created (Module.Workflow)
+	// indirectDocs is the same for every document kind ("microflow:M.Name"),
+	// and renamedModules the names a rename module gives, so the statement
+	// target check does not refuse what an earlier statement provides
+	// (ako/mxcli#1821). opaqueModules are modules a statement fills with
+	// documents it does not name (generated connectors, business event
+	// services); opaqueScript is an execute script, which can create anything.
+	indirectDocs   map[string]bool
+	renamedModules map[string]bool
+	opaqueModules  map[string]bool
+	opaqueScript   bool
+	enumerations   map[string]bool // Enumerations created (Module.Enum)
+	microflows     map[string]bool // Microflows created (Module.Microflow)
+	nanoflows      map[string]bool // Nanoflows created (Module.Nanoflow)
+	pages          map[string]bool // Pages created (Module.Page)
+	snippets       map[string]bool // Snippets created (Module.Snippet)
+	layouts        map[string]bool // Layouts created (Module.Layout)
+	menus          map[string]bool // Menu documents created (Module.Menu)
+	constants      map[string]bool // Constants created (Module.Constant)
+	workflows      map[string]bool // Workflows created (Module.Workflow)
 	// Task queues created (Module.Queue, lower-cased — a queue is resolved
 	// case-insensitively, like buildQueueQualifiedNames). Missing, a queue the
 	// script creates was "not found" for every `in queue` call to it
@@ -178,6 +188,9 @@ func newScriptContext() *scriptContext {
 		pageParams:            make(map[string][]string),
 		pageParamNames:        make(map[string][]string),
 		pageParamEdits:        make(map[string][]ast.AlterPageOperation),
+		indirectDocs:          make(map[string]bool),
+		renamedModules:        make(map[string]bool),
+		opaqueModules:         make(map[string]bool),
 		entityGeneralizations: make(map[string]string),
 	}
 }
@@ -309,10 +322,24 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 		if s.ObjectType == "entity" && s.Name.Module != "" && s.NewName != "" {
 			sc.indirectEntities[s.Name.Module+"."+s.NewName] = true
 		}
+		if s.ObjectType == "module" && s.NewName != "" {
+			sc.renamedModules[s.NewName] = true
+		} else if s.Name.Module != "" && s.NewName != "" && !s.DryRun {
+			sc.indirectDocs[s.ObjectType+":"+s.Name.Module+"."+s.NewName] = true
+		}
 	case *ast.MoveStmt:
 		if s.DocumentType == ast.DocumentTypeEntity && s.TargetModule != "" {
 			sc.indirectEntities[s.TargetModule+"."+s.Name.Name] = true
 		}
+		if s.TargetModule != "" {
+			sc.indirectDocs[moveTargetKind(s.DocumentType)+":"+s.TargetModule+"."+s.Name.Name] = true
+		}
+	case *ast.ExecuteScriptStmt:
+		sc.opaqueScript = true
+	case *ast.SQLGenerateConnectorStmt:
+		sc.opaqueModules[s.Module] = true
+	case *ast.CreateBusinessEventServiceStmt:
+		sc.opaqueModules[s.Name.Module] = true
 	case *ast.CreateEnumerationStmt:
 		if s.Name.Module != "" {
 			sc.enumerations[s.Name.String()] = true
