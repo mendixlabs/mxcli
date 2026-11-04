@@ -8,11 +8,12 @@ package modelsdkbackend
 // — the method would quietly go back to erroring.
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 // imageWidgetID is in the shared fixture; combobox and datagrid are too.
@@ -21,7 +22,7 @@ const imageWidgetID = "com.mendix.widget.web.image.Image"
 func customWidgetFixture(t *testing.T) *Backend {
 	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../../testdata/expr-checker")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../../testdata/expr-checker"); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	b := New()

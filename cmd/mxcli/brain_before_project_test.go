@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/brain"
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 // A brain can be born before its project (ako/mxcli#1949). These tests pin
@@ -190,7 +191,7 @@ func TestBrainBornBeforeTheProjectIsCountedAfterIt(t *testing.T) {
 		t.Fatalf("checkNewProjectDestination = %v, %v; want adopt", adopt, err)
 	}
 	stage := filepath.Join(t.TempDir(), "stage")
-	if err := os.CopyFS(stage, os.DirFS(filepath.Join("..", "..", "testdata", "pedapp"))); err != nil {
+	if err := testutil.CopyFixture(stage, filepath.Join("..", "..", "testdata", "pedapp")); err != nil {
 		t.Fatal(err)
 	}
 	if err := moveProject(stage, dir); err != nil {

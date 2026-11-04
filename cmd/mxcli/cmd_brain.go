@@ -66,6 +66,7 @@ on 'plan' and 'check' with the same -C count against the model.`,
   mxcli brain brief --slice 02-approvals -p app.mpr
   mxcli brain plan -p app.mpr
   mxcli brain check -p app.mpr
+  mxcli brain list -p app.mpr --json
   mxcli brain show -p app.mpr`,
 }
 
@@ -405,6 +406,71 @@ func runBrainChange(cmd *cobra.Command, id, verb string, change func(brain.Entry
 		return
 	}
 	fmt.Printf("%s %s in %s\n", verb, id, shardLabel(moved.To))
+}
+
+var brainListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "The committed entries as data, filterable (the structured read of docs/brain/)",
+	Long: `List the committed entries — the promoted side of what 'staged' shows.
+
+With --json each entry is the object 'staged --json' returns (id, kind, slice,
+open, title, body, anchors, source, date) plus the shard it is in, so a tool can
+render the store without parsing its markdown. 'brief --json' is for a prompt;
+this is for a program.
+
+  --slice <s>       one slice: its requirements and the questions filed on it
+  --kind <k>        decision or requirement
+  --open            only open questions; --open=false only settled entries
+
+Blocks whose metadata line cannot be read are listed under "malformed" rather
+than dropped, so a listing never silently shows fewer entries than the files
+hold. No model is needed.`,
+	Example: `  mxcli brain list -C ./App --json
+  mxcli brain list --slice 01-scheduling -p app.mpr --json
+  mxcli brain list --open -p app.mpr`,
+	Args: cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		store := brain.NewStore(brainProjectDir(cmd))
+		var f brain.ListFilter
+		f.Slice, _ = cmd.Flags().GetString("slice")
+		kind, _ := cmd.Flags().GetString("kind")
+		f.Kind = brain.Kind(kind)
+		if cmd.Flags().Changed("open") {
+			open, _ := cmd.Flags().GetBool("open")
+			f.Open = &open
+		}
+		res, err := store.List(f)
+		if err != nil {
+			brainFatal(err)
+		}
+		if globalJSONFlag {
+			brainJSON(map[string]any{
+				"entries":   res.Entries,
+				"count":     len(res.Entries),
+				"malformed": res.Malformed,
+			})
+			return
+		}
+		if !store.Exists() {
+			fmt.Println("No store yet. Create one with 'mxcli brain init'.")
+			return
+		}
+		for _, m := range res.Malformed {
+			fmt.Printf("MALFORMED   %s\n", m)
+		}
+		if len(res.Entries) == 0 {
+			fmt.Println("No committed entries match.")
+			return
+		}
+		for _, e := range res.Entries {
+			open := ""
+			if e.Open {
+				open = "  OPEN"
+			}
+			fmt.Printf("%s  %-18s  %s%s\n", e.ID, shardLabel(e.Shard), e.Title, open)
+		}
+		fmt.Printf("\n%d committed.\n", len(res.Entries))
+	},
 }
 
 var brainShowCmd = &cobra.Command{
@@ -1057,6 +1123,7 @@ func brainLocatedCommands() []*cobra.Command {
 		brainInitCmd, brainCaptureCmd, brainStagedCmd, brainPromoteCmd,
 		brainDropCmd, brainShowCmd, brainCheckCmd, brainPlanCmd,
 		brainResolveCmd, brainBriefCmd, brainEditCmd, brainMoveCmd,
+		brainListCmd,
 	}
 }
 
@@ -1078,6 +1145,9 @@ func init() {
 	brainEditCmd.Flags().StringSliceP("anchor", "a", nil,
 		"Replace the anchors with these (repeatable); without -a the anchors are kept")
 	brainMoveCmd.Flags().StringP("slice", "s", "", "The slice to move the requirement to")
+	brainListCmd.Flags().String("slice", "", "Only this slice's entries")
+	brainListCmd.Flags().String("kind", "", "Only decisions or only requirements (decision|requirement)")
+	brainListCmd.Flags().Bool("open", false, "Only open questions; --open=false for only settled entries")
 	brainPromoteCmd.Flags().String("to", "",
 		"Override the derived shard (use 'project' for a cross-cutting fact)")
 	brainStagedCmd.Flags().String("since", "",
@@ -1097,7 +1167,7 @@ func init() {
 		"Modules being worked, for a session with no slice; repeatable")
 	brainCmd.AddCommand(brainInitCmd, brainCaptureCmd, brainStagedCmd,
 		brainPromoteCmd, brainDropCmd, brainShowCmd, brainCheckCmd, brainPlanCmd,
-		brainResolveCmd, brainBriefCmd, brainEditCmd, brainMoveCmd)
+		brainResolveCmd, brainBriefCmd, brainEditCmd, brainMoveCmd, brainListCmd)
 	rootCmd.AddCommand(brainCmd)
 }
 
@@ -1132,7 +1202,11 @@ type stagedEntry struct {
 func stagedReport(all, shown []brain.Entry, filter brain.StagedFilter) map[string]any {
 	out := make([]stagedEntry, 0, len(shown))
 	for _, e := range shown {
-		out = append(out, stagedEntry{Entry: e, Shard: e.Shard()})
+		shard := e.Shard()
+		// Explicit, as 'list' gives it: a consumer must not have to know
+		// that an empty kind means a decision.
+		e.Kind = e.EntryKind()
+		out = append(out, stagedEntry{Entry: e, Shard: shard})
 	}
 	rep := map[string]any{"staged": out, "count": len(out)}
 

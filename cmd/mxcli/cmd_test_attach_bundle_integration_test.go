@@ -29,6 +29,14 @@ import (
 //
 // The control is the same page module before the attach, which the boot's
 // first (complete) build serves with a 200.
+//
+// On Mendix 11.14.0 the attach cannot apply at all: every later build in a serve
+// process fails, even for an unchanged model, and the failed response carries no
+// restartRequired (measured over mxbuild's /build API; 11.15.0 builds them and
+// answers false for a microflow). The only answer is a cold build's, which asks
+// for a restart whatever changed, so the attach is refused and must say why
+// rather than claim an entity changed. Its pages must survive all the same. When
+// an 11.14 mxbuild builds incrementally again, that branch fails and should go.
 func TestTestAttach_KeepsTheHostingAppsPageBundles(t *testing.T) {
 	version := os.Getenv("MXCLI_RUNLIFE_VERSION")
 	if version == "" {
@@ -57,6 +65,7 @@ func TestTestAttach_KeepsTheHostingAppsPageBundles(t *testing.T) {
 		t.Skipf("mx create-project: %v\n%s", err, out)
 	}
 	mpr := filepath.Join(work, "App.mpr")
+	coldAnswerOnly := projectAtLeast(t, mpr, 11, 14) && !projectAtLeast(t, mpr, 11, 15)
 
 	const appPort, adminPort, servePort = 8487, 8497, 6943
 	for _, p := range []int{appPort, adminPort, servePort} {
@@ -64,15 +73,20 @@ func TestTestAttach_KeepsTheHostingAppsPageBundles(t *testing.T) {
 			t.Skipf("port %d is in use", p)
 		}
 	}
-	mxcli := func(args ...string) string {
+	run := func(args ...string) (string, error) {
 		cmd := exec.Command(bin, args...)
 		cmd.Dir = work
 		var out bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &out, &out
-		if err := cmd.Run(); err != nil {
-			t.Fatalf("mxcli %v: %v\n%s", args, err, out.String())
+		err := cmd.Run()
+		return out.String(), err
+	}
+	mxcli := func(args ...string) string {
+		out, err := run(args...)
+		if err != nil {
+			t.Fatalf("mxcli %v: %v\n%s", args, err, out)
 		}
-		return out.String()
+		return out
 	}
 	t.Cleanup(func() { _ = exec.Command(bin, "run", "stop", "-p", mpr).Run() })
 
@@ -102,9 +116,16 @@ func TestTestAttach_KeepsTheHostingAppsPageBundles(t *testing.T) {
 	if err := os.WriteFile(test, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	out := mxcli("test", test, "-p", mpr, "--attach", "--skip-app-startup", "--require-assertions")
-	if !strings.Contains(out, "Passed: 1") {
-		t.Fatalf("the attach run did not pass:\n%s", out)
+	out, err := run("test", test, "-p", mpr, "--attach", "--skip-app-startup", "--require-assertions")
+	switch {
+	case coldAnswerOnly:
+		if err == nil || !strings.Contains(out, "could not build this change incrementally, and the full build") ||
+			strings.Contains(out, "an entity or association changed") {
+			t.Fatalf("Mendix 11.14: want the attach refused for want of an incremental answer, not for an entity "+
+				"change; if this mxbuild builds incrementally again, drop the 11.14 branch (err %v):\n%s", err, out)
+		}
+	case err != nil || !strings.Contains(out, "Passed: 1"):
+		t.Fatalf("the attach run did not pass (err %v):\n%s", err, out)
 	}
 
 	if got := status(); got != http.StatusOK {

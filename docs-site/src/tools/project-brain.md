@@ -316,6 +316,41 @@ rewrite the file. The queue is less forgiving: an older build that rewrites
 `.mxcli/brain/staged.jsonl` (on a capture, drop or promote) drops the source of
 the entries still queued there.
 
+## Reading the store from a program
+
+```bash
+mxcli brain list -C ./App --json
+mxcli brain list --slice 01-scheduling --json -p app.mpr
+mxcli brain list --open --json -p app.mpr      # --open=false: only settled entries
+```
+
+`brain list --json` is the committed side of `brain staged --json`: the same
+entry objects — `id`, `kind`, `slice`, `open`, `title`, `body`, `anchors`,
+`source`, `date` — each with the `shard` it is in, in store order (`project.md`,
+modules, slices; file order within each). `kind` is always present.
+
+```json
+{
+  "count": 1,
+  "entries": [
+    {
+      "id": "72dfdd", "kind": "requirement", "slice": "01-scheduling",
+      "title": "A planner can create a visit",
+      "anchors": ["@Scheduling.Visit"], "source": "docs/sample-prd.md#L18-21",
+      "date": "2026-11-04", "shard": "plan/01-scheduling"
+    }
+  ],
+  "malformed": []
+}
+```
+
+Use it rather than parsing the shard files: their format is mxcli's to change.
+`brief --json` is the other read, meant for a prompt — it returns each shard's
+rendered markdown. A block whose metadata line cannot be read is listed under
+`malformed` instead of being dropped, so a listing never quietly shows fewer
+entries than the files hold. Built-ness is not in the listing: that is derived
+from the model by `brain plan`, never stored on an entry.
+
 ## Editing an entry
 
 ```bash
@@ -425,6 +460,7 @@ progress from 65/65 to 63/65 and the number was the only symptom.
 | `brain plan [--slice <name>]` | Each slice's requirements counted against the model |
 | `brain brief --slice <name> \| --module <M>` | The reading pack: exactly the shards that work needs |
 | `brain check [--changed]` | Anchors resolve, entries filed correctly, plus slice progress |
+| `brain list [--slice <n>] [--kind <k>] [--open]` | The committed entries; with `--json`, as data |
 | `brain show [<shard>]` | Entries, lines and headroom per shard |
 
 Dropping the last entry from a module shard deletes the file, so the directory

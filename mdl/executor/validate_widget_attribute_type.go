@@ -386,7 +386,11 @@ func (v *attributeScopeValidator) checkInputBinding(w *ast.WidgetV3, enclosing d
 						"anything else). Bind an attribute over it (`%s/<Attribute>`), or select the associated object "+
 						"with a `combobox` over the association ["+widgetAttributeTypeRule+"]",
 					w.Name, strings.ToLower(w.Type), name, assocQN, entity, name, name))
+				return
 			}
+		}
+		if !isComboBox {
+			v.reportMissingAttribute(w, "", attr, entity, name)
 		}
 		return
 	}
@@ -401,6 +405,92 @@ func (v *attributeScopeValidator) checkInputBinding(w *ast.WidgetV3, enclosing d
 		msg += " For " + a.kind + ", use " + alt + "."
 	}
 	v.errs = append(v.errs, msg+" ["+widgetAttributeTypeRule+"]")
+}
+
+// auditMembers are the system members an entity's audit settings add —
+// bindable by these names, and never in its attribute list.
+var auditMembers = kindSet("createddate", "changeddate", "owner", "changedby")
+
+// reportMissingAttribute is CE1613 for a binding to an attribute the entity
+// in context does not have (ako/mxcli#555). Exec wrote the name as given and
+// mxbuild refused it; check had resolved neither an input widget's Attribute
+// nor a template parameter. where names the template parameter ("" for the
+// widget's own Attribute).
+func (v *attributeScopeValidator) reportMissingAttribute(w *ast.WidgetV3, where, path, entity, name string) {
+	if auditMembers[strings.ToLower(name)] {
+		return
+	}
+	var have []string
+	for _, e := range v.types.chain(entity) {
+		for _, a := range v.types.attrs[e] {
+			have = append(have, a.name)
+		}
+	}
+	sort.Strings(have)
+	const max = 12
+	list := strings.Join(have, ", ")
+	if len(have) > max {
+		list = fmt.Sprintf("%s and %d more", strings.Join(have[:max], ", "), len(have)-max)
+	}
+	if list == "" {
+		list = "none"
+	}
+	subject := fmt.Sprintf("widget `%s` (%s)", w.Name, strings.ToLower(w.Type))
+	if where != "" {
+		subject += " " + where
+	}
+	v.errs = append(v.errs, fmt.Sprintf(
+		"%s binds `%s`, but %s has no attribute %s (attributes: %s) — mxbuild reports CE1613 "+
+			"\"The selected attribute '%s.%s' no longer exists\"",
+		subject, path, entity, name, list, entity, name))
+}
+
+// checkTemplateParams judges the attribute bindings among a widget's template
+// parameters (ContentParams, CaptionParams) the way checkInputBinding judges an
+// input's Attribute: against the entity the enclosing data container supplies,
+// the context exec qualifies a bare name with (ako/mxcli#555). An expression,
+// a $variable path, or a context this walk cannot resolve is not judged.
+func (v *attributeScopeValidator) checkTemplateParams(w *ast.WidgetV3, enclosing dataContext) {
+	if enclosing.unresolved || len(enclosing.entities) == 0 {
+		return
+	}
+	for _, set := range []struct {
+		key    string
+		params []ast.ParamAssignmentV3
+	}{{"ContentParams", w.GetContentParams()}, {"CaptionParams", w.GetCaptionParams()}} {
+		for _, p := range set.params {
+			raw, ok := p.Value.(string)
+			if !ok || isTemplateExpression(raw) {
+				continue
+			}
+			path := strings.TrimPrefix(strings.TrimSpace(raw), "$currentObject/")
+			if path == "" || strings.HasPrefix(path, "$") {
+				continue
+			}
+			entity := enclosing.entities[len(enclosing.entities)-1]
+			segs := strings.Split(path, "/")
+			resolved := true
+			for _, seg := range segs[:len(segs)-1] {
+				_, next, ok := v.types.follow(seg, entity)
+				if !ok {
+					resolved = false
+					break
+				}
+				entity = next
+			}
+			name := segs[len(segs)-1]
+			if !resolved || name == "" || strings.Contains(name, ".") {
+				continue
+			}
+			if _, _, found, known := v.types.lookup(entity, name); !known || found {
+				continue
+			}
+			if _, _, isAssoc := v.types.follow(name, entity); isAssoc {
+				continue
+			}
+			v.reportMissingAttribute(w, fmt.Sprintf("%s {%d}", set.key, p.Index), raw, entity, name)
+		}
+	}
 }
 
 func anPrefix(kind string) string {

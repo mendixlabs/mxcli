@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
@@ -37,7 +38,7 @@ func storageVersion(t *testing.T, mprPath string) types.MPRVersion {
 func v2Fixture(t *testing.T) string {
 	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../../testdata/expr-checker")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../../testdata/expr-checker"); err != nil {
 		t.Fatalf("copy v2 fixture: %v", err)
 	}
 	p := filepath.Join(dst, "minimal.mpr")
@@ -51,7 +52,7 @@ func v2Fixture(t *testing.T) string {
 func v1Fixture(t *testing.T) string {
 	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../../modelsdk/mpr/testdata/v1-project")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../../modelsdk/mpr/testdata/v1-project"); err != nil {
 		t.Fatalf("copy v1 fixture: %v", err)
 	}
 	p := filepath.Join(dst, "App.mpr")

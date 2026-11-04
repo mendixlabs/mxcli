@@ -132,8 +132,8 @@ func TestServeRecovery_IncompletePrebuiltBundleRestartsServe(t *testing.T) {
 	// The fresh process says restartRequired for an unchanged model; the
 	// incremental build's answer is the one that knows what changed. Taking the
 	// cold one would restart the runtime — and drop every session — per change.
-	if res.RestartRequired {
-		t.Fatal("RestartRequired must be the incremental build's (false), not the cold build's")
+	if res.RestartRequired || res.ColdRestart {
+		t.Fatalf("RestartRequired must be the incremental build's (false), not the cold build's: %+v", res)
 	}
 	if got := out.String(); !strings.Contains(got, "dist/pages") || !strings.Contains(got, "mxbuild --serve") {
 		t.Fatalf("the recovery must be reported in one line naming what was lost, got:\n%s", got)
@@ -195,6 +195,12 @@ func TestServeRecovery_MissingClientSourceFailureRestartsServe(t *testing.T) {
 	if !res.RestartRequired {
 		t.Fatal("with no successful incremental build to say otherwise, the cold build's restartRequired stands")
 	}
+	// ...but it is a first build's answer, true whatever changed, and a caller
+	// that cannot restart the runtime (test --attach) must be able to say so
+	// rather than claim an entity changed.
+	if !res.ColdRestart {
+		t.Fatal("the cold build's restartRequired must be marked ColdRestart")
+	}
 	if f.restarts != 1 {
 		t.Fatalf("restarts = %d, want 1", f.restarts)
 	}
@@ -224,6 +230,9 @@ func TestServeRecovery_FailedRestartIsRetriedOnNextBuild(t *testing.T) {
 	}
 	if f.restarts != before+1 {
 		t.Fatalf("the next build must start a serve process first, restarts %d -> %d", before, f.restarts)
+	}
+	if !res.ColdRestart {
+		t.Fatal("the first build of the process just started is a cold answer and must be marked ColdRestart")
 	}
 }
 
