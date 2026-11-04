@@ -4,11 +4,11 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 )
 
@@ -18,7 +18,7 @@ import (
 func flowLayoutFixture(t *testing.T) (*bytes.Buffer, func(args ...string) error) {
 	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../testdata/expr-checker")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../testdata/expr-checker"); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	exec, logger := newLoggedExecutor("test")

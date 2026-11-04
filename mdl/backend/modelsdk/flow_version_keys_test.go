@@ -3,10 +3,10 @@
 package modelsdkbackend
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
@@ -40,7 +40,7 @@ import (
 func copyV9Fixture(t *testing.T) string {
 	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../../modelsdk/mpr/testdata/v1-project")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../../modelsdk/mpr/testdata/v1-project"); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	return filepath.Join(dst, "App.mpr")
