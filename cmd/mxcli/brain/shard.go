@@ -50,6 +50,15 @@ func renderEntry(e Entry) string {
 		open = " · OPEN"
 	}
 	fmt.Fprintf(&b, "Anchors: %s · id `%s` · %s%s\n", renderAnchors(e.Anchors), e.ID, e.Date, open)
+	if e.Source != "" {
+		// Its own line, directly after the metadata line (ako/mxcli#1951).
+		// Not ON that line: older builds match it with an exact regex and
+		// would report every entry carrying a source as malformed. Not
+		// before it: older builds discard lines between title and metadata
+		// on their next rewrite. Here, an older build reads it as the first
+		// line of the body and keeps it.
+		fmt.Fprintf(&b, "Source: `%s`\n", e.Source)
+	}
 	if e.Body != "" {
 		fmt.Fprintf(&b, "\n%s\n", e.Body)
 	}
@@ -137,9 +146,27 @@ func parseEntry(block string) (Entry, bool) {
 	if metaAt < 0 {
 		return Entry{}, false
 	}
-	e.Body = strings.TrimSpace(strings.Join(lines[metaAt+1:], "\n"))
+	rest := lines[metaAt+1:]
+	// The first non-blank line after the metadata may be the source. An
+	// older build that rewrote the shard put a blank line before it, having
+	// taken it for body text, so blank lines are skipped — but only the FIRST
+	// line is read: a body that mentions a source further down is prose.
+	for i, ln := range rest {
+		if strings.TrimSpace(ln) == "" {
+			continue
+		}
+		if m := sourceLine.FindStringSubmatch(strings.TrimSpace(ln)); m != nil {
+			e.Source = m[1]
+			rest = rest[i+1:]
+		}
+		break
+	}
+	e.Body = strings.TrimSpace(strings.Join(rest, "\n"))
 	return e, true
 }
+
+// sourceLine matches an entry's provenance line.
+var sourceLine = regexp.MustCompile("^Source: `([^`]+)`$")
 
 func firstLine(s string) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {

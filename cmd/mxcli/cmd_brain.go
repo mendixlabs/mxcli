@@ -62,6 +62,7 @@ on 'plan' and 'check' with the same -C count against the model.`,
   mxcli brain promote a1b2c3 -p app.mpr
   mxcli brain edit a1b2c3 "Orders are committed by Finance, never by Sales" -p app.mpr
   mxcli brain capture "Orders must be approvable by a manager" --slice 02-approvals -a @Sales.ACT_Order_Approve -p app.mpr
+  mxcli brain capture "A planner can create a visit" -s 01-scheduling --source docs/prd.md#L18-21 -p app.mpr
   mxcli brain brief --slice 02-approvals -p app.mpr
   mxcli brain plan -p app.mpr
   mxcli brain check -p app.mpr
@@ -117,6 +118,11 @@ var brainCaptureCmd = &cobra.Command{
 		}
 		if err != nil {
 			brainFatal(err)
+		}
+		if raw, _ := cmd.Flags().GetString("source"); raw != "" {
+			if e.Source, err = brainSource(dir, raw); err != nil {
+				brainFatal(err)
+			}
 		}
 		store, queue := brain.NewStore(dir), brain.NewQueue(dir)
 		// Already committed is a duplicate too, found by content: an edited
@@ -296,10 +302,20 @@ An edit that would make the entry say the same as another is refused.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		anchors, _ := cmd.Flags().GetStringSlice("anchor")
 		replace := cmd.Flags().Changed("anchor")
-		if len(args) == 1 && !replace {
-			brainFatal(fmt.Errorf("nothing to change: give the new text, -a anchors, or both"))
+		var source string
+		if raw, _ := cmd.Flags().GetString("source"); raw != "" {
+			var err error
+			if source, err = brainSource(brainProjectDir(cmd), raw); err != nil {
+				brainFatal(err)
+			}
+		}
+		if len(args) == 1 && !replace && source == "" {
+			brainFatal(fmt.Errorf("nothing to change: give the new text, -a anchors, --source, or a combination"))
 		}
 		runBrainChange(cmd, args[0], "Edited", func(e brain.Entry) (brain.Entry, error) {
+			if source != "" {
+				e.Source = source
+			}
 			text := e.Title
 			if e.Body != "" {
 				text += "\n\n" + e.Body
@@ -331,6 +347,24 @@ would turn it into a requirement, which is a change of meaning, not of place.`,
 			return e.MoveToSlice(slice)
 		})
 	},
+}
+
+// brainSource resolves a --source the way a shell user means it — a relative
+// path is relative to where they ran the command — and stores it relative to
+// the project directory, so it means the same on every checkout.
+func brainSource(projectDir, raw string) (string, error) {
+	path, locator, hasLocator := strings.Cut(raw, "#")
+	if path != "" && !filepath.IsAbs(path) {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return "", err
+		}
+		path = abs
+	}
+	if hasLocator {
+		path += "#" + locator
+	}
+	return brain.NormalizeSource(projectDir, path)
 }
 
 // runBrainChange applies a change to an entry wherever it is — the queue first,
@@ -604,6 +638,9 @@ axis, not a fourth state — an anchor can resolve perfectly and the entry still
 sit in the wrong file. At least one anchor must belong to the entry's shard;
 anchors into other modules are fine, because a fact can genuinely span two.
 
+An entry recorded with --source must still find that document in the project;
+one whose source file is gone fails the check, like an anchor that names nothing.
+
 With no .mpr at the -p path there is nothing to resolve against: every anchor
 is UNVERIFIABLE, which is counted and reported once and does not fail.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -676,6 +713,9 @@ func printBrainReportCI(rep brain.Report) {
 	for _, m := range rep.Misfiled {
 		fmt.Printf("brain: %s: %s: misfiled, resolves in %s\n", shardLabel(m.Shard), m.EntryID, m.Belongs)
 	}
+	for _, m := range rep.MissingSources {
+		fmt.Printf("brain: %s: %s: source %s not found\n", shardLabel(m.Shard), m.EntryID, brain.SourcePath(m.Source))
+	}
 }
 
 // printNoModel says, once, that nothing could be checked. Without it a plan of
@@ -712,6 +752,10 @@ func printBrainReport(rep brain.Report, loc brainLocation) {
 		}
 		fmt.Printf("MISFILED      %s: %q is in %s but resolves in %s\n",
 			m.EntryID, m.Title, shardLabel(m.Shard), belongs)
+	}
+	for _, m := range rep.MissingSources {
+		fmt.Printf("NO SOURCE     %s: %q cites %s, which is not in the project\n",
+			m.EntryID, m.Title, brain.SourcePath(m.Source))
 	}
 	if len(rep.Slices) > 0 {
 		fmt.Println()
@@ -1027,6 +1071,10 @@ func init() {
 		"Record this as an OPEN QUESTION — something not decided yet, so its anchors are not checked")
 	brainCaptureCmd.Flags().StringP("slice", "s", "",
 		"Record this as a requirement of the named slice (plan/<slice>.md) instead of a decision")
+	brainCaptureCmd.Flags().String("source", "",
+		"Where this came from: a document in the project, optionally #<locator> (docs/prd.md#L18-21)")
+	brainEditCmd.Flags().String("source", "",
+		"Set where this came from: a document in the project, optionally #<locator>")
 	brainEditCmd.Flags().StringSliceP("anchor", "a", nil,
 		"Replace the anchors with these (repeatable); without -a the anchors are kept")
 	brainMoveCmd.Flags().StringP("slice", "s", "", "The slice to move the requirement to")

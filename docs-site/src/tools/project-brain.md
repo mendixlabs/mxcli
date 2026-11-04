@@ -281,6 +281,41 @@ Both `brain check` and `mxcli lint` report unanswered questions until one is
 resolved. A question nobody answers is the one kind of entry that gets more
 expensive the longer it sits.
 
+## Where an entry came from
+
+```bash
+mxcli brain capture "A planner can create a visit" -s 01-scheduling -a @Scheduling.Visit \
+  --source docs/sample-prd.md#L18-21 -p app.mpr
+```
+
+`--source` records the document an entry was taken from, and optionally where
+in it after a `#` — a line range, a heading, whatever locates it. It is rendered
+on its own line under the anchors and is in the JSON (`staged --json`):
+
+```markdown
+## A planner can create a visit
+
+Anchors: `@Scheduling.Visit` · id `72dfdd` · 2026-11-04
+Source: `docs/sample-prd.md#L18-21`
+```
+
+The path is stored **relative to the project directory** — type it relative to
+where you are, or absolute — so it means the same on every checkout. The
+document has to be **in the project**: a source outside it, or one that does not
+exist, is refused, because provenance pointing at a file nobody else has is not
+provenance. If the document later disappears, `brain check` fails with
+`NO SOURCE`, as it does for an anchor that names nothing.
+
+`brain edit <id> --source …` sets or changes it; an edit of the wording keeps it.
+The source is provenance, not content: the same requirement found in two places
+is still one entry.
+
+Older mxcli builds read a shard with sources without complaint — they see the
+`Source:` line as the first line of the entry's text and keep it when they
+rewrite the file. The queue is less forgiving: an older build that rewrites
+`.mxcli/brain/staged.jsonl` (on a capture, drop or promote) drops the source of
+the entries still queued there.
+
 ## Editing an entry
 
 ```bash
@@ -381,7 +416,8 @@ progress from 65/65 to 63/65 and the number was the only symptom.
 | `brain staged [--since <id>] [--slice <n>] [--fail-if-empty]` | Lists the queue with the shard each entry would land in |
 | `brain promote <id> [--to <shard>]` | Writes it into its shard |
 | `brain drop <id>` | Removes it from the queue or from its shard |
-| `brain edit <id> ["<text>"] [-a @Anchor]…` | Rewrites it in place, staged or committed; the id does not change |
+| `brain capture "<text>" --source <doc>[#<locator>]` | Records which document, and where in it, the entry came from |
+| `brain edit <id> ["<text>"] [-a @Anchor]… [--source <doc>]` | Rewrites it in place, staged or committed; the id does not change |
 | `brain move <id> --slice <name>` | Moves a requirement to another slice; the id does not change |
 | `brain capture "<text>" --slice <name> [-a @Anchor]…` | Queues a **requirement** of that slice |
 | `brain capture "<text>" --open [-a @Anchor]…` | Queues an **open question**; anchors not checked |
