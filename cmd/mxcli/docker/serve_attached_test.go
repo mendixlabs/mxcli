@@ -107,6 +107,40 @@ func TestAttachedServe_CompletesTheBundleOnItsOwnServe(t *testing.T) {
 	}
 }
 
+// Mendix 11.14.0: the host's build fails outright, even for an unchanged model,
+// and the failure carries no restartRequired (measured over mxbuild's /build
+// API). The private serve's cold build is then the only answer, and it asks for
+// a restart whatever changed: the result says it is that answer, so the attach
+// can refuse without blaming an entity.
+func TestAttachedServe_FailedHostBuildLeavesOnlyAColdAnswer(t *testing.T) {
+	deploy := prebuiltDeployment(t)
+	config := filepath.Join(deploy, "web", "rollup.config.mjs")
+	host := &scriptedServe{build: func(_, _ int) (*BuildResult, error) {
+		return &BuildResult{Status: "Failure", Message: "Compilation of the app bundle failed.",
+			Raw: []byte(`{"problems":{"errors":[{"details":"Error [ERR_MODULE_NOT_FOUND]: Cannot find module '` +
+				config + `' imported from rollup-runner.mjs"}]},"status":"Failure"}`)}, nil
+	}}
+	var own *privateServe
+	a := attachedServeFor(host, deploy, func() (ownedServe, error) {
+		own = newPrivateServe(t, deploy)
+		return own, nil
+	})
+	res, err := a.Build(BuildRequest{ProjectFilePath: "/p/App.mpr"})
+	if err != nil || !res.OK() {
+		t.Fatalf("Build = %+v, %v", res, err)
+	}
+	if !res.RestartRequired || !res.ColdRestart {
+		t.Fatalf("want the cold build's restartRequired, marked ColdRestart; got %+v", res)
+	}
+	if host.restarts != 0 || own == nil {
+		t.Fatalf("host restarts = %d, private serve started = %v; want only a private one", host.restarts, own != nil)
+	}
+	if pagesIn(t, deploy) == 0 {
+		t.Fatal("dist/pages is empty after the attach's build")
+	}
+	a.Close()
+}
+
 // Control: a host build that leaves the bundle complete is all there is — no
 // private serve process is started for it.
 func TestAttachedServe_CompleteHostBuildStartsNothing(t *testing.T) {
