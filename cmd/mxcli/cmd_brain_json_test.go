@@ -105,10 +105,7 @@ func TestBrainStagedJSONIsStillJSONWhenEmpty(t *testing.T) {
 // and the control below (human output is NOT JSON) passes for the wrong reason.
 func runBrainForTest(t *testing.T, args []string) string {
 	t.Helper()
-	if err := rootCmd.PersistentFlags().Set("json", "false"); err != nil {
-		t.Fatal(err)
-	}
-	globalJSONFlag = false
+	resetBrainFlagsForTest(t)
 
 	out, err := captureStdout(t, func() error {
 		rootCmd.SetArgs(args)
@@ -118,6 +115,24 @@ func runBrainForTest(t *testing.T, args []string) string {
 		t.Fatalf("`mxcli %v` failed: %v\n%s", args, err, out)
 	}
 	return out
+}
+
+// resetBrainFlagsForTest clears what cobra carries between runs: --json, and
+// -p / -C on every brain command. A -C left over from one run makes the next
+// run's -p look like both were passed, which is refused.
+func resetBrainFlagsForTest(t *testing.T) {
+	t.Helper()
+	if err := rootCmd.PersistentFlags().Set("json", "false"); err != nil {
+		t.Fatal(err)
+	}
+	globalJSONFlag = false
+	for _, c := range brainLocatedCommands() {
+		for _, name := range []string{"project", "dir"} {
+			if err := c.Flags().Set(name, ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 }
 
 func brainTestDay() time.Time { return time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC) }
