@@ -91,7 +91,7 @@ func TestBuildPluggableDataSource_DatabaseOverAssociationOn10(t *testing.T) {
 		t.Fatalf("parse: %v", errs)
 	}
 	w := prog.Statements[0].(*ast.CreatePageStmtV3).Widgets[0]
-	built, entity, err := pb.buildPluggableDataSourceV3(w.GetDataSource())
+	built, entity, err := pb.buildPluggableDataSourceV3(w.GetDataSource(), "")
 	if err != nil {
 		t.Fatalf("buildPluggableDataSourceV3: %v", err)
 	}

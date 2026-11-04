@@ -440,3 +440,39 @@ func bsonIDKey(v any) string {
 	}
 	return ""
 }
+
+// storedUsesDatabaseSource reports whether the stored pluggable widget named
+// name holds a 9.x database source (CustomWidgets$CustomWidgetDatabaseSource)
+// anywhere in its Object (ako/mxcli#1208).
+func (pt *pluggablePassthrough) storedUsesDatabaseSource(name string) bool {
+	if pt == nil || name == "" {
+		return false
+	}
+	sp, ok := pt.byName[name]
+	if !ok || sp == nil {
+		return false
+	}
+	return bsonHasType(sp.obj, "CustomWidgets$CustomWidgetDatabaseSource")
+}
+
+// bsonHasType reports whether v, or anything below it, is a document of $Type t.
+func bsonHasType(v any, t string) bool {
+	switch x := v.(type) {
+	case bson.D:
+		for _, e := range x {
+			if e.Key == "$Type" && e.Value == t {
+				return true
+			}
+			if bsonHasType(e.Value, t) {
+				return true
+			}
+		}
+	case bson.A:
+		for _, el := range x {
+			if bsonHasType(el, t) {
+				return true
+			}
+		}
+	}
+	return false
+}
