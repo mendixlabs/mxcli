@@ -271,9 +271,13 @@ func buildPageParamEntities(ctx *ExecContext) map[string][]string {
 	if err != nil {
 		return out
 	}
-	for _, p := range all {
+	for _, p := range liveFirst(all, pageExcluded) {
 		if p == nil {
 			continue
+		}
+		key := strings.ToLower(h.GetQualifiedName(p.ContainerID, p.Name))
+		if _, seen := out[key]; seen {
+			continue // an excluded twin of a live page (#1928)
 		}
 		entities := make([]string, 0, len(p.Parameters))
 		for _, param := range p.Parameters {
@@ -281,7 +285,7 @@ func buildPageParamEntities(ctx *ExecContext) map[string][]string {
 				entities = append(entities, param.EntityName)
 			}
 		}
-		out[strings.ToLower(h.GetQualifiedName(p.ContainerID, p.Name))] = entities
+		out[key] = entities
 	}
 	return out
 }

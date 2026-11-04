@@ -121,6 +121,7 @@ func (v *attributeScopeValidator) walk(w *ast.WidgetV3, enclosing dataContext) {
 	}
 	inner := childContext(enclosing, w.GetDataSource(), v.sigs, v.pageParams)
 	v.checkInputBinding(w, enclosing)
+	v.checkTemplateParams(w, enclosing)
 	v.checkAssocListSource(w, enclosing)
 	v.checkViewAssocReverse(w, enclosing)
 	v.checkAssocHopStart(w, enclosing)

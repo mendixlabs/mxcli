@@ -409,6 +409,9 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 			for _, w := range refWarnings {
 				fmt.Fprintf(os.Stderr, "  %s\n", w)
 			}
+			// Printed here, not through report, but part of the total the
+			// closing summary gives (ako/mxcli#1928).
+			printed = append(printed, warnViolations...)
 		} else if len(warnViolations) > 0 && len(validationErrors) == 0 {
 			structured = append(structured, warnViolations...)
 		}
@@ -430,6 +433,16 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 					fmt.Fprintf(os.Stderr, "  %v\n", err)
 				}
 				fmt.Fprintf(os.Stderr, "\n✗ %d reference error(s) found\n", len(validationErrors))
+				// The closing summary is the run's total; it read "0 errors"
+				// after this line, because these are printed here rather than
+				// through report (ako/mxcli#1928).
+				for _, err := range validationErrors {
+					printed = append(printed, linter.Violation{
+						RuleID:   "MDL-REF",
+						Severity: linter.SeverityError,
+						Message:  err.Error(),
+					})
+				}
 				if hint := testFileMissingTargetHint(filePath, validationErrors); hint != "" {
 					fmt.Fprint(os.Stderr, hint)
 				}
