@@ -110,6 +110,118 @@ func init() {
 		SeeAlso: []string{"microflow", "domain-model.entity", "page", "document-folder", "create-if-not-exists"},
 	})
 
+	// `show features` had no topic, so a reader who checked the index concluded
+	// there was no way to ask which Mendix version a statement needs
+	// (ako/mxcli#1367). The same registry answers it, the topics' "Requires"
+	// lines, and the exec-time version gate.
+	Register(SyntaxFeature{
+		Path:    "features",
+		Summary: "LIST FEATURES — which MDL features a Mendix version supports, and since when",
+		Keywords: []string{
+			"show features", "list features", "features", "version", "mendix version",
+			"supported", "support", "requires", "since", "added since", "min version", "compatibility",
+		},
+		Syntax: "LIST FEATURES;                         -- the connected project's version\n" +
+			"LIST FEATURES IN <area>;               -- one area, e.g. workflows, microflows, pages\n" +
+			"LIST FEATURES FOR VERSION 10.24;       -- any version, no project needed\n" +
+			"LIST FEATURES FOR VERSION 10.24.3;\n" +
+			"LIST FEATURES ADDED SINCE 11.0;        -- what is new from a version on\n\n" +
+			"-- Areas: agent_documents, domain_model, integration, microflows, modules,\n" +
+			"-- mpr_format, navigation, oql_functions, pages, scheduled_events,\n" +
+			"-- security, workflows. SHOW FEATURES is the older spelling (MDL-DEPR002).\n" +
+			"--\n" +
+			"-- The table is sdk/versions/*.yaml, the registry `exec` and `check -p`\n" +
+			"-- gate on: a statement whose feature the project's version lacks is\n" +
+			"-- refused before anything is written. Each `mxcli syntax <topic>` page\n" +
+			"-- prints its own \"Requires: Mendix X+\" from the same registry.",
+		Example: "LIST FEATURES FOR VERSION 10.24;\nLIST FEATURES ADDED SINCE 11.0;",
+		SeeAlso: []string{"language-header", "status"},
+	})
+
+	// Every DROP statement, in one place. They used to be spread over the topic of
+	// each document type, and several (DROP ENTITY, DROP MICROFLOW, DROP NANOFLOW,
+	// DROP SNIPPET) were in none: `mxcli syntax drop` found three unrelated
+	// topics, and DROP ASSOCIATION could only be found by trial (#1716).
+	// drop_statements_drift_test.go holds this list to the grammar's
+	// dropStatement rule.
+	Register(SyntaxFeature{
+		Path:    "drop",
+		Summary: "DROP — remove a document (entity, association, microflow, page, …)",
+		Keywords: []string{
+			"drop", "delete", "remove", "destroy", "drop entity", "drop association",
+			"drop microflow", "drop nanoflow", "drop page", "drop snippet", "drop module",
+			"drop enumeration", "drop constant", "drop index", "drop annotation",
+		},
+		Syntax: "-- Domain model\n" +
+			"DROP ENTITY Module.Name;\n" +
+			"DROP EXTERNAL ENTITY Module.Name;\n" +
+			"DROP ASSOCIATION Module.Name;\n" +
+			"DROP ENUMERATION Module.Name;\n" +
+			"DROP CONSTANT Module.Name;\n" +
+			"DROP VALIDATION RULE FOR Module.Entity.Attribute [REGEX | RANGE];\n" +
+			"DROP REGULAR EXPRESSION Module.Name;\n" +
+			"DROP INDEX Module.IndexName ON Module.Entity;\n" +
+			"DROP ANNOTATION 'first line of the caption' IN Module;\n" +
+			"DROP ANNOTATION AT (x, y) IN Module;\n\n" +
+			"-- Logic\n" +
+			"DROP MICROFLOW Module.Name;\n" +
+			"DROP NANOFLOW Module.Name;\n" +
+			"DROP RULE Module.Name;\n" +
+			"DROP JAVA ACTION Module.Name;\n" +
+			"DROP JAVASCRIPT ACTION Module.Name;\n" +
+			"DROP WORKFLOW Module.Name;\n" +
+			"DROP TASK QUEUE Module.Name;\n" +
+			"DROP SCHEDULED EVENT Module.Name;\n\n" +
+			"-- Pages and resources\n" +
+			"DROP PAGE Module.Name;\n" +
+			"DROP SNIPPET Module.Name;\n" +
+			"DROP LAYOUT Module.Name;\n" +
+			"DROP MENU Module.Name;\n" +
+			"DROP IMAGE COLLECTION Module.Name;\n\n" +
+			"-- Integration\n" +
+			"DROP CONSUMED ODATA SERVICE Module.Name;\n" +
+			"DROP PUBLISHED ODATA SERVICE Module.Name;\n" +
+			"DROP CONSUMED REST SERVICE Module.Name;\n" +
+			"DROP PUBLISHED REST SERVICE Module.Name;\n" +
+			"DROP BUSINESS EVENT SERVICE Module.Name;\n" +
+			"DROP DATABASE CONNECTION Module.Name;\n" +
+			"DROP JSON STRUCTURE Module.Name;\n" +
+			"DROP MESSAGE DEFINITION COLLECTION Module.Name;\n" +
+			"DROP MESSAGE DEFINITION Module.Name;\n" +
+			"DROP IMPORT MAPPING Module.Name;\n" +
+			"DROP EXPORT MAPPING Module.Name;\n" +
+			"DROP DATA TRANSFORMER Module.Name;\n\n" +
+			"-- Agents\n" +
+			"DROP AI MODEL Module.Name;\n" +
+			"DROP CONSUMED MCP SERVICE Module.Name;\n" +
+			"DROP KNOWLEDGE BASE Module.Name;\n" +
+			"DROP AGENT Module.Name;\n\n" +
+			"-- Project structure\n" +
+			"DROP MODULE ModuleName;\n" +
+			"DROP FOLDER 'path' IN Module;\n" +
+			"DROP CONFIGURATION 'Name';\n\n" +
+			"-- Every form but INDEX and ANNOTATION takes IF EXISTS after the type\n" +
+			"-- (DROP ENTITY IF EXISTS Module.Name;) -- see drop-if-exists. Without it\n" +
+			"-- a missing target is an error, as in SQL.\n" +
+			"--\n" +
+			"-- Members of a document are removed with ALTER, not DROP:\n" +
+			"--   ALTER ENTITY … DROP ATTRIBUTE | DROP INDEX | DROP EVENT HANDLER\n" +
+			"--   ALTER ENUMERATION … DROP VALUE\n" +
+			"--   ALTER MESSAGE DEFINITION … DROP MEMBER\n" +
+			"--   ALTER PAGE / ALTER SNIPPET … DROP WIDGET\n" +
+			"--   ALTER WORKFLOW … DROP ACTIVITY | DROP OUTCOME | DROP PATH …\n" +
+			"-- Security has its own: DROP USER ROLE, DROP MODULE ROLE, DROP DEMO USER\n" +
+			"-- (see security).\n" +
+			"--\n" +
+			"-- DROP ASSOCIATION reconciles the entity access rules that named it, and is\n" +
+			"-- refused while a message definition still exposes it.",
+		Example: "mdl 1;\n" +
+			"DROP ASSOCIATION Shop.Order_Customer;\n" +
+			"DROP ENTITY Shop.OrderLine;\n" +
+			"DROP MICROFLOW IF EXISTS Shop.ACT_Old;",
+		SeeAlso: []string{"drop-if-exists", "domain-model.entity.alter", "security"},
+	})
+
 	// IF EXISTS sits on every document-level alternative of dropStatement, so it
 	// is documented once here for the same reason OR MODIFY is (#531).
 	Register(SyntaxFeature{
@@ -314,8 +426,9 @@ DISCONNECT;`,
 	// ── Navigation ──────────────────────────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "navigation",
-		Summary: "Navigation profiles — home pages, menus, login pages per device type",
+		Path:     "navigation",
+		Features: []string{"navigation/profiles", "navigation/home_pages", "navigation/menu_items", "navigation/menu_item_icons", "navigation/native_home_page", "navigation/not_found_page", "navigation/progressive_web_app"},
+		Summary:  "Navigation profiles — home pages, menus, login pages per device type",
 		Keywords: []string{
 			"navigation", "nav", "profile", "responsive", "phone", "tablet",
 			"home page", "menu", "login page",
@@ -850,8 +963,19 @@ CALL JAVA ACTION (see: mxcli syntax microflow.call):
   CALL MICROFLOW Ops.ACT_Process(Order = $Order) IN QUEUE Ops.OrderProcessing;
 
 A rewrite that does NOT restate a stored binding is refused, because it would
-drop it silently. A retry policy on a queued call has no MDL spelling and is
-also refused rather than reset — change those in Studio Pro.`,
+drop it silently.
+
+A queued call's retry policy (Mendix 9.10+) follows the queue:
+
+  CALL MICROFLOW Ops.POST_Message(Body = $Body) IN QUEUE Ops.SendQueue
+    RETRY EXPONENTIAL (Retries: 20, InitialInterval: 1, MaximumInterval: 60, IntervalType: Minutes);
+  CALL JAVA ACTION Ops.Refresh(Url = $Url) IN QUEUE Ops.SendQueue
+    RETRY FIXED (Retries: 5, Interval: 10, IntervalType: Minutes);
+
+Every property is required (IntervalType: Seconds | Minutes | Hours); Retries
+must be at least 1 (CE7044). DESCRIBE prints a stored retry, so it round-trips.
+A rewrite that still calls into the queue but leaves the retry out is refused
+rather than reset: restate it, or state a new one.`,
 		Example: `mdl 1;
 CREATE TASK QUEUE Ops.OrderProcessing (
   Parallelism: 3,
@@ -1003,8 +1127,9 @@ CREATE VALIDATION RULE FOR Shop.Product.Price
 	// ── Scheduled events ────────────────────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "scheduled-event",
-		Summary: "Scheduled events — Mendix's cron: run a microflow on a repeating schedule",
+		Path:     "scheduled-event",
+		Features: []string{"scheduled_events/schedules"},
+		Summary:  "Scheduled events — Mendix's cron: run a microflow on a repeating schedule",
 		Keywords: []string{
 			"scheduled event", "scheduled events", "schedule", "cron", "recurring",
 			"create scheduled event", "drop scheduled event", "describe scheduled event",
@@ -1481,8 +1606,9 @@ mxcli check script.mdl -p app.mpr --references  -- With reference validation`,
 	})
 
 	Register(SyntaxFeature{
-		Path:    "module.settings",
-		Summary: "A module's version and module type (Studio Pro's Module settings, General tab)",
+		Path:     "module.settings",
+		Features: []string{"modules/module_type"},
+		Summary:  "A module's version and module type (Studio Pro's Module settings, General tab)",
 		Keywords: []string{
 			"module settings", "module version", "module type", "add-on module",
 			"addon", "app module", "semver", "export module",
@@ -1505,8 +1631,9 @@ alter module Inventory set (Version: '2.4.0');
 	})
 
 	Register(SyntaxFeature{
-		Path:    "module.jar-dependencies",
-		Summary: "Manage Maven/JAR dependencies in a module's settings",
+		Path:     "module.jar-dependencies",
+		Features: []string{"modules/jar_dependencies", "modules/jar_dependency_exclusions"},
+		Summary:  "Manage Maven/JAR dependencies in a module's settings",
 		Keywords: []string{
 			"jar dependency", "maven", "jar dep", "module settings",
 			"group", "artifact", "classpath", "exclusion",

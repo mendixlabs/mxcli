@@ -74,6 +74,13 @@ func execCreateMicroflow(ctx *ExecContext, s *ast.CreateMicroflowStmt) error {
 		if err := validateMicroflowRules(s); err != nil {
 			return err
 		}
+		// The splice path does not reach the rebuild's queue guard, and a
+		// call restated without its stored retry is an edit it would make.
+		if stored := findMicroflowByQualifiedName(ctx, s.Name.String()); stored != nil {
+			if err := checkNoDroppedQueueRetries(ctx, stored.ID, s.Name.String(), s, nil); err != nil {
+				return err
+			}
+		}
 		if handled, err := modifyFlowInPlace(ctx, microflowDecl(s)); handled || err != nil {
 			return err
 		}

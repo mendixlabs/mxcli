@@ -14,8 +14,8 @@ description: "Provision a Mendix project in a repo that has none — interview, 
 | 44-130 | Step 0 — interview, and WAIT for the answers |
 | 131-263 | Provision |
 | 264-333 | If this is a solution (several apps in one repo) |
-| 334-391 | Then propose the model — do not build it yet |
-| 392-455 | After bootstrap — the inner loop |
+| 334-393 | Then propose the model — do not build it yet |
+| 394-457 | After bootstrap — the inner loop |
 
 <!-- /skill-index -->
 # Bootstrap a Mendix App in an Empty Repo
@@ -363,7 +363,9 @@ flags it. The cost lands later, on someone else.
   `GROUP BY`, `SUM`/`COUNT` — returning rows a page binds to directly. The microflow
   version pulls every object into memory to produce one number, and it gets slower
   exactly as the app succeeds, which is the worst possible failure curve. Needs
-  **Mendix 10.18+** (`list features` confirms it). `create view entity Mod.Name (…)
+  **Mendix 10.21+** for mxcli to write one (view entities are 10.18, but the source
+  document mxcli writes is 10.21; `list features` and `mxcli syntax view-entity`
+  print the floor from the registry). `create view entity Mod.Name (…)
   as ( select … )` — see `mxcli syntax view-entity` for the shape, its `oql` and
   `association` subtopics for the rules that bite (every column needs an `AS`
   alias; `ORDER BY` needs a `LIMIT`; selecting an id under an alias makes an

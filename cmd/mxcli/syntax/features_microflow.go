@@ -4,8 +4,9 @@ package syntax
 
 func init() {
 	Register(SyntaxFeature{
-		Path:    "microflow",
-		Summary: "Programmatic logic — variables, object operations, control flow, and integrations",
+		Path:     "microflow",
+		Features: []string{"microflows/basic"},
+		Summary:  "Programmatic logic — variables, object operations, control flow, and integrations",
 		Keywords: []string{
 			"microflow", "nanoflow", "logic", "automation",
 			"action", "activity", "flow",
@@ -16,8 +17,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.synchronize",
-		Summary: "SYNCHRONIZE — offline data synchronization (nanoflow only)",
+		Path:     "microflow.synchronize",
+		Features: []string{"microflows/synchronize", "microflows/synchronize_unsynchronized"},
+		Summary:  "SYNCHRONIZE — offline data synchronization (nanoflow only)",
 		Keywords: []string{
 			"synchronize", "sync", "offline", "unsynchronized", "specific",
 			"offline first", "nanoflow",
@@ -28,8 +30,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.send-email",
-		Summary: "SEND EMAIL — the built-in Send Email activity (SMTP, Mendix 11.13+, beta)",
+		Path:     "microflow.send-email",
+		Features: []string{"microflows/send_email"},
+		Summary:  "SEND EMAIL — the built-in Send Email activity (SMTP, Mendix 11.13+, beta)",
 		Keywords: []string{
 			"send email", "email", "mail", "smtp", "send mail", "e-mail",
 			"cc", "bcc", "subject", "attachment", "email connector",
@@ -93,8 +96,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.create",
-		Summary: "Create a microflow with parameters, return type, and body",
+		Path:     "microflow.create",
+		Features: []string{"microflows/deep_link_url"},
+		Summary:  "Create a microflow with parameters, return type, and body",
 		Keywords: []string{
 			"create microflow", "new microflow", "define microflow",
 			"parameters", "returns", "folder",
@@ -119,7 +123,8 @@ func init() {
 			"  MDL-MF03  DISALLOW needs an error message or microflow         (CE4899)\n" +
 			"and with a project, a URL another microflow already owns         (CE0570).\n\n" +
 			"`Mark as used` still has no clause and is carried, as all of these were\n" +
-			"before they were authorable (mendixlabs/mxcli#1120).",
+			"before they were authorable (mendixlabs/mxcli#1120).\n\n" +
+			"DROP MICROFLOW [IF EXISTS] Module.Name;   -- every DROP: see `mxcli syntax drop`",
 		Example: "CREATE MICROFLOW MyModule.ACT_CreateOrder (\n  $CustomerCode: String,\n  $Quantity: Integer\n)\nRETURNS MyModule.Order AS $NewOrder\nFOLDER 'Orders'\nEXPOSED AS MICROFLOW ACTION 'Create order' IN 'Orders'\n  ICON 'assets/order-64.png'\nBEGIN\n  $NewOrder = CREATE MyModule.Order (\n    OrderNumber = 'ORD-001',\n    Quantity = $Quantity\n  );\n  COMMIT $NewOrder;\n  RETURN $NewOrder;\nEND;",
 		SeeAlso: []string{"microflow.nanoflow", "microflow.variables"},
 	})
@@ -218,8 +223,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.control-flow",
-		Summary: "IF/ELSIF/ELSE, LOOP, WHILE, BREAK, CONTINUE, RETURN",
+		Path:     "microflow.control-flow",
+		Features: []string{"microflows/while_loop", "microflows/loop_over_list", "microflows/loop_in_branch"},
+		Summary:  "IF/ELSIF/ELSE, LOOP, WHILE, BREAK, CONTINUE, RETURN",
 		Keywords: []string{
 			"if", "elsif", "else", "then", "end if",
 			"loop", "while", "break", "continue", "return",
@@ -343,7 +349,7 @@ func init() {
 			"-- (MDL-FLOW01). NORMALIZED instead folds the branch guards into a single\n" +
 			"-- condition, which is equivalent and duplicates nothing.\n" +
 			"--\n" +
-			"-- The graph from mxcli #923:\n" +
+			"-- The graph from mendixlabs/mxcli#923:\n" +
 			"--   split1: true -> split2      false -> merge1\n" +
 			"--   split2: true -> merge1      false -> merge2\n" +
 			"-- The activity on merge1 runs on `not(c1) or c2`. Default DESCRIBE renders\n" +
@@ -465,8 +471,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.object-operations",
-		Summary: "CREATE, CHANGE, COMMIT, ROLLBACK, and DELETE objects",
+		Path:     "microflow.object-operations",
+		Features: []string{"microflows/send_external_object", "microflows/delete_external_object"},
+		Summary:  "CREATE, CHANGE, COMMIT, ROLLBACK, and DELETE objects",
 		Keywords: []string{
 			"create object", "change object", "commit", "rollback",
 			"delete", "save", "persist", "modify object",
@@ -508,8 +515,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.list-operations",
-		Summary: "List manipulation — HEAD, TAIL, FIND, FILTER, SORT, UNION, RANGE, aggregates",
+		Path:     "microflow.list-operations",
+		Features: []string{"microflows/list_find_filter_by_expression", "microflows/list_range"},
+		Summary:  "List manipulation — HEAD, TAIL, FIND, FILTER, SORT, UNION, RANGE, aggregates",
 		Keywords: []string{
 			"list", "head", "tail", "find", "filter", "sort",
 			"union", "intersect", "subtract", "count", "sum",
@@ -663,7 +671,7 @@ func init() {
 			"  -- absolute, whichever date comes first; rounded for an Integer\n" +
 			"  return round(minutesBetween($Start, $End));\n" +
 			"end;",
-		SeeAlso: []string{"microflow.logging", "microflow.variables", "regular-expression"},
+		SeeAlso: []string{"microflow.expressions.functions", "microflow.logging", "microflow.variables", "regular-expression"},
 	})
 
 	Register(SyntaxFeature{
@@ -743,8 +751,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.show-page",
-		Summary: "Open and close pages from microflows",
+		Path:     "microflow.show-page",
+		Features: []string{"microflows/show_page_with_params"},
+		Summary:  "Open and close pages from microflows",
 		Keywords: []string{
 			"show page", "open page", "close page", "display page",
 			"navigate", "page action", "number of pages to close", "title override",
@@ -761,14 +770,19 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.call",
-		Summary: "Call microflows and Java actions with parameters",
+		Path:     "microflow.call",
+		Features: []string{"microflows/queued_calls"},
+		Summary:  "Call microflows and Java actions with parameters",
 		Keywords: []string{
 			"call microflow", "call java action", "invoke", "in queue", "queued call", "background execution",
 			"sub-microflow", "java action", "parameter passing", "blank argument", "nothing",
 			"text template parameter", "stringtemplate", "document parameter", "agent parameter",
 		},
-		Syntax: "$Result = CALL MICROFLOW Module.Name (Param = value) [IN QUEUE Module.Queue];\n$Result = CALL JAVA ACTION Module.Name (Param = value) [IN QUEUE Module.Queue];\n\n" +
+		Syntax: "$Result = CALL MICROFLOW Module.Name (Param = value) [IN QUEUE Module.Queue [retry]];\n$Result = CALL JAVA ACTION Module.Name (Param = value) [IN QUEUE Module.Queue [retry]];\n\n" +
+			"-- retry (Mendix 9.10+; every property required, Retries >= 1):\n" +
+			"--   RETRY FIXED (Retries: n, Interval: n, IntervalType: Seconds|Minutes|Hours)\n" +
+			"--   RETRY EXPONENTIAL (Retries: n, InitialInterval: n, MaximumInterval: n, IntervalType: …)\n" +
+			"-- A rewrite that keeps a queued call but drops its stored retry is refused.\n\n" +
 			"-- A Java action parameter of type StringTemplate(Text|Sql) takes a template, filled\n" +
 			"-- like a log message: Param = 'text {1}' WITH ({1} = expression, ...). A plain string\n" +
 			"-- is the text; any other expression is the template '{1}' with it as the argument,\n" +
@@ -777,13 +791,14 @@ func init() {
 			"-- DateTime); an enumeration is refused — pass getKey(...) or getCaption(...).\n" +
 			"-- A document parameter (DESCRIBE JAVA ACTION shows Document(<type>), e.g. an\n" +
 			"-- agent-editor Agent) takes the document's name: Param = Module.Document.",
-		Example: "$IsValid = CALL MICROFLOW MyModule.ValidateOrder (\n  Order = $NewOrder\n);\n\n$Token = CALL JAVA ACTION MyModule.GenerateToken (\n  UserId = $User/Id\n);\n\n-- Run the call on a task queue (background execution). The queue must\n-- exist; a queued CALL JAVA ACTION must return Nothing, or the build fails\n-- with CE7038.\nCALL MICROFLOW MyModule.ACT_Refresh () IN QUEUE MyModule.RefreshQueue;\nCALL JAVA ACTION MyModule.RefreshData (Url = $Url) IN QUEUE MyModule.RefreshQueue;\n\n-- A blank argument: the mapping is kept, its expression left empty, as\n-- Studio Pro stores an argument field left blank. Not the same as `empty`\n-- (a Mendix value); only CALL MICROFLOW and CALL NANOFLOW take it. Mendix\n-- reports it as CE0127 \"Missing argument\": it exists so DESCRIBE round-trips.\nCALL MICROFLOW MyModule.ACT_Log (Message = 'x', TraceId = nothing);\n\n-- A text-template parameter, and a document parameter.\nCALL JAVA ACTION BusinessEvents.PublishBusinessEvent_V2 (\n  Subject = 'Order {1} shipped' WITH ({1} = $Order/OrderNumber),\n  BusinessEvent = $Event\n);\n$Response = CALL JAVA ACTION AgentEditorCommons.Agent_CallDocument_WithoutHistory (\n  Agent = MyModule.PaymentReminderAgent, OptionalContextObject = $Invoice\n);",
+		Example: "$IsValid = CALL MICROFLOW MyModule.ValidateOrder (\n  Order = $NewOrder\n);\n\n$Token = CALL JAVA ACTION MyModule.GenerateToken (\n  UserId = $User/Id\n);\n\n-- Run the call on a task queue (background execution). The queue must\n-- exist; a queued CALL JAVA ACTION must return Nothing, or the build fails\n-- with CE7038.\nCALL MICROFLOW MyModule.ACT_Refresh () IN QUEUE MyModule.RefreshQueue;\nCALL JAVA ACTION MyModule.RefreshData (Url = $Url) IN QUEUE MyModule.RefreshQueue;\n\n-- Retried with back-off when the receiver is down.\nCALL MICROFLOW MyModule.POST_Message (Body = $Body) IN QUEUE MyModule.RefreshQueue\n  RETRY EXPONENTIAL (Retries: 20, InitialInterval: 1, MaximumInterval: 60, IntervalType: Minutes);\n\n-- A blank argument: the mapping is kept, its expression left empty, as\n-- Studio Pro stores an argument field left blank. Not the same as `empty`\n-- (a Mendix value); CALL MICROFLOW, CALL NANOFLOW and CALL EXTERNAL ACTION\n-- take it. On a flow call Mendix reports it as CE0127 \"Missing argument\":\n-- it exists so DESCRIBE round-trips. On an external action it is how Studio\n-- Pro 11.16 stores an optional OData parameter left blank.\nCALL MICROFLOW MyModule.ACT_Log (Message = 'x', TraceId = nothing);\nCALL EXTERNAL ACTION MyModule.OrderService.CreateBuffer (command = $Cmd, additional = nothing);\n\n-- A text-template parameter, and a document parameter.\nCALL JAVA ACTION BusinessEvents.PublishBusinessEvent_V2 (\n  Subject = 'Order {1} shipped' WITH ({1} = $Order/OrderNumber),\n  BusinessEvent = $Event\n);\n$Response = CALL JAVA ACTION AgentEditorCommons.Agent_CallDocument_WithoutHistory (\n  Agent = MyModule.PaymentReminderAgent, OptionalContextObject = $Invoice\n);",
 		SeeAlso: []string{"java-action", "microflow.create", "queue", "microflow.workflow-actions"},
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.workflow-actions",
-		Summary: "Start and manage workflows from a microflow: call workflow, get workflow data, workflow operation, lock/unlock",
+		Path:     "microflow.workflow-actions",
+		Features: []string{"workflows/workflow_microflow_actions", "workflows/workflow_operations", "workflows/workflow_operation_pause_continue", "workflows/workflow_operation_retry_unpause", "workflows/get_workflow_data", "workflows/get_workflows", "workflows/get_workflow_activity_records", "workflows/workflow_definition_selection"},
+		Summary:  "Start and manage workflows from a microflow: call workflow, get workflow data, workflow operation, lock/unlock",
 		Keywords: []string{
 			"call workflow", "start workflow", "trigger workflow", "workflow from microflow",
 			"get workflow data", "get workflows for", "get workflow activity records",

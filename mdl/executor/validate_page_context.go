@@ -30,7 +30,7 @@ func validatePageContextTree(ctx *ExecContext, params []ast.PageParameter, widge
 	// Walk the widget tree with context tracking
 	var errors []string
 	errors = append(errors, checkDuplicateWidgetNames(widgets, pageContextWidgetRegistry(ctx))...)
-	walkWidgetsWithContext(widgets, paramNames, widgetNames, false, &errors)
+	walkWidgetsWithContext(widgets, paramNames, widgetNames, false, pageContextWidgetRegistry(ctx), nil, &errors)
 	return errors
 }
 
@@ -173,7 +173,16 @@ func collectWidgetNames(widgets []*ast.WidgetV3, names map[string]bool) {
 // walkWidgetsWithContext validates each widget's DataSource and attribute bindings,
 // tracking whether the current position is inside a data container (DataView,
 // DataGrid, ListView, etc.) that provides entity context.
-func walkWidgetsWithContext(widgets []*ast.WidgetV3, paramNames map[string]bool, widgetNames map[string]bool, hasEntityContext bool, errors *[]string) {
+//
+// itemKinds are the container keywords the enclosing widget's definition
+// declares (unstoredContainerKinds): a child of one of those types is an
+// object-list ITEM or a slot block, not a widget, and its properties are the
+// item's own. An item property may be named `attribute` without being an
+// attribute binding — AccessibilityHelper's attributesList.attribute is the
+// HTML attribute's name, a string — and reading it as one refused the
+// describe output of every such widget (ako/mxcli#904). registry may be nil;
+// then no item resolves and the rule behaves as before.
+func walkWidgetsWithContext(widgets []*ast.WidgetV3, paramNames map[string]bool, widgetNames map[string]bool, hasEntityContext bool, registry *WidgetRegistry, itemKinds map[string]bool, errors *[]string) {
 	for _, w := range widgets {
 		ds := w.GetDataSource()
 		childHasContext := hasEntityContext
@@ -212,7 +221,7 @@ func walkWidgetsWithContext(widgets []*ast.WidgetV3, paramNames map[string]bool,
 		}
 
 		// Validate attribute binding: needs entity context
-		if attr := w.GetAttribute(); attr != "" {
+		if attr := w.GetAttribute(); attr != "" && !itemKinds[strings.ToLower(w.Type)] {
 			// `$Param.Attr` names its object; validateNamedObjectBindings
 			// judges the name.
 			if _, _, named := namedObjectBinding(attr); !hasEntityContext && !named {
@@ -222,7 +231,7 @@ func walkWidgetsWithContext(widgets []*ast.WidgetV3, paramNames map[string]bool,
 		}
 
 		// Recurse into children
-		walkWidgetsWithContext(w.Children, paramNames, widgetNames, childHasContext, errors)
+		walkWidgetsWithContext(w.Children, paramNames, widgetNames, childHasContext, registry, unstoredContainerKinds(registry, w), errors)
 	}
 }
 

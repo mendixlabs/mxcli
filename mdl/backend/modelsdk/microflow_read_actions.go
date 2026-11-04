@@ -109,6 +109,24 @@ func actionFromGen(el element.Element) microflows.MicroflowAction {
 		out.ID = model.ID(a.ID())
 		return out
 
+	case *genMf.SendExternalObject:
+		out := &microflows.SendExternalObjectAction{
+			Variable:          a.VariableNameToBeSent(),
+			RefreshInClient:   a.RefreshInClient(),
+			ErrorHandlingType: microflows.ErrorHandlingType(a.ErrorHandlingType()),
+		}
+		out.ID = model.ID(a.ID())
+		return out
+
+	case *genMf.DeleteExternalObject:
+		out := &microflows.DeleteExternalObjectAction{
+			Variable:          a.DeleteVariableName(),
+			RefreshInClient:   a.RefreshInClient(),
+			ErrorHandlingType: microflows.ErrorHandlingType(a.ErrorHandlingType()),
+		}
+		out.ID = model.ID(a.ID())
+		return out
+
 	case *genMf.RollbackAction:
 		out := &microflows.RollbackObjectAction{
 			RollbackVariable:  a.RollbackVariableName(),
@@ -1614,8 +1632,34 @@ func queueSettingsFromRaw(raw bson.Raw) *microflows.QueueSettings {
 	qs := &microflows.QueueSettings{Queue: rawStr(doc, "Queue")}
 	if v, err := doc.LookupErr("Retry"); err == nil && v.Type != bson.TypeNull {
 		qs.Retry = v
+		if rd, ok := v.DocumentOK(); ok {
+			qs.RetryPolicy = queueRetryFromRaw(rd)
+		}
 	}
 	return qs
+}
+
+// queueRetryFromRaw decodes a stored Queues$QueueRetry, or nil for a type this
+// build does not know — the raw value is still carried, so the rewrite guard
+// refuses rather than drops it.
+func queueRetryFromRaw(doc bson.Raw) *microflows.QueueRetry {
+	num := func(key string) int { n, _ := rawInteger(doc, key); return n }
+	r := &microflows.QueueRetry{
+		Retries:      num("Retries"),
+		IntervalType: rawStr(doc, "IntervalType"),
+	}
+	switch rawStr(doc, "$Type") {
+	case "Queues$QueueFixedRetry":
+		r.Kind = microflows.QueueRetryFixed
+		r.Interval = num("Interval")
+	case "Queues$QueueExponentialRetry":
+		r.Kind = microflows.QueueRetryExponential
+		r.InitialInterval = num("InitialInterval")
+		r.MaximumInterval = num("MaximumInterval")
+	default:
+		return nil
+	}
+	return r
 }
 
 // closePageCount reads how many pages a close-page action closes. Mendix stores

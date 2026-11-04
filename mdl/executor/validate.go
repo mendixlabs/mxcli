@@ -579,6 +579,12 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// CE0069, after exec wrote it (ako/mxcli#1645). Replayed in statement
 	// order, judged by the verdict exec gives.
 	errors = append(errors, validateMemberNameClashes(ctx, prog)...)
+	// A drop + create of a flow whose stored body holds an activity MDL cannot
+	// express: the create writes it without that activity (mendixlabs/mxcli#1735).
+	errors = append(errors, validateDropRecreateKeepsActivities(ctx, prog)...)
+	// toString(<Decimal>) into a String(n): builds, and overflows the attribute
+	// on commit (mendixlabs/mxcli#1515). Warns, never blocks.
+	validateToStringIntoShortAttribute(ctx, prog, sc)
 	return errors, sc.warnings
 }
 
@@ -1068,6 +1074,10 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 		}
 	case *ast.CreatePublishedRestServiceStmt:
 		return validatePublishedRestAuthMicroflow(ctx, s.Authentication, sc)
+	case *ast.CreateMessageDefinitionCollectionStmt:
+		return messageDefinitionMemberErrors(ctx, sc, s.Name.String(), s.Definitions...)
+	case *ast.CreateMessageDefinitionStmt:
+		return messageDefinitionMemberErrors(ctx, sc, s.Name.String(), s.Definition)
 	case *ast.AlterPublishedRestServiceStmt:
 		for _, a := range s.Actions {
 			if set, ok := a.(*ast.PublishedRestSetAction); ok {

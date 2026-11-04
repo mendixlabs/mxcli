@@ -43,14 +43,54 @@ import (
 // unquoted, and with or without the System prefix, all of which parse.
 const assigneesAssociation = "workflowusertask_assignees"
 
-// ValidateTaskClaims reports SET TASK OUTCOME statements whose task was not
+// assigneeAssociation is the same association's name before Mendix 10.0: a
+// Reference (one user) named WorkflowUserTask_Assignee, renamed to the
+// ReferenceSet Assignees in 10.0 with its GUID kept (ako/mxcli#1810). A 9.x
+// claim writes this one, so it claims just the same.
+const assigneeAssociation = "workflowusertask_assignee"
+
+// isClaimAssociation reports whether a member name (unqualified) is the
+// association a claim writes, under either version's name.
+func isClaimAssociation(name string) bool {
+	return strings.EqualFold(name, assigneesAssociation) || strings.EqualFold(name, assigneeAssociation)
+}
+
+// taskClaimSuggestion is MDL-WORKFLOW10's fix for the project's version.
+// atLeast is the project version's IsAtLeast, nil when it is not known; then
+// both spellings are given, each with its versions, rather than one that does
+// not build on the other (CE1613 on 9.x for Assignees, ako/mxcli#1810).
+func taskClaimSuggestion(task string, atLeast func(major, minor int) bool) string {
+	var claim string
+	switch {
+	case atLeast == nil:
+		claim = fmt.Sprintf("    change $%s (System.WorkflowUserTask_Assignees = [%%CurrentUser%%]);   -- Mendix 10.0+\n"+
+			"    change $%s (System.WorkflowUserTask_Assignee = [%%CurrentUser%%]);    -- Mendix 9.x\n", task, task)
+	case atLeast(10, 0):
+		claim = fmt.Sprintf("    change $%s (System.WorkflowUserTask_Assignees = [%%CurrentUser%%]);\n", task)
+	default:
+		claim = fmt.Sprintf("    change $%s (System.WorkflowUserTask_Assignee = [%%CurrentUser%%]);\n"+
+			"  (Mendix 9 names it WorkflowUserTask_Assignee, one user; Assignees is 10.0+ and CE1613 here.)\n", task)
+	}
+	return "Claim the task before setting the outcome:\n" + claim +
+		fmt.Sprintf("    commit $%s;\n", task) +
+		"  TARGETING XPATH / TARGETING MICROFLOW decides who may SEE a task; it does not " +
+		"assign it. A microflow this one calls first, passing the task, counts when it claims " +
+		"it. Ignore this if the task is claimed elsewhere — in a nanoflow on the button, or " +
+		"earlier in the process."
+}
+
+// ValidateTaskClaimsIn reports SET TASK OUTCOME statements whose task was not
 // assigned earlier in the same microflow — or in a microflow it calls first,
 // passing the task (ako/mxcli#943). A callee the script itself creates is read;
 // one it does not create cannot be, so a call that passes the task to it counts
 // as a possible claim and the outcome is not reported. With a project,
 // StoredTaskClaimViolations reads those callees too.
-func ValidateTaskClaims(prog *ast.Program) []linter.Violation {
-	return validateTaskClaims(prog, nil)
+//
+// version returns the project version's IsAtLeast (nil when unknown), asked
+// only when a warning is written, so the suggested claim is the one that
+// builds on the project's version (ako/mxcli#1810).
+func ValidateTaskClaimsIn(prog *ast.Program, version func() func(major, minor int) bool) []linter.Violation {
+	return validateTaskClaims(prog, nil, version)
 }
 
 // storedClaimSource reads a microflow the script does not create: whether it
@@ -65,11 +105,11 @@ type storedClaimSource interface {
 // call is treated as a possible claim — the quiet direction.
 const maxClaimCallDepth = 8
 
-func validateTaskClaims(prog *ast.Program, stored storedClaimSource) []linter.Violation {
+func validateTaskClaims(prog *ast.Program, stored storedClaimSource, version func() func(major, minor int) bool) []linter.Violation {
 	if prog == nil {
 		return nil
 	}
-	r := &taskClaimResolver{script: map[string]*ast.CreateMicroflowStmt{}, stored: stored}
+	r := &taskClaimResolver{script: map[string]*ast.CreateMicroflowStmt{}, stored: stored, version: version}
 	for _, stmt := range prog.Statements {
 		if mf, ok := stmt.(*ast.CreateMicroflowStmt); ok {
 			r.script[strings.ToLower(mf.Name.String())] = mf
@@ -86,22 +126,24 @@ func validateTaskClaims(prog *ast.Program, stored storedClaimSource) []linter.Vi
 	return out
 }
 
-// StoredTaskClaimViolations is the MDL-WORKFLOW10 warnings ValidateTaskClaims
+// StoredTaskClaimViolations is the MDL-WORKFLOW10 warnings ValidateTaskClaimsIn
 // stays quiet about because the claiming callee is not in the script: with the
 // project's microflows readable, a call to a stored microflow that does not
 // claim the task it is passed no longer hides the outcome. Only the warnings
-// ValidateTaskClaims did not already report are returned, so the two can be
+// ValidateTaskClaimsIn did not already report are returned, so the two can be
 // printed together.
 func StoredTaskClaimViolations(prog *ast.Program, b backend.FullBackend) []linter.Violation {
 	if prog == nil || b == nil {
 		return nil
 	}
 	base := map[string]bool{}
-	for _, v := range validateTaskClaims(prog, nil) {
+	for _, v := range validateTaskClaims(prog, nil, nil) {
 		base[v.Location.DocumentName+"\x00"+v.Message] = true
 	}
 	var out []linter.Violation
-	for _, v := range validateTaskClaims(prog, &storedTaskClaims{b: b}) {
+	for _, v := range validateTaskClaims(prog, &storedTaskClaims{b: b}, func() func(major, minor int) bool {
+		return projectVersionAtLeast(b)
+	}) {
 		if !base[v.Location.DocumentName+"\x00"+v.Message] {
 			out = append(out, v)
 		}
@@ -114,6 +156,17 @@ func StoredTaskClaimViolations(prog *ast.Program, b backend.FullBackend) []linte
 type taskClaimResolver struct {
 	script map[string]*ast.CreateMicroflowStmt
 	stored storedClaimSource
+	// version returns the project version's IsAtLeast, or nil when unknown.
+	// Asked only when a warning is written, so no project is opened for a
+	// script that has nothing to report.
+	version func() func(major, minor int) bool
+}
+
+func (r *taskClaimResolver) versionAtLeast() func(major, minor int) bool {
+	if r.version == nil {
+		return nil
+	}
+	return r.version()
 }
 
 // callClaims reports whether calling flow with the task bound to param may
@@ -246,15 +299,7 @@ func (r *taskClaimResolver) taskClaimViolations(name ast.QualifiedName, body []a
 							"RUNTIME (\"You can't complete this user task, it is not assigned to you\") with "+
 							"the button appearing to do nothing. Neither mxcli check nor mx check catches it.",
 						flowName, s.WorkflowTaskVariable),
-					Suggestion: fmt.Sprintf(
-						"Claim the task before setting the outcome:\n"+
-							"    change $%s (System.WorkflowUserTask_Assignees = [%%CurrentUser%%]);\n"+
-							"    commit $%s;\n"+
-							"  TARGETING XPATH / TARGETING MICROFLOW decides who may SEE a task; it does not "+
-							"assign it. A microflow this one calls first, passing the task, counts when it claims "+
-							"it. Ignore this if the task is claimed elsewhere — in a nanoflow on the button, or "+
-							"earlier in the process.",
-						s.WorkflowTaskVariable, s.WorkflowTaskVariable),
+					Suggestion: taskClaimSuggestion(s.WorkflowTaskVariable, r.versionAtLeast()),
 				})
 			}
 			// Nested bodies (loops, decisions, error handlers) can hold either half,
@@ -274,7 +319,7 @@ func changeClaimsTask(s *ast.ChangeObjectStmt) bool {
 		if i := strings.LastIndex(name, "."); i >= 0 {
 			name = name[i+1:]
 		}
-		if strings.EqualFold(strings.Trim(name, `"`), assigneesAssociation) {
+		if isClaimAssociation(strings.Trim(name, `"`)) {
 			return true
 		}
 	}
@@ -296,4 +341,16 @@ func nestedStatements(st ast.MicroflowStatement) []ast.MicroflowStatement {
 		return s.Body
 	}
 	return nil
+}
+
+// projectVersionAtLeast is b's project version as IsAtLeast, nil when unknown.
+func projectVersionAtLeast(b backend.FullBackend) func(major, minor int) bool {
+	if b == nil {
+		return nil
+	}
+	pv := b.ProjectVersion()
+	if pv == nil || pv.MajorVersion == 0 {
+		return nil
+	}
+	return pv.IsAtLeast
 }

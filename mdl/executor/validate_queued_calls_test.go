@@ -232,8 +232,8 @@ func TestAuthoredQueueTargets_FindsNestedCalls(t *testing.T) {
 	}
 }
 
-// A stored retry policy has no MDL spelling, so restating the queue is not
-// enough — the rewrite would reset the retry. That must still refuse.
+// Restating the queue without the retry is not enough — the rewrite would
+// reset the retry. That must still refuse, and say how to restate it.
 func TestCheckNoQueuedCalls_RefusesStoredRetry(t *testing.T) {
 	mb := &mock.MockBackend{
 		IsConnectedFunc: func() bool { return true },
@@ -319,5 +319,65 @@ func TestStoredQueueRetries_HandlesBsonArrays(t *testing.T) {
 	}}}
 	if got := storedQueueRetries(doc); len(got) != 1 {
 		t.Fatalf("storedQueueRetries = %v, want [Q.MyQueue]", got)
+	}
+}
+
+// mendixlabs/mxcli#1729: a flow with a retry was locked for MDL. A script that
+// restates a retry on that queue is saying what it wants, and goes through.
+func TestCheckNoQueuedCalls_AllowsRestatedRetry(t *testing.T) {
+	mb := &mock.MockBackend{
+		IsConnectedFunc: func() bool { return true },
+		GetRawUnitFunc: func(id model.ID) (map[string]any, error) {
+			return storedCall(map[string]any{
+				"$Type": "Queues$QueueSettings",
+				"Queue": "Q.MyQueue",
+				"Retry": map[string]any{"$Type": "Queues$QueueFixedRetry", "Retries": 3},
+			}, nil), nil
+		},
+	}
+	ctx, _ := newMockCtx(t, withBackend(mb))
+	stmt := &ast.CreateMicroflowStmt{
+		Name: ast.QualifiedName{Module: "Q", Name: "ACT_Caller"},
+		Body: []ast.MicroflowStatement{
+			&ast.IfStmt{ThenBody: []ast.MicroflowStatement{ // nested: the walk must reach it
+				&ast.CallMicroflowStmt{
+					MicroflowName: ast.QualifiedName{Module: "Q", Name: "Target"},
+					Queue:         &ast.QualifiedName{Module: "Q", Name: "MyQueue"},
+					QueueRetry:    &ast.QueueRetry{Kind: "Fixed", Retries: 3, Interval: 10, IntervalType: "Minutes"},
+				},
+			}},
+		},
+	}
+	if err := checkNoQueuedCalls(ctx, "mf-1", "Q.ACT_Caller", stmt); err != nil {
+		t.Fatalf("a script restating the retry must be allowed: %v", err)
+	}
+}
+
+// The splice path calls checkNoDroppedQueueRetries directly: a call still bound
+// to the queue without its retry is refused; a script that removed every call
+// to that queue has said so, and is let through.
+func TestCheckNoDroppedQueueRetries(t *testing.T) {
+	raw := storedCall(map[string]any{
+		"$Type": "Queues$QueueSettings",
+		"Queue": "Q.MyQueue",
+		"Retry": map[string]any{"$Type": "Queues$QueueExponentialRetry", "Retries": 3},
+	}, nil)
+	ctx, _ := newMockCtx(t, withBackend(&mock.MockBackend{IsConnectedFunc: func() bool { return true }}))
+	call := func(retry *ast.QueueRetry) *ast.CreateMicroflowStmt {
+		return &ast.CreateMicroflowStmt{Body: []ast.MicroflowStatement{&ast.CallMicroflowStmt{
+			MicroflowName: ast.QualifiedName{Module: "Q", Name: "Target"},
+			Queue:         &ast.QualifiedName{Module: "Q", Name: "MyQueue"},
+			QueueRetry:    retry,
+		}}}
+	}
+	if err := checkNoDroppedQueueRetries(ctx, "mf", "Q.F", call(nil), raw); err == nil {
+		t.Error("a call restated without its stored retry must be refused")
+	}
+	if err := checkNoDroppedQueueRetries(ctx, "mf", "Q.F",
+		call(&ast.QueueRetry{Kind: "Fixed", Retries: 1, Interval: 1, IntervalType: "Hours"}), raw); err != nil {
+		t.Errorf("a changed, stated retry must be allowed: %v", err)
+	}
+	if err := checkNoDroppedQueueRetries(ctx, "mf", "Q.F", &ast.CreateMicroflowStmt{}, raw); err != nil {
+		t.Errorf("removing the queued call must be allowed: %v", err)
 	}
 }

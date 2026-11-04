@@ -445,3 +445,23 @@ func TestValidateMemberReferences_ScriptCreatedModuleIsAModule(t *testing.T) {
 		t.Errorf("control: got %d messages without the script's module, want 1: %v", len(msgs), msgs)
 	}
 }
+
+// ako/mxcli#1810: `Module.Assoc` over a real module names an association, and
+// exec's builder refuses one the module does not have. check passed it — on a
+// 9.x project, System.WorkflowUserTask_Assignees (10.0's name) passed check and
+// then stopped exec. The existing associations, same-module and cross-module,
+// are the control.
+func TestValidateMemberReferences_RefusesAnUnknownQualifiedAssociation(t *testing.T) {
+	ctx := memberFixture(t)
+	msgs := validateMemberReferences(ctx,
+		flowProgram(orderParam(), changeStmt("Order", "Shop.Order_Nope")), newScriptContext())
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "Shop.Order_Nope") || !strings.Contains(msgs[0], "not an association") {
+		t.Fatalf("want one refusal naming Shop.Order_Nope, got %v", msgs)
+	}
+	for _, ok := range []string{"Shop.Order_Customer", "Shop.Order_Bin"} {
+		if msgs := validateMemberReferences(ctx,
+			flowProgram(orderParam(), changeStmt("Order", ok)), newScriptContext()); len(msgs) != 0 {
+			t.Errorf("%s exists and must pass: %v", ok, msgs)
+		}
+	}
+}

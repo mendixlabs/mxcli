@@ -1,0 +1,31 @@
+mdl 1;
+-- Bug #1003: `describe json structure` wrapped the sample in `$$ … $$`. A
+-- snippet holding `$$` — a Teamcenter UID such as
+-- "SR::N::BOMLine..10.7$$Otklm9GclKA" — ended the literal early, and
+-- `mxcli check` on the describe output reported
+--   token recognition error at: '$$
+--
+-- The lexer's DOLLAR_STRING has no escape: it ends at the first `$$`. Describe
+-- now writes such a text as a single-quoted string (mdlDollarQuote /
+-- mdlSourceBlock), which every position describe emits `$$` at accepts —
+-- a Java/JavaScript action body and EXTRA CODE accept one since this fix.
+--
+-- Below: the forms describe now writes for each position. They must parse and,
+-- executed, store the text with its `$$`.
+
+create module BugTest1003;
+
+create or modify json structure BugTest1003.BomLine
+  sample '{
+  "uid": "SR::N::BOMLine..10.7$$Otklm9GclKA",
+  "name": "it''s"
+}';
+
+create or modify java action BugTest1003.JA_Uid(N: String not null) returns String
+as 'return "SR::N::10.7$$Otk" + N;'
+extra code $$
+private static final String PREFIX = "x";
+$$;
+
+create or modify javascript action BugTest1003.JS_Uid() returns String
+as 'return Promise.resolve("10.7$$Otk");';

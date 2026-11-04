@@ -9,13 +9,36 @@ import (
 
 // SyntaxFeature describes a discoverable MDL syntax feature.
 type SyntaxFeature struct {
-	Path       string   `json:"path"`
-	Summary    string   `json:"summary"`
-	Keywords   []string `json:"keywords"`
-	Syntax     string   `json:"syntax"`
-	Example    string   `json:"example"`
-	MinVersion string   `json:"min_version,omitempty"`
-	SeeAlso    []string `json:"see_also,omitempty"`
+	Path     string   `json:"path"`
+	Summary  string   `json:"summary"`
+	Keywords []string `json:"keywords"`
+	Syntax   string   `json:"syntax"`
+	Example  string   `json:"example"`
+
+	// Features names the version-registry features (sdk/versions/*.yaml, as
+	// "area/name") the topic's statements need. It is the ONLY place a topic
+	// says which Mendix version it needs: MinVersion and Requires are filled
+	// from the registry, never written by hand, so `mxcli syntax`, `show
+	// features` and the exec-time gate cannot disagree (ako/mxcli#1367 — they
+	// had drifted apart in both directions).
+	Features []string `json:"-"`
+
+	// MinVersion is the version of the FIRST of Features, the topic's primary
+	// statement (data-transformer's document is 11.9 although the transform
+	// that uses it is 11.4). Computed; Register refuses one set by hand.
+	MinVersion string `json:"min_version,omitempty"`
+	// Requires lists each feature with its own version, since one topic can
+	// span several (notify workflow is 10.0, its event sub-process target 11.7).
+	Requires []Requirement `json:"requires,omitempty"`
+
+	SeeAlso []string `json:"see_also,omitempty"`
+}
+
+// Requirement is one registry feature a topic needs.
+type Requirement struct {
+	Feature string `json:"feature"` // "area/name"
+	Since   string `json:"since"`
+	MDL     string `json:"mdl,omitempty"`
 }
 
 var registry []SyntaxFeature
@@ -111,6 +134,9 @@ func Register(f SyntaxFeature) {
 	if registeredPaths[f.Path] {
 		panic("syntax: duplicate feature path: " + f.Path)
 	}
+	if f.MinVersion != "" || len(f.Requires) > 0 {
+		panic("syntax: " + f.Path + " sets a version by hand; name its sdk/versions feature in Features instead (#1367)")
+	}
 	registeredPaths[f.Path] = true
 	registry = append(registry, f)
 }
@@ -126,6 +152,7 @@ func ResolveAlias(path string) string {
 
 // All returns every registered feature, sorted by path.
 func All() []SyntaxFeature {
+	resolveVersions()
 	out := make([]SyntaxFeature, len(registry))
 	copy(out, registry)
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
@@ -134,6 +161,7 @@ func All() []SyntaxFeature {
 
 // ByPrefix returns features whose path equals or starts with prefix+".".
 func ByPrefix(prefix string) []SyntaxFeature {
+	resolveVersions()
 	var out []SyntaxFeature
 	for _, f := range registry {
 		if f.Path == prefix || strings.HasPrefix(f.Path, prefix+".") {
@@ -146,6 +174,7 @@ func ByPrefix(prefix string) []SyntaxFeature {
 
 // ByPath returns the feature with the exact path, or nil.
 func ByPath(path string) *SyntaxFeature {
+	resolveVersions()
 	for i := range registry {
 		if registry[i].Path == path {
 			return &registry[i]
@@ -180,6 +209,7 @@ func HasPrefix(prefix string) bool {
 // Substring rather than equality because a segment is often a compound of the
 // word the reader has in mind: `task` should find `workflow.user-task`.
 func BySegmentMatch(q string) []SyntaxFeature {
+	resolveVersions()
 	if q == "" {
 		return nil
 	}
@@ -205,6 +235,7 @@ func BySegmentMatch(q string) []SyntaxFeature {
 // Whole words, not substrings: keywords are prose, and a substring match on
 // "ant" would answer with every topic that mentions "grant".
 func ByKeyword(q string) []SyntaxFeature {
+	resolveVersions()
 	q = strings.ToLower(q)
 	if q == "" {
 		return nil

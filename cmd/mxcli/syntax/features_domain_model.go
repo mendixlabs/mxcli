@@ -63,8 +63,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "domain-model.entity",
-		Summary: "Entity creation: persistent, non-persistent, generalization, event handlers",
+		Path:     "domain-model.entity",
+		Features: []string{"domain_model/entities", "domain_model/non_persistent_entities", "domain_model/entity_generalization"},
+		Summary:  "Entity creation: persistent, non-persistent, generalization, event handlers",
 		Keywords: []string{
 			"entity", "create entity", "persistent", "non-persistent",
 			"generalization", "extends", "event handler", "attribute",
@@ -82,14 +83,15 @@ func init() {
 			"non-persistent", "extends", "generalization",
 			"index", "event handler", "before commit", "after commit",
 		},
-		Syntax:  "CREATE PERSISTENT ENTITY Module.Name (\n  Attr: Type [NOT NULL [ERROR MESSAGE 'msg']] [UNIQUE [ERROR MESSAGE 'msg']] [DEFAULT val],\n  ...\n)\n[INDEX (attr1, attr2)]\n[ON BEFORE|AFTER CREATE|COMMIT|DELETE|ROLLBACK CALL Module.MF [RAISE ERROR]]\n[EXPORT LEVEL API|HIDDEN];   -- also per attribute: `Attr: Type EXPORT LEVEL API`\n\n-- An AutoNumber attribute needs its start value: `Nr: AutoNumber DEFAULT 1`.\n-- Without the DEFAULT seed, check reports MDL023 and the build fails CE7247.\n\n-- Documentation: the /** … */ doc comment before the statement, or\n-- ALTER ENTITY Module.Name SET DOCUMENTATION 'text' on an existing entity.\n\nCREATE NON-PERSISTENT ENTITY Module.Name (...);\nCREATE PERSISTENT ENTITY Module.Name EXTENDS Module.Parent (...);\n\n-- INDEX goes AFTER the closing parenthesis, never inside the attribute list.\n-- On an existing entity, either spelling works:\nALTER ENTITY Module.Name ADD INDEX [IF NOT EXISTS] [name] [ON] (attr1 [ASC|DESC], ...);\nCREATE INDEX IdxName ON Module.Name (attr1 [ASC|DESC], ...);\n\n-- Re-runnable script: IF NOT EXISTS skips instead of erroring, and leaves an\n-- existing element untouched (unlike OR MODIFY, which rebuilds it from the\n-- statement and drops any attribute the statement omits).\nCREATE ENTITY IF NOT EXISTS Module.Name (...);\nALTER ENTITY Module.Name ADD ATTRIBUTE IF NOT EXISTS Attr: Type;\nALTER ENTITY Module.Name DROP INDEX IF EXISTS (attr1, ...);",
+		Syntax:  "CREATE PERSISTENT ENTITY Module.Name (\n  Attr: Type [NOT NULL [ERROR MESSAGE 'msg']] [UNIQUE [ERROR MESSAGE 'msg']] [DEFAULT val],\n  ...\n)\n[INDEX (attr1, attr2)]\n[ON BEFORE|AFTER CREATE|COMMIT|DELETE|ROLLBACK CALL Module.MF [RAISE ERROR]]\n[EXPORT LEVEL API|HIDDEN];   -- also per attribute: `Attr: Type EXPORT LEVEL API`\n\n-- An AutoNumber attribute needs its start value: `Nr: AutoNumber DEFAULT 1`.\n-- Without the DEFAULT seed, check reports MDL023 and the build fails CE7247.\n\n-- Documentation: the /** … */ doc comment before the statement, or\n-- ALTER ENTITY Module.Name SET DOCUMENTATION 'text' on an existing entity.\n\nCREATE NON-PERSISTENT ENTITY Module.Name (...);\nCREATE PERSISTENT ENTITY Module.Name EXTENDS Module.Parent (...);\n\nDROP ENTITY [IF EXISTS] Module.Name;   -- every DROP: see `mxcli syntax drop`\n\n-- INDEX goes AFTER the closing parenthesis, never inside the attribute list.\n-- On an existing entity, either spelling works:\nALTER ENTITY Module.Name ADD INDEX [IF NOT EXISTS] [name] [ON] (attr1 [ASC|DESC], ...);\nCREATE INDEX IdxName ON Module.Name (attr1 [ASC|DESC], ...);\n\n-- Re-runnable script: IF NOT EXISTS skips instead of erroring, and leaves an\n-- existing element untouched (unlike OR MODIFY, which rebuilds it from the\n-- statement and drops any attribute the statement omits).\nCREATE ENTITY IF NOT EXISTS Module.Name (...);\nALTER ENTITY Module.Name ADD ATTRIBUTE IF NOT EXISTS Attr: Type;\nALTER ENTITY Module.Name DROP INDEX IF EXISTS (attr1, ...);",
 		Example: "mdl 1;\n-- Persistent with constraints and index\nCREATE PERSISTENT ENTITY Shop.Order (\n  OrderNumber: String(20) NOT NULL,\n  Total: Decimal DEFAULT 0,\n  CreatedAt: DateTime\n)\nINDEX (OrderNumber)\nON BEFORE COMMIT CALL Shop.ValidateOrder($currentObject) RAISE ERROR;\n\n-- With generalization\nCREATE PERSISTENT ENTITY Shop.ProductImage EXTENDS System.Image (\n  Caption: String(200)\n);",
 		SeeAlso: []string{"domain-model.entity.alter", "domain-model.entity.attributes", "domain-model.export-level"},
 	})
 
 	Register(SyntaxFeature{
-		Path:    "domain-model.entity.alter",
-		Summary: "ALTER ENTITY: add/rename/modify/drop attributes, indexes, documentation, event handlers; ALTER ENTITIES for the bulk add",
+		Path:     "domain-model.entity.alter",
+		Features: []string{"domain_model/alter_entity"},
+		Summary:  "ALTER ENTITY: add/rename/modify/drop attributes, indexes, documentation, event handlers; ALTER ENTITIES for the bulk add",
 		Keywords: []string{
 			"alter entity", "modify entity", "add attribute",
 			"drop attribute", "rename attribute", "add index",
@@ -115,8 +117,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "domain-model.entity.attributes",
-		Summary: "Attribute data types, constraints, system attributes, and calculated attributes",
+		Path:     "domain-model.entity.attributes",
+		Features: []string{"domain_model/calculated_attributes"},
+		Summary:  "Attribute data types, constraints, system attributes, and calculated attributes",
 		Keywords: []string{
 			"attribute", "data type", "string", "integer", "decimal",
 			"boolean", "datetime", "autonumber", "binary", "hashedstring",
@@ -146,7 +149,7 @@ func init() {
 			"group by", "sum", "count", "report", "dashboard", "totals",
 			"create view entity", "query performance", "read model",
 		},
-		MinVersion: "10.18.0",
+		Features: []string{"domain_model/view_entities"},
 		Syntax: "CREATE VIEW ENTITY [IF NOT EXISTS] Module.Name (\n" +
 			"  Attr: Type,\n" +
 			"  ...\n" +
@@ -185,7 +188,7 @@ func init() {
 			"MDL030", "MDL031", "MDL072", "CE0174", "CE6770",
 			"string_agg", "aggregate functions",
 		},
-		MinVersion: "10.18.0",
+		Features: []string{"domain_model/view_entities"},
 		Syntax: "BOTH CLAUSE ORDERS ARE ACCEPTED — `select … from …` and Mendix's own\n" +
 			"from-first `from … join … group by … select …`.\n\n" +
 			"An association is walked with SLASHES, never dots:\n" +
@@ -247,7 +250,7 @@ func init() {
 			"view entity association", "oql association", "select id as",
 			"OqlViewAssociationSource", "CE6771", "CE6770", "MDL080",
 		},
-		MinVersion: "10.18.0",
+		Features: []string{"domain_model/view_entities"},
 		Syntax: "SELECTING A PERSISTENT ENTITY'S ID UNDER AN ALIAS CREATES AN ASSOCIATION,\n" +
 			"named after the alias. There is no second statement, and the id column is\n" +
 			"NOT one of the view entity's attributes:\n\n" +
@@ -417,8 +420,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "domain-model.export-level",
-		Summary: "EXPORT LEVEL API|HIDDEN on entities, attributes, associations and enumerations (Protected / add-on modules)",
+		Path:     "domain-model.export-level",
+		Features: []string{"domain_model/export_levels"},
+		Summary:  "EXPORT LEVEL API|HIDDEN on entities, attributes, associations and enumerations (Protected / add-on modules)",
 		Keywords: []string{
 			"export level", "usable", "hidden", "api", "protected module", "add-on module",
 			"addon", "CE5400", "CE1406", "public surface",

@@ -76,6 +76,9 @@ func validatePluggableAttributeScopes(ctx *ExecContext, layout string, params []
 		assocs:      checkAssociationShapes(ctx, sc),
 		pb:          &pageBuilder{ctx: ctx, backend: ctx.Backend, execCache: ctx.Cache},
 	}
+	if sc != nil {
+		v.generalizations = sc.entityGeneralizations
+	}
 	for _, w := range widgets {
 		v.walk(w, dataContext{})
 	}
@@ -97,6 +100,11 @@ type attributeScopeValidator struct {
 	// assocs feeds MDL-ASSOCDS01 (validate_assoc_list_source.go).
 	assocs map[string]assocShape
 
+	// generalizations are the script's entities' EXTENDS targets (lower-cased
+	// name -> generalization, "" for none), ahead of the project's, for
+	// MDL-ASSOCDS03 (validate_assoc_hop_start.go).
+	generalizations map[string]string
+
 	// pb answers the association-as-attribute question with exec's own
 	// function (validate_assoc_as_attribute.go).
 	pb *pageBuilder
@@ -115,6 +123,7 @@ func (v *attributeScopeValidator) walk(w *ast.WidgetV3, enclosing dataContext) {
 	v.checkInputBinding(w, enclosing)
 	v.checkAssocListSource(w, enclosing)
 	v.checkViewAssocReverse(w, enclosing)
+	v.checkAssocHopStart(w, enclosing)
 	v.checkReactUnsupported(w)
 	if v.registry == nil {
 		// No registry: the pluggable half cannot run, and a pluggable widget's

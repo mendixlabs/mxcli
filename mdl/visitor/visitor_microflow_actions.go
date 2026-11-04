@@ -417,8 +417,9 @@ func buildCallMicroflowStatement(ctx parser.ICallMicroflowStatementContext) *ast
 		stmt.Arguments = buildCallArgumentList(argList)
 	}
 
-	// IN QUEUE Module.Name — runs the call on a task queue.
+	// IN QUEUE Module.Name [RETRY …] — runs the call on a task queue.
 	stmt.Queue = buildQueueClause(callCtx.QueueClause())
+	stmt.QueueRetry = buildQueueRetry(callCtx.QueueClause())
 
 	// Check for ON ERROR clause
 	if errClause := callCtx.OnErrorClause(); errClause != nil {
@@ -486,8 +487,9 @@ func buildCallJavaActionStatement(ctx parser.ICallJavaActionStatementContext) *a
 		stmt.Arguments = buildCallArgumentList(argList)
 	}
 
-	// IN QUEUE Module.Name — runs the call on a task queue.
+	// IN QUEUE Module.Name [RETRY …] — runs the call on a task queue.
 	stmt.Queue = buildQueueClause(callCtx.QueueClause())
+	stmt.QueueRetry = buildQueueRetry(callCtx.QueueClause())
 
 	// Check for ON ERROR clause
 	if errClause := callCtx.OnErrorClause(); errClause != nil {
@@ -730,7 +732,7 @@ func buildCallArgumentList(ctx parser.ICallArgumentListContext) []ast.CallArgume
 		}
 		if arg.NOTHING() != nil {
 			// `Param = nothing`: a blank argument, stored as "" (ExitCallArgument
-			// refuses it outside call microflow / call nanoflow).
+			// refuses it outside call microflow / call nanoflow / call external action).
 			ca.Value = &ast.BlankExpr{}
 		} else if expr := arg.Expression(); expr != nil {
 			value := buildSourceExpression(expr)

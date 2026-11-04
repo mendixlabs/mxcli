@@ -6,7 +6,10 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -19,12 +22,18 @@ func TestDialPlan(t *testing.T) {
 		dockerable bool
 		want       []string
 	}{
-		{"localhost where the docker name resolves: loopback, then the gateway", "localhost:7784", "", true, []string{"localhost:7784", "host.docker.internal:7784"}},
-		{"localhost where it does not (macOS host, Issue 8)", "localhost:7784", "", false, []string{"localhost:7784"}},
+		// localhost dials 127.0.0.1 first: Studio Pro on Windows listens on
+		// 127.0.0.1 only, and a resolver that answers localhost with a LAN
+		// address first made a plain `--mcp http://localhost:7782/mcp` time out
+		// (mendixlabs/mxcli#1684). The resolver's own answer stays as the next
+		// try, for a server bound to ::1 only.
+		{"localhost where the docker name resolves: 127.0.0.1, localhost, then the gateway", "localhost:7784", "", true, []string{"127.0.0.1:7784", "localhost:7784", "host.docker.internal:7784"}},
+		{"localhost where it does not (macOS host, Issue 8)", "localhost:7784", "", false, []string{"127.0.0.1:7784", "localhost:7784"}},
+		{"localhost is matched without regard to case", "LocalHost:7784", "", false, []string{"127.0.0.1:7784", "LocalHost:7784"}},
 		{"127.0.0.1 where the docker name resolves", "127.0.0.1:7782", "", true, []string{"127.0.0.1:7782", "host.docker.internal:7782"}},
 		{"127.0.0.1 where it does not", "127.0.0.1:7782", "", false, []string{"127.0.0.1:7782"}},
 		{"another host has no fallback", "myhost:9000", "", true, []string{"myhost:9000"}},
-		{"no port is port 80", "localhost", "", true, []string{"localhost:80", "host.docker.internal:80"}},
+		{"no port is port 80", "localhost", "", true, []string{"127.0.0.1:80", "localhost:80", "host.docker.internal:80"}},
 		{"--mcp-dial is the only address", "localhost:7782", "127.0.0.1:7782", true, []string{"127.0.0.1:7782"}},
 	}
 	for _, c := range cases {
@@ -96,5 +105,35 @@ func TestClient_LocalhostReachesStudioProOnTheHostWhenTheDockerNameResolves(t *t
 	}
 	if _, err := c.Initialize(); err != nil {
 		t.Fatalf("a Studio Pro listening on loopback was not reached: %v", err)
+	}
+}
+
+// The dial goes to 127.0.0.1, but the request still says Host: localhost —
+// Studio Pro answers HTTP 400 "Invalid Hostname" to any other Host header
+// (mendixlabs/mxcli#1684), so the dial address must never leak into the URL.
+func TestClient_LocalhostKeepsTheLocalhostHostHeader(t *testing.T) {
+	var mu sync.Mutex
+	var hosts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hosts = append(hosts, r.Host)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"fake","version":"1"}}}`))
+	}))
+	defer srv.Close()
+	port := srv.URL[strings.LastIndex(srv.URL, ":")+1:]
+	c, err := NewClient(ClientOptions{URL: "http://localhost:" + port + "/mcp", Timeout: 10 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = c.Initialize()
+	mu.Lock()
+	defer mu.Unlock()
+	if len(hosts) == 0 {
+		t.Fatal("the server on 127.0.0.1 received no request")
+	}
+	if hosts[0] != "localhost:"+port {
+		t.Errorf("Host header = %q, want %q", hosts[0], "localhost:"+port)
 	}
 }

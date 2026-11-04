@@ -296,6 +296,39 @@ func (fb *flowBuilder) addDeleteAction(s *ast.DeleteObjectStmt) model.ID {
 	return activity.ID
 }
 
+// addExternalObjectAction creates a SEND or DELETE EXTERNAL OBJECT activity
+// (mendixlabs/mxcli#1735).
+func (fb *flowBuilder) addExternalObjectAction(s *ast.ExternalObjectStmt) model.ID {
+	activityX := fb.posX
+	var action microflows.MicroflowAction
+	id := model.BaseElement{ID: model.ID(types.GenerateID())}
+	eh := explicitErrorHandling(fb, s.ErrorHandling)
+	if s.Delete {
+		action = &microflows.DeleteExternalObjectAction{BaseElement: id, Variable: s.Variable, RefreshInClient: s.RefreshInClient, ErrorHandlingType: eh}
+	} else {
+		action = &microflows.SendExternalObjectAction{BaseElement: id, Variable: s.Variable, RefreshInClient: s.RefreshInClient, ErrorHandlingType: eh}
+	}
+
+	activity := &microflows.ActionActivity{
+		BaseActivity: microflows.BaseActivity{
+			BaseMicroflowObject: microflows.BaseMicroflowObject{
+				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
+				Position:    model.Point{X: fb.posX, Y: fb.posY},
+				Size:        model.Size{Width: ActivityWidth, Height: ActivityHeight},
+			},
+			AutoGenerateCaption: true,
+		},
+		Action: action,
+	}
+
+	fb.objects = append(fb.objects, activity)
+	fb.posX += fb.spacing
+
+	fb.finishCustomErrorHandler(activity.ID, activityX, s.ErrorHandling, "")
+
+	return activity.ID
+}
+
 // addRollbackAction creates a ROLLBACK statement.
 func (fb *flowBuilder) addRollbackAction(s *ast.RollbackStmt) model.ID {
 	activityX := fb.posX
@@ -1476,7 +1509,10 @@ func (fb *flowBuilder) addRetrieveAction(s *ast.RetrieveStmt) model.ID {
 				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 				RangeType:   microflows.RangeTypeFirst,
 			}
-		} else if s.Limit != "" {
+		} else if s.Limit != "" || s.Offset != "" {
+			// An offset alone is a Custom range too; testing the limit only
+			// wrote `offset 5000` as the "all" range, and the retrieve
+			// returned the first objects instead (mendixlabs/mxcli#1737).
 			dbSource.Range = &microflows.Range{
 				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 				RangeType:   microflows.RangeTypeCustom,

@@ -119,9 +119,9 @@ showStatement
     | showOrList PUBLISHED REST SERVICES (IN (qualifiedName | IDENTIFIER))?
     | showOrList DATA TRANSFORMERS (IN (qualifiedName | IDENTIFIER))?
     | showOrList LANGUAGES
-    | showOrList FEATURES (IN IDENTIFIER)?
-    | showOrList FEATURES FOR VERSION NUMBER_LITERAL
-    | showOrList FEATURES ADDED SINCE NUMBER_LITERAL
+    | showOrList FEATURES (IN identifierOrKeyword)?   // area names are keywords: workflows, pages, … (#1367)
+    | showOrList FEATURES FOR VERSION featureVersion
+    | showOrList FEATURES ADDED SINCE featureVersion
     | showOrList JAR DEPENDENCIES (IN (qualifiedName | IDENTIFIER))?
     ;
 
@@ -398,4 +398,10 @@ groupByList
 limitOffsetClause
     : LIMIT NUMBER_LITERAL (OFFSET NUMBER_LITERAL)?
     | OFFSET NUMBER_LITERAL (LIMIT NUMBER_LITERAL)?
+    ;
+
+// A Mendix version as written everywhere else: 10.24 or 10.24.3. NUMBER_LITERAL
+// takes one dot, so a patch arrives as DOT NUMBER_LITERAL (ako/mxcli#1367).
+featureVersion
+    : NUMBER_LITERAL (DOT NUMBER_LITERAL)?
     ;

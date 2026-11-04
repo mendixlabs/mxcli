@@ -172,7 +172,7 @@ func foldSplit(work *microflows.MicroflowObjectCollection, f microflowgraph.Find
 	return fmt.Sprintf(
 		"-- NOTE: the decision at %s was NORMALIZED - its branches were folded into one condition. "+
 			"This is equivalent to the microflow but is NOT its shape: re-executing this MDL builds "+
-			"a graph with fewer nodes and a different layout (mxcli #923, Mode 3)",
+			"a graph with fewer nodes and a different layout (mendixlabs/mxcli#923, Mode 3)",
 		positionOf(f.Split)), nil
 }
 

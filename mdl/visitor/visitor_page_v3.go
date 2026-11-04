@@ -1194,7 +1194,8 @@ func buildActionV3(ctx parser.IActionExprV3Context) *ast.ActionV3 {
 	// snake-case one (R8, ako/mxcli#752); both build the same action, and
 	// ExitActionExprV3 reports the old one.
 	closePage := actCtx.ClosePageV3() != nil
-	if v := actCtx.VARIABLE(); v != nil && actCtx.OpenLinkV3() == nil {
+	isDelete := actCtx.DELETE_OBJECT() != nil || actCtx.DELETE() != nil
+	if v := actCtx.VARIABLE(); v != nil && actCtx.OpenLinkV3() == nil && !isDelete {
 		// $handler — a fragment action parameter; resolved at expansion.
 		// (open link $currentObject/Attr also carries a VARIABLE.)
 		action.Type = "param"
@@ -1212,9 +1213,12 @@ func buildActionV3(ctx parser.IActionExprV3Context) *ast.ActionV3 {
 	} else if actCtx.CANCEL_CHANGES() != nil {
 		action.Type = "cancel"
 		action.ClosePage = closePage
-	} else if actCtx.DELETE_OBJECT() != nil || actCtx.DELETE() != nil {
+	} else if isDelete {
 		action.Type = "delete"
 		action.ClosePage = closePage
+		if v := actCtx.VARIABLE(); v != nil {
+			action.SourceVariable = strings.TrimPrefix(v.GetText(), "$")
+		}
 	} else if closePage {
 		action.Type = "close"
 	} else if actCtx.CREATE_OBJECT() != nil || actCtx.CREATE() != nil {

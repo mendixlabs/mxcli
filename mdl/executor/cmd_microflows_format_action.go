@@ -133,7 +133,8 @@ func refreshModifier(refresh bool) string {
 //
 // Widget and workflow expressions are not microflow expressions: they are
 // stored as written in both languages, so their describers only trim.
-// describeCallArgument renders a call microflow / call nanoflow argument. A
+// describeCallArgument renders a call microflow / call nanoflow / call external
+// action argument. A
 // blank stored argument — the mapping is present, its expression empty, which
 // is what Studio Pro writes for an argument field left empty — is `nothing`.
 // Printing it through describeExpr gave `Param = ,` / `Param = )`, which does
@@ -542,6 +543,12 @@ func formatAction(
 	case *microflows.RollbackObjectAction:
 		return fmt.Sprintf("rollback $%s%s;", a.RollbackVariable, refreshModifier(a.RefreshInClient))
 
+	case *microflows.SendExternalObjectAction:
+		return fmt.Sprintf("send external object $%s%s;", a.Variable, refreshModifier(a.RefreshInClient))
+
+	case *microflows.DeleteExternalObjectAction:
+		return fmt.Sprintf("delete external object $%s%s;", a.Variable, refreshModifier(a.RefreshInClient))
+
 	case *microflows.CreateListAction:
 		// Use EntityQualifiedName (BY_NAME_REFERENCE) or fall back to EntityID lookup
 		entityName := a.EntityQualifiedName
@@ -907,7 +914,11 @@ func formatAction(
 
 		var params []string
 		for _, pm := range a.ParameterMappings {
-			params = append(params, fmt.Sprintf("%s = %s", pm.ParameterName, describeExpr(ctx, pm.Argument)))
+			// describeCallArgument, not describeExpr: Studio Pro 11.16 stores an
+			// optional parameter left blank as `Argument: ""`, which printed as
+			// `name = )` and did not parse (ako/mxcli#1915). `nothing` is the
+			// blank; `empty` (11.14's spelling of the same field) stays a value.
+			params = append(params, fmt.Sprintf("%s = %s", pm.ParameterName, describeCallArgument(ctx, pm.Argument)))
 		}
 
 		paramStr := ""
@@ -2383,7 +2394,25 @@ func queueClauseMDL(qs *microflows.QueueSettings) string {
 	if qs == nil || qs.Queue == "" {
 		return ""
 	}
-	return " in queue " + qs.Queue
+	return " in queue " + qs.Queue + queueRetryClauseMDL(qs.RetryPolicy)
+}
+
+// queueRetryClauseMDL renders a queued call's retry policy, so a stored retry
+// round-trips (mendixlabs/mxcli#1729). Every property is printed: the clause
+// has no defaults.
+func queueRetryClauseMDL(r *microflows.QueueRetry) string {
+	if r == nil {
+		return ""
+	}
+	switch r.Kind {
+	case microflows.QueueRetryFixed:
+		return fmt.Sprintf(" retry fixed (Retries: %d, Interval: %d, IntervalType: %s)",
+			r.Retries, r.Interval, r.IntervalType)
+	case microflows.QueueRetryExponential:
+		return fmt.Sprintf(" retry exponential (Retries: %d, InitialInterval: %d, MaximumInterval: %d, IntervalType: %s)",
+			r.Retries, r.InitialInterval, r.MaximumInterval, r.IntervalType)
+	}
+	return ""
 }
 
 // mdlAggregateKeyword maps a Mendix aggregate function to the MDL keyword that

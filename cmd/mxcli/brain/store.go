@@ -212,6 +212,11 @@ func (s *Store) Promote(e Entry, shard string) error {
 		if existing.ID == e.ID {
 			return fmt.Errorf("%s already carries entry %s (%q)", shard, e.ID, existing.Title)
 		}
+		// By content as well: an edited entry keeps an id its text no longer
+		// hashes to, so the same words captured again arrive with a new id.
+		if existing.ContentKey() == e.ContentKey() {
+			return fmt.Errorf("%s already says this, as entry %s (%q)", shard, existing.ID, existing.Title)
+		}
 	}
 	next := append(entries, e)
 	// Counted WITH frontmatter: the cap is what a session pays to load the

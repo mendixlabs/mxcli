@@ -6,8 +6,9 @@ func init() {
 	// ── Page ──────────────────────────────────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "page",
-		Summary: "Create and manage pages with widgets, datasources, and actions",
+		Path:     "page",
+		Features: []string{"pages/basic"},
+		Summary:  "Create and manage pages with widgets, datasources, and actions",
 		Keywords: []string{
 			"page", "pages", "form", "UI", "user interface",
 			"widget", "layout", "screen",
@@ -18,8 +19,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "page.create",
-		Summary: "CREATE PAGE with parameters, variables, layout, and URL",
+		Path:     "page.create",
+		Features: []string{"pages/page_parameters", "pages/page_parameter_optional", "pages/page_variables"},
+		Summary:  "CREATE PAGE with parameters, variables, layout, and URL",
 		Keywords: []string{
 			"create page", "new page", "page parameters", "page variables",
 			"layout", "url", "folder",
@@ -113,8 +115,9 @@ LIST IMPACT OF htmlelement;
 	})
 
 	Register(SyntaxFeature{
-		Path:    "page.widgets",
-		Summary: "Widget types: containers, data widgets, inputs, actions, display",
+		Path:     "page.widgets",
+		Features: []string{"pages/pluggable_widgets", "pages/conditional_visibility", "pages/conditional_editability", "pages/responsive_column_widths"},
+		Summary:  "Widget types: containers, data widgets, inputs, actions, display",
 		Keywords: []string{
 			"widget", "layoutgrid", "container", "customcontainer", "dataview", "datagrid",
 			"gallery", "listview", "textbox", "textarea", "datepicker",
@@ -292,8 +295,9 @@ LIST IMPACT OF htmlelement;
 	})
 
 	Register(SyntaxFeature{
-		Path:    "page.action",
-		Summary: "Widget actions: save, cancel, close, delete, show page, microflow, nanoflow, nothing",
+		Path:     "page.action",
+		Features: []string{"pages/complete_task_action", "pages/workflow_page_actions", "pages/flow_call_output_mappings", "pages/flow_call_output_mappings_to_attribute"},
+		Summary:  "Widget actions: save, cancel, close, delete, show page, microflow, nanoflow, nothing",
 		Keywords: []string{
 			"action", "save", "cancel", "close", "delete",
 			"show page", "navigate", "microflow", "create object",
@@ -320,8 +324,9 @@ LIST IMPACT OF htmlelement;
 	})
 
 	Register(SyntaxFeature{
-		Path:    "page.alter",
-		Summary: "ALTER PAGE — modify widget properties, insert, drop, replace widgets in-place",
+		Path:     "page.alter",
+		Features: []string{"pages/alter_page"},
+		Summary:  "ALTER PAGE — modify widget properties, insert, drop, replace widgets in-place",
 		Keywords: []string{
 			"alter page", "modify page", "update page",
 			"set property", "insert widget", "drop widget", "replace widget",
@@ -335,8 +340,9 @@ LIST IMPACT OF htmlelement;
 	})
 
 	Register(SyntaxFeature{
-		Path:    "page.styling",
-		Summary: "CSS classes, inline styles, dynamic classes and Atlas design properties — written inline, or ALTERed in place",
+		Path:     "page.styling",
+		Features: []string{"pages/design_properties_v3"},
+		Summary:  "CSS classes, inline styles, dynamic classes and Atlas design properties — written inline, or ALTERed in place",
 		Keywords: []string{
 			"class", "style", "css", "design properties", "atlas",
 			"spacing", "full width", "dynamic classes", "dynamicclasses",
@@ -448,8 +454,9 @@ LIST IMPACT OF htmlelement;
 	})
 
 	Register(SyntaxFeature{
-		Path:    "snippet.create",
-		Summary: "CREATE SNIPPET with parameters, variables, and folder",
+		Path:     "snippet.create",
+		Features: []string{"pages/snippet_parameters"},
+		Summary:  "CREATE SNIPPET with parameters, variables, and folder",
 		Keywords: []string{
 			"create snippet", "new snippet", "snippet parameters",
 			"snippet variables",

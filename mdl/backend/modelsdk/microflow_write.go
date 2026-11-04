@@ -588,6 +588,22 @@ func microflowActionToGen(action microflows.MicroflowAction) element.Element {
 		g.SetDeleteVariableName(a.DeleteVariable)
 		g.SetRefreshInClient(a.RefreshInClient)
 		return g
+	case *microflows.SendExternalObjectAction:
+		// Microflows$SendExternalObject (mendixlabs/mxcli#1735).
+		g := genMf.NewSendExternalObject()
+		g.SetID(element.ID(a.ID))
+		g.SetVariableNameToBeSent(a.Variable)
+		g.SetRefreshInClient(a.RefreshInClient)
+		g.SetErrorHandlingType(orDefault(string(a.ErrorHandlingType), "Rollback"))
+		return g
+	case *microflows.DeleteExternalObjectAction:
+		// Microflows$DeleteExternalObject (mendixlabs/mxcli#1735).
+		g := genMf.NewDeleteExternalObject()
+		g.SetID(element.ID(a.ID))
+		g.SetDeleteVariableName(a.Variable)
+		g.SetRefreshInClient(a.RefreshInClient)
+		g.SetErrorHandlingType(orDefault(string(a.ErrorHandlingType), "Rollback"))
+		return g
 	case *microflows.RollbackObjectAction:
 		g := genMf.NewRollbackAction()
 		g.SetID(element.ID(a.ID))
@@ -1164,7 +1180,36 @@ func queueSettingsToGen(qs *microflows.QueueSettings) element.Element {
 	}
 	g := newElem("Queues$QueueSettings", string(qs.ID))
 	addStr(g, "Queue", qs.Queue)
+	if r := queueRetryToGen(qs.RetryPolicy); r != nil {
+		addPart(g, "Retry", r)
+	}
 	return g
+}
+
+// queueRetryToGen builds the Queues$QueueFixedRetry / Queues$QueueExponentialRetry
+// a `retry fixed|exponential (…)` clause states (mendixlabs/mxcli#1729), with
+// exactly the properties the type has. nil — no retry — leaves Retry to the
+// registered null default.
+func queueRetryToGen(r *microflows.QueueRetry) element.Element {
+	if r == nil {
+		return nil
+	}
+	switch r.Kind {
+	case microflows.QueueRetryFixed:
+		g := newElem("Queues$QueueFixedRetry", string(r.ID))
+		addInt32(g, "Retries", int32(r.Retries))
+		addInt32(g, "Interval", int32(r.Interval))
+		addStr(g, "IntervalType", r.IntervalType)
+		return g
+	case microflows.QueueRetryExponential:
+		g := newElem("Queues$QueueExponentialRetry", string(r.ID))
+		addInt32(g, "Retries", int32(r.Retries))
+		addInt32(g, "InitialInterval", int32(r.InitialInterval))
+		addInt32(g, "MaximumInterval", int32(r.MaximumInterval))
+		addStr(g, "IntervalType", r.IntervalType)
+		return g
+	}
+	return nil
 }
 
 func newElem(typeName, id string) *element.Base {
