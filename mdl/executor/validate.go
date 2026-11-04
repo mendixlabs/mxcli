@@ -52,7 +52,9 @@ type scriptContext struct {
 	queues map[string]bool
 
 	// Image collections created (Module.Collection) and the images they declare
-	// (Module.Collection.Image), both lower-cased like buildImageQualifiedNames.
+	// (Module.Collection.Image), both spelled as declared, like
+	// buildImageQualifiedNames — Mendix resolves an image reference
+	// case-sensitively.
 	// Missing, an image widget naming a collection the same script creates was
 	// "image collection not found" and exec refused the script
 	// (mendixlabs/mxcli#1419).
@@ -346,10 +348,10 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 		}
 	case *ast.CreateImageCollectionStmt:
 		if s.Name.Module != "" {
-			qn := strings.ToLower(s.Name.String())
+			qn := s.Name.String()
 			sc.imageCollections[qn] = true
 			for _, img := range s.Images {
-				sc.images[qn+"."+strings.ToLower(img.Name)] = true
+				sc.images[qn+"."+img.Name] = true
 			}
 		}
 	case *ast.CreateWorkflowStmt:

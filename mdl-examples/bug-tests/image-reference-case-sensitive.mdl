@@ -1,0 +1,31 @@
+mdl 1;
+
+/**
+ * The image reference check folded case: on a blank 11.13.0 app, whose
+ * Atlas_Core.Content holds the image `Mendix`, `mxcli check --references`
+ * passed all three wrong-case references below, and `mxcli docker check`
+ * then reported each as CE1613 "The selected image '…' no longer exists".
+ * The miss hint also printed the image as `mendix`, so following it produced
+ * the CE1613.
+ *
+ * Expected (run with `-p app.mpr --references`): ImgOk passes; each of
+ * ImgCase, CollCase and ModCase is a reference error naming the stored
+ * spelling (Atlas_Core.Content.Mendix / Atlas_Core.Content). This file is not
+ * .fail.mdl: without a project `check` cannot resolve references and passes.
+ */
+
+create page MyFirstModule.ImgOk (Title: 'Ok', Layout: Atlas_Core.Atlas_Default) {
+  image imgOk (Image: 'Atlas_Core.Content.Mendix')
+};
+
+create page MyFirstModule.ImgCase (Title: 'Image', Layout: Atlas_Core.Atlas_Default) {
+  image imgCase (Image: 'Atlas_Core.Content.mendix')
+};
+
+create page MyFirstModule.CollCase (Title: 'Collection', Layout: Atlas_Core.Atlas_Default) {
+  image imgColl (Image: 'Atlas_Core.content.Mendix')
+};
+
+create page MyFirstModule.ModCase (Title: 'Module', Layout: Atlas_Core.Atlas_Default) {
+  image imgMod (Image: 'atlas_core.Content.Mendix')
+};
