@@ -225,16 +225,15 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 		if err := checkNoQueuedCalls(ctx, existingID, qualifiedName, s); err != nil {
 			return nil, err
 		}
+		// A whole-flow rebuild writes only what the statement says, so an
+		// activity MDL cannot express is lost (mendixlabs/mxcli#1735).
+		if types := unsupportedActionTypes(existingObjects); len(types) > 0 {
+			return nil, unsupportedActionLossError("microflow", qualifiedName, "rebuilding it from this statement", types)
+		}
 		// Same reasoning for a REST body the writer cannot express: the rebuild
 		// would drop it, DESCRIBE would not show it missing, and the app would
 		// still build.
 		if err := checkNoUnwritableRestBody(ctx, existingID, qualifiedName); err != nil {
-			return nil, err
-		}
-		// And for an activity MDL cannot express at all, which a rewrite
-		// from MDL deletes (FlowUnsupportedRule). The verdict pass refuses it
-		// first under exec; this holds for a run without it (--no-check).
-		if err := checkNoUnsupportedActionsLost("microflow", qualifiedName, existingObjects); err != nil {
 			return nil, err
 		}
 	}
@@ -576,11 +575,12 @@ func buildNanoflowFromStmt(ctx *ExecContext, s *ast.CreateNanoflowStmt, opts bui
 		// A rewrite that carried no doc comment keeps the stored one (#1018).
 		existingDocumentation = existing.Documentation
 		preserveDocumentation = true
-		// A rewrite from MDL deletes an activity MDL cannot express
-		// (FlowUnsupportedRule); refused before anything is written.
+		// As for a microflow: a whole-flow rebuild loses an activity MDL cannot
+		// express (mendixlabs/mxcli#1735).
 		if opts.AllowCreate {
-			if err := checkNoUnsupportedActionsLost("nanoflow", s.Name.Module+"."+s.Name.Name, existing.ObjectCollection); err != nil {
-				return nil, err
+			if types := unsupportedActionTypes(existing.ObjectCollection); len(types) > 0 {
+				return nil, unsupportedActionLossError("nanoflow", s.Name.Module+"."+s.Name.Name,
+					"rebuilding it from this statement", types)
 			}
 		}
 	}

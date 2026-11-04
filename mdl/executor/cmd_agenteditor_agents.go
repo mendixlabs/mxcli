@@ -126,10 +126,10 @@ func describeAgentEditorAgent(ctx *ExecContext, name ast.QualifiedName) error {
 		lines = append(lines, fmt.Sprintf("  TopP: %g", *a.TopP))
 	}
 	if a.SystemPrompt != "" {
-		lines = append(lines, fmt.Sprintf("  SystemPrompt: %s", formatAgentString(a.SystemPrompt)))
+		lines = append(lines, fmt.Sprintf("  SystemPrompt: %s", formatAgentString(ctx, a.SystemPrompt)))
 	}
 	if a.UserPrompt != "" {
-		lines = append(lines, fmt.Sprintf("  UserPrompt: %s", formatAgentString(a.UserPrompt)))
+		lines = append(lines, fmt.Sprintf("  UserPrompt: %s", formatAgentString(ctx, a.UserPrompt)))
 	}
 
 	for i, line := range lines {
@@ -257,11 +257,10 @@ func findAgentEditorAgent(ctx *ExecContext, moduleName, agentName string) *agent
 
 // formatAgentString formats a string value for MDL output. Single-line
 // values use single quotes; multi-line values use $$...$$ dollar-quoting
-// so they round-trip cleanly through the parser (which doesn't support
-// newlines inside single-quoted strings).
-func formatAgentString(s string) string {
+// unless they hold `$$`, which would end the literal early (ako/mxcli#1003).
+func formatAgentString(ctx *ExecContext, s string) string {
 	if strings.ContainsAny(s, "\r\n") {
-		return "$$" + s + "$$"
+		return mdlDollarQuote(ctx, s)
 	}
-	return "'" + escapeSQLString(s) + "'"
+	return mdlQuote(ctx, s)
 }

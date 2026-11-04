@@ -1398,7 +1398,7 @@ func irreducibleGraphWarnings(oc *microflows.MicroflowObjectCollection, declared
 		out = append(out, fmt.Sprintf(
 			"-- WARNING: the decision%s has %d branches that do not nest - %s. "+
 				"This description is NOT equivalent to the microflow and must not be re-executed over it; "+
-				"edit it in Studio Pro instead (mxcli #923, %s)",
+				"edit it in Studio Pro instead (mendixlabs/mxcli#923, %s)",
 			pos, f.BranchCount, detail, f.Class))
 	}
 	return out

@@ -1,0 +1,31 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#1932 (mendixlabs/mxcli#1730) — bare `delete` in a control bar
+-- ============================================================================
+--
+-- NEGATIVE TEST: this script must FAIL `mxcli check`.
+--
+-- A control bar has no context object, so a bare `delete` there has nothing
+-- to delete: it was written with SourceVariable null and mx check reported
+-- CE7005 "No value selection has been made", while check --references passed.
+-- check now reports MDL-PAGEDEL01 and suggests `delete $grid1`; the working
+-- form is in 1932-delete-grid-selection.mdl.
+-- ============================================================================
+
+create module Probe1932F;
+
+create persistent entity Probe1932F.Order (
+  Name: String(200)
+);
+
+create page Probe1932F.Orders (
+  title: 'Orders',
+  layout: Atlas_Core.Atlas_Default
+) {
+  datagrid grid1 (datasource: database from Probe1932F.Order) {
+    controlbar {
+      actionbutton btnDelete (caption: 'Delete', action: delete)
+    }
+    column (attribute: Name, caption: 'Name')
+  }
+};

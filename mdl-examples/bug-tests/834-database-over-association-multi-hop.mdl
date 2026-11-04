@@ -1,0 +1,35 @@
+-- ============================================================================
+-- Bug test: ako/mxcli#834 — `database from $ctx/…` over two associations
+-- ============================================================================
+--
+-- A List View's database source over associations read its path two segments
+-- at a time (association, destination). The association source accepts the
+-- short form `A1/A2` (mendixlabs/mxcli#1467); this one refused it:
+--   entity "Bug834.Flag_Account" in datasource `database from
+--   $currentObject/Bug834.Order_Account/Bug834.Flag_Account` does not exist
+-- and wrote `A1/E1` with E1 off the association as stated.
+--
+-- To verify:
+--   1. mxcli exec this script, then: describe page Bug834.P1
+--      -> listview flags (DataSource: database from $currentObject/
+--         Bug834.Order_Account/Bug834.Account/Bug834.Flag_Account/Bug834.Flag …)
+--   2. exec that output -> "Unchanged page Bug834.P1".
+-- ============================================================================
+
+mdl 1;
+
+create module Bug834;
+
+create persistent entity Bug834.Order (Code: String(20));
+create persistent entity Bug834.Account (Name: String(50));
+create persistent entity Bug834.Flag (Label: String(50));
+create association Bug834.Order_Account from Bug834.Order to Bug834.Account;
+create association Bug834.Flag_Account from Bug834.Flag to Bug834.Account;
+
+create page Bug834.P1 (Title: 'P', Layout: Atlas_Core.Atlas_Default) {
+  listview orders (DataSource: database from Bug834.Order) {
+    listview flags (DataSource: database from $currentObject/Bug834.Order_Account/Bug834.Flag_Account where [Label != empty]) {
+      dynamictext x (Content: '{1}', ContentParams: ({1} = Label))
+    }
+  }
+};

@@ -3,10 +3,54 @@
   "mdlName": "NUMBERFILTER",
   "templateFile": "datagrid-number-filter.json",
   "defaultEditable": "Always",
-  "propertyMappings": [
-    {"propertyKey": "attrChoice", "value": "auto", "operation": "primitive"},
-    {"propertyKey": "attributes", "source": "Attributes", "operation": "attributeObjects"},
-    {"propertyKey": "defaultFilter", "source": "FilterType", "operation": "primitive"},
-    {"propertyKey": "onChange", "source": "OnChange", "operation": "action"}
+  "modes": [
+    {
+      "name": "attributes",
+      "condition": "hasAttributes",
+      "description": "Custom attributes — `attributes: [A, …]` names the attributes the filter compares, stored on the `attributes` list, which the widget's editorConfig shows only when attrChoice is \"linked\" (Custom). The builder's SetAttributeObjects writes \"linked\" whenever it fills the list; the mode states it so check reads the configuration exec stores (ako/mxcli#1684 — the constant \"auto\" made MDL-WIDGET10 call the list hidden). Same shape as the drop-down filter's `attribute` mode (mendixlabs/mxcli#1519).",
+      "propertyMappings": [
+        {
+          "propertyKey": "attrChoice",
+          "value": "linked",
+          "operation": "primitive"
+        },
+        {
+          "propertyKey": "attributes",
+          "source": "Attributes",
+          "operation": "attributeObjects"
+        },
+        {
+          "propertyKey": "defaultFilter",
+          "source": "FilterType",
+          "operation": "primitive"
+        },
+        {
+          "propertyKey": "onChange",
+          "source": "OnChange",
+          "operation": "action"
+        }
+      ]
+    },
+    {
+      "name": "default",
+      "description": "Auto — no attributes given: the filter takes the attribute of the Data grid 2 column it sits in (attrChoice \"auto\"), so it only works inside a column.",
+      "propertyMappings": [
+        {
+          "propertyKey": "attrChoice",
+          "value": "auto",
+          "operation": "primitive"
+        },
+        {
+          "propertyKey": "defaultFilter",
+          "source": "FilterType",
+          "operation": "primitive"
+        },
+        {
+          "propertyKey": "onChange",
+          "source": "OnChange",
+          "operation": "action"
+        }
+      ]
+    }
   ]
 }

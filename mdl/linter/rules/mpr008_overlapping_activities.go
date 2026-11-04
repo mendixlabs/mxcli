@@ -77,22 +77,18 @@ func (r *OverlappingActivitiesRule) Check(ctx *linter.LintContext) []linter.Viol
 							continue
 						}
 						reported[key] = true
+						msg, suggestion := overlapViolationText(a, b, mf.DocumentNoun(), mf.ModuleName, mf.Name)
 						violations = append(violations, linter.Violation{
 							RuleID:   r.ID(),
 							Severity: r.DefaultSeverity(),
-							Message: fmt.Sprintf(
-								"Activities '%s' (%d,%d) and '%s' (%d,%d) overlap in %s '%s.%s'. "+
-									"Each MDL statement that creates a canvas activity needs its own @position annotation.",
-								a.caption, a.x, a.y, b.caption, b.x, b.y,
-								mf.DocumentNoun(), mf.ModuleName, mf.Name,
-							),
+							Message:  msg,
 							Location: linter.Location{
 								Module:       mf.ModuleName,
 								DocumentType: mf.DocumentNoun(),
 								DocumentName: mf.Name,
 								DocumentID:   mf.ID,
 							},
-							Suggestion: "Add a separate @position(x, y) annotation before each statement. Use 190px spacing between activities.",
+							Suggestion: suggestion,
 						})
 					}
 				}
@@ -103,12 +99,49 @@ func (r *OverlappingActivitiesRule) Check(ctx *linter.LintContext) []linter.Viol
 	return violations
 }
 
+// overlapViolationText words an MPR008 finding for one overlapping pair.
+//
+// When one box is a loop, the overlap is almost never two statements sharing one
+// @position: a loop's box grows with its body, so a loop placed at an ordinary
+// activity spacing reaches into the activity before or after it. Saying "each
+// statement needs its own @position" there sent users adding annotations that
+// were already present (ako/mxcli#1839, mendixlabs/mxcli#1690), so the message
+// names the loop, its size, and the neighbour it covers instead.
+func overlapViolationText(a, b actInfo, noun, module, name string) (message, suggestion string) {
+	loop, other := a, b
+	if !loop.loop {
+		loop, other = b, a
+	}
+	if loop.loop {
+		message = fmt.Sprintf(
+			"The box of loop '%s' (%d,%d, %dx%d) overlaps '%s' (%d,%d) in %s '%s.%s'. "+
+				"A loop's box grows with its body, so a gap sized for an ordinary activity is not enough.",
+			loop.caption, loop.x, loop.y, loop.w, loop.h, other.caption, other.x, other.y,
+			noun, module, name,
+		)
+		suggestion = fmt.Sprintf(
+			"Widen the gap: the @position x values of the loop and '%s' must differ by more than half of both widths "+
+				"(%dpx here). Or drop the @position annotations around the loop and let the layout place it.",
+			other.caption, (loop.w+other.w)/2,
+		)
+		return message, suggestion
+	}
+	message = fmt.Sprintf(
+		"Activities '%s' (%d,%d) and '%s' (%d,%d) overlap in %s '%s.%s'. "+
+			"Each MDL statement that creates a canvas activity needs its own @position annotation.",
+		a.caption, a.x, a.y, b.caption, b.x, b.y, noun, module, name,
+	)
+	return message, "Add a separate @position(x, y) annotation before each statement. Use 190px spacing between activities."
+}
+
 // actInfo is one positioned node on a canvas: its middle point (Mendix stores
-// RelativeMiddlePoint) and its box size.
+// RelativeMiddlePoint) and its box size. loop marks a LoopedActivity, whose box
+// is sized by its body.
 type actInfo struct {
 	x, y    int
 	w, h    int
 	caption string
+	loop    bool
 }
 
 // boxesOverlap reports whether two nodes' boxes intersect. Each node is
@@ -174,7 +207,9 @@ func overlapPlanes(objects []microflows.MicroflowObject) [][]actInfo {
 				if caption == "" {
 					caption = "(loop)"
 				}
-				plane = append(plane, newActInfo(act, caption))
+				info := newActInfo(act, caption)
+				info.loop = true
+				plane = append(plane, info)
 				if act.ObjectCollection != nil {
 					nested = append(nested, act.ObjectCollection.Objects)
 				}

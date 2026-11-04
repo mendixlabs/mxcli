@@ -5,10 +5,11 @@
 // Two independent questions, and conflating them is the mistake this file
 // exists to avoid:
 //
-//   - Does each anchor still resolve? Three states, and only one is a failure.
+//   - Does each anchor still resolve? Four states, and only one is a failure.
 //     An anchor to a document type the catalog does not index resolves as
 //     *missing* through the catalog alone, which is a false staleness signal —
 //     so a second, type-agnostic lookup separates "gone" from "not indexed".
+//     With no model at all, nothing can be checked, which is its own state.
 //   - Is the entry in the right shard? A separate axis, not a fourth state: an
 //     anchor can resolve perfectly and the entry still sit in the wrong file.
 package brain
@@ -31,6 +32,10 @@ const (
 	// view does not cover. Reported, never failed — treating it as missing
 	// would make `check` demand edits to entries that are perfectly current.
 	NotIndexable
+	// Unverifiable: there is no model to check against — the brain was started
+	// before the project (ako/mxcli#1948). Neither a failure nor "built": a
+	// requirement counts as planned, a decision is simply not checked.
+	Unverifiable
 )
 
 // MarshalJSON writes the state's name. The zero value of an int is a state
@@ -53,6 +58,8 @@ func (s *AnchorState) UnmarshalJSON(b []byte) error {
 		*s = NotFound
 	case "not indexable":
 		*s = NotIndexable
+	case "unverifiable":
+		*s = Unverifiable
 	default:
 		return fmt.Errorf("unknown anchor state %q", name)
 	}
@@ -65,6 +72,8 @@ func (s AnchorState) String() string {
 		return "resolved"
 	case NotFound:
 		return "not found"
+	case Unverifiable:
+		return "unverifiable"
 	default:
 		return "not indexable"
 	}
@@ -85,6 +94,17 @@ type Resolution struct {
 // ones, and a fixture project cannot readily produce a NotIndexable.
 type Resolver interface {
 	Resolve(Anchor) (Resolution, error)
+}
+
+// NoModel is the Resolver for a brain whose project does not exist yet. It
+// answers every anchor Unverifiable rather than NotFound: a null resolver that
+// said NotFound would report the whole store as stale when the truth is that
+// nothing could be checked.
+type NoModel struct{}
+
+// Resolve reports that there is nothing to resolve against.
+func (NoModel) Resolve(Anchor) (Resolution, error) {
+	return Resolution{State: Unverifiable}, nil
 }
 
 // AnchorFinding is one anchor's outcome.
@@ -143,8 +163,15 @@ type Report struct {
 	Entries   int      `json:"entries"`
 	Anchors   int      `json:"anchors"`
 	ResolvedN int      `json:"resolved"`
-	// Findings carries NotFound and NotIndexable anchors only; a resolved
-	// anchor is not a finding.
+	// Unverifiable counts anchors that could not be checked because there is
+	// no model. Counted rather than listed: with no model every anchor is in
+	// this state, and listing them all would bury the one line that matters.
+	Unverifiable int `json:"unverifiable"`
+	// ModelAbsent says the check ran with no project to resolve against, so a
+	// consumer does not have to infer it from a count.
+	ModelAbsent bool `json:"model_absent,omitempty"`
+	// Findings carries NotFound and NotIndexable anchors only; a resolved or
+	// unverifiable anchor is not a finding.
 	Findings []AnchorFinding   `json:"findings"`
 	Misfiled []MisfiledFinding `json:"misfiled"`
 	// Malformed names entry blocks whose metadata line could not be read.
@@ -188,7 +215,8 @@ func (r Report) Failed() bool {
 // Check validates the given shards. Passing a subset is how `--changed` avoids
 // paying for shards a diff did not touch.
 func Check(s *Store, r Resolver, shards []string) (Report, error) {
-	rep := Report{Shards: shards}
+	_, noModel := r.(NoModel)
+	rep := Report{Shards: shards, ModelAbsent: noModel}
 	for _, shard := range shards {
 		entries, malformed, err := s.LoadShard(shard)
 		if err != nil {
@@ -205,6 +233,7 @@ func Check(s *Store, r Resolver, shards []string) (Report, error) {
 			rep.Entries += len(entries)
 			rep.Anchors += progress.anchors
 			rep.ResolvedN += progress.resolved
+			rep.Unverifiable += progress.unverifiable
 			rep.Slices = append(rep.Slices, progress.SliceProgress)
 			rep.Open = append(rep.Open, progress.open...)
 			continue
@@ -226,9 +255,13 @@ func Check(s *Store, r Resolver, shards []string) (Report, error) {
 				if err != nil {
 					return rep, err
 				}
-				if res.State == Resolved {
+				switch res.State {
+				case Resolved:
 					rep.ResolvedN++
 					resolvedModules = append(resolvedModules, res.Module)
+					continue
+				case Unverifiable:
+					rep.Unverifiable++
 					continue
 				}
 				rep.Findings = append(rep.Findings, AnchorFinding{
@@ -249,8 +282,8 @@ func Check(s *Store, r Resolver, shards []string) (Report, error) {
 
 type sliceCounts struct {
 	SliceProgress
-	anchors, resolved int
-	open              []OpenQuestion
+	anchors, resolved, unverifiable int
+	open                            []OpenQuestion
 }
 
 // checkSlice counts a slice's requirements against the model. It records no
@@ -285,8 +318,17 @@ func checkSlice(r Resolver, shard string, entries []Entry) (sliceCounts, error) 
 			// NotIndexable counts as built: the thing is there, the catalog
 			// simply does not index its type. Calling it planned would report
 			// finished work as outstanding.
-			if res.State == NotFound {
+			//
+			// Unverifiable does NOT: with no model nothing is built, and
+			// letting it fall through to the built branch with NotIndexable
+			// reports a project that does not exist yet as finished.
+			switch res.State {
+			case NotFound:
 				built = false
+				continue
+			case Unverifiable:
+				built = false
+				out.unverifiable++
 				continue
 			}
 			out.resolved++

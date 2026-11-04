@@ -12,16 +12,14 @@ import (
 	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
-// A flow holding an action describe cannot print — it prints
-// `-- Unsupported action: <$Type>`, which no statement recreates — loses that
-// activity when it is rebuilt from MDL: a drop + create from its description
-// (the route MDL-V1-REBUILD recommends), or the whole-flow rebuild `create or
-// modify` falls back to under mdl 0. check passed and exec reported success
-// (mendixlabs/mxcli#1735, #1738). Both must be refused before anything is
-// written; the in-place splice under mdl 1 keeps the activity and stays allowed.
-//
-// The subjects are Studio Pro's own: WorkflowCommons in ako/TestApp holds
-// Microflows$GenerateJumpToOptionsAction, which mxcli has no MDL for.
+// The unsupported-activity guards (validate_unsupported_actions.go) on Studio
+// Pro's own flows: WorkflowCommons in ako/TestApp holds
+// Microflows$GenerateJumpToOptionsAction and ApplyJumpToOptionAction, which
+// mxcli has no MDL for. A drop + create from the description and the mdl 0
+// whole-flow rebuild must be refused before anything is written — the rebuild
+// in the verdict pass too (FlowUnsupportedRule), so a script is not left
+// half-applied; the in-place splice under mdl 1 keeps the activity and stays
+// allowed (mendixlabs/mxcli#1735, #1738).
 
 const unsupportedFlow = "WorkflowCommons.ACT_Workflow_JumpTo"
 
@@ -59,6 +57,15 @@ func withoutHeader(s string) string {
 	return s
 }
 
+func dropRecreateRefusals(t *testing.T, exec *Executor, src string) []error {
+	t.Helper()
+	prog, errs := visitor.Build(src)
+	if len(errs) > 0 {
+		t.Fatalf("parse: %v\n%s", errs[0], src)
+	}
+	return validateDropRecreateKeepsActivities(exec.newExecContext(context.Background()), prog)
+}
+
 func TestUnsupportedActionGuard_DropAndCreateIsRefused(t *testing.T) {
 	exec, _ := openTestAppCopy(t)
 	described := describeQualified(t, exec, "microflow", unsupportedFlow)
@@ -66,13 +73,9 @@ func TestUnsupportedActionGuard_DropAndCreateIsRefused(t *testing.T) {
 		t.Fatalf("control: %s no longer holds the unsupported action:\n%s", unsupportedFlow, described)
 	}
 	src := "mdl 1;\ndrop microflow " + unsupportedFlow + ";\n" + withoutHeader(described)
-	rules := verdictRules(t, exec, src)
-	msg, ok := rules[FlowUnsupportedRule]
-	if !ok {
-		t.Fatalf("drop + create of %s was not refused; verdicts: %v", unsupportedFlow, rules)
-	}
-	if !strings.Contains(msg, "Microflows$GenerateJumpToOptionsAction") {
-		t.Errorf("the refusal does not name the action it would lose:\n%s", msg)
+	errs := dropRecreateRefusals(t, exec, src)
+	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "Microflows$GenerateJumpToOptionsAction") {
+		t.Fatalf("drop + create of %s: want one refusal naming the action, got %v", unsupportedFlow, errs)
 	}
 }
 
@@ -86,8 +89,8 @@ func TestUnsupportedActionGuard_PlainRebuildIsAllowed(t *testing.T) {
 		t.Fatalf("control subject %s holds an unsupported action:\n%s", plain, described)
 	}
 	src := "mdl 1;\ndrop microflow " + plain + ";\n" + withoutHeader(described)
-	if msg, ok := verdictRules(t, exec, src)[FlowUnsupportedRule]; ok {
-		t.Fatalf("a flow without unsupported actions was refused:\n%s", msg)
+	if errs := dropRecreateRefusals(t, exec, src); len(errs) != 0 {
+		t.Fatalf("a flow without unsupported actions was refused: %v", errs)
 	}
 }
 

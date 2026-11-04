@@ -320,6 +320,8 @@ func validateWidgetTreeIn(widgets []*ast.WidgetV3, registry *WidgetRegistry, loc
 		// The widget's OWN action is judged in the context IT establishes, not the
 		// one it sits in — a list widget's onClick is row-scoped (ako/mxcli#552).
 		out = append(out, validateShowPageArguments(w, argContextForOwnAction(w, argCtx), locationPrefix)...)
+		// A bare `delete` with no object to delete is CE7005 (ako/mxcli#1932).
+		out = append(out, validateDeleteSource(w, argContextForOwnAction(w, argCtx), locationPrefix)...)
 		// An `Attribute:` binding with no object to bind to is written empty.
 		out = append(out, validateInputBindingContext(w, argCtx, locationPrefix)...)
 		// Unknown-property warning applies only to built-in widgets; pluggable

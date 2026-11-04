@@ -328,7 +328,11 @@ maintain or to go stale. Building the thing is what moves the number.
 
 Slices are listed in name order, so a numeric prefix is how a roadmap is
 sequenced: 01-accounts, 02-approvals. That is the user's choice, not a field
-mxcli maintains.`,
+mxcli maintains.
+
+The brain can exist before the project does. With no .mpr at the -p path,
+nothing is built: every anchored requirement counts as planned, and the output
+says the model is absent.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		projectPath := brainProjectPath(cmd)
 		store := brain.NewStore(filepath.Dir(projectPath))
@@ -348,7 +352,7 @@ mxcli maintains.`,
 			fmt.Println("  mxcli brain capture \"<requirement>\" --slice 01-<name> -a @Module.Element")
 			return
 		}
-		resolver, closeFn, err := openBrainResolver(projectPath)
+		resolver, closeFn, err := openBrainResolverOrNoModel(projectPath)
 		if err != nil {
 			brainFatal(err)
 		}
@@ -359,8 +363,12 @@ mxcli maintains.`,
 			brainFatal(err)
 		}
 		if globalJSONFlag {
-			brainJSON(planReport(rep.Slices))
+			brainJSON(planReport(rep))
 			return
+		}
+		if rep.ModelAbsent {
+			printNoModel(rep, projectPath)
+			fmt.Println()
 		}
 		printBrainPlan(rep.Slices)
 	},
@@ -465,7 +473,10 @@ perfectly current.
 Separately, each entry is checked for being in the right shard. That is a second
 axis, not a fourth state — an anchor can resolve perfectly and the entry still
 sit in the wrong file. At least one anchor must belong to the entry's shard;
-anchors into other modules are fine, because a fact can genuinely span two.`,
+anchors into other modules are fine, because a fact can genuinely span two.
+
+With no .mpr at the -p path there is nothing to resolve against: every anchor
+is UNVERIFIABLE, which is counted and reported once and does not fail.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		projectPath := brainProjectPath(cmd)
 		store := brain.NewStore(filepath.Dir(projectPath))
@@ -488,7 +499,7 @@ anchors into other modules are fine, because a fact can genuinely span two.`,
 			}
 		}
 
-		resolver, closeFn, err := openBrainResolver(projectPath)
+		resolver, closeFn, err := openBrainResolverOrNoModel(projectPath)
 		if err != nil {
 			brainFatal(err)
 		}
@@ -506,7 +517,7 @@ anchors into other modules are fine, because a fact can genuinely span two.`,
 		case ci:
 			printBrainReportCI(rep)
 		default:
-			printBrainReport(rep)
+			printBrainReport(rep, projectPath)
 		}
 		if rep.Failed() {
 			os.Exit(1)
@@ -519,6 +530,11 @@ anchors into other modules are fine, because a fact can genuinely span two.`,
 // (a not-indexable anchor) are omitted rather than printed, because a line in a
 // CI log reads as something to fix.
 func printBrainReportCI(rep brain.Report) {
+	if rep.ModelAbsent {
+		// stderr: in CI an absent model is worth seeing, but it is not a
+		// problem line, and stdout stays empty for a clean store.
+		fmt.Fprintf(os.Stderr, "brain: no model; %d anchor(s) not checked\n", rep.Unverifiable)
+	}
 	for _, m := range rep.Malformed {
 		fmt.Printf("brain: malformed entry: %s\n", m)
 	}
@@ -533,7 +549,19 @@ func printBrainReportCI(rep brain.Report) {
 	}
 }
 
-func printBrainReport(rep brain.Report) {
+// printNoModel says, once, that nothing could be checked. Without it a plan of
+// "0 built" reads as "nothing has been done" when the truth is "there is no
+// project yet", and the two call for different actions.
+func printNoModel(rep brain.Report, projectPath string) {
+	if !rep.ModelAbsent {
+		return
+	}
+	fmt.Printf("No model at %s yet: %d anchor(s) not checked, so nothing counts as built.\n",
+		projectPath, rep.Unverifiable)
+}
+
+func printBrainReport(rep brain.Report, projectPath string) {
+	printNoModel(rep, projectPath)
 	for _, m := range rep.Malformed {
 		fmt.Printf("MALFORMED   %s\n", m)
 	}
@@ -720,6 +748,17 @@ func brainCell(v any) string {
 	return fmt.Sprint(v)
 }
 
+// openBrainResolverOrNoModel opens the project, or answers for a project that
+// does not exist yet. Only a missing file means "no model": an .mpr that is
+// there but will not open is still an error, or a corrupt project would be
+// reported as merely unbuilt.
+func openBrainResolverOrNoModel(projectPath string) (brain.Resolver, func(), error) {
+	if _, err := os.Stat(projectPath); os.IsNotExist(err) {
+		return brain.NoModel{}, func() {}, nil
+	}
+	return openBrainResolver(projectPath)
+}
+
 func openBrainResolver(projectPath string) (brain.Resolver, func(), error) {
 	// Catalog progress goes to stderr so stdout carries only the report — the
 	// same split cmd_lint.go makes, and what lets `brain check` be piped.
@@ -881,15 +920,19 @@ func stagedReport(all, shown []brain.Entry, filter brain.StagedFilter) map[strin
 // planReport carries the totals as well as the slices. A dispatcher's question
 // is usually "is this slice done", and the answer is a comparison it should not
 // have to assemble from four counters.
-func planReport(slices []brain.SliceProgress) map[string]any {
+func planReport(rep brain.Report) map[string]any {
 	var built, total int
-	for _, sl := range slices {
+	for _, sl := range rep.Slices {
 		built += sl.Built
 		total += sl.Total()
 	}
-	return map[string]any{
-		"slices": slices,
+	out := map[string]any{
+		"slices": rep.Slices,
 		"built":  built,
 		"total":  total,
 	}
+	if rep.ModelAbsent {
+		out["model_absent"] = true
+	}
+	return out
 }

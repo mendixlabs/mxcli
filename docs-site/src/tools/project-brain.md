@@ -199,6 +199,29 @@ implement it.
 
 Misfiling is not checked for slices: a slice spans modules by design.
 
+### Before there is a project
+
+The brain does not need a model to exist. `-p` names where the project *will*
+be, and every store command works before it does — capture requirements from a
+specification first, create the app afterwards.
+
+`plan` and `check` then report what is true: nothing is built.
+
+```
+No model at /ws/App.mpr yet: 1 anchor(s) not checked, so nothing counts as built.
+
+SLICE            BUILT  PLANNED   UNANCHORED
+01-scheduling        0        1
+
+0 of 1 requirements built, across 1 slice(s).
+```
+
+Every anchor is **unverifiable** — neither *not found* (that would report the
+whole store as stale) nor built. `check` exits 0, and `--json` carries
+`"model_absent": true` and an `unverifiable` count. Only a *missing* `.mpr`
+means this: one that exists but will not open is still an error. Create the
+project at that path and the same requirements start counting as built.
+
 ## Open questions
 
 An open question is a decision that has not been made yet.

@@ -129,21 +129,21 @@ func describeJavaAction(ctx *ExecContext, name ast.QualifiedName) error {
 	// longer existed.
 	source := readJavaActionSource(ctx.MprPath, name.Module, name.Name)
 	javaCode := javaActionUserCode(source)
-	sb.WriteString("\nas $$\n")
+	var body strings.Builder
 	if javaCode != "" {
 		if imports := javaactions.StatedImports(source, ja.Parameters, ja.ReturnType); len(imports) > 0 {
-			sb.WriteString(strings.Join(imports, "\n"))
-			sb.WriteString("\n\n")
+			body.WriteString(strings.Join(imports, "\n"))
+			body.WriteString("\n\n")
 		}
-		sb.WriteString(javaCode)
+		body.WriteString(javaCode)
 	} else {
-		sb.WriteString(javaSourceOmittedBody)
+		body.WriteString(javaSourceOmittedBody)
 	}
-	sb.WriteString("\n$$")
+	sb.WriteString("\nas ")
+	sb.WriteString(mdlSourceBlock(ctx, body.String()))
 	if _, extra := javaactions.RetainedSections(source); javaCode != "" && extra != "" {
-		sb.WriteString("\nextra code $$\n")
-		sb.WriteString(extra)
-		sb.WriteString("\n$$")
+		sb.WriteString("\nextra code ")
+		sb.WriteString(mdlSourceBlock(ctx, extra))
 	}
 	sb.WriteString(";")
 

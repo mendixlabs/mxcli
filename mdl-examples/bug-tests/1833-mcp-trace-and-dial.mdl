@@ -8,12 +8,25 @@
 --    host.docker.internal whenever that name resolved. Docker Desktop for
 --    Windows adds it to the hosts file (the LAN address), so on the machine
 --    Studio Pro runs on the connection timed out: `dial tcp <LAN IP>:7782`.
+-- 3. A `localhost` URL was dialled through the resolver, which on the reporter's
+--    machine answered with a LAN address first; Studio Pro on Windows listens
+--    on 127.0.0.1 only. localhost now dials 127.0.0.1 first and keeps the
+--    `Host: localhost` header Studio Pro requires.
+--
+-- The headline claim — exec / -c with --mcp write the .mpr and mprcontents/
+-- and skip the .mpr.lock refusal — does not reproduce: the CLI with --mcp
+-- calls ped_create_document and leaves every model file byte-identical, with
+-- the lock present; a statement with no PED route (e.g. `create image
+-- collection`) is refused, not written. cmd/mxcli/mcp_exec_no_file_write_test.go
+-- pins both, with the fault forced back in as its control.
 --
 -- To verify, with Studio Pro open on a throwaway app and its MCP server on 7782:
 --   mxcli exec 1833-mcp-trace-and-dial.mdl -p App.mpr --mcp http://localhost:7782/mcp --mcp-trace
 -- The trace lists `→ ped_create_document` and `→ ped_check_errors` under the
--- statement, and the connection needs no --mcp-dial (on Windows with Docker
--- Desktop installed too). The constant appears in Studio Pro's App Explorer.
+-- statement, and the connection needs no --mcp-dial (on Windows, with or
+-- without Docker Desktop). The constant appears in Studio Pro's App Explorer,
+-- and a hash of App.mpr + mprcontents/ taken before and after is unchanged
+-- until Studio Pro itself saves.
 
 mdl 1;
 

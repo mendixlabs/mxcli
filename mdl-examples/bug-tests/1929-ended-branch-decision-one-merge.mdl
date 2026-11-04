@@ -1,0 +1,50 @@
+mdl 1;
+-- ako/mxcli#1929 (mendixlabs/mxcli#1727): a decision one of whose branches
+-- ends the flow is described with the decision's own merge as a label:
+--
+--   end case;
+--   join shared1;
+--   merge shared1;
+--
+-- Executing that description as a fresh create (drop + create) built the
+-- decision's merge AND a second merge for the label, wired merge -> merge, and
+-- each further round trip added `join junctionN; merge junctionN;`.
+--
+-- Now the label's merge is the decision's merge when the join directly
+-- follows the decision and nothing else reaches the label: one ExclusiveMerge,
+-- stable across round trips.
+--
+-- Verify: exec this, describe Probe.RT_Repro, drop it, exec the description,
+-- describe again — the two descriptions are identical and hold no `junction`.
+
+create module Probe;
+create enumeration Probe.Col (R 'R', G 'G', B 'B');
+create persistent entity Probe.Shape (C: Enumeration(Probe.Col));
+
+create microflow Probe.RT_Repro ($S: Probe.Shape) returns Integer as $N
+begin
+  declare $N Integer = 0;
+  case $S/C
+    when R then return 1;
+    when G then set $N = 2;
+    when (empty) then set $N = 3;
+  end case;
+  return $N;
+end;
+
+-- The described form, as `describe` prints it: builds the same single merge.
+create microflow Probe.RT_Described ($S: Probe.Shape) returns Integer as $N
+begin
+  declare $N Integer = 0;
+  case $S/C
+    when R then
+      return 1;
+    when G then
+      set $N = 2;
+    when (empty) then
+      set $N = 3;
+  end case;
+  join shared1;
+  merge shared1;
+  return $N;
+end;

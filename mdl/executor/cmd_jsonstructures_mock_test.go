@@ -139,3 +139,47 @@ func TestDescribeJsonStructure_NotFound(t *testing.T) {
 	ctx, _ := newMockCtx(t, withBackend(mb), withHierarchy(h))
 	assertError(t, describeJsonStructure(ctx, ast.QualifiedName{Module: "OrderMgmt", Name: "NoSuch"}))
 }
+
+// TestDescribeJsonStructure_SnippetContainingDollarDollar (ako/mxcli#1003): a
+// snippet holding `$$` — a Teamcenter UID such as
+// "SR::N::BOMLine..10.7$$Otklm9GclKA" — ended describe's `$$ … $$` literal
+// early, and `mxcli check` on the output reported `token recognition error at:
+// '$$`. The controls are the same snippet without the `$$`, which keeps the
+// dollar-quoted form, and one ending in a single `$`.
+func TestDescribeJsonStructure_SnippetContainingDollarDollar(t *testing.T) {
+	for _, snippet := range []string{
+		`{"uid": "SR::N::BOMLine..10.7$$Otklm9GclKA", "name": "it's"}`,
+		`{"uid": "SR::N::BOMLine..10.7Otklm9GclKA", "name": "it's"}`,
+		`{"path": "C:\\temp$$x", "price": "5$"}`,
+	} {
+		mod := mkModule("Tc")
+		js := &types.JsonStructure{
+			BaseElement: model.BaseElement{ID: nextID("js")},
+			ContainerID: mod.ID,
+			Name:        "BomLine",
+			JsonSnippet: snippet,
+		}
+		h := mkHierarchy(mod)
+		withContainer(h, js.ContainerID, mod.ID)
+		mb := &mock.MockBackend{
+			IsConnectedFunc:        func() bool { return true },
+			ListJsonStructuresFunc: func() ([]*types.JsonStructure, error) { return []*types.JsonStructure{js}, nil },
+		}
+		ctx, buf := newMockCtx(t, withBackend(mb), withHierarchy(h))
+		assertNoError(t, describeJsonStructure(ctx, ast.QualifiedName{Module: "Tc", Name: "BomLine"}))
+		prog, errs := visitor.Build(describedSource(ctx, buf.String()))
+		if len(errs) > 0 {
+			t.Fatalf("describe of snippet %q does not parse: %v\n%s", snippet, errs, buf.String())
+		}
+		var got *ast.CreateJsonStructureStmt
+		for _, s := range prog.Statements {
+			if cs, ok := s.(*ast.CreateJsonStructureStmt); ok {
+				got = cs
+			}
+		}
+		want := types.PrettyPrintJSON(snippet)
+		if got == nil || got.JsonSnippet != want {
+			t.Errorf("snippet %q did not read back; got %+v from:\n%s", snippet, got, buf.String())
+		}
+	}
+}

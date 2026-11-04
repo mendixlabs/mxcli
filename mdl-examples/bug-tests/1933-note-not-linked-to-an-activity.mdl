@@ -1,0 +1,32 @@
+mdl 1;
+-- ako/mxcli#1933 (mendixlabs/mxcli#1731): annotations not linked to an
+-- activity were missing from `describe microflow`.
+--
+-- A note linked to nothing was already described, as a free note (the first
+-- one below). What vanished was a note whose only link ends where the
+-- describer never prints an @annotation: the START EVENT, or ANOTHER NOTE.
+-- Such a note is now described as a free note, preceded by a
+-- `-- WARNING: the note '…' is linked to the start event, which MDL cannot
+-- state …` line, because the link itself has no MDL form and a rewrite drops it.
+--
+-- Free note syntax: an @annotation with text and position, BEFORE the first
+-- statement's own @position. Linked notes keep their syntax: `@annotation 'x'`,
+-- and `id:` to share one note between activities.
+--
+-- Verify: exec this, then link Note1 to the start event in Studio Pro and
+-- describe ACT_notes — Note1 is printed, with the warning.
+
+create module ExamplesModule;
+
+create microflow ExamplesModule.ACT_notes ()
+begin
+  @annotation(text: 'Note1', position: (120, 60), size: (200, 50))
+  @position(314, 200)
+  @annotation(id: n1, text: 'Note2', position: (383, 89), size: (230, 50))
+  declare $Variable Boolean = false;
+  @position(504, 200)
+  @annotation(id: n1)
+  declare $Variable_1 Boolean = false;
+  @position(700, 200)
+  return;
+end;

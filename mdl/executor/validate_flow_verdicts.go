@@ -153,32 +153,6 @@ func checkFlowVerdicts(ctx *ExecContext, prog *ast.Program) FlowVerdictReport {
 		}
 		return "", false
 	}
-	// The actions MDL cannot express that a dropped flow held, by key: a
-	// create of the same flow later in the script rebuilds it without them
-	// (FlowUnsupportedRule).
-	droppedUnsupported := map[string][]string{}
-	kindOf := func(nanoflow bool) string {
-		if nanoflow {
-			return "nanoflow"
-		}
-		return "microflow"
-	}
-	recreated := func(nanoflow bool, qn ast.QualifiedName) {
-		if types := droppedUnsupported[key(nanoflow, qn)]; len(types) > 0 {
-			r.Violations = append(r.Violations, unsupportedRebuildViolation(kindOf(nanoflow), qn,
-				"a drop followed by a create of it in the same script", types))
-			delete(droppedUnsupported, key(nanoflow, qn))
-		}
-	}
-	// dropped records what a flow the stored project holds as it is — not
-	// one an earlier statement created, changed or dropped — loses with it.
-	dropped := func(nanoflow bool, qn ast.QualifiedName) {
-		if why, _ := stale(nanoflow, qn); why == "" {
-			if types := storedUnsupportedActions(ctx, nanoflow, qn); len(types) > 0 {
-				droppedUnsupported[key(nanoflow, qn)] = types
-			}
-		}
-	}
 	unpredicted := func(nanoflow bool, qn ast.QualifiedName, reason string) {
 		kind := "microflow"
 		if nanoflow {
@@ -199,13 +173,13 @@ func checkFlowVerdicts(ctx *ExecContext, prog *ast.Program) FlowVerdictReport {
 		case ruled:
 			vs, dep, apply := flowModifyViolations(ctx, d)
 			r.Violations = append(r.Violations, vs...)
-			// A rebuild exec runs instead of the splice (mdl 0) deletes what
-			// MDL cannot express.
+			// A rebuild exec runs instead of the splice (mdl 0) would delete
+			// what MDL cannot express; exec refuses it when it gets there,
+			// so refuse the script now, before anything is written.
 			for _, v := range vs {
 				if v.RuleID == FlowRebuildRule && v.Severity != linter.SeverityError {
-					if types := storedUnsupportedActions(ctx, d.nanoflow, d.name); len(types) > 0 {
-						r.Violations = append(r.Violations, unsupportedRebuildViolation(d.kind(), d.name,
-							"the whole-flow rebuild exec runs for this statement", types))
+					if types := storedFlowUnsupportedActions(ctx, d.kind(), d.name.String()); len(types) > 0 {
+						r.Violations = append(r.Violations, unsupportedRebuildViolation(d.kind(), d.name, types))
 					}
 					break
 				}
@@ -221,13 +195,11 @@ func checkFlowVerdicts(ctx *ExecContext, prog *ast.Program) FlowVerdictReport {
 	for _, stmt := range prog.Statements {
 		switch s := stmt.(type) {
 		case *ast.CreateMicroflowStmt:
-			recreated(false, s.Name)
 			if !(s.CreateOrModify && modify(microflowDecl(s), validateMicroflowRules(s) == nil)) {
 				touched[key(false, s.Name)] = "creates or changes it"
 			}
 			declare(false, s.Name, s.ReturnType)
 		case *ast.CreateNanoflowStmt:
-			recreated(true, s.Name)
 			if !(s.CreateOrModify && modify(nanoflowDecl(s), true)) {
 				touched[key(true, s.Name)] = "creates or changes it"
 			}
@@ -251,11 +223,9 @@ func checkFlowVerdicts(ctx *ExecContext, prog *ast.Program) FlowVerdictReport {
 				touched[key(s.Nanoflow, s.Name)] = "alters it"
 			}
 		case *ast.DropMicroflowStmt:
-			dropped(false, s.Name)
 			touched[key(false, s.Name)] = touchDropped
 			undeclare(s.Name)
 		case *ast.DropNanoflowStmt:
-			dropped(true, s.Name)
 			touched[key(true, s.Name)] = touchDropped
 			undeclare(s.Name)
 		case *ast.MoveStmt:
