@@ -32,7 +32,10 @@
 //	page parameter of the exact type, no dataview           → CE1571
 //
 // So an enclosing data container of a compatible type DOES supply the argument,
-// at any depth, and a page parameter does not. The rule now says exactly that;
+// at any depth, and a page parameter does not — FROM MENDIX 10.1. Before it, a
+// page's or snippet's own parameter supplies it too, for data sources and
+// actions alike (bisected for ako/mxcli#1206: 9.24.30 and 10.0.0 build clean,
+// 10.1.0 onwards CE1571); see paramsSupplyFlowArguments. The rule now says exactly that;
 // before this it rejected a page that builds, with a message asserting as fact
 // that Mendix "does not fill it in, even when an object of the right type is in
 // scope".
@@ -211,17 +214,41 @@ func validateFlowArguments(ctx *ExecContext, params []ast.PageParameter, widgets
 	if len(sigs) == 0 {
 		return nil
 	}
-	return validateFlowArgumentsIn(params, widgets, sigs, entityCompatibility(ctx))
+	return validateFlowArgumentsScoped(params, widgets, sigs, entityCompatibility(ctx),
+		paramsSupplyFlowArguments(projectVersionAtLeast(ctx.Backend)))
+}
+
+// paramsSupplyFlowArguments reports whether the page's or snippet's own
+// parameters supply flow arguments, as an enclosing data container does. They
+// do before Mendix 10.1 and not from it (ako/mxcli#1206), bisected with one
+// script — snippet and page parameter, data source and button action — across
+// 9.24.30, 10.0.0 (0 errors) and 10.1.0 … 11.12.6 (CE1571 on each). An unknown
+// version gets the 10.1+ rule, the one every project used to get.
+func paramsSupplyFlowArguments(atLeast func(major, minor int) bool) bool {
+	return atLeast != nil && !atLeast(10, 1)
 }
 
 // validateFlowArgumentsIn is the whole rule with its two project-dependent
 // inputs — the flow signatures and the entity-compatibility test — handed in, so
-// it can be measured against the shapes `mx check` was run on.
+// it can be measured against the shapes `mx check` was run on. It is the 10.1+
+// rule; validateFlowArgumentsScoped takes the version's answer.
 func validateFlowArgumentsIn(
 	pageParams []ast.PageParameter,
 	widgets []*ast.WidgetV3,
 	sigs map[string]*flowSignature,
 	compatible func(contextQN, paramQN string) bool,
+) []string {
+	return validateFlowArgumentsScoped(pageParams, widgets, sigs, compatible, false)
+}
+
+// validateFlowArgumentsScoped is validateFlowArgumentsIn with paramsInScope:
+// when set, the parameters' entities are the root data context.
+func validateFlowArgumentsScoped(
+	pageParams []ast.PageParameter,
+	widgets []*ast.WidgetV3,
+	sigs map[string]*flowSignature,
+	compatible func(contextQN, paramQN string) bool,
+	paramsInScope bool,
 ) []string {
 	paramEntities := make(map[string]string, len(pageParams))
 	for _, p := range pageParams {
@@ -262,8 +289,16 @@ func validateFlowArgumentsIn(
 			walk(c, inner, childControlBarOf)
 		}
 	}
+	root := dataContext{}
+	if paramsInScope {
+		for _, p := range pageParams {
+			if qn := p.EntityType.String(); qn != "" && qn != "." {
+				root = root.with(qn)
+			}
+		}
+	}
 	for _, w := range widgets {
-		walk(w, dataContext{}, "")
+		walk(w, root, "")
 	}
 	return errs
 }

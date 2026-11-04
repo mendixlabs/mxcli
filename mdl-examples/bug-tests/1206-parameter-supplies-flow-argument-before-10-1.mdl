@@ -1,0 +1,16 @@
+-- ako/mxcli#1206: before Mendix 10.1, a page's or snippet's own parameter
+-- supplies a flow argument the way an enclosing data container does. Bisected
+-- with this script: 9.24.30 and 10.0.0 build at 0 errors; 10.1.0, 10.2.0,
+-- 10.3.1, 10.6.25, 10.12.19, 10.24.24 and 11.12.6 report CE1571 three times.
+-- check -p now follows the project's version (0 reports below 10.1, 3 from it).
+mdl 1;
+create module BugTest1206;
+create persistent entity BugTest1206.OrderX (Code: String(10));
+create nanoflow BugTest1206.DS_Order ($Order: BugTest1206.OrderX) returns BugTest1206.OrderX
+begin
+  return $Order;
+end;
+create snippet BugTest1206.SN_Order ( Params: ( $Order: BugTest1206.OrderX ) )
+{
+  dataview dvSnippet (datasource: nanoflow BugTest1206.DS_Order(Order = $Order)) { }
+};
