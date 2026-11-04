@@ -60,6 +60,7 @@ on 'plan' and 'check' with the same -C count against the model.`,
   mxcli brain capture "Orders are committed by Finance, not Sales" -a @Sales.Order -a @Finance.ACT_Post -p app.mpr
   mxcli brain staged -p app.mpr
   mxcli brain promote a1b2c3 -p app.mpr
+  mxcli brain edit a1b2c3 "Orders are committed by Finance, never by Sales" -p app.mpr
   mxcli brain capture "Orders must be approvable by a manager" --slice 02-approvals -a @Sales.ACT_Order_Approve -p app.mpr
   mxcli brain brief --slice 02-approvals -p app.mpr
   mxcli brain plan -p app.mpr
@@ -117,7 +118,25 @@ var brainCaptureCmd = &cobra.Command{
 		if err != nil {
 			brainFatal(err)
 		}
-		added, err := brain.NewQueue(dir).Append(e)
+		store, queue := brain.NewStore(dir), brain.NewQueue(dir)
+		// Already committed is a duplicate too, found by content: an edited
+		// entry's id no longer matches its text (ako/mxcli#1950).
+		if store.Exists() {
+			if dup, err := store.FindContent(e.ContentKey()); err != nil {
+				brainFatal(err)
+			} else if dup.ID != "" {
+				fmt.Printf("Already committed as %s — not added again.\n", dup.ID)
+				return
+			}
+		}
+		// The content-derived id may already be the handle of an entry whose
+		// text has since changed; a new fact gets an id of its own.
+		taken, err := brain.TakenIDs(store, queue)
+		if err != nil {
+			brainFatal(err)
+		}
+		e = brain.AssignFreeID(e, taken)
+		added, err := queue.Append(e)
 		if err != nil {
 			brainFatal(err)
 		}
@@ -251,6 +270,107 @@ var brainDropCmd = &cobra.Command{
 			fmt.Printf("%s had no entries left and was removed.\n", shardLabel(shard))
 		}
 	},
+}
+
+var brainEditCmd = &cobra.Command{
+	Use:   "edit <id> [<text>] [-a @Anchor]…",
+	Short: "Change an entry's wording (and with -a its anchors), keeping its id",
+	Long: `Rewrite an entry in place. The id does not change.
+
+An id is a handle — 'brain promote <id>', 'brain resolve <id>' and prose cite
+it — so correcting a word must not turn the entry into a different one. The text
+replaces the title (first line) and body (the rest); -a, if given, replaces the
+anchors, and is checked as 'capture' checks it. With -a the text may be left
+out, to re-anchor an entry without retyping it.
+
+A staged entry is edited in the queue, keeping its place there. A committed one
+is edited in its shard, keeping its position — unless re-anchoring a decision
+points it at another module, in which case it moves to that module's file, so
+'check' does not report it misfiled. A decision put in project.md on purpose
+('promote --to project') stays there.
+
+An edit that would make the entry say the same as another is refused.`,
+	Example: `  mxcli brain edit 66dcf4 "A planner can create a visit for one named engineer" -C ./App
+  mxcli brain edit a1b2c3 -a @Finance.ACT_Post -p app.mpr     # re-anchor, keep the text`,
+	Args: cobra.RangeArgs(1, 2),
+	Run: func(cmd *cobra.Command, args []string) {
+		anchors, _ := cmd.Flags().GetStringSlice("anchor")
+		replace := cmd.Flags().Changed("anchor")
+		if len(args) == 1 && !replace {
+			brainFatal(fmt.Errorf("nothing to change: give the new text, -a anchors, or both"))
+		}
+		runBrainChange(cmd, args[0], "Edited", func(e brain.Entry) (brain.Entry, error) {
+			text := e.Title
+			if e.Body != "" {
+				text += "\n\n" + e.Body
+			}
+			if len(args) == 2 {
+				text = args[1]
+			}
+			return e.Edit(text, anchors, replace)
+		})
+	},
+}
+
+var brainMoveCmd = &cobra.Command{
+	Use:   "move <id> --slice <slice>",
+	Short: "Move a requirement to another slice, keeping its id",
+	Long: `Move a requirement (or a question filed against a slice) to another slice.
+
+The id does not change. A decision has no slice — its file follows its anchors,
+so re-anchor it with 'brain edit <id> <text> -a …' instead; giving it a slice
+would turn it into a requirement, which is a change of meaning, not of place.`,
+	Example: `  mxcli brain move 66dcf4 --slice 02-dispatch -C ./App`,
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		slice, _ := cmd.Flags().GetString("slice")
+		if slice == "" {
+			brainFatal(fmt.Errorf("say where to: --slice <slice>"))
+		}
+		runBrainChange(cmd, args[0], "Moved", func(e brain.Entry) (brain.Entry, error) {
+			return e.MoveToSlice(slice)
+		})
+	},
+}
+
+// runBrainChange applies a change to an entry wherever it is — the queue first,
+// as 'drop' looks, then the store — and reports where it ended up.
+func runBrainChange(cmd *cobra.Command, id, verb string, change func(brain.Entry) (brain.Entry, error)) {
+	dir := brainProjectDir(cmd)
+	queue := brain.NewQueue(dir)
+	ok, err := queue.Update(id, change)
+	if err != nil {
+		brainFatal(err)
+	}
+	if ok {
+		e, _, err := queue.Get(id)
+		if err != nil {
+			brainFatal(err)
+		}
+		if globalJSONFlag {
+			brainJSON(map[string]any{"id": id, "staged": true, "shard": e.Shard()})
+			return
+		}
+		fmt.Printf("%s staged %s -> would promote into %s\n", verb, id, shardLabel(e.Shard()))
+		return
+	}
+	store := brain.NewStore(dir)
+	if !store.Exists() {
+		brainFatal(fmt.Errorf("no entry with id %s, staged or committed", id))
+	}
+	moved, err := store.Update(id, change)
+	if err != nil {
+		brainFatal(err)
+	}
+	if globalJSONFlag {
+		brainJSON(map[string]any{"id": id, "staged": false, "shard": moved.To, "from": moved.From})
+		return
+	}
+	if moved.From != moved.To {
+		fmt.Printf("%s %s, and moved it from %s to %s\n", verb, id, shardLabel(moved.From), shardLabel(moved.To))
+		return
+	}
+	fmt.Printf("%s %s in %s\n", verb, id, shardLabel(moved.To))
 }
 
 var brainShowCmd = &cobra.Command{
@@ -892,7 +1012,7 @@ func brainLocatedCommands() []*cobra.Command {
 	return []*cobra.Command{
 		brainInitCmd, brainCaptureCmd, brainStagedCmd, brainPromoteCmd,
 		brainDropCmd, brainShowCmd, brainCheckCmd, brainPlanCmd,
-		brainResolveCmd, brainBriefCmd,
+		brainResolveCmd, brainBriefCmd, brainEditCmd, brainMoveCmd,
 	}
 }
 
@@ -907,6 +1027,9 @@ func init() {
 		"Record this as an OPEN QUESTION — something not decided yet, so its anchors are not checked")
 	brainCaptureCmd.Flags().StringP("slice", "s", "",
 		"Record this as a requirement of the named slice (plan/<slice>.md) instead of a decision")
+	brainEditCmd.Flags().StringSliceP("anchor", "a", nil,
+		"Replace the anchors with these (repeatable); without -a the anchors are kept")
+	brainMoveCmd.Flags().StringP("slice", "s", "", "The slice to move the requirement to")
 	brainPromoteCmd.Flags().String("to", "",
 		"Override the derived shard (use 'project' for a cross-cutting fact)")
 	brainStagedCmd.Flags().String("since", "",
@@ -926,7 +1049,7 @@ func init() {
 		"Modules being worked, for a session with no slice; repeatable")
 	brainCmd.AddCommand(brainInitCmd, brainCaptureCmd, brainStagedCmd,
 		brainPromoteCmd, brainDropCmd, brainShowCmd, brainCheckCmd, brainPlanCmd,
-		brainResolveCmd, brainBriefCmd)
+		brainResolveCmd, brainBriefCmd, brainEditCmd, brainMoveCmd)
 	rootCmd.AddCommand(brainCmd)
 }
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/brain"
+	"github.com/spf13/pflag"
 )
 
 // The types marshalling correctly is only half of it. The other half is that
@@ -117,9 +118,12 @@ func runBrainForTest(t *testing.T, args []string) string {
 	return out
 }
 
-// resetBrainFlagsForTest clears what cobra carries between runs: --json, and
-// -p / -C on every brain command. A -C left over from one run makes the next
-// run's -p look like both were passed, which is refused.
+// resetBrainFlagsForTest restores every brain flag, and --json, to its default.
+// cobra keeps flag values between runs of the shared rootCmd, and two of the
+// leftovers change the answer rather than just the noise: a -C from one run
+// makes the next run's -p look like both were passed, and a StringSlice flag
+// APPENDS on each Set — so a second `capture -a X` captures [X, X], a
+// different entry from the first.
 func resetBrainFlagsForTest(t *testing.T) {
 	t.Helper()
 	if err := rootCmd.PersistentFlags().Set("json", "false"); err != nil {
@@ -127,11 +131,14 @@ func resetBrainFlagsForTest(t *testing.T) {
 	}
 	globalJSONFlag = false
 	for _, c := range brainLocatedCommands() {
-		for _, name := range []string{"project", "dir"} {
-			if err := c.Flags().Set(name, ""); err != nil {
-				t.Fatal(err)
+		c.Flags().VisitAll(func(f *pflag.Flag) {
+			if sv, ok := f.Value.(pflag.SliceValue); ok {
+				_ = sv.Replace(nil)
+			} else if err := f.Value.Set(f.DefValue); err != nil {
+				t.Fatalf("reset --%s: %v", f.Name, err)
 			}
-		}
+			f.Changed = false
+		})
 	}
 }
 
