@@ -669,8 +669,11 @@ func buildMicroflowReturnTypes(ctx *ExecContext) map[string]string {
 	if err != nil {
 		return result
 	}
-	for _, mf := range mfs {
+	for _, mf := range liveFirst(mfs, microflowExcluded) {
 		qn := h.GetQualifiedName(mf.ContainerID, mf.Name)
+		if _, seen := result[qn]; seen {
+			continue // an excluded twin of a live flow (#1928)
+		}
 		if mf.ReturnType == nil {
 			result[qn] = ""
 			continue
