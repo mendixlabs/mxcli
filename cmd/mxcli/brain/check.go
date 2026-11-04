@@ -175,9 +175,13 @@ type Report struct {
 	Findings []AnchorFinding   `json:"findings"`
 	Misfiled []MisfiledFinding `json:"misfiled"`
 	// Malformed names entry blocks whose metadata line could not be read.
-	Malformed []string        `json:"malformed"`
-	Slices    []SliceProgress `json:"slices"`
-	Open      []OpenQuestion  `json:"open"`
+	Malformed []string `json:"malformed"`
+	// MissingSources names entries whose source document is not there. It
+	// fails the check: provenance pointing at a file nobody has is a
+	// reference to nothing, the same defect as an anchor that names nothing.
+	MissingSources []SourceFinding `json:"missing_sources,omitempty"`
+	Slices         []SliceProgress `json:"slices"`
+	Open           []OpenQuestion  `json:"open"`
 }
 
 // MarshalJSON adds a derived "failed" alongside the report's contents. A
@@ -201,7 +205,7 @@ func (r Report) MarshalJSON() ([]byte, error) {
 // the wrong shard. A NotIndexable anchor is information, not a defect — see the
 // constant's comment.
 func (r Report) Failed() bool {
-	if len(r.Misfiled) > 0 || len(r.Malformed) > 0 {
+	if len(r.Misfiled) > 0 || len(r.Malformed) > 0 || len(r.MissingSources) > 0 {
 		return true
 	}
 	for _, f := range r.Findings {
@@ -225,6 +229,7 @@ func Check(s *Store, r Resolver, shards []string) (Report, error) {
 		for _, m := range malformed {
 			rep.Malformed = append(rep.Malformed, shard+": "+m)
 		}
+		rep.MissingSources = append(rep.MissingSources, s.missingSources(shard, entries)...)
 		if IsPlanShard(shard) {
 			progress, err := checkSlice(r, shard, entries)
 			if err != nil {

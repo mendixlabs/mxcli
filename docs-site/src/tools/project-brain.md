@@ -281,6 +281,71 @@ Both `brain check` and `mxcli lint` report unanswered questions until one is
 resolved. A question nobody answers is the one kind of entry that gets more
 expensive the longer it sits.
 
+## Where an entry came from
+
+```bash
+mxcli brain capture "A planner can create a visit" -s 01-scheduling -a @Scheduling.Visit \
+  --source docs/sample-prd.md#L18-21 -p app.mpr
+```
+
+`--source` records the document an entry was taken from, and optionally where
+in it after a `#` — a line range, a heading, whatever locates it. It is rendered
+on its own line under the anchors and is in the JSON (`staged --json`):
+
+```markdown
+## A planner can create a visit
+
+Anchors: `@Scheduling.Visit` · id `72dfdd` · 2026-11-04
+Source: `docs/sample-prd.md#L18-21`
+```
+
+The path is stored **relative to the project directory** — type it relative to
+where you are, or absolute — so it means the same on every checkout. The
+document has to be **in the project**: a source outside it, or one that does not
+exist, is refused, because provenance pointing at a file nobody else has is not
+provenance. If the document later disappears, `brain check` fails with
+`NO SOURCE`, as it does for an anchor that names nothing.
+
+`brain edit <id> --source …` sets or changes it; an edit of the wording keeps it.
+The source is provenance, not content: the same requirement found in two places
+is still one entry.
+
+Older mxcli builds read a shard with sources without complaint — they see the
+`Source:` line as the first line of the entry's text and keep it when they
+rewrite the file. The queue is less forgiving: an older build that rewrites
+`.mxcli/brain/staged.jsonl` (on a capture, drop or promote) drops the source of
+the entries still queued there.
+
+## Editing an entry
+
+```bash
+mxcli brain edit 66dcf4 "A planner can create a visit for one named engineer" -p app.mpr
+mxcli brain edit a1b2c3 -a @Finance.ACT_Post -p app.mpr      # re-anchor, keep the text
+mxcli brain move 66dcf4 --slice 02-dispatch -p app.mpr
+```
+
+An entry's id is a handle — `promote`, `resolve` and prose cite it — so
+changing the wording keeps the id, the entry's position in its file, and its
+date. The text replaces the title and body; `-a`, if given, replaces the
+anchors and is checked as `capture` checks it — with `-a` the text can be left
+out. A staged entry is edited in the
+queue, a committed one in its shard.
+
+Two things move an entry to another file, and only these:
+
+- `move --slice` on a requirement. A decision has no slice: giving it one would
+  make it a requirement, whose anchors stop failing when they go stale.
+- Re-anchoring a decision into another module, so `check` does not report it
+  misfiled. A decision put in `project.md` on purpose (`promote --to project`)
+  stays there.
+
+An id is derived from the content once, at capture, and never again — so after
+an edit it no longer matches the text. Duplicates are therefore found by what
+an entry *says*, not by its id: capturing the edited wording again is refused
+("Already committed as 66dcf4"), and capturing the *original* wording — which
+hashes to the edited entry's id — is a new fact and gets an id of its own. An
+edit that would make one entry say the same as another is refused.
+
 ## When to capture a decision
 
 Capture needs a trigger, not good intentions. The reliable one:
@@ -351,6 +416,9 @@ progress from 65/65 to 63/65 and the number was the only symptom.
 | `brain staged [--since <id>] [--slice <n>] [--fail-if-empty]` | Lists the queue with the shard each entry would land in |
 | `brain promote <id> [--to <shard>]` | Writes it into its shard |
 | `brain drop <id>` | Removes it from the queue or from its shard |
+| `brain capture "<text>" --source <doc>[#<locator>]` | Records which document, and where in it, the entry came from |
+| `brain edit <id> ["<text>"] [-a @Anchor]… [--source <doc>]` | Rewrites it in place, staged or committed; the id does not change |
+| `brain move <id> --slice <name>` | Moves a requirement to another slice; the id does not change |
 | `brain capture "<text>" --slice <name> [-a @Anchor]…` | Queues a **requirement** of that slice |
 | `brain capture "<text>" --open [-a @Anchor]…` | Queues an **open question**; anchors not checked |
 | `brain resolve <id> "<answer>"` | Answers it, turning it into a decision in place |
