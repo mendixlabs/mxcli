@@ -78,8 +78,10 @@ func (q *Queue) Append(e Entry) (added bool, err error) {
 	if err != nil {
 		return false, err
 	}
+	// By content, not by stored id: an edited entry keeps an id its text no
+	// longer hashes to (edit.go).
 	for _, existing := range entries {
-		if existing.ID == e.ID {
+		if existing.ID == e.ID || existing.ContentKey() == e.ContentKey() {
 			return false, nil
 		}
 	}
