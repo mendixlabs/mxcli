@@ -230,6 +230,34 @@ func (r *Registry) IsAvailable(area, name string, projectVersion SemVer) bool {
 	return false
 }
 
+// Lookup returns the feature area/name, or false when the registry has none:
+// the entry with the lowest MinVersion when the YAML files disagree, since that
+// is the version below which none of it exists. `mxcli syntax` reads its
+// "Requires Mendix" lines from here (ako/mxcli#1367).
+func (r *Registry) Lookup(area, name string) (FeatureEntry, bool) {
+	entries, ok := r.index[area+"."+name]
+	if !ok || len(entries) == 0 {
+		return FeatureEntry{}, false
+	}
+	best := entries[0]
+	for _, e := range entries[1:] {
+		if best.MinVersion.AtLeast(e.MinVersion) && best.MinVersion != e.MinVersion {
+			best = e
+		}
+	}
+	return best, true
+}
+
+// Keys returns every feature as "area/name", sorted.
+func (r *Registry) Keys() []string {
+	out := make([]string, 0, len(r.index))
+	for k := range r.index {
+		out = append(out, strings.Replace(k, ".", "/", 1))
+	}
+	sort.Strings(out)
+	return out
+}
+
 // FeaturesForVersion returns all features and their availability status for a
 // given project version. Results are sorted alphabetically by display name.
 func (r *Registry) FeaturesForVersion(projectVersion SemVer) []FeatureStatus {

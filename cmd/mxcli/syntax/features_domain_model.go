@@ -63,8 +63,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "domain-model.entity",
-		Summary: "Entity creation: persistent, non-persistent, generalization, event handlers",
+		Path:     "domain-model.entity",
+		Features: []string{"domain_model/entities", "domain_model/non_persistent_entities", "domain_model/entity_generalization"},
+		Summary:  "Entity creation: persistent, non-persistent, generalization, event handlers",
 		Keywords: []string{
 			"entity", "create entity", "persistent", "non-persistent",
 			"generalization", "extends", "event handler", "attribute",
@@ -88,8 +89,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "domain-model.entity.alter",
-		Summary: "ALTER ENTITY: add/rename/modify/drop attributes, indexes, documentation, event handlers; ALTER ENTITIES for the bulk add",
+		Path:     "domain-model.entity.alter",
+		Features: []string{"domain_model/alter_entity"},
+		Summary:  "ALTER ENTITY: add/rename/modify/drop attributes, indexes, documentation, event handlers; ALTER ENTITIES for the bulk add",
 		Keywords: []string{
 			"alter entity", "modify entity", "add attribute",
 			"drop attribute", "rename attribute", "add index",
@@ -115,8 +117,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "domain-model.entity.attributes",
-		Summary: "Attribute data types, constraints, system attributes, and calculated attributes",
+		Path:     "domain-model.entity.attributes",
+		Features: []string{"domain_model/calculated_attributes"},
+		Summary:  "Attribute data types, constraints, system attributes, and calculated attributes",
 		Keywords: []string{
 			"attribute", "data type", "string", "integer", "decimal",
 			"boolean", "datetime", "autonumber", "binary", "hashedstring",
@@ -146,7 +149,7 @@ func init() {
 			"group by", "sum", "count", "report", "dashboard", "totals",
 			"create view entity", "query performance", "read model",
 		},
-		MinVersion: "10.18.0",
+		Features: []string{"domain_model/view_entities"},
 		Syntax: "CREATE VIEW ENTITY [IF NOT EXISTS] Module.Name (\n" +
 			"  Attr: Type,\n" +
 			"  ...\n" +
@@ -185,7 +188,7 @@ func init() {
 			"MDL030", "MDL031", "MDL072", "CE0174", "CE6770",
 			"string_agg", "aggregate functions",
 		},
-		MinVersion: "10.18.0",
+		Features: []string{"domain_model/view_entities"},
 		Syntax: "BOTH CLAUSE ORDERS ARE ACCEPTED — `select … from …` and Mendix's own\n" +
 			"from-first `from … join … group by … select …`.\n\n" +
 			"An association is walked with SLASHES, never dots:\n" +
@@ -247,7 +250,7 @@ func init() {
 			"view entity association", "oql association", "select id as",
 			"OqlViewAssociationSource", "CE6771", "CE6770", "MDL080",
 		},
-		MinVersion: "10.18.0",
+		Features: []string{"domain_model/view_entities"},
 		Syntax: "SELECTING A PERSISTENT ENTITY'S ID UNDER AN ALIAS CREATES AN ASSOCIATION,\n" +
 			"named after the alias. There is no second statement, and the id column is\n" +
 			"NOT one of the view entity's attributes:\n\n" +
@@ -417,8 +420,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "domain-model.export-level",
-		Summary: "EXPORT LEVEL API|HIDDEN on entities, attributes, associations and enumerations (Protected / add-on modules)",
+		Path:     "domain-model.export-level",
+		Features: []string{"domain_model/export_levels"},
+		Summary:  "EXPORT LEVEL API|HIDDEN on entities, attributes, associations and enumerations (Protected / add-on modules)",
 		Keywords: []string{
 			"export level", "usable", "hidden", "api", "protected module", "add-on module",
 			"addon", "CE5400", "CE1406", "public surface",

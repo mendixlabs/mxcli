@@ -4,8 +4,9 @@ package syntax
 
 func init() {
 	Register(SyntaxFeature{
-		Path:    "microflow",
-		Summary: "Programmatic logic — variables, object operations, control flow, and integrations",
+		Path:     "microflow",
+		Features: []string{"microflows/basic"},
+		Summary:  "Programmatic logic — variables, object operations, control flow, and integrations",
 		Keywords: []string{
 			"microflow", "nanoflow", "logic", "automation",
 			"action", "activity", "flow",
@@ -16,8 +17,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.synchronize",
-		Summary: "SYNCHRONIZE — offline data synchronization (nanoflow only)",
+		Path:     "microflow.synchronize",
+		Features: []string{"microflows/synchronize", "microflows/synchronize_unsynchronized"},
+		Summary:  "SYNCHRONIZE — offline data synchronization (nanoflow only)",
 		Keywords: []string{
 			"synchronize", "sync", "offline", "unsynchronized", "specific",
 			"offline first", "nanoflow",
@@ -28,8 +30,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.send-email",
-		Summary: "SEND EMAIL — the built-in Send Email activity (SMTP, Mendix 11.13+, beta)",
+		Path:     "microflow.send-email",
+		Features: []string{"microflows/send_email"},
+		Summary:  "SEND EMAIL — the built-in Send Email activity (SMTP, Mendix 11.13+, beta)",
 		Keywords: []string{
 			"send email", "email", "mail", "smtp", "send mail", "e-mail",
 			"cc", "bcc", "subject", "attachment", "email connector",
@@ -93,8 +96,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.create",
-		Summary: "Create a microflow with parameters, return type, and body",
+		Path:     "microflow.create",
+		Features: []string{"microflows/deep_link_url"},
+		Summary:  "Create a microflow with parameters, return type, and body",
 		Keywords: []string{
 			"create microflow", "new microflow", "define microflow",
 			"parameters", "returns", "folder",
@@ -219,8 +223,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.control-flow",
-		Summary: "IF/ELSIF/ELSE, LOOP, WHILE, BREAK, CONTINUE, RETURN",
+		Path:     "microflow.control-flow",
+		Features: []string{"microflows/while_loop", "microflows/loop_over_list", "microflows/loop_in_branch"},
+		Summary:  "IF/ELSIF/ELSE, LOOP, WHILE, BREAK, CONTINUE, RETURN",
 		Keywords: []string{
 			"if", "elsif", "else", "then", "end if",
 			"loop", "while", "break", "continue", "return",
@@ -466,8 +471,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.object-operations",
-		Summary: "CREATE, CHANGE, COMMIT, ROLLBACK, and DELETE objects",
+		Path:     "microflow.object-operations",
+		Features: []string{"microflows/send_external_object", "microflows/delete_external_object"},
+		Summary:  "CREATE, CHANGE, COMMIT, ROLLBACK, and DELETE objects",
 		Keywords: []string{
 			"create object", "change object", "commit", "rollback",
 			"delete", "save", "persist", "modify object",
@@ -509,8 +515,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.list-operations",
-		Summary: "List manipulation — HEAD, TAIL, FIND, FILTER, SORT, UNION, RANGE, aggregates",
+		Path:     "microflow.list-operations",
+		Features: []string{"microflows/list_find_filter_by_expression", "microflows/list_range"},
+		Summary:  "List manipulation — HEAD, TAIL, FIND, FILTER, SORT, UNION, RANGE, aggregates",
 		Keywords: []string{
 			"list", "head", "tail", "find", "filter", "sort",
 			"union", "intersect", "subtract", "count", "sum",
@@ -744,8 +751,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.show-page",
-		Summary: "Open and close pages from microflows",
+		Path:     "microflow.show-page",
+		Features: []string{"microflows/show_page_with_params"},
+		Summary:  "Open and close pages from microflows",
 		Keywords: []string{
 			"show page", "open page", "close page", "display page",
 			"navigate", "page action", "number of pages to close", "title override",
@@ -762,8 +770,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.call",
-		Summary: "Call microflows and Java actions with parameters",
+		Path:     "microflow.call",
+		Features: []string{"microflows/queued_calls"},
+		Summary:  "Call microflows and Java actions with parameters",
 		Keywords: []string{
 			"call microflow", "call java action", "invoke", "in queue", "queued call", "background execution",
 			"sub-microflow", "java action", "parameter passing", "blank argument", "nothing",
@@ -787,8 +796,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "microflow.workflow-actions",
-		Summary: "Start and manage workflows from a microflow: call workflow, get workflow data, workflow operation, lock/unlock",
+		Path:     "microflow.workflow-actions",
+		Features: []string{"workflows/workflow_microflow_actions", "workflows/workflow_operations", "workflows/workflow_operation_pause_continue", "workflows/workflow_operation_retry_unpause", "workflows/get_workflow_data", "workflows/get_workflows", "workflows/get_workflow_activity_records", "workflows/workflow_definition_selection"},
+		Summary:  "Start and manage workflows from a microflow: call workflow, get workflow data, workflow operation, lock/unlock",
 		Keywords: []string{
 			"call workflow", "start workflow", "trigger workflow", "workflow from microflow",
 			"get workflow data", "get workflows for", "get workflow activity records",

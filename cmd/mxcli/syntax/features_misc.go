@@ -110,6 +110,34 @@ func init() {
 		SeeAlso: []string{"microflow", "domain-model.entity", "page", "document-folder", "create-if-not-exists"},
 	})
 
+	// `show features` had no topic, so a reader who checked the index concluded
+	// there was no way to ask which Mendix version a statement needs
+	// (ako/mxcli#1367). The same registry answers it, the topics' "Requires"
+	// lines, and the exec-time version gate.
+	Register(SyntaxFeature{
+		Path:    "features",
+		Summary: "LIST FEATURES — which MDL features a Mendix version supports, and since when",
+		Keywords: []string{
+			"show features", "list features", "features", "version", "mendix version",
+			"supported", "support", "requires", "since", "added since", "min version", "compatibility",
+		},
+		Syntax: "LIST FEATURES;                         -- the connected project's version\n" +
+			"LIST FEATURES IN <area>;               -- one area, e.g. workflows, microflows, pages\n" +
+			"LIST FEATURES FOR VERSION 10.24;       -- any version, no project needed\n" +
+			"LIST FEATURES FOR VERSION 10.24.3;\n" +
+			"LIST FEATURES ADDED SINCE 11.0;        -- what is new from a version on\n\n" +
+			"-- Areas: agent_documents, domain_model, integration, microflows, modules,\n" +
+			"-- mpr_format, navigation, oql_functions, pages, scheduled_events,\n" +
+			"-- security, workflows. SHOW FEATURES is the older spelling (MDL-DEPR002).\n" +
+			"--\n" +
+			"-- The table is sdk/versions/*.yaml, the registry `exec` and `check -p`\n" +
+			"-- gate on: a statement whose feature the project's version lacks is\n" +
+			"-- refused before anything is written. Each `mxcli syntax <topic>` page\n" +
+			"-- prints its own \"Requires: Mendix X+\" from the same registry.",
+		Example: "LIST FEATURES FOR VERSION 10.24;\nLIST FEATURES ADDED SINCE 11.0;",
+		SeeAlso: []string{"language-header", "status"},
+	})
+
 	// Every DROP statement, in one place. They used to be spread over the topic of
 	// each document type, and several (DROP ENTITY, DROP MICROFLOW, DROP NANOFLOW,
 	// DROP SNIPPET) were in none: `mxcli syntax drop` found three unrelated
@@ -398,8 +426,9 @@ DISCONNECT;`,
 	// ── Navigation ──────────────────────────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "navigation",
-		Summary: "Navigation profiles — home pages, menus, login pages per device type",
+		Path:     "navigation",
+		Features: []string{"navigation/profiles", "navigation/home_pages", "navigation/menu_items", "navigation/menu_item_icons", "navigation/native_home_page", "navigation/not_found_page", "navigation/progressive_web_app"},
+		Summary:  "Navigation profiles — home pages, menus, login pages per device type",
 		Keywords: []string{
 			"navigation", "nav", "profile", "responsive", "phone", "tablet",
 			"home page", "menu", "login page",
@@ -1098,8 +1127,9 @@ CREATE VALIDATION RULE FOR Shop.Product.Price
 	// ── Scheduled events ────────────────────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "scheduled-event",
-		Summary: "Scheduled events — Mendix's cron: run a microflow on a repeating schedule",
+		Path:     "scheduled-event",
+		Features: []string{"scheduled_events/schedules"},
+		Summary:  "Scheduled events — Mendix's cron: run a microflow on a repeating schedule",
 		Keywords: []string{
 			"scheduled event", "scheduled events", "schedule", "cron", "recurring",
 			"create scheduled event", "drop scheduled event", "describe scheduled event",
@@ -1576,8 +1606,9 @@ mxcli check script.mdl -p app.mpr --references  -- With reference validation`,
 	})
 
 	Register(SyntaxFeature{
-		Path:    "module.settings",
-		Summary: "A module's version and module type (Studio Pro's Module settings, General tab)",
+		Path:     "module.settings",
+		Features: []string{"modules/module_type"},
+		Summary:  "A module's version and module type (Studio Pro's Module settings, General tab)",
 		Keywords: []string{
 			"module settings", "module version", "module type", "add-on module",
 			"addon", "app module", "semver", "export module",
@@ -1600,8 +1631,9 @@ alter module Inventory set (Version: '2.4.0');
 	})
 
 	Register(SyntaxFeature{
-		Path:    "module.jar-dependencies",
-		Summary: "Manage Maven/JAR dependencies in a module's settings",
+		Path:     "module.jar-dependencies",
+		Features: []string{"modules/jar_dependencies", "modules/jar_dependency_exclusions"},
+		Summary:  "Manage Maven/JAR dependencies in a module's settings",
 		Keywords: []string{
 			"jar dependency", "maven", "jar dep", "module settings",
 			"group", "artifact", "classpath", "exclusion",
