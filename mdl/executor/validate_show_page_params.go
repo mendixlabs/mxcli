@@ -3,6 +3,7 @@
 package executor
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
@@ -30,6 +31,7 @@ func validateShowPageParams(ctx *ExecContext, calls []codeActionCallRef, sc *scr
 		if !ok {
 			continue
 		}
+		declared = applyPageParamEdits(declared, sc.pageParamEdits[key])
 		for _, msg := range validateCodeActionParams("page", call, declared) {
 			for _, written := range call.argNames {
 				if strings.EqualFold(written, "NumberOfPagesToClose") && strings.Contains(msg, `"`+written+`"`) {
@@ -95,4 +97,38 @@ func (sc *scriptContext) recordPageParamNames(qualifiedName string, params []ast
 		names = append(names, p.Name)
 	}
 	sc.pageParamNames[strings.ToLower(qualifiedName)] = names
+}
+
+// recordPageParamEdits keeps an alter page's add/drop parameter operations, so
+// a show page later in the script is checked against the page as the script
+// leaves it, not as it is stored (ako/mxcli#1940): adding a parameter to a page
+// and passing it from the flow that opens the page is one change.
+func (sc *scriptContext) recordPageParamEdits(qualifiedName string, ops []ast.AlterPageOperation) {
+	key := strings.ToLower(qualifiedName)
+	for _, op := range ops {
+		switch op.(type) {
+		case *ast.AddParameterOp, *ast.DropParameterOp:
+			sc.pageParamEdits[key] = append(sc.pageParamEdits[key], op)
+		}
+	}
+}
+
+// applyPageParamEdits returns declared with the edits applied in order. It
+// never changes declared, which may be the stored page's list.
+func applyPageParamEdits(declared []string, edits []ast.AlterPageOperation) []string {
+	if len(edits) == 0 {
+		return declared
+	}
+	out := append([]string{}, declared...)
+	for _, op := range edits {
+		switch o := op.(type) {
+		case *ast.AddParameterOp:
+			if !slices.Contains(out, o.Parameter.Name) {
+				out = append(out, o.Parameter.Name)
+			}
+		case *ast.DropParameterOp:
+			out = slices.DeleteFunc(out, func(n string) bool { return n == o.ParameterName })
+		}
+	}
+	return out
 }

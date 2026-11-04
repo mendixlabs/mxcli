@@ -99,9 +99,13 @@ type scriptContext struct {
 	// the workflow task signature checks, for the same reason as flowParams: the
 	// task page, the targeting microflow, the context entity and the workflow are
 	// ordinarily one script.
-	pageParams            map[string][]string // Module.Page (lower-cased) -> parameter entities
-	pageParamNames        map[string][]string // Module.Page (lower-cased) -> parameter names, for show page arguments
-	entityGeneralizations map[string]string   // Module.Entity (lower-cased) -> generalization, "" for none
+	pageParams     map[string][]string // Module.Page (lower-cased) -> parameter entities
+	pageParamNames map[string][]string // Module.Page (lower-cased) -> parameter names, for show page arguments
+	// pageParamEdits is each page's add/drop parameter operations from alter
+	// page statements, in script order, applied over pageParamNames or the
+	// stored list (ako/mxcli#1940).
+	pageParamEdits        map[string][]ast.AlterPageOperation
+	entityGeneralizations map[string]string // Module.Entity (lower-cased) -> generalization, "" for none
 
 	// Associations and entity attributes declared in the script, for
 	// MDL-XPATH01. Same reason as flowParams above: the overwhelmingly common
@@ -173,6 +177,7 @@ func newScriptContext() *scriptContext {
 
 		pageParams:            make(map[string][]string),
 		pageParamNames:        make(map[string][]string),
+		pageParamEdits:        make(map[string][]ast.AlterPageOperation),
 		entityGeneralizations: make(map[string]string),
 	}
 }
@@ -335,6 +340,10 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 	case *ast.CreateSnippetStmtV3:
 		if s.Name.Module != "" {
 			sc.snippets[s.Name.String()] = true
+		}
+	case *ast.AlterPageStmt:
+		if s.ContainerType == "PAGE" && s.PageName.Module != "" {
+			sc.recordPageParamEdits(s.PageName.String(), s.Operations)
 		}
 	case *ast.CreateLayoutStmt:
 		if s.Name.Module != "" {

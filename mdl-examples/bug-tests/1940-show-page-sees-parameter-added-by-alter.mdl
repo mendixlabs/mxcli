@@ -1,0 +1,15 @@
+-- ako/mxcli#1940 (mendixlabs/mxcli#1736): a parameter added by an earlier
+-- `alter page … add parameters` in the same script was not declared for a later
+-- show page, so check --references and exec refused the script. Run against a
+-- project with a page BugTest1940.Edit taking $Account: check passes, exec
+-- alters the page and creates the flow. A `drop parameters` earlier in the
+-- script likewise removes the name.
+mdl 1;
+alter page BugTest1940.Edit {
+  add parameters $Extra: Administration.Account;
+};
+create microflow BugTest1940.OpenEdit ($Acc: Administration.Account)
+begin
+  show page BugTest1940.Edit(Account = $Acc, Extra = $Acc);
+  return;
+end;
