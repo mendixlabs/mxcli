@@ -97,10 +97,35 @@ $Response = call external action Odata.Bug1914.CreateBuffer(
 - `describe microflow` prints the clause whenever the stored tree is non-empty,
   so the round trip is exact and the #1922 carry becomes the fallback for a
   script that omits the clause, rather than the only route.
-- An **omitted** clause keeps today's behaviour (carry the stored tree on
-  `create or modify`); `include associations ()` states "none" explicitly and
-  clears it. That matches how other omitted activity settings preserve what is
-  stored.
+- An **omitted** clause on an argument whose stored tree is non-empty still
+  **carries** that tree on `create or modify` (#1922), so a script written
+  before the clause existed never silently drops Studio Pro's settings — but
+  `check -p` and `exec` **warn**, naming the argument and the carried
+  associations, and say to state them or write `include associations ()`. The
+  warning is what tells an author who deleted the clause to remove the
+  associations that the deletion did nothing.
+- `include associations ()` states "none" explicitly and clears the tree.
+
+### Removing associations
+
+The clause is the whole tree, so removing is restating it with less:
+
+```sql
+-- stored: Quantity, with Unit under it — keep Quantity, drop Unit
+command = $Cmd include associations (Odata.Quantity)
+
+-- drop them all
+command = $Cmd include associations ()
+```
+
+The workflow is describe → delete the entries no longer wanted → `create or
+modify`. Deleting the clause itself removes nothing (it is carried, with the
+warning above).
+
+One limitation follows from refusing self-associations: a tree holding a
+self-association cannot be restated, so it cannot be **partly** removed from
+MDL. `include associations ()` still clears all of it, self-association
+included; removing only some entries of such a tree is a Studio Pro edit.
 
 ## Implementation Plan
 
@@ -134,6 +159,9 @@ gate at 10.11.0; the explicit empty clause writes nothing and needs none.
   "Unchanged" against the fixture project.
 - Refusal: an association that does not touch the entity on its side, and a
   self-association.
+- Warning: an omitted clause over a stored non-empty tree warns and carries it;
+  `include associations ()` clears it with no warning; a stored empty tree and
+  an omitted clause give neither.
 - `mx check` on a fresh 10.11+ and 11.x app with the clause: 0 errors; the same
   call without it at runtime omits the sub-object (the reporter's symptom).
 - `mdl-examples/bug-tests/1914-external-action-include-associations.mdl`.
@@ -144,10 +172,10 @@ gate at 10.11.0; the explicit empty clause writes nothing and needs none.
   property list. ADR-0013's property list holds an *activity's* settings; this
   setting belongs to one argument, and the clause keeps it next to that argument.
 - **Self-associations:** refused (see Proposed MDL Syntax), not defaulted.
+- **Omitted clause:** carried, with a warning (see Proposed MDL Syntax), not
+  carried silently.
 
 ## Open Questions
 
-1. **Should an omitted clause keep carrying** the stored tree (proposed), or warn
-   once the clause exists so that scripts converge on stating it?
-2. `AdditionalAttributes` (11.5.0, also per argument, also unauthored) is out of
+1. `AdditionalAttributes` (11.5.0, also per argument, also unauthored) is out of
    scope here; it likely needs the same treatment and the same clause position.
