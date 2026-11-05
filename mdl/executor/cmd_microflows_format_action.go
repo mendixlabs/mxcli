@@ -918,7 +918,8 @@ func formatAction(
 			// optional parameter left blank as `Argument: ""`, which printed as
 			// `name = )` and did not parse (ako/mxcli#1915). `nothing` is the
 			// blank; `empty` (11.14's spelling of the same field) stays a value.
-			params = append(params, fmt.Sprintf("%s = %s", pm.ParameterName, describeCallArgument(ctx, pm.Argument)))
+			arg := fmt.Sprintf("%s = %s", pm.ParameterName, describeCallArgument(ctx, pm.Argument))
+			params = append(params, arg+describeIncludedAssociations(ctx, pm.IncludedAssociations))
 		}
 
 		paramStr := ""
@@ -2506,4 +2507,84 @@ func workflowSelectionMDL(workflow, variable string, flag bool, flagWords string
 		sel += " " + flagWords
 	}
 	return sel
+}
+
+// describeIncludedAssociations prints an argument's stored Associations to
+// include as its `include associations ( … )` clause (ako/mxcli#1914), so
+// describe -> exec restates the tree rather than relying on the carry. A tree
+// holding a self-association cannot be written back — the builder refuses one,
+// its direction not being derivable — so it is printed as a comment instead:
+// left out, the clause carries the stored tree on create or modify.
+func describeIncludedAssociations(ctx *ExecContext, tree []*microflows.IncludedAssociation) string {
+	if len(tree) == 0 {
+		return ""
+	}
+	if self := selfAssociationsIn(ctx, tree); len(self) > 0 {
+		return fmt.Sprintf(" /* include associations (%s): holds the self-association %s, which MDL cannot write; "+
+			"create or modify keeps it while this clause is left out — change it in Studio Pro */",
+			formatIncludedAssociations(tree), strings.Join(self, ", "))
+	}
+	return " include associations (" + formatIncludedAssociations(tree) + ")"
+}
+
+// selfAssociationsIn lists the tree's associations whose two ends are one
+// entity. An association the project does not resolve is not one.
+func selfAssociationsIn(ctx *ExecContext, tree []*microflows.IncludedAssociation) []string {
+	if ctx == nil || ctx.Backend == nil {
+		return nil
+	}
+	var names []string
+	var walk func([]*microflows.IncludedAssociation)
+	walk = func(in []*microflows.IncludedAssociation) {
+		for _, ia := range in {
+			names = append(names, ia.Association)
+			walk(ia.IncludedAssociations)
+		}
+	}
+	walk(tree)
+	ends := projectAssociationEnds(ctx)
+	var self []string
+	seen := map[string]bool{}
+	for _, n := range names {
+		if e, ok := ends[n]; ok && e[0] != "" && e[0] == e[1] && !seen[n] {
+			seen[n] = true
+			self = append(self, n)
+		}
+	}
+	return self
+}
+
+// projectAssociationEnds maps each association's qualified name to its
+// {FROM, TO} entities.
+func projectAssociationEnds(ctx *ExecContext) map[string][2]string {
+	out := map[string][2]string{}
+	modules, err := getModulesFromCache(ctx)
+	if err != nil {
+		return out
+	}
+	moduleNames := make(map[model.ID]string, len(modules))
+	for _, m := range modules {
+		moduleNames[m.ID] = m.Name
+	}
+	dms, err := ctx.Backend.ListDomainModels()
+	if err != nil {
+		return out
+	}
+	for _, dm := range dms {
+		mod := moduleNames[dm.ContainerID]
+		if mod == "" {
+			continue
+		}
+		byID := make(map[model.ID]string, len(dm.Entities))
+		for _, e := range dm.Entities {
+			byID[e.ID] = mod + "." + e.Name
+		}
+		for _, a := range dm.Associations {
+			out[mod+"."+a.Name] = [2]string{byID[a.ParentID], byID[a.ChildID]}
+		}
+		for _, a := range dm.CrossAssociations {
+			out[mod+"."+a.Name] = [2]string{byID[a.ParentID], a.ChildRef}
+		}
+	}
+	return out
 }

@@ -50,7 +50,43 @@ func (b *Builder) ExitCallArgument(ctx *parser.CallArgumentContext) {
 			"call java action has; bind this parameter to an expression",
 			tok.GetLine(), tok.GetColumn()))
 	}
+	if ic := ctx.IncludeAssociationsClause(); ic != nil {
+		tok := ic.GetStart()
+		if !isExternalActionCallArgument(ctx) {
+			b.addError(fmt.Errorf("line %d:%d `include associations ( … )` is a call external action argument's "+
+				"Associations to include, which only call external action has; remove it",
+				tok.GetLine(), tok.GetColumn()))
+		}
+		b.refuseUnqualifiedIncludedAssociations(ic.(*parser.IncludeAssociationsClauseContext).AllIncludedAssociation())
+	}
 	b.recordDollarArgument(ctx.VARIABLE())
+}
+
+// refuseUnqualifiedIncludedAssociations refuses a node of an include
+// associations tree that names an association without its module: the tree is
+// stored by qualified name, and an unqualified one does not resolve.
+func (b *Builder) refuseUnqualifiedIncludedAssociations(nodes []parser.IIncludedAssociationContext) {
+	for _, n := range nodes {
+		node := n.(*parser.IncludedAssociationContext)
+		if qn := buildQualifiedName(node.QualifiedName()); qn.Module == "" {
+			tok := node.GetStart()
+			b.addError(fmt.Errorf("line %d:%d `%s` in include associations is not qualified: write the association "+
+				"as Module.Association", tok.GetLine(), tok.GetColumn(), qn.Name))
+		}
+		b.refuseUnqualifiedIncludedAssociations(node.AllIncludedAssociation())
+	}
+}
+
+// isExternalActionCallArgument reports whether a call argument belongs to a
+// call external action — the one call whose arguments have Associations to
+// include (ako/mxcli#1914).
+func isExternalActionCallArgument(ctx *parser.CallArgumentContext) bool {
+	list := ctx.GetParent()
+	if list == nil {
+		return false
+	}
+	_, ok := list.GetParent().(*parser.CallExternalActionStatementContext)
+	return ok
 }
 
 // isJavaActionCallArgument reports whether a call argument belongs to a call

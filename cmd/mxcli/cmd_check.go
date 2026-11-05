@@ -484,6 +484,11 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 		// mdl 0, and an alter whose patch fails is refused under both. They
 		// run the verdict exec and diff run, so the three agree.
 		projectViolations := exec.CheckEntityMemberDrops(prog)
+		// MDL-ODATA10: a call external action argument whose stored Associations
+		// to include a create or modify keeps because the statement does not
+		// write the clause (ako/mxcli#1914) — the omitted-clause warning exec
+		// prints, said before the write.
+		projectViolations = append(projectViolations, exec.CheckCarriedIncludedAssociations(prog)...)
 		projectViolations = append(projectViolations, exec.TypeCheckProgram(prog)...)
 		flowReport := exec.CheckFlowVerdictsReport(prog)
 		projectViolations = append(projectViolations, flowReport.Violations...)

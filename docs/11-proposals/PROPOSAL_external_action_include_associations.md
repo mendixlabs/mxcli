@@ -1,11 +1,11 @@
 ---
 title: Associations to Include on a Call External Action Argument
-status: draft
+status: implemented
 ---
 
 # Proposal: Associations to Include on a Call External Action Argument
 
-**Status:** Draft
+**Status:** Implemented
 **Date:** 2026-11-03
 **Issue:** ako/mxcli#1914 (mendixlabs/mxcli#1721)
 

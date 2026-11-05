@@ -35,6 +35,8 @@ var nestedBuilderInherits = map[string]bool{
 	"annotationsByLabel":   true,
 	"storedNotes":          true,
 	"qualifiedMembersOnly": true,
+	"statedIncludes":       true, // the carry reads one registry (#1914)
+	"resolveKnownOnly":     true,
 
 	// Where the body is drawn: nestedBuilder's arguments, and the body's own
 	// lanes and rows (a loop box is sized to fit, so it never wraps).

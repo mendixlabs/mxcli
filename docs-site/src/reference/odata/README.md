@@ -103,6 +103,34 @@ A re-import of a module that an earlier mxcli version imported the old way lists
 the associations that fail with `CE6618` as `drop association …;` lines. Run them,
 then run the import again.
 
+## Calling an External Action
+
+```sql
+$Response = call external action Odata.OrderService.CreateBuffer(
+  command = $Cmd include associations (Odata.Quantity (Odata.Unit)),
+  additional = nothing
+);
+```
+
+`include associations ( … )` after an argument is Studio Pro's **Associations to
+include**: the associations whose objects are serialised into the OData request
+with that argument. It is a tree. A name followed by `( … )` lists the
+associations included under it, reached from the entity at its far end. Without
+the clause, a sub-object linked to the argument is not sent, and nothing fails
+until the service receives the request.
+
+- Which end of each association the object is on is worked out from the domain
+  model, so the clause names only the associations.
+- A self-association is refused, because its direction cannot be derived. Tick it
+  in Studio Pro instead. `describe` prints a tree that holds one as a comment.
+- `include associations ()` removes them all. To remove some, restate the tree
+  without them. The clause is always the whole tree.
+- Left out on `create or modify`, the stored tree is **kept**, and `check -p` and
+  `exec` warn with **MDL-ODATA10**. Deleting the clause does not remove the
+  associations.
+- `describe microflow` prints the clause, so describe → exec restates the tree.
+- A non-empty clause needs Mendix 10.11 or later.
+
 ## Contract Browsing Statements
 
 Browse available assets from cached service contracts without network access.

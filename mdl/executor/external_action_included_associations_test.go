@@ -76,10 +76,48 @@ func storedCreateBufferCall() *microflows.ActionActivity {
 	}}
 }
 
+// includedAssocDomainModel is the Odata module: the reporter's DTOs, the
+// associations the fixture ticks (Quantity: command -> quantity, Unit:
+// quantity -> unit), and three probes — Owner reaches the command from its TO
+// end, Self links the command to itself, Elsewhere does not touch it.
+func includedAssocDomainModel(modID model.ID) *domainmodel.DomainModel {
+	entity := func(name string) *domainmodel.Entity {
+		return &domainmodel.Entity{
+			BaseElement:       model.BaseElement{ID: nextID("ent")},
+			Name:              name,
+			RemoteServiceName: "Odata.Bug1914",
+			RemoteEntityName:  name,
+		}
+	}
+	cmd, qty, other, unit := entity("CreateBufferCommand"), entity("QuantityParameterType"), entity("OtherCommand"), entity("Unit")
+	assoc := func(name string, from, to *domainmodel.Entity) *domainmodel.Association {
+		return &domainmodel.Association{BaseElement: model.BaseElement{ID: nextID("as")}, Name: name, ParentID: from.ID, ChildID: to.ID}
+	}
+	return &domainmodel.DomainModel{
+		ContainerID: modID,
+		Entities:    []*domainmodel.Entity{cmd, qty, other, unit},
+		Associations: []*domainmodel.Association{
+			assoc("Quantity", cmd, qty), assoc("Unit", qty, unit),
+			assoc("Owner", qty, cmd), assoc("Self", cmd, cmd), assoc("Elsewhere", other, unit),
+		},
+	}
+}
+
 // rewriteExternalActionFlow runs CREATE OR MODIFY of Odata.ACT_Buffer with body
 // against a stored microflow holding stored (nil: there is no stored
 // microflow), and returns the CallExternalActions the rewrite wrote.
 func rewriteExternalActionFlow(t *testing.T, stored *microflows.ActionActivity, body string) []*microflows.CallExternalAction {
+	t.Helper()
+	calls, _, err := runExternalActionFlow(t, stored, body)
+	if err != nil {
+		t.Fatalf("create or modify: %v", err)
+	}
+	return calls
+}
+
+// runExternalActionFlow is rewriteExternalActionFlow returning exec's output
+// and error rather than failing on one.
+func runExternalActionFlow(t *testing.T, stored *microflows.ActionActivity, body string) ([]*microflows.CallExternalAction, string, error) {
 	t.Helper()
 	mod := mkModule("Odata")
 	h := mkHierarchy(mod)
@@ -90,26 +128,28 @@ func rewriteExternalActionFlow(t *testing.T, stored *microflows.ActionActivity, 
 		mf.ObjectCollection = &microflows.MicroflowObjectCollection{Objects: []microflows.MicroflowObject{stored}}
 		existing = append(existing, mf)
 	}
-	entity := func(name string) *domainmodel.Entity {
-		return &domainmodel.Entity{
-			BaseElement:       model.BaseElement{ID: nextID("ent")},
-			Name:              name,
-			RemoteServiceName: "Odata.Bug1914",
-			RemoteEntityName:  name,
-		}
-	}
+	dm := includedAssocDomainModel(mod.ID)
 	var written *microflows.Microflow
 	mb := &mock.MockBackend{
 		IsConnectedFunc: func() bool { return true },
 		ListModulesFunc: func() ([]*model.Module, error) { return []*model.Module{mod}, nil },
+		GetModuleByNameFunc: func(name string) (*model.Module, error) {
+			if name == mod.Name {
+				return mod, nil
+			}
+			return nil, nil
+		},
+		GetDomainModelFunc: func(id model.ID) (*domainmodel.DomainModel, error) {
+			if id == mod.ID {
+				return dm, nil
+			}
+			return nil, nil
+		},
 		ListMicroflowsFunc: func() ([]*microflows.Microflow, error) {
 			return existing, nil
 		},
 		ListDomainModelsFunc: func() ([]*domainmodel.DomainModel, error) {
-			return []*domainmodel.DomainModel{{
-				ContainerID: mod.ID,
-				Entities:    []*domainmodel.Entity{entity("CreateBufferCommand"), entity("QuantityParameterType"), entity("OtherCommand")},
-			}}, nil
+			return []*domainmodel.DomainModel{dm}, nil
 		},
 		ListConsumedODataServicesFunc: func() ([]*model.ConsumedODataService, error) {
 			return []*model.ConsumedODataService{{
@@ -123,7 +163,7 @@ func rewriteExternalActionFlow(t *testing.T, stored *microflows.ActionActivity, 
 		CreateMicroflowFunc:          func(mf *microflows.Microflow) error { written = mf; return nil },
 		UpdateMicroflowFunc:          func(mf *microflows.Microflow) error { written = mf; return nil },
 	}
-	ctx, _ := newMockCtx(t, withBackend(mb), withHierarchy(h))
+	ctx, out := newMockCtx(t, withBackend(mb), withHierarchy(h))
 
 	prog, errs := visitor.Build("create or modify microflow Odata.ACT_Buffer ($Cmd: Odata.CreateBufferCommand, $Other: Odata.OtherCommand)\nbegin\n" +
 		body + "\nend;")
@@ -131,7 +171,7 @@ func rewriteExternalActionFlow(t *testing.T, stored *microflows.ActionActivity, 
 		t.Fatalf("parse: %v", errs)
 	}
 	if err := execCreateMicroflow(ctx, prog.Statements[0].(*ast.CreateMicroflowStmt)); err != nil {
-		t.Fatalf("create or modify: %v", err)
+		return nil, out.String(), err
 	}
 	if written == nil {
 		t.Fatal("nothing was written")
@@ -144,7 +184,7 @@ func rewriteExternalActionFlow(t *testing.T, stored *microflows.ActionActivity, 
 			}
 		}
 	}
-	return calls
+	return calls, out.String(), nil
 }
 
 func mappingNamed(c *microflows.CallExternalAction, name string) *microflows.ExternalActionParameterMapping {
@@ -229,8 +269,8 @@ func TestCreateOrModify_IncludedAssociationsTwoCalls(t *testing.T) {
 			rebuilt.Objects = append(rebuilt.Objects, a)
 			calls = append(calls, a.Action.(*microflows.CallExternalAction))
 		}
-		err := carryIncludedAssociations(rebuilt,
-			&microflows.MicroflowObjectCollection{Objects: []microflows.MicroflowObject{stored}}, "Odata.ACT_Buffer")
+		_, err := carryIncludedAssociations(rebuilt,
+			&microflows.MicroflowObjectCollection{Objects: []microflows.MicroflowObject{stored}}, "Odata.ACT_Buffer", nil)
 		return calls, err
 	}
 

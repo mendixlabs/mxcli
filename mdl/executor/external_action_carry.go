@@ -24,8 +24,15 @@ import (
 // when they differ, the rewrite is refused rather than guessed.
 //
 // A tree is not carried onto a parameter that now binds another entity: its
-// associations belong to the entity it was ticked on.
-func carryIncludedAssociations(rebuilt, stored *microflows.MicroflowObjectCollection, qualifiedName string) error {
+// associations belong to the entity it was ticked on. Nor onto a mapping whose
+// statement writes `include associations ( … )` (stated), which says the tree
+// itself — `()` included, which clears it.
+//
+// Each carry is returned, so exec can say that a statement left the clause out
+// and kept the stored tree: deleting the clause removes nothing, and the
+// warning is what tells the author so.
+func carryIncludedAssociations(rebuilt, stored *microflows.MicroflowObjectCollection, qualifiedName string,
+	stated map[*microflows.ExternalActionParameterMapping]bool) ([]carriedIncludes, error) {
 	type slot struct {
 		entity string
 		tree   []*microflows.IncludedAssociation
@@ -51,21 +58,22 @@ func carryIncludedAssociations(rebuilt, stored *microflows.MicroflowObjectCollec
 	}
 	if len(conflicts) > 0 {
 		sort.Strings(conflicts)
-		return mdlerrors.NewUnsupported(fmt.Sprintf(
+		return nil, mdlerrors.NewUnsupported(fmt.Sprintf(
 			"microflow %s calls %s more than once with different associations to include, "+
 				"and MDL cannot say which call has which — rewriting it would mix them up.\n"+
 				"  Change the microflow in Studio Pro, or give the calls the same associations first.",
 			qualifiedName, strings.Join(conflicts, ", ")))
 	}
 	if len(storedTrees) == 0 {
-		return nil
+		return nil, nil
 	}
+	var carried []carriedIncludes
 	used := map[string]bool{}
 	for _, call := range externalActionCalls(rebuilt) {
 		for _, pm := range call.ParameterMappings {
 			key := externalActionKey(call) + "|" + strings.ToLower(pm.ParameterName)
 			s, ok := storedTrees[key]
-			if !ok || len(pm.IncludedAssociations) > 0 {
+			if !ok || len(pm.IncludedAssociations) > 0 || stated[pm] {
 				continue
 			}
 			if s.entity != "" && pm.ParameterEntity != "" && !strings.EqualFold(s.entity, pm.ParameterEntity) {
@@ -74,10 +82,48 @@ func carryIncludedAssociations(rebuilt, stored *microflows.MicroflowObjectCollec
 			// The first copy keeps the stored $IDs; a second call to the same
 			// action gets fresh ones, since two elements of a unit cannot share one.
 			pm.IncludedAssociations = cloneIncludedAssociations(s.tree, !used[key])
+			if !used[key] {
+				carried = append(carried, carriedIncludes{
+					call:  call.ConsumedODataService + "." + call.Name,
+					param: pm.ParameterName,
+					tree:  formatIncludedAssociations(s.tree),
+				})
+			}
 			used[key] = true
 		}
 	}
-	return nil
+	return carried, nil
+}
+
+// carriedIncludes is one argument that kept its stored Associations to include
+// because its statement did not write the clause.
+type carriedIncludes struct {
+	call, param string
+	tree        string // as the clause writes it: "Odata.Quantity (Odata.Unit)"
+}
+
+// carriedIncludesWarning is what exec prints for a carry (ako/mxcli#1914).
+func carriedIncludesWarning(flow string, c carriedIncludes) string {
+	return fmt.Sprintf("Warning: %s: call external action %s(%s) keeps its stored associations to include (%s), "+
+		"because the statement does not write `include associations`. State them — `%s = … include associations (%s)` — "+
+		"or write `include associations ()` to remove them [%s]",
+		flow, c.call, c.param, c.tree, c.param, c.tree, carriedIncludesRule)
+}
+
+// carriedIncludesRule is the rule id of the omitted-clause warning.
+const carriedIncludesRule = "MDL-ODATA10"
+
+// formatIncludedAssociations writes a tree as the clause's contents.
+func formatIncludedAssociations(in []*microflows.IncludedAssociation) string {
+	parts := make([]string, 0, len(in))
+	for _, ia := range in {
+		s := ia.Association
+		if len(ia.IncludedAssociations) > 0 {
+			s += " (" + formatIncludedAssociations(ia.IncludedAssociations) + ")"
+		}
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // externalActionCalls returns every CallExternalAction in a flow, loop bodies
