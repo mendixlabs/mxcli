@@ -463,6 +463,12 @@ func applySetProperties(ctx *ExecContext, mutator backend.PageMutator, op *ast.S
 				"`set %s = <action>` needs a pluggable widget target: `set '%s' = … on <widgetName>`",
 				propName, propName)
 		}
+		if params, ok := value.([]ast.ParamAssignmentV3); ok && isTemplateParamsKey(propName) {
+			if err := setTemplateParameters(ctx, mutator, op.Target, propName, params, moduleName, moduleID); err != nil {
+				return err
+			}
+			continue
+		}
 		if op.Target.IsColumn() {
 			if err := mutator.SetColumnProperty(op.Target.Widget, columnRefOf(op.Target), propName, value); err != nil {
 				return mdlerrors.NewBackend("set "+propName+" on "+op.Target.Name(), err)
@@ -1383,4 +1389,33 @@ func newAlterPageBuilder(ctx *ExecContext, moduleName string, moduleID model.ID,
 		isDocumentWidget: alterDocumentWidgets(mutator, nil),
 		isSnippet:        mutator.ContainerType() == backend.ContainerSnippet,
 	}
+}
+
+// templateParameterSetter is the page mutator capability behind
+// `set (CaptionParams: …)` / `set (ContentParams: …)`.
+type templateParameterSetter interface {
+	SetWidgetTemplateParameters(widgetRef, prop string, params []*pages.ClientTemplateParameter) error
+}
+
+func isTemplateParamsKey(prop string) bool {
+	return strings.EqualFold(prop, "CaptionParams") || strings.EqualFold(prop, "ContentParams")
+}
+
+// setTemplateParameters writes a text template's parameters on a stored
+// built-in widget (ako/mxcli#1966), resolved by the builder CREATE PAGE uses
+// against the entity of the data container the widget sits in — so a bare
+// attribute name means here what it means in `create page`.
+func setTemplateParameters(ctx *ExecContext, mutator backend.PageMutator, target ast.WidgetRef, prop string,
+	params []ast.ParamAssignmentV3, moduleName string, moduleID model.ID) error {
+	setter, ok := mutator.(templateParameterSetter)
+	if !ok || target.Widget == "" || target.IsColumn() || target.Item != nil {
+		return mdlerrors.NewUnsupported(fmt.Sprintf(
+			"alter page set %s is supported on a button or a dynamic text — use `replace <widget> with …` here", prop))
+	}
+	pb := newAlterPageBuilder(ctx, moduleName, moduleID, mutator.EnclosingEntity(target.Widget), mutator)
+	resolved := pb.buildClientTemplateParams(params)
+	if err := setter.SetWidgetTemplateParameters(target.Widget, prop, resolved); err != nil {
+		return mdlerrors.NewBackend("set "+prop+" on "+target.Name(), err)
+	}
+	return nil
 }

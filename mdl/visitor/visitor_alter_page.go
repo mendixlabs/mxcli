@@ -133,6 +133,15 @@ func (b *Builder) buildAlterSetLayout(ctx *parser.AlterSetContext) *ast.SetLayou
 
 // buildAlterPageAssignment extracts property name and value from an assignment context.
 func (b *Builder) buildAlterPageAssignment(ctx *parser.AlterPageAssignmentContext) (string, interface{}) {
+	// CaptionParams / ContentParams: a text template's parameters, the same
+	// list CREATE PAGE reads (ako/mxcli#1966).
+	if pl := ctx.ParamListV3(); pl != nil {
+		name := "ContentParams"
+		if ctx.CAPTIONPARAMS() != nil {
+			name = "CaptionParams"
+		}
+		return name, buildParamListV3(pl)
+	}
 	// An expression-typed property takes the expression as written, from
 	// whichever value alternative matched (visitor_widget_expression.go).
 	if id := ctx.IdentifierOrKeyword(); id != nil && ctx.STRING_LITERAL() == nil {
