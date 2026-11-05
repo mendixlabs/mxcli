@@ -221,6 +221,9 @@ func ParseEdmx(metadataXML string) (*EdmxDocument, error) {
 	if err := xml.Unmarshal([]byte(metadataXML), &edmx); err != nil {
 		return nil, fmt.Errorf("failed to parse EDMX XML: %w", err)
 	}
+	// Every term below is matched by its full namespace; read aliased ones
+	// through the document's aliases first (ako/mxcli#1977).
+	normalizeAnnotationTerms(&edmx)
 
 	doc := &EdmxDocument{
 		Version: edmx.Version,
@@ -736,7 +739,19 @@ func ResolveNavType(t string) (typeName string, isMany bool) {
 type xmlEdmx struct {
 	XMLName      xml.Name         `xml:"Edmx"`
 	Version      string           `xml:"Version,attr"`
+	References   []xmlReference   `xml:"Reference"`
 	DataServices []xmlDataService `xml:"DataServices"`
+}
+
+// xmlReference is an <edmx:Reference>: the vocabularies (and other documents)
+// this one uses, each Include optionally giving its namespace an alias.
+type xmlReference struct {
+	Includes []xmlInclude `xml:"Include"`
+}
+
+type xmlInclude struct {
+	Namespace string `xml:"Namespace,attr"`
+	Alias     string `xml:"Alias,attr"`
 }
 
 type xmlDataService struct {
@@ -745,6 +760,7 @@ type xmlDataService struct {
 
 type xmlSchema struct {
 	Namespace        string                  `xml:"Namespace,attr"`
+	Alias            string                  `xml:"Alias,attr"`
 	EntityTypes      []xmlEntityType         `xml:"EntityType"`
 	ComplexTypes     []xmlComplexType        `xml:"ComplexType"`
 	EnumTypes        []xmlEnumType           `xml:"EnumType"`
@@ -938,4 +954,88 @@ func containsString(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// normalizeAnnotationTerms rewrites every annotation term written with a
+// vocabulary alias to its full namespace, so the term switches below match it.
+//
+// CSDL lets a document alias a namespace — <edmx:Include
+// Namespace="Org.OData.Capabilities.V1" Alias="Capabilities"/>, or a Schema's
+// own Alias — and write `Term="Capabilities.UpdateRestrictions"`. Matched by
+// the full namespace only, every such term was skipped: an entity set imported
+// as not creatable / updatable / deletable, which mxbuild, resolving the alias,
+// reports as CE6630 (ako/mxcli#1977). A prefix the document does not declare is
+// left as written; it names no vocabulary this parser knows.
+func normalizeAnnotationTerms(edmx *xmlEdmx) {
+	aliases := map[string]string{}
+	for _, ref := range edmx.References {
+		for _, inc := range ref.Includes {
+			if inc.Alias != "" && inc.Namespace != "" {
+				aliases[inc.Alias] = inc.Namespace
+			}
+		}
+	}
+	for _, ds := range edmx.DataServices {
+		for _, s := range ds.Schemas {
+			if s.Alias != "" && s.Namespace != "" {
+				aliases[s.Alias] = s.Namespace
+			}
+		}
+	}
+	if len(aliases) == 0 {
+		return
+	}
+	canon := func(term string) string {
+		name, qualifier, hasQualifier := strings.Cut(term, "#")
+		i := strings.LastIndex(name, ".")
+		if i <= 0 {
+			return term
+		}
+		ns, ok := aliases[name[:i]]
+		if !ok {
+			return term
+		}
+		out := ns + name[i:]
+		if hasQualifier {
+			out += "#" + qualifier
+		}
+		return out
+	}
+	for d := range edmx.DataServices {
+		for si := range edmx.DataServices[d].Schemas {
+			s := &edmx.DataServices[d].Schemas[si]
+			for i := range s.EntityTypes {
+				et := &s.EntityTypes[i]
+				for j := range et.Annotations {
+					et.Annotations[j].Term = canon(et.Annotations[j].Term)
+				}
+				for j := range et.Properties {
+					for k := range et.Properties[j].Annotations {
+						et.Properties[j].Annotations[k].Term = canon(et.Properties[j].Annotations[k].Term)
+					}
+				}
+			}
+			for i := range s.ComplexTypes {
+				for j := range s.ComplexTypes[i].Properties {
+					p := &s.ComplexTypes[i].Properties[j]
+					for k := range p.Annotations {
+						p.Annotations[k].Term = canon(p.Annotations[k].Term)
+					}
+				}
+			}
+			for i := range s.EntityContainers {
+				for j := range s.EntityContainers[i].EntitySets {
+					es := &s.EntityContainers[i].EntitySets[j]
+					for k := range es.Annotations {
+						es.Annotations[k].Term = canon(es.Annotations[k].Term)
+					}
+				}
+			}
+			for i := range s.Annotations {
+				for j := range s.Annotations[i].Annotations {
+					s.Annotations[i].Annotations[j].Term = canon(s.Annotations[i].Annotations[j].Term)
+				}
+			}
+		}
+	}
 }
