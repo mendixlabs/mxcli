@@ -40,6 +40,17 @@ func JsonMappingRootIsList(lookup JsonStructureLookup, im *model.ImportMapping) 
 		MappingRootPathCrossesArray(im.Elements[0].JsonPath) {
 		return true, true
 	}
+	// A root whose path is stored is decided by it alone: one that does not
+	// cross an array yields one object, even in an array-rooted structure.
+	// A mapping may root at "(Array)" — the array itself — with its items a
+	// child at "(Array)|(Object)"; it returns one root object, and answering
+	// "list" from the structure wrote the import as returning a list: mx check
+	// 11.14 CE0243 "The mapping used to return a value of type 'List of X', but
+	// now returns a value of type 'X'" (ako/mxcli#1938). The structure decides
+	// only when the mapping stores no path.
+	if len(im.Elements) > 0 && im.Elements[0] != nil && im.Elements[0].JsonPath != "" {
+		return false, true
+	}
 	if im.JsonStructure != "" && lookup != nil {
 		parts := strings.SplitN(im.JsonStructure, ".", 2)
 		if len(parts) == 2 {
