@@ -587,6 +587,10 @@ alterPageAssignment
     // without this, `set (CaptionParams: ({1} = Attr))` did not parse and a
     // template's parameters could only be changed by REPLACEing the widget.
     | (CONTENTPARAMS | CAPTIONPARAMS) alterAssignOp paramListV3   // CaptionParams: ({1} = VersionNo)
+    // An attribute over associations, as CREATE PAGE takes a column's or an
+    // input's (ako/mxcli#1644): `Assoc/Attr` parsed as a division and was
+    // refused as an expression.
+    | ATTRIBUTE alterAssignOp attributePathHopV3 SLASH attributePathV3   // Attribute: Order_Customer/City
     | identifierOrKeyword alterAssignOp actionExprV3           // createFileAction: microflow Module.MF
     | identifierOrKeyword alterAssignOp propertyValueV3       // Caption: 'Save'
     | STRING_LITERAL alterAssignOp propertyValueV3             // 'showLabel': false

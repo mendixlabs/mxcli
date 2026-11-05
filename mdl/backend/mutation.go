@@ -534,6 +534,10 @@ type PluggablePropertyScoper interface {
 type AttributeBinding struct {
 	Path           string
 	SourceVariable *pages.WidgetVariable
+	// Steps are the association hops of an attribute reached over
+	// associations (`Assoc/Attr`), written as the AttributeRef's EntityRef as
+	// CREATE writes a multi-hop column (ako/mxcli#1644).
+	Steps []pages.AttributeRefStep
 }
 
 // ObjectListItemSpec describes one item of an object-list property (e.g. one
