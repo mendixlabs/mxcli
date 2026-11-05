@@ -752,6 +752,10 @@ func setAttributeRefField(value bson.D, attributePath string, steps []pages.Attr
 // an attribute over associations (one EntityRefStep per hop), or nil for an
 // own-entity attribute. Mirrors the codec-form attributeRefWithStepsToGen and the
 // legacy serializeAssociationSource EntityRef structure.
+// AttributeEntityRefBSON is the AttributeRef.EntityRef an attribute over
+// associations stores: its hops as an IndirectEntityRef, or nil for none.
+func AttributeEntityRefBSON(steps []pages.AttributeRefStep) any { return attributeEntityRefBSON(steps) }
+
 func attributeEntityRefBSON(steps []pages.AttributeRefStep) any {
 	if len(steps) == 0 {
 		return nil

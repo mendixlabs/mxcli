@@ -1,0 +1,21 @@
+-- ako/mxcli#1644: `alter page … set (Attribute: …) on <grid> column(…)` was
+-- refused for every spelling ("holds a value of kind Attribute, which ALTER
+-- cannot set from a plain value"), and `Assoc/Attr` did not parse. It now binds
+-- as CREATE binds a column's Attribute, against the grid's entity. Measured on a
+-- fresh 11.14.0 app: all three SETs apply, describe prints them back, mx check
+-- 0 errors, and describe -> exec of the page is Unchanged.
+mdl 1;
+create module BugTest1644;
+create persistent entity BugTest1644.Customer (Name: String(100), City: String(100));
+create persistent entity BugTest1644.Order (Number: String(20), Note: String(200), Code: String(20), Ref: String(20));
+create association BugTest1644.Order_Customer from BugTest1644.Order to BugTest1644.Customer;
+create page BugTest1644.OrderGrid ( Title: 'Orders', Layout: Atlas_Core.Atlas_Default ) {
+  datagrid dgOrders (DataSource: database from BugTest1644.Order) {
+    column (Attribute: Number, Caption: 'Number')
+    column (Attribute: Code, Caption: 'Code')
+    column (Attribute: Ref, Caption: 'Ref')
+  }
+};
+alter page BugTest1644.OrderGrid { set (Attribute: Note) on dgOrders column(Number) };
+alter page BugTest1644.OrderGrid { set (Attribute: BugTest1644.Order.Number) on dgOrders column(Code) };
+alter page BugTest1644.OrderGrid { set (Attribute: Order_Customer/City) on dgOrders column(Ref) };

@@ -2844,6 +2844,11 @@ func setColumnPropertyMut(colDoc bson.D, propKeyMap map[string]string, propKindM
 			return fmt.Errorf("column property %q has no Value", propName)
 		}
 
+		// A column's attribute, resolved by the executor against the grid's
+		// data source as CREATE resolves it (ako/mxcli#1644).
+		if b, ok := value.(backend.AttributeBinding); ok {
+			return setColumnAttributeBinding(valDoc, propName, propKindMap[typePointerID], b)
+		}
 		field, settable := columnValueField(propKindMap[typePointerID])
 		if !settable {
 			return fmt.Errorf(
@@ -4411,4 +4416,27 @@ func (m *Mutator) PageVariableNames() []string {
 		}
 	}
 	return names
+}
+
+// setColumnAttributeBinding writes a Data grid 2 column's attribute: the
+// AttributeRef CREATE writes for `column (Attribute: …)`, with the association
+// hops as its EntityRef (ako/mxcli#1644). A column attribute reads the grid's
+// items, so a SourceVariable — a page parameter's — is never written here.
+func setColumnAttributeBinding(valDoc bson.D, propName, kind string, b backend.AttributeBinding) error {
+	if kind != "Attribute" {
+		return fmt.Errorf("column property %q holds a value of kind %s, not an attribute", propName, kind)
+	}
+	if strings.Count(b.Path, ".") < 2 {
+		return fmt.Errorf("column property %q: %q is not a qualified attribute", propName, b.Path)
+	}
+	if !hasKey(valDoc, "AttributeRef") {
+		return fmt.Errorf("column property %q stores no AttributeRef to set — replace the column instead", propName)
+	}
+	bsonnav.DSet(valDoc, "AttributeRef", bson.D{
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
+		{Key: "$Type", Value: "DomainModels$AttributeRef"},
+		{Key: "Attribute", Value: b.Path},
+		{Key: "EntityRef", Value: widgetobj.AttributeEntityRefBSON(b.Steps)},
+	})
+	return nil
 }
