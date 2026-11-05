@@ -182,6 +182,19 @@ func PackageProject(ctx context.Context, mpkPath, mendixVersion, workDir string,
 		}
 	}
 
+	// A protected module ships its model as a module tree, which mx refuses to
+	// import; split it into units and write those instead (moduletree.go).
+	if tree, err := IsModuleTreePackage(mpkPath); err == nil && tree {
+		name, err := ModuleNameInPackage(mpkPath)
+		if err != nil {
+			return "", err
+		}
+		if _, err := InsertModuleTree(mpkPath, mprPath, name); err != nil {
+			return "", fmt.Errorf("load the package's module tree: %w", err)
+		}
+		return mprPath, nil
+	}
+
 	// mx refuses a theme module (Atlas_Core, Atlas_Web_Content, Conversational
 	// UI); makeImportable clears the flag that gates the refusal, on a copy.
 	importable, err := makeImportable(mpkPath, workDir)
