@@ -3590,13 +3590,12 @@ func setWidgetFormattingMut(widget bson.D, propName string, value any) error {
 		if !isString || !ok {
 			return fmt.Errorf("DateFormat is one of Date, Time, DateTime, Custom, not %v", value)
 		}
-		// mxbuild: CE0493 "Date format is custom but no format string is
-		// specified." Set the pattern in the same statement — properties are
-		// applied in name order, so CustomDateFormat lands first.
-		if canon == "Custom" && strings.TrimSpace(bsonnav.DGetString(fi, "CustomDateFormat")) == "" {
-			return fmt.Errorf("`DateFormat: Custom` needs a pattern: set CustomDateFormat in the same statement, " +
-				"e.g. `set (DateFormat: Custom, CustomDateFormat: 'dd-MM-yyyy HH:mm') on …` (mxbuild CE0493)")
-		}
+		// mxbuild CE0493 "Date format is custom but no format string is
+		// specified" is judged on the widget the whole statement leaves
+		// (CheckDateFormat, after the SET; check does the same), not here:
+		// this sees one property, and refusing on the stored pattern refused
+		// `set (DateFormat: Custom, CustomDateFormat: …)` in check's
+		// one-property dry run (ako/mxcli#1965).
 		bsonnav.DSet(fi, "DateFormat", canon)
 	case "CustomDateFormat":
 		s, isString := value.(string)

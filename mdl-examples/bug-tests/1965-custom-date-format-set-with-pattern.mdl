@@ -1,0 +1,11 @@
+-- ako/mxcli#1965 (mendixlabs/mxcli#1743): setting a date picker to
+-- `DateFormat: Custom` with its pattern was refused by check (and so by
+-- exec's pre-check) in either order and as two SETs, telling the author to
+-- write the very statement they had written; --no-check wrote it correctly and
+-- mx check passed. check now judges the widget as the statement leaves it.
+-- Run against a project holding the page below (create it first): check and
+-- exec accept all three; `set (DateFormat: Custom)` alone is still CE0493.
+mdl 1;
+alter page BugTest1965.Booking_Edit { set (DateFormat: Custom, CustomDateFormat: 'dd/MM/yyyy') on dpA };
+alter page BugTest1965.Booking_Edit { set (CustomDateFormat: 'dd/MM/yyyy', DateFormat: Custom) on dpB };
+alter page BugTest1965.Booking_Edit { set (CustomDateFormat: 'HH:mm') on dpC; set (DateFormat: Custom) on dpC };

@@ -94,6 +94,7 @@ func validateAlterSetProperties(ctx *ExecContext, prog *ast.Program, sc *scriptC
 		}
 		label := fmt.Sprintf("alter %s %s", containerType, s.PageName.String())
 		modName := h.GetModuleName(containerID)
+		var earlier []*ast.SetPropertyOp
 		for _, op := range s.Operations {
 			set, ok := op.(*ast.SetPropertyOp)
 			if !ok {
@@ -111,9 +112,45 @@ func validateAlterSetProperties(ctx *ExecContext, prog *ast.Program, sc *scriptC
 				continue
 			}
 			errs = append(errs, checkSetOp(ctx, probe, label, set, modName, containerID, sc)...)
+			errs = append(errs, checkDateFormatSet(ctx, probe, label, earlier, set, modName, containerID)...)
+			earlier = append(earlier, set)
 		}
 	}
 	return errs
+}
+
+// checkDateFormatSet is exec's checkDateFormatAfterSet for check: a date
+// picker left `DateFormat: Custom` with no pattern is CE0493, judged on the
+// widget as the statement leaves it — its earlier SETs on that widget applied
+// first, then this one whole — because the format and its pattern may be set
+// in either order, in one SET or in two (ako/mxcli#1965).
+func checkDateFormatSet(ctx *ExecContext, p pageProbe, label string, earlier []*ast.SetPropertyOp, op *ast.SetPropertyOp,
+	modName string, modID model.ID) []error {
+	touches := false
+	for name := range op.Properties {
+		if strings.EqualFold(name, "DateFormat") || strings.EqualFold(name, "CustomDateFormat") {
+			touches = true
+		}
+	}
+	if !touches || op.Target.IsColumn() || op.Target.Item != nil || op.Target.Widget == "" {
+		return nil
+	}
+	probe, err := p.Probe()
+	if err != nil {
+		return nil
+	}
+	for _, e := range earlier {
+		if e.Target.Widget == op.Target.Widget && !e.Target.IsColumn() && e.Target.Item == nil {
+			_ = applySetProperties(ctx, probe, e, modName, modID) // its own errors are reported for it
+		}
+	}
+	if applySetProperties(ctx, probe, op, modName, modID) != nil {
+		return nil // reported by checkSetOp
+	}
+	if err := checkDateFormatAfterSet(probe, op); err != nil {
+		return []error{mdlerrors.NewValidation(fmt.Sprintf("%s: %v", label, err))}
+	}
+	return nil
 }
 
 // openPageProbe opens the stored document and returns it as a prober, or nil
