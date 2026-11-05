@@ -118,6 +118,10 @@ features:
       min_version: "10.2.0"
       mdl: "CALL EXTERNAL ACTION Module.Service.Action (Name = $Value);"
       notes: "Microflows$ExternalActionParameterMapping introduced in 10.2.0 (mendixmodelsdk 4.117.0); an action called with no arguments writes none (ako/mxcli#1811)."
+    call_external_action_include_associations:
+      min_version: "10.11.0"
+      mdl: "CALL EXTERNAL ACTION Module.Service.Action (Command = $Cmd INCLUDE ASSOCIATIONS (Module.Assoc (Module.SubAssoc)));"
+      notes: "Microflows$IncludedAssociation and ExternalActionParameterMapping.IncludedAssociations introduced in 10.11.0 (mendixmodelsdk); an empty clause writes nothing (ako/mxcli#1914)."
     send_rest_request_output:
       min_version: "10.4.0"
       mdl: "$Response = SEND REST REQUEST Module.Service.Operation;"

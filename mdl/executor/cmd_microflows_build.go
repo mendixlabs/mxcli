@@ -472,8 +472,14 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 		}
 		return nil, fmt.Errorf("%s", errMsg.String())
 	}
-	if err := carryIncludedAssociations(mf.ObjectCollection, existingObjects, qualifiedName); err != nil {
+	carried, err := carryIncludedAssociations(mf.ObjectCollection, existingObjects, qualifiedName, builder.statedIncludes)
+	if err != nil {
 		return nil, err
+	}
+	if !opts.Quiet && ctx.Output != nil {
+		for _, c := range carried {
+			fmt.Fprintln(ctx.Output, carriedIncludesWarning(qualifiedName, c))
+		}
 	}
 	return &builtFlow{
 		Microflow:           mf,

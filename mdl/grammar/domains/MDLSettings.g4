@@ -679,6 +679,7 @@ keyword
     | MERGE
     | NORMALIZED
     | HANDLES
+    | INCLUDE
 
     // Query / SQL
     | SELECT | FROM | WHERE | JOIN | LEFT | RIGHT | INNER | OUTER | FULL | CROSS
