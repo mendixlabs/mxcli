@@ -443,6 +443,11 @@ type WidgetObjectBuilder interface {
 	// values, matching Studio Pro's editorConfig.js-driven behavior (#574).
 	ApplyPropertyVisibility(rules []types.WidgetVisibilityRule)
 
+	// NullTemplatesOfUnsetDataSources stores TextTemplate: null for an unset
+	// TextTemplate bound to a data source property that holds none, as Studio
+	// Pro does (ako/mxcli#1967); an empty template there is CE0463.
+	NullTemplatesOfUnsetDataSources()
+
 	// --- Gallery-specific ---
 
 	// CloneGallerySelectionProperty clones the itemSelection property with a new Selection value.

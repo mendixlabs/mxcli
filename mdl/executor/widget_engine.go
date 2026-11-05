@@ -833,6 +833,9 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	if len(visibility) > 0 {
 		builder.ApplyPropertyVisibility(visibility)
 	}
+	// 4.11 A TextTemplate bound to an optional data source the statement does
+	// not set is null, as Studio Pro stores it (ako/mxcli#1967, CE0463).
+	builder.NullTemplatesOfUnsetDataSources()
 
 	// 5. Build CustomWidget
 	widgetID := model.ID(types.GenerateID())

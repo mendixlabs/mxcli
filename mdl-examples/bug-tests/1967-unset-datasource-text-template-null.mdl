@@ -1,0 +1,27 @@
+-- ako/mxcli#1967 (mendixlabs/mxcli#1745): a pluggable widget's textTemplate
+-- property bound to an OPTIONAL data source (widget.xml `dataSource="X"`) was
+-- written as an empty Forms$ClientTemplate while X was unset; Studio Pro stores
+-- null there, and mx check reports CE0463 "The definition of this widget has
+-- changed". With X set, an unset template stays empty (the control, PageC).
+--
+-- Measured on a fresh 11.14.0 app with a probe widget declaring the reporter's
+-- two pairs (logicItems/logicText, accessColumns/accessColumnTitle, all
+-- optional): the base build gives 3 x CE0463, one per page; this build 0.
+-- Needs that widget installed and extracted (`mxcli widget extract --mpk`).
+mdl 1;
+create module BugTest1967;
+create non-persistent entity BugTest1967.Rule (Words: String(200));
+create microflow BugTest1967.DS_Rules () returns list of BugTest1967.Rule as $L
+begin
+  $L = create list of BugTest1967.Rule;
+  return $L;
+end;
+create page BugTest1967.PageA ( Title: 'A', Layout: Atlas_Core.Atlas_Default ) {
+  formprobe fcA ()
+};
+create page BugTest1967.PageB ( Title: 'B', Layout: Atlas_Core.Atlas_Default ) {
+  formprobe fcB (logicItems: microflow BugTest1967.DS_Rules, logicText: '{1}', logicTextParams: ({1} = $currentObject/Words))
+};
+create page BugTest1967.PageC ( Title: 'C', Layout: Atlas_Core.Atlas_Default ) {
+  formprobe fcC (logicItems: microflow BugTest1967.DS_Rules)
+};
