@@ -1038,6 +1038,14 @@ func widgetToGen(w pages.Widget) (element.Element, error) {
 			// A snippet's own parameter, passed on from inside that snippet,
 			// fills the SnippetParameter slot (ako/mxcli#721 L3).
 			// A page `Variables:` entry fills LocalVariable (ako/mxcli#826).
+			// A data view's object, passed by naming the data view, fills
+			// Widget alone, as a flow call's widget argument does
+			// (ako/mxcli#1968); in PageParameter it was CE0115.
+			if pm.IsWidget {
+				m.SetVariable(pageVariableToGen(strings.TrimPrefix(pm.Argument, "$"), "", ""))
+				call.AddParameterMappings(m)
+				continue
+			}
 			kind := ""
 			switch {
 			case pm.IsSnippetParameter:

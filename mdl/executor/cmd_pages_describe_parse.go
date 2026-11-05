@@ -1415,7 +1415,9 @@ func extractSnippetCallParams(w map[string]any) string {
 		}
 		ref := extractString(mm["Parameter"])
 		name := ref[strings.LastIndex(ref, ".")+1:]
-		value := pageVariableArgValue(mm["Variable"])
+		// flowArgVariableValue: a data view's object is named in Widget
+		// (ako/mxcli#1968), which pageVariableArgValue does not read.
+		value := flowArgVariableValue(mm["Variable"])
 		if value == "" {
 			value = strings.TrimSpace(extractString(mm["Argument"]))
 		}

@@ -1638,6 +1638,9 @@ func (pb *pageBuilder) buildSnippetCallParams(sc *pages.SnippetCallWidget, snipp
 			Argument:           argument,
 			IsSnippetParameter: kind == "snippet",
 			IsLocalVariable:    kind == "local",
+			// A data view of the document, named for its object
+			// (ako/mxcli#1968), the way a flow call's argument is (#1560).
+			IsWidget: kind == "widget",
 		})
 	}
 
