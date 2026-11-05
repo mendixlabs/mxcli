@@ -1269,41 +1269,17 @@ func TestTraverseFlowWithSourceMap_RecordsRange(t *testing.T) {
 }
 
 // =============================================================================
-// negateIfCondition
+// Empty then-branch: printed as stored, not folded (ako/mxcli#1963)
 // =============================================================================
 
-func TestNegateIfCondition(t *testing.T) {
-	tests := []struct {
-		in, want string
-	}{
-		{"if $Active then", "if not($Active) then"},
-		{"if $X = 42 then", "if not($X = 42) then"},
-		{"if not($Done) then", "if $Done then"},                           // double-negation removal
-		{"if not($A and $B) then", "if $A and $B then"},                   // unwrap not()
-		{"if true then", "if not(true) then"},                             // literal
-		{"something else", "something else"},                              // no match — passthrough
-		{"if find($S,'{{') >= 0 then", "if not(find($S,'{{') >= 0) then"}, // complex expression
-		{"if not($A) or $B) then", "if not(not($A) or $B)) then"},         // unbalanced — do NOT unwrap
-	}
-	for _, tt := range tests {
-		got := negateIfCondition(tt.in)
-		if got != tt.want {
-			t.Errorf("negateIfCondition(%q) = %q, want %q", tt.in, got, tt.want)
-		}
-	}
-}
-
-// =============================================================================
-// Empty-then swap: true branch → merge produces negated condition
-// =============================================================================
-
-func TestTraverseFlow_EmptyThenSwap(t *testing.T) {
+func TestTraverseFlow_EmptyThenPrintedAsStored(t *testing.T) {
 	e := newTestExecutor()
 
 	// Graph: start → split → (true) → merge → end
 	//                      → (false) → log → merge
-	// Without swap: if cond then else log end if;
-	// With swap: if not(cond) then log end if;
+	// Printed: if $Active then else log end if; — the folded
+	// `if not($Active) then log end if;` stored not($Active) with the
+	// outcomes swapped when executed (ako/mxcli#1963).
 	activityMap := map[model.ID]microflows.MicroflowObject{
 		mkID("start"): &microflows.StartEvent{BaseMicroflowObject: mkObj("start")},
 		mkID("split"): &microflows.ExclusiveSplit{
@@ -1342,8 +1318,8 @@ func TestTraverseFlow_EmptyThenSwap(t *testing.T) {
 		output += l + "\n"
 	}
 
-	if !strings.Contains(output, "not($Active)") {
-		t.Errorf("expected negated condition 'not($Active)', got:\n%s", output)
+	if strings.Contains(output, "not(") || !strings.Contains(output, "if $Active then") {
+		t.Errorf("expected the stored condition, not its negation, got:\n%s", output)
 	}
 	if strings.Count(output, "if ") != 1 {
 		t.Errorf("expected split header to be emitted once, got:\n%s", output)
@@ -1351,8 +1327,9 @@ func TestTraverseFlow_EmptyThenSwap(t *testing.T) {
 	if !strings.Contains(output, "log node 'Test'") {
 		t.Errorf("expected a log statement in output, got:\n%s", output)
 	}
-	if strings.Contains(output, "else") {
-		t.Errorf("expected no empty else block, got:\n%s", output)
+	then, els := strings.Index(output, "if $Active then"), strings.Index(output, "else")
+	if els < 0 || els > strings.Index(output, "log node 'Test'") || then > els {
+		t.Errorf("expected the log on the false path, after else, got:\n%s", output)
 	}
 }
 

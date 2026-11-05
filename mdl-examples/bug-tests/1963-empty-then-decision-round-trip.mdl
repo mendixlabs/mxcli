@@ -1,0 +1,21 @@
+-- ako/mxcli#1963 (mendixlabs/mxcli#1742): describe printed a decision whose
+-- true branch is empty as `if not(<condition>) then <false branch> end if;`,
+-- and executing that description stored not(<condition>) with the outcomes
+-- swapped — the same behaviour, a different model. describe now prints the
+-- decision as stored, `if <condition> then else <false branch> end if;`, so
+-- describe -> exec keeps the expression and the outcomes.
+-- Run, describe, execute the description under a new name: both decisions
+-- store `$Value != empty`, true -> merge, false -> the change.
+mdl 1;
+create module BugTest1963;
+create microflow BugTest1963.Repro_DecisionNegation ($Value: String)
+returns Boolean
+begin
+  declare $Valid Boolean = true;
+  @caption 'Value filled?'
+  if $Value != empty then
+  else
+    set $Valid = false;
+  end if;
+  return $Valid;
+end;
