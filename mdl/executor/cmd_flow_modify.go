@@ -190,6 +190,11 @@ func modifyFlowInPlace(ctx *ExecContext, d *flowDecl) (handled bool, err error) 
 	switch summary := patchSummary(ops, a.edited, moves, set); {
 	case summary != "":
 		ctx.ReportMutation("Modified", "%s: %s (%s)", d.kind(), d.name, summary)
+		if ctx.Output != nil {
+			for _, c := range a.carriedIncludes {
+				fmt.Fprintln(ctx.Output, carriedIncludesWarning(d.name.String(), c))
+			}
+		}
 	case moved:
 		ctx.ReportMutation("Moved", "%s: %s", d.kind(), d.name)
 	default:

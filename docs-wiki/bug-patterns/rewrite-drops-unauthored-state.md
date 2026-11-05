@@ -368,6 +368,17 @@ non-canonical units. Its additions are the gaps, valued with Mendix's own
 defaults. Its removals are keys the version does not declare, and those turned
 out to hide real behaviour bugs.
 
+**A carry has as many sites as the statement has write paths.** A `create or
+modify` of a *stored* flow is applied as an in-place splice first, and rebuilt
+from scratch only when the splice cannot make the change. A carry wired into the
+rebuild alone is therefore skipped in the common case. The splice's replace
+rebuilds the activity through the alter-flow fragment builder, which never reaches
+it. Associations to include shipped that way: the carry was tested, and the tests
+passed, because the mock's stored flow had no start or end event and always fell
+back to the rebuild. Before trusting a carry, list the write paths (rebuild,
+splice replace, explicit `alter … replace`), and test the splice against a real
+project, where the stored flow is a whole graph.
+
 ## See also
 
 - [fix-issue findings](../../.claude/skills/fix-issue/findings/) — the individual
