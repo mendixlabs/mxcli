@@ -484,34 +484,46 @@ func (m *Mutator) DropOutcome(activityRef string, atPos int, outcomeName string)
 	}
 
 	outcomes := bsonnav.DGetArrayElements(bsonnav.DGet(actDoc, "Outcomes"))
-	found := false
-	var kept []any
-	for _, elem := range outcomes {
-		oDoc, ok := elem.(bson.D)
-		if !ok {
-			kept = append(kept, elem)
-			continue
-		}
+	kept, err := dropOneOutcome(outcomes, "outcome", outcomeName, activityRef, func(oDoc bson.D) bool {
 		// Only an outcome that stores a string value can be addressed by one:
 		// a path, a void or a boolean outcome reads back as "" and would match
 		// an empty value (found reviewing ako/mxcli#791).
 		value, hasValue := bsonnav.DGet(oDoc, "Value").(string)
-		typeName := bsonnav.DGetString(oDoc, "$Type")
-		matched := hasValue && value == outcomeName
-		if !matched && strings.EqualFold(outcomeName, "Default") && typeName == "Workflows$VoidConditionOutcome" {
-			matched = true
+		if hasValue && value == outcomeName {
+			return true
 		}
-		if matched && !found {
-			found = true
-			continue
-		}
-		kept = append(kept, elem)
-	}
-	if !found {
-		return fmt.Errorf("outcome %q not found on activity %q", outcomeName, activityRef)
+		return strings.EqualFold(outcomeName, "Default") && bsonnav.DGetString(oDoc, "$Type") == "Workflows$VoidConditionOutcome"
+	})
+	if err != nil {
+		return err
 	}
 	bsonnav.DSetArray(actDoc, "Outcomes", kept)
 	return nil
+}
+
+// dropOneOutcome removes the single outcome that matches. A value is the only
+// address an outcome has, and Mendix does not keep it unique: with two outcomes
+// of the same value, dropping the first was a guess at which one was meant, so
+// it is refused instead (ako/mxcli#808).
+func dropOneOutcome(outcomes []any, kind, value, activityRef string, matches func(bson.D) bool) ([]any, error) {
+	at, n := -1, 0
+	for i, elem := range outcomes {
+		if oDoc, ok := elem.(bson.D); ok && matches(oDoc) {
+			if at < 0 {
+				at = i
+			}
+			n++
+		}
+	}
+	if n == 0 {
+		return nil, fmt.Errorf("%s %q not found on activity %q", kind, value, activityRef)
+	}
+	if n > 1 {
+		return nil, fmt.Errorf("%s %q on activity %q is ambiguous: %d outcomes have that value. Nothing was written", kind, value, activityRef, n)
+	}
+	kept := make([]any, 0, len(outcomes)-1)
+	kept = append(kept, outcomes[:at]...)
+	return append(kept, outcomes[at+1:]...), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -626,47 +638,21 @@ func (m *Mutator) DropBranch(activityRef string, atPos int, branchName string) e
 	}
 
 	outcomes := bsonnav.DGetArrayElements(bsonnav.DGet(actDoc, "Outcomes"))
-	found := false
-	var kept []any
-	for _, elem := range outcomes {
-		oDoc, ok := elem.(bson.D)
-		if !ok {
-			kept = append(kept, elem)
-			continue
+	kept, err := dropOneOutcome(outcomes, "branch", branchName, activityRef, func(oDoc bson.D) bool {
+		typeName := bsonnav.DGetString(oDoc, "$Type")
+		switch strings.ToLower(branchName) {
+		case "true", "false":
+			v, ok := bsonnav.DGet(oDoc, "Value").(bool)
+			return typeName == "Workflows$BooleanConditionOutcome" && ok && v == strings.EqualFold(branchName, "true")
+		case "default":
+			return typeName == "Workflows$VoidConditionOutcome"
+		default:
+			value, ok := bsonnav.DGet(oDoc, "Value").(string)
+			return ok && value == branchName
 		}
-		if !found {
-			typeName := bsonnav.DGetString(oDoc, "$Type")
-			switch strings.ToLower(branchName) {
-			case "true":
-				if typeName == "Workflows$BooleanConditionOutcome" {
-					if v, ok := bsonnav.DGet(oDoc, "Value").(bool); ok && v {
-						found = true
-						continue
-					}
-				}
-			case "false":
-				if typeName == "Workflows$BooleanConditionOutcome" {
-					if v, ok := bsonnav.DGet(oDoc, "Value").(bool); ok && !v {
-						found = true
-						continue
-					}
-				}
-			case "default":
-				if typeName == "Workflows$VoidConditionOutcome" {
-					found = true
-					continue
-				}
-			default:
-				if value, ok := bsonnav.DGet(oDoc, "Value").(string); ok && value == branchName {
-					found = true
-					continue
-				}
-			}
-		}
-		kept = append(kept, elem)
-	}
-	if !found {
-		return fmt.Errorf("branch %q not found on activity %q", branchName, activityRef)
+	})
+	if err != nil {
+		return err
 	}
 	bsonnav.DSetArray(actDoc, "Outcomes", kept)
 	return nil
@@ -730,7 +716,7 @@ func (m *Mutator) InsertBoundaryEvent(activityRef string, atPos int, eventType s
 	return nil
 }
 
-func (m *Mutator) DropBoundaryEvent(activityRef string, atPos int) error {
+func (m *Mutator) DropBoundaryEvent(activityRef string, atPos int, index int) error {
 	actDoc, err := m.findActivityByCaption(activityRef, atPos)
 	if err != nil {
 		return err
@@ -740,9 +726,11 @@ func (m *Mutator) DropBoundaryEvent(activityRef string, atPos int) error {
 	if len(events) == 0 {
 		return fmt.Errorf("activity %q has no boundary events", activityRef)
 	}
-
-	// Drop the first boundary event silently.
-	bsonnav.DSetArray(actDoc, "BoundaryEvents", events[1:])
+	at, err := backend.BoundaryEventIndex(activityRef, index, len(events))
+	if err != nil {
+		return err
+	}
+	bsonnav.DSetArray(actDoc, "BoundaryEvents", append(append([]any{}, events[:at]...), events[at+1:]...))
 	return nil
 }
 

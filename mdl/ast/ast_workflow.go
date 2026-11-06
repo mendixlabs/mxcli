@@ -475,6 +475,9 @@ func (o *InsertBoundaryEventOp) alterWorkflowOp() {}
 type DropBoundaryEventOp struct {
 	ActivityRef string
 	AtPosition  int
+	// Index is `boundary event N`: the N-th event, 1-based, in describe order;
+	// 0 when the statement names none (ako/mxcli#808).
+	Index int
 }
 
 func (o *DropBoundaryEventOp) alterWorkflowOp() {}
