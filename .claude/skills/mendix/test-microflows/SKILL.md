@@ -12,18 +12,18 @@ description: "Write and run MDL-based microflow tests with `mxcli test` — anno
 |---|---|
 | 33-39 | Reference files |
 | 40-50 | When to Use This Skill |
-| 51-184 | Prerequisites |
-| 185-227 | Test File Formats |
-| 228-243 | string Operations |
-| 244-267 | Running Tests |
-| 268-465 | How It Works |
-| 466-504 | Check a test file before you run it |
-| 505-626 | Writing Good Tests |
-| 627-641 | Test File Organization |
-| 642-654 | Interpreting Failures |
-| 655-676 | CI Integration |
-| 677-683 | Related Skills |
-| 684-686 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
+| 51-189 | Prerequisites |
+| 190-232 | Test File Formats |
+| 233-248 | string Operations |
+| 249-272 | Running Tests |
+| 273-470 | How It Works |
+| 471-509 | Check a test file before you run it |
+| 510-631 | Writing Good Tests |
+| 632-646 | Test File Organization |
+| 647-659 | Interpreting Failures |
+| 660-681 | CI Integration |
+| 682-688 | Related Skills |
+| 689-691 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
 
 <!-- /skill-index -->
 # Test Microflows Skill
@@ -137,6 +137,11 @@ To set a value for one run without touching the project, use `--constant`
 ```bash
 mxcli test tests/ -p app.mpr --local --constant MyModule.ApiKey=sk-test-123
 ```
+
+A real secret should not be typed there (it shows in `ps` and shell history):
+`--constant MyModule.ApiKey=@env:API_KEY` reads an environment variable, and
+`--constant MyModule.ApiKey=@file:/path/to/key` a file only you can read
+(`chmod 600`). `@@…` is a literal value starting with `@`.
 
 A name the project does not declare is **refused**, before anything boots — the
 runtime silently ignores a value for a constant that does not exist, so a typo
