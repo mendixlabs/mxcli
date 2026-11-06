@@ -166,7 +166,13 @@ func TestExpectActualValueIsTypeSafe(t *testing.T) {
 		// The literal pins the unknown side's type, so toString() is safe.
 		{"$count = 3", "toString($count)"},
 		{"$done = true", "toString($done)"},
+		// An enumeration value pins the other side, in either order.
+		{"$Paid/Status = Procurement.InvoiceStatus.PAID", "toString($Paid/Status)"},
+		{"Procurement.InvoiceStatus.PAID = $Paid/Status", "toString($Paid/Status)"},
+		{"$Paid/Status != Procurement.InvoiceStatus.PAID", "toString($Paid/Status)"},
 		// Neither side pins anything, or the assertion is not a comparison.
+		{"Mod.Enum.A = Mod.Enum.B", ""}, // two literals, nothing was observed
+		{"$a/X = $b/Y", ""},
 		{"1 = 2", ""}, // nothing was observed
 		{"$a = $b", ""},
 		{"$result != empty", ""},
@@ -249,6 +255,17 @@ func TestFailureMessageReportsTheActualValue(t *testing.T) {
 	}
 	if !strings.Contains(got, "expected $result = ''John''") {
 		t.Errorf("the failure message does not echo the assertion:\n%s", got)
+	}
+}
+
+// TestFailureMessageReportsTheActualEnumValue pins that an enumeration compare
+// reports what the attribute held, via toString() (the enumeration key).
+func TestFailureMessageReportsTheActualEnumValue(t *testing.T) {
+	var b strings.Builder
+	writeExpectCheck(&b, expectOf("$Paid/Status = Procurement.InvoiceStatus.APPROVED"))
+	got := b.String()
+	if !strings.Contains(got, ", actual: ' + toString($Paid/Status)") {
+		t.Errorf("the failure message does not carry the actual enum value:\n%s", got)
 	}
 }
 
