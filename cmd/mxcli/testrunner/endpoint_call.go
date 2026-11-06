@@ -176,7 +176,16 @@ const endpointCallMethods = `
 
     private Object resolve(com.mendix.systemwideinterfaces.core.IContext ctx, String path, java.util.Map<String, Object> vars) throws Exception {
         if (path.startsWith("count:")) {
-            return Integer.valueOf(com.mendix.core.Core.createXPathQuery("//" + path.substring(6)).execute(ctx).size());
+            String xp = path.substring(6);
+            java.util.regex.Matcher mt = java.util.regex.Pattern.compile("\\{\\$(\\w+)\\}").matcher(xp);
+            StringBuffer sb = new StringBuffer();
+            while (mt.find()) {
+                Object ov = vars.get(mt.group(1));
+                if (!(ov instanceof com.mendix.systemwideinterfaces.core.IMendixObject)) throw new RuntimeException("{$" + mt.group(1) + "} is not an object");
+                mt.appendReplacement(sb, String.valueOf(((com.mendix.systemwideinterfaces.core.IMendixObject) ov).getId().toLong()));
+            }
+            mt.appendTail(sb);
+            return Integer.valueOf(com.mendix.core.Core.createXPathQuery("//" + sb).execute(ctx).size());
         }
         String[] seg = path.split("/");
         String head = seg[0].startsWith("$") ? seg[0].substring(1) : seg[0];

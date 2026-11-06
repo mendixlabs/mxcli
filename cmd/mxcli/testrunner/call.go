@@ -19,6 +19,11 @@ import (
 // a rollback. Nothing is generated or built; the case is sent as data to the
 // running app.
 type CallCase struct {
+	// Raw is the case exactly as written. It is what is sent, because the order
+	// of the keys in "params" is the order the objects are built in (a later
+	// parameter can $ref an earlier one), and a Go map loses it.
+	Raw json.RawMessage `json:"-"`
+
 	Name     string           `json:"name,omitempty"`
 	Flow     string           `json:"flow"`
 	Params   map[string]any   `json:"params,omitempty"`
@@ -54,21 +59,26 @@ func ParseCallCases(r io.Reader) ([]CallCase, error) {
 		return nil, err
 	}
 	s := strings.TrimSpace(string(body))
-	var cases []CallCase
+	var raws []json.RawMessage
 	if strings.HasPrefix(s, "[") {
-		err = json.Unmarshal([]byte(s), &cases)
+		err = json.Unmarshal([]byte(s), &raws)
 	} else {
-		var c CallCase
-		err = json.Unmarshal([]byte(s), &c)
-		cases = []CallCase{c}
+		raws = []json.RawMessage{json.RawMessage(s)}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading cases: %w", err)
 	}
-	for i, c := range cases {
+	var cases []CallCase
+	for i, raw := range raws {
+		var c CallCase
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, fmt.Errorf("reading case %d: %w", i+1, err)
+		}
 		if c.Flow == "" {
 			return nil, fmt.Errorf("case %d has no \"flow\"", i+1)
 		}
+		c.Raw = raw
+		cases = append(cases, c)
 	}
 	return cases, nil
 }
@@ -93,10 +103,7 @@ func RunCalls(projectPath string, cases []CallCase, repeat int, out io.Writer) (
 	for round := 0; round < repeat; round++ {
 		var total time.Duration
 		for _, cs := range cases {
-			b, err := json.Marshal(cs)
-			if err != nil {
-				return false, err
-			}
+			b := []byte(cs.Raw)
 			t0 := time.Now()
 			var rr callResponse
 			if err := c.get("call", url.Values{"case": {string(b)}}, &rr); err != nil {
