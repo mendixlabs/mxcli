@@ -95,6 +95,19 @@ type UnitHeaderRef struct {
 // every one of their files on each call (ako/mxcli#1791). MPR v1 reads the
 // blobs, which live in the one database file.
 func (r *Reader) ListUnitHeaders(typeName string) ([]UnitHeaderRef, error) {
+	out, err := r.listStoredUnitHeaders(typeName)
+	if err != nil {
+		return nil, err
+	}
+	for _, u := range r.packagedUnitsOf(typeName, "", nil) {
+		e := unitIndexEntryOf(u.Contents)
+		out = append(out, UnitHeaderRef{ID: u.ID, ContainerID: u.ContainerID, Name: e.Name, Excluded: e.Excluded})
+	}
+	return out, nil
+}
+
+// listStoredUnitHeaders is ListUnitHeaders for the units the .mpr stores.
+func (r *Reader) listStoredUnitHeaders(typeName string) ([]UnitHeaderRef, error) {
 	if r.version != MPRVersionV2 {
 		units, err := r.listUnitsByType(typeName)
 		if err != nil {
@@ -137,6 +150,9 @@ func (r *Reader) ListUnitHeaders(typeName string) ([]UnitHeaderRef, error) {
 // catalog's source build described each microflow through a listing of them
 // all and opened millions of files on a large project (ako/mxcli#1789).
 func (r *Reader) UnitByID(id string) (unit UnitRef, ok bool, err error) {
+	if u, ok := r.packagedUnit(id); ok {
+		return UnitRef{ID: u.ID, ContainerID: u.ContainerID, Type: u.Type, Contents: u.Contents}, true, nil
+	}
 	if r.version != MPRVersionV2 {
 		return r.unitByIDV1(id)
 	}
@@ -193,6 +209,7 @@ func (r *Reader) ListUnitsByTypeInContainer(typeName, containerID string) ([]Uni
 	if err != nil {
 		return nil, err
 	}
+	units = append(units, r.packagedUnitsOf(typeName, containerID, nil)...)
 	result := make([]UnitRef, len(units))
 	for i, u := range units {
 		result[i] = UnitRef{ID: u.ID, ContainerID: u.ContainerID, Type: u.Type, Contents: u.Contents}
@@ -221,8 +238,13 @@ func (r *Reader) listUnitsByTypeWhere(typeName string, keep func(id string) bool
 	if keep == nil {
 		return r.listUnitsByType(typeName)
 	}
+	packaged := r.packagedUnitsOf(typeName, "", keep)
 	if r.version == MPRVersionV2 {
-		return r.listUnitsByTypeV2Where(typeName, "", keep)
+		units, err := r.listUnitsByTypeV2Where(typeName, "", keep)
+		if err != nil {
+			return nil, err
+		}
+		return append(units, packaged...), nil
 	}
 	units, err := r.listUnitsByTypeV1(typeName)
 	if err != nil {
@@ -234,7 +256,7 @@ func (r *Reader) listUnitsByTypeWhere(typeName string, keep func(id string) bool
 			kept = append(kept, u)
 		}
 	}
-	return kept, nil
+	return append(kept, packaged...), nil
 }
 
 // listUnitsByType returns all units of exactly the given storage type. An empty
@@ -243,7 +265,19 @@ func (r *Reader) listUnitsByTypeWhere(typeName string, keep func(id string) bool
 // Exact, not prefix: Mendix storage names nest (`Forms$Page` is a prefix of
 // `Forms$PageTemplate`), so a prefix match silently folds one document type into
 // another. See the note on the same function in sdk/mpr.
+//
+// The units of the project's module packages (packaged_modules.go) are listed
+// with the stored ones.
 func (r *Reader) listUnitsByType(typeName string) ([]rawUnit, error) {
+	units, err := r.listStoredUnitsByType(typeName)
+	if err != nil {
+		return nil, err
+	}
+	return append(units, r.packagedUnitsOf(typeName, "", nil)...), nil
+}
+
+// listStoredUnitsByType is listUnitsByType for the units the .mpr stores.
+func (r *Reader) listStoredUnitsByType(typeName string) ([]rawUnit, error) {
 	if r.version == MPRVersionV2 {
 		return r.listUnitsByTypeV2(typeName)
 	}
@@ -257,7 +291,11 @@ func (r *Reader) listUnitsByType(typeName string) ([]rawUnit, error) {
 // shape, not its documents.
 func (r *Reader) listUnitTypes() ([]rawUnit, error) {
 	if r.version != MPRVersionV2 {
-		return r.listUnitTypesV1()
+		units, err := r.listUnitTypesV1()
+		if err != nil {
+			return nil, err
+		}
+		return append(units, r.packagedUnitsOf("", "", nil)...), nil
 	}
 	if !r.unitCacheValid {
 		if err := r.buildUnitCache(); err != nil {
@@ -268,7 +306,7 @@ func (r *Reader) listUnitTypes() ([]rawUnit, error) {
 	for _, cu := range r.unitCache {
 		units = append(units, rawUnit{ID: cu.ID, ContainerID: cu.ContainerID, ContainmentName: cu.ContainmentName, Type: cu.Type})
 	}
-	return units, nil
+	return append(units, r.packagedUnitsOf("", "", nil)...), nil
 }
 
 // listUnitsByTypeV2 handles MPR v2 format (contents in mprcontents folder).

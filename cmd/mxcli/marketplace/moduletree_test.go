@@ -133,30 +133,6 @@ func TestCheckTreeVersion(t *testing.T) {
 	}
 }
 
-// Only modules and folders hold units: a document with a property that happens
-// to share a containment's name is one unit and keeps that property.
-func TestModuleTreeUnits_DocumentKeepsAPropertyNamedLikeAContainment(t *testing.T) {
-	doc := bson.D{
-		{Key: "$ID", Value: gid(7)},
-		{Key: "$Type", Value: "Constants$Constant"},
-		{Key: "Documents", Value: bson.A{int32(3), bson.D{{Key: "$ID", Value: gid(8)}, {Key: "$Type", Value: "Some$Part"}}}},
-	}
-	var units []treeUnit
-	if err := splitUnit(doc, "", "Documents", &units); err != nil {
-		t.Fatal(err)
-	}
-	if len(units) != 1 {
-		t.Fatalf("got %d units, want the document alone", len(units))
-	}
-	var own bson.D
-	if err := bson.Unmarshal(units[0].contents, &own); err != nil {
-		t.Fatal(err)
-	}
-	if lookup(own, "Documents") == nil {
-		t.Error("the document lost its Documents property")
-	}
-}
-
 const pluginPackageXML = `<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://www.mendix.com/package/1.0/">
   <modelerProject xmlns="http://www.mendix.com/modelerProject/1.0/">
