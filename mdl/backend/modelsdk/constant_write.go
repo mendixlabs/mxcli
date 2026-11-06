@@ -51,6 +51,13 @@ func (b *Backend) UpdateConstant(c *model.Constant) error {
 	if err != nil {
 		return fmt.Errorf("UpdateConstant: encode: %w", err)
 	}
+	// A constant has no MDL spelling for its export level, so the rewrite keeps
+	// the stored one: the executor's model carries none, and constToGen's
+	// "Hidden" would otherwise turn an API constant Hidden (ako/mxcli#1980).
+	contents, err = b.keepStoredExportLevel(string(c.ID), contents)
+	if err != nil {
+		return fmt.Errorf("UpdateConstant: %w", err)
+	}
 	return b.writer.UpdateRawUnit(string(c.ID), contents)
 }
 
@@ -72,7 +79,10 @@ func constToGen(c *model.Constant) *genConst.Constant {
 	out.SetName(c.Name)
 	out.SetDocumentation(c.Documentation)
 	out.SetExcluded(c.Excluded)
-	out.SetExportLevel(c.ExportLevel)
+	// Studio Pro writes "Hidden". An empty value passes mx check, but mx diff
+	// crashes comparing it with "Hidden" on another branch, which takes git
+	// merge's property report with it (ako/mxcli#1980).
+	out.SetExportLevel(orDefault(c.ExportLevel, "Hidden"))
 	out.SetType(constantDataTypeToGen(c.Type))
 	out.SetDefaultValue(c.DefaultValue)
 	out.SetExposedToClient(c.ExposedToClient)

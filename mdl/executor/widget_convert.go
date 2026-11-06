@@ -3,6 +3,7 @@
 package executor
 
 import (
+	"math"
 	"sort"
 	"strings"
 
@@ -59,14 +60,38 @@ func widgetToMap(v any) any {
 		return bsonutil.BsonBinaryToID(t)
 	case []byte:
 		return bsonutil.BsonBinaryToID(bson.Binary{Subtype: 0x00, Data: t})
-	case int32:
-		// The template pipeline models Mendix's array markers and small ints as
-		// float64; keep one numeric representation so comparisons behave.
-		return float64(t)
-	case int64:
-		return float64(t)
+	case float64:
+		// A double the unit stores is kept a double on the way back; a bare
+		// float64 there means a number the template pipeline made (below).
+		return storedDouble(t)
 	}
+	// int32 and int64 pass through at the width the unit stores them: Mendix
+	// reads the width, so -1.0 as a text box's MaxLengthCode means "unlimited"
+	// where -1 means "the attribute's length" (CE6510, ako/mxcli#1976).
+	// AugmentTemplate never asserts a number's type, so it needs no single form.
 	return v
+}
+
+// storedDouble marks a BSON double read from the unit, so mapToWidgetDoc can
+// tell it from the float64 numbers AugmentTemplate writes. Those are JSON-shaped
+// — the passes construct them as float64, and deepCloneMap round-trips a cloned
+// exemplar through JSON — and stand for integers.
+type storedDouble float64
+
+// templateNumberToBSON writes a number the template pipeline made the way the
+// create path does (widgets.jsonValueToBSONWithMapping): a whole number as
+// int32, int64 only when int32 cannot hold it.
+func templateNumberToBSON(f float64) any {
+	if f != math.Trunc(f) || math.IsInf(f, 0) {
+		return f
+	}
+	if f >= math.MinInt32 && f <= math.MaxInt32 {
+		return int32(f)
+	}
+	if f >= math.MinInt64 && f < math.MaxInt64 {
+		return int64(f)
+	}
+	return f
 }
 
 // mapToWidgetDoc converts back, restoring binary IDs and alphabetical key order.
@@ -89,6 +114,10 @@ func mapToWidgetDoc(v any) any {
 			out[i] = mapToWidgetDoc(item)
 		}
 		return out
+	case storedDouble:
+		return float64(t)
+	case float64:
+		return templateNumberToBSON(t)
 	}
 	return v
 }
