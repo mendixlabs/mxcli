@@ -108,6 +108,9 @@ type LocalApp struct {
 	RuntimeLogPath string
 
 	serve *ServeServer
+	// rec runs Rebuild's builds with the recovery `run --local --watch` has: a
+	// build whose outcome only a fresh mxbuild --serve fixes is repeated on one.
+	rec *serveRecovery
 }
 
 func (o *LocalAppOptions) applyDefaults() {
@@ -323,6 +326,7 @@ func StartLocalApp(opts LocalAppOptions) (*LocalApp, error) {
 			return nil, fmt.Errorf("starting mxbuild serve: %w", err)
 		}
 		app.serve = serve
+		app.rec = &serveRecovery{serve: serve, deployDir: opts.DeployDir, out: w, headless: true}
 
 		build, err := buildRetryingServeTimeout(serve, BuildRequest{Target: TargetDeploy, ProjectFilePath: opts.ProjectPath}, w)
 		if err != nil {
@@ -365,7 +369,14 @@ func (a *LocalApp) Rebuild(projectPath string) (ApplyAction, *BuildResult, error
 	if a.Runtime == nil {
 		return ActionReload, nil, fmt.Errorf("the runtime is not running")
 	}
-	build, err := a.serve.Build(BuildRequest{Target: TargetDeploy, ProjectFilePath: projectPath})
+	req := BuildRequest{Target: TargetDeploy, ProjectFilePath: projectPath}
+	var build *BuildResult
+	var err error
+	if a.rec != nil {
+		build, err = a.rec.Build(req)
+	} else {
+		build, err = a.serve.Build(req)
+	}
 	if err != nil {
 		return ActionReload, nil, err
 	}

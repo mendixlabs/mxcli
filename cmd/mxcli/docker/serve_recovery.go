@@ -74,6 +74,10 @@ type serveRecovery struct {
 	// failed. A theme failure then is not trustworthy: the process may be
 	// reporting the earlier error rather than the source on disk.
 	themeFailed bool
+
+	// headless: nothing serves the client (the test runner), so a build that
+	// succeeds with an incomplete web/dist is a good build and is not repeated.
+	headless bool
 }
 
 func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
@@ -105,7 +109,7 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 	}
 
 	if res.OK() {
-		if !prebuilt {
+		if !prebuilt || r.headless {
 			return res, nil
 		}
 		after, _ := readPrebuiltBundle(r.deployDir)
