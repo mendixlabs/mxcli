@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 
 	modelsdk "github.com/mendixlabs/mxcli"
 	"github.com/mendixlabs/mxcli/internal/zipentry"
@@ -28,6 +30,22 @@ import (
 // transplant uses. Unit contents are copied as they are, protection settings
 // (ModuleSettings.ProtectedModuleType, ExportLevel) included: the result is the
 // module as the package ships it, not an unprotected copy.
+//
+// Two things `mx module-import` does besides writing units are done here too,
+// because the reference project is read for more than its units:
+//
+//   - The package's declared files (javasource/, javascriptsource/, ...) are
+//     written next to the reference .mpr. DESCRIBE JAVA ACTION and DESCRIBE
+//     JAVASCRIPT ACTION read them, and without them every action of the module
+//     compares as "changed locally" in `marketplace diff` and `update`
+//     (mendixlabs/mxcli#1441).
+//   - The units are NOT migrated. mx converts an imported module to the
+//     project's Mendix version; these units keep the schema of the version the
+//     package was saved with. A tree saved with a newer Mendix than the project
+//     is refused, as mx refuses such an import; an older one is written as it
+//     is, which is what the measurement above did (11.5.5 into 11.15). A
+//     comparison against such a reference can therefore also report the
+//     platform's own migrations of the module.
 
 // sqliteMagic opens every SQLite database file, and so every v1 .mpr.
 var sqliteMagic = []byte("SQLite format 3\x00")
@@ -37,6 +55,9 @@ var sqliteMagic = []byte("SQLite format 3\x00")
 // carry none of them — measured on an 11.15 MPR v2 project: a Projects$Folder
 // unit is {$ID, $Type, Name}, a Projects$ModuleImpl has no Folders, Documents,
 // DomainModel, ModuleSettings or ModuleSecurity key.
+//
+// Only the unit kinds that hold units are split (unitHolders): a document that
+// happens to have a property of one of these names keeps it.
 var unitContainments = map[string]bool{
 	"Folders":        true,
 	"Documents":      true,
@@ -45,30 +66,73 @@ var unitContainments = map[string]bool{
 	"ModuleSecurity": true,
 }
 
+// unitHolders are the unit types that contain other units in a module.
+var unitHolders = map[string]bool{
+	"Projects$ModuleImpl": true,
+	"Projects$Folder":     true,
+}
+
 // treeUnit is one unit cut out of a module tree, ready for AddRawUnit.
 type treeUnit struct {
 	id, containerID, containment, unitType string
 	contents                               []byte
 }
 
-// IsModuleTreePackage reports whether the package's project.mpr is a module tree
-// rather than an SQLite .mpr.
-func IsModuleTreePackage(mpkPath string) (bool, error) {
-	data, err := readZipEntry(mpkPath, packageProjectEntry)
+// readModuleTree returns the package's project.mpr and the Mendix version it was
+// saved with when it is a module tree, and nil when it is an ordinary .mpr.
+func readModuleTree(mpkPath string) (data []byte, productVersion string, err error) {
+	data, err = readZipEntry(mpkPath, packageProjectEntry)
 	if err != nil {
-		return false, err
+		return nil, "", err
 	}
-	return isModuleTree(data), nil
+	productVersion, ok := moduleTreeVersion(data)
+	if !ok {
+		return nil, "", nil
+	}
+	return data, productVersion, nil
 }
 
 func isModuleTree(data []byte) bool {
+	_, ok := moduleTreeVersion(data)
+	return ok
+}
+
+// moduleTreeVersion reports the _ProductVersion of a module tree, and false when
+// data is not one.
+func moduleTreeVersion(data []byte) (string, bool) {
 	if bytes.HasPrefix(data, sqliteMagic) || len(data) < 5 {
-		return false
+		return "", false
 	}
 	var head struct {
 		ProductVersion string `bson:"_ProductVersion"`
 	}
-	return bson.Unmarshal(data, &head) == nil && head.ProductVersion != ""
+	if bson.Unmarshal(data, &head) != nil || head.ProductVersion == "" {
+		return "", false
+	}
+	return head.ProductVersion, true
+}
+
+// checkTreeVersion refuses a module tree saved with a newer Mendix than the
+// project it is written into: its units may use properties or types that
+// version does not have, and nothing here converts them. Only major.minor.patch
+// count — _ProductVersion carries a build number (11.5.5.73100) that the
+// project's version usually does not.
+func checkTreeVersion(treeVersion, projectVersion string) error {
+	tv, pv := releaseOf(treeVersion), releaseOf(projectVersion)
+	if tv == "" || pv == "" || !versionLess(pv, tv) {
+		return nil
+	}
+	return fmt.Errorf("the package was saved with Mendix %s, which is newer than the project's %s; "+
+		"install it from Studio Pro %s or later, or upgrade the project first", tv, pv, tv)
+}
+
+// releaseOf keeps the first three components of a dotted version.
+func releaseOf(v string) string {
+	parts := strings.Split(strings.TrimSpace(v), ".")
+	if len(parts) > 3 {
+		parts = parts[:3]
+	}
+	return strings.Join(parts, ".")
 }
 
 // moduleTreeUnits splits the named module of a module tree into units, parents
@@ -104,10 +168,12 @@ func splitUnit(doc bson.D, containerID, containment string, units *[]treeUnit) e
 	if err != nil {
 		return err
 	}
+	unitType := stringOf(lookup(doc, "$Type"))
+	holder := unitHolders[unitType]
 	own := make(bson.D, 0, len(doc))
 	var children []bson.E
 	for _, e := range doc {
-		if unitContainments[e.Key] {
+		if holder && unitContainments[e.Key] {
 			children = append(children, e)
 			continue
 		}
@@ -121,7 +187,7 @@ func splitUnit(doc bson.D, containerID, containment string, units *[]treeUnit) e
 		id:          id,
 		containerID: containerID,
 		containment: containment,
-		unitType:    stringOf(lookup(doc, "$Type")),
+		unitType:    unitType,
 		contents:    encoded,
 	})
 	for _, c := range children {
@@ -145,15 +211,26 @@ func splitUnit(doc bson.D, containerID, containment string, units *[]treeUnit) e
 	return nil
 }
 
-// InsertModuleTree writes the package's module into mprPath, a project that does
-// not have it yet, attached to that project's project unit. It is the
-// module-tree counterpart of `mx module-import` for the reference project.
-func InsertModuleTree(mpkPath, mprPath, moduleName string) (int, error) {
-	data, err := readZipEntry(mpkPath, packageProjectEntry)
-	if err != nil {
-		return 0, err
+// buildFromModuleTree is the module-tree counterpart of `mx module-import` for
+// the reference project: it writes the package's module into mprPath, a project
+// that does not have it yet, and the package's declared files next to it.
+func buildFromModuleTree(tree []byte, treeVersion, mpkPath, mprPath, moduleName, projectVersion string) error {
+	if err := checkTreeVersion(treeVersion, projectVersion); err != nil {
+		return err
 	}
-	units, err := moduleTreeUnits(data, moduleName)
+	if _, err := insertModuleTree(tree, mprPath, moduleName); err != nil {
+		return err
+	}
+	if _, _, err := InstallPackageFiles(mpkPath, filepath.Dir(mprPath)); err != nil {
+		return fmt.Errorf("write the package's files into the reference project: %w", err)
+	}
+	return nil
+}
+
+// insertModuleTree writes the tree's module into mprPath, attached to that
+// project's project unit, and returns the number of units written.
+func insertModuleTree(tree []byte, mprPath, moduleName string) (int, error) {
+	units, err := moduleTreeUnits(tree, moduleName)
 	if err != nil {
 		return 0, err
 	}
@@ -206,7 +283,7 @@ func idOf(doc bson.D) (string, error) {
 			return v, nil
 		}
 	}
-	return "", fmt.Errorf("%s without a 16-byte $ID in the module tree", stringOf(lookup(doc, "$Type")))
+	return "", fmt.Errorf("%s without an $ID (a 16-byte binary or a non-empty string) in the module tree", stringOf(lookup(doc, "$Type")))
 }
 
 func readZipEntry(zipPath, entry string) ([]byte, error) {
