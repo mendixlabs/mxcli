@@ -336,7 +336,7 @@ Examples:
 				AppPort:    info.AppPort,
 				AdminPort:  info.AdminPort,
 				AdminPass:  info.AdminPass,
-				BootConfig: info.BootConfig,
+				BootConfig: bootConfigForHandshake(info.BootConfig),
 				Started:    time.Now(),
 			}); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: could not publish the dev-loop handshake: %v\n", err)
@@ -359,8 +359,11 @@ Examples:
 			if detachedChild {
 				logPath = docker.RunLogPath(projectPath)
 			}
+			// The stored arguments are for `run restart`, not a copy of the
+			// secrets: they stay out of the file (see redactArgs).
+			storedArgs, _ := redactArgs(detachArgs(os.Args[1:], projectPath))
 			state = docker.NewRunStateRecorder(projectPath, os.Getpid(), detachedChild, watch,
-				detachArgs(os.Args[1:], projectPath), logPath)
+				storedArgs, logPath)
 			state.Warn = func(err error) {
 				fmt.Fprintf(os.Stderr, "Warning: could not publish the run state: %v\n", err)
 			}
@@ -387,7 +390,7 @@ func init() {
 	runCmd.Flags().String("configuration", "",
 		"Which project configuration's constant values to run with (default: the only one, or \"Default\")")
 	runCmd.Flags().StringArray("constant", nil,
-		"Set a constant for THIS RUN only: Module.Name=value (repeatable). Wins over the configuration and is never written to the project. The value is visible in shell history and in `ps` — see docs/11-proposals/PROPOSAL_constant_values.md")
+		"Set a constant for THIS RUN only: Module.Name=value (repeatable). Wins over the configuration and is never written to the project. A literal value is visible in shell history and in ps; Module.Name=@env:VAR reads an environment variable and Module.Name=@file:path reads a file (owner-only permissions, checked on Unix and not on Windows) instead, and @@ starts a literal value with @ — see docs/11-proposals/PROPOSAL_constant_values.md")
 	runCmd.Flags().Bool("local", false, "Run locally without Docker (warm serve + standalone runtime)")
 	runCmd.Flags().String("hub", "", "Expose the running app in a browser via your own mxcli tunnel-hub URL (e.g. https://hub.example.com). Implies --local; the app stays local and is reverse-tunnelled out")
 	runCmd.Flags().String("hub-secret", "", "Shared auth secret for --hub (\"user:pass\"), matching the hub's --secret")

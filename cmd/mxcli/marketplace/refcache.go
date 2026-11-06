@@ -299,9 +299,9 @@ func publishToCache(buildDir, cacheDir string) error {
 // — a difference that shows up as findings that come and go. Extend this filter
 // in the same commit and bump refEntryFormat, or store the whole tree again.
 //
-// mprcontents/ is kept even though `mx module-import` always collapses the
-// reference to MPR v1: the cost is nothing when it is absent, and the failure if
-// that ever changes is an unreadable model rather than a slower run.
+// mprcontents/ is kept: `mx module-import` collapses the reference to MPR v1,
+// but a reference built from a protected module's tree (moduletree.go) skips
+// module-import and keeps whatever format the blank project was created in.
 func isModelFile(rel string) bool {
 	for _, dir := range []string{"mprcontents", "javascriptsource", "javasource"} {
 		if rel == dir || strings.HasPrefix(rel, dir+string(filepath.Separator)) {

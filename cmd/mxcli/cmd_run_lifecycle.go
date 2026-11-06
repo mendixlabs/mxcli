@@ -154,7 +154,11 @@ start it again in the background with the arguments it was started with (as
 
 The arguments come from the project's run state, so this also restarts a run
 that has already stopped or crashed. To change a flag, stop it and start a new
-one: mxcli run stop -p app.mpr && mxcli run --local --watch --detach -p app.mpr …`,
+one: mxcli run stop -p app.mpr && mxcli run --local --watch --detach -p app.mpr …
+
+Secrets given on the command line (--constant values, --db-password,
+--screenshot-password, --hub-secret, --debug-pass) are not stored with the run, so
+a run started with them cannot be restarted: restart says so and changes nothing.`,
 	Example: `  mxcli run restart -p app.mpr`,
 	Run: func(cmd *cobra.Command, args []string) {
 		projectPath := lifecycleProject(cmd)
@@ -163,10 +167,22 @@ one: mxcli run stop -p app.mpr && mxcli run --local --watch --detach -p app.mpr 
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(runExitFailed)
 		}
+		noteForeignRunState(projectPath, os.Stderr)
 		if st == nil || len(st.Args) == 0 {
 			fmt.Fprintf(os.Stderr, "nothing to restart: no run of this project is recorded\n"+
 				"  start one: mxcli run --local --watch --detach -p %s\n", projectPath)
 			os.Exit(runExitNotRunning)
+		}
+		// Secrets given on the command line are not stored with the run, so a
+		// restart would hand the app the placeholder instead of the value. Say so
+		// before stopping anything.
+		if hasRedactedArgs(st.Args) {
+			fmt.Fprintf(os.Stderr, "cannot restart: this run was started with secrets on the command line "+
+				"(--constant values, --db-password, ...), and they are not stored.\n"+
+				"  Either set the database password in the PGPASSWORD environment variable, or stop the run and\n"+
+				"  start it again with the secrets: mxcli run stop -p %s && mxcli run --local --detach -p %s ...\n",
+				projectPath, projectPath)
+			os.Exit(runExitFailed)
 		}
 		if code := runStop(projectPath, os.Stdout); code != runExitOK {
 			os.Exit(code)
@@ -202,6 +218,7 @@ func lifecycleProject(cmd *cobra.Command) string {
 // `run restart` from another directory) runs the same project.
 func detachArgs(args []string, projectPath string) []string {
 	var out []string
+	args = absoluteConstantArgs(args)
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
@@ -216,6 +233,17 @@ func detachArgs(args []string, projectPath string) []string {
 		out = append(out, a)
 	}
 	return append(out, "-p", projectPath)
+}
+
+// noteForeignRunState says so when the run state in this project's .mxcli/ was
+// written for another project, which a copied folder brings along. Every reader
+// treats such a state as no run at all (docker.ReadRunState), so a command
+// that goes on to report "not running" is not leaving the user guessing why.
+func noteForeignRunState(projectPath string, out io.Writer) {
+	if st := docker.ForeignRunState(projectPath); st != nil {
+		fmt.Fprintf(out, "note: .mxcli/run-state.json here belongs to the run of %s (pid %d), not this project; ignoring it\n",
+			st.Project, st.PID)
+	}
 }
 
 // refuseIfRunning returns an error when a live run already serves the project
@@ -375,6 +403,7 @@ func printLogWarnings(out io.Writer, logPath string, max int) {
 // --- status ------------------------------------------------------------
 
 func runStatus(projectPath string, out io.Writer) int {
+	noteForeignRunState(projectPath, out)
 	st, err := docker.ReadRunState(projectPath)
 	if err != nil {
 		fmt.Fprintf(out, "unknown: %v\n", err)
@@ -628,6 +657,7 @@ func runWaitReady(projectPath string, timeout time.Duration, out io.Writer) int 
 // --- stop --------------------------------------------------------------
 
 func runStop(projectPath string, out io.Writer) int {
+	noteForeignRunState(projectPath, out)
 	st, err := docker.ReadRunState(projectPath)
 	if err != nil {
 		fmt.Fprintf(out, "failed: %v\n", err)

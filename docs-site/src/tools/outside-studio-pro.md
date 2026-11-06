@@ -285,6 +285,9 @@ it is copied back, so the engine owns the `.mpr`:
 - a conflict in non-model files (text sources) is left in place for manual
   resolution, like plain git: resolve them, `git add` them, and re-run the
   command — it finishes the merge (model conflicts included) and commits.
+  When that re-run needs a model decision and aborts, your text resolutions
+  are recorded in the plan template and `--plan` puts them back; `--plan`
+  stops before it touches the model while a text conflict is still open.
 
 Merging is still never done by plain `git merge` on a Mendix repository: use
 `mxcli git merge` or Studio Pro, never a textual merge of `mprcontents/`.
