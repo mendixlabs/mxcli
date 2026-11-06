@@ -120,8 +120,37 @@ func validateExternalActionCalls(ctx *ExecContext, prog *ast.Program) []error {
 		if err := checkExternalActionCall(ctx, h, services, c.call); err != nil {
 			errs = append(errs, fmt.Errorf("statement %d: %w", c.index, err))
 		}
+		for _, msg := range checkIncludedAssociations(ctx, h, c.call) {
+			errs = append(errs, fmt.Errorf("statement %d: %s", c.index, msg))
+		}
 	}
 	return errs
+}
+
+// checkIncludedAssociations resolves each `include associations ( … )` the
+// call writes as exec's builder does (ako/mxcli#1914), so check refuses what
+// exec would: a self-association, an association that does not touch the
+// entity on its side, one whose side specializes both ends.
+func checkIncludedAssociations(ctx *ExecContext, h *ContainerHierarchy, c externalCall) []string {
+	stated := false
+	for _, a := range c.stmt.Arguments {
+		if a.IncludeAssociations != nil && len(a.IncludeAssociations.Associations) > 0 {
+			stated = true
+		}
+	}
+	if !stated {
+		return nil
+	}
+	fb := &flowBuilder{backend: flowBuildBackend(ctx.Backend), hierarchy: h, resolveKnownOnly: true}
+	kinds := fb.resolveExternalActionParameterKinds(c.stmt.ServiceName, c.stmt.ActionName)
+	call := c.stmt.ServiceName.String() + "." + c.stmt.ActionName
+	for _, a := range c.stmt.Arguments {
+		if a.IncludeAssociations == nil {
+			continue
+		}
+		fb.buildIncludedAssociations(call, a.Name, kinds[strings.ToLower(a.Name)].entity, a.IncludeAssociations.Associations)
+	}
+	return fb.GetErrors()
 }
 
 func checkExternalActionCall(ctx *ExecContext, h *ContainerHierarchy, services []*model.ConsumedODataService, c externalCall) error {

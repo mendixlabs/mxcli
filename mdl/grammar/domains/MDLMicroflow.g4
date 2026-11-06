@@ -797,10 +797,24 @@ callArgumentList
 // action's text-template parameter (StringTemplate(Text|Sql)) — the `with`
 // form of log and show message. Only call java action takes it (the visitor
 // refuses it elsewhere; ako/mxcli#1451).
+//
+// `Param = $Obj include associations (M.A (M.B), M.C)` is the argument's
+// Associations to include: the associations whose objects are serialised into
+// the OData request with it, as a tree. Only call external action takes it (the
+// visitor refuses it elsewhere; ako/mxcli#1914). `include associations ()`
+// states "none".
 callArgument
-    : (VARIABLE /* @alias MDL-DEPR006 */ | parameterName) EQUALS (NOTHING | expression templateParams?)
+    : (VARIABLE /* @alias MDL-DEPR006 */ | parameterName) EQUALS (NOTHING | expression templateParams? includeAssociationsClause?)
     | parameterName COLON /* @alias MDL-DEPR007 */ expression
     | expression                                  // positional: refused by the visitor
+    ;
+
+includeAssociationsClause
+    : INCLUDE ASSOCIATIONS LPAREN (includedAssociation (COMMA includedAssociation)*)? RPAREN
+    ;
+
+includedAssociation
+    : qualifiedName (LPAREN includedAssociation (COMMA includedAssociation)* RPAREN)?
     ;
 
 showPageStatement

@@ -573,6 +573,8 @@ func (w *mcpWidgetBuilder) PrimitiveValues() map[string]string { return nil }
 func (w *mcpWidgetBuilder) EnsureRequiredObjectLists()                             {}
 func (w *mcpWidgetBuilder) ApplyPropertyVisibility(_ []types.WidgetVisibilityRule) {}
 
+func (w *mcpWidgetBuilder) NullTemplatesOfUnsetDataSources() {}
+
 // Finalize builds the CustomWidget shell and registers its recorded pg object on
 // the backend, keyed by the widget's ID so mapPageWidget can find it.
 func (w *mcpWidgetBuilder) Finalize(id model.ID, name, label, editable string) *pages.CustomWidget {

@@ -110,3 +110,17 @@ func ParallelPathIndex(caption, ref string, count int) (int, error) {
 	}
 	return n - 1, nil
 }
+
+// BoundaryEventIndex is the 0-based position of `boundary event N` among an
+// activity's count boundary events (ako/mxcli#808). index 0 — no number written
+// — is the first, the old behaviour the executor gates (MDL-V1-BOUNDARYDROP);
+// a number past the last is refused rather than clamped.
+func BoundaryEventIndex(ref string, index, count int) (int, error) {
+	if index == 0 {
+		return 0, nil
+	}
+	if index < 1 || index > count {
+		return 0, fmt.Errorf("activity %q has %d boundary event(s); `boundary event %d` names none of them", ref, count, index)
+	}
+	return index - 1, nil
+}

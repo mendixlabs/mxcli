@@ -170,6 +170,11 @@ NORMALIZED: N O R M A L I Z E D;
 // activity (ADR-0012). In `keyword` too, so "handles" still parses as a name.
 HANDLES: H A N D L E S;
 
+// `command = $Cmd include associations (M.A (M.B))` — a call external action
+// argument's Associations to include (ako/mxcli#1914). In `keyword` too, so
+// "include" still parses as a name.
+INCLUDE: I N C L U D E;
+
 ENTITY: E N T I T Y;
 PERSISTENT: P E R S I S T E N T;
 VIEW: V I E W;

@@ -1376,18 +1376,13 @@ func traverseFlow(
 			continueAfterSplitJoin(ctx, mergeID, activityMap, flowsByOrigin, flowsByDest, splitMergeMap, visited, entityNames, microflowNames, lines, indent, sourceMap, headerLineCount, annotationsByTarget, labels)
 			return
 		}
+		// A decision whose true path goes straight on is printed as stored —
+		// `if X then else <false path> end if;` — not folded into
+		// `if not(X) then …`: executing the folded form stored not(X) with
+		// the outcomes swapped, so describe -> exec changed the model
+		// (ako/mxcli#1963), and a condition edit had to undo the fold
+		// (#1930). The builder builds the unfolded form as Studio Pro stores it.
 		trueFlow, falseFlow := findBranchFlows(flows)
-
-		// Empty-then swap: when the true branch goes directly to the merge
-		// (empty then body) and the false branch has real content, negate
-		// the condition and swap branches for more readable output.
-		// "if cond then else <body> end if;" → "if not(cond) then <body> end if;"
-		if trueFlow != nil && falseFlow != nil && mergeID != "" {
-			if trueFlow.DestinationID == mergeID && falseFlow.DestinationID != mergeID {
-				stmt = negateIfCondition(stmt)
-				trueFlow, falseFlow = falseFlow, trueFlow
-			}
-		}
 
 		if stmt != "" {
 			emitObjectAnnotations(obj, lines, indentStr, annotationsByTarget, flowsByOrigin, flowsByDest, activityMap)
@@ -1602,15 +1597,7 @@ func traverseFlowUntilMerge(
 		}
 		trueFlow, falseFlow := findBranchFlows(flows)
 		nestedMergeID = resolveNestedMergeID(nestedMergeID, mergeID, trueFlow, falseFlow, flowsByOrigin)
-
-		// Empty-then swap: negate when true branch is empty but false branch has content.
-		// Skip when both branches go directly to merge (both empty).
-		if trueFlow != nil && falseFlow != nil && nestedMergeID != "" && nestedMergeID == mergeID {
-			if trueFlow.DestinationID == nestedMergeID && falseFlow.DestinationID != nestedMergeID {
-				stmt = negateIfCondition(stmt)
-				trueFlow, falseFlow = falseFlow, trueFlow
-			}
-		}
+		// Printed as stored, never folded into not(X) (ako/mxcli#1963).
 
 		if stmt != "" {
 			emitObjectAnnotations(obj, lines, indentStr, annotationsByTarget, flowsByOrigin, flowsByDest, activityMap)
@@ -3180,81 +3167,6 @@ func (e *Executor) traverseFlow(
 	// the pre-refactor behaviour. Nil labels likewise: a caller that does not
 	// compute them describes exactly as before.
 	traverseFlow(e.newExecContext(context.Background()), currentID, activityMap, flowsByOrigin, nil, splitMergeMap, visited, entityNames, microflowNames, lines, indent, sourceMap, headerLineCount, annotationsByTarget, mergeLabels{})
-}
-
-// negateIfCondition transforms "if <cond> then" into "if not(<cond>) then".
-// Used by the empty-then swap to produce readable output when Studio Pro stores
-// the flow with an inverted condition (true branch empty, false branch has body).
-func negateIfCondition(stmt string) string {
-	// stmt is always "if <condition> then" from formatActivity.
-	const prefix = "if "
-	const suffix = " then"
-	if strings.HasPrefix(stmt, prefix) && strings.HasSuffix(stmt, suffix) {
-		return prefix + negateExpression(stmt[len(prefix):len(stmt)-len(suffix)]) + suffix
-	}
-	return stmt
-}
-
-// negateExpression is cond's negation as describe spells it: not(x) becomes
-// x, anything else not(cond). It is its own inverse, which is what lets a
-// condition edit undo the empty-then swap (decisionPrintedNegated).
-func negateExpression(cond string) string {
-	// Avoid double-negation: not(not(x)) → x
-	// Only unwrap if the outer parens are balanced (depth returns to 0 at the final char)
-	if strings.HasPrefix(cond, "not(") && strings.HasSuffix(cond, ")") {
-		inner := cond[4 : len(cond)-1]
-		depth := 0
-		balanced := true
-		for _, ch := range inner {
-			if ch == '(' {
-				depth++
-			} else if ch == ')' {
-				depth--
-				if depth < 0 {
-					balanced = false
-					break
-				}
-			}
-		}
-		if balanced && depth == 0 {
-			return inner
-		}
-	}
-	return "not(" + cond + ")"
-}
-
-// decisionPrintedNegated reports whether describe prints the decision splitID
-// with the empty-then swap: its condition negated and its paths swapped, because
-// its true path goes straight to its merge and its false path does not. The
-// condition an `if` states for such a decision is the negation of the one
-// stored, so whatever replaces it must be negated back (ako/mxcli#1930). It
-// looks in the loop bodies too, each printed from its own collection.
-func decisionPrintedNegated(ctx *ExecContext, oc *microflows.MicroflowObjectCollection, splitID model.ID) bool {
-	if oc == nil {
-		return false
-	}
-	activityMap := make(map[model.ID]microflows.MicroflowObject, len(oc.Objects))
-	for _, obj := range oc.Objects {
-		activityMap[obj.GetID()] = obj
-	}
-	if _, here := activityMap[splitID]; !here {
-		for _, obj := range oc.Objects {
-			if loop, ok := obj.(*microflows.LoopedActivity); ok && decisionPrintedNegated(ctx, loop.ObjectCollection, splitID) {
-				return true
-			}
-		}
-		return false
-	}
-	var flows []*microflows.SequenceFlow
-	for _, f := range oc.Flows {
-		if f.OriginID == splitID {
-			flows = append(flows, f)
-		}
-	}
-	mergeID := findSplitMergePoints(ctx, oc, activityMap)[splitID]
-	trueFlow, falseFlow := findBranchFlows(flows)
-	return trueFlow != nil && falseFlow != nil && mergeID != "" &&
-		trueFlow.DestinationID == mergeID && falseFlow.DestinationID != mergeID
 }
 
 func (e *Executor) collectErrorHandlerStatements(

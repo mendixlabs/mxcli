@@ -355,6 +355,32 @@ func resolveAlterPageUnit(ctx *ExecContext, s *ast.AlterPageStmt, h *ContainerHi
 // ============================================================================
 
 func applySetPropertyMutator(ctx *ExecContext, mutator backend.PageMutator, op *ast.SetPropertyOp, moduleName string, moduleID model.ID) error {
+	// A column's attribute is written last. The column is addressed by its
+	// attribute, so once it changes, `column(Old)` no longer finds it, and the
+	// follow-up below — which re-finds the column — failed with "column(Old)
+	// not found". The attribute drives none of the visibility the follow-up
+	// resets, so the rest is applied and reset under the address as written
+	// (ako/mxcli#1644).
+	if op.Target.IsColumn() {
+		for name, value := range op.Properties {
+			if !strings.EqualFold(name, "Attribute") {
+				continue
+			}
+			rest := &ast.SetPropertyOp{Target: op.Target, Properties: map[string]any{}}
+			for k, v := range op.Properties {
+				if k != name {
+					rest.Properties[k] = v
+				}
+			}
+			if len(rest.Properties) > 0 {
+				if err := applySetPropertyMutator(ctx, mutator, rest, moduleName, moduleID); err != nil {
+					return err
+				}
+			}
+			return applySetProperties(ctx, mutator,
+				&ast.SetPropertyOp{Target: op.Target, Properties: map[string]any{name: value}}, moduleName, moduleID)
+		}
+	}
 	if err := applySetProperties(ctx, mutator, op, moduleName, moduleID); err != nil {
 		return err
 	}
@@ -463,7 +489,20 @@ func applySetProperties(ctx *ExecContext, mutator backend.PageMutator, op *ast.S
 				"`set %s = <action>` needs a pluggable widget target: `set '%s' = … on <widgetName>`",
 				propName, propName)
 		}
+		if params, ok := value.([]ast.ParamAssignmentV3); ok && isTemplateParamsKey(propName) {
+			if err := setTemplateParameters(ctx, mutator, op.Target, propName, params, moduleName, moduleID); err != nil {
+				return err
+			}
+			continue
+		}
 		if op.Target.IsColumn() {
+			if strings.EqualFold(propName, "Attribute") {
+				b, err := resolveColumnAttribute(ctx, mutator, op.Target, value, moduleName, moduleID)
+				if err != nil {
+					return err
+				}
+				value = b
+			}
 			if err := mutator.SetColumnProperty(op.Target.Widget, columnRefOf(op.Target), propName, value); err != nil {
 				return mdlerrors.NewBackend("set "+propName+" on "+op.Target.Name(), err)
 			}
@@ -1383,4 +1422,33 @@ func newAlterPageBuilder(ctx *ExecContext, moduleName string, moduleID model.ID,
 		isDocumentWidget: alterDocumentWidgets(mutator, nil),
 		isSnippet:        mutator.ContainerType() == backend.ContainerSnippet,
 	}
+}
+
+// templateParameterSetter is the page mutator capability behind
+// `set (CaptionParams: …)` / `set (ContentParams: …)`.
+type templateParameterSetter interface {
+	SetWidgetTemplateParameters(widgetRef, prop string, params []*pages.ClientTemplateParameter) error
+}
+
+func isTemplateParamsKey(prop string) bool {
+	return strings.EqualFold(prop, "CaptionParams") || strings.EqualFold(prop, "ContentParams")
+}
+
+// setTemplateParameters writes a text template's parameters on a stored
+// built-in widget (ako/mxcli#1966), resolved by the builder CREATE PAGE uses
+// against the entity of the data container the widget sits in — so a bare
+// attribute name means here what it means in `create page`.
+func setTemplateParameters(ctx *ExecContext, mutator backend.PageMutator, target ast.WidgetRef, prop string,
+	params []ast.ParamAssignmentV3, moduleName string, moduleID model.ID) error {
+	setter, ok := mutator.(templateParameterSetter)
+	if !ok || target.Widget == "" || target.IsColumn() || target.Item != nil {
+		return mdlerrors.NewUnsupported(fmt.Sprintf(
+			"alter page set %s is supported on a button or a dynamic text — use `replace <widget> with …` here", prop))
+	}
+	pb := newAlterPageBuilder(ctx, moduleName, moduleID, mutator.EnclosingEntity(target.Widget), mutator)
+	resolved := pb.buildClientTemplateParams(params)
+	if err := setter.SetWidgetTemplateParameters(target.Widget, prop, resolved); err != nil {
+		return mdlerrors.NewBackend("set "+prop+" on "+target.Name(), err)
+	}
+	return nil
 }

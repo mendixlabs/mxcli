@@ -53,6 +53,9 @@ func execAlterFlow(ctx *ExecContext, s *ast.AlterFlowStmt) error {
 		return mdlerrors.NewBackend("save altered "+s.Kind(), err)
 	}
 	fmt.Fprintf(ctx.Output, "Altered %s %s\n", s.Kind(), s.Name)
+	for _, c := range a.carriedIncludes {
+		fmt.Fprintln(ctx.Output, carriedIncludesWarning(s.Name.String(), c))
+	}
 	return nil
 }
 
@@ -201,6 +204,18 @@ func (a *alterFlowContext) applyTo(ctx *ExecContext, mut backend.MicroflowMutato
 			if frag, err = a.keepStoredHandler(ctx, op, target, frag); err != nil {
 				return fail(err)
 			}
+			// A call external action replaced by one that leaves out
+			// `include associations` keeps the stored tree, as a create or
+			// modify rebuild does (ako/mxcli#1914): the splice rebuilt the
+			// call and dropped it.
+			carried, err := carryIncludedAssociations(
+				&microflows.MicroflowObjectCollection{Objects: frag.Objects},
+				&microflows.MicroflowObjectCollection{Objects: []microflows.MicroflowObject{target.Object}},
+				a.stmt.Name.String(), a.statedIncludes)
+			if err != nil {
+				return fail(err)
+			}
+			a.carriedIncludes = append(a.carriedIncludes, carried...)
 		}
 		if inLoop != nil {
 			if what := notPlainFragment(frag); what != "" {
@@ -329,6 +344,12 @@ type alterFlowContext struct {
 	// one whose target was swapped for new elements (ako/mxcli#1761). The
 	// report of a `create or modify` tells the two apart.
 	edited map[*ast.AlterFlowOperation]bool
+	// statedIncludes are the external action mappings whose fragment wrote
+	// `include associations ( … )`, and carriedIncludes the stored trees a
+	// replace kept because its statement did not (ako/mxcli#1914) — told by
+	// whoever reports the write, not here, since check plans the same splice.
+	statedIncludes  map[*microflows.ExternalActionParameterMapping]bool
+	carriedIncludes []carriedIncludes
 }
 
 // noteEdited records that op edited its stored target in place.
@@ -771,13 +792,10 @@ func (a *alterFlowContext) splitCondition(ctx *ExecContext, op *ast.AlterFlowOpe
 	if missing := a.unscopedRefs(expr, target.ID); len(missing) > 0 {
 		return "", "", fmt.Errorf("the condition uses %s, which is not declared on the path to the decision", strings.Join(missing, ", "))
 	}
-	// The `if` states the condition as describe printed it. For a decision
-	// whose true path goes straight on, describe prints the negated condition
-	// with the paths swapped; the stored flows do not move, so storing the
-	// printed condition as it is would invert the decision (ako/mxcli#1930).
-	if decisionPrintedNegated(ctx, a.mf.ObjectCollection, target.ID) {
-		expr = negateExpression(expr)
-	}
+	// The `if` states the condition as describe prints it, which is the stored
+	// one: describe no longer folds a decision whose true path goes straight
+	// on into not(X) with its paths swapped (ako/mxcli#1963), so there is no
+	// fold to undo here (#1930).
 	caption = split.Caption
 	if caption == old.Expression {
 		caption = expr
@@ -867,6 +885,12 @@ func (a *alterFlowContext) buildFragmentVars(ctx *ExecContext, body []ast.Microf
 		return nil, fragmentVars{}, err
 	}
 	frag.Pinned = fb.statedNotes
+	for pm := range fb.statedIncludes {
+		if a.statedIncludes == nil {
+			a.statedIncludes = map[*microflows.ExternalActionParameterMapping]bool{}
+		}
+		a.statedIncludes[pm] = true
+	}
 	return frag, declaredVarsOf(fb, frag.Objects), nil
 }
 

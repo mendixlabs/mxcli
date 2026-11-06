@@ -218,7 +218,18 @@ func (b *Builder) buildAlterWorkflowDrop(ctx *parser.AlterWorkflowTargetContext)
 	case m.PATH() != nil:
 		return &ast.DropPathOp{PathCaption: "Path " + m.NUMBER_LITERAL().GetText(), ActivityRef: ref, AtPosition: pos}
 	case m.BOUNDARY() != nil:
-		return &ast.DropBoundaryEventOp{ActivityRef: ref, AtPosition: pos}
+		op := &ast.DropBoundaryEventOp{ActivityRef: ref, AtPosition: pos}
+		if n := m.NUMBER_LITERAL(); n != nil {
+			idx, err := strconv.Atoi(n.GetText())
+			if err != nil || idx < 1 {
+				tok := n.GetSymbol()
+				b.addError(fmt.Errorf("line %d:%d `boundary event %s`: the number is the event's place, from 1, "+
+					"in the order describe workflow prints them", tok.GetLine(), tok.GetColumn(), n.GetText()))
+				return nil
+			}
+			op.Index = idx
+		}
+		return op
 	}
 	return nil
 }

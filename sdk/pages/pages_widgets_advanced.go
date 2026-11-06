@@ -187,6 +187,10 @@ type SnippetParamMapping struct {
 	// IsLocalVariable puts Argument in the LocalVariable slot: the call passes a
 	// page `Variables:` entry, not a parameter (ako/mxcli#826).
 	IsLocalVariable bool
+	// IsWidget puts Argument in the Widget slot: the call passes a data
+	// view's object by naming the data view (ako/mxcli#1968). Written in
+	// PageParameter, it named a page parameter that does not exist — CE0115.
+	IsWidget bool
 }
 
 // SnippetCallWidget represents a snippet call widget.

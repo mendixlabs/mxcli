@@ -3,9 +3,12 @@
 package executor
 
 import (
+	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
@@ -55,20 +58,19 @@ func TestCreateOrModify_FoldedDecisionKeepsItsMeaning(t *testing.T) {
 		name, stored, printed, edited, want string
 	}{
 		{
-			// The reporter's flow.
-			name:    "printed as not(X)",
+			// The reporter's flow. describe prints it as stored since
+			// ako/mxcli#1963, so the edited condition is stored as written.
+			name:    "printed as stored",
 			stored:  "trim($Sale/Code) != ''",
-			printed: "if not(trim($Sale/Code) != '') then",
-			edited:  "if not(trim($Sale/Reference) != '') then",
+			printed: "if trim($Sale/Code) != '' then",
+			edited:  "if trim($Sale/Reference) != '' then",
 			want:    "trim($Sale/Reference) != ''",
 		},
 		{
-			// describe takes a stored not(Z) out of the fold rather than
-			// printing not(not(Z)); the edit must put it back.
-			name:    "stored not(Z), printed as Z",
+			name:    "stored not(Z), printed as stored",
 			stored:  "not($Sale/Code = empty)",
-			printed: "if $Sale/Code = empty then",
-			edited:  "if $Sale/Reference = empty then",
+			printed: "if not($Sale/Code = empty) then",
+			edited:  "if not($Sale/Reference = empty) then",
 			want:    "not($Sale/Reference = empty)",
 		},
 	} {
@@ -127,8 +129,8 @@ begin
   end loop;
   return $Valid;
 end;`
-	const printed = "if not(trim($Sale/Code) != '') then"
-	const edited = "if not(trim($Sale/Reference) != '') then"
+	const printed = "if trim($Sale/Code) != '' then"
+	const edited = "if trim($Sale/Reference) != '' then"
 
 	exec, out, _ := openPedAppCopy(t)
 	if err := agreeExec(t, exec, setup); err != nil {
@@ -164,5 +166,55 @@ end;`
 	walk(loopEditFlowOf(t, exec, "VAL_Loop1930").ObjectCollection)
 	if want := "trim($Sale/Code) != ''"; expr != want {
 		t.Fatalf("stored expression in the loop = %q, want it unchanged, %q", expr, want)
+	}
+}
+
+// ako/mxcli#1963 (mendixlabs/mxcli#1742): describe folded a decision whose true
+// path goes straight on into `if not(X) then <false path> end if;`, and
+// executing that description stored not(X) with the outcomes swapped — the
+// same behaviour, a different model. The reporter's steps: describe the flow,
+// execute the description under a new name, compare the decisions.
+func TestDescribeExec_EmptyThenDecisionRoundTrips(t *testing.T) {
+	exec, out, _ := openPedAppCopy(t)
+	if err := agreeExec(t, exec, strings.Replace(negatedSetup, "%s", "$Sale/Code != empty", 1)); err != nil {
+		t.Fatalf("setup: %v\n%s", err, out.String())
+	}
+	described := describeFlow(t, exec, "VAL_Sale1930")
+	if strings.Contains(described, "not(") {
+		t.Errorf("describe folded the decision:\n%s", described)
+	}
+	src := strings.Replace(described, "VAL_Sale1930", "VAL_Sale1930_RoundTrip", 1)
+	if !strings.HasPrefix(strings.TrimSpace(src), "mdl ") {
+		src = "mdl 1;\n" + src
+	}
+	out.Reset()
+	if err := agreeExec(t, exec, src); err != nil {
+		t.Fatalf("exec of the description: %v\n%s", err, out.String())
+	}
+	shape := func(name string) string {
+		t.Helper()
+		mf := loopEditFlowOf(t, exec, name)
+		kinds := map[model.ID]string{}
+		var split *microflows.ExclusiveSplit
+		for _, obj := range mf.ObjectCollection.Objects {
+			kinds[obj.GetID()] = fmt.Sprintf("%T", obj)
+			if s, ok := obj.(*microflows.ExclusiveSplit); ok {
+				split = s
+			}
+		}
+		if split == nil {
+			t.Fatalf("%s has no decision", name)
+		}
+		var outcomes []string
+		for _, f := range mf.ObjectCollection.Flows {
+			if f.OriginID == split.ID {
+				outcomes = append(outcomes, fmt.Sprintf("%v→%s", f.CaseValue, kinds[f.DestinationID]))
+			}
+		}
+		sort.Strings(outcomes)
+		return split.SplitCondition.(*microflows.ExpressionSplitCondition).Expression + " " + strings.Join(outcomes, " ")
+	}
+	if a, b := shape("VAL_Sale1930"), shape("VAL_Sale1930_RoundTrip"); a != b {
+		t.Errorf("the round trip changed the decision:\n  original   %s\n  round trip %s", a, b)
 	}
 }

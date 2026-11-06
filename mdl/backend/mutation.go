@@ -351,7 +351,9 @@ type WorkflowMutator interface {
 	InsertBoundaryEvent(activityRef string, atPos int, eventType string, delay string, caption string, recurrence *workflows.Recurrence, activities []workflows.WorkflowActivity) error
 
 	// DropBoundaryEvent removes the boundary event from the referenced activity.
-	DropBoundaryEvent(activityRef string, atPos int) error
+	// DropBoundaryEvent removes an activity's boundary event: the index-th
+	// (1-based, describe order), or the first when index is 0.
+	DropBoundaryEvent(activityRef string, atPos int, index int) error
 
 	// Save persists the mutations to the backend.
 	Save() error
@@ -443,6 +445,11 @@ type WidgetObjectBuilder interface {
 	// values, matching Studio Pro's editorConfig.js-driven behavior (#574).
 	ApplyPropertyVisibility(rules []types.WidgetVisibilityRule)
 
+	// NullTemplatesOfUnsetDataSources stores TextTemplate: null for an unset
+	// TextTemplate bound to a data source property that holds none, as Studio
+	// Pro does (ako/mxcli#1967); an empty template there is CE0463.
+	NullTemplatesOfUnsetDataSources()
+
 	// --- Gallery-specific ---
 
 	// CloneGallerySelectionProperty clones the itemSelection property with a new Selection value.
@@ -529,6 +536,10 @@ type PluggablePropertyScoper interface {
 type AttributeBinding struct {
 	Path           string
 	SourceVariable *pages.WidgetVariable
+	// Steps are the association hops of an attribute reached over
+	// associations (`Assoc/Attr`), written as the AttributeRef's EntityRef as
+	// CREATE writes a multi-hop column (ako/mxcli#1644).
+	Steps []pages.AttributeRefStep
 }
 
 // ObjectListItemSpec describes one item of an object-list property (e.g. one

@@ -33,9 +33,17 @@ type flowBuilder struct {
 	// reports the rest without a project).
 	assocObjectVars map[string]bool
 
-	objects         []microflows.MicroflowObject
-	flows           []*microflows.SequenceFlow
-	annotationFlows []*microflows.AnnotationFlow
+	objects []microflows.MicroflowObject
+	flows   []*microflows.SequenceFlow
+	// statedIncludes are the external action parameter mappings whose
+	// statement wrote `include associations ( … )`: the tree is the statement's,
+	// so the stored one is not carried onto them (ako/mxcli#1914).
+	statedIncludes map[*microflows.ExternalActionParameterMapping]bool
+	// resolveKnownOnly is check's mode for include associations: an
+	// association or entity the project does not hold yet may be one an
+	// earlier statement creates, so only what the project decides is reported.
+	resolveKnownOnly bool
+	annotationFlows  []*microflows.AnnotationFlow
 
 	// storedNotes resolves `@annotation(existing: '…')` to the note of the
 	// stored flow with that text, keyed by the text as the script writes it.
@@ -220,6 +228,11 @@ type flowBuilder struct {
 // it — `find $L by Code = …` in a replaced loop became a find by the invalid
 // expression `Code = …` (CE0117).
 func (fb *flowBuilder) nestedBuilder(x, y int) *flowBuilder {
+	// One registry for the whole flow, made here so a body's marks land in
+	// it rather than in a map of the body's own (ako/mxcli#1914).
+	if fb.statedIncludes == nil {
+		fb.statedIncludes = map[*microflows.ExternalActionParameterMapping]bool{}
+	}
 	return &flowBuilder{
 		posX:    x,
 		posY:    y,
@@ -255,6 +268,10 @@ func (fb *flowBuilder) nestedBuilder(x, y int) *flowBuilder {
 		storedNotes:        fb.storedNotes,
 		// A body of a spliced fragment is spliced too (ako/mxcli#1769).
 		qualifiedMembersOnly: fb.qualifiedMembersOnly,
+		// A call in a body that states `include associations` must reach the
+		// carry, which reads the flow's registry (ako/mxcli#1914).
+		statedIncludes:   fb.statedIncludes,
+		resolveKnownOnly: fb.resolveKnownOnly,
 	}
 }
 
