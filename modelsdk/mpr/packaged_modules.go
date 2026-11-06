@@ -61,6 +61,11 @@ type packagedSet struct {
 	module  map[string]int // unit ID → index in modules of the package holding it
 }
 
+// PackagedModuleNotice, when set, is told in one line about each module
+// package whose model could not be read: that module is then missing from
+// every listing, and without the line it would look as if mxcli never saw it.
+var PackagedModuleNotice io.Writer
+
 // packagedModulesDir is where Studio Pro keeps module packages, relative to the
 // project directory.
 const packagedModulesDir = "modules"
@@ -163,6 +168,9 @@ func (r *Reader) loadPackagedModules() *packagedSet {
 			}
 		}
 		if pm.Err != nil {
+			if PackagedModuleNotice != nil {
+				fmt.Fprintf(PackagedModuleNotice, "warning: packaged module %s (%s) is left out: %v\n", pm.Name, pm.File, pm.Err)
+			}
 			set.modules = append(set.modules, pm)
 			continue
 		}
