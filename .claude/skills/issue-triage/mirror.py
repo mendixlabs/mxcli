@@ -12,6 +12,10 @@ What it does each run:
   * labels a mirror `upstream-closed` and closes it when upstream closed the
     original, unless the mirror has `agent:working` or an open fork PR
     mentions it; then it only labels and comments
+  * labels a mirror `upstream-open` while it is closed here as completed (fixed
+    in the fork) but its upstream original is still open, and removes the label
+    once upstream closes it: the list of upstream tickets waiting to be closed
+    is `issues?state=closed&labels=upstream-open`
 
 It refuses to create mirrors (exit 1) when the listing of existing mirrors looks
 short: empty while the fork has mirrors, or more than BACKFILL_LIMIT unmirrored
@@ -36,6 +40,7 @@ MARKER = re.compile(r"<!--\s*upstream:\s*([\w.-]+/[\w.-]+)#(\d+)(?:\s+updated=(\
 MAX_BODY = 60000
 COMMENT_CHARS = 1500
 LAST_COMMENTS = 5
+FIXED_OPEN = "upstream-open"  # closed here as completed, upstream still open
 BACKFILL_LIMIT = 5  # older-than-newest gaps tolerated (e.g. a mirror deleted by hand)
 DRY = False
 UPSTREAM = None
@@ -156,10 +161,11 @@ def main():
     if up.lower() == fork.lower():
         sys.exit("--upstream and --fork must differ")
     summary = {"upstream_open": 0, "created": [], "refreshed": [], "closed": [], "flagged_closed": [],
-               "pending_create": 0, "dry_run": DRY}
+               "pending_create": 0, "fixed_here_open_upstream": [], "dry_run": DRY}
 
     for name, color, desc in [("mirror", "c5def5", "Downstream copy of an upstream issue"),
-                              ("upstream-closed", "d4c5f9", "The upstream original was closed")]:
+                              ("upstream-closed", "d4c5f9", "The upstream original was closed"),
+                              (FIXED_OPEN, "0e8a16", "Closed here as fixed; the upstream original is still open")]:
         api(f"/repos/{fork}/labels", "POST", {"name": name, "color": color, "description": desc}, ok_codes=("422",))
 
     open_up = {i["number"]: i for i in paged(f"/repos/{up}/issues?state=open") if "pull_request" not in i}
@@ -209,6 +215,24 @@ def main():
     open_prs = None
     for n, m in sorted(by_up.items()):
         hit = MARKER.search(m["body"])
+        labels = {l["name"] for l in m.get("labels") or []}
+        # Closed here as fixed while upstream is open: flag it, so the upstream
+        # tickets waiting to be closed are one query away. Only by_up's pick
+        # (an open mirror if there is one) counts, so a closed duplicate of an
+        # open mirror is never flagged.
+        fixed_here = m["state"] == "closed" and m.get("state_reason") == "completed"
+        if fixed_here and n in open_up:
+            summary["fixed_here_open_upstream"].append(n)
+            if FIXED_OPEN not in labels:
+                api(f"/repos/{fork}/issues/{m['number']}/labels", "POST", {"labels": [FIXED_OPEN]})
+        elif FIXED_OPEN in labels:
+            # Reopened here, or upstream closed it. Confirm the latter first:
+            # a short upstream listing must not strip every label.
+            st = (api(f"/repos/{up}/issues/{n}", ok_codes=("404", "410")) or {}) if fixed_here else {}
+            if st.get("state") == "open":
+                summary["fixed_here_open_upstream"].append(n)
+            else:
+                api(f"/repos/{fork}/issues/{m['number']}/labels/{FIXED_OPEN}", "DELETE", ok_codes=("404",))
         if n in open_up:
             i = open_up[n]
             if m["state"] == "open" and hit.group(3) != i["updated_at"]:
@@ -216,7 +240,6 @@ def main():
                     {"title": title_for(i), "body": build_body(up, i, last_comments(up, i))})
                 summary["refreshed"].append(n)
             continue
-        labels = {l["name"] for l in m.get("labels") or []}
         # Already flagged and kept open for the maintainer: don't comment again every run.
         if m["state"] != "open" or "upstream-closed" in labels:
             continue
