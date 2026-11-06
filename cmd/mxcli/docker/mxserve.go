@@ -78,6 +78,15 @@ type BuildResult struct {
 	Message         string          `json:"message"`
 	Problems        BuildProblems   `json:"problems"`
 	Raw             json.RawMessage `json:"-"`
+
+	// ColdRestart marks a RestartRequired that comes from a fresh serve
+	// process's first build with no incremental build to correct it. A first
+	// build reports true even for an unchanged model, so here true means "could
+	// not tell", not "an entity changed". serveRecovery sets it; mxbuild never
+	// sends it. Measured on 11.14.0: every later build in a serve process
+	// fails, even for an unchanged model, and the failed response has no
+	// restartRequired at all, so this is the only answer a build there gets.
+	ColdRestart bool `json:"-"`
 }
 
 // BuildProblems is the serve response's problems object. The consistency errors

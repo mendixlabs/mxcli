@@ -631,21 +631,25 @@ func buildFlowSignatures(ctx *ExecContext) map[string]*flowSignature {
 		return result
 	}
 	if mfs, err := ctx.Backend.ListMicroflows(); err == nil {
-		for _, mf := range mfs {
+		for _, mf := range liveFirst(mfs, microflowExcluded) {
 			if mf == nil {
 				continue
 			}
-			result[strings.ToLower(h.GetQualifiedName(mf.ContainerID, mf.Name))] =
-				sdkFlowSignature(mf.Parameters, mf.ReturnType)
+			key := strings.ToLower(h.GetQualifiedName(mf.ContainerID, mf.Name))
+			if _, seen := result[key]; !seen {
+				result[key] = sdkFlowSignature(mf.Parameters, mf.ReturnType)
+			}
 		}
 	}
 	if nfs, err := ctx.Backend.ListNanoflows(); err == nil {
-		for _, nf := range nfs {
+		for _, nf := range liveFirst(nfs, nanoflowExcluded) {
 			if nf == nil {
 				continue
 			}
-			result[strings.ToLower(h.GetQualifiedName(nf.ContainerID, nf.Name))] =
-				sdkFlowSignature(nf.Parameters, nf.ReturnType)
+			key := strings.ToLower(h.GetQualifiedName(nf.ContainerID, nf.Name))
+			if _, seen := result[key]; !seen {
+				result[key] = sdkFlowSignature(nf.Parameters, nf.ReturnType)
+			}
 		}
 	}
 	return result

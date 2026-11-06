@@ -741,15 +741,40 @@ func buildCallArgumentList(ctx parser.ICallArgumentListContext) []ast.CallArgume
 				// whitespace before `)` to keep.
 				ca.Value = value
 				ca.TemplateParams = buildTemplateParams(tp)
+			} else if arg.IncludeAssociationsClause() != nil {
+				ca.Value = value // ends at `include`, as above
 			} else {
 				ca.Value = appendExpressionListTrailingWhitespace(listCtx, nextParserRuleContext(allArgs, i), expr, value)
 			}
+		}
+
+		if ic := arg.IncludeAssociationsClause(); ic != nil {
+			ca.IncludeAssociations = buildIncludeAssociationsClause(ic)
 		}
 
 		args = append(args, ca)
 	}
 
 	return args
+}
+
+// buildIncludeAssociationsClause converts `include associations ( … )`.
+func buildIncludeAssociationsClause(ctx parser.IIncludeAssociationsClauseContext) *ast.IncludeAssociationsClause {
+	c := ctx.(*parser.IncludeAssociationsClauseContext)
+	clause := &ast.IncludeAssociationsClause{Associations: []*ast.IncludedAssociationDef{}}
+	for _, n := range c.AllIncludedAssociation() {
+		clause.Associations = append(clause.Associations, buildIncludedAssociation(n))
+	}
+	return clause
+}
+
+func buildIncludedAssociation(ctx parser.IIncludedAssociationContext) *ast.IncludedAssociationDef {
+	n := ctx.(*parser.IncludedAssociationContext)
+	def := &ast.IncludedAssociationDef{Name: buildQualifiedName(n.QualifiedName())}
+	for _, c := range n.AllIncludedAssociation() {
+		def.Children = append(def.Children, buildIncludedAssociation(c))
+	}
+	return def
 }
 
 // buildMemberAssignmentList converts memberAssignmentList context to ChangeItem slice.

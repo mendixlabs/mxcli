@@ -243,7 +243,7 @@ func execAlterWorkflow(ctx *ExecContext, s *ast.AlterWorkflowStmt) error {
 			}
 
 		case *ast.DropBoundaryEventOp:
-			if err := mutator.DropBoundaryEvent(o.ActivityRef, o.AtPosition); err != nil {
+			if err := mutator.DropBoundaryEvent(o.ActivityRef, o.AtPosition, o.Index); err != nil {
 				return mdlerrors.NewBackend("drop boundary event", err)
 			}
 

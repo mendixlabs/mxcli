@@ -544,7 +544,7 @@ func TestWFBoundaryEvent(t *testing.T) {
 	}
 	// DROP removes index 0.
 	f2, m2 := wfMutatorFake(t)
-	if err := m2.DropBoundaryEvent("ReviewOrder", 0); err != nil {
+	if err := m2.DropBoundaryEvent("ReviewOrder", 0, 0); err != nil {
 		t.Fatal(err)
 	}
 	if ops := wfUpdateOps(t, f2); !strings.Contains(ops, `"path":"/flow/activities/0/boundaryEvents"`) || !strings.Contains(ops, `"index":0`) {

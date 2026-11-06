@@ -32,13 +32,15 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:     "odata.consume",
-		Features: []string{"integration/odata_client", "microflows/call_external_action", "microflows/call_external_action_arguments"},
-		Summary:  "Create consumed OData services and external entities",
+		Path: "odata.consume",
+		Features: []string{"integration/odata_client", "microflows/call_external_action", "microflows/call_external_action_arguments",
+			"microflows/call_external_action_include_associations"},
+		Summary: "Create consumed OData services and external entities",
 		Keywords: []string{
 			"create consumed odata service", "create odata client", "odata client", "consume odata", "external entity",
 			"metadata url", "odata4", "headers", "proxy",
 			"configurationmicroflow", "headersmicroflow", "service url",
+			"call external action", "include associations", "associations to include",
 		},
 		Syntax: "CREATE CONSUMED ODATA SERVICE Module.Name (\n" +
 			"  Version: '1.0',\n" +
@@ -66,6 +68,18 @@ func init() {
 			"  [INTO Module] [ENTITIES (Name1, Name2)];\n\n" +
 			"ALTER ENTITY Module.Name SET (AllowCreateChangeLocally: true);\n\n" +
 			"DROP EXTERNAL ENTITY [IF EXISTS] Module.Name;  -- refuses a local entity\n\n" +
+			"$Result = CALL EXTERNAL ACTION Module.Client.Action (\n" +
+			"  Param = $Obj [INCLUDE ASSOCIATIONS (Module.Assoc [(Module.SubAssoc, ...)], ...)],\n" +
+			"  Other = nothing                       -- a blank (optional) argument\n" +
+			");\n" +
+			"-- INCLUDE ASSOCIATIONS is Studio Pro's \"Associations to include\": the\n" +
+			"-- associations whose objects are sent with the argument, as a tree. A\n" +
+			"-- name in ( ) after an association lists those included under it, from\n" +
+			"-- the entity at its far end. Which end the object is on is worked out\n" +
+			"-- from the domain model; a self-association is refused (tick it in\n" +
+			"-- Studio Pro). INCLUDE ASSOCIATIONS () removes them all. Left out on\n" +
+			"-- CREATE OR MODIFY, the stored tree is kept and MDL-ODATA10 warns.\n" +
+			"-- DESCRIBE prints the clause. Mendix 10.11+ for a non-empty clause.\n\n" +
 			"-- `SET Key = value, ...` (no parentheses) still runs and warns MDL-DEPR061;\n" +
 			"-- `SET allow_create_change_locally = true` warns MDL-DEPR063.",
 		Example: "mdl 1;\nCREATE CONSTANT MyModule.SvcUrl ( Type: String, DefaultValue: 'https://api.example.com/odata/v4/' );\n\nCREATE CONSUMED ODATA SERVICE MyModule.SalesforceAPI (\n  Version: '1.0',\n  ODataVersion: OData4,\n  MetadataUrl: 'https://api.example.com/odata/$metadata',\n  Timeout: 300,\n  ServiceUrl: MyModule.SvcUrl\n);\n\nCREATE EXTERNAL ENTITIES FROM MyModule.SalesforceAPI INTO Integration;",

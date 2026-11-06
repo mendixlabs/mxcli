@@ -31,6 +31,26 @@ var flowActionGates = []typeGate{
 		},
 	},
 	{
+		// `include associations ()` writes nothing and is not gated: only a
+		// tree needs the 10.11 type (ako/mxcli#1914).
+		versionGate: versionGate{"microflows", "call_external_action_include_associations", "call external action … include associations ( … )",
+			"this version has no associations to include on an external action argument (Microflows$IncludedAssociation): leave out the clause, or upgrade the project"},
+		types:      []string{"Microflows$IncludedAssociation"},
+		properties: []string{"Microflows$ExternalActionParameterMapping.IncludedAssociations"},
+		match: func(st ast.MicroflowStatement) bool {
+			s, ok := st.(*ast.CallExternalActionStmt)
+			if !ok {
+				return false
+			}
+			for _, a := range s.Arguments {
+				if a.IncludeAssociations != nil && len(a.IncludeAssociations.Associations) > 0 {
+					return true
+				}
+			}
+			return false
+		},
+	},
+	{
 		// The body variable is written for an operation whose body is an export
 		// mapping, or one the builder cannot find; for a JSON, template or file
 		// body the body lives on the operation and the clause is dropped. Gated

@@ -2844,6 +2844,11 @@ func setColumnPropertyMut(colDoc bson.D, propKeyMap map[string]string, propKindM
 			return fmt.Errorf("column property %q has no Value", propName)
 		}
 
+		// A column's attribute, resolved by the executor against the grid's
+		// data source as CREATE resolves it (ako/mxcli#1644).
+		if b, ok := value.(backend.AttributeBinding); ok {
+			return setColumnAttributeBinding(valDoc, propName, propKindMap[typePointerID], b)
+		}
 		field, settable := columnValueField(propKindMap[typePointerID])
 		if !settable {
 			return fmt.Errorf(
@@ -3590,13 +3595,12 @@ func setWidgetFormattingMut(widget bson.D, propName string, value any) error {
 		if !isString || !ok {
 			return fmt.Errorf("DateFormat is one of Date, Time, DateTime, Custom, not %v", value)
 		}
-		// mxbuild: CE0493 "Date format is custom but no format string is
-		// specified." Set the pattern in the same statement — properties are
-		// applied in name order, so CustomDateFormat lands first.
-		if canon == "Custom" && strings.TrimSpace(bsonnav.DGetString(fi, "CustomDateFormat")) == "" {
-			return fmt.Errorf("`DateFormat: Custom` needs a pattern: set CustomDateFormat in the same statement, " +
-				"e.g. `set (DateFormat: Custom, CustomDateFormat: 'dd-MM-yyyy HH:mm') on …` (mxbuild CE0493)")
-		}
+		// mxbuild CE0493 "Date format is custom but no format string is
+		// specified" is judged on the widget the whole statement leaves
+		// (CheckDateFormat, after the SET; check does the same), not here:
+		// this sees one property, and refusing on the stored pattern refused
+		// `set (DateFormat: Custom, CustomDateFormat: …)` in check's
+		// one-property dry run (ako/mxcli#1965).
 		bsonnav.DSet(fi, "DateFormat", canon)
 	case "CustomDateFormat":
 		s, isString := value.(string)
@@ -4412,4 +4416,27 @@ func (m *Mutator) PageVariableNames() []string {
 		}
 	}
 	return names
+}
+
+// setColumnAttributeBinding writes a Data grid 2 column's attribute: the
+// AttributeRef CREATE writes for `column (Attribute: …)`, with the association
+// hops as its EntityRef (ako/mxcli#1644). A column attribute reads the grid's
+// items, so a SourceVariable — a page parameter's — is never written here.
+func setColumnAttributeBinding(valDoc bson.D, propName, kind string, b backend.AttributeBinding) error {
+	if kind != "Attribute" {
+		return fmt.Errorf("column property %q holds a value of kind %s, not an attribute", propName, kind)
+	}
+	if strings.Count(b.Path, ".") < 2 {
+		return fmt.Errorf("column property %q: %q is not a qualified attribute", propName, b.Path)
+	}
+	if !hasKey(valDoc, "AttributeRef") {
+		return fmt.Errorf("column property %q stores no AttributeRef to set — replace the column instead", propName)
+	}
+	bsonnav.DSet(valDoc, "AttributeRef", bson.D{
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
+		{Key: "$Type", Value: "DomainModels$AttributeRef"},
+		{Key: "Attribute", Value: b.Path},
+		{Key: "EntityRef", Value: widgetobj.AttributeEntityRefBSON(b.Steps)},
+	})
+	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/linter"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
@@ -26,7 +27,7 @@ func fixtureProjectWithDefs(t *testing.T) string {
 	t.Helper()
 	src := filepath.Dir(fixtureProject(t))
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS(src)); err != nil {
+	if err := testutil.CopyFixture(dst, src); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	// Start from no definitions whatever the developer's tree holds, so the

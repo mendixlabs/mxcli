@@ -869,9 +869,9 @@ Modify an existing workflow's properties, activities, outcomes, paths, condition
 | Insert decision outcome | `insert into activity { outcomes 'Module.Enum.Value' -> { body } }` (or `true`, `false`, `default`) | Decision or call microflow |
 | Insert path | `insert into activity { path { body } }` | Parallel split; `path n` must be the next number |
 | Insert boundary event | `insert into activity { boundary event interrupting timer <expr> [caption '<caption>'] { body } }` | Boundary timer |
-| Drop outcome | `drop activity outcome 'name';` / `drop activity outcome true;` | `true`, `false`, `default` for a decision's Boolean or default outcome |
+| Drop outcome | `drop activity outcome 'name';` / `drop activity outcome true;` | `true`, `false`, `default` for a decision's Boolean or default outcome; refused as ambiguous when two outcomes have that value |
 | Drop path | `drop activity path 2;` | Parallel split path by number, as `describe` numbers them; refused on any other activity (a user task's branches are its outcomes) |
-| Drop boundary event | `drop activity boundary event;` | For an activity with one boundary event; with several, refused under `mdl 1` and the first dropped with warning MDL-V1-BOUNDARYDROP under `mdl 0` |
+| Drop boundary event | `drop activity boundary event [n];` | `n` picks one by number, as `describe` lists them. Without it: for an activity with one boundary event; with several, refused under `mdl 1` and the first dropped with warning MDL-V1-BOUNDARYDROP under `mdl 0` |
 
 **Activity references** are names (`ReviewOrder`) or captions in quotes (`'Review the order'`). Add `@n` to choose one of several matches (`ACT_Process@2`); without it a name wins over a caption that repeats it, and an ambiguous reference is refused with the matches listed. Every target is resolved before anything changes.
 

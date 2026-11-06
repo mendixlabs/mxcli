@@ -311,9 +311,9 @@ func mergeRun(mprPath, ref, message, strategy, plan string, push bool, runners m
 			theirsJSON := filepath.Join(tmp, "theirs-diff.json")
 			d1 := runners.diff(filepath.Join(baseDir, filepath.FromSlash(repo.MPRPath)), oursMpr, oursJSON)
 			d2 := runners.diff(filepath.Join(baseDir, filepath.FromSlash(repo.MPRPath)), filepath.Join(theirsDir, filepath.FromSlash(repo.MPRPath)), theirsJSON)
-			if d1 == nil && d2 == nil {
-				fmt.Fprintln(out, propertyReport(oursJSON, theirsJSON, manual))
-			}
+			// A failed side is reported, not dropped: skipping the report made
+			// "the diff crashed" read as "no details" (ako/mxcli#1981).
+			fmt.Fprintln(out, propertyReport(diffSide{oursJSON, d1}, diffSide{theirsJSON, d2}, manual))
 		}
 		// The abort below resets the index; what the human resolved and staged
 		// for the non-model files is recorded first, and --plan restores it
@@ -722,15 +722,30 @@ type mxDiffFile struct {
 	UnitDifferences []mxDiffUnit `json:"unitDifferences"`
 }
 
+// diffSide is one side's mx diff: the file it was asked to write, and the
+// error the run returned, if it failed.
+type diffSide struct {
+	path string
+	err  error
+}
+
 // propertyReport renders the two mx diff files as one property-level report
-// over the conflicted units: what each side changed.
-func propertyReport(oursJSON, theirsJSON string, unitIDs []string) string {
+// over the conflicted units: what each side changed. A side whose diff failed
+// says why, on one line, and the other side is reported as usual.
+func propertyReport(ours, theirs diffSide, unitIDs []string) string {
 	want := map[string]bool{}
 	for _, id := range unitIDs {
 		want[id] = true
 	}
 	lines := map[string][]string{}
-	for _, f := range []struct{ side, path string }{{"Yours", oursJSON}, {"Theirs", theirsJSON}} {
+	for _, f := range []struct {
+		side string
+		diffSide
+	}{{"Yours", ours}, {"Theirs", theirs}} {
+		if f.err != nil {
+			lines[f.side] = append(lines[f.side], fmt.Sprintf("  (diff unavailable: %s)", strings.Join(strings.Fields(f.err.Error()), " ")))
+			continue
+		}
 		raw, err := os.ReadFile(f.path)
 		if err != nil {
 			lines[f.side] = append(lines[f.side], fmt.Sprintf("  (diff unavailable: %v)", err))

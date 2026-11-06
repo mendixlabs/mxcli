@@ -2095,7 +2095,7 @@ func (m *mcpWorkflowMutator) InsertBoundaryEvent(activityRef string, atPos int, 
 }
 
 // DropBoundaryEvent removes the activity's (first) boundary event.
-func (m *mcpWorkflowMutator) DropBoundaryEvent(activityRef string, atPos int) error {
+func (m *mcpWorkflowMutator) DropBoundaryEvent(activityRef string, atPos int, index int) error {
 	loc, err := m.resolve(activityRef, atPos)
 	if err != nil {
 		return err
@@ -2108,7 +2108,11 @@ func (m *mcpWorkflowMutator) DropBoundaryEvent(activityRef string, atPos int) er
 	if len(events) == 0 {
 		return fmt.Errorf("activity %q has no boundary events", activityRef)
 	}
-	return m.apply(removeAtOp(actPath+"/boundaryEvents", 0))
+	at, err := backend.BoundaryEventIndex(activityRef, index, len(events))
+	if err != nil {
+		return err
+	}
+	return m.apply(removeAtOp(actPath+"/boundaryEvents", at))
 }
 
 // --- shared helpers for nested-array ops ---
@@ -2176,12 +2180,24 @@ func (m *mcpWorkflowMutator) dropFromActivityArray(actPath, field, activityRef, 
 	if err != nil {
 		return err
 	}
+	// A value does not identify an outcome uniquely, so a second match makes the
+	// address a guess and the drop is refused, as in wfmutator (ako/mxcli#808).
+	at, n := -1, 0
 	for i, e := range elems {
 		if match(e) {
-			return m.apply(removeAtOp(actPath+"/"+field, i))
+			if at < 0 {
+				at = i
+			}
+			n++
 		}
 	}
-	return fmt.Errorf("%s not found on activity %q", kind, activityRef)
+	switch {
+	case n == 0:
+		return fmt.Errorf("%s not found on activity %q", kind, activityRef)
+	case n > 1:
+		return fmt.Errorf("%s on activity %q is ambiguous: %d outcomes match. Nothing was written", kind, activityRef, n)
+	}
+	return m.apply(removeAtOp(actPath+"/"+field, at))
 }
 
 // readActivityArray reads an activity's nested array (outcomes, boundaryEvents)

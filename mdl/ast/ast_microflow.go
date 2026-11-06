@@ -763,6 +763,24 @@ type CallArgument struct {
 	// a Java action's text-template parameter: `Subject = 'Order {1}' with
 	// ({1} = $Order/Number)` (ako/mxcli#1451). Only call java action takes it.
 	TemplateParams []TemplateParam
+	// IncludeAssociations is a call external action argument's Associations to
+	// include, `include associations ( … )` (ako/mxcli#1914). nil when the
+	// clause is not written; a non-nil empty clause states "none".
+	IncludeAssociations *IncludeAssociationsClause
+}
+
+// IncludeAssociationsClause is `include associations (M.A (M.B), M.C)`: the
+// tree of associations whose objects an OData external action call serialises
+// with the argument. Each node's children are reached from the entity at its
+// association's far end.
+type IncludeAssociationsClause struct {
+	Associations []*IncludedAssociationDef
+}
+
+// IncludedAssociationDef is one node of the tree.
+type IncludedAssociationDef struct {
+	Name     QualifiedName
+	Children []*IncludedAssociationDef
 }
 
 // QueueRetry is the retry policy of a queued call (mendixlabs/mxcli#1729):

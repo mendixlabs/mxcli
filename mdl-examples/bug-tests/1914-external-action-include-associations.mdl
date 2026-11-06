@@ -1,0 +1,16 @@
+-- ako/mxcli#1914 (mendixlabs/mxcli#1721): a call external action argument's
+-- Associations to include had no MDL, so a sub-DTO linked to the command was
+-- not sent and nothing failed until the service received the request.
+-- Measured on a fresh 11.12.6 app with the reporter's service shape (command ->
+-- Quantity -> Unit, imported with `create external entities`): the call below
+-- builds at 0 errors and `describe` prints the clause back; leaving the clause
+-- out of a later `create or modify` keeps the tree and warns MDL-ODATA10;
+-- `include associations ()` clears it. Run against a project holding the
+-- BugTest1914.Bug1914 service and its imported entities.
+mdl 1;
+create or modify microflow BugTest1914.ACT_CreateBuffer ($Cmd: BugTest1914.CreateBufferCommand)
+begin
+  call external action BugTest1914.Bug1914.CreateBuffer(
+    command = $Cmd include associations (BugTest1914.Quantity (BugTest1914.Unit_2))
+  );
+end;

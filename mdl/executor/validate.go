@@ -36,15 +36,25 @@ type scriptContext struct {
 	// association endpoint check from refusing what exec will find (#555).
 	indirectEntities      map[string]bool
 	externalEntityModules map[string]bool
-	enumerations          map[string]bool // Enumerations created (Module.Enum)
-	microflows            map[string]bool // Microflows created (Module.Microflow)
-	nanoflows             map[string]bool // Nanoflows created (Module.Nanoflow)
-	pages                 map[string]bool // Pages created (Module.Page)
-	snippets              map[string]bool // Snippets created (Module.Snippet)
-	layouts               map[string]bool // Layouts created (Module.Layout)
-	menus                 map[string]bool // Menu documents created (Module.Menu)
-	constants             map[string]bool // Constants created (Module.Constant)
-	workflows             map[string]bool // Workflows created (Module.Workflow)
+	// indirectDocs is the same for every document kind ("microflow:M.Name"),
+	// and renamedModules the names a rename module gives, so the statement
+	// target check does not refuse what an earlier statement provides
+	// (ako/mxcli#1821). opaqueModules are modules a statement fills with
+	// documents it does not name (generated connectors, business event
+	// services); opaqueScript is an execute script, which can create anything.
+	indirectDocs   map[string]bool
+	renamedModules map[string]bool
+	opaqueModules  map[string]bool
+	opaqueScript   bool
+	enumerations   map[string]bool // Enumerations created (Module.Enum)
+	microflows     map[string]bool // Microflows created (Module.Microflow)
+	nanoflows      map[string]bool // Nanoflows created (Module.Nanoflow)
+	pages          map[string]bool // Pages created (Module.Page)
+	snippets       map[string]bool // Snippets created (Module.Snippet)
+	layouts        map[string]bool // Layouts created (Module.Layout)
+	menus          map[string]bool // Menu documents created (Module.Menu)
+	constants      map[string]bool // Constants created (Module.Constant)
+	workflows      map[string]bool // Workflows created (Module.Workflow)
 	// Task queues created (Module.Queue, lower-cased — a queue is resolved
 	// case-insensitively, like buildQueueQualifiedNames). Missing, a queue the
 	// script creates was "not found" for every `in queue` call to it
@@ -52,7 +62,9 @@ type scriptContext struct {
 	queues map[string]bool
 
 	// Image collections created (Module.Collection) and the images they declare
-	// (Module.Collection.Image), both lower-cased like buildImageQualifiedNames.
+	// (Module.Collection.Image), both spelled as declared, like
+	// buildImageQualifiedNames — Mendix resolves an image reference
+	// case-sensitively.
 	// Missing, an image widget naming a collection the same script creates was
 	// "image collection not found" and exec refused the script
 	// (mendixlabs/mxcli#1419).
@@ -99,9 +111,13 @@ type scriptContext struct {
 	// the workflow task signature checks, for the same reason as flowParams: the
 	// task page, the targeting microflow, the context entity and the workflow are
 	// ordinarily one script.
-	pageParams            map[string][]string // Module.Page (lower-cased) -> parameter entities
-	pageParamNames        map[string][]string // Module.Page (lower-cased) -> parameter names, for show page arguments
-	entityGeneralizations map[string]string   // Module.Entity (lower-cased) -> generalization, "" for none
+	pageParams     map[string][]string // Module.Page (lower-cased) -> parameter entities
+	pageParamNames map[string][]string // Module.Page (lower-cased) -> parameter names, for show page arguments
+	// pageParamEdits is each page's add/drop parameter operations from alter
+	// page statements, in script order, applied over pageParamNames or the
+	// stored list (ako/mxcli#1940).
+	pageParamEdits        map[string][]ast.AlterPageOperation
+	entityGeneralizations map[string]string // Module.Entity (lower-cased) -> generalization, "" for none
 
 	// Associations and entity attributes declared in the script, for
 	// MDL-XPATH01. Same reason as flowParams above: the overwhelmingly common
@@ -173,6 +189,10 @@ func newScriptContext() *scriptContext {
 
 		pageParams:            make(map[string][]string),
 		pageParamNames:        make(map[string][]string),
+		pageParamEdits:        make(map[string][]ast.AlterPageOperation),
+		indirectDocs:          make(map[string]bool),
+		renamedModules:        make(map[string]bool),
+		opaqueModules:         make(map[string]bool),
 		entityGeneralizations: make(map[string]string),
 	}
 }
@@ -304,10 +324,24 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 		if s.ObjectType == "entity" && s.Name.Module != "" && s.NewName != "" {
 			sc.indirectEntities[s.Name.Module+"."+s.NewName] = true
 		}
+		if s.ObjectType == "module" && s.NewName != "" {
+			sc.renamedModules[s.NewName] = true
+		} else if s.Name.Module != "" && s.NewName != "" && !s.DryRun {
+			sc.indirectDocs[s.ObjectType+":"+s.Name.Module+"."+s.NewName] = true
+		}
 	case *ast.MoveStmt:
 		if s.DocumentType == ast.DocumentTypeEntity && s.TargetModule != "" {
 			sc.indirectEntities[s.TargetModule+"."+s.Name.Name] = true
 		}
+		if s.TargetModule != "" {
+			sc.indirectDocs[moveTargetKind(s.DocumentType)+":"+s.TargetModule+"."+s.Name.Name] = true
+		}
+	case *ast.ExecuteScriptStmt:
+		sc.opaqueScript = true
+	case *ast.SQLGenerateConnectorStmt:
+		sc.opaqueModules[s.Module] = true
+	case *ast.CreateBusinessEventServiceStmt:
+		sc.opaqueModules[s.Name.Module] = true
 	case *ast.CreateEnumerationStmt:
 		if s.Name.Module != "" {
 			sc.enumerations[s.Name.String()] = true
@@ -336,6 +370,10 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 		if s.Name.Module != "" {
 			sc.snippets[s.Name.String()] = true
 		}
+	case *ast.AlterPageStmt:
+		if s.ContainerType == "PAGE" && s.PageName.Module != "" {
+			sc.recordPageParamEdits(s.PageName.String(), s.Operations)
+		}
 	case *ast.CreateLayoutStmt:
 		if s.Name.Module != "" {
 			sc.layouts[s.Name.String()] = true
@@ -346,10 +384,10 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 		}
 	case *ast.CreateImageCollectionStmt:
 		if s.Name.Module != "" {
-			qn := strings.ToLower(s.Name.String())
+			qn := s.Name.String()
 			sc.imageCollections[qn] = true
 			for _, img := range s.Images {
-				sc.images[qn+"."+strings.ToLower(img.Name)] = true
+				sc.images[qn+"."+img.Name] = true
 			}
 		}
 	case *ast.CreateWorkflowStmt:

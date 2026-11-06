@@ -1139,6 +1139,14 @@ func (fb *flowBuilder) addCallExternalActionAction(s *ast.CallExternalActionStmt
 			// makes every call on a nullable parameter unbuildable.
 			mapping.CanBeEmpty = pk.canBeEmpty
 		}
+		if arg.IncludeAssociations != nil {
+			mapping.IncludedAssociations = fb.buildIncludedAssociations(
+				serviceQN+"."+s.ActionName, arg.Name, mapping.ParameterEntity, arg.IncludeAssociations.Associations)
+			if fb.statedIncludes == nil {
+				fb.statedIncludes = map[*microflows.ExternalActionParameterMapping]bool{}
+			}
+			fb.statedIncludes[mapping] = true
+		}
 		mappings = append(mappings, mapping)
 	}
 
@@ -2491,4 +2499,67 @@ func (fb *flowBuilder) optExprToString(e ast.Expression) string {
 		return ""
 	}
 	return fb.exprToString(e)
+}
+
+// buildIncludedAssociations builds an argument's Associations to include from
+// `include associations ( … )` (ako/mxcli#1914). side is the entity on this
+// side of each node: the parameter's entity at the root, and below a node the
+// entity at its association's far end.
+//
+// IsParent is derived, never written: it is whether side is the association's
+// FROM end, its owner (ParentPointer — CLAUDE.md, "Association Parent/Child
+// Pointer Semantics"). A self-association is refused, because both ends are
+// side and the direction cannot be derived; guessing it would serialise the
+// wrong one. So is an association that does not touch side, and one side
+// specializes both ends of.
+func (fb *flowBuilder) buildIncludedAssociations(call, param, side string, defs []*ast.IncludedAssociationDef) []*microflows.IncludedAssociation {
+	out := make([]*microflows.IncludedAssociation, 0, len(defs))
+	for _, def := range defs {
+		qn := def.Name.String()
+		where := fmt.Sprintf("call external action %s(%s): include associations %s", call, param, qn)
+		if side == "" {
+			if fb.resolveKnownOnly {
+				return out
+			}
+			fb.addError("%s: the parameter's entity is not known (the service's metadata does not type it), "+
+				"so which end of the association it is on cannot be worked out", where)
+			return out
+		}
+		info := fb.lookupAssociation(def.Name.Module, def.Name.Name)
+		if info == nil {
+			if !fb.resolveKnownOnly {
+				fb.addError("%s: association not found", where)
+			}
+			continue
+		}
+		if info.parentEntityQN != "" && info.parentEntityQN == info.childEntityQN {
+			fb.addError("%s is a self-association (%s to itself): MDL cannot tell which end the object is on, "+
+				"so it cannot write it. Tick it in Studio Pro; a create or modify that leaves the clause out keeps it", where, side)
+			continue
+		}
+		isFrom := fb.entityIsSubtypeOf(side, info.parentEntityQN)
+		isTo := fb.entityIsSubtypeOf(side, info.childEntityQN)
+		var far string
+		switch {
+		case isFrom && !isTo:
+			far = info.childEntityQN
+		case isTo && !isFrom:
+			far = info.parentEntityQN
+		case isFrom && isTo:
+			fb.addError("%s: %s specializes both ends (%s and %s), so which end the object is on cannot be worked out",
+				where, side, info.parentEntityQN, info.childEntityQN)
+			continue
+		default:
+			fb.addError("%s does not touch %s: it is from %s to %s. A node's associations start from the entity "+
+				"at its parent's far end, and the root's from the parameter's entity", where, side, info.parentEntityQN, info.childEntityQN)
+			continue
+		}
+		out = append(out, &microflows.IncludedAssociation{
+			BaseElement:          model.BaseElement{ID: model.ID(types.GenerateID())},
+			Association:          qn,
+			IsParent:             isFrom,
+			IncludedAssociations: fb.buildIncludedAssociations(call, param, far, def.Children),
+		})
+	}
+	return out
 }

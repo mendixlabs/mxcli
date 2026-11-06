@@ -3,10 +3,10 @@
 package modelsdkbackend
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 )
@@ -17,7 +17,7 @@ import (
 func copyPedApp(t *testing.T) string {
 	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../../testdata/pedapp")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../../testdata/pedapp"); err != nil {
 		t.Fatalf("copy PedApp fixture: %v", err)
 	}
 	return filepath.Join(dst, "PedApp.mpr")
