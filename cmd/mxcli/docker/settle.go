@@ -30,8 +30,11 @@ import (
 //
 // mxPath is the `mx` binary already resolved by the caller — mxbuild lives
 // beside it — and version is used to find a cached download when it does not.
-func SettleGeneratedSources(projectPath, mxPath, version string, w io.Writer) error {
-	mxbuildPath := resolveMxBuildForSettle(mxPath, version)
+// An explicit mxbuildPath pins the build to that tool, without cache fallback.
+func SettleGeneratedSources(projectPath, mxPath, mxbuildPath, version string, w io.Writer) error {
+	if mxbuildPath == "" {
+		mxbuildPath = resolveMxBuildForSettle(mxPath, version)
+	}
 	if mxbuildPath == "" {
 		return fmt.Errorf("mxbuild not found next to %s or in the cache for %s", mxPath, version)
 	}

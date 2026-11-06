@@ -23,7 +23,7 @@ var newCmd = &cobra.Command{
 	Long: `Create a new Mendix project with all tooling configured.
 
 This command performs the following steps:
-  1. Downloads MxBuild for the specified Mendix version
+  1. Resolves MxBuild for the specified Mendix version
   2. Creates a blank Mendix project using mx create-project
   3. Applies mxcli's default styling (--theme, see 'mxcli theme list')
   4. Creates a layout the project owns and moves its pages onto it (--layout none)
@@ -35,6 +35,12 @@ This command performs the following steps:
 Step 4 exists because Atlas's layouts live in a Marketplace module, and Mendix's
 own guidance is not to edit them: an update replaces the module and the edit is
 gone. A generated app therefore starts with a layout it can change.
+
+--mxbuild-path selects an installed mxbuild and its sibling mx for creation and
+the first build. The selected tools must match --version. This bypasses CDN
+version resolution and tool autodetection; an invalid path or version is an error.
+A three-part --version accepts the selected installation's build. A four-part
+version must match the created project's full version.
 
 The target directory must be empty, or hold only a brain (docs/brain/ and
 .mxcli/brain/, from 'mxcli brain init -C <dir>'). A brain is adopted: the project
@@ -53,6 +59,7 @@ Examples:
   mxcli new MyApp --version 11.8.0 --theme none
   mxcli new MyApp --version 11.8.0 --layout none
   mxcli new MyApp --version 11.8.0 --container-runtime podman
+  mxcli new MyApp --version 11.8.0 --mxbuild-path /path/to/modeler/mxbuild
 `,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -64,6 +71,8 @@ Examples:
 		skipBuild, _ := cmd.Flags().GetBool("skip-build")
 		layoutMode, _ := cmd.Flags().GetString("layout")
 		containerRuntime, _ := cmd.Flags().GetString("container-runtime")
+		mxbuildPath, _ := cmd.Flags().GetString("mxbuild-path")
+		explicitTools := cmd.Flags().Changed("mxbuild-path")
 
 		if mendixVersion == "" {
 			fmt.Fprintln(os.Stderr, "Error: --version is required (e.g., --version 11.8.0)")
@@ -100,14 +109,21 @@ Examples:
 			fmt.Printf("Adopting the brain already in %s; the project is created around it.\n", absDir)
 		}
 
-		// A hand-typed version may name no CDN artifact: Mendix 9 and 10 publish a
+		// Without an override, a version may name no CDN artifact: Mendix 9 and 10 publish a
 		// build number the release notes never mention, so the release called
 		// "10.24.25" is mxbuild-10.24.25.122571.tar.gz and every probe of the
 		// three-part name 404s. Resolve before anything else, because the
 		// resolved string is what the rest of the command must use — the
 		// postcondition below compares the created project's stamp against it,
 		// and mx stamps the four-part version.
-		if resolved, rerr := docker.ResolveCDNVersion(mendixVersion, runtime.GOARCH); rerr != nil {
+		var mxPath string
+		if explicitTools {
+			mxPath, mxbuildPath, err = docker.ResolveNewProjectTools(mxbuildPath, mendixVersion)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+		} else if resolved, rerr := docker.ResolveCDNVersion(mendixVersion, runtime.GOARCH); rerr != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", rerr)
 			if avail := docker.CDNReleasesFor(majorMinorOf(mendixVersion), runtime.GOARCH); len(avail) > 0 {
 				fmt.Fprintf(os.Stderr, "  Published for %s: %s\n",
@@ -124,7 +140,9 @@ Examples:
 		// CDN downloads contain Linux ELF binaries that cannot run on those platforms.
 		// On Linux (CI, devcontainers), download mxbuild from CDN and derive mx.
 		fmt.Printf("Step 1/6: Resolving MxBuild %s...\n", mendixVersion)
-		mxPath, err := docker.ResolveMxForNewProject(mendixVersion, os.Stdout)
+		if mxPath == "" {
+			mxPath, err = docker.ResolveMxForNewProject(mendixVersion, os.Stdout)
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: could not find mx binary for version %s: %v\n", mendixVersion, err)
 			if runtime.GOOS == "darwin" {
@@ -143,11 +161,6 @@ Examples:
 		// the destination may be as deep as the filesystem allows — and means the
 		// destination is only ever written to after creation has succeeded.
 		fmt.Printf("\nStep 2/6: Creating Mendix project '%s'...\n", appName)
-		if err := os.MkdirAll(absDir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", err)
-			os.Exit(1)
-		}
-
 		stageDir, cleanupStage, err := stagedProjectDirs()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -165,6 +178,60 @@ Examples:
 			os.Exit(1)
 		}
 
+		// Verify .mpr was created — mx create-project names the file after --app-name
+		mprPath := filepath.Join(stageDir, appName+".mpr")
+		if _, err := os.Stat(mprPath); os.IsNotExist(err) {
+			// Fallback: check for App.mpr (default when --app-name is not used)
+			fallback := filepath.Join(stageDir, "App.mpr")
+			if _, err := os.Stat(fallback); err == nil {
+				mprPath = fallback
+			} else {
+				// Last resort: find any .mpr file
+				matches, _ := filepath.Glob(filepath.Join(stageDir, "*.mpr"))
+				if len(matches) > 0 {
+					mprPath = matches[0]
+				} else {
+					fmt.Fprintf(os.Stderr, "Error: mx create-project did not produce an .mpr file in %s\n", stageDir)
+					cleanupStage()
+					os.Exit(1)
+				}
+			}
+		}
+		// The project is stamped with the version of the binary that created it, not
+		// with --version. Resolving the wrong binary therefore yields a project at a
+		// version the user never asked for, and every later step (init, mxbuild,
+		// runtime) silently follows it. Check the postcondition rather than trusting
+		// the resolution: a mismatch here means the model is wrong, so fail loudly
+		// before publishing the staged project into the destination.
+		if reader, err := openProjectReadOnly(mprPath); err == nil {
+			created := reader.ProjectVersion().ProductVersion
+			_ = reader.Disconnect()
+			if explicitTools && created == "" {
+				fmt.Fprintln(os.Stderr, "Error: cannot verify the created project's Mendix version.")
+				cleanupStage()
+				os.Exit(1)
+			}
+			if created != "" && created != mendixVersion &&
+				!(explicitTools && strings.Count(mendixVersion, ".") == 2 && docker.SameMendixRelease(created, mendixVersion)) {
+				fmt.Fprintf(os.Stderr,
+					"Error: requested Mendix %s but the created project is %s.\n",
+					mendixVersion, created)
+				fmt.Fprintf(os.Stderr,
+					"  mx create-project stamps the project with the version of the binary that ran it (%s).\n", mxPath)
+				if !explicitTools {
+					fmt.Fprintf(os.Stderr,
+						"  Run 'mxcli setup mxbuild --version %s' and try again.\n", mendixVersion)
+				}
+				cleanupStage()
+				os.Exit(1)
+			}
+			fmt.Printf("  Mendix version: %s\n", created)
+		} else if explicitTools {
+			fmt.Fprintf(os.Stderr, "Error: cannot verify the created project's Mendix version: %v\n", err)
+			cleanupStage()
+			os.Exit(1)
+		}
+
 		// Measure the template's deepest path before moving, so the portability
 		// warning uses this version's real number rather than a constant that
 		// drifts (181 characters on 11.13.0, 182 on 11.12.0).
@@ -173,6 +240,8 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Error moving project into place: %v\n", err)
 			os.Exit(1)
 		}
+		mprPath = filepath.Join(absDir, filepath.Base(mprPath))
+		fmt.Printf("  Created %s\n", mprPath)
 		warnIfPathTooLongForStudioPro(os.Stdout, absDir, longest, longestPath)
 
 		// Clean up duplicate locale files that mx create-project generates.
@@ -180,48 +249,6 @@ Examples:
 		// key has already been added" when duplicate translation.json files exist.
 		if removed := cleanupDuplicateLocaleFiles(absDir); removed > 0 {
 			fmt.Printf("  Cleaned %d duplicate locale file(s)\n", removed)
-		}
-
-		// Verify .mpr was created — mx create-project names the file after --app-name
-		mprPath := filepath.Join(absDir, appName+".mpr")
-		if _, err := os.Stat(mprPath); os.IsNotExist(err) {
-			// Fallback: check for App.mpr (default when --app-name is not used)
-			fallback := filepath.Join(absDir, "App.mpr")
-			if _, err := os.Stat(fallback); err == nil {
-				mprPath = fallback
-			} else {
-				// Last resort: find any .mpr file
-				matches, _ := filepath.Glob(filepath.Join(absDir, "*.mpr"))
-				if len(matches) > 0 {
-					mprPath = matches[0]
-				} else {
-					fmt.Fprintf(os.Stderr, "Error: mx create-project did not produce an .mpr file in %s\n", absDir)
-					os.Exit(1)
-				}
-			}
-		}
-		fmt.Printf("  Created %s\n", mprPath)
-
-		// The project is stamped with the version of the binary that created it, not
-		// with --version. Resolving the wrong binary therefore yields a project at a
-		// version the user never asked for, and every later step (init, mxbuild,
-		// runtime) silently follows it. Check the postcondition rather than trusting
-		// the resolution: a mismatch here means the model is wrong, so fail loudly
-		// instead of handing back something that merely looks finished.
-		if reader, err := openProjectReadOnly(mprPath); err == nil {
-			created := reader.ProjectVersion().ProductVersion
-			_ = reader.Disconnect()
-			if created != "" && created != mendixVersion {
-				fmt.Fprintf(os.Stderr,
-					"Error: requested Mendix %s but the created project is %s.\n",
-					mendixVersion, created)
-				fmt.Fprintf(os.Stderr,
-					"  mx create-project stamps the project with the version of the binary that ran it (%s).\n", mxPath)
-				fmt.Fprintf(os.Stderr,
-					"  Run 'mxcli setup mxbuild --version %s' and try again.\n", mendixVersion)
-				os.Exit(1)
-			}
-			fmt.Printf("  Mendix version: %s\n", created)
 		}
 
 		// Step 3: Default styling. A blank Atlas app is unmistakably a blank Atlas
@@ -307,7 +334,7 @@ Examples:
 			fmt.Printf("\nStep 6/7: Skipped first build (--skip-build)\n")
 		} else {
 			fmt.Printf("\nStep 6/7: Running the first build (settles generated sources)...\n")
-			if err := docker.SettleGeneratedSources(mprPath, mxPath, mendixVersion, os.Stdout); err != nil {
+			if err := docker.SettleGeneratedSources(mprPath, mxPath, mxbuildPath, mendixVersion, os.Stdout); err != nil {
 				buildFailed = reportFirstBuildFailure(err, os.Stderr)
 			}
 		}
@@ -478,6 +505,7 @@ func cleanupDuplicateLocaleFiles(projectDir string) int {
 }
 
 func init() {
+	newCmd.Flags().String("mxbuild-path", "", "Use this installed mxbuild and its sibling mx (binary, modeler directory, or installation root); no tool fallback")
 	newCmd.Flags().String("version", "", "Mendix version (e.g., 11.8.0) — required")
 	newCmd.Flags().String("output-dir", "", "Output directory (default: ./<app-name>)")
 	newCmd.Flags().Bool("skip-init", false, "Skip AI tooling initialization (mxcli init)")

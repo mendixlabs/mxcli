@@ -14,12 +14,12 @@ description: "Build, run and validate a Mendix app in Docker from inside a devco
 | 37-52 | Prerequisites |
 | 53-68 | Architecture |
 | 69-85 | Quick Start: One Command |
-| 86-113 | Creating an Empty Mendix App |
-| 114-274 | Step-by-Step Workflow |
-| 275-305 | Common Workflow: Edit, Rebuild, Test |
-| 306-419 | Hot Reload |
-| 420-438 | Environment Variables |
-| 439-459 | Troubleshooting |
+| 86-115 | Creating an Empty Mendix App |
+| 116-276 | Step-by-Step Workflow |
+| 277-307 | Common Workflow: Edit, Rebuild, Test |
+| 308-421 | Hot Reload |
+| 422-440 | Environment Variables |
+| 441-461 | Troubleshooting |
 
 <!-- /skill-index -->
 # Docker Build & Run Skill
@@ -92,6 +92,8 @@ mxcli new MyApp --version 11.8.0
 ```
 
 This downloads MxBuild, creates a blank project, sets up AI tooling and Dev Container, and installs the correct Linux mxcli binary. Open the resulting folder in VS Code and reopen in Dev Container.
+
+For a specific installed toolchain, use `mxcli new MyApp --version 11.8.0 --mxbuild-path /path/to/modeler/mxbuild`. It uses that mxbuild and its sibling mx, checks the version and bypasses CDN version resolution and tool autodetection. A bad selection fails without fallback. A three-part version accepts that installation's build; a four-part version must match the created project. Other setup steps still run.
 
 **Manual approach** (if you need more control):
 
