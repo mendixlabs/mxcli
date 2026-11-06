@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mendixlabs/mxcli/internal/pathutil"
 )
 
 // runstate.go is the contract between a running `mxcli run --local` and the
@@ -119,8 +121,30 @@ type RunState struct {
 	Updated time.Time     `json:"updated"`
 }
 
-// ReadRunState reads a project's state file. A missing file is (nil, nil).
+// ReadRunState reads a project's state file. A missing file is (nil, nil), and
+// so is one that was written for another project: copying an app folder copies
+// .mxcli/ with it, and a state that names the original's pid must neither block
+// the copy nor be acted on (`run stop` would signal the original's process).
+// ForeignRunState says whether that is what was skipped.
 func ReadRunState(projectPath string) (*RunState, error) {
+	st, err := readRunStateFile(projectPath)
+	if st != nil && !pathutil.SameProject(st.Project, projectPath) {
+		return nil, nil
+	}
+	return st, err
+}
+
+// ForeignRunState returns the state in projectPath's .mxcli/ when it was
+// written for a different project, so a command can say that it is ignoring it.
+func ForeignRunState(projectPath string) *RunState {
+	st, err := readRunStateFile(projectPath)
+	if err != nil || st == nil || pathutil.SameProject(st.Project, projectPath) {
+		return nil
+	}
+	return st
+}
+
+func readRunStateFile(projectPath string) (*RunState, error) {
 	body, err := os.ReadFile(RunStatePath(projectPath))
 	if os.IsNotExist(err) {
 		return nil, nil

@@ -336,7 +336,7 @@ Examples:
 				AppPort:    info.AppPort,
 				AdminPort:  info.AdminPort,
 				AdminPass:  info.AdminPass,
-				BootConfig: info.BootConfig,
+				BootConfig: bootConfigForHandshake(info.BootConfig),
 				Started:    time.Now(),
 			}); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: could not publish the dev-loop handshake: %v\n", err)
@@ -359,8 +359,11 @@ Examples:
 			if detachedChild {
 				logPath = docker.RunLogPath(projectPath)
 			}
+			// The stored arguments are for `run restart`, not a copy of the
+			// secrets: they stay out of the file (see redactArgs).
+			storedArgs, _ := redactArgs(detachArgs(os.Args[1:], projectPath))
 			state = docker.NewRunStateRecorder(projectPath, os.Getpid(), detachedChild, watch,
-				detachArgs(os.Args[1:], projectPath), logPath)
+				storedArgs, logPath)
 			state.Warn = func(err error) {
 				fmt.Fprintf(os.Stderr, "Warning: could not publish the run state: %v\n", err)
 			}
