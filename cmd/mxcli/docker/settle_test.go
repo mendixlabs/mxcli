@@ -4,6 +4,7 @@ package docker
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -75,12 +76,61 @@ func TestSettleGeneratedSources_NoMxBuild(t *testing.T) {
 	if err := os.WriteFile(mpr, []byte("not a real project"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := SettleGeneratedSources(mpr, filepath.Join(dir, "mx"), "0.0.0-not-a-version", os.Stdout)
+	err := SettleGeneratedSources(mpr, filepath.Join(dir, "mx"), "", "0.0.0-not-a-version", os.Stdout)
 	if err == nil {
 		t.Fatal("expected an error when mxbuild cannot be found")
 	}
 	if !strings.Contains(err.Error(), "mxbuild") {
 		t.Errorf("error should name what is missing, got: %v", err)
+	}
+}
+
+func TestSettleGeneratedSources_ExplicitBuildDoesNotFallBack(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test executables use POSIX scripts")
+	}
+	home := t.TempDir()
+	isolateResolution(t, home)
+	jdk := filepath.Join(home, "jdk")
+	if err := os.MkdirAll(filepath.Join(jdk, "bin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jdk, "bin", "java"), []byte("#!/bin/sh\necho 'openjdk version \"21\"'\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("JAVA_HOME", jdk)
+	mx, fallback := fakeNewProjectTools(t, filepath.Join(home, "fallback"), "11.13.0")
+	_, selected := fakeNewProjectTools(t, filepath.Join(home, "selected"), "11.13.0")
+	for _, path := range []string{fallback, selected} {
+		if err := os.WriteFile(path, []byte("#!/bin/sh\nprintf '%s\\n' \"$0\" \"$@\" > \"$MXCLI_TEST_BUILD_RECORD\"\n"), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	project := filepath.Join(home, "App.mpr")
+	if err := os.WriteFile(project, []byte("not a real project"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	record := filepath.Join(home, "build-record")
+	t.Setenv("MXCLI_TEST_BUILD_RECORD", record)
+	for _, tc := range []struct{ name, explicit, want string }{
+		{"selected", selected, selected},
+		{"missing selected", filepath.Join(home, "missing", mxbuildBinaryName()), ""},
+		{"default sibling control", "", fallback},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_ = os.Remove(record)
+			err := SettleGeneratedSources(project, mx, tc.explicit, "11.13.0", io.Discard)
+			got, readErr := os.ReadFile(record)
+			if tc.want == "" {
+				if err == nil || !os.IsNotExist(readErr) {
+					t.Fatalf("missing selected tool must fail without running fallback: err=%v record=%q read=%v", err, got, readErr)
+				}
+				return
+			}
+			if err != nil || readErr != nil || !strings.HasPrefix(string(got), tc.want+"\n--target=deploy\n") || !strings.Contains(string(got), project) {
+				t.Fatalf("wrong build tool or args: err=%v record=%q read=%v", err, got, readErr)
+			}
+		})
 	}
 }
 

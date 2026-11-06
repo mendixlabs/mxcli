@@ -17,8 +17,17 @@ Placing that Linux binary is best-effort. If the download fails (no network, a p
 | Flag | Description |
 |------|-------------|
 | `--version` | Mendix version (required, e.g., `11.8.0`) |
+| `--mxbuild-path` | Select an installed mxbuild executable, its directory, or an installation root containing `modeler/mxbuild`. Uses its sibling `mx` for creation and this mxbuild for the first build |
 | `--output-dir` | Output directory (default: `./<app-name>`) |
 | `--skip-init` | Skip AI tooling initialization |
+
+To choose a specific installed toolchain, including a beta or a second installation of the same release:
+
+```bash
+mxcli new MyApp --version 11.8.0 --mxbuild-path /path/to/modeler/mxbuild
+```
+
+The selected tools must match `--version`. This bypasses CDN version resolution and native tool autodetection. An invalid selection fails without switching to another installation, PATH or the download cache. A three-part version accepts the selected installation's build; a four-part version must match the created project's full version. Without the flag, tool resolution is unchanged. AI tooling and Linux devcontainer binary setup still run as usual.
 
 ## mxcli init — Add tooling to an existing project
 
