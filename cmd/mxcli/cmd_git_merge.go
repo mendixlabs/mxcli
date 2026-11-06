@@ -85,7 +85,9 @@ the engine chokes on the conflicted state. Its result is copied back:
   - a conflict in non-model files (text sources) is left in place for manual
     resolution, like plain git: resolve them, 'git add' them, and re-run
     this command — it finishes the merge (model conflicts included) and
-    commits.
+    commits. If that re-run then needs a model decision, the abort keeps
+    what you resolved: the plan template records it and --plan restores
+    it, and --plan stops before the model while a text conflict is open.
 
 --ours/--theirs take one side of every conflicted unit — never a side of the
 .mpr without the hash check, because the .mpr lists every document: a whole
@@ -233,11 +235,7 @@ func mergeRun(mprPath, ref, message, strategy, plan string, push bool, runners m
 		}
 	}
 	if len(other) > 0 {
-		fmt.Fprintln(out, "Non-model conflicts, resolve by hand, then 'git add' them and re-run this command to resolve the model and commit:")
-		for _, p := range other {
-			fmt.Fprintf(out, "  %s\n", p)
-		}
-		return errors.New("merge has non-model conflicts left for manual resolution")
+		return reportTextConflicts(out, other)
 	}
 
 	baseSha := strings.TrimSpace(gitOutOr(root, "merge-base", "HEAD", "MERGE_HEAD"))
@@ -317,7 +315,11 @@ func mergeRun(mprPath, ref, message, strategy, plan string, push bool, runners m
 				fmt.Fprintln(out, propertyReport(oursJSON, theirsJSON, manual))
 			}
 		}
-		if err := writePlanTemplate(mprPath, baseSha, oursSha, theirsSha, manual); err != nil {
+		// The abort below resets the index; what the human resolved and staged
+		// for the non-model files is recorded first, and --plan restores it
+		// (mendixlabs/mxcli#1751).
+		resolved := stagedTextResolutions(root, repo, mprPath)
+		if err := writePlanTemplate(mprPath, baseSha, oursSha, theirsSha, manual, resolved); err != nil {
 			fmt.Fprintf(out, "  (could not write the plan template: %v)\n", err)
 		} else {
 			fmt.Fprintf(out, "Plan template: %s — set \"take\" per unit, re-run with --plan.\n", filepath.Base(mprPath)+".merge-plan.json")
@@ -789,6 +791,9 @@ type mergePlanTemplate struct {
 	Ours   string     `json:"ours"`
 	Theirs string     `json:"theirs"`
 	Units  []planUnit `json:"units"`
+	// Resolved are the non-model files the human had resolved and staged when
+	// the merge was aborted for this plan; --plan restores them.
+	Resolved []textResolution `json:"resolved,omitempty"`
 }
 
 type planUnit struct {
@@ -796,8 +801,8 @@ type planUnit struct {
 	Take string `json:"take"`
 }
 
-func writePlanTemplate(mprPath, baseSha, oursSha, theirsSha string, unitIDs []string) error {
-	tmpl := mergePlanTemplate{Base: baseSha, Ours: oursSha, Theirs: theirsSha}
+func writePlanTemplate(mprPath, baseSha, oursSha, theirsSha string, unitIDs []string, resolved []textResolution) error {
+	tmpl := mergePlanTemplate{Base: baseSha, Ours: oursSha, Theirs: theirsSha, Resolved: resolved}
 	for _, id := range unitIDs {
 		tmpl.Units = append(tmpl.Units, planUnit{ID: id, Take: "ours"})
 	}
@@ -827,12 +832,7 @@ func applyPlan(root string, repo *gitNoteRepo, mprAbs, mprPath, ref, planPath, m
 	if err != nil {
 		return fmt.Errorf("read plan: %w", err)
 	}
-	var plan struct {
-		Base   string     `json:"base"`
-		Ours   string     `json:"ours"`
-		Theirs string     `json:"theirs"`
-		Units  []planUnit `json:"units"`
-	}
+	var plan mergePlanTemplate
 	if err := json.Unmarshal(raw, &plan); err != nil {
 		return fmt.Errorf("plan %s is not valid JSON: %w", planPath, err)
 	}
@@ -848,6 +848,20 @@ func applyPlan(root string, repo *gitNoteRepo, mprAbs, mprPath, ref, planPath, m
 			return fmt.Errorf("git merge %s: %v", ref, mergeErr)
 		}
 	}
+	// The text resolutions the abort recorded go back first; a non-model
+	// conflict still open then stops the plan before it touches the model,
+	// the merge left in progress (mendixlabs/mxcli#1751).
+	restored, err := restoreTextResolutions(root, plan.Resolved)
+	if err != nil {
+		return err
+	}
+	if len(restored) > 0 {
+		fmt.Fprintf(out, "Restored your resolution of %s.\n", strings.Join(restored, ", "))
+	}
+	if other := openTextConflicts(root, repo); len(other) > 0 {
+		return reportTextConflicts(out, other)
+	}
+
 	baseSha := strings.TrimSpace(gitOutOr(root, "merge-base", "HEAD", "MERGE_HEAD"))
 	oursSha := strings.TrimSpace(gitOutOr(root, "rev-parse", "HEAD"))
 	theirsSha := strings.TrimSpace(gitOutOr(root, "rev-parse", "MERGE_HEAD"))
