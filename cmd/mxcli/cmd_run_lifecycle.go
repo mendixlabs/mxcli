@@ -218,6 +218,7 @@ func lifecycleProject(cmd *cobra.Command) string {
 // `run restart` from another directory) runs the same project.
 func detachArgs(args []string, projectPath string) []string {
 	var out []string
+	args = absoluteConstantArgs(args)
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {

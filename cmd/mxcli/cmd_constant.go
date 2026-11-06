@@ -34,6 +34,8 @@ rather than encryption.
 Where a value comes from, highest first:
 
   1. --constant Module.Name=value    this run only, written nowhere
+                                     (=@env:VAR or =@file:path keeps the value
+                                     out of 'ps' and shell history)
   2. this store                      this machine, gitignored
   3. the project configuration       shared, in git ('alter settings constant')
   4. the constant's default          shared, in git

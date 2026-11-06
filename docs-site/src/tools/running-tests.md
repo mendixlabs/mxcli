@@ -48,7 +48,13 @@ default — and prints what it applied. Use `--configuration <name>` to choose
 between several, and `--constant Module.Name=value` (repeatable) to set one for
 this run only — it wins over everything and is never written anywhere. For a
 value that should persist on this machine without being committed, use
-`mxcli constant set` (see [Constant values](#constant-values) below). A constant
+`mxcli constant set` (see [Constant values](#constant-values) below). A literal
+value on the command line shows in shell history and in `ps`; write
+`--constant Module.Name=@env:VAR` to read it from an environment variable, or
+`--constant Module.Name=@file:path` to read it from a file that only you can read
+(`chmod 600`; owner-only check on Unix, not checked on Windows). An unset or empty
+variable, an empty file, or an open file is an error, never an empty
+value, and a value that must start with `@` is written `@@…`. A constant
 the project does not declare is refused before anything boots. `--attach` takes
 none of these, since it inherits the constants of the app it attaches to. This
 matters whenever a test asserts on something a constant feeds: the two modes
@@ -73,7 +79,7 @@ Highest layer wins:
 
 | Layer | Set with | In git? |
 |---|---|---|
-| this run | `--constant Module.Name=value` | no |
+| this run | `--constant Module.Name=value` (or `=@env:VAR`, `=@file:path`) | no |
 | this machine | `mxcli constant set Module.Name value` | no — gitignored, 0600 |
 | this configuration | `alter settings constant … in configuration 'X'` | yes |
 | default | `create constant … default '…'` | yes |
