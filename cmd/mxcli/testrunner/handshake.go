@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/mendixlabs/mxcli/internal/pathutil"
 	"github.com/mendixlabs/mxcli/internal/procalive"
 )
 
@@ -102,6 +103,14 @@ func ReadHandshake(projectPath string) (*Handshake, error) {
 	var h Handshake
 	if err := json.Unmarshal(body, &h); err != nil {
 		return nil, fmt.Errorf("%s is not readable as a handshake: %w", path, err)
+	}
+	// A copied app folder carries the original's handshake, with the token and
+	// ports of the original's runtime. Attaching to it would run the copy's
+	// tests against another app.
+	if !pathutil.SameProject(h.Project, projectPath) {
+		return nil, fmt.Errorf("no test endpoint is being hosted for this project\n"+
+			"  %s was left by the run of %s, not this one; ignoring it\n"+
+			"  Start one with: mxcli run --local --test-endpoint -p %s", path, h.Project, projectPath)
 	}
 	if h.Token == "" || h.AppPort == 0 {
 		return nil, fmt.Errorf("%s is incomplete; stop and restart the hosting 'mxcli run --local --test-endpoint'", path)
