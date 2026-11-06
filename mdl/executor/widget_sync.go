@@ -160,12 +160,14 @@ func PlanWidgetSync(b backend.RawUnitBackend, projectPath string, opts SyncOptio
 		return nil, err
 	}
 
+	instances, err = filterSyncContainer(instances, opts.Container)
+	if err != nil {
+		return nil, err
+	}
+
 	unresolved := map[string]bool{}
 	for _, inst := range instances {
 		if opts.WidgetID != "" && !strings.EqualFold(opts.WidgetID, inst.WidgetID) {
-			continue
-		}
-		if opts.Container != "" && !strings.EqualFold(opts.Container, inst.UnitName) {
 			continue
 		}
 		def, ok := defs[inst.WidgetID]
@@ -194,10 +196,55 @@ func PlanWidgetSync(b backend.RawUnitBackend, projectPath string, opts SyncOptio
 	return plan, nil
 }
 
+// filterSyncContainer keeps the instances on the page or snippet want names.
+// A qualified name (Module.Name) is what --page documents; it used to be
+// compared with the bare document name, so it matched nothing and the sync
+// reported no drift (ako/mxcli#1997). A bare name is still accepted when it
+// names one document, and refused when it names documents in several modules —
+// a sync writes, and should not write to a page the caller did not mean.
+func filterSyncContainer(all []*types.CustomWidgetInstance, want string) ([]*types.CustomWidgetInstance, error) {
+	if want == "" {
+		return all, nil
+	}
+	qualified := strings.Contains(want, ".")
+	var out []*types.CustomWidgetInstance
+	modules := map[string]bool{}
+	for _, inst := range all {
+		name := inst.UnitName
+		if qualified {
+			name = qualifiedUnitName(inst)
+		}
+		if strings.EqualFold(want, name) {
+			out = append(out, inst)
+			modules[qualifiedUnitName(inst)] = true
+		}
+	}
+	if !qualified && len(modules) > 1 {
+		names := make([]string, 0, len(modules))
+		for n := range modules {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		return nil, fmt.Errorf("--page %s names a page or snippet in more than one module (%s); give the qualified name", want, strings.Join(names, ", "))
+	}
+	return out, nil
+}
+
+// qualifiedUnitName is the instance's page or snippet as Module.Name, or the
+// bare name when the scan found no owning module.
+func qualifiedUnitName(inst *types.CustomWidgetInstance) string {
+	if inst.ModuleName == "" {
+		return inst.UnitName
+	}
+	return inst.ModuleName + "." + inst.UnitName
+}
+
 // planInstance diffs one stored instance against its package definition.
 func planInstance(inst *types.CustomWidgetInstance, def *mpk.WidgetDefinition) SyncWidgetPlan {
 	wp := SyncWidgetPlan{
-		Container:   inst.UnitName,
+		// Qualified, as the field says: the bare name made two pages of one
+		// name in different modules print, and count, as one (ako/mxcli#1997).
+		Container:   qualifiedUnitName(inst),
 		ContainerID: inst.UnitID,
 		Widget:      inst.WidgetName,
 		WidgetID:    inst.WidgetID,
