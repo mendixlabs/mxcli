@@ -168,6 +168,10 @@ one: mxcli run stop -p app.mpr && mxcli run --local --watch --detach -p app.mpr 
 				"  start one: mxcli run --local --watch --detach -p %s\n", projectPath)
 			os.Exit(runExitNotRunning)
 		}
+		if runArgsNeedPasswordStdin(st.Args) {
+			fmt.Fprintln(os.Stderr, "Error: run restart cannot reuse --db-password-stdin; stop the run and start a new foreground run with fresh stdin")
+			os.Exit(runExitFailed)
+		}
 		if code := runStop(projectPath, os.Stdout); code != runExitOK {
 			os.Exit(code)
 		}
@@ -205,6 +209,9 @@ func detachArgs(args []string, projectPath string) []string {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
+		case a == "--":
+			out = append(out, "-p", projectPath)
+			return append(out, args[i:]...)
 		case a == "--detach" || strings.HasPrefix(a, "--detach="):
 			continue
 		case a == "-p" || a == "--project":
@@ -214,6 +221,13 @@ func detachArgs(args []string, projectPath string) []string {
 			continue // --project=X, -p=X, -pX
 		}
 		out = append(out, a)
+		if name, ok := strings.CutPrefix(a, "--"); ok {
+			// Keep a string flag and its value together, even when the value looks like a flag.
+			if flag := runCmd.Flag(name); flag != nil && flag.NoOptDefVal == "" && i+1 < len(args) {
+				i++
+				out = append(out, args[i])
+			}
+		}
 	}
 	return append(out, "-p", projectPath)
 }
@@ -234,6 +248,11 @@ func refuseIfRunning(projectPath string) error {
 	where := st.URL
 	if where == "" {
 		where = "starting"
+	}
+	if runArgsNeedPasswordStdin(st.Args) {
+		return fmt.Errorf("already running for this project: %s (pid %d)\n"+
+			"  mxcli run status -p %s     # what it is doing\n"+
+			"  %s", where, st.PID, projectPath, restartHint(st))
 	}
 	return fmt.Errorf("already running for this project: %s (pid %d)\n"+
 		"  mxcli run status -p %s     # what it is doing\n"+
@@ -442,13 +461,16 @@ func (p statusProbes) handshakePublished(st *docker.RunState) bool {
 	return p.handshake == nil || p.handshake(st)
 }
 
-// restartHint is the command that brings a stopped run back with the same
-// arguments.
+// restartHint describes how to start the recorded run again.
 func restartHint(st *docker.RunState) string {
-	if st.Project == "" {
-		return "mxcli run restart"
+	project := ""
+	if st.Project != "" {
+		project = " -p " + st.Project
 	}
-	return "mxcli run restart -p " + st.Project
+	if runArgsNeedPasswordStdin(st.Args) {
+		return "mxcli run stop" + project + "; then start a new foreground run with --db-password-stdin and fresh stdin"
+	}
+	return "mxcli run restart" + project
 }
 
 // leftoverCount is how many processes of a dead detached run are still alive.
@@ -498,6 +520,9 @@ func statusLine(st *docker.RunState, p statusProbes, source, now time.Time) (str
 			reason = p.reasonFromLog(st)
 		}
 		if reason != "" {
+			if runArgsNeedPasswordStdin(st.Args) {
+				return "stopped: " + reason + "; " + restartHint(st), runExitNotRunning
+			}
 			return "stopped: " + reason + "; restart with " + restartHint(st), runExitNotRunning
 		}
 		if st.Error != "" {
@@ -536,14 +561,22 @@ func statusLine(st *docker.RunState, p statusProbes, source, now time.Time) (str
 	case source.After(covered) && st.Watch:
 		parts = append(parts, "change pending")
 	case source.After(covered):
-		parts = append(parts, "changes on disk NOT applied (no --watch): mxcli run restart applies them")
+		hint := "mxcli run restart applies them"
+		if runArgsNeedPasswordStdin(st.Args) {
+			hint = restartHint(st)
+		}
+		parts = append(parts, "changes on disk NOT applied (no --watch): "+hint)
 	}
 	line := fmt.Sprintf("running: %s (%s)", st.URL, strings.Join(parts, ", "))
 	if !p.handshakePublished(st) {
 		// The app is up, but the file other commands find it by is gone — so
 		// they fall back to default credentials and meet a 403 (#1542).
+		hint := restartHint(st)
+		if !runArgsNeedPasswordStdin(st.Args) {
+			hint += " publishes it again"
+		}
 		line += "; but .mxcli/run-local.json is MISSING, so oql, log and constant --apply cannot " +
-			"reach its admin API — " + restartHint(st) + " publishes it again"
+			"reach its admin API — " + hint
 	}
 	return line, runExitOK
 }
@@ -580,8 +613,12 @@ func runWait(projectPath string, timeout time.Duration, since int, out io.Writer
 			fmt.Fprintf(out, "not running: %s\n", strings.TrimPrefix(line, "stopped: "))
 			return runExitNotRunning
 		case docker.WaitNotWatching:
+			hint := "mxcli run restart -p " + projectPath
+			if runArgsNeedPasswordStdin(st.Args) {
+				hint = restartHint(st)
+			}
 			fmt.Fprintf(out, "failed: this run was started without --watch, so it never applies a change\n"+
-				"  apply it with: mxcli run restart -p %s\n", projectPath)
+				"  apply it with: %s\n", hint)
 			return runExitFailed
 		}
 		if time.Now().After(deadline) {

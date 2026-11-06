@@ -32,6 +32,23 @@ func TestDetachArgs_DropsDetachAndPinsTheProject(t *testing.T) {
 	}
 }
 
+func TestDetachArgs_PreservesConsumedFlagValues(t *testing.T) {
+	for _, flag := range []string{"--screenshot-password", "--db-password", "--engine"} {
+		for _, value := range []string{"--detach", "--detach=false", "--project", "--project=other.mpr", "-p", "-pother.mpr", "--"} {
+			in := []string{"run", "--local", flag, value, "--db-password-stdin", "--detach", "-p", "app.mpr"}
+			want := []string{"run", "--local", flag, value, "--db-password-stdin", "-p", "/abs/app.mpr"}
+			if got := detachArgs(in, "/abs/app.mpr"); !reflect.DeepEqual(got, want) {
+				t.Errorf("argument recording changed the value consumed by %s", flag)
+			}
+		}
+	}
+	in := []string{"run", "--local", "--detach", "--", "--detach", "--project=literal"}
+	want := []string{"run", "--local", "-p", "/abs/app.mpr", "--", "--detach", "--project=literal"}
+	if got := detachArgs(in, "/abs/app.mpr"); !reflect.DeepEqual(got, want) {
+		t.Error("argument recording reinterpreted positional arguments after --")
+	}
+}
+
 func alwaysAlive(int) bool { return true }
 func neverAlive(int) bool  { return false }
 func noLeftovers(*docker.RunState) int {

@@ -76,6 +76,8 @@ type LocalRunOptions struct {
 	AdminPass string
 	// DB is the Postgres the runtime connects to (devcontainer defaults applied).
 	DB DBConfig
+	// DBPasswordStdin means restarting the CLI requires a fresh password on stdin.
+	DBPasswordStdin bool
 	// Hub, when set, is the URL of an mxcli tunnel-hub (e.g. https://hub.example.com).
 	// The app stays running here; a chisel client reverse-tunnels it out to the hub
 	// so it is reachable in a browser at the hub URL. Implies a local run. The
@@ -1062,7 +1064,7 @@ func RunLocal(opts LocalRunOptions) error {
 	}
 	fmt.Fprintln(w, "(run with --watch to rebuild and hot-apply on changes; Ctrl-C to stop)")
 	if waitForInterruptOrExit(rt.Exited()) {
-		return runtimeStoppedError(rt)
+		return runtimeStoppedError(rt, opts.DBPasswordStdin)
 	}
 	fmt.Fprintln(w, "\nShutting down...")
 	return nil
@@ -1081,7 +1083,7 @@ func RunLocal(opts LocalRunOptions) error {
 // exceeded" is written — reaches only the file subscriber, never stdout
 // (ako/mxcli#1542). It travels as RuntimeStoppedError.Reason so the run state
 // can record it for `run status`.
-func runtimeStoppedError(rt *LocalRuntime) error {
+func runtimeStoppedError(rt *LocalRuntime, dbPasswordStdin bool) error {
 	fileLog := currentRuntimeLog(rt.opts.RuntimeLogPath)
 	reason := stopReason(fileLog, filepath.Base(rt.opts.RuntimeLogPath))
 	if reason == "" {
@@ -1096,10 +1098,14 @@ func runtimeStoppedError(rt *LocalRuntime) error {
 	if err := rt.ExitErr(); err != nil {
 		detail += "\n  the runtime process exited with: " + err.Error()
 	}
-	return &RuntimeStoppedError{Reason: reason, msg: fmt.Sprintf("the app stopped: the Mendix runtime is no longer running%s\n"+
+	restart := "Restart it: mxcli run restart -p <app.mpr>, or re-run."
+	if dbPasswordStdin {
+		restart = "Start a new foreground run with --db-password-stdin and fresh stdin."
+	}
+	return NewRuntimeStoppedError(reason, fmt.Sprintf("the app stopped: the Mendix runtime is no longer running%s\n"+
 		"  mxcli is exiting rather than staying up over a dead app — a tunnel or reverse proxy\n"+
 		"  keeps answering after the runtime is gone, so \"the URL responds\" is not evidence\n"+
-		"  the app is alive. Restart it: mxcli run restart -p <app.mpr>, or re-run.", detail)}
+		"  the app is alive. %s", detail, restart))
 }
 
 // maybeScreenshot captures the app (best-effort) when --screenshot is set. A
@@ -1445,7 +1451,7 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 			// must end the run rather than leave it watching for edits to apply
 			// to nothing (FINDINGS §60). A restart the controller performs
 			// re-arms this channel, so only an unasked-for exit lands here.
-			return runtimeStoppedError(rt)
+			return runtimeStoppedError(rt, opts.DBPasswordStdin)
 		case <-ticker.C:
 			now := sourceMTime(opts.ProjectPath)
 			if !now.After(last) {
