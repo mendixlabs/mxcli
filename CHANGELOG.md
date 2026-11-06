@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`widget sync --page` takes the qualified name it documents** (ako/mxcli#1997) — `--page Module.Page` matched nothing and reported no drift; only the bare name worked, and it matched a page of that name in every module. A bare name is still accepted when it is unambiguous and refused when it is not, the plan names pages by their qualified name, and an applying run no longer prints "Read-only: nothing was written."
 - **`create constant` writes `ExportLevel: Hidden`, as Studio Pro does** (ako/mxcli#1980, mendixlabs/mxcli#1749) — it wrote `""`, which `mx check` accepts but `mx diff` crashes on against a `Hidden` copy (exit 129), taking `git merge`'s report with it. `create or modify constant` now keeps a stored level instead of clearing it, and repairs a stored `""`.
 - **`git merge` reports the side whose `mx diff` failed instead of dropping the report** (ako/mxcli#1981, mendixlabs/mxcli#1750) — when one side's diff failed, no property-level report was printed at all. The side that worked is shown, and the failing side reads `(diff unavailable: <why>)`.
 - **`widget sync` keeps the integers it does not change as integers** (ako/mxcli#1976, mendixlabs/mxcli#1748) — syncing a widget wrote every int32 and int64 in it back as a double, a text box in the widget's slot included, whose `MaxLengthCode -1.0` Mendix reads as unlimited (CE6510). A unit already synced by an earlier version keeps its doubles; re-create the page to repair it.
