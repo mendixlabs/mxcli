@@ -31,6 +31,11 @@ type RuntimeStoppedError struct {
 
 func (e *RuntimeStoppedError) Error() string { return e.msg }
 
+// NewRuntimeStoppedError records both the status reason and the full error message.
+func NewRuntimeStoppedError(reason, message string) *RuntimeStoppedError {
+	return &RuntimeStoppedError{Reason: reason, msg: message}
+}
+
 // runtimeStartMarker begins each boot's section of the runtime log (see
 // openRuntimeLog).
 const runtimeStartMarker = "=== runtime start "

@@ -147,6 +147,29 @@ func TestRuntimeConfigParams_NilConstants(t *testing.T) {
 	}
 }
 
+func TestPrivateDBPasswordRuntimeConfig(t *testing.T) {
+	const password = " test-only-private-db-password "
+	for _, supplied := range []string{"", password} {
+		run := LocalRunOptions{ProjectPath: "App.mpr", DB: DBConfig{Password: supplied}}
+		if err := run.applyDatabaseDefaults(); err != nil {
+			t.Fatal("could not apply database defaults")
+		}
+		want := supplied
+		if want == "" {
+			want = "mendix"
+		}
+		runtime := testLocalOpts()
+		runtime.DB = run.DB
+		if runtimeConfigParams(runtime, nil)["DatabasePassword"] != want {
+			t.Fatal("password did not reach runtime configuration")
+		}
+		if strings.Contains(strings.Join(runtime.jvmArgs(), " "), password) ||
+			strings.Contains(strings.Join(localRuntimeEnv(runtime), " "), password) {
+			t.Fatal("database password appeared in runtime argv or environment")
+		}
+	}
+}
+
 func TestRuntimeConfigParams_ApplicationRootUrl(t *testing.T) {
 	// Absent by default (plain local run): the runtime derives it from the listen
 	// address, so we must not pin it.

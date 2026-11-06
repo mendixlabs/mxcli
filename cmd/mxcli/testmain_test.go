@@ -27,6 +27,10 @@ import (
 // per-test overrides (json_output_purity_test.go, session_start_test.go) give
 // their child a directory of its own to assert on and stay as they are.
 func TestMain(m *testing.M) {
+	// A broken restart probe must not replay the test binary's entire suite.
+	if os.Getenv("MXCLI_TEST_PASSWORD_MODE") == "restart-probe" && os.Getenv(envDetachedChild) == "1" {
+		os.Exit(99)
+	}
 	if os.Getenv("MXCLI_LOG_DIR") != "" {
 		os.Exit(m.Run())
 	}

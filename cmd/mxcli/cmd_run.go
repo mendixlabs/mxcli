@@ -3,9 +3,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
@@ -13,6 +15,8 @@ import (
 	"github.com/mendixlabs/mxcli/cmd/mxcli/testrunner"
 	"github.com/spf13/cobra"
 )
+
+var runLocal = docker.RunLocal
 
 var runCmd = &cobra.Command{
 	Use:   "run",
@@ -51,6 +55,19 @@ Requirements:
   - --db-type hsqldb runs against the built-in file database instead of
     PostgreSQL, so no database server is needed. Its data lives under the
     project's deployment directory and is meant for local development only.
+
+For a private PostgreSQL password, pass --db-password-stdin and pipe one password
+to stdin, then close the pipe. Input is limited to 64 KiB including an optional
+final LF or CRLF, which is removed; other spaces and tabs are preserved. Empty or
+multiline input is rejected. Cannot be combined with --db-password (even empty), --detach
+or --db-type hsqldb. Restart a run using this flag by starting it again with fresh
+stdin, not 'run restart'. The value stays off argv and is not written to the model;
+the existing private .mxcli/run-local.json boot configuration still contains it.
+
+Runtime limit: native testing with Mendix 11.16 Beta found that its runtime setting
+parser trims leading/trailing whitespace from DatabasePassword, preventing
+authentication for such passwords. The CLI preserves spaces and tabs; other
+runtime versions have not been verified.
 
 With --hub, the running app is exposed in a browser at a public URL through an
 mxcli tunnel-hub, without leaving this machine: a tunnel client reverse-tunnels
@@ -113,7 +130,16 @@ Examples:
   mxcli run --hub https://hub.example.com --hub-secret u:pass -p app.mpr --watch
   mxcli auth hub login && mxcli run --hub https://hub.mxcli.org -p app.mpr  # authed hub
 `,
-	Run: func(cmd *cobra.Command, args []string) {
+}
+
+func init() {
+	runCmd.Run = func(cmd *cobra.Command, args []string) {
+		dbPassword, err := runDBPassword(cmd)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		dbPasswordStdin, _ := cmd.Flags().GetBool("db-password-stdin")
 		local, _ := cmd.Flags().GetBool("local")
 		hub, _ := cmd.Flags().GetString("hub")
 		hubSecret, _ := cmd.Flags().GetString("hub-secret")
@@ -202,7 +228,6 @@ Examples:
 		dbHost, _ := cmd.Flags().GetString("db-host")
 		dbName, _ := cmd.Flags().GetString("db-name")
 		dbUser, _ := cmd.Flags().GetString("db-user")
-		dbPassword, _ := cmd.Flags().GetString("db-password")
 		dbAdminUser, _ := cmd.Flags().GetString("db-admin-user")
 		dbAdminPassword, _ := cmd.Flags().GetString("db-admin-password")
 		screenshot, _ := cmd.Flags().GetBool("screenshot")
@@ -270,6 +295,7 @@ Examples:
 			ScreenshotURLs:     screenshotURLs,
 			ScreenshotUser:     screenshotUser,
 			ScreenshotPassword: screenshotPassword,
+			DBPasswordStdin:    dbPasswordStdin,
 			RuntimeLogPath:     runtimeLog,
 			Debug:              debug,
 			DebugPass:          debugPass,
@@ -367,7 +393,20 @@ Examples:
 			opts.State = state
 		}
 
-		err = docker.RunLocal(opts)
+		err = runLocal(opts)
+		if dbPasswordStdin && err != nil {
+			// A tool or runtime error may echo the supplied password.
+			message := strings.ReplaceAll(err.Error(), dbPassword, "[redacted]")
+			var stopped *docker.RuntimeStoppedError
+			if errors.As(err, &stopped) {
+				reason := strings.ReplaceAll(stopped.Reason, dbPassword, "[redacted]")
+				if message != err.Error() || reason != stopped.Reason {
+					err = docker.NewRuntimeStoppedError(reason, message)
+				}
+			} else if message != err.Error() {
+				err = errors.New(message)
+			}
+		}
 		// One moment, two files: the run state says stopped (with the reason, when
 		// the runtime stopped on its own) before the handshake disappears, so a
 		// caller that finds run-local.json gone finds the explanation in `run
@@ -380,10 +419,7 @@ Examples:
 			hosted.Remove()
 			os.Exit(1)
 		}
-	},
-}
-
-func init() {
+	}
 	runCmd.Flags().String("configuration", "",
 		"Which project configuration's constant values to run with (default: the only one, or \"Default\")")
 	runCmd.Flags().StringArray("constant", nil,
@@ -413,6 +449,7 @@ func init() {
 	runCmd.Flags().String("db-name", "", "Database name (default derived from the project name)")
 	runCmd.Flags().String("db-user", "", "Database user (default mendix)")
 	runCmd.Flags().String("db-password", "", "Database password (default mendix)")
+	runCmd.Flags().Bool("db-password-stdin", false, "Read a private PostgreSQL password from stdin (max 64 KiB; strips one final LF/CRLF, CLI preserves spaces/tabs); conflicts with --db-password, --detach and --db-type hsqldb; run restart needs a fresh foreground run")
 	runCmd.Flags().String("db-admin-user", "", "PostgreSQL superuser --ensure-db creates the role and database with, when it has a password (e.g. every Windows install). Default postgres when --db-admin-password is given")
 	runCmd.Flags().String("db-admin-password", "", "Password for --db-admin-user, used only by --ensure-db and never passed to the runtime. PGPASSWORD or a .pgpass file for postgres works too, and keeps it off the command line")
 	runCmd.Flags().Bool("screenshot", false, "Capture a Playwright screenshot after boot and each applied change")

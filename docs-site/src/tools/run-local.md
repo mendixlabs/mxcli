@@ -172,6 +172,7 @@ would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
 | `--db-host` | 127.0.0.1:5432 | Database `host:port`; bracket IPv6 endpoints (`[::1]:5432`) |
 | `--db-name` | derived from project | Database name |
 | `--db-user` / `--db-password` | mendix / mendix | Database credentials |
+| `--db-password-stdin` | off | Read a private PostgreSQL password from stdin instead of argv; see [Private database passwords](#private-database-passwords) |
 | `--db-type` | `postgresql` | `postgresql` or `hsqldb`. `hsqldb` boots on the runtime's built-in file database: no database server, no provisioning, works offline. Its data lives in `<project>/deployment/data/database/hsqldb/`. Cannot be combined with `--db-host`, `--db-user`, `--db-password` or `--ensure-db` (refused, not ignored). For local development only |
 | `--screenshot` | off | Capture a Playwright PNG after boot and each applied change |
 | `--screenshot-path` | `<projectDir>/.mxcli/run-local.png` | Screenshot output PNG |
@@ -186,6 +187,37 @@ would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
 | `--trace-service` | `.mpr` name | `OTEL_SERVICE_NAME` under `--trace` |
 | `--trace-otlp` | off (console) | Export traces to this OTLP collector endpoint (e.g. `http://127.0.0.1:4318`) instead of the console; implies `--trace` (needed for flame charts) |
 | `--runtime-setting Key=Value` | — | Merge an extra runtime setting into the boot config (Value parsed as JSON when possible); repeatable |
+
+## Private database passwords
+
+Use `--db-password-stdin` to keep a password out of shell history, process arguments
+and the model. Pipe it from a private credential source, or redirect a protected
+file outside the project:
+
+```bash
+mxcli run --local -p app.mpr --db-password-stdin < "$HOME/.config/mxcli/db-password"
+```
+
+The flag reads stdin to EOF, up to 64 KiB including an optional final LF or CRLF.
+That one line ending is removed; leading and trailing spaces and tabs are preserved.
+Empty input, embedded line endings and NUL bytes are rejected before project setup,
+building or database provisioning. Close the input pipe after writing the password.
+Without the flag, stdin is not read and existing password defaults are unchanged.
+
+Runtime limit: native testing with Mendix 11.16 Beta found that its
+`DatabasePassword` string-setting parser trims leading/trailing whitespace,
+preventing authentication for such passwords. The CLI preserves spaces and tabs;
+other runtime versions have not been verified.
+
+The flag cannot be combined with `--db-password`, even `--db-password=`, or with
+`--db-type hsqldb` or `--detach`. It supports foreground runs only. `run restart`
+refuses to reuse it without stopping the current app: stop it explicitly, then
+start a new foreground run with fresh stdin. Watch-loop runtime restarts still
+reuse the password in memory.
+
+This changes the input channel, not runtime secret storage. The existing private
+`.mxcli/run-local.json` boot configuration still contains the password while the
+app is running. Keep it and the input file private and out of version control.
 
 ## Metrics and OpenTelemetry
 

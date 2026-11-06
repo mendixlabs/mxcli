@@ -3,10 +3,12 @@
 package docker
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ako/mxcli#1542: "One of the two times, the runtime had stopped itself on the
@@ -53,7 +55,7 @@ func TestRuntimeStoppedError_ReadsTheReasonFromTheRuntimeLog(t *testing.T) {
 	_, _ = mem.Write([]byte("Picked up JAVA_TOOL_OPTIONS\nMendix runtime launcher started\n"))
 	rt := &LocalRuntime{log: mem, opts: LocalRuntimeOptions{RuntimeLogPath: logPath}}
 
-	err := runtimeStoppedError(rt)
+	err := runtimeStoppedError(rt, false)
 	msg := err.Error()
 	if !strings.Contains(strings.ToLower(msg), "licence") {
 		t.Fatalf("the runtime log says the trial licence ended the run, but the error does not:\n%s", msg)
@@ -64,6 +66,40 @@ func TestRuntimeStoppedError_ReadsTheReasonFromTheRuntimeLog(t *testing.T) {
 	}
 	if want := "trial licence time limit reached at 18:43:16 (runtime.log)"; stopped.Reason != want {
 		t.Errorf("Reason = %q, want %q", stopped.Reason, want)
+	}
+}
+
+func TestRuntimeStoppedError_PasswordInputGuidance(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		stdin bool
+	}{{"legacy", false}, {"stdin", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt := &LocalRuntime{log: &syncBuffer{}, exited: make(chan struct{}),
+				opts: LocalRuntimeOptions{RuntimeLogPath: writeRuntimeLog(t, licenceStopLog)}}
+			close(rt.exited)
+			err := watchAndApply(LocalRunOptions{DBPasswordStdin: tc.stdin, PollInterval: time.Hour, Stdout: io.Discard},
+				nil, rt, nil, "", time.Time{})
+			stopped, ok := err.(*RuntimeStoppedError)
+			if !ok || stopped.Reason != "trial licence time limit reached at 18:43:16 (runtime.log)" {
+				t.Fatal("runtime exit lost its typed stop reason")
+			}
+			message := err.Error()
+			if !tc.stdin {
+				if !strings.HasSuffix(message, "Restart it: mxcli run restart -p <app.mpr>, or re-run.") {
+					t.Fatal("legacy runtime exit guidance changed")
+				}
+				return
+			}
+			for _, want := range []string{"new foreground run", "--db-password-stdin", "fresh stdin"} {
+				if !strings.Contains(message, want) {
+					t.Error("runtime exit did not explain how to restart with fresh private input")
+				}
+			}
+			if strings.Contains(message, "mxcli run restart") {
+				t.Error("runtime exit recommends unsupported private-input replay")
+			}
+		})
 	}
 }
 
