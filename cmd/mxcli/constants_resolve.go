@@ -5,6 +5,9 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -53,6 +56,10 @@ type constantChain struct {
 // certainly means the author expected the next argument to be the value, and
 // silently setting the constant to empty is exactly the kind of quiet wrong
 // value this whole feature exists to stop.
+//
+// The value may point at the secret instead of being it, so that it stays out of
+// `ps` and shell history: `Module.Name=@env:VAR` reads an environment variable
+// and `Module.Name=@file:path` reads a file. See resolveValueSource.
 func parseConstantFlags(flags []string) (map[string]string, error) {
 	out := make(map[string]string, len(flags))
 	for _, f := range flags {
@@ -67,9 +74,117 @@ func parseConstantFlags(flags []string) (map[string]string, error) {
 		if _, dup := out[name]; dup {
 			return nil, fmt.Errorf("--constant %s given more than once", name)
 		}
-		out[name] = value
+		resolved, err := resolveValueSource(value)
+		if err != nil {
+			return nil, fmt.Errorf("--constant %s: %w", name, err)
+		}
+		out[name] = resolved
 	}
 	return out, nil
+}
+
+// resolveValueSource turns the text after the "=" of a flag value into the value
+// itself:
+//
+//	@env:VAR    the environment variable VAR; unset or empty is an error
+//	@file:PATH  the contents of the file, minus one trailing newline; an empty
+//	            file is an error; on unix the file must not be readable by its
+//	            group or by others (not checked on Windows)
+//	@@text      the literal "@text", for a value that really starts with "@"
+//	text        itself
+//
+// Any other value starting with "@" is refused rather than taken literally: a
+// mistyped `@evn:TOKEN` would otherwise be applied as the constant's value, and
+// that is the quiet wrong value this flag family is built to refuse. Errors name
+// the variable or the file, never the value.
+func resolveValueSource(v string) (string, error) {
+	if !strings.HasPrefix(v, "@") {
+		return v, nil
+	}
+	switch {
+	case strings.HasPrefix(v, "@@"):
+		return v[1:], nil
+	case strings.HasPrefix(v, "@env:"):
+		name := strings.TrimPrefix(v, "@env:")
+		if name == "" {
+			return "", fmt.Errorf("@env: needs a variable name (@env:VAR)")
+		}
+		val, ok := os.LookupEnv(name)
+		if !ok {
+			return "", fmt.Errorf("environment variable %s is not set", name)
+		}
+		if val == "" {
+			return "", fmt.Errorf("environment variable %s is set but empty", name)
+		}
+		return val, nil
+	case strings.HasPrefix(v, "@file:"):
+		return readValueFile(strings.TrimPrefix(v, "@file:"))
+	}
+	return "", fmt.Errorf("a value starting with @ is read from the environment (@env:VAR) or a file (@file:path); " +
+		"write @@ for a literal leading @")
+}
+
+// readValueFile reads one value from a file that only its owner can read.
+func readValueFile(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("@file: needs a path (@file:/path/to/file)")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("@file:%s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("@file:%s is not a regular file", path)
+	}
+	// Windows reports synthetic permission bits, so the check would only be noise.
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
+		return "", fmt.Errorf("@file:%s is readable by group or others (mode %04o); restrict it first: chmod 600 %s",
+			path, info.Mode().Perm(), path)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("@file:%s: %w", path, err)
+	}
+	val := strings.TrimSuffix(string(body), "\n")
+	val = strings.TrimSuffix(val, "\r")
+	if val == "" {
+		return "", fmt.Errorf("@file:%s is empty", path)
+	}
+	return val, nil
+}
+
+// absoluteConstantArgs returns args with every relative `@file:path` in a
+// --constant value made absolute against the current directory, so a command
+// stored for detach or restart still finds the file from another directory.
+// The input is not modified.
+func absoluteConstantArgs(args []string) []string {
+	out := make([]string, len(args))
+	copy(out, args)
+	fix := func(nv string) string {
+		k := strings.Index(nv, "=")
+		if k < 0 || !strings.HasPrefix(nv[k+1:], "@file:") {
+			return nv
+		}
+		p := strings.TrimPrefix(nv[k+1:], "@file:")
+		if p == "" || filepath.IsAbs(p) {
+			return nv
+		}
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return nv
+		}
+		return nv[:k+1] + "@file:" + abs
+	}
+	for i := 0; i < len(out); i++ {
+		switch {
+		case out[i] == "--constant" && i+1 < len(out):
+			i++
+			out[i] = fix(out[i])
+		case strings.HasPrefix(out[i], "--constant="):
+			out[i] = "--constant=" + fix(strings.TrimPrefix(out[i], "--constant="))
+		}
+	}
+	return out
 }
 
 // resolveConstantChain layers `--constant` values over a configuration's shared

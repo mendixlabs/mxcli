@@ -682,7 +682,7 @@ encryption key while the model said otherwise.
   developer's workstation), so the default is used and the constant is named.
 - The line prints in every case, including "no overrides" — silence used to mean
   "your override is in effect" when it was not.
-- `--constant Module.Name=value` (repeatable) sets a value for **this run only**.
+- `--constant Module.Name=value` (repeatable) sets a value for **this run only**; `=@env:VAR` / `=@file:path` read a secret from the environment or an owner-only file (`@@` = literal `@`), keeping it out of `ps`.
   It wins over the configuration, is never written to the project, and is
   reported as coming from `--constant` so the output says which layer won. A
   constant the project does not declare is refused before the app boots: the
