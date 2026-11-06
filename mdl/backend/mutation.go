@@ -351,7 +351,9 @@ type WorkflowMutator interface {
 	InsertBoundaryEvent(activityRef string, atPos int, eventType string, delay string, caption string, recurrence *workflows.Recurrence, activities []workflows.WorkflowActivity) error
 
 	// DropBoundaryEvent removes the boundary event from the referenced activity.
-	DropBoundaryEvent(activityRef string, atPos int) error
+	// DropBoundaryEvent removes an activity's boundary event: the index-th
+	// (1-based, describe order), or the first when index is 0.
+	DropBoundaryEvent(activityRef string, atPos int, index int) error
 
 	// Save persists the mutations to the backend.
 	Save() error

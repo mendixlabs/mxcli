@@ -374,7 +374,7 @@ func TestWorkflowMutator_DropBoundaryEvent_Single(t *testing.T) {
 	act := makeWfActivityWithBoundaryEvents("Review", evt)
 	m := newMutator(makeWorkflowDoc(act))
 
-	if err := m.DropBoundaryEvent("Review", 0); err != nil {
+	if err := m.DropBoundaryEvent("Review", 0, 0); err != nil {
 		t.Fatalf("DropBoundaryEvent failed: %v", err)
 	}
 
@@ -391,7 +391,7 @@ func TestWorkflowMutator_DropBoundaryEvent_Multiple(t *testing.T) {
 	act := makeWfActivityWithBoundaryEvents("Review", evt1, evt2)
 	m := newMutator(makeWorkflowDoc(act))
 
-	if err := m.DropBoundaryEvent("Review", 0); err != nil {
+	if err := m.DropBoundaryEvent("Review", 0, 0); err != nil {
 		t.Fatalf("DropBoundaryEvent failed: %v", err)
 	}
 
@@ -410,7 +410,7 @@ func TestWorkflowMutator_DropBoundaryEvent_NoEvents(t *testing.T) {
 	act := makeWfActivityWithBoundaryEvents("Review")
 	m := newMutator(makeWorkflowDoc(act))
 
-	err := m.DropBoundaryEvent("Review", 0)
+	err := m.DropBoundaryEvent("Review", 0, 0)
 	if err == nil {
 		t.Fatal("Expected error when dropping from activity with no boundary events")
 	}
@@ -1551,5 +1551,52 @@ func TestWorkflowMutator_InsertBoundaryEvent_EndsWithMarker(t *testing.T) {
 		if got := bsonnav.DGetString(items[len(items)-1].(bson.D), "Caption"); got != "End of boundary event path" {
 			t.Errorf("%s: last activity caption = %q, want the end-of-path marker", name, got)
 		}
+	}
+}
+
+// ako/mxcli#808: a value is an outcome's only address and Mendix does not keep
+// it unique, so two outcomes with the same value make the drop a guess. It is
+// refused, and the document is left as it was.
+func TestWorkflowMutator_DropOutcome_DuplicateValueRefused(t *testing.T) {
+	act := makeWfActivityWithOutcomes("Review", "task1",
+		makeOutcome("Workflows$UserTaskOutcome", "Approve"),
+		makeOutcome("Workflows$UserTaskOutcome", "Approve"))
+	m := newMutator(makeWorkflowDoc(act))
+	err := m.DropOutcome("Review", 0, "Approve")
+	if err == nil || !strings.Contains(err.Error(), "ambiguous: 2 outcomes") {
+		t.Fatalf("want an ambiguity refusal, got %v", err)
+	}
+	actDoc, _ := m.findActivityByCaption("Review", 0)
+	if n := len(bsonnav.DGetArrayElements(bsonnav.DGet(actDoc, "Outcomes"))); n != 2 {
+		t.Errorf("refused drop changed the outcomes: %d left", n)
+	}
+}
+
+func TestWorkflowMutator_DropBranch_DuplicateValueRefused(t *testing.T) {
+	act := makeWfActivityWithOutcomes("Decision", "dec1",
+		makeOutcome("Workflows$EnumerationValueConditionOutcome", "Active"),
+		makeOutcome("Workflows$EnumerationValueConditionOutcome", "Active"))
+	m := newMutator(makeWorkflowDoc(act))
+	err := m.DropBranch("Decision", 0, "Active")
+	if err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("want an ambiguity refusal, got %v", err)
+	}
+}
+
+// ako/mxcli#808: `boundary event N` drops the N-th event (describe order).
+func TestWorkflowMutator_DropBoundaryEvent_ByIndex(t *testing.T) {
+	evt1 := makeWfBoundaryEvent("Workflows$InterruptingTimerBoundaryEvent")
+	evt2 := makeWfBoundaryEvent("Workflows$NonInterruptingTimerBoundaryEvent")
+	m := newMutator(makeWorkflowDoc(makeWfActivityWithBoundaryEvents("Review", evt1, evt2)))
+	if err := m.DropBoundaryEvent("Review", 0, 2); err != nil {
+		t.Fatal(err)
+	}
+	actDoc, _ := m.findActivityByCaption("Review", 0)
+	events := bsonnav.DGetArrayElements(bsonnav.DGet(actDoc, "BoundaryEvents"))
+	if len(events) != 1 || bsonnav.DGetString(events[0].(bson.D), "$Type") != "Workflows$InterruptingTimerBoundaryEvent" {
+		t.Fatalf("boundary event 2 did not drop the second event: %v", events)
+	}
+	if err := m.DropBoundaryEvent("Review", 0, 2); err == nil {
+		t.Fatal("boundary event 2 of 1 accepted")
 	}
 }

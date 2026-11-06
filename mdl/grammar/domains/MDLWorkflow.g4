@@ -436,10 +436,13 @@ alterWorkflowTarget
     : alterTarget alterWorkflowTargetMember?
     ;
 
+// `boundary event N` is the N-th boundary event in the order `describe workflow`
+// prints them, like a parallel split's `path N` (ako/mxcli#808); without N it
+// is the activity's only one.
 alterWorkflowTargetMember
     : OUTCOME (STRING_LITERAL | TRUE | FALSE | DEFAULT)
     | PATH NUMBER_LITERAL
-    | BOUNDARY EVENT
+    | BOUNDARY EVENT NUMBER_LITERAL?
     ;
 
 // `Key: value`, the key naming a workflow property (Display, Description,
