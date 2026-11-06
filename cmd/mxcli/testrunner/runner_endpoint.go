@@ -112,6 +112,9 @@ func runViaEndpoint(opts RunOptions, suite *TestSuite, token string, timeout tim
 		return resultsForBuildFailure(err, suite)
 	}
 	defer sess.stop()
+	if opts.recordKey != "" {
+		recordBuild(opts.ProjectPath, opts.recordKey)
+	}
 	return runSuite(sess.client, sess.adminOptions(), suite, opts, w)
 }
 

@@ -166,6 +166,7 @@ Examples:
 		junitOutput, _ := cmd.Flags().GetString("junit")
 		requireAssertions, _ := cmd.Flags().GetBool("require-assertions")
 		skipBuild, _ := cmd.Flags().GetBool("skip-build")
+		reuseBuild, _ := cmd.Flags().GetBool("reuse-build")
 		local, _ := cmd.Flags().GetBool("local")
 		legacyRunner, _ := cmd.Flags().GetBool("legacy-runner")
 		watch, _ := cmd.Flags().GetBool("watch")
@@ -214,6 +215,7 @@ Examples:
 			ProjectPath:       projectPath,
 			TestFiles:         resolveTestPaths(args, projectPath),
 			SkipBuild:         skipBuild,
+			ReuseBuild:        reuseBuild,
 			Local:             local,
 			LegacyRunner:      legacyRunner,
 			Watch:             watch,
