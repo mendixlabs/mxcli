@@ -7,6 +7,10 @@ package catalog
 //
 // History:
 //
+//	33 (container widgets): widgets gains the rows inside table cells, scroll
+//	    container regions, header sides and split panes (ako/mxcli#1895). No
+//	    column changed, but a cached catalog keeps the table with nothing in
+//	    it, so XPath rows naming those widgets join to nothing.
 //	32 (xpath widget): xpath_expressions gains WidgetId and WidgetName, and
 //	    ComponentId is written as a GUID instead of a Go byte dump
 //	    (ako/mxcli#1879) — a cached catalog keeps the dump and lacks the
@@ -174,7 +178,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "32"
+const CatalogSchemaVersion = "33"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
