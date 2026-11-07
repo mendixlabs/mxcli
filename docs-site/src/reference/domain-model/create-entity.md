@@ -37,7 +37,7 @@ Where *entity_type* is one of:
 
 If `OR MODIFY` is specified, the statement is idempotent: if an entity with the same qualified name already exists, its attributes are updated to match the definition. New attributes are added, and existing attributes have their types and constraints updated. This is useful for repeatable scripts.
 
-The optional `EXTENDS` clause establishes generalization (inheritance). The child entity inherits all attributes from the parent and can add its own. Common parent entities include `System.User`, `System.FileDocument`, and `System.Image`. The `EXTENDS` clause must appear **before** the opening parenthesis.
+The optional `EXTENDS` clause establishes generalization (inheritance). The child entity inherits all attributes from the parent and can add its own. Common parent entities include `System.User`, `System.FileDocument`, and `System.Image`. The `EXTENDS` clause must appear **before** the opening parenthesis. A specialization inherits its persistability from the root of the generalization chain, which is the only place Mendix stores it: `PERSISTENT` or `NON-PERSISTENT` on it may restate the inherited value, and one that contradicts it is an error from both `check` and `exec`. Leave the keyword out to take whatever the chain says.
 
 Each attribute definition specifies a name, a data type, and optional constraints. Attributes are separated by commas. The supported data types are:
 

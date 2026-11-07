@@ -29,6 +29,7 @@ func (b *Builder) ExitCreateEntityStatement(ctx *parser.CreateEntityStatementCon
 	if ctx.NON_PERSISTENT() != nil {
 		stmt.Kind = ast.EntityNonPersistent
 	}
+	stmt.KindStated = ctx.PERSISTENT() != nil || ctx.NON_PERSISTENT() != nil
 
 	// Navigate to parent CreateStatement to get annotations and doc comment
 	createStmt := findParentCreateStatement(ctx)

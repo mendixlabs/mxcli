@@ -33,9 +33,14 @@ func (k EntityKind) String() string {
 
 // CreateEntityStmt represents: CREATE [OR MODIFY] PERSISTENT|NON-PERSISTENT ENTITY Module.Name [EXTENDS Parent] (attributes) ...
 type CreateEntityStmt struct {
-	CreateGuard    // `create … if not exists` (ako/mxcli#731)
-	Name           QualifiedName
-	Kind           EntityKind
+	CreateGuard // `create … if not exists` (ako/mxcli#731)
+	Name        QualifiedName
+	Kind        EntityKind
+	// KindStated is true when the statement says `persistent` or
+	// `non-persistent`; a bare `create entity` defaults Kind to persistent.
+	// A specialization inherits its persistability, so only a stated one can
+	// contradict the chain (ako/mxcli#2005).
+	KindStated     bool
 	Generalization *QualifiedName // Parent entity for inheritance (e.g., System.Image)
 	Attributes     []Attribute
 	Indexes        []Index

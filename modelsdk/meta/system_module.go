@@ -199,6 +199,26 @@ func SystemEntityStoresMember(name, member string) (stores, known bool) {
 	return false, false
 }
 
+// SystemEntityPersistable reports whether the System entity named by name
+// ("Image" or "System.Image") is persistable, which its chain's root decides.
+// known is false when the entity is not a System entity mxcli knows.
+func SystemEntityPersistable(name string) (persistable, known bool) {
+	name = strings.TrimPrefix(name, "System.")
+	seen := map[string]bool{}
+	for name != "" && !seen[name] {
+		seen[name] = true
+		def, ok := systemEntityByName(name)
+		if !ok {
+			return false, false
+		}
+		if def.Generalization == "" {
+			return def.Persistable, true
+		}
+		name = strings.TrimPrefix(def.Generalization, "System.")
+	}
+	return false, false
+}
+
 func systemEntityByName(name string) (SystemEntityDef, bool) {
 	for _, e := range SystemEntities {
 		if e.Name == name {
