@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/catalog"
 )
 
@@ -85,11 +84,15 @@ const sourceIndexHint = "refresh catalog full source"
 // string literals and said nothing — an agent read the empty source section
 // as "no MDL mentions this". The warning must name the command that builds it,
 // and go to diagnostics so --format json stays parseable.
+//
+// Since ako/mxcli#2004 a search builds the source index itself, so only a
+// NoBuild search can still meet a catalog without one; that is where the
+// warning lives now (cmd_search_builds_source_index_test.go covers the build).
 func TestSearch_WarnsWhenSourceIndexNotBuilt(t *testing.T) {
 	for _, format := range []string{"json", "names", "table"} {
 		t.Run(format, func(t *testing.T) {
 			ctx, out, diag := searchCacheFixture(t, "full", nil)
-			if err := search(ctx, "Invoice", format); err != nil {
+			if _, err := searchWith(ctx, "Invoice", format, SearchOptions{NoBuild: true}); err != nil {
 				t.Fatalf("search: %v", err)
 			}
 			if !strings.Contains(diag.String(), sourceIndexHint) {
@@ -113,7 +116,7 @@ func TestSearch_WarnsWhenSourceIndexNotBuilt(t *testing.T) {
 // searched (this is the case where "No matches found." is most misleading).
 func TestSearch_WarnsOnNoMatchesWithoutSourceIndex(t *testing.T) {
 	ctx, _, diag := searchCacheFixture(t, "full", nil)
-	if err := execSearch(ctx, &ast.SearchStmt{Query: "Nonexistent"}); err != nil {
+	if _, err := searchWith(ctx, "Nonexistent", "table", SearchOptions{NoBuild: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(diag.String(), sourceIndexHint) {

@@ -389,6 +389,7 @@ func init() {
 	searchCmd.Flags().BoolP("quiet", "q", false, "Suppress connection and status messages (for piping)")
 	searchCmd.Flags().Bool("fail-on-match", false, "Exit 1 when there is at least one hit, 0 when there is none (an error exits 2)")
 	searchCmd.Flags().Bool("exclude-marketplace", false, "Leave out hits inside modules downloaded from the Marketplace")
+	searchCmd.Flags().Bool("no-build", false, "Never build the source index; without one, exit 3 because flow, page and expression bodies were not searched")
 
 	// Callers/callees command flags
 	callersCmd.Flags().BoolP("transitive", "t", false, "Find transitive (indirect) callers")
