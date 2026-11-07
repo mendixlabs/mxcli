@@ -222,6 +222,20 @@ Examples:
 	},
 }
 
+// searchExitCode is the exit status of a search that ran. Under --fail-on-match a
+// hit is 1, a definite answer whatever else is missing. An answer that left MDL
+// source unsearched (--no-build without a source index) is 3, so a script never
+// reads it as "nothing matched" (ako/mxcli#2004). Anything else is 0.
+func searchExitCode(res executor.SearchOutcome, failOnMatch bool) int {
+	switch {
+	case failOnMatch && res.Hits > 0:
+		return 1
+	case res.Incomplete:
+		return 3
+	}
+	return 0
+}
+
 var searchCmd = &cobra.Command{
 	Use:   "search <query>",
 	Short: "Search the project catalog using full-text search",
@@ -243,9 +257,16 @@ field) and the summary text of a remote service's contract.
 A hit names the element (qualified name, type) and the field: the context
 column says "documentation" for a documentation hit.
 
-MDL source is searched only once the source index exists — build it with
-  mxcli -p app.mpr -c "refresh catalog full source"
-Until then a warning on stderr says only string literals were searched.
+MDL source (flow, page and expression bodies) is searched through the source
+index. The first search builds it, saying so on stderr; on a large project that
+takes a while, once. After a model change it is brought up to date
+incrementally, which is quick.
+
+  --no-build        never build the source index. Without one, only string
+                    literals and documentation are searched: a warning on
+                    stderr says so and the command exits 3, so "no matches"
+                    is never mistaken for a complete answer. With one, the
+                    search is complete and exits as usual.
 
 Output Formats:
   table   - Human-readable table (default)
@@ -258,7 +279,8 @@ Gating on a word:
   --fail-on-match   exit 1 when there is at least one hit, 0 when there is none
                     (results are printed as usual, JSON included). A query the
                     index cannot run, or any other error, exits 2 so that 1
-                    always means "something matched".
+                    always means "something matched". With --no-build and no
+                    source index, a search that found nothing exits 3.
 
 Marketplace modules:
   --exclude-marketplace
@@ -272,6 +294,7 @@ Examples:
   mxcli search -p app.mpr "error" -q --format names | xargs -I {} mxcli describe -p app.mpr microflow {}
   mxcli search -p app.mpr "TODO" --fail-on-match
   mxcli search -p app.mpr "TODO" --exclude-marketplace
+  mxcli search -p app.mpr "SUB_Do" --no-build
 `,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -280,6 +303,7 @@ Examples:
 		quiet, _ := cmd.Flags().GetBool("quiet")
 		failOnMatch, _ := cmd.Flags().GetBool("fail-on-match")
 		excludeMarketplace, _ := cmd.Flags().GetBool("exclude-marketplace")
+		noBuild, _ := cmd.Flags().GetBool("no-build")
 
 		// Under --fail-on-match, exit status 1 means "something matched", so a
 		// search that could not run says so with 2 rather than with 1.
@@ -318,20 +342,21 @@ Examples:
 
 		// Execute search with format option
 		query := strings.ReplaceAll(args[0], "'", "''")
-		hits, err := exec.SearchWith(query, format, executor.SearchOptions{
+		res, err := exec.SearchReport(query, format, executor.SearchOptions{
 			ExcludeMarketplace: excludeMarketplace,
 			// A gate must not read "the index refused the query" as "no match".
-			Strict: failOnMatch,
+			Strict:  failOnMatch,
+			NoBuild: noBuild,
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(errorExit)
 		}
-		if failOnMatch && hits > 0 {
+		if code := searchExitCode(res, failOnMatch); code != 0 {
 			// os.Exit skips the deferred closes, and the log file would stay open.
 			exec.Close()
 			logger.Close()
-			os.Exit(1)
+			os.Exit(code)
 		}
 	},
 }

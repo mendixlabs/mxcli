@@ -106,7 +106,15 @@ mxcli search -p app.mpr "error" -q --format names | head -1 | awk '{print $2}' |
 
   This is the complete set: every document type whose catalog table carries a documentation text. Not covered: the documentation of an enumeration value (Mendix has no such field) and the summary text of a remote service's contract entities (written by the remote service, not by the project).
 
-**MDL source** (only after `refresh catalog full source`): microflow, nanoflow and page bodies, expressions and the other definitions as MDL text. Until it is built, a warning on stderr says only strings were searched.
+**MDL source**: microflow, nanoflow and page bodies, expressions and the other definitions as MDL text, through the source index. The first search builds that index and says so on stderr. On a large project this takes a while, once. After a model change it is brought up to date incrementally: only the documents that changed, or that name one that did, are described again.
+
+## Searching without building the source index
+
+`--no-build` never builds the source index. That suits a caller that must stay cheap or must not write the catalog cache beyond what it already holds. If the project has a source index, the search is complete. If it has none, only string literals and documentation are searched: a warning on stderr says so, and the command exits `3`. A script can therefore never take "No matches found." for a complete answer.
+
+```bash
+mxcli search -p app.mpr "SUB_Do" --no-build --json   # exit 3 when the source index is missing
+```
 
 ## Failing on a match
 
@@ -117,6 +125,7 @@ mxcli search -p app.mpr "error" -q --format names | head -1 | awk '{print $2}' |
 | `0` | No hit |
 | `1` | At least one hit |
 | `2` | The search could not run: an unknown project, or a query the index rejects (an unbalanced `"`, say) |
+| `3` | With `--no-build` and no source index, no hit was found but the MDL source was not searched |
 
 ```bash
 # Refuse the change if a placeholder is left anywhere in the project's text
