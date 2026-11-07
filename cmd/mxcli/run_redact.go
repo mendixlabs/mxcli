@@ -9,7 +9,9 @@ const redactedValue = "<redacted>"
 
 // secretRunFlags are the `run` flags whose value is a credential. The state file
 // is 0600, but it sits in .mxcli/ next to the project and travels with a copy of
-// the folder, a sync client or an archive.
+// the folder, a sync client or an archive. Each accepts @env:VAR and @file:path
+// (resolveRunSecrets), which keep the value off the command line and out of the
+// state file, so a run started that way can still be restarted.
 var secretRunFlags = map[string]bool{
 	"--db-password":         true,
 	"--db-admin-password":   true,
@@ -35,9 +37,10 @@ func redactArgs(args []string) ([]string, bool) {
 		switch {
 		case secretRunFlags[flag]:
 			if inline {
-				// An empty value holds no secret; keep it empty so a restart
-				// is not refused for a placeholder that stands for nothing.
-				if val == "" {
+				// An empty value holds no secret, and a reference (@env:VAR,
+				// @file:path) only points at one: keep both, so a restart is not
+				// refused for a value it can resolve again.
+				if val == "" || isValueReference(val) {
 					out = append(out, a)
 					continue
 				}
@@ -48,8 +51,8 @@ func redactArgs(args []string) ([]string, bool) {
 			out = append(out, a)
 			if i+1 < len(args) {
 				i++
-				if args[i] == "" {
-					out = append(out, "")
+				if args[i] == "" || isValueReference(args[i]) {
+					out = append(out, args[i])
 				} else {
 					out = append(out, redactedValue)
 					changed = true
@@ -112,11 +115,16 @@ func redactConstant(nv string) (string, bool) {
 	if k < 0 {
 		return nv, false
 	}
-	v := nv[k+1:]
-	if strings.HasPrefix(v, "@env:") || strings.HasPrefix(v, "@file:") {
+	if isValueReference(nv[k+1:]) {
 		return nv, false
 	}
 	return nv[:k+1] + redactedValue, true
+}
+
+// isValueReference reports whether a flag value names where the secret is
+// (@env:VAR, @file:path; see resolveValueSource) rather than being it.
+func isValueReference(v string) bool {
+	return strings.HasPrefix(v, "@env:") || strings.HasPrefix(v, "@file:")
 }
 
 // hasRedactedArgs reports whether args carry a value redactArgs replaced, so a

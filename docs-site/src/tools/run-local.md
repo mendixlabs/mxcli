@@ -171,7 +171,7 @@ would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
 | `--mxbuild-path` | resolved for this host | The mxbuild to build with, overriding resolution (Studio Pro on macOS/Windows, the cached CDN download on Linux). `MXCLI_MXBUILD_PATH` sets the same override from the environment; the flag wins |
 | `--db-host` | 127.0.0.1:5432 | Database `host:port`; bracket IPv6 endpoints (`[::1]:5432`) |
 | `--db-name` | derived from project | Database name |
-| `--db-user` / `--db-password` | mendix / mendix | Database credentials |
+| `--db-user` / `--db-password` | mendix / mendix | Database credentials; the password takes `@env:VAR` / `@file:path` — see [Secrets off the command line](#secrets-off-the-command-line) |
 | `--db-type` | `postgresql` | `postgresql` or `hsqldb`. `hsqldb` boots on the runtime's built-in file database: no database server, no provisioning, works offline. Its data lives in `<project>/deployment/data/database/hsqldb/`. Cannot be combined with `--db-host`, `--db-user`, `--db-password` or `--ensure-db` (refused, not ignored). For local development only |
 | `--screenshot` | off | Capture a Playwright PNG after boot and each applied change |
 | `--screenshot-path` | `<projectDir>/.mxcli/run-local.png` | Screenshot output PNG |
@@ -186,6 +186,43 @@ would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
 | `--trace-service` | `.mpr` name | `OTEL_SERVICE_NAME` under `--trace` |
 | `--trace-otlp` | off (console) | Export traces to this OTLP collector endpoint (e.g. `http://127.0.0.1:4318`) instead of the console; implies `--trace` (needed for flame charts) |
 | `--runtime-setting Key=Value` | — | Merge an extra runtime setting into the boot config (Value parsed as JSON when possible); repeatable |
+
+## Secrets off the command line
+
+A value typed on the command line is visible in `ps` for as long as the app runs and
+stays in shell history. The secret flags — `--db-password`, `--db-admin-password`,
+`--screenshot-password`, `--hub-secret`, `--debug-pass` — and every `--constant` value
+can name where the secret is instead:
+
+```bash
+export MX_DB_PASSWORD=…        # from your secret store, a .env loader, CI secrets
+mxcli run --local --watch --detach -p app.mpr --db-password @env:MX_DB_PASSWORD
+mxcli run --local -p app.mpr --db-password @file:$HOME/.config/mxcli/db-password
+```
+
+| Form | Reads | Refused when |
+|------|-------|--------------|
+| `@env:VAR` | the environment variable `VAR` | it is unset or empty |
+| `@file:path` | the file, minus one trailing newline | it is empty, not a regular file, or readable by its group or others (Unix; Windows is not checked) |
+| `@@text` | the literal `@text` | — |
+
+Any other value starting with `@` is refused, so a mistyped `@evn:VAR` is not used as
+the password. Errors name the flag and the variable or file, never the value.
+
+Only the reference is stored in `.mxcli/run-state.json`, so a run started this way can
+be detached and restarted: `run restart` resolves it again, **in the environment of the
+shell that runs the restart** (a relative `@file:` path is stored as an absolute one). A
+secret written literally is not stored, and `run restart` refuses that run and says so.
+The resolved database password is still in the owner-only `.mxcli/run-local.json` while
+the app runs, because re-applying constants needs it.
+
+`PGPASSWORD` is not read for `--db-password`: it is what `--ensure-db` hands `psql` for
+the superuser, which is usually a different account. Use `--db-password @env:PGPASSWORD`
+if they really are the same.
+
+A password with leading or trailing whitespace may not work whatever the source: the
+Mendix 11.16 beta runtime was observed to trim `DatabasePassword` (reported in
+mendixlabs/mxcli#1761). mxcli passes the value unchanged.
 
 ## Metrics and OpenTelemetry
 

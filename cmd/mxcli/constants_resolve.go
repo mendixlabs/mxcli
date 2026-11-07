@@ -153,35 +153,52 @@ func readValueFile(path string) (string, error) {
 	return val, nil
 }
 
-// absoluteConstantArgs returns args with every relative `@file:path` in a
-// --constant value made absolute against the current directory, so a command
-// stored for detach or restart still finds the file from another directory.
-// The input is not modified.
-func absoluteConstantArgs(args []string) []string {
+// absoluteFileRefArgs returns args with every relative `@file:path` made
+// absolute against the current directory, in a --constant value and in the
+// value of a secret flag (secretRunFlags), so a command stored for detach or
+// restart still finds the file from another directory. The input is not
+// modified.
+func absoluteFileRefArgs(args []string) []string {
 	out := make([]string, len(args))
 	copy(out, args)
-	fix := func(nv string) string {
-		k := strings.Index(nv, "=")
-		if k < 0 || !strings.HasPrefix(nv[k+1:], "@file:") {
-			return nv
-		}
-		p := strings.TrimPrefix(nv[k+1:], "@file:")
-		if p == "" || filepath.IsAbs(p) {
-			return nv
+	fixRef := func(v string) string {
+		p, ok := strings.CutPrefix(v, "@file:")
+		if !ok || p == "" || filepath.IsAbs(p) {
+			return v
 		}
 		abs, err := filepath.Abs(p)
 		if err != nil {
+			return v
+		}
+		return "@file:" + abs
+	}
+	fixConstant := func(nv string) string {
+		k := strings.Index(nv, "=")
+		if k < 0 {
 			return nv
 		}
-		return nv[:k+1] + "@file:" + abs
+		return nv[:k+1] + fixRef(nv[k+1:])
 	}
 	for i := 0; i < len(out); i++ {
+		a := out[i]
+		flag, val, inline := a, "", false
+		if k := strings.Index(a, "="); strings.HasPrefix(a, "--") && k > 0 {
+			flag, val, inline = a[:k], a[k+1:], true
+		}
+		var fix func(string) string
 		switch {
-		case out[i] == "--constant" && i+1 < len(out):
+		case flag == "--constant":
+			fix = fixConstant
+		case secretRunFlags[flag]:
+			fix = fixRef
+		default:
+			continue
+		}
+		if inline {
+			out[i] = flag + "=" + fix(val)
+		} else if i+1 < len(out) {
 			i++
 			out[i] = fix(out[i])
-		case strings.HasPrefix(out[i], "--constant="):
-			out[i] = "--constant=" + fix(strings.TrimPrefix(out[i], "--constant="))
 		}
 	}
 	return out
