@@ -461,8 +461,9 @@ lint: lint-go lint-ts check-conformance check-test-timeouts
 # check-skill-index and the rest run only in CI unless someone remembers them.
 # check-skill-mdl is a superset of the job's three skill/docs MDL steps.
 #
-# Left out: govulncheck (the job installs it @latest, over the network) and the
-# integration jobs, which need mxbuild -- `make test-integration` runs those.
+# Left out: govulncheck (the job installs a pinned version and reads its
+# database over the network) and the integration jobs, which need mxbuild --
+# `make test-integration` runs those.
 # A step added to the job belongs here too.
 ci-local: fmt-check check-findings check-wiki-pages check-skill-index check-test-timeouts \
 		build vet test check-tunnel-deps check-mdl check-skill-pack-js check-skill-mdl \

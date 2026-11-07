@@ -229,8 +229,12 @@ jobs:
       # The integration tests are the `integration` job below. Lint Go was here:
       # its fmt-check is in quick-checks and its vet runs before Test.
       - name: Vulnerability scan
+        # Pinned, not @latest: a new scanner release could otherwise turn every
+        # run red, or change what it reports, with no change in this repo. The
+        # vulnerability DATABASE is still fetched fresh each run, so new advisories
+        # are seen without bumping this; bump the scanner on purpose.
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
           govulncheck ./...
 
   # The integration tests, split into suites that run as parallel jobs
