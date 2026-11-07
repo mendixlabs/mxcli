@@ -116,7 +116,6 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		local, _ := cmd.Flags().GetBool("local")
 		hub, _ := cmd.Flags().GetString("hub")
-		hubSecret, _ := cmd.Flags().GetString("hub-secret")
 		hubPrefix, _ := cmd.Flags().GetString("hub-prefix")
 		hubProject, _ := cmd.Flags().GetString("hub-project")
 		hubSolution, _ := cmd.Flags().GetString("hub-solution")
@@ -155,6 +154,16 @@ Examples:
 		if abs, err := filepath.Abs(projectPath); err == nil {
 			projectPath = abs
 		}
+
+		// Resolved before --detach as well as in the detached child, so a
+		// missing variable or a world-readable file is reported here, in the
+		// foreground, rather than in a log after the parent has returned.
+		secrets, err := resolveRunSecrets(cmd)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		hubSecret := secrets["hub-secret"]
 
 		watch, _ := cmd.Flags().GetBool("watch")
 		setupOnly, _ := cmd.Flags().GetBool("setup")
@@ -202,18 +211,18 @@ Examples:
 		dbHost, _ := cmd.Flags().GetString("db-host")
 		dbName, _ := cmd.Flags().GetString("db-name")
 		dbUser, _ := cmd.Flags().GetString("db-user")
-		dbPassword, _ := cmd.Flags().GetString("db-password")
+		dbPassword := secrets["db-password"]
 		dbAdminUser, _ := cmd.Flags().GetString("db-admin-user")
-		dbAdminPassword, _ := cmd.Flags().GetString("db-admin-password")
+		dbAdminPassword := secrets["db-admin-password"]
 		screenshot, _ := cmd.Flags().GetBool("screenshot")
 		pageCheck, _ := cmd.Flags().GetBool("page-check")
 		screenshotPath, _ := cmd.Flags().GetString("screenshot-path")
 		screenshotURLs, _ := cmd.Flags().GetStringArray("screenshot-url")
 		screenshotUser, _ := cmd.Flags().GetString("screenshot-user")
-		screenshotPassword, _ := cmd.Flags().GetString("screenshot-password")
+		screenshotPassword := secrets["screenshot-password"]
 		runtimeLog, _ := cmd.Flags().GetString("runtime-log")
 		debug, _ := cmd.Flags().GetBool("debug")
-		debugPass, _ := cmd.Flags().GetString("debug-pass")
+		debugPass := secrets["debug-pass"]
 		metrics, _ := cmd.Flags().GetBool("metrics")
 		runtimeSettings, _ := cmd.Flags().GetStringArray("runtime-setting")
 		trace, _ := cmd.Flags().GetBool("trace")
@@ -393,7 +402,7 @@ func init() {
 		"Set a constant for THIS RUN only: Module.Name=value (repeatable). Wins over the configuration and is never written to the project. A literal value is visible in shell history and in ps; Module.Name=@env:VAR reads an environment variable and Module.Name=@file:path reads a file (owner-only permissions, checked on Unix and not on Windows) instead, and @@ starts a literal value with @ — see docs/11-proposals/PROPOSAL_constant_values.md")
 	runCmd.Flags().Bool("local", false, "Run locally without Docker (warm serve + standalone runtime)")
 	runCmd.Flags().String("hub", "", "Expose the running app in a browser via your own mxcli tunnel-hub URL (e.g. https://hub.example.com). Implies --local; the app stays local and is reverse-tunnelled out")
-	runCmd.Flags().String("hub-secret", "", "Shared auth secret for --hub (\"user:pass\"), matching the hub's --secret")
+	runCmd.Flags().String("hub-secret", "", "Shared auth secret for --hub (\"user:pass\"), matching the hub's --secret"+secretRefHelp)
 	runCmd.Flags().String("hub-prefix", "", "Optional subdomain prefix on the hub (org/solution/team/env): <prefix>-<project>-<branch>")
 	runCmd.Flags().String("hub-project", "", "Project name for the hub subdomain + overview (default: the .mpr name)")
 	runCmd.Flags().String("hub-solution", "", "Solution name to group this app under in the hub overview (multi-app solutions)")
@@ -415,18 +424,18 @@ func init() {
 	runCmd.Flags().String("db-host", "", "Database host:port (IPv6: [::1]:5432; default 127.0.0.1:5432)")
 	runCmd.Flags().String("db-name", "", "Database name (default derived from the project name)")
 	runCmd.Flags().String("db-user", "", "Database user (default mendix)")
-	runCmd.Flags().String("db-password", "", "Database password (default mendix)")
+	runCmd.Flags().String("db-password", "", "Database password (default mendix)"+secretRefHelp)
 	runCmd.Flags().String("db-admin-user", "", "PostgreSQL superuser --ensure-db creates the role and database with, when it has a password (e.g. every Windows install). Default postgres when --db-admin-password is given")
-	runCmd.Flags().String("db-admin-password", "", "Password for --db-admin-user, used only by --ensure-db and never passed to the runtime. PGPASSWORD or a .pgpass file for postgres works too, and keeps it off the command line")
+	runCmd.Flags().String("db-admin-password", "", "Password for --db-admin-user, used only by --ensure-db and never passed to the runtime. PGPASSWORD or a .pgpass file for postgres works too"+secretRefHelp)
 	runCmd.Flags().Bool("screenshot", false, "Capture a Playwright screenshot after boot and each applied change")
 	runCmd.Flags().Bool("page-check", false, "Print a text verdict for each page (title, headings, error banners, row count, console errors) instead of reading a screenshot — far cheaper, and it reports console errors a PNG cannot show")
 	runCmd.Flags().String("screenshot-path", "", "Screenshot output PNG (default <projectDir>/.mxcli/run-local.png)")
 	runCmd.Flags().StringArray("screenshot-url", nil, "Page to screenshot: a full URL or a path relative to the app root, e.g. /p/customers (default the app root). Repeat for a multi-page set.")
 	runCmd.Flags().String("screenshot-user", "", "Log in with this user before screenshotting (for pages behind login)")
-	runCmd.Flags().String("screenshot-password", "", "Password for --screenshot-user")
+	runCmd.Flags().String("screenshot-password", "", "Password for --screenshot-user"+secretRefHelp)
 	runCmd.Flags().String("runtime-log", "", "Write the Mendix runtime log (server stack traces + microflow LOG output) to this file for debugging (default <projectDir>/.mxcli/runtime.log; \"-\" to disable)")
 	runCmd.Flags().Bool("debug", false, "Enable the microflow debugger at boot and start a session, so 'mxcli debug break/paused/…' works from another terminal (no breakpoints = no behaviour change)")
-	runCmd.Flags().String("debug-pass", "", "Debugger password when --debug is set (default \"mxdebug\")")
+	runCmd.Flags().String("debug-pass", "", "Debugger password when --debug is set (default \"mxdebug\")"+secretRefHelp)
 	runCmd.Flags().Bool("metrics", false, "Register a Prometheus meter registry at boot; the runtime serves metrics at http://127.0.0.1:<admin-port>/prometheus")
 	runCmd.Flags().StringArray("runtime-setting", nil, "Extra runtime setting Key=Value merged into the boot configuration (Value parsed as JSON when possible), e.g. --runtime-setting 'OpenTelemetry._RuntimeSpanFilters=[\"Loop\",\"Gateway\"]'. Repeatable.")
 	runCmd.Flags().Bool("trace", false, "Enable OpenTelemetry tracing: attach the bundled agent (console exporter → the runtime log) and apply default span filters (unfiltered tracing is ~10x slower)")
