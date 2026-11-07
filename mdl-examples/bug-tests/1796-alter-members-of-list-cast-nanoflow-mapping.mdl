@@ -1,0 +1,88 @@
+mdl 1;
+-- ako/mxcli#1796 — a fragment an alter splices names a member of a stored
+-- created list's, cast's, nanoflow call's or import mapping's output
+--
+-- A fragment spliced by `alter microflow` / `alter nanoflow` (or `create or
+-- modify`) starts from the variables the stored flow declares, typed as
+-- `create microflow` types them. #1769 and #1777 typed association retrieves,
+-- loop iterators, list operations and Java actions; a `create list of`, a cast
+-- in a type split's case, a nanoflow call's result and an import mapping's
+-- (or a REST call's mapped) result stayed untyped, so a member of one was
+-- refused with nothing written: "cannot qualify member "Code": the entity
+-- its variable holds is not known here …".
+--
+-- Run on any project:
+--   mxcli exec mdl-examples/bug-tests/1796-alter-members-of-list-cast-nanoflow-mapping.mdl -p app.mpr
+--   mxcli docker check -p app.mpr
+-- Expected: every alter reports "Altered …"; mx check reports 0 errors.
+-- Before the fix: every alter is refused, "cannot qualify member".
+
+create module BugTest1796;
+create persistent entity BugTest1796.Order (Code: String(50));
+create persistent entity BugTest1796.SpecialOrder extends BugTest1796.Order (Rank: Integer);
+create non-persistent entity BugTest1796.Country (Code: String(10), Name: String(100));
+
+create json structure BugTest1796.JSON_Country
+sample '{"code": "NL", "name": "Netherlands"}';
+
+create import mapping BugTest1796.IMM_Country
+  with json structure BugTest1796.JSON_Country
+{
+  create BugTest1796.Country {
+    Code = code,
+    Name = name
+  }
+};
+
+create nanoflow BugTest1796.NF_FirstOrder () returns BugTest1796.Order as $Order
+begin
+  retrieve $Order from BugTest1796.Order first;
+  return $Order;
+end;
+
+create microflow BugTest1796.SUB_Shapes ($Order: BugTest1796.Order, $Json: String)
+begin
+  $Orders = create list of BugTest1796.Order;
+  $Country = import from mapping BugTest1796.IMM_Country($Json);
+  split type $Order
+  when BugTest1796.SpecialOrder then
+    cast $Special;
+    log info node 'Shapes' 'special';
+  when BugTest1796.Order then
+  end split;
+  log info node 'Shapes' 'done';
+end;
+
+create nanoflow BugTest1796.NF_Shapes ()
+begin
+  $First = call nanoflow BugTest1796.NF_FirstOrder();
+  log info node 'Shapes' 'done';
+end;
+
+-- A created list: the entity it lists.
+alter microflow BugTest1796.SUB_Shapes {
+  insert after $Country begin
+    $Found = find $Orders by Code = 'A';
+  end;
+};
+
+-- An import mapping's result: its root entity.
+alter microflow BugTest1796.SUB_Shapes {
+  insert after $Country begin
+    change $Country (Name = 'Nederland');
+  end;
+};
+
+-- A cast in a type split's case: the case's specialization.
+alter microflow BugTest1796.SUB_Shapes {
+  insert after $Special begin
+    change $Special (Rank = 1);
+  end;
+};
+
+-- A nanoflow call's result: the called nanoflow's return type.
+alter nanoflow BugTest1796.NF_Shapes {
+  insert after $First begin
+    change $First (Code = 'X');
+  end;
+};
