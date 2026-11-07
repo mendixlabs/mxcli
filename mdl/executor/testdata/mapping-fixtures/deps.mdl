@@ -507,7 +507,7 @@ Note: Not all connectors or models might support token usage metrics. */
  * This entity represents a discrete piece of knowledge that can be used in embed and store operations. It is a specialization of Chunk and it is the relevant entity if you need to both generate embedding vectors and want to store them in a knowledge base.
  */
 @Position(730, 1650)
-create or modify persistent entity GenAICommons.KnowledgeBaseChunk extends GenAICommons.Chunk (
+create or modify non-persistent entity GenAICommons.KnowledgeBaseChunk extends GenAICommons.Chunk (
   /** This is a system-generated UUID for the chunk in the knowledge base.  */
   ChunkID: String(36),
   /** This is a front-end reference to the KnowledgeBaseChunk so that users know what it refers to (e.g. URL, document location, human-readable record ID). */
