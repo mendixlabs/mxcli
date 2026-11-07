@@ -711,7 +711,51 @@ func walkWidget(w map[string]any, parentID string, depth int) []rawWidgetInfo {
 		}
 	}
 
+	// Handle the containers that keep their widgets under other keys: table
+	// cells, a header's and a split pane's sides, a scroll container's regions.
+	// Each was skipped, so everything inside was absent from the index while the
+	// XPath walk, which descends into every key, named it (ako/mxcli#1895).
+	var parts []map[string]any
+	for _, cell := range getBsonArrayElements(w["Cells"]) {
+		if cellMap, ok := cell.(map[string]any); ok {
+			parts = append(parts, cellMap)
+		}
+	}
+	if widget.WidgetType == "Forms$ScrollContainer" {
+		for _, key := range []string{"CenterRegion", "Top", "Left", "Right", "Bottom"} {
+			if region, ok := w[key].(map[string]any); ok {
+				parts = append(parts, region)
+			}
+		}
+	}
+	for _, part := range parts {
+		for _, pw := range partWidgets(part, "Widgets", "Widget") {
+			result = append(result, walkWidget(pw, childParent, childDepth)...)
+		}
+	}
+	for _, side := range [][2]string{{"LeftWidgets", "LeftWidget"}, {"RightWidgets", "RightWidget"},
+		{"FirstWidgets", "FirstWidget"}, {"SecondWidgets", "SecondWidget"}} {
+		for _, sw := range partWidgets(w, side[0], side[1]) {
+			result = append(result, walkWidget(sw, childParent, childDepth)...)
+		}
+	}
+
 	return result
+}
+
+// partWidgets returns the widgets m holds under a list key or, in older models,
+// a single-widget key.
+func partWidgets(m map[string]any, listKey, singleKey string) []map[string]any {
+	var out []map[string]any
+	for _, v := range getBsonArrayElements(m[listKey]) {
+		if vm, ok := v.(map[string]any); ok {
+			out = append(out, vm)
+		}
+	}
+	if single, ok := m[singleKey].(map[string]any); ok {
+		out = append(out, single)
+	}
+	return out
 }
 
 // widgetsInPropertyBag walks a pluggable widget's stored property bag and
