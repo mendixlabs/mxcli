@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run the tunnel seam's !linux stub tests on a non-Linux runner (ADR-0009).
-# Shared by push-test.yml (Windows on PRs, Windows + macOS on main) and
+# Shared by push-test.yml (Windows, on every PR and main push) and
 # nightly.yml (macOS), so the two cannot drift.
 #
 # Scoped with -run to the seam's own tests. The full test binaries are still

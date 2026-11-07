@@ -4,7 +4,6 @@ package marketplace
 
 import (
 	"archive/zip"
-	"bytes"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -12,7 +11,7 @@ import (
 
 	modelsdk "github.com/mendixlabs/mxcli"
 	"github.com/mendixlabs/mxcli/internal/zipentry"
-	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/mendixlabs/mxcli/modelsdk/mpr"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -47,29 +46,14 @@ import (
 //     comparison against such a reference can therefore also report the
 //     platform's own migrations of the module.
 
-// sqliteMagic opens every SQLite database file, and so every v1 .mpr.
-var sqliteMagic = []byte("SQLite format 3\x00")
-
-// unitContainments are the properties under which a unit holds other units.
-// They are stored as separate units in a .mpr, and the parent's own contents
-// carry none of them — measured on an 11.15 MPR v2 project: a Projects$Folder
-// unit is {$ID, $Type, Name}, a Projects$ModuleImpl has no Folders, Documents,
-// DomainModel, ModuleSettings or ModuleSecurity key.
-//
-// Only the unit kinds that hold units are split (unitHolders): a document that
-// happens to have a property of one of these names keeps it.
+// unitContainments are the properties under which a unit holds other units
+// (mpr.IsTreeUnitContainment); the tests check a split unit holds none.
 var unitContainments = map[string]bool{
 	"Folders":        true,
 	"Documents":      true,
 	"DomainModel":    true,
 	"ModuleSettings": true,
 	"ModuleSecurity": true,
-}
-
-// unitHolders are the unit types that contain other units in a module.
-var unitHolders = map[string]bool{
-	"Projects$ModuleImpl": true,
-	"Projects$Folder":     true,
 }
 
 // treeUnit is one unit cut out of a module tree, ready for AddRawUnit.
@@ -99,18 +83,7 @@ func isModuleTree(data []byte) bool {
 
 // moduleTreeVersion reports the _ProductVersion of a module tree, and false when
 // data is not one.
-func moduleTreeVersion(data []byte) (string, bool) {
-	if bytes.HasPrefix(data, sqliteMagic) || len(data) < 5 {
-		return "", false
-	}
-	var head struct {
-		ProductVersion string `bson:"_ProductVersion"`
-	}
-	if bson.Unmarshal(data, &head) != nil || head.ProductVersion == "" {
-		return "", false
-	}
-	return head.ProductVersion, true
-}
+func moduleTreeVersion(data []byte) (string, bool) { return mpr.ModuleTreeVersion(data) }
 
 // checkTreeVersion refuses a module tree saved with a newer Mendix than the
 // project it is written into: its units may use properties or types that
@@ -136,79 +109,18 @@ func releaseOf(v string) string {
 }
 
 // moduleTreeUnits splits the named module of a module tree into units, parents
-// before children. The module unit's containerID is left empty: the caller
-// attaches it to its own project unit.
+// before children (mpr.ModuleTreeUnits). The module unit's containerID is left
+// empty: the caller attaches it to its own project unit.
 func moduleTreeUnits(data []byte, moduleName string) ([]treeUnit, error) {
-	var root bson.D
-	if err := bson.Unmarshal(data, &root); err != nil {
-		return nil, fmt.Errorf("decode module tree: %w", err)
-	}
-	contents, ok := lookup(root, "Contents").(bson.D)
-	if !ok {
-		return nil, fmt.Errorf("module tree has no Contents document")
-	}
-	modules, _ := lookup(contents, "Modules").(bson.A)
-	for _, m := range modules {
-		mod, ok := m.(bson.D)
-		if !ok || !equalFold(stringOf(lookup(mod, "Name")), moduleName) {
-			continue
-		}
-		var units []treeUnit
-		if err := splitUnit(mod, "", projectContainment, &units); err != nil {
-			return nil, err
-		}
-		return units, nil
-	}
-	return nil, fmt.Errorf("module %q not found in the package's module tree", moduleName)
-}
-
-// splitUnit appends doc as a unit, then recurses into the units it contains.
-func splitUnit(doc bson.D, containerID, containment string, units *[]treeUnit) error {
-	id, err := idOf(doc)
+	split, err := mpr.ModuleTreeUnits(data, moduleName)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	unitType := stringOf(lookup(doc, "$Type"))
-	holder := unitHolders[unitType]
-	own := make(bson.D, 0, len(doc))
-	var children []bson.E
-	for _, e := range doc {
-		if holder && unitContainments[e.Key] {
-			children = append(children, e)
-			continue
-		}
-		own = append(own, e)
+	units := make([]treeUnit, len(split))
+	for i, u := range split {
+		units[i] = treeUnit{id: u.ID, containerID: u.ContainerID, containment: u.ContainmentName, unitType: u.Type, contents: u.Contents}
 	}
-	encoded, err := bson.Marshal(own)
-	if err != nil {
-		return fmt.Errorf("encode unit %s: %w", id, err)
-	}
-	*units = append(*units, treeUnit{
-		id:          id,
-		containerID: containerID,
-		containment: containment,
-		unitType:    unitType,
-		contents:    encoded,
-	})
-	for _, c := range children {
-		switch v := c.Value.(type) {
-		case bson.D:
-			if err := splitUnit(v, id, c.Key, units); err != nil {
-				return err
-			}
-		case bson.A:
-			// A Mendix list stores its storage-kind marker as element 0; the
-			// units are the documents after it.
-			for _, item := range v {
-				if child, ok := item.(bson.D); ok {
-					if err := splitUnit(child, id, c.Key, units); err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
-	return nil
+	return units, nil
 }
 
 // buildFromModuleTree is the module-tree counterpart of `mx module-import` for
@@ -270,20 +182,6 @@ func lookup(doc bson.D, key string) any {
 func stringOf(v any) string {
 	s, _ := v.(string)
 	return s
-}
-
-func idOf(doc bson.D) (string, error) {
-	switch v := lookup(doc, "$ID").(type) {
-	case bson.Binary:
-		if len(v.Data) == 16 {
-			return types.BlobToUUID(v.Data), nil
-		}
-	case string:
-		if v != "" {
-			return v, nil
-		}
-	}
-	return "", fmt.Errorf("%s without an $ID (a 16-byte binary or a non-empty string) in the module tree", stringOf(lookup(doc, "$Type")))
 }
 
 func readZipEntry(zipPath, entry string) ([]byte, error) {

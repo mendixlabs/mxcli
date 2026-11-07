@@ -92,6 +92,10 @@ type Module struct {
 	AppStoreVersion     string `json:"appStoreVersion,omitempty"`
 	AppStoreGuid        string `json:"appStoreGuid,omitempty"`
 	IsReusableComponent bool   `json:"isReusableComponent,omitempty"`
+	// PackageFile is set for a module the project holds as a package file
+	// instead of as units: its path relative to the project directory,
+	// modules/<Name>.mxmodule. Such a module is read-only (ako/mxcli#1780).
+	PackageFile string `json:"packageFile,omitempty"`
 
 	// Contained units
 	DomainModelID ID   `json:"domainModelId,omitempty"`
