@@ -88,6 +88,11 @@ type Reader struct {
 	// listings — the cost a typed listing must keep proportional to its
 	// result, not to the project. Read by tests.
 	blobReads atomic.Int64
+
+	// packaged is what the project's module packages (modules/*.mxmodule)
+	// hold, read on first use (packaged_modules.go).
+	packagedOnce sync.Once
+	packaged     *packagedSet
 }
 
 // cachedUnit stores metadata about a unit for fast filtering.
@@ -487,6 +492,9 @@ func (r *Reader) rawUnitBytes(q rowQuerier, unitID string) ([]byte, error) {
 		if data, ok := r.overlay[unitID]; ok {
 			return data, nil
 		}
+	}
+	if u, ok := r.packagedUnit(unitID); ok {
+		return u.Contents, nil
 	}
 	if r.version == MPRVersionV2 {
 		// For v2, we need the swapped UUID to build the file path.

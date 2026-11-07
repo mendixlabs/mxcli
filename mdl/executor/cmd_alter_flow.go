@@ -1024,12 +1024,40 @@ func (a *alterFlowContext) storedVariables(ctx *ExecContext) (varTypes, declared
 	for _, p := range a.mf.Parameters {
 		add(p.Name, p.Type)
 	}
-	// What is typed from another variable — a retrieve over an association
-	// from its start, a loop's iterator or a list operation's output from its
-	// list — is typed once the rest are, below; so is a Java action's result,
-	// which a list argument can type and another origin can contradict.
+	// Every output is an origin of its name. What is typed from another
+	// variable — a retrieve over an association from its start, a loop's
+	// iterator or a list operation's output from its list, a Java action's
+	// list of its type parameter from an argument — is typed once the rest
+	// are, below. What is typed outright is an origin too (dependsOnNothing),
+	// so two origins of one name that type it differently leave it untyped,
+	// whatever their kind: a direct one used to win over a dependent one, and
+	// of two direct ones the last (ako/mxcli#1796).
 	deps := storedDependents{}
 	fb := &flowBuilder{backend: ctx.Backend}
+	direct := func(name, entityType, declaredAs string) {
+		if entityType == "" {
+			declared[name] = declaredAs
+		} else {
+			declared[name] = "Unknown"
+		}
+		deps.add(name, storedDependent{how: dependsOnNothing, typ: entityType})
+	}
+	directOf := func(name string, dt microflows.DataType) {
+		switch dt.(type) {
+		case *microflows.ObjectType, *microflows.ListType:
+			direct(name, formatMicroflowDataType(ctx, dt, a.entityNames), "")
+		case nil:
+			direct(name, "", "Unknown")
+		default:
+			direct(name, "", formatMicroflowDataType(ctx, dt, a.entityNames))
+		}
+	}
+	entityName := func(qn string, id model.ID) string {
+		if qn != "" {
+			return qn
+		}
+		return a.entityNames[id]
+	}
 	for _, c := range a.cands {
 		if loop, ok := c.Object.(*microflows.LoopedActivity); ok {
 			if src, ok := loop.LoopSource.(*microflows.IterableList); ok {
@@ -1043,14 +1071,24 @@ func (a *alterFlowContext) storedVariables(ctx *ExecContext) (varTypes, declared
 		}
 		switch x := act.Action.(type) {
 		case *microflows.CreateVariableAction:
-			add(c.OutputVariable, x.DataType)
+			directOf(c.OutputVariable, x.DataType)
 		case *microflows.CreateObjectAction:
-			if x.EntityQualifiedName != "" {
-				varTypes[c.OutputVariable] = x.EntityQualifiedName
-			} else if n, ok := a.entityNames[x.EntityID]; ok {
-				varTypes[c.OutputVariable] = n
+			direct(c.OutputVariable, entityName(x.EntityQualifiedName, x.EntityID), "Object")
+		case *microflows.CreateListAction:
+			// `create list of`, typed as the full build types it
+			// (addCreateListAction).
+			if e := entityName(x.EntityQualifiedName, x.EntityID); e != "" {
+				direct(c.OutputVariable, "List of "+e, "")
 			} else {
-				declared[c.OutputVariable] = "Object"
+				direct(c.OutputVariable, "", "Unknown")
+			}
+		case *microflows.CastAction:
+			// A cast in a type split's case holds that case's
+			// specialization, as the full build types a cast in a case body.
+			if e := a.castCaseEntity(act.ID); e != "" {
+				direct(c.OutputVariable, e, "")
+			} else {
+				direct(c.OutputVariable, "", "Unknown")
 			}
 		case *microflows.RetrieveAction:
 			// A database retrieve names its entity; one over an association
@@ -1064,31 +1102,36 @@ func (a *alterFlowContext) storedVariables(ctx *ExecContext) (varTypes, declared
 			src, ok := x.Source.(*microflows.DatabaseRetrieveSource)
 			entity := ""
 			if ok {
-				entity = src.EntityQualifiedName
-				if entity == "" {
-					entity = a.entityNames[src.EntityID]
-				}
+				entity = entityName(src.EntityQualifiedName, src.EntityID)
 			}
 			switch {
 			case entity == "":
-				declared[c.OutputVariable] = "Unknown"
+				direct(c.OutputVariable, "", "Unknown")
 			case src.Range != nil && src.Range.RangeType == microflows.RangeTypeFirst:
-				varTypes[c.OutputVariable] = entity
+				direct(c.OutputVariable, entity, "")
 			default:
-				varTypes[c.OutputVariable] = "List of " + entity
+				direct(c.OutputVariable, "List of "+entity, "")
 			}
 		case *microflows.MicroflowCallAction:
-			// A call's result has the called microflow's return type.
+			// A call's result has the called flow's return type.
 			var rt microflows.DataType
 			if x.MicroflowCall != nil {
 				rt = fb.lookupMicroflowReturnType(x.MicroflowCall.Microflow)
 			}
-			switch rt.(type) {
-			case *microflows.ObjectType, *microflows.ListType:
-				add(c.OutputVariable, rt)
-			default:
-				declared[c.OutputVariable] = "Unknown"
+			directOfEntity(directOf, direct, c.OutputVariable, rt)
+		case *microflows.NanoflowCallAction:
+			var rt microflows.DataType
+			if x.NanoflowCall != nil {
+				rt = fb.lookupNanoflowReturnType(x.NanoflowCall.Nanoflow)
 			}
+			directOfEntity(directOf, direct, c.OutputVariable, rt)
+		case *microflows.ImportXmlAction:
+			// An import mapping's result: its root entity, one object or a
+			// list (mappingResultType, the full build's own reading).
+			direct(c.OutputVariable, mappingResultType(x.ResultHandling), "Unknown")
+		case *microflows.RestCallAction:
+			h, _ := x.ResultHandling.(*microflows.ResultHandlingMapping)
+			direct(c.OutputVariable, mappingResultType(h), "Unknown")
 		case *microflows.ListOperationAction:
 			// The output holds what the operation keeps of its input list,
 			// as the full build types it (ako/mxcli#1777); a contains or an
@@ -1096,33 +1139,122 @@ func (a *alterFlowContext) storedVariables(ctx *ExecContext) (varTypes, declared
 			declared[c.OutputVariable] = "Unknown"
 			if r := listOperationResult(x.Operation); r != listResultNone {
 				deps.add(c.OutputVariable, storedDependent{how: dependsOnList, list: r, from: listOperationInput(x.Operation)})
+			} else {
+				deps.add(c.OutputVariable, storedDependent{how: dependsOnNothing})
 			}
 		case *microflows.AggregateListAction:
-			declared[c.OutputVariable] = aggregateResultType(x.Function, x.ReduceReturnType)
+			direct(c.OutputVariable, "", aggregateResultType(x.Function, x.ReduceReturnType))
 		case *microflows.JavaActionCallAction:
 			// The result has the action's declared return type, read the
 			// way the full build reads it (ako/mxcli#1777); a list of a type
 			// parameter takes the list an argument holds.
-			declared[c.OutputVariable] = "Unknown"
 			var ja *javaactions.JavaAction
 			if fb.backend != nil && x.JavaAction != "" {
 				ja, _ = fb.backend.ReadJavaActionByName(x.JavaAction)
 			}
 			switch {
 			case ja == nil:
+				direct(c.OutputVariable, "", "Unknown")
 			case returnsTypeParameterList(ja):
+				declared[c.OutputVariable] = "Unknown"
 				deps.add(c.OutputVariable, storedDependent{how: dependsOnFirstList, from: strings.Join(storedArgVariables(x), ",")})
 			default:
-				if t := javaActionResultType(ja, nil, nil); t != "" {
-					deps.add(c.OutputVariable, storedDependent{how: dependsOnNothing, typ: t})
-				}
+				direct(c.OutputVariable, javaActionResultType(ja, nil, nil), "Unknown")
 			}
 		default:
-			declared[c.OutputVariable] = "Unknown"
+			direct(c.OutputVariable, "", "Unknown")
 		}
 	}
 	deps.typeAll(fb, varTypes, declared)
 	return varTypes, declared
+}
+
+// directOfEntity registers a call's result: its return type when that holds
+// an entity, otherwise a name declared Unknown, as the full build declares a
+// call whose result it does not type.
+func directOfEntity(directOf func(string, microflows.DataType), direct func(string, string, string), name string, rt microflows.DataType) {
+	switch rt.(type) {
+	case *microflows.ObjectType, *microflows.ListType:
+		directOf(name, rt)
+	default:
+		direct(name, "", "Unknown")
+	}
+}
+
+// castCaseEntity is the specialization a stored cast holds: the case of the
+// type split whose branch reaches it through plain activities only. That is
+// the full build's rule — a cast among a case body's own statements is typed
+// with the case — so a cast past a merge, inside a nested decision, or not
+// after a type split at all is "" and stays untyped.
+func (a *alterFlowContext) castCaseEntity(id model.ID) string {
+	oc := a.collectionOf(id)
+	if oc == nil {
+		return ""
+	}
+	objects := map[model.ID]microflows.MicroflowObject{}
+	for _, o := range oc.Objects {
+		objects[o.GetID()] = o
+	}
+	for cur, seen := id, map[model.ID]bool{}; !seen[cur]; {
+		seen[cur] = true
+		var in []*microflows.SequenceFlow
+		for _, f := range oc.Flows {
+			if f.DestinationID == cur && !f.IsErrorHandler {
+				in = append(in, f)
+			}
+		}
+		if len(in) != 1 {
+			return ""
+		}
+		switch objects[in[0].OriginID].(type) {
+		case *microflows.InheritanceSplit:
+			switch c := in[0].CaseValue.(type) {
+			case *microflows.InheritanceCase:
+				return a.caseEntity(c.EntityQualifiedName, c.EntityID)
+			case microflows.InheritanceCase:
+				return a.caseEntity(c.EntityQualifiedName, c.EntityID)
+			}
+			return ""
+		case *microflows.ActionActivity:
+			cur = in[0].OriginID
+		default:
+			return ""
+		}
+	}
+	return ""
+}
+
+func (a *alterFlowContext) caseEntity(qn string, id model.ID) string {
+	if qn != "" {
+		return qn
+	}
+	return a.entityNames[id]
+}
+
+// collectionOf is the object collection of the stored flow, or of a loop in
+// it, that holds the object id.
+func (a *alterFlowContext) collectionOf(id model.ID) *microflows.MicroflowObjectCollection {
+	var find func(oc *microflows.MicroflowObjectCollection) *microflows.MicroflowObjectCollection
+	find = func(oc *microflows.MicroflowObjectCollection) *microflows.MicroflowObjectCollection {
+		if oc == nil {
+			return nil
+		}
+		for _, o := range oc.Objects {
+			if o.GetID() == id {
+				return oc
+			}
+			if l, ok := o.(*microflows.LoopedActivity); ok {
+				if found := find(l.ObjectCollection); found != nil {
+					return found
+				}
+			}
+		}
+		return nil
+	}
+	if a.mf == nil {
+		return nil
+	}
+	return find(a.mf.ObjectCollection)
 }
 
 // storedArgVariable is an argument a stored Java action call passes as a

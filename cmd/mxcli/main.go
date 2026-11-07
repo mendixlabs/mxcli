@@ -36,6 +36,7 @@ func main() {
 		// clone) opens every unit file to build the unit index; say so
 		// rather than stall unexplained (ako/mxcli#1806).
 		mpr.ColdUnitIndexNotice = os.Stderr
+		mpr.PackagedModuleNotice = os.Stderr
 	}
 
 	// Open the process session before cobra sees argv. Cobra validates a

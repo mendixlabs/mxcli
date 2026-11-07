@@ -128,11 +128,12 @@ jobs:
         run: make test-integration
         timeout-minutes: 60
 
-  # The tunnel seam's !linux stub on macOS (ADR-0009). Per-PR CI runs it on
-  # Windows only; push-test.yml runs macOS on main, and this catches a
-  # darwin-only break within a day even when main is quiet. Like
-  # upgrade-full-corpus it does not gate the release: the hosted macOS queue is
-  # the one known runner flake, and a nightly is not held back by it.
+  # The tunnel seam's !linux stub on macOS (ADR-0009) -- the ONLY place it runs.
+  # push-test.yml runs it on Windows, on every PR and main push; macOS left
+  # that workflow because its hosted queue failed to deliver a runner for a
+  # third of main pushes. This catches a darwin-only break within a day; run it
+  # on demand with workflow_dispatch. Like upgrade-full-corpus it does not gate
+  # the release: a nightly is not held back by a macOS queue flake.
   tunnel-seam-macos:
     runs-on: macos-latest
     timeout-minutes: 30

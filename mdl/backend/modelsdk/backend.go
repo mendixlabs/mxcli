@@ -342,6 +342,9 @@ func (b *Backend) enrichModule(m *model.Module) {
 	if m == nil || m.ID == "" {
 		return
 	}
+	if pm, ok := b.reader.PackagedModuleOf(string(m.ID)); ok {
+		m.PackageFile = pm.File
+	}
 	raw, err := b.reader.GetRawUnitBytes(string(m.ID))
 	if err != nil || len(raw) == 0 {
 		return

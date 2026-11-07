@@ -15,6 +15,7 @@ import (
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
 	"github.com/mendixlabs/mxcli/cmd/mxcli/testrunner"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // cmd_run_lifecycle.go makes `mxcli run --local` a background service an agent
@@ -156,9 +157,12 @@ The arguments come from the project's run state, so this also restarts a run
 that has already stopped or crashed. To change a flag, stop it and start a new
 one: mxcli run stop -p app.mpr && mxcli run --local --watch --detach -p app.mpr …
 
-Secrets given on the command line (--constant values, --db-password,
---screenshot-password, --hub-secret, --debug-pass) are not stored with the run, so
-a run started with them cannot be restarted: restart says so and changes nothing.`,
+Secrets written literally on the command line (--constant values, --db-password,
+--db-admin-password, --screenshot-password, --hub-secret, --debug-pass) are not
+stored with the run, so a run started with them cannot be restarted: restart says
+so and changes nothing. Written as @env:VAR or @file:path they are stored as that
+reference and resolved again on restart, in the environment of the restarting
+shell.`,
 	Example: `  mxcli run restart -p app.mpr`,
 	Run: func(cmd *cobra.Command, args []string) {
 		projectPath := lifecycleProject(cmd)
@@ -177,11 +181,7 @@ a run started with them cannot be restarted: restart says so and changes nothing
 		// restart would hand the app the placeholder instead of the value. Say so
 		// before stopping anything.
 		if hasRedactedArgs(st.Args) {
-			fmt.Fprintf(os.Stderr, "cannot restart: this run was started with secrets on the command line "+
-				"(--constant values, --db-password, ...), and they are not stored.\n"+
-				"  Either set the database password in the PGPASSWORD environment variable, or stop the run and\n"+
-				"  start it again with the secrets: mxcli run stop -p %s && mxcli run --local --detach -p %s ...\n",
-				projectPath, projectPath)
+			fmt.Fprint(os.Stderr, restartSecretRefusal(projectPath))
 			os.Exit(runExitFailed)
 		}
 		if code := runStop(projectPath, os.Stdout); code != runExitOK {
@@ -211,14 +211,39 @@ func lifecycleProject(cmd *cobra.Command) string {
 	return projectPath
 }
 
+// restartSecretRefusal is why `run restart` refuses a run whose stored
+// arguments had a literal secret redacted, and what to do instead.
+//
+// It used to suggest the PGPASSWORD environment variable, which the runtime's
+// database password never reads (only --ensure-db's psql does): a run started
+// that way connected as the default password. A reference is what restart can
+// resolve again.
+func restartSecretRefusal(projectPath string) string {
+	return fmt.Sprintf("cannot restart: this run was started with a secret written literally on the command line "+
+		"(a --constant value, --db-password, ...), and it is not stored.\n"+
+		"  Stop it and start it again with the secret as a reference, which is stored and resolved again on restart:\n"+
+		"    mxcli run stop -p %s\n"+
+		"    mxcli run --local --detach -p %s --db-password @env:MX_DB_PASSWORD ...   (or @file:path)\n",
+		projectPath, projectPath)
+}
+
 // --- detach ------------------------------------------------------------
+
+// runFlagLookup finds a `run` flag by name. It is set in init rather than
+// calling runCmd.Flag directly, because runCmd's Run refers to detachArgs and
+// a direct reference would be an initialization cycle.
+var runFlagLookup = func(string) *pflag.Flag { return nil }
+
+func init() {
+	runFlagLookup = func(name string) *pflag.Flag { return runCmd.Flag(name) }
+}
 
 // detachArgs turns the parent's arguments into the child's: --detach removed,
 // and the project pinned to an absolute path so the child (and a later
 // `run restart` from another directory) runs the same project.
 func detachArgs(args []string, projectPath string) []string {
 	var out []string
-	args = absoluteConstantArgs(args)
+	args = absoluteFileRefArgs(args)
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
@@ -231,6 +256,15 @@ func detachArgs(args []string, projectPath string) []string {
 			continue // --project=X, -p=X, -pX
 		}
 		out = append(out, a)
+		// A flag that takes a value keeps it, even when the value looks like
+		// one of the flags dropped above (`--db-password -pX`). From
+		// mendixlabs/mxcli#1761.
+		if name, ok := strings.CutPrefix(a, "--"); ok && i+1 < len(args) {
+			if f := runFlagLookup(name); f != nil && f.NoOptDefVal == "" {
+				i++
+				out = append(out, args[i])
+			}
+		}
 	}
 	return append(out, "-p", projectPath)
 }
