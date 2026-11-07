@@ -287,6 +287,10 @@ type Layout struct {
 	LayoutType    string // "Responsive", "Phone", "Tablet", "Popup", "ModalPopup", "Default", "Legacy"
 	Platform      string // "Web" or "Native" — LayoutType alone cannot tell ("Popup" is native)
 	Description   string
+	// The layout's own Appearance (full catalog only).
+	Class          string
+	Style          string
+	DynamicClasses string
 }
 
 // Layouts iterates every layout outside System and Marketplace modules.
@@ -294,7 +298,8 @@ func (ctx *LintContext) Layouts() iter.Seq[Layout] {
 	return func(yield func(Layout) bool) {
 		rows, err := ctx.db.Query(fmt.Sprintf(`
 			SELECT l.Name, l.QualifiedName, l.ModuleName, COALESCE(l.Folder, ''),
-			       COALESCE(l.LayoutType, ''), COALESCE(l.Platform, ''), COALESCE(l.Description, '')
+			       COALESCE(l.LayoutType, ''), COALESCE(l.Platform, ''), COALESCE(l.Description, ''),
+			       COALESCE(l.Class, ''), COALESCE(l.Style, ''), COALESCE(l.DynamicClasses, '')
 			FROM layouts l
 			LEFT JOIN modules m ON l.ModuleName = m.Name
 			WHERE %s AND %s
@@ -309,7 +314,8 @@ func (ctx *LintContext) Layouts() iter.Seq[Layout] {
 		for rows.Next() {
 			var l Layout
 			if err := rows.Scan(&l.Name, &l.QualifiedName, &l.ModuleName, &l.Folder,
-				&l.LayoutType, &l.Platform, &l.Description); err != nil {
+				&l.LayoutType, &l.Platform, &l.Description,
+				&l.Class, &l.Style, &l.DynamicClasses); err != nil {
 				ctx.recordQueryError("Layouts (row scan)", err)
 				continue
 			}
@@ -324,7 +330,8 @@ func (ctx *LintContext) Layouts() iter.Seq[Layout] {
 }
 
 // NativePages returns the qualified names of the pages whose layout is a
-// native-mobile one. React-client rules (CE0582) do not apply to them: a native
+// native-mobile one, and of the native layouts themselves (whose widgets the
+// catalog records too, ako/mxcli#1302). React-client rules (CE0582) do not apply to them: a native
 // page is not rendered by the React client, and mxbuild builds a legacy widget
 // there clean (ako/mxcli#953).
 //
@@ -341,6 +348,8 @@ func (ctx *LintContext) NativePages() map[string]bool {
 		FROM pages p
 		JOIN layouts l ON l.QualifiedName = p.LayoutRef
 		WHERE l.Platform = 'Native'
+		UNION
+		SELECT QualifiedName FROM layouts WHERE Platform = 'Native'
 	`)
 	if err != nil {
 		ctx.recordQueryError("NativePages", err)

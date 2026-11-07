@@ -22,9 +22,9 @@ func (b *Builder) buildPages() error {
 
 	pageStmt, err := b.tx.Prepare(`
 		INSERT INTO pages_data (Id, Name, QualifiedName, ModuleName, Folder, Title, URL, LayoutRef,
-			Description, ParameterCount, WidgetCount, Excluded,
+			Description, ParameterCount, WidgetCount, Excluded, Class, Style, DynamicClasses,
 			ProjectId, SnapshotId)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -74,6 +74,7 @@ func (b *Builder) buildPages() error {
 		layoutRef := ""
 		widgetCnt := 0
 		var rawWidgets []rawWidgetInfo
+		var class, style, dynamicClasses string
 
 		if b.fullMode {
 			rawData, _ := b.reader.GetRawUnit(pg.ID)
@@ -81,6 +82,7 @@ func (b *Builder) buildPages() error {
 				layoutRef = extractLayoutRef(rawData)
 				rawWidgets = extractPageWidgets(rawData, string(pg.ID))
 				widgetCnt = len(rawWidgets)
+				class, style, dynamicClasses = widgetAppearance(rawData)
 			}
 		}
 
@@ -97,6 +99,7 @@ func (b *Builder) buildPages() error {
 			len(pg.Parameters),
 			widgetCnt,
 			pg.Excluded,
+			class, style, dynamicClasses,
 			projectID, snapshotID,
 		)
 		if err != nil {
@@ -976,17 +979,37 @@ func (b *Builder) buildLayouts() error {
 
 	layoutStmt, err := b.tx.Prepare(`
 		INSERT INTO layouts_data (Id, Name, QualifiedName, ModuleName, Folder, LayoutType, Platform,
-			Description, ProjectId, SnapshotId)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			Description, Class, Style, DynamicClasses, ProjectId, SnapshotId)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
 	}
 	defer layoutStmt.Close()
 
+	// A layout's widgets feed widgets_data like a page's, with
+	// ContainerType=LAYOUT (full mode only). Without them a "no inline styles"
+	// rule passed the styling that reaches every page on the layout, and a
+	// microflow only a layout's button calls had no caller (ako/mxcli#1302).
+	var widgetStmt *Stmt
+	if b.fullMode {
+		widgetStmt, err = b.tx.Prepare(`
+			INSERT INTO widgets_data (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
+				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, Description,
+				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation,
+				ProjectId, SnapshotId)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`)
+		if err != nil {
+			return err
+		}
+		defer widgetStmt.Close()
+	}
+
 	projectID, snapshotID := b.snapshotMeta()
 
 	count := 0
+	widgetCount := 0
 	for _, l := range layoutList {
 		if !b.own(string(l.ID)) {
 			continue
@@ -997,6 +1020,15 @@ func (b *Builder) buildLayouts() error {
 		qualifiedName := moduleName + "." + l.Name
 		folder := b.hierarchy.buildFolderPath(l.ContainerID)
 
+		var rawWidgets []rawWidgetInfo
+		var class, style, dynamicClasses string
+		if b.fullMode {
+			if rawData, _ := b.reader.GetRawUnit(l.ID); rawData != nil {
+				rawWidgets = extractLayoutWidgets(rawData)
+				class, style, dynamicClasses = widgetAppearance(rawData)
+			}
+		}
+
 		_, err := layoutStmt.Exec(
 			string(l.ID),
 			l.Name,
@@ -1006,17 +1038,68 @@ func (b *Builder) buildLayouts() error {
 			string(l.LayoutType),
 			layoutPlatform(l),
 			l.Documentation,
+			class, style, dynamicClasses,
 			projectID, snapshotID,
 		)
 		if err != nil {
 			return err
 		}
 		count++
+
+		for _, w := range rawWidgets {
+			if _, err := widgetStmt.Exec(
+				w.ID, w.Name, w.WidgetType,
+				string(l.ID), qualifiedName, "LAYOUT",
+				moduleName, folder,
+				w.EntityRef, w.AttributeRef, w.MicroflowRef, w.NanoflowRef, w.PageRef, "",
+				w.ParentID, w.Depth, w.Class, w.Style, w.DynamicClasses,
+				w.ActionType, w.HasConfirmation,
+				projectID, snapshotID,
+			); err != nil {
+				return fmt.Errorf("insert widget %s for layout %s: %w", w.Name, qualifiedName, err)
+			}
+			widgetCount++
+			b.collectWidgetExtraRefs("LAYOUT", qualifiedName, moduleName, w)
+		}
 	}
 	b.disown()
 
 	b.report("Layouts", count)
+	if b.fullMode {
+		b.report("Layout widgets", widgetCount)
+	}
 	return nil
+}
+
+// extractLayoutWidgets extracts every widget of a raw layout. A Forms$Layout
+// keeps its tree under Content (Forms$WebLayoutContent or
+// Forms$NativeLayoutContent): its own Widgets, or — for a layout built on
+// another one — the arguments of Content.LayoutCall, shaped like a page's
+// FormCall. A native layout adds the header placeholder and the sidebar.
+func extractLayoutWidgets(rawData map[string]any) []rawWidgetInfo {
+	content, ok := rawData["Content"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	var roots []map[string]any
+	roots = append(roots, partWidgets(content, "Widgets", "Widget")...)
+	if call, ok := content["LayoutCall"].(map[string]any); ok {
+		for _, arg := range getBsonArrayElements(call["Arguments"]) {
+			if argMap, ok := arg.(map[string]any); ok {
+				roots = append(roots, partWidgets(argMap, "Widgets", "Widget")...)
+			}
+		}
+	}
+	if ph, ok := content["RightHeaderPlaceholder"].(map[string]any); ok {
+		roots = append(roots, ph)
+	}
+	roots = append(roots, partWidgets(content, "SidebarWidgets", "")...)
+
+	var widgets []rawWidgetInfo
+	for _, w := range roots {
+		widgets = append(widgets, extractWidgetsRecursive(w)...)
+	}
+	return widgets
 }
 
 // widgetExtraRef is a page/snippet → document edge a widget makes that its

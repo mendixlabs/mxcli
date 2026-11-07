@@ -145,7 +145,8 @@ func flowKindsFixtureDB(t *testing.T) catalog.CatalogDB {
 			TargetId TEXT, TargetName TEXT, RefKind TEXT, ModuleName TEXT)`,
 		`INSERT INTO refs VALUES ('PAGE','p1','Sales.P','ENTITY','e1','Sales.E','parameter','Sales')`,
 		`CREATE TABLE pages (Id TEXT, Name TEXT, QualifiedName TEXT, ModuleName TEXT, Folder TEXT,
-			Title TEXT, URL TEXT, Description TEXT, WidgetCount INTEGER)`,
+			Title TEXT, URL TEXT, Description TEXT, WidgetCount INTEGER,
+			Class TEXT, Style TEXT, DynamicClasses TEXT)`,
 		`CREATE TABLE entities (
 			Id TEXT, Name TEXT, QualifiedName TEXT, ModuleName TEXT, Folder TEXT,
 			EntityType TEXT, Description TEXT, Generalization TEXT,

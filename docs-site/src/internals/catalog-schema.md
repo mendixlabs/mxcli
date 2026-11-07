@@ -108,7 +108,10 @@ CREATE TABLE LAYOUTS (
     Folder        TEXT,
     LayoutType    TEXT,   -- Responsive / Phone / Tablet / ModalPopup / Default / Popup
     Platform      TEXT,   -- 'Web' or 'Native' (the content wrapper's type)
-    Description   TEXT
+    Description   TEXT,
+    Class         TEXT,   -- the layout's own Appearance (full build only)
+    Style         TEXT,
+    DynamicClasses TEXT
 );
 ```
 
@@ -227,9 +230,9 @@ CREATE TABLE WIDGETS (
     Id                      TEXT PRIMARY KEY,
     Name                    TEXT,
     WidgetType              TEXT,    -- "Forms$TextBox", or a pluggable widget's id
-    ContainerId             TEXT,    -- the page or snippet
+    ContainerId             TEXT,    -- the page, snippet or layout
     ContainerQualifiedName  TEXT,
-    ContainerType           TEXT,    -- "PAGE" or "SNIPPET"
+    ContainerType           TEXT,    -- "PAGE", "SNIPPET" or "LAYOUT"
     ModuleName              TEXT,
     Folder                  TEXT,
     EntityRef               TEXT,

@@ -233,8 +233,11 @@ var fullBuiltins = []string{
 
 // fullFields are struct fields a fast build leaves at their zero value
 // (page.widget_count and snippet.widget_count count widgets only a full build
-// extracts). They are detected as an attribute access, `.name`.
-var fullFields = []string{"widget_count"}
+// extracts; a page's and a layout's own class_name, style and dynamic_classes
+// are read from the raw unit a full build loads). They are detected as an
+// attribute access, `.name`; a match on another struct's field of the same
+// name only builds a deeper catalog than needed.
+var fullFields = []string{"widget_count", "class_name", "style", "dynamic_classes"}
 
 // detectRequiredCatalogMode infers the catalog depth a Starlark rule needs by
 // scanning its source for calls to the graph / full-only builtins and reads of
@@ -1245,6 +1248,10 @@ func pageToStarlark(p Page) starlark.Value {
 		"url":            starlark.String(p.URL),
 		"description":    starlark.String(p.Description),
 		"widget_count":   starlark.MakeInt(p.WidgetCount),
+		// Named class_name because class is a Starlark keyword, as on a widget.
+		"class_name":      starlark.String(p.Class),
+		"style":           starlark.String(p.Style),
+		"dynamic_classes": starlark.String(p.DynamicClasses),
 	})
 }
 
