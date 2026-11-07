@@ -19,7 +19,7 @@ The optional property list sets the module's settings, the General tab of Studio
 : The *Module version*, a SemVer string `'major.minor.patch'` with an optional pre-release or build suffix (`'1.0.0-rc.1'`). It is the version an exported `.mpk` carries. Anything else is refused, as the dialog refuses it.
 
 **ModuleType**
-: `app` (an *App module*, the default) or `addon` (an *Add-on module*). An add-on hides every element not marked *Usable* from the rest of the app: referencing one from another module is CE1406, which `check -p --references` reports. Add-on modules need Mendix 9.12 or later. Solution modules have no MDL spelling.
+: `app` (an *App module*, the default) or `addon` (an *Add-on module*). An add-on hides every element not marked *Usable* from the rest of the app: referencing one from another module is CE1406, which `check -p --references` reports. Pages and snippets in an add-on cannot be made Usable at all: showing such a page, or calling such a snippet, from another module is CE1406 whatever export level it stores. Add-on modules need Mendix 9.12 or later. Solution modules have no MDL spelling.
 
 ## Settings shown by DESCRIBE MODULE
 

@@ -31,8 +31,15 @@ import (
 // that shows it is the measured way in. The enumeration arm of CE5400 was
 // measured on 11.14.0 the same way (mendixlabs/mxcli#1498 follow-up).
 //
+// A snippet call is the page case again (ako/mxcli#1998 follow-up), measured
+// on 11.12.6: a snippet call in a page or a snippet of an app module into an
+// add-on module's snippet is CE1406 whether the snippet stores Hidden or API,
+// while the same call from inside the add-on, or with the module set back to
+// App, is clean. Studio Pro's own add-on packages agree: TeamcenterExtension's
+// api.json lists no snippet, and its one snippet is stored Hidden.
+//
 // Covered shapes: navigation home pages, home flows, login / not-found pages and
-// menu items; menu documents; microflow and nanoflow parameter and return
+// menu items; menu documents; snippet calls in a created page or snippet; microflow and nanoflow parameter and return
 // types, call microflow and show page in their bodies; and the entities a
 // database retrieve, create object and create list name and the attributes and
 // associations a flow uses (checkFlowMembers). Everything else is left
@@ -61,6 +68,7 @@ func validateProtectedModuleRefs(ctx *ExecContext, prog *ast.Program, sc *script
 		scriptAttr:   map[string]*string{},
 		scriptAssoc:  map[string]*string{},
 		scriptPages:  map[string]bool{},
+		scriptSnips:  map[string]bool{},
 		entityLevels: map[string]map[string]string{},
 	}
 	for _, stmt := range prog.Statements {
@@ -80,7 +88,7 @@ func hasProtectedModuleCandidates(prog *ast.Program) bool {
 	for _, stmt := range prog.Statements {
 		switch stmt.(type) {
 		case *ast.CreateNavigationStmt, *ast.CreateMenuStmt, *ast.CreateMicroflowStmt, *ast.CreateNanoflowStmt,
-			*ast.AlterNavigationStmt, *ast.AlterMenuStmt:
+			*ast.AlterNavigationStmt, *ast.AlterMenuStmt, *ast.CreatePageStmtV3, *ast.CreateSnippetStmtV3:
 			return true
 		}
 	}
@@ -147,8 +155,10 @@ type protectedRefResolver struct {
 	scriptAttr   map[string]*string // "Module.Entity.Attribute"
 	scriptAssoc  map[string]*string // "Module.Association"
 	scriptPages  map[string]bool
+	scriptSnips  map[string]bool
 
 	storedPages  map[string]bool
+	storedSnips  map[string]bool
 	entityLevels map[string]map[string]string // module -> entity -> stored level; nil = unreadable
 	enumLevels   map[string]string            // qualified name -> stored level; nil = not read yet
 }
@@ -193,6 +203,8 @@ func (r *protectedRefResolver) recordDefinition(stmt ast.Statement) {
 		}
 	case *ast.CreatePageStmtV3:
 		r.scriptPages[s.Name.String()] = true
+	case *ast.CreateSnippetStmtV3:
+		r.scriptSnips[s.Name.String()] = true
 	}
 }
 
@@ -219,6 +231,10 @@ func (r *protectedRefResolver) check(stmt ast.Statement) []string {
 	case *ast.CreateMicroflowStmt:
 		return append(r.checkFlow(s.Name, s.Parameters, s.ReturnType, s.Body, effectiveFlowLevel(r, s)),
 			r.checkFlowMembers(s.Name, s.Parameters, s.Body)...)
+	case *ast.CreatePageStmtV3:
+		return r.checkSnippetCalls(s.Name, s.Widgets)
+	case *ast.CreateSnippetStmtV3:
+		return r.checkSnippetCalls(s.Name, s.Widgets)
 	case *ast.CreateNanoflowStmt:
 		// A nanoflow's own export level is not read, so only its references out
 		// of an ordinary module are checked, never CE5400 on it.
@@ -348,6 +364,36 @@ func (r *protectedRefResolver) pageRef(who string, qn ast.QualifiedName, src str
 		"and a page in one cannot be made usable (mxbuild refuses it even with export level API stored); "+
 		"reference a microflow in %s with `export level api` that shows the page instead",
 		who, qn.String(), src, ce1406Tail, qn.Module, qn.Module)
+}
+
+// checkSnippetCalls reports the snippet calls in the widgets of page or
+// snippet owner, in an app module, into an add-on module's snippet.
+func (r *protectedRefResolver) checkSnippetCalls(owner ast.QualifiedName, widgets []*ast.WidgetV3) []string {
+	if r.protected[owner.Module] {
+		return nil // from one add-on into another is not judged (see above)
+	}
+	var out []string
+	var walk func([]*ast.WidgetV3)
+	walk = func(ws []*ast.WidgetV3) {
+		for _, w := range ws {
+			if target := w.GetSnippet(); target != "" {
+				out = appendNonEmpty(out, r.snippetRef(fmt.Sprintf("snippet call '%s'", w.Name), parseQN(target), "app modules"))
+			}
+			walk(w.Children)
+		}
+	}
+	walk(widgets)
+	return out
+}
+
+func (r *protectedRefResolver) snippetRef(who string, qn ast.QualifiedName, src string) string {
+	if !r.protected[qn.Module] || !r.snippetExists(qn) {
+		return ""
+	}
+	return fmt.Sprintf("CE1406: %s is not allowed to use snippet '%s' because %s %s — %s is a protected module, "+
+		"and a snippet in one cannot be made usable (mxbuild refuses it even with export level API stored); "+
+		"build the widgets in a snippet of your own module instead",
+		who, qn.String(), src, ce1406Tail, qn.Module)
 }
 
 func (r *protectedRefResolver) microflowRef(who string, qn ast.QualifiedName, src string) string {
@@ -485,6 +531,16 @@ func (r *protectedRefResolver) pageExists(qn ast.QualifiedName) bool {
 		r.storedPages = buildPageQualifiedNames(r.ctx)
 	}
 	return r.storedPages[qn.String()]
+}
+
+func (r *protectedRefResolver) snippetExists(qn ast.QualifiedName) bool {
+	if r.scriptSnips[qn.String()] {
+		return true
+	}
+	if r.storedSnips == nil {
+		r.storedSnips = buildSnippetQualifiedNames(r.ctx)
+	}
+	return r.storedSnips[qn.String()]
 }
 
 // signatureEntity is the entity a parameter or return type names, if any. A

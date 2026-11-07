@@ -586,6 +586,13 @@ func listModules(ctx *ExecContext) error {
 				source = "Marketplace"
 			}
 		}
+		if m.PackageFile != "" {
+			// ako/mxcli#1780: held as modules/<Name>.mxmodule, not as units.
+			if source != "" {
+				source += ", "
+			}
+			source += "Packaged"
+		}
 		if kind := protections[string(m.ID)]; kind != "" {
 			// mendixlabs/mxcli#1498: its Hidden elements cannot be referenced
 			// from other modules, which nothing else printed showed.
@@ -680,6 +687,9 @@ func describeModule(ctx *ExecContext, moduleName string, withAll bool) error {
 		}
 	}
 	fmt.Fprintf(ctx.Output, "create or modify module %s%s;\n", targetModule.Name, moduleSettingsMDL(ctx, settings))
+	if targetModule.PackageFile != "" {
+		fmt.Fprintf(ctx.Output, "-- packaged module: %s — read-only, the project file holds none of its documents\n", targetModule.PackageFile)
+	}
 	// Location has no key yet (PROPOSAL_module_settings.md, "Later: Location").
 	if targetModule.FromAppStore {
 		fmt.Fprintln(ctx.Output, "-- location: Marketplace modules (set in Studio Pro)")

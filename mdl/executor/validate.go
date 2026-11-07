@@ -730,6 +730,11 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 		return err
 	}
 
+	// A packaged module is read-only; exec's writer refuses it (#1780).
+	if err := validatePackagedModuleTarget(ctx, stmt); err != nil {
+		return err
+	}
+
 	// An ALTER's target document must already exist. Until this, only the
 	// MODULE was resolved, so a misspelled document passed --references and was
 	// refused by exec — check was the weaker gate, which is backwards.
