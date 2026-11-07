@@ -86,13 +86,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS runs on main and workflow_dispatch only, and nightly
-        # (nightly.yml): on a PR, Windows already executes the same !linux stub,
-        # so macOS added only a darwin compile, while its hosted queue is the
-        # scarcest (5 concurrent on GitHub Free) and the one known flake, a job
-        # cancelled before it gets a runner. A darwin-only break is still caught
-        # on the merge to main.
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["windows-latest"]' || '["windows-latest", "macos-latest"]') }}
+        # Windows only; macOS runs nightly (nightly.yml, `tunnel-seam-macos`,
+        # also on workflow_dispatch there). Windows executes the same !linux
+        # stub, so macOS added only a darwin compile, while its hosted queue
+        # never delivered a runner for 15 of 46 main pushes (2026-11-03..07):
+        # the job was cancelled after ~15 min with every real job green, so
+        # main read red for nothing. Off PRs first (#1916), now off main too.
+        # Kept a one-entry matrix so the check name stays
+        # `tunnel-seam-cross-platform (windows-latest)`.
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
