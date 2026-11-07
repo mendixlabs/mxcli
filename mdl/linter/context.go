@@ -725,6 +725,10 @@ type Page struct {
 	URL           string
 	Description   string
 	WidgetCount   int
+	// The page's own Appearance (full catalog only, like WidgetCount).
+	Class          string
+	Style          string
+	DynamicClasses string
 }
 
 // Pages returns an iterator over all pages (excluding system modules).
@@ -732,7 +736,8 @@ func (ctx *LintContext) Pages() iter.Seq[Page] {
 	return func(yield func(Page) bool) {
 		rows, err := ctx.db.Query(fmt.Sprintf(`
 			SELECT p.Id, p.Name, p.QualifiedName, p.ModuleName, p.Folder,
-			       p.Title, p.URL, p.Description, p.WidgetCount
+			       p.Title, p.URL, p.Description, p.WidgetCount,
+			       COALESCE(p.Class, ''), COALESCE(p.Style, ''), COALESCE(p.DynamicClasses, '')
 			FROM pages p
 			LEFT JOIN modules m ON p.ModuleName = m.Name
 			WHERE %s AND %s
@@ -749,7 +754,7 @@ func (ctx *LintContext) Pages() iter.Seq[Page] {
 			var title, url, desc, folder sql.NullString
 			var widgetCount sql.NullInt64
 			err := rows.Scan(&pg.ID, &pg.Name, &pg.QualifiedName, &pg.ModuleName, &folder,
-				&title, &url, &desc, &widgetCount)
+				&title, &url, &desc, &widgetCount, &pg.Class, &pg.Style, &pg.DynamicClasses)
 			if err != nil {
 				ctx.recordQueryError("Pages (row scan)", err)
 				continue

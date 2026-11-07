@@ -54,7 +54,7 @@ func (r *EmptyContainerRule) Check(ctx *linter.LintContext) []linter.Violation {
 	type containerInfo struct {
 		ID            string
 		QualifiedName string
-		Type          string // "PAGE" or "SNIPPET"
+		Type          string // "PAGE", "SNIPPET" or "LAYOUT"
 		ModuleName    string
 	}
 	containers := make(map[string]containerInfo)
@@ -86,10 +86,7 @@ func (r *EmptyContainerRule) Check(ctx *linter.LintContext) []linter.Violation {
 
 		empties := findEmptyContainers(rawData)
 		for _, e := range empties {
-			docType := "page"
-			if c.Type == "SNIPPET" {
-				docType = "snippet"
-			}
+			docType := widgetDocType(c.Type)
 
 			violations = append(violations, linter.Violation{
 				RuleID:   r.ID(),

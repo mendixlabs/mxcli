@@ -770,6 +770,11 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 			if err != nil {
 				return err
 			}
+			// The persistability verdict exec gives; a parent the script
+			// declares counts, it decides the chain once written (#2005).
+			if err := checkSpecializationPersistability(ctx, sc, s); err != nil {
+				return err
+			}
 		}
 		// Validate enumeration references in attributes
 		attrTypes := make(map[string]ast.DataType)

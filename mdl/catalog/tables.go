@@ -7,6 +7,11 @@ package catalog
 //
 // History:
 //
+//	34 (page and layout appearance, layout widgets): pages and layouts gain
+//	    Class, Style and DynamicClasses, and widgets gains the rows of every
+//	    layout (ContainerType LAYOUT), with the refs they make (ako/mxcli#1302).
+//	    The linter selects the new columns, so against a cached catalog
+//	    without them every Pages() and Layouts() query fails.
 //	33 (container widgets): widgets gains the rows inside table cells, scroll
 //	    container regions, header sides and split panes (ako/mxcli#1895). No
 //	    column changed, but a cached catalog keeps the table with nothing in
@@ -178,7 +183,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "33"
+const CatalogSchemaVersion = "34"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -419,6 +424,10 @@ func (c *Catalog) createTables() error {
 			ParameterCount INTEGER DEFAULT 0,
 			WidgetCount INTEGER DEFAULT 0,
 			Excluded BOOLEAN DEFAULT 0,
+			-- The page's own Forms$Appearance (full build only, like WidgetCount).
+			Class TEXT,
+			Style TEXT,
+			DynamicClasses TEXT,
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,
@@ -466,6 +475,10 @@ func (c *Catalog) createTables() error {
 			LayoutType TEXT,
 			Platform TEXT,
 			Description TEXT,
+			-- The layout's own Forms$Appearance (full build only).
+			Class TEXT,
+			Style TEXT,
+			DynamicClasses TEXT,
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,
