@@ -98,6 +98,9 @@ Returned by `layouts()`.
 | `layout_type` | string | `"Responsive"`, `"Phone"`, `"Tablet"`, `"Popup"`, `"ModalPopup"`, `"Default"`, `"Legacy"` |
 | `platform` | string | `"Web"` or `"Native"` — the platform the layout (and every page on it) renders on. `layout_type` cannot tell: a native popup shares its value with a web one. React-client errors (CE0582) apply to `"Web"` only |
 | `description` | string | Documentation text |
+| `class_name` | string | The layout's own `Class` (Appearance), e.g. `"layout-atlas layout-atlas-responsive-default"`, else `""` (full catalog — auto-detected). Its widgets are `widgets()` rows with `container_type` `"LAYOUT"` |
+| `style` | string | The layout's own inline `Style` (Appearance), else `""` (full catalog) |
+| `dynamic_classes` | string | The layout's own `Dynamic classes` expression, else `""` (full catalog) |
 
 ### published_rest_operation
 Returned by `published_rest_operations()`.
@@ -123,7 +126,7 @@ Returned by `widgets()` (full catalog — auto-detected).
 | `widget_type` | string | The widget's storage type, e.g. `"Forms$DataView"`, `"Forms$DivContainer"`, `"Forms$ActionButton"`; a pluggable widget's id, e.g. `"com.mendix.widget.web.datagrid.Datagrid"` |
 | `container_id` | string | Container UUID |
 | `container_qualified_name` | string | `"Sales.Customer_Overview"` |
-| `container_type` | string | `"PAGE"` or `"SNIPPET"` |
+| `container_type` | string | `"PAGE"`, `"SNIPPET"` or `"LAYOUT"`. A layout's widgets reach every page on it, so a styling rule that skips `"LAYOUT"` misses the widest-reaching cases; a page-only rule (a data source, a page parameter) should filter on `"PAGE"` |
 | `module_name` | string | `"Sales"` |
 | `entity_ref` | string | Referenced entity qualified name |
 | `attribute_ref` | string | Referenced attribute path |

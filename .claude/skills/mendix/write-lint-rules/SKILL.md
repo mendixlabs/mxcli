@@ -12,10 +12,10 @@ description: "Write custom Starlark lint rules in .claude/lint-rules/ that run b
 |---|---|
 | 25-67 | Rule File Structure |
 | 68-163 | Available Query Functions |
-| 164-545 | Object Properties |
-| 546-559 | Helper Functions |
-| 560-646 | Common Patterns |
-| 647-655 | Validation |
+| 164-548 | Object Properties |
+| 549-562 | Helper Functions |
+| 563-649 | Common Patterns |
+| 650-658 | Validation |
 
 <!-- /skill-index -->
 # Writing Custom Starlark Lint Rules
@@ -245,6 +245,9 @@ def check():
 | `url` | string | Page URL |
 | `description` | string | Documentation text |
 | `widget_count` | int | Number of widgets (full catalog — auto-detected) |
+| `class_name` | string | The page's own `Class` (Appearance), else `""` (full catalog — auto-detected). Named `class_name` because `class` is a Starlark keyword |
+| `style` | string | The page's own inline `Style` (Appearance), else `""` (full catalog) |
+| `dynamic_classes` | string | The page's own `Dynamic classes` expression, else `""` (full catalog) |
 
 ### enumeration
 | Property | Type | Example |

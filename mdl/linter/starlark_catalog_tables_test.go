@@ -165,8 +165,8 @@ func TestCatalogTableBuiltins(t *testing.T) {
 		// An untranslated language has no row, rather than an empty one.
 		{`strings("de_DE")`, nil},
 		{"layouts()", []string{
-			"description=A popup|folder=Layouts|layout_type=ModalPopup|module_name=Sales|name=Atlas_Popup|" +
-				"platform=Web|qualified_name=Sales.Atlas_Popup",
+			"class_name=|description=A popup|dynamic_classes=|folder=Layouts|layout_type=ModalPopup|module_name=Sales|" +
+				"name=Atlas_Popup|platform=Web|qualified_name=Sales.Atlas_Popup|style=",
 		}},
 		{"published_rest_operations()", []string{
 			"deprecated=True|http_method=Get|microflow=Sales.PRS_GetOrder|module_name=Sales|path=/{id}|" +

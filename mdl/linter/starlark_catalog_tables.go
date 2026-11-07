@@ -189,6 +189,10 @@ func layoutToStarlark(l Layout) starlark.Value {
 		"layout_type":    starlark.String(l.LayoutType),
 		"platform":       starlark.String(l.Platform),
 		"description":    starlark.String(l.Description),
+		// Named class_name because class is a Starlark keyword, as on a widget.
+		"class_name":      starlark.String(l.Class),
+		"style":           starlark.String(l.Style),
+		"dynamic_classes": starlark.String(l.DynamicClasses),
 	})
 }
 

@@ -145,10 +145,7 @@ func (r *ReactUnsupportedWidgetRule) Check(ctx *linter.LintContext) []linter.Vio
 			continue
 		}
 
-		docType := "page"
-		if w.ContainerType == "SNIPPET" {
-			docType = "snippet"
-		}
+		docType := widgetDocType(w.ContainerType)
 
 		severity := r.DefaultSeverity()
 		message := fmt.Sprintf(

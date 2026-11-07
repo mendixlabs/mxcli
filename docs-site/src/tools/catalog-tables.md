@@ -193,6 +193,7 @@ Information about pages and their properties.
 | `ParameterCount` | Number of page parameters |
 | `WidgetCount` | Number of widgets (full build only; 0 otherwise) |
 | `Excluded` | 1 when the page is excluded from the project |
+| `Class`, `Style`, `DynamicClasses` | The page's own Appearance: CSS class, inline style and dynamic-classes expression (full build only) |
 
 ```sql
 SELECT Name, Title, URL
@@ -214,7 +215,7 @@ One row per widget **instance** on a page or snippet. Full build only
 | `Id` | The widget's element ID |
 | `Name` | Widget name |
 | `WidgetType` | Storage type (`Forms$DataView`, `Forms$ActionButton`, …); a pluggable widget's id (`com.mendix.widget.web.datagrid.Datagrid`) |
-| `ContainerId`, `ContainerQualifiedName`, `ContainerType` | The page or snippet holding the widget; `ContainerType` is `PAGE` or `SNIPPET` |
+| `ContainerId`, `ContainerQualifiedName`, `ContainerType` | The page, snippet or layout holding the widget; `ContainerType` is `PAGE`, `SNIPPET` or `LAYOUT`. `UPDATE WIDGETS` changes page and snippet widgets only |
 | `ModuleName`, `Folder` | The container's module and folder |
 | `EntityRef`, `AttributeRef`, `MicroflowRef`, `NanoflowRef`, `PageRef` | What the widget's own content references: datasource entity, bound attribute, action or datasource flow, the page its action opens |
 | `ParentWidgetId` | `Id` of the nearest widget **in this table** that encloses it; empty at the page or snippet root. What the catalog skips is transparent: the synthetic `conditionalVisibilityWidget…` container, layout grid rows and columns, tab pages, a pluggable widget's properties and object-list items. A widget in a layout grid column or a data grid 2 column has the grid as its parent |
@@ -270,6 +271,7 @@ Atlas_Core.
 | `LayoutType` | `Responsive`, `Phone`, `Tablet`, `ModalPopup` (web); `Default`, `Popup` (native) |
 | `Platform` | `Web` or `Native` — the platform every page on this layout renders on. React-client errors such as CE0582 apply to `Web` pages only |
 | `Description` | Documentation text |
+| `Class`, `Style`, `DynamicClasses` | The layout's own Appearance (full build only). Its widgets are in `CATALOG.WIDGETS` with `ContainerType = 'LAYOUT'` |
 
 ```sql
 -- pages on a native layout (needs a full build for LayoutRef)
