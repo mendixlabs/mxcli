@@ -2284,11 +2284,9 @@ func (fb *flowBuilder) addImportFromMappingAction(s *ast.ImportFromMappingStmt) 
 
 	fb.objects = append(fb.objects, activity)
 	fb.posX += fb.spacing
-	if s.OutputVariable != "" && resultEntityQN != "" && fb.varTypes != nil {
-		if resultHandling.SingleObject {
-			fb.varTypes[s.OutputVariable] = resultEntityQN
-		} else {
-			fb.varTypes[s.OutputVariable] = "List of " + resultEntityQN
+	if s.OutputVariable != "" && fb.varTypes != nil {
+		if t := mappingResultType(resultHandling); t != "" {
+			fb.varTypes[s.OutputVariable] = t
 		}
 	}
 
@@ -2562,4 +2560,19 @@ func (fb *flowBuilder) buildIncludedAssociations(call, param, side string, defs 
 		})
 	}
 	return out
+}
+
+// mappingResultType is the type a mapping's result binds its variable to: the
+// root entity it writes ResultEntityID with (a qualified name), one object
+// or a list as SingleObject says; "" when there is none. It reads the written
+// result handling, not the statement, so a stored import or REST call result
+// can be typed the way the full build types it (ako/mxcli#1796).
+func mappingResultType(h *microflows.ResultHandlingMapping) string {
+	if h == nil || h.ResultEntityID == "" {
+		return ""
+	}
+	if h.SingleObject {
+		return string(h.ResultEntityID)
+	}
+	return "List of " + string(h.ResultEntityID)
 }
