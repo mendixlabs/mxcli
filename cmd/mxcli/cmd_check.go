@@ -447,6 +447,20 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 					fmt.Fprint(os.Stderr, hint)
 				}
 			}
+			// The flow verdicts still run (ako/mxcli#2014): they are what exec
+			// would refuse, and stopping here hid them behind the reference
+			// error — fixed, re-checked, and only then the next problem, or an
+			// `exec --no-check` that ran far and rolled back. The rest of the
+			// project tier stays skipped: a name that does not resolve mostly
+			// makes the type checks repeat the reference error.
+			if verdicts := executor.ApplyV1Policy(exec.CheckFlowVerdictsReport(prog).Violations, v1); len(verdicts) > 0 {
+				if isStructured {
+					structured = append(structured, verdicts...)
+				} else {
+					fmt.Fprintln(os.Stderr)
+					report(verdicts)
+				}
+			}
 			return finish(1)
 		}
 		if !isStructured {
