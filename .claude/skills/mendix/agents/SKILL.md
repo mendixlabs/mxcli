@@ -15,8 +15,8 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | 138-164 | Altering existing documents |
 | 165-193 | Gotchas |
 | 194-215 | Common Patterns |
-| 216-272 | Calling Agents from Microflows |
-| 273-275 | AI agent documents |
+| 216-280 | Calling Agents from Microflows |
+| 281-283 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -252,23 +252,31 @@ $ChatContext = call java action AgentEditorCommons.ChatContext_Create_ForAgentDo
 `OptionalContextObject` / `ContextObject` fills the prompt's `{{variables}}` from
 the object's attributes; its entity must be the agent's `Entity`.
 
-For an agent built at runtime (an `AgentCommons.Agent` object, not a document),
-the **AgentCommons** actions take the object instead. They have the same
-parameters: `Agent_Call_WithoutHistory(Agent, OptionalContextObject,
+The **AgentCommons** actions take an `AgentCommons.Agent` object instead of the
+document: an agent built at runtime, or one `ASU_AgentEditor` imported from a
+document. They have the same parameters: `Agent_Call_WithoutHistory(Agent, OptionalContextObject,
 OptionalRequest, OptionalFileCollection)`,
 `Agent_Call_WithHistory(Agent, Request, OptionalContextObject)` and
 `ChatContext_Create_ForAgent(Agent, ActionMicroflow, ContextObject,
 OverwritingDeployedModel)`.
 
 ```sql
+-- _QualifiedName is the document's name, filled by ASU_AgentEditor; Title is not a stable key.
 retrieve $Agent from AgentCommons.Agent
-  where Title = 'MyAgent'
+  where _QualifiedName = 'Module.MyAgent'
   first;
 $Response = call java action AgentCommons.Agent_Call_WithoutHistory(
   Agent = $Agent, OptionalContextObject = $Invoice,
   OptionalRequest = empty, OptionalFileCollection = empty
 );
 ```
+
+**A document reference is checked, a runtime retrieve is not.** `check
+--references` resolves `Agent = 'Module.MyAgent'`, so a script that calls an
+agent by document passes only once that agent exists. When a tool microflow
+calls a flow that calls the agent that uses the tool, no statement order works
+on a fresh project: break the cycle with the AgentCommons form and a retrieve
+by `_QualifiedName`, which is what `Agent_CallDocument_*` does internally.
 
 ## AI agent documents
 
