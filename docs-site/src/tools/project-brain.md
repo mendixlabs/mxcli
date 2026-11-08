@@ -467,7 +467,11 @@ Dropping the last entry from a module shard deletes the file, so the directory
 does not accumulate husks that read as "this module has decisions".
 
 Every command takes `--json`, so a dispatcher running one agent per slice can
-act on the answers rather than read them. `brain staged --since <id>` is the
+act on the answers rather than read them. `capture --json` returns the entry's
+`id`, `kind`, `slice`, `shard`, `added` and a `status` of `queued`,
+`already_queued` or `already_committed` (a duplicate is reported with its
+twin's id, and exits 0 as before); `promote --json` returns the `id`, `kind`,
+`shard` and the shard file's `path`. `brain staged --since <id>` is the
 slice boundary: note `last_id` before handing a slice off, pass it back
 afterwards, and `--fail-if-empty` exits 1 on a slice that recorded nothing.
 
