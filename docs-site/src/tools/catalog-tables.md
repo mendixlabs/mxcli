@@ -217,7 +217,7 @@ One row per widget **instance** on a page or snippet. Full build only
 | `WidgetType` | Storage type (`Forms$DataView`, `Forms$ActionButton`, …); a pluggable widget's id (`com.mendix.widget.web.datagrid.Datagrid`) |
 | `ContainerId`, `ContainerQualifiedName`, `ContainerType` | The page, snippet or layout holding the widget; `ContainerType` is `PAGE`, `SNIPPET` or `LAYOUT`. `UPDATE WIDGETS` changes page and snippet widgets only |
 | `ModuleName`, `Folder` | The container's module and folder |
-| `EntityRef`, `AttributeRef`, `MicroflowRef`, `NanoflowRef`, `PageRef` | What the widget's own content references: datasource entity, bound attribute, action or datasource flow, the page its action opens |
+| `EntityRef`, `AttributeRef`, `MicroflowRef`, `NanoflowRef`, `PageRef`, `SnippetRef` | What the widget's own content references: datasource entity, bound attribute, action or datasource flow, the page its action opens, the snippet a snippet call places |
 | `ParentWidgetId` | `Id` of the nearest widget **in this table** that encloses it; empty at the page or snippet root. What the catalog skips is transparent: the synthetic `conditionalVisibilityWidget…` container, layout grid rows and columns, tab pages, a pluggable widget's properties and object-list items. A widget in a layout grid column or a data grid 2 column has the grid as its parent |
 | `Depth` | Number of ancestors in this table: 0 at the root. A list view **template** is a row of its own, so its widgets are two below the list view. A snippet call is not entered: a snippet's widgets have their own rows, depth 0 at the snippet root |
 | `Class`, `Style`, `DynamicClasses` | The widget's Appearance |

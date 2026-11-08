@@ -240,6 +240,7 @@ CREATE TABLE WIDGETS (
     MicroflowRef            TEXT,
     NanoflowRef             TEXT,
     PageRef                 TEXT,
+    SnippetRef              TEXT,    -- snippet a snippet call places
     Description             TEXT,
     ParentWidgetId          TEXT,    -- nearest catalogued ancestor; '' at the root
     Depth                   INTEGER, -- catalogued ancestors; 0 at the root
@@ -303,6 +304,7 @@ rather than trusting a list here:
 | `datasource` | page or widget reads an entity |
 | `action` | widget calls a microflow / nanoflow |
 | `show_page` | flow or widget action opens a page |
+| `snippet_call` | page, snippet or layout places a snippet |
 | `home_page` / `login_page` / `menu_item` | navigation profile references a page, or a microflow (home microflow, menu item that calls one) |
 | `calculate` | calculated attribute uses a microflow |
 | `schedule` | scheduled event runs a microflow |

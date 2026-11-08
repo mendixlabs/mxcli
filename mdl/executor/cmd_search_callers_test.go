@@ -27,6 +27,7 @@ func TestCallerRefKinds(t *testing.T) {
 		"call",         // microflow/nanoflow call activity — the only one that used to count
 		"action",       // widget action: the reported button case
 		"show_page",    // a microflow, or a button, opening a page
+		"snippet_call", // a page, snippet or layout placing a snippet (ako/mxcli#2017)
 		"mapping_call", // a flow applying an import or export mapping (ako/mxcli#1861)
 		"calculate",    // calculated attribute running a microflow
 		"home_page",    // navigation
