@@ -24,16 +24,17 @@ func TestCallerRefKinds(t *testing.T) {
 
 	// Every way one document can INVOKE another.
 	for _, k := range []string{
-		"call",       // microflow/nanoflow call activity — the only one that used to count
-		"action",     // widget action: the reported button case
-		"show_page",  // a microflow, or a button, opening a page
-		"calculate",  // calculated attribute running a microflow
-		"home_page",  // navigation
-		"login_page", //
-		"menu_item",  //
-		"schedule",   // entry point: a scheduled event runs the microflow
-		"publish",    // entry point: a published REST operation runs the microflow (#1126)
-		"settings",   // entry point: after-startup / before-shutdown / health check
+		"call",         // microflow/nanoflow call activity — the only one that used to count
+		"action",       // widget action: the reported button case
+		"show_page",    // a microflow, or a button, opening a page
+		"mapping_call", // a flow applying an import or export mapping (ako/mxcli#1861)
+		"calculate",    // calculated attribute running a microflow
+		"home_page",    // navigation
+		"login_page",   //
+		"menu_item",    //
+		"schedule",     // entry point: a scheduled event runs the microflow
+		"publish",      // entry point: a published REST operation runs the microflow (#1126)
+		"settings",     // entry point: after-startup / before-shutdown / health check
 		// An entity event handler runs its microflow on every create/commit/
 		// delete of the entity. Omitting it reported the hottest code in the
 		// app as uncalled (mendixlabs/mxcli#1127).
@@ -51,6 +52,8 @@ func TestCallerRefKinds(t *testing.T) {
 	for _, k := range []string{
 		"datasource", "parameter", "return", "retrieve",
 		"create", "change", "delete", "associate", "generalize", "layout",
+		// A mapping built on a JSON structure uses it as a type.
+		"structure",
 		// `sync` reads as an entry point and is not one: an offline profile
 		// names an ENTITY it downloads, which is a use of a type.
 		"sync",

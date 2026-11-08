@@ -738,6 +738,9 @@ func describeAction(action microflows.MicroflowAction, varEntity map[string]stri
 		// expression string (e.g. "300").
 		r.useRequestTimeout = a.UseRequestTimeOut
 		r.timeoutExpression = a.TimeoutExpression
+		r.actionRef = primaryMapping(action)
+	case *microflows.ImportXmlAction, *microflows.ExportXmlAction:
+		r.actionRef = primaryMapping(action)
 	case *microflows.WebServiceCallAction:
 		// ServiceID holds the imported web service's qualified name (a
 		// by-name reference).
@@ -746,6 +749,23 @@ func describeAction(action microflows.MicroflowAction, varEntity map[string]stri
 		r.useRequestTimeout = a.UseRequestTimeOut
 		r.timeoutExpression = a.TimeoutExpression
 	}
+}
+
+// primaryMapping is the one mapping ActionRef names for an action that applies
+// mappings: the import (result) mapping when there is one, since it decides
+// what the action produces, else the export mapping. Every mapping is in refs
+// as a mapping_call edge (ako/mxcli#1861).
+func primaryMapping(action microflows.MicroflowAction) string {
+	refs := microflowMappingRefs(action)
+	for _, m := range refs {
+		if m.targetType == RefObjectImportMapping {
+			return m.name
+		}
+	}
+	if len(refs) > 0 {
+		return refs[0].name
+	}
+	return ""
 }
 
 // textValue returns a stored text's value: en_US when present, otherwise the

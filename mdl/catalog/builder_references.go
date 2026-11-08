@@ -13,37 +13,39 @@ import (
 
 // Reference kinds for the refs table
 const (
-	RefKindCall       = "call"       // Microflow calls microflow (also: a workflow's handler, a consumed OData service's configuration microflow)
-	RefKindCreate     = "create"     // Microflow creates entity
-	RefKindRetrieve   = "retrieve"   // Microflow retrieves entity
-	RefKindShowPage   = "show_page"  // Microflow shows page
-	RefKindGeneralize = "generalize" // Entity extends entity
-	RefKindAssociate  = "associate"  // Association targets entity
-	RefKindLayout     = "layout"     // Page uses layout
-	RefKindDatasource = "datasource" // Page/widget uses entity via datasource
-	RefKindParameter  = "parameter"  // Page parameter entity type
-	RefKindAction     = "action"     // Widget calls microflow/nanoflow
-	RefKindHomePage   = "home_page"  // Navigation home page reference
-	RefKindLoginPage  = "login_page" // Navigation login page reference
-	RefKindMenuItem   = "menu_item"  // Navigation menu item page reference
-	RefKindChange     = "change"     // Microflow changes an entity object
-	RefKindDelete     = "delete"     // Microflow deletes an entity object
-	RefKindCommit     = "commit"     // Microflow commits an entity object (commit action, or create/change with commit)
-	RefKindCalculate  = "calculate"  // Calculated attribute uses a microflow
-	RefKindReturn     = "return"     // Microflow/nanoflow returns an entity type
-	RefKindSchedule   = "schedule"   // Scheduled event runs a microflow
-	RefKindValidate   = "validate"   // Attribute validation rule uses a regular expression
-	RefKindWidget     = "widget"     // Page/snippet uses a pluggable or custom widget
-	RefKindSettings   = "settings"   // A project setting names a microflow
-	RefKindSync       = "sync"       // An offline navigation profile synchronizes an entity
-	RefKindPublish    = "publish"    // A published service runs a microflow (REST operation, OData resource or action, authentication)
-	RefKindEvent      = "event"      // An event handler runs a microflow (entity event, or a business event a service subscribes to)
-	RefKindMember     = "member"     // A document binds, reads or writes an attribute, or navigates an association
-	RefKindXPath      = "xpath"      // An XPath constraint names an attribute, association or enumeration value
-	RefKindType       = "type"       // An attribute, parameter or variable is typed as an enumeration
-	RefKindValue      = "value"      // An expression names an enumeration value
-	RefKindMapping    = "mapping"    // An import or export mapping maps an entity, or a message definition exposes one
-	RefKindSplit      = "split"      // A decision branches on an object being a specialization
+	RefKindCall        = "call"         // Microflow calls microflow (also: a workflow's handler, a consumed OData service's configuration microflow)
+	RefKindCreate      = "create"       // Microflow creates entity
+	RefKindRetrieve    = "retrieve"     // Microflow retrieves entity
+	RefKindShowPage    = "show_page"    // Microflow shows page
+	RefKindGeneralize  = "generalize"   // Entity extends entity
+	RefKindAssociate   = "associate"    // Association targets entity
+	RefKindLayout      = "layout"       // Page uses layout
+	RefKindDatasource  = "datasource"   // Page/widget uses entity via datasource
+	RefKindParameter   = "parameter"    // Page parameter entity type
+	RefKindAction      = "action"       // Widget calls microflow/nanoflow
+	RefKindHomePage    = "home_page"    // Navigation home page reference
+	RefKindLoginPage   = "login_page"   // Navigation login page reference
+	RefKindMenuItem    = "menu_item"    // Navigation menu item page reference
+	RefKindChange      = "change"       // Microflow changes an entity object
+	RefKindDelete      = "delete"       // Microflow deletes an entity object
+	RefKindCommit      = "commit"       // Microflow commits an entity object (commit action, or create/change with commit)
+	RefKindCalculate   = "calculate"    // Calculated attribute uses a microflow
+	RefKindReturn      = "return"       // Microflow/nanoflow returns an entity type
+	RefKindSchedule    = "schedule"     // Scheduled event runs a microflow
+	RefKindValidate    = "validate"     // Attribute validation rule uses a regular expression
+	RefKindWidget      = "widget"       // Page/snippet uses a pluggable or custom widget
+	RefKindSettings    = "settings"     // A project setting names a microflow
+	RefKindSync        = "sync"         // An offline navigation profile synchronizes an entity
+	RefKindPublish     = "publish"      // A published service runs a microflow (REST operation, OData resource or action, authentication)
+	RefKindEvent       = "event"        // An event handler runs a microflow (entity event, or a business event a service subscribes to)
+	RefKindMember      = "member"       // A document binds, reads or writes an attribute, or navigates an association
+	RefKindXPath       = "xpath"        // An XPath constraint names an attribute, association or enumeration value
+	RefKindType        = "type"         // An attribute, parameter or variable is typed as an enumeration
+	RefKindValue       = "value"        // An expression names an enumeration value
+	RefKindMapping     = "mapping"      // An import or export mapping maps an entity, or a message definition exposes one
+	RefKindSplit       = "split"        // A decision branches on an object being a specialization
+	RefKindMappingCall = "mapping_call" // A flow applies an import or export mapping (import/export action, REST or web service call)
+	RefKindStructure   = "structure"    // An import or export mapping is built on a JSON structure
 )
 
 // RefKinds is every value that reaches refs.RefKind. It is the vocabulary a
@@ -60,7 +62,8 @@ var RefKinds = []string{
 	RefKindCalculate, RefKindReturn, RefKindSchedule, RefKindValidate,
 	RefKindWidget, RefKindSettings, RefKindSync, RefKindPublish,
 	RefKindEvent, RefKindMember, RefKindXPath, RefKindType,
-	RefKindValue, RefKindMapping, RefKindSplit,
+	RefKindValue, RefKindMapping, RefKindSplit, RefKindMappingCall,
+	RefKindStructure,
 }
 
 // Object types recorded in refs.SourceType and refs.TargetType — the catalog's
@@ -100,6 +103,7 @@ const (
 	RefObjectEnumerationValue       = "ENUMERATION_VALUE"
 	RefObjectImportMapping          = "IMPORT_MAPPING"
 	RefObjectExportMapping          = "EXPORT_MAPPING"
+	RefObjectJsonStructure          = "JSON_STRUCTURE"
 	// Message definitions: the pre-11.15 collection and the 11.15+ document.
 	RefObjectMessageDefinitionCollection = "MESSAGE_DEFINITION_COLLECTION"
 	RefObjectMessageDefinition           = "MESSAGE_DEFINITION"
@@ -151,6 +155,9 @@ var (
 		RefObjectAttribute,
 		RefObjectEnumeration,
 		RefObjectEnumerationValue,
+		RefObjectImportMapping,
+		RefObjectExportMapping,
+		RefObjectJsonStructure,
 	}
 )
 
@@ -299,6 +306,50 @@ func microflowActionRef(action microflows.MicroflowAction) (targetType, targetNa
 		}
 	}
 	return "", "", "", false
+}
+
+// mappingRef is one mapping an action applies: IMPORT_MAPPING or EXPORT_MAPPING
+// and its qualified name.
+type mappingRef struct{ targetType, name string }
+
+// microflowMappingRefs returns every mapping an action applies. Each holder
+// stores the mapping by qualified name — the field is typed model.ID but the
+// reader fills it from the BY_NAME key. A REST or web service call can name an
+// export mapping for the request AND an import mapping for the response, so
+// this returns a list rather than joining microflowActionRef's single target.
+// Without these edges a mapping in use had no inbound reference and read as
+// dead (ako/mxcli#1861).
+func microflowMappingRefs(action microflows.MicroflowAction) []mappingRef {
+	var out []mappingRef
+	add := func(targetType string, id model.ID) {
+		if id != "" {
+			out = append(out, mappingRef{targetType, string(id)})
+		}
+	}
+	importOf := func(rh microflows.ResultHandling) {
+		if m, ok := rh.(*microflows.ResultHandlingMapping); ok && m != nil {
+			add(RefObjectImportMapping, m.MappingID)
+		}
+	}
+	switch a := action.(type) {
+	case *microflows.ImportXmlAction:
+		if a.ResultHandling != nil {
+			add(RefObjectImportMapping, a.ResultHandling.MappingID)
+		}
+	case *microflows.ExportXmlAction:
+		if a.RequestHandling != nil {
+			add(RefObjectExportMapping, a.RequestHandling.MappingID)
+		}
+	case *microflows.RestCallAction:
+		if m, ok := a.RequestHandling.(*microflows.MappingRequestHandling); ok && m != nil {
+			add(RefObjectExportMapping, m.MappingID)
+		}
+		importOf(a.ResultHandling)
+	case *microflows.WebServiceCallAction:
+		add(RefObjectExportMapping, a.SendMappingID)
+		add(RefObjectImportMapping, a.ReceiveMappingID)
+	}
+	return out
 }
 
 // entityOfDataType returns the entity qualified name a microflow data type refers
@@ -565,6 +616,9 @@ func (b *Builder) buildReferences() error {
 			if qn, ok := microflowCommitRef(act.Action, varEntity); ok {
 				emit(RefObjectEntity, qn, RefKindCommit)
 			}
+			for _, m := range microflowMappingRefs(act.Action) {
+				emit(m.targetType, m.name, RefKindMappingCall)
+			}
 		}
 	}
 
@@ -590,6 +644,34 @@ func (b *Builder) buildReferences() error {
 				continue
 			}
 			emitActionRefs(RefObjectNanoflow, string(nf.ID), nf.ContainerID, nf.Name, nf.Parameters, nf.ReturnType, nf.ObjectCollection)
+		}
+		b.disown()
+	}
+
+	// Mapping → JSON structure: the structure an import or export mapping is
+	// built on. Without the edge a JSON structure only mappings use had no
+	// inbound reference and read as dead (ako/mxcli#1861). XML schemas and
+	// message definitions are not catalogued as documents, so they get no edge.
+	emitStructure := func(sourceType string, id model.ID, containerID model.ID, name, structure string) {
+		if structure == "" || !b.own(string(id)) {
+			return
+		}
+		moduleName := b.hierarchy.getModuleName(b.hierarchy.findModuleID(containerID))
+		if _, err := stmt.Exec(sourceType, string(id), moduleName+"."+name,
+			RefObjectJsonStructure, "", structure,
+			RefKindStructure, moduleName, projectID, snapshotID); err == nil {
+			refCount++
+		}
+	}
+	if ims, err := b.lister().ListImportMappings(); err == nil {
+		for _, im := range ims {
+			emitStructure(RefObjectImportMapping, im.ID, im.ContainerID, im.Name, im.JsonStructure)
+		}
+		b.disown()
+	}
+	if ems, err := b.lister().ListExportMappings(); err == nil {
+		for _, em := range ems {
+			emitStructure(RefObjectExportMapping, em.ID, em.ContainerID, em.Name, em.JsonStructure)
 		}
 		b.disown()
 	}

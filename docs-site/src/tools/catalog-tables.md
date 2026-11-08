@@ -152,7 +152,7 @@ query written then that should keep its old result filters on
 | `AutoGenerateCaption` | 1 when Studio Pro generates the activity's caption |
 | `Description` | Documentation of an action activity, split or loop |
 | `EntityRef` | Entity of a create object, a database retrieve, or a delete (the deleted variable's entity, when the flow types it) |
-| `ServiceRef`, `ActionRef` | Called service and operation: REST, web service, OData action. For a microflow, nanoflow, Java or JavaScript action call, `ActionRef` is the called document and `ServiceRef` is empty |
+| `ServiceRef`, `ActionRef` | Called service and operation: REST, web service, OData action. For a microflow, nanoflow, Java or JavaScript action call, `ActionRef` is the called document and `ServiceRef` is empty. For an import or export action it is the mapping, and for a REST call that uses mappings the response (import) mapping, else the request one; every mapping is a `mapping_call` row in `refs` |
 | `QueueRef` | Task queue a microflow or Java action call runs in; empty when it runs in place |
 | `UseRequestTimeout`, `TimeoutExpression` | "Use a timeout" and its seconds, for a REST or web service call |
 | `ConditionExpression` | An exclusive split's expression |

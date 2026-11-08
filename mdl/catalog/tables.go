@@ -7,6 +7,13 @@ package catalog
 //
 // History:
 //
+//	35 (mapping edges): refs gains mapping_call edges from a flow to each
+//	    import / export mapping it applies (import and export actions, REST
+//	    and web service calls) and structure edges from a mapping to its JSON
+//	    structure; activities.ActionRef names an import / export action's
+//	    mapping (ako/mxcli#1861). Without the bump a cached catalog keeps
+//	    answering "not referenced" for every mapping in use.
+//
 //	34 (page and layout appearance, layout widgets): pages and layouts gain
 //	    Class, Style and DynamicClasses, and widgets gains the rows of every
 //	    layout (ContainerType LAYOUT), with the refs they make (ako/mxcli#1302).
@@ -183,7 +190,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "34"
+const CatalogSchemaVersion = "35"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
