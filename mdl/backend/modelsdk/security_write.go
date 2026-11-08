@@ -229,6 +229,18 @@ func (b *Backend) SetProjectAdminUserName(unitID model.ID, name string) error {
 	return b.persistUnit(unitID, ps)
 }
 
+// SetProjectAdminUserRole sets the built-in administrator's user role
+// (Security$ProjectSecurity.AdminUserRole), stored by name like the guest user
+// role (ako/mxcli#2015).
+func (b *Backend) SetProjectAdminUserRole(unitID model.ID, role string) error {
+	ps, err := b.loadProjectSecurityGen(unitID)
+	if err != nil {
+		return err
+	}
+	ps.SetAdminUserRoleName(role)
+	return b.persistUnit(unitID, ps)
+}
+
 // SetProjectAdminPassword sets the built-in administrator's password
 // (Security$ProjectSecurity.AdminPassword), which Studio Pro stores in the
 // model as entered. The user name is left as stored (mendixlabs/mxcli#624).

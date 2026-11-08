@@ -1078,10 +1078,13 @@ func parallelDescribeContext(ctx *ExecContext, out io.Writer, id model.ID) *Exec
 		// Pins the describe to this document rather than to whichever
 		// document of this name the lookup prefers (#1185).
 		describeID: id,
-		// The text feeds the search index, where layout annotations do not
-		// matter, and telling derived layout from authored rebuilds each flow
-		// several times — it made a full source refresh 2.3x slower (#766).
-		describeFullLayout: true,
+		// The canonical description, as DESCRIBE prints it (ako/mxcli#2036).
+		// The text is read as MDL, not only searched: tools generate scripts
+		// from it, and with every stored layout annotation kept (#766 did so
+		// to skip the derivation, 2.3x faster cold) those scripts stated
+		// layout DESCRIBE leaves out — 376 of one project's 858 microflows.
+		// Telling derived layout from authored costs on a cold build; the
+		// incremental source build (#1790) carries unchanged rows after it.
 	}
 }
 
@@ -1179,6 +1182,18 @@ type SearchOptions struct {
 	// absence of hits needs the difference: "nothing found" and "could not look"
 	// are not the same answer.
 	Strict bool
+	// NoBuild never builds the source index (CATALOG.SOURCE). Without it the
+	// flow, page and expression bodies are not searched, and the outcome says
+	// so (SearchOutcome.Incomplete) instead of passing for "nothing found".
+	NoBuild bool
+}
+
+// SearchOutcome is what a search found, and whether it looked everywhere.
+type SearchOutcome struct {
+	Hits int
+	// Incomplete is true when MDL source was not searched because the source
+	// index does not exist and NoBuild kept the search from building it.
+	Incomplete bool
 }
 
 // marketplaceModuleFilter is the WHERE fragment that keeps a search to modules
@@ -1229,16 +1244,15 @@ func execSearch(ctx *ExecContext, stmt *ast.SearchStmt) error {
 	return err
 }
 
-// searchTable prints the human-readable result of a search and returns how many
-// hits it printed.
-func searchTable(ctx *ExecContext, query string, opts SearchOptions) (int, error) {
+// searchTable prints the human-readable result of a search and returns what it
+// found.
+func searchTable(ctx *ExecContext, query string, opts SearchOptions) (SearchOutcome, error) {
 	if !ctx.Connected() {
-		return 0, mdlerrors.NewNotConnected()
+		return SearchOutcome{}, mdlerrors.NewNotConnected()
 	}
-
-	// Ensure catalog is built (at least full mode for strings table)
-	if err := ensureCatalog(ctx, true); err != nil {
-		return 0, err
+	incomplete, err := ensureSearchCatalog(ctx, opts)
+	if err != nil {
+		return SearchOutcome{}, err
 	}
 
 	stringsSQL, sourceSQL := searchSQL(query, opts)
@@ -1247,7 +1261,7 @@ func searchTable(ctx *ExecContext, query string, opts SearchOptions) (int, error
 	// Search strings table
 	strResult, err := runSearchQuery(ctx, stringsSQL, opts)
 	if err != nil {
-		return 0, err
+		return SearchOutcome{}, err
 	}
 	if strResult != nil && strResult.Count > 0 {
 		hits += strResult.Count
@@ -1259,7 +1273,7 @@ func searchTable(ctx *ExecContext, query string, opts SearchOptions) (int, error
 	// Search source table (if available)
 	srcResult, err := runSearchQuery(ctx, sourceSQL, opts)
 	if err != nil {
-		return 0, err
+		return SearchOutcome{}, err
 	}
 	if srcResult != nil && srcResult.Count > 0 {
 		hits += srcResult.Count
@@ -1271,9 +1285,59 @@ func searchTable(ctx *ExecContext, query string, opts SearchOptions) (int, error
 	if hits == 0 {
 		fmt.Fprintln(ctx.Output, "No matches found.")
 	}
-	warnIfSourceIndexMissing(ctx)
+	if incomplete {
+		warnIfSourceIndexMissing(ctx)
+	}
 
-	return hits, nil
+	return SearchOutcome{Hits: hits, Incomplete: incomplete}, nil
+}
+
+// ensureSearchCatalog gets the catalog a search reads. A search reads
+// CATALOG.SOURCE as well as the strings index, and answered "No matches
+// found." for a name used only in flow, page and expression bodies on a
+// project whose source index had never been built (ako/mxcli#2004). So it
+// builds the source index when it is missing — once, saying so, since on a
+// large project that first build is noticeable; later builds carry every
+// unchanged document's row over (builder_source_reuse.go), so keeping it
+// current after a save costs a fraction of that.
+//
+// With NoBuild it never builds the source index, and incomplete reports that
+// the source was therefore not searched.
+func ensureSearchCatalog(ctx *ExecContext, opts SearchOptions) (incomplete bool, err error) {
+	if opts.NoBuild {
+		if err := ensureCatalog(ctx, true); err != nil {
+			return false, err
+		}
+		return !catalogHasSourceIndex(ctx), nil
+	}
+	if cachePath := getCachePath(ctx); cachePath != "" {
+		if valid, _ := isCacheValid(ctx, cachePath, "source"); valid {
+			return false, loadCachedCatalog(ctx, cachePath)
+		}
+	}
+	if !ctx.Connected() {
+		return false, mdlerrors.NewNotConnected()
+	}
+	if cachedCatalogMode(ctx) != "source" {
+		fmt.Fprintln(ctx.diagnostics(), "Building the source index so the search covers flow, page and expression bodies "+
+			"(once; later searches keep it up to date incrementally — pass --no-build to skip it)…")
+	}
+	defer beginUntimed(ctx.Context, "source mode")()
+	if implicitCatalogBuildHook != nil {
+		defer implicitCatalogBuildHook()()
+	}
+	return false, buildCatalog(ctx, true, true, false, 0)
+}
+
+// catalogHasSourceIndex reports whether the loaded catalog was built with the
+// source index. Keyed off the build mode the catalog records, never the row
+// count: a source-mode catalog with no matching (or no) rows is a real answer.
+func catalogHasSourceIndex(ctx *ExecContext) bool {
+	if ctx.Catalog == nil {
+		return false
+	}
+	info, err := ctx.Catalog.GetCacheInfo()
+	return err == nil && catalogModeRank(info.BuildMode) >= catalogModeRank("source")
 }
 
 // warnIfSourceIndexMissing says, on the diagnostics channel, that a search did
@@ -1286,14 +1350,14 @@ func searchTable(ctx *ExecContext, query string, opts SearchOptions) (int, error
 // source-mode catalog with no matching (or no) rows is a real answer, and
 // counting rows would make "built, nothing matched" warn too.
 func warnIfSourceIndexMissing(ctx *ExecContext) {
+	if catalogHasSourceIndex(ctx) {
+		return
+	}
 	mode := ""
 	if ctx.Catalog != nil {
 		if info, err := ctx.Catalog.GetCacheInfo(); err == nil {
 			mode = info.BuildMode
 		}
-	}
-	if catalogModeRank(mode) >= catalogModeRank("source") {
-		return
 	}
 	if mode == "" {
 		mode = "unknown"
@@ -1332,17 +1396,23 @@ func search(ctx *ExecContext, query, format string) error {
 // searchWith is search with options. It returns how many hits it found, which
 // is the number a caller gating on "no match" needs.
 func searchWith(ctx *ExecContext, query, format string, opts SearchOptions) (int, error) {
+	res, err := searchReport(ctx, query, format, opts)
+	return res.Hits, err
+}
+
+// searchReport is searchWith with the outcome in full.
+func searchReport(ctx *ExecContext, query, format string, opts SearchOptions) (SearchOutcome, error) {
 	if !ctx.Connected() {
-		return 0, mdlerrors.NewNotConnected()
+		return SearchOutcome{}, mdlerrors.NewNotConnected()
 	}
 
 	if format != "names" && format != "json" { // "table" (default)
 		return searchTable(ctx, query, opts)
 	}
 
-	// Ensure catalog is built (at least full mode for strings table)
-	if err := ensureCatalog(ctx, true); err != nil {
-		return 0, err
+	incomplete, err := ensureSearchCatalog(ctx, opts)
+	if err != nil {
+		return SearchOutcome{}, err
 	}
 
 	type searchResult struct {
@@ -1362,7 +1432,7 @@ func searchWith(ctx *ExecContext, query, format string, opts SearchOptions) (int
 	// Search strings table
 	strResult, err := runSearchQuery(ctx, stringsSQL, opts)
 	if err != nil {
-		return 0, err
+		return SearchOutcome{}, err
 	}
 	if strResult != nil && strResult.Count > 0 {
 		for _, row := range strResult.Rows {
@@ -1381,7 +1451,7 @@ func searchWith(ctx *ExecContext, query, format string, opts SearchOptions) (int
 	// Search source table (if available)
 	srcResult, err := runSearchQuery(ctx, sourceSQL, opts)
 	if err != nil {
-		return 0, err
+		return SearchOutcome{}, err
 	}
 	if srcResult != nil && srcResult.Count > 0 {
 		for _, row := range srcResult.Rows {
@@ -1402,8 +1472,10 @@ func searchWith(ctx *ExecContext, query, format string, opts SearchOptions) (int
 		} else {
 			fmt.Fprintln(ctx.Output, "[]")
 		}
-		warnIfSourceIndexMissing(ctx)
-		return 0, nil
+		if incomplete {
+			warnIfSourceIndexMissing(ctx)
+		}
+		return SearchOutcome{Incomplete: incomplete}, nil
 	}
 
 	switch format {
@@ -1419,13 +1491,15 @@ func searchWith(ctx *ExecContext, query, format string, opts SearchOptions) (int
 	case "json":
 		jsonBytes, err := json.MarshalIndent(allResults, "", "  ")
 		if err != nil {
-			return 0, err
+			return SearchOutcome{}, err
 		}
 		fmt.Fprintln(ctx.Output, string(jsonBytes))
 	}
 
-	warnIfSourceIndexMissing(ctx)
-	return len(allResults), nil
+	if incomplete {
+		warnIfSourceIndexMissing(ctx)
+	}
+	return SearchOutcome{Hits: len(allResults), Incomplete: incomplete}, nil
 }
 
 // Search performs a full-text search with the specified output format.
@@ -1439,6 +1513,12 @@ func (e *Executor) Search(query, format string) error {
 // parsing the output it just printed.
 func (e *Executor) SearchWith(query, format string, opts SearchOptions) (int, error) {
 	return searchWith(e.newExecContext(context.Background()), query, format, opts)
+}
+
+// SearchReport is SearchWith with the outcome in full: the hits, and whether
+// MDL source went unsearched because NoBuild found no source index.
+func (e *Executor) SearchReport(query, format string, opts SearchOptions) (SearchOutcome, error) {
+	return searchReport(e.newExecContext(context.Background()), query, format, opts)
 }
 
 // builtinWidgetMetas adapts the built-in WidgetRegistry's definitions into

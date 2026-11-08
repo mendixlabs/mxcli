@@ -248,7 +248,8 @@ func (m *reachModel) reach(userRole string, roles map[string]bool) []string {
 		}
 		for _, e := range m.edges[n] {
 			switch {
-			case e.kind == "show_page" && e.targetType == "PAGE":
+			case e.kind == "show_page" && e.targetType == "PAGE",
+				e.kind == "snippet_call" && e.targetType == "SNIPPET":
 				queue = append(queue, item{name: e.target})
 			case (e.kind == "action" || e.kind == "datasource") && (e.targetType == "MICROFLOW" || e.targetType == "NANOFLOW"):
 				if reachAny(m.executes[e.target], held) {
@@ -436,7 +437,7 @@ func loadReachModel(ctx *linter.LintContext) *reachModel {
 		}
 	})
 	query(`SELECT SourceName, RefKind, TargetType, TargetName FROM refs
-		WHERE RefKind IN ('show_page', 'action', 'call', 'member', 'datasource')`, func(c []string) {
+		WHERE RefKind IN ('show_page', 'snippet_call', 'action', 'call', 'member', 'datasource')`, func(c []string) {
 		m.edges[c[0]] = append(m.edges[c[0]], reachEdge{kind: c[1], targetType: c[2], target: c[3]})
 	})
 	query(`SELECT COALESCE(TargetPage, ''), COALESCE(TargetMicroflow, '') FROM navigation_menu_items`, func(c []string) {

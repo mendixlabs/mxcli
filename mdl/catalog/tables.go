@@ -7,6 +7,11 @@ package catalog
 //
 // History:
 //
+//	35 (snippet call edges): widgets gains SnippetRef, and a snippet call
+//	    becomes a snippet_call edge to a SNIPPET instead of a show_page edge to
+//	    a PAGE (ako/mxcli#2017). The linter selects SnippetRef, so against a
+//	    cached catalog without it every Widgets() query fails.
+//
 //	34 (page and layout appearance, layout widgets): pages and layouts gain
 //	    Class, Style and DynamicClasses, and widgets gains the rows of every
 //	    layout (ContainerType LAYOUT), with the refs they make (ako/mxcli#1302).
@@ -183,7 +188,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "34"
+const CatalogSchemaVersion = "35"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -829,6 +834,11 @@ func (c *Catalog) createTables() error {
 			-- from a button had no inbound reference at all and read as dead code
 			-- (issue #773).
 			PageRef TEXT,
+			-- The snippet a snippet call places (Forms$SnippetCall.Form). The
+			-- call stores it under "Form" like a page action's page, and it was
+			-- recorded as PageRef, so every snippet call read as a show_page
+			-- edge to a PAGE and no reference targeted a SNIPPET (ako/mxcli#2017).
+			SnippetRef TEXT,
 			Description TEXT,
 			-- Tree position (mendixlabs/mxcli#1268): the nearest INDEXED
 			-- ancestor (skipped wrappers and grid rows/columns are

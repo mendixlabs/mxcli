@@ -102,11 +102,13 @@ func TestJSONFlagKeepsStdoutPureJSON(t *testing.T) {
 		{name: "show entities", args: []string{"show", "entities"}},
 		{name: "show modules", args: []string{"show", "modules"}},
 		{name: "describe", args: []string{"describe", "entity", "System.User"}},
+		// Before the searches: a search builds the source index (ako/mxcli#2004),
+		// and this case is the empty answer of a catalog without one.
+		{name: "select, source-only table", args: []string{"-c", "select QualifiedName from CATALOG.source limit 1"}, empty: true},
 		{name: "search", args: []string{"search", "User"}},
 		{name: "search, nothing found", args: []string{"search", "zzqqxxnomatch"}, empty: true},
 		{name: "select", args: []string{"-c", "select Name from CATALOG.entities order by Name limit 3"}},
 		{name: "select, nothing found", args: []string{"-c", "select Name from CATALOG.entities where Name = 'zz'"}, empty: true},
-		{name: "select, source-only table", args: []string{"-c", "select QualifiedName from CATALOG.source limit 1"}, empty: true},
 		{name: "-c show references", args: []string{"-c", "show references to System.User"}},
 		{name: "show catalog tables", args: []string{"-c", "show catalog tables"}},
 		{name: "show catalog status", args: []string{"-c", "show catalog status"}},
@@ -211,6 +213,9 @@ func TestTextModeKeepsProgressOnStdout(t *testing.T) {
 		{[]string{"impact", "System.User"}, []string{"Impact analysis for System.User", "Summary:"}},
 		{[]string{"context", "System.User"}, []string{"Connected to:", "## Context: System.User"}},
 		{[]string{"show", "entities"}, []string{"Connected to:", "| Entity"}},
+		// The commands above cached a full catalog; the first search adds the
+		// source index (ako/mxcli#2004), and its progress is on stdout too.
+		{[]string{"search", "User"}, []string{"Building catalog (source mode", "String Matches"}},
 		{[]string{"search", "User"}, []string{"Loading cached catalog", "String Matches"}},
 	}
 	for _, tc := range cases {

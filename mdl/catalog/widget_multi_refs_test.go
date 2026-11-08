@@ -56,7 +56,7 @@ func TestScanWidgetAllRefsKeepsEveryMicroflow(t *testing.T) {
 	}
 	// The single column keeps its documented choice — the smallest — for
 	// `show widgets` and Starlark's microflow_ref.
-	if _, mf, _, _ := scanWidgetOwnRefs(w); mf != "Tmp.Open" {
+	if _, mf, _, _, _ := scanWidgetOwnRefs(w); mf != "Tmp.Open" {
 		t.Errorf("single MicroflowRef = %q, want Tmp.Open (the smallest)", mf)
 	}
 	// Duplicates collapse.

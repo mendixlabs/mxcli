@@ -566,7 +566,7 @@ func nextToken(stop antlr.Token, ctx antlr.ParserRuleContext) antlr.Token {
 
 // appSecurityKeys are the properties `alter app security ( … )` takes: the
 // Security$ProjectSecurity property names.
-var appSecurityKeys = []string{"SecurityLevel", "EnableDemoUsers", "EnableGuestAccess", "GuestUserRole", "StrictMode", "AdminUserName", "AdminPassword"}
+var appSecurityKeys = []string{"SecurityLevel", "EnableDemoUsers", "EnableGuestAccess", "GuestUserRole", "StrictMode", "AdminUserName", "AdminUserRole", "AdminPassword"}
 
 // appSecurityProperties reads the property list into stmt. A key or value the
 // list does not take is an error, never an ignored property.
@@ -646,6 +646,19 @@ func (b *Builder) appSecurityProperties(stmt *ast.AlterProjectSecurityStmt, opts
 				continue
 			}
 			stmt.AdminUserName = name
+		case "AdminUserRole":
+			if sv.QualifiedName() == nil && sv.STRING_LITERAL() == nil {
+				b.addError(fmt.Errorf("line %d: AdminUserRole takes the name of a user role, not %s", line, sv.GetText()))
+				continue
+			}
+			role := settingsValueText(sv)
+			if strings.TrimSpace(role) == "" {
+				// An empty AdminUserRole is CE0130 "No administrator user role
+				// selected" (measured on 11.12.6, mendixlabs/mxcli#1775).
+				b.addError(fmt.Errorf("line %d: AdminUserRole cannot be empty — Mendix reports CE0130 \"No administrator user role selected\"", line))
+				continue
+			}
+			stmt.AdminUserRole = role
 		case "AdminPassword":
 			if sv.STRING_LITERAL() == nil {
 				b.addError(fmt.Errorf("line %d: AdminPassword takes the administrator's password as a string, not %s", line, sv.GetText()))

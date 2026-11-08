@@ -36,10 +36,10 @@ func (b *Builder) buildPages() error {
 	if b.fullMode {
 		widgetStmt, err = b.tx.Prepare(`
 			INSERT INTO widgets_data (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
-				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, Description,
+				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, SnippetRef, Description,
 				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation,
 				ProjectId, SnapshotId)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`)
 		if err != nil {
 			return err
@@ -124,6 +124,7 @@ func (b *Builder) buildPages() error {
 					w.MicroflowRef,
 					w.NanoflowRef,
 					w.PageRef,
+					w.SnippetRef,
 					"",
 					w.ParentID, w.Depth, w.Class, w.Style, w.DynamicClasses,
 					w.ActionType, w.HasConfirmation,
@@ -170,10 +171,10 @@ func (b *Builder) buildSnippets() error {
 	if b.fullMode {
 		widgetStmt, err = b.tx.Prepare(`
 			INSERT INTO widgets_data (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
-				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, Description,
+				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, SnippetRef, Description,
 				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation,
 				ProjectId, SnapshotId)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`)
 		if err != nil {
 			return err
@@ -223,7 +224,7 @@ func (b *Builder) buildSnippets() error {
 					w.ID, w.Name, w.WidgetType,
 					string(sn.ID), qualifiedName, "SNIPPET",
 					moduleName, folder,
-					w.EntityRef, w.AttributeRef, w.MicroflowRef, w.NanoflowRef, w.PageRef, "",
+					w.EntityRef, w.AttributeRef, w.MicroflowRef, w.NanoflowRef, w.PageRef, w.SnippetRef, "",
 					w.ParentID, w.Depth, w.Class, w.Style, w.DynamicClasses,
 					w.ActionType, w.HasConfirmation,
 					projectID, snapshotID,
@@ -319,6 +320,7 @@ type rawWidgetInfo struct {
 	MicroflowRef string // action/datasource microflow (Forms$MicroflowSettings.Microflow, …)
 	NanoflowRef  string // action/datasource nanoflow
 	PageRef      string // action page (Forms$PageSettings.Form) — see scanWidgetOwnRefs
+	SnippetRef   string // called snippet (Forms$SnippetCall.Form)
 
 	// AllRefs is every document the widget names in its own BSON. The four
 	// single columns above hold one of each kind (the smallest, see
@@ -408,7 +410,7 @@ var widgetChildKeys = map[string]bool{
 // widgetOwnRefs is every entity, microflow, nanoflow and page a widget names in
 // its own (non-child-widget) BSON, each list sorted and without duplicates.
 type widgetOwnRefs struct {
-	Entities, Microflows, Nanoflows, Pages []string
+	Entities, Microflows, Nanoflows, Pages, Snippets []string
 }
 
 // scanWidgetOwnRefs returns ONE entity/microflow/nanoflow/page per kind from a
@@ -421,7 +423,7 @@ type widgetOwnRefs struct {
 // columns alone — QUAL004 then called a live datasource microflow unused
 // (mendixlabs/mxcli#1513). The refs table takes every name, from
 // scanWidgetAllRefs.
-func scanWidgetOwnRefs(w map[string]any) (entity, microflow, nanoflow, page string) {
+func scanWidgetOwnRefs(w map[string]any) (entity, microflow, nanoflow, page, snippet string) {
 	all := scanWidgetAllRefs(w)
 	first := func(xs []string) string {
 		if len(xs) == 0 {
@@ -429,14 +431,14 @@ func scanWidgetOwnRefs(w map[string]any) (entity, microflow, nanoflow, page stri
 		}
 		return xs[0]
 	}
-	return first(all.Entities), first(all.Microflows), first(all.Nanoflows), first(all.Pages)
+	return first(all.Entities), first(all.Microflows), first(all.Nanoflows), first(all.Pages), first(all.Snippets)
 }
 
 // scanWidgetAllRefs collects every entity/microflow/nanoflow/page a widget
 // references in its own (non-child-widget) BSON — datasource entity, datasource
 // microflow, on-click microflow, etc.
 func scanWidgetAllRefs(w map[string]any) widgetOwnRefs {
-	var ents, mfs, nfs, forms []string
+	var ents, mfs, nfs, forms, snippets []string
 	var walk func(v any)
 	walk = func(v any) {
 		switch x := v.(type) {
@@ -455,8 +457,16 @@ func scanWidgetAllRefs(w map[string]any) widgetOwnRefs {
 			// collecting it is why an action button that opens a page created no
 			// reference, so the page reported "(no callers found)" however many
 			// buttons pointed at it (issue #773).
+			//
+			// A snippet call stores its snippet under "Form" too. Read as a page,
+			// every snippet call became a show_page edge to a PAGE and nothing in
+			// refs ever targeted a SNIPPET (ako/mxcli#2017).
 			if s, ok := x["Form"].(string); ok && s != "" {
-				forms = append(forms, s)
+				if x["$Type"] == "Forms$SnippetCall" {
+					snippets = append(snippets, s)
+				} else {
+					forms = append(forms, s)
+				}
 			}
 			for k, val := range x {
 				if widgetChildKeys[k] {
@@ -476,6 +486,7 @@ func scanWidgetAllRefs(w map[string]any) widgetOwnRefs {
 		Microflows: sortedUnique(mfs),
 		Nanoflows:  sortedUnique(nfs),
 		Pages:      sortedUnique(forms),
+		Snippets:   sortedUnique(snippets),
 	}
 }
 
@@ -615,7 +626,7 @@ func walkWidget(w map[string]any, parentID string, depth int) []rawWidgetInfo {
 
 	// Extract datasource entity + action microflow/nanoflow references from this
 	// widget's own content (not its child widgets).
-	widget.EntityRef, widget.MicroflowRef, widget.NanoflowRef, widget.PageRef = scanWidgetOwnRefs(w)
+	widget.EntityRef, widget.MicroflowRef, widget.NanoflowRef, widget.PageRef, widget.SnippetRef = scanWidgetOwnRefs(w)
 	widget.AllRefs = scanWidgetAllRefs(w)
 	widget.Class, widget.Style, widget.DynamicClasses = widgetAppearance(w)
 	widget.ActionType, widget.HasConfirmation = widgetPrimaryAction(w)
@@ -995,10 +1006,10 @@ func (b *Builder) buildLayouts() error {
 	if b.fullMode {
 		widgetStmt, err = b.tx.Prepare(`
 			INSERT INTO widgets_data (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
-				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, Description,
+				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, SnippetRef, Description,
 				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation,
 				ProjectId, SnapshotId)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`)
 		if err != nil {
 			return err
@@ -1051,7 +1062,7 @@ func (b *Builder) buildLayouts() error {
 				w.ID, w.Name, w.WidgetType,
 				string(l.ID), qualifiedName, "LAYOUT",
 				moduleName, folder,
-				w.EntityRef, w.AttributeRef, w.MicroflowRef, w.NanoflowRef, w.PageRef, "",
+				w.EntityRef, w.AttributeRef, w.MicroflowRef, w.NanoflowRef, w.PageRef, w.SnippetRef, "",
 				w.ParentID, w.Depth, w.Class, w.Style, w.DynamicClasses,
 				w.ActionType, w.HasConfirmation,
 				projectID, snapshotID,
@@ -1128,4 +1139,5 @@ func (b *Builder) collectWidgetExtraRefs(containerType, containerQN, moduleName 
 	add(w.AllRefs.Microflows, w.MicroflowRef, RefObjectMicroflow, RefKindAction)
 	add(w.AllRefs.Nanoflows, w.NanoflowRef, RefObjectNanoflow, RefKindAction)
 	add(w.AllRefs.Pages, w.PageRef, RefObjectPage, RefKindShowPage)
+	add(w.AllRefs.Snippets, w.SnippetRef, RefObjectSnippet, RefKindSnippetCall)
 }
