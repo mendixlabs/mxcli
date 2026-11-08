@@ -13,11 +13,11 @@ description: "Configure Mendix security in MDL — module and user roles, access
 | 27-35 | When to Use This Skill |
 | 36-43 | Security Concepts |
 | 44-120 | The System-module ceiling — decide the role model around this FIRST |
-| 121-560 | Syntax Reference |
-| 561-575 | Starlark Lint Rule APIs |
-| 576-637 | Common Workflow: Setting Up Module Security |
-| 638-647 | Common Mistakes |
-| 648-657 | Validation |
+| 121-567 | Syntax Reference |
+| 568-582 | Starlark Lint Rule APIs |
+| 583-644 | Common Workflow: Setting Up Module Security |
+| 645-654 | Common Mistakes |
+| 655-664 | Validation |
 
 <!-- /skill-index -->
 # Security Management Skill
@@ -501,6 +501,13 @@ alter app security ( AdminUserName: 'appadmin' );
 -- as written (as Studio Pro stores it), so keep real secrets out of committed
 -- scripts. `describe app security` says whether one is set, never what.
 alter app security ( AdminPassword: 'N3w-Admin-Passw0rd' );
+
+-- Its user role. `drop user role` refuses the administrator's role (a dangling
+-- one passes mx check and crashes every build), so move it before dropping the
+-- template role. `describe app security` prints it as "Admin User Role".
+-- It also refuses a role a demo user holds (CE1613): drop the demo user first.
+alter app security ( AdminUserRole: AppAdmin );
+drop user role Administrator;
 ```
 
 ### Guest (Anonymous) Access

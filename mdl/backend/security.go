@@ -34,6 +34,11 @@ type ProjectSecurityBackend interface {
 	// (Security$ProjectSecurity.AdminUserName), which lint reads as
 	// project_security().admin_user_name (mendixlabs/mxcli#1314).
 	SetProjectAdminUserName(unitID model.ID, name string) error
+	// SetProjectAdminUserRole sets that account's user role
+	// (Security$ProjectSecurity.AdminUserRole). The caller resolves the role:
+	// mxbuild does not report a name that does not resolve, it crashes on it
+	// (ako/mxcli#2015).
+	SetProjectAdminUserRole(unitID model.ID, role string) error
 	// SetProjectAdminPassword sets that account's password
 	// (Security$ProjectSecurity.AdminPassword); an empty one is CE0129 at
 	// prototype and production level (mendixlabs/mxcli#624).
