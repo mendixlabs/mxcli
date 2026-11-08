@@ -11,12 +11,12 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | lines | section |
 |---|---|
 | 24-50 | Overview |
-| 51-138 | Syntax |
-| 139-165 | Altering existing documents |
-| 166-194 | Gotchas |
-| 195-216 | Common Patterns |
-| 217-281 | Calling Agents from Microflows |
-| 282-284 | AI agent documents |
+| 51-140 | Syntax |
+| 141-167 | Altering existing documents |
+| 168-196 | Gotchas |
+| 197-218 | Common Patterns |
+| 219-283 | Calling Agents from Microflows |
+| 284-286 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -60,21 +60,23 @@ create ai model Module.MyModel (
 );
 ```
 
-**`Provider` is free-form, and nothing validates it.** MDL passes the value
-straight through; `MxCloudGenAI` is only the default applied when you omit the
-property, not the only accepted value. `Provider: OpenAI` parses, writes, and
-round-trips through `describe ai model` — as does `Provider: TotallyMadeUp`.
+**`Provider` is free-form; `check` warns on a value Agent Editor rejects (MDL-AGENT01).**
 
-That means a typo is caught by **nothing** in the headless path. Agent Editor
-documents are stored as custom blobs, and mxbuild contains no agent-editor
-strings at all, so `mx check` and the build both stay green and the fault
-surfaces only when Studio Pro opens the document.
+| Document | Provider | Connector it imports through |
+|---|---|---|
+| AI model | `MxCloudGenAI` | MxGenAIConnector |
+| AI model | `Azure` (Azure AI Foundry) | OpenAIConnector |
+| AI model | `Fuse` (Agent Editor 2.7+) | FuseConnector |
+| Knowledge base | `MxCloudGenAI` only | MxGenAIConnector |
 
-mxcli deliberately does not enforce an allowlist, because the authoritative set
-of provider values is not available to it: the agent editor is a Studio Pro
-*extension*, its enum is not in `generated/metamodel` and not in mxbuild. Guessing
-a list risks rejecting a value Mendix accepts. **Take the value from a model
-document Studio Pro created**, rather than from memory or from this file.
+MDL passes the value straight through, and mxbuild contains no agent-editor
+strings, so `mx check` and the build stay green on a typo. The fault surfaces at
+startup, when `ASU_AgentEditor` fails the import with "Model provider is not
+one of the allowed types". `mxcli check` therefore warns, without a project, on
+any other value or the wrong case. The values come from
+`javasource/agenteditorcommons/actions/ImportDeployedModel.java`, whose
+`getImportMicroflow` switch is the authority; read it in the app when a newer
+Agent Editor may have added one. It warns rather than refuses for that reason.
 
 ### Knowledge Base
 
