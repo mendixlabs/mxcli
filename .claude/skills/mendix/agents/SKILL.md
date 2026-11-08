@@ -11,12 +11,12 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | lines | section |
 |---|---|
 | 24-50 | Overview |
-| 51-137 | Syntax |
-| 138-164 | Altering existing documents |
-| 165-193 | Gotchas |
-| 194-215 | Common Patterns |
-| 216-251 | Calling Agents from Microflows |
-| 252-254 | AI agent documents |
+| 51-135 | Syntax |
+| 136-162 | Altering existing documents |
+| 163-191 | Gotchas |
+| 192-213 | Common Patterns |
+| 214-249 | Calling Agents from Microflows |
+| 250-252 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -60,21 +60,19 @@ create ai model Module.MyModel (
 );
 ```
 
-**`Provider` is free-form, and nothing validates it.** MDL passes the value
-straight through; `MxCloudGenAI` is only the default applied when you omit the
-property, not the only accepted value. `Provider: OpenAI` parses, writes, and
-round-trips through `describe ai model` — as does `Provider: TotallyMadeUp`.
+**`Provider` is free-form; `check` warns on an unmeasured value (MDL-AGENT01).**
+MDL passes the value straight through, and mxbuild contains no agent-editor
+strings, so `mx check` and the build stay green on a typo; the fault surfaces
+only when Studio Pro opens the document. `mxcli check` therefore warns, without a
+project, when a model's Provider is not one read from a Studio Pro-saved
+document (so far only `MxCloudGenAI`), when its case is off, and when a
+knowledge base uses anything but `MxCloudGenAI` (the only provider Agent Editor
+supports for one).
 
-That means a typo is caught by **nothing** in the headless path. Agent Editor
-documents are stored as custom blobs, and mxbuild contains no agent-editor
-strings at all, so `mx check` and the build both stay green and the fault
-surfaces only when Studio Pro opens the document.
-
-mxcli deliberately does not enforce an allowlist, because the authoritative set
-of provider values is not available to it: the agent editor is a Studio Pro
-*extension*, its enum is not in `generated/metamodel` and not in mxbuild. Guessing
-a list risks rejecting a value Mendix accepts. **Take the value from a model
-document Studio Pro created**, rather than from memory or from this file.
+It is a warning, not an error: Agent Editor adds providers (Azure AI Foundry for
+models since Agents Kit 2.1) and mxcli has not measured that value yet. **Take a
+new value from a model document Studio Pro created**, rather than from memory,
+and expect the warning until it is added to the measured list.
 
 ### Knowledge Base
 

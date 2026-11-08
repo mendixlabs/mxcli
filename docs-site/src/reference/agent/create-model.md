@@ -32,7 +32,7 @@ If `OR MODIFY` is specified and the model already exists, its properties are upd
 :   The qualified name of the model document.
 
 `Provider: MxCloudGenAI`
-:   The provider. `MxCloudGenAI` is the only supported value in current Mendix versions.
+:   The provider. `MxCloudGenAI` is the only value measured from Studio Pro-saved documents. `mxcli check` warns on any other value (MDL-AGENT01), and on a value in the wrong case. It does not refuse it, because Agent Editor adds providers (Azure AI Foundry since Agents Kit 2.1).
 
 `key: module.KeyConstant`
 :   A qualified reference to a String constant that holds the Portal resource key. The constant must exist before the model is created.
