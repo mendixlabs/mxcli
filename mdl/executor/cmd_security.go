@@ -36,6 +36,9 @@ func listProjectSecurity(ctx *ExecContext) error {
 		if ps.AdminUserName != "" {
 			result.Rows = append(result.Rows, []any{"AdminUser", ps.AdminUserName})
 		}
+		if ps.AdminUserRole != "" {
+			result.Rows = append(result.Rows, []any{"AdminUserRole", ps.AdminUserRole})
+		}
 		result.Rows = append(result.Rows, []any{"AdminPasswordSet", fmt.Sprintf("%v", ps.AdminPassword != "")})
 		if ps.GuestUserRole != "" {
 			result.Rows = append(result.Rows, []any{"GuestUserRole", ps.GuestUserRole})
@@ -59,6 +62,11 @@ func listProjectSecurity(ctx *ExecContext) error {
 	fmt.Fprintf(ctx.Output, "Guest Access: %v\n", ps.EnableGuestAccess)
 	if ps.AdminUserName != "" {
 		fmt.Fprintf(ctx.Output, "Admin User: %s\n", ps.AdminUserName)
+	}
+	// The role `drop user role` must not take away (ako/mxcli#2015); set with
+	// alter app security ( AdminUserRole: … ).
+	if ps.AdminUserRole != "" {
+		fmt.Fprintf(ctx.Output, "Admin User Role: %s\n", ps.AdminUserRole)
 	}
 	// Whether, never what: an empty one is CE0129 at prototype and production
 	// level, which `alter app security ( AdminPassword: '…' )` resolves.

@@ -368,6 +368,9 @@ func execDropUserRole(ctx *ExecContext, s *ast.DropUserRoleStmt) error {
 		}
 		return mdlerrors.NewNotFound("user role", s.Name)
 	}
+	if ps.AdminUserRole == s.Name {
+		return mdlerrors.NewValidation(adminUserRoleDropRefusal(s.Name))
+	}
 
 	if err := ctx.Backend.RemoveUserRole(ps.ID, s.Name); err != nil {
 		return mdlerrors.NewBackend("drop user role", err)
@@ -375,6 +378,32 @@ func execDropUserRole(ctx *ExecContext, s *ast.DropUserRoleStmt) error {
 
 	fmt.Fprintf(ctx.Output, "Dropped user role: %s\n", s.Name)
 	return nil
+}
+
+// adminUserRoleDropRefusal is why `drop user role` refuses the administrator's
+// role (ako/mxcli#2015, mendixlabs/mxcli#1775). Security$ProjectSecurity names
+// it by name, and the drop left that name dangling: `mx check` reports nothing
+// (an empty one is CE0130, a name that does not resolve is not checked), and
+// every build then fails with a NullReferenceException in mxbuild's metadata
+// writer — measured on 11.12.6, where moving AdminUserRole first builds.
+func adminUserRoleDropRefusal(role string) string {
+	return fmt.Sprintf("user role '%s' is the administrator's user role (App Security > Administrator > User role): "+
+		"dropping it leaves the administrator a role that does not exist, which mx check does not report and every "+
+		"build then crashes on. Give the administrator another role first: alter app security ( AdminUserRole: <UserRole> );", role)
+}
+
+// resolveUserRole returns the project user role named role, in its declared
+// casing, or an error naming the roles there are.
+func resolveUserRole(ps *security.ProjectSecurity, role, why string) (string, error) {
+	known := make([]string, 0, len(ps.UserRoles))
+	for _, ur := range ps.UserRoles {
+		known = append(known, ur.Name)
+		if strings.EqualFold(ur.Name, role) {
+			return ur.Name, nil
+		}
+	}
+	return "", mdlerrors.NewNotFoundMsg("user role", role, fmt.Sprintf(
+		"user role not found: %s (project user roles: %s). %s", role, strings.Join(known, ", "), why))
 }
 
 // execGrantEntityAccess handles GRANT roles ON Module.Entity (rights) [WHERE '...'].
@@ -1233,6 +1262,18 @@ func execAlterProjectSecurity(ctx *ExecContext, s *ast.AlterProjectSecurityStmt)
 			return mdlerrors.NewBackend("set admin user name", err)
 		}
 		ctx.reportWrite("admin user name: "+s.AdminUserName, "Admin user name set to %s", s.AdminUserName)
+	}
+
+	if s.AdminUserRole != "" {
+		role, err := resolveUserRole(ps, s.AdminUserRole,
+			"mxbuild does not report an administrator role that does not resolve; every build crashes on it")
+		if err != nil {
+			return err
+		}
+		if err := ctx.Backend.SetProjectAdminUserRole(ps.ID, role); err != nil {
+			return mdlerrors.NewBackend("set admin user role", err)
+		}
+		ctx.reportWrite("admin user role: "+role, "Admin user role set to %s", role)
 	}
 
 	if s.AdminPassword != "" {

@@ -77,6 +77,12 @@ type grantResolver struct {
 	moduleRoles   map[string]map[string]bool // module -> role names; nil value = unreadable
 	userRoles     map[string]bool            // lower-cased; nil until read
 	userRolesRead bool
+
+	// adminRole is the administrator's user role as the script has it so far:
+	// the stored one until an `alter app security ( AdminUserRole: … )`
+	// changes it. Read on first use; "" when it cannot be read.
+	adminRole     string
+	adminRoleRead bool
 	entities      map[string]bool
 	docs          map[string]map[string]bool
 	xpath         *grantXPathResolver // built on the first WHERE
@@ -112,6 +118,10 @@ func (g *grantResolver) record(stmt ast.Statement) {
 	case *ast.DropUserRoleStmt:
 		delete(g.scriptUserRoles, strings.ToLower(s.Name))
 		g.droppedUserRoles[strings.ToLower(s.Name)] = true
+	case *ast.AlterProjectSecurityStmt:
+		if s.AdminUserRole != "" {
+			g.adminRoleRead, g.adminRole = true, s.AdminUserRole
+		}
 	case *ast.CreateODataServiceStmt:
 		g.scriptServices["odata:"+s.Name.String()] = true
 	case *ast.CreatePublishedRestServiceStmt:
@@ -207,6 +217,14 @@ func (g *grantResolver) check(stmt ast.Statement) []string {
 		if s.GuestUserRole != "" {
 			add(g.userRoleProblem(s.GuestUserRole))
 		}
+		if s.AdminUserRole != "" {
+			add(g.userRoleProblem(s.AdminUserRole))
+		}
+	case *ast.DropUserRoleStmt:
+		// The drop exec refuses (execDropUserRole, ako/mxcli#2015).
+		if admin := g.administratorRole(); admin != "" && strings.EqualFold(admin, s.Name) {
+			add(adminUserRoleDropRefusal(s.Name))
+		}
 	case *ast.CreatePageStmtV3, *ast.CreateSnippetStmtV3, *ast.AlterPageStmt:
 		// `Visible: roles (…)` stores the names unresolved, as `create user
 		// role` does — a dangling one is CE1613 a build later (#1460).
@@ -221,6 +239,18 @@ func (g *grantResolver) check(stmt ast.Statement) []string {
 		})
 	}
 	return out
+}
+
+// administratorRole is the administrator's user role at this point of the
+// script: the stored one, or the last AdminUserRole the script set.
+func (g *grantResolver) administratorRole() string {
+	if !g.adminRoleRead {
+		g.adminRoleRead = true
+		if ps, err := g.ctx.Backend.GetProjectSecurity(); err == nil && ps != nil {
+			g.adminRole = ps.AdminUserRole
+		}
+	}
+	return g.adminRole
 }
 
 // missing words one unresolved name, with the reorder hint when the script
@@ -711,6 +741,8 @@ func grantStatementLabel(stmt ast.Statement) string {
 		return fmt.Sprintf("create user role %s", s.Name)
 	case *ast.AlterUserRoleStmt:
 		return fmt.Sprintf("alter user role %s", s.Name)
+	case *ast.DropUserRoleStmt:
+		return fmt.Sprintf("drop user role %s", s.Name)
 	case *ast.CreateDemoUserStmt:
 		return fmt.Sprintf("create demo user '%s'", s.UserName)
 	case *ast.AlterProjectSecurityStmt:

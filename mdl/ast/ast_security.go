@@ -226,6 +226,10 @@ type AlterProjectSecurityStmt struct {
 	// AdminUserName renames the built-in administrator account (MxAdmin by
 	// default). Empty means "keep what is stored".
 	AdminUserName string
+	// AdminUserRole is the user role of that account
+	// (Security$ProjectSecurity.AdminUserRole, App Security > Administrator >
+	// User role). Empty means "keep what is stored" (ako/mxcli#2015).
+	AdminUserRole string
 	// AdminPassword sets that account's password, which Mendix stores in the
 	// model; empty means "keep what is stored". An empty stored password is
 	// CE0129 at prototype and production level (mendixlabs/mxcli#624), so the
