@@ -10,9 +10,9 @@ description: "Publish a Mendix app as an MCP server so external agents can call 
 
 | lines | section |
 |---|---|
-| 35-143 | Runtime configuration |
-| 144-163 | Gotchas |
-| 164-177 | Reading and migrating an existing setup |
+| 43-161 | Runtime configuration |
+| 162-182 | Gotchas |
+| 183-207 | Reading and migrating an existing setup |
 
 <!-- /skill-index -->
 # Publishing an MCP Server
@@ -22,15 +22,23 @@ Two ways to configure it exist:
 
 | | Runtime configuration | Model configuration |
 |---|---|---|
-| Where it lives | A microflow that runs at startup and calls the module's Java actions | A document in the model, edited in Studio Pro |
-| Module versions | MCP Server 3.x and 4.x (measured 3.0.0, 4.0.0, 4.2.2) | MCP Server 5.x with Agent Editor (OAuth) |
+| Where it lives | A microflow that runs at startup and calls the module's Java actions | A *Published MCP service* document (Agent Editor), edited in Studio Pro |
+| Module versions | MCP Server 3.x and later (measured 3.0.0, 4.0.0, 4.2.2, 5.4.0) | MCP Server 5.x with Agent Editor 2.6+ (measured 5.4.0 / 2.6.0) |
+| Prompts | Yes (`AddPrompt`) | No: the document holds tools only |
 | MDL | `call java action MCPServer.*`, below | Not supported yet (ako/mxcli#2020) |
+
+The two are the same mechanism. At startup AgentEditorCommons reads every
+Published MCP service document and calls `MCPServer.CreateMCPServer` and
+`MCPServer.AddTool` with its values (`AgentDocumentUtils.initPublishedMCPService`),
+exactly as a runtime-configured app does from its own microflow. So a server
+behaves the same either way, and moving between them is a 1:1 mapping (see the
+end of this skill).
 
 Runtime configuration is plain microflow logic, so everything mxcli writes for
 microflows applies: `describe microflow` reads an existing setup back,
 `check --references` validates it, `exec` writes it. Choose it when the server's
-tools depend on data or settings known only at runtime, or when the app is on an
-MCP Server version before 5.
+tools or prompts depend on data or settings known only at runtime, when it needs
+prompts, or when the app is on an MCP Server version before 5.
 
 ## Runtime configuration
 
@@ -130,11 +138,21 @@ wires it; a server whose initialize microflow nothing calls is never started.
 | Tool | Primitives named as the Schema's properties, optionally `MCPServer.Tool` | `MCPServer.TextContent` or a `String` |
 | Prompt | `MCPServer.Prompt` plus one primitive per prompt argument | `MCPServer.PromptMessage` |
 
-| Java action | Parameters |
-|---|---|
-| `MCPServer.CreateMCPServer` | `Path`, `Name`, `Version`, `ProtocolVersion`, `AuthenticationMicroflow` → `MCPServer.McpServer` |
-| `MCPServer.AddTool` | `McpServer`, `Name`, `Description`, `ExecutingMicroflow`, `Schema` → `MCPServer.Tool` |
-| `MCPServer.AddPrompt` | `Name`, `Description`, `Parameters` (list of `MCPServer.PromptArgument`), `Microflow`, `McpServer` → `MCPServer.Prompt` |
+| Java action | Parameters | Added in 5.x |
+|---|---|---|
+| `MCPServer.CreateMCPServer` | `Path`, `Name`, `Version`, `ProtocolVersion`, `AuthenticationMicroflow` → `MCPServer.McpServer` | `AuthorizationServerUrl`, `Scopes` (OAuth) |
+| `MCPServer.AddTool` | `McpServer`, `Name`, `Description`, `ExecutingMicroflow`, `Schema` → `MCPServer.Tool` | `Title` |
+| `MCPServer.AddPrompt` | `Name`, `Description`, `Parameters` (list of `MCPServer.PromptArgument`), `Microflow`, `McpServer` → `MCPServer.Prompt` | — |
+
+**OAuth (5.x).** `AuthorizationServerUrl` is the issuer URL of the OAuth server
+that issues the tokens (e.g. `https://login.microsoftonline.com/<tenant-id>/v2.0`);
+the server publishes it as Protected Resource Metadata and in its 401 responses,
+so a client can find where to sign in. `Scopes` is space-separated and requires
+`AuthorizationServerUrl`, which requires an authentication microflow: that
+microflow must validate the access token, audience included, and return empty
+rather than throw (a throw is a 500, which stops the client's OAuth flow). In
+5.x the authentication microflow is optional and both its parameters are
+optional; it may return a specialization of `System.User`.
 
 A microflow parameter is passed as its qualified name in quotes, as for any Java
 action. In 4.x `Schema` is optional: the module derives it from the tool
@@ -153,8 +171,9 @@ matter to the calling model; the property names must match the parameter names.
   `change $McpServer (AuthenticationMicroflow = empty)`, which makes the server
   usable by anyone who can reach the app. With no authentication microflow the
   module applies none.
-- **Avoid `sse` and `mcp` in the server `Name`.** 4.2.2 documents both words as
-  reserved.
+- **Reserved names and paths.** 4.2.2 documents `sse` and `mcp` as reserved in
+  the server `Name`; 5.4 refuses a `Path` that is `mcp`, ends in `/mcp`, or
+  contains `/`.
 - **The current user in a tool microflow depends on the version.** The 3.0
   action documentation says the user is not in scope of a tool or prompt
   microflow; 4.x drops that sentence. FactoryManagement grants its tool
@@ -170,8 +189,19 @@ list callers of MCPServer.CreateMCPServer;
 ```
 
 Each `CreateMCPServer` call is one server, and the `AddTool` / `AddPrompt` calls
-on its result are its tools and prompts. That inventory is also the input for a
-move to model configuration: the tool microflows and the authentication logic
-carry over, the registration calls are what model configuration replaces. MDL
-for the model-configured document follows once its storage is measured
-(ako/mxcli#2020).
+on its result are its tools and prompts. That inventory is the input for a move
+to model configuration. The tool microflows and the authentication microflow
+carry over unchanged; the registration calls map onto the document's keys:
+
+| Runtime configuration | Published MCP service document |
+|---|---|
+| `CreateMCPServer(Path)` | `endpointPath` |
+| `Name` / `Version` / `ProtocolVersion` | `serverName` / `version` / `protocolVersion` |
+| `AuthenticationMicroflow` | `authenticationEnabled: true` + `authenticationMicroflow` |
+| `AuthorizationServerUrl` / `Scopes` | `authorizationServerUrl` / `scopes` (read only when authentication is enabled) |
+| each `AddTool(Name, Description, ExecutingMicroflow, Schema, Title)` | a `tools` entry: `name`, `description`, `sourceMicroflow`, `schema`, `title` |
+| `AddPrompt` | no equivalent: keep a runtime microflow for prompts |
+
+After the move, remove the initialize call from the after-startup microflow, so
+the server is not created twice. The MDL statement for the document is
+ako/mxcli#2020.
