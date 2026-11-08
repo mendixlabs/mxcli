@@ -91,6 +91,7 @@ func (b *Builder) appendAgentBodyBlock(stmt *ast.AlterAgentStmt, blk *parser.Age
 			td.Enabled = strings.EqualFold(v, "true")
 		}
 		td.Description = blockProps["description"]
+		b.toolUserSettings(&td, blockProps)
 		stmt.AddTools = append(stmt.AddTools, td)
 
 	case blk.KNOWLEDGE() != nil && blk.BASE() != nil:
@@ -112,10 +113,11 @@ func (b *Builder) appendAgentBodyBlock(stmt *ast.AlterAgentStmt, blk *parser.Age
 		if v, ok := blockProps["enabled"]; ok {
 			kbd.Enabled = strings.EqualFold(v, "true")
 		}
+		kbRetrievalSettings(&kbd, blockProps)
 		stmt.AddKBs = append(stmt.AddKBs, kbd)
 
 	case blk.TOOL() != nil:
-		stmt.AddTools = append(stmt.AddTools, toolBlockDef(blk, blockProps))
+		stmt.AddTools = append(stmt.AddTools, b.toolBlockDef(blk, blockProps))
 	}
 }
 

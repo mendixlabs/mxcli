@@ -256,6 +256,9 @@ func execCreateAgent(ctx *ExecContext, s *ast.CreateAgentStmt) error {
 		ToolChoice:    s.ToolChoice,
 		Temperature:   s.Temperature,
 		TopP:          s.TopP,
+
+		EnableBackendStreaming: s.EnableBackendStreaming,
+		EnableUIStreaming:      s.EnableUIStreaming,
 	}
 	// A rewrite that carried no doc comment keeps the stored one (#1018).
 	if existingAgent != nil {

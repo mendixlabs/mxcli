@@ -271,20 +271,26 @@ var agentSchema = propSchema{on: "an agent", keys: []propKey{
 	{"TopP", []propShape{shapeNumber}},
 	{"SystemPrompt", textShapes},
 	{"UserPrompt", textShapes},
+	{"EnableBackendStreaming", []propShape{shapeBool}},
+	{"EnableUIStreaming", []propShape{shapeBool}},
 }}
 
 var agentMCPServiceSchema = propSchema{on: "an agent's mcp service block", keys: []propKey{
 	{"Enabled", []propShape{shapeBool}},
 	{"Description", textShapes},
+	{"UserAccessApproval", []propShape{shapeName}},
+	{"DisplayTitle", textShapes},
+	{"DisplayDescription", textShapes},
 }}
 
-// ToolType and Document are what describe writes for a tool; create does not
-// read them yet, the tool's kind and target coming from the block itself.
 var agentToolSchema = propSchema{on: "an agent's tool block", keys: []propKey{
 	{"Enabled", []propShape{shapeBool}},
 	{"Description", textShapes},
 	{"ToolType", []propShape{shapeName}},
 	{"Document", []propShape{shapeQName}},
+	{"UserAccessApproval", []propShape{shapeName}},
+	{"DisplayTitle", textShapes},
+	{"DisplayDescription", textShapes},
 }}
 
 var agentKnowledgeBaseSchema = propSchema{on: "an agent's knowledge base block", keys: []propKey{
@@ -293,6 +299,8 @@ var agentKnowledgeBaseSchema = propSchema{on: "an agent's knowledge base block",
 	{"Description", textShapes},
 	{"MaxResults", []propShape{shapeNumber}},
 	{"Enabled", []propShape{shapeBool}},
+	{"MinSimilarity", []propShape{shapeNumber}},
+	{"IsVisible", []propShape{shapeBool}},
 }}
 
 // ---------------------------------------------------------------------------

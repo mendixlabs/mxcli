@@ -207,14 +207,18 @@ type CreateAgentStmt struct {
 	Entity           *QualifiedName // reference to a domain entity
 	MaxTokens        *int
 	ToolChoice       string
-	Temperature      *float64
-	TopP             *float64
-	SystemPrompt     string
-	UserPrompt       string
-	Variables        []AgentVarDef
-	Tools            []AgentToolDef
-	KBTools          []AgentKBToolDef
-	CreateOrModify   bool // true for CREATE OR MODIFY / CREATE OR REPLACE
+	// Response streaming (#2022). Left out, a create or modify keeps the
+	// stored value.
+	EnableBackendStreaming *bool
+	EnableUIStreaming      *bool
+	Temperature            *float64
+	TopP                   *float64
+	SystemPrompt           string
+	UserPrompt             string
+	Variables              []AgentVarDef
+	Tools                  []AgentToolDef
+	KBTools                []AgentKBToolDef
+	CreateOrModify         bool // true for CREATE OR MODIFY / CREATE OR REPLACE
 }
 
 func (s *CreateAgentStmt) isStatement() {}
@@ -261,6 +265,11 @@ type AgentToolDef struct {
 	Document    *QualifiedName
 	Description string
 	Enabled     bool
+	// Agent Editor 2.2+ (#2021). Left out, a create or modify keeps the stored
+	// value: "" / nil means the statement does not say.
+	UserAccessApproval string
+	DisplayTitle       *string
+	DisplayDescription *string
 }
 
 // AgentKBToolDef represents a KNOWLEDGE BASE block in CREATE AGENT body.
@@ -271,4 +280,7 @@ type AgentKBToolDef struct {
 	MaxResults  int
 	Description string
 	Enabled     bool
+	// Left out, a create or modify keeps the stored value.
+	MinSimilarity *float64
+	IsVisible     *bool
 }

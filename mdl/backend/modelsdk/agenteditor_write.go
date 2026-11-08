@@ -460,6 +460,10 @@ func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 		Enabled     bool                `json:"enabled"`
 		ToolType    string              `json:"toolType"`
 		Document    *agenteditor.DocRef `json:"document,omitempty"`
+		// Written only when set, so a document without them stays without.
+		UserAccessApproval string  `json:"userAccessApproval,omitempty"`
+		DisplayTitle       *string `json:"displayTitle,omitempty"`
+		DisplayDescription *string `json:"displayDescription,omitempty"`
 	}
 	type kbToolEntry struct {
 		ID                   string              `json:"id"`
@@ -470,6 +474,8 @@ func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 		Document             *agenteditor.DocRef `json:"document,omitempty"`
 		CollectionIdentifier string              `json:"collectionIdentifier,omitempty"`
 		MaxResults           int                 `json:"maxResults,omitempty"`
+		MinSimilarity        *float64            `json:"minSimilarity,omitempty"`
+		IsVisible            *bool               `json:"isVisible,omitempty"`
 	}
 	type contentsShape struct {
 		Description        string                 `json:"description"`
@@ -485,15 +491,19 @@ func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 		ToolChoice         string                 `json:"toolChoice,omitempty"`
 		Temperature        *float64               `json:"temperature,omitempty"`
 		TopP               *float64               `json:"topP,omitempty"`
+		EnableBackend      *bool                  `json:"enableBackendStreaming,omitempty"`
+		EnableUI           *bool                  `json:"enableUIStreaming,omitempty"`
 	}
 
 	tools := make([]toolEntry, 0, len(a.Tools))
 	for _, t := range a.Tools {
-		tools = append(tools, toolEntry{ID: t.ID, Name: t.Name, Description: t.Description, Enabled: t.Enabled, ToolType: t.ToolType, Document: t.Document})
+		tools = append(tools, toolEntry{ID: t.ID, Name: t.Name, Description: t.Description, Enabled: t.Enabled, ToolType: t.ToolType, Document: t.Document,
+			UserAccessApproval: t.UserAccessApproval, DisplayTitle: t.DisplayTitle, DisplayDescription: t.DisplayDescription})
 	}
 	kbTools := make([]kbToolEntry, 0, len(a.KBTools))
 	for _, kb := range a.KBTools {
-		kbTools = append(kbTools, kbToolEntry{ID: kb.ID, Name: kb.Name, Description: kb.Description, Enabled: kb.Enabled, ToolType: kb.ToolType, Document: kb.Document, CollectionIdentifier: kb.CollectionIdentifier, MaxResults: kb.MaxResults})
+		kbTools = append(kbTools, kbToolEntry{ID: kb.ID, Name: kb.Name, Description: kb.Description, Enabled: kb.Enabled, ToolType: kb.ToolType, Document: kb.Document, CollectionIdentifier: kb.CollectionIdentifier, MaxResults: kb.MaxResults,
+			MinSimilarity: kb.MinSimilarity, IsVisible: kb.IsVisible})
 	}
 	vars := a.Variables
 	if vars == nil {
@@ -513,6 +523,8 @@ func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 		ToolChoice:         a.ToolChoice,
 		Temperature:        a.Temperature,
 		TopP:               a.TopP,
+		EnableBackend:      a.EnableBackendStreaming,
+		EnableUI:           a.EnableUIStreaming,
 	})
 }
 

@@ -45,16 +45,18 @@ var docRefSpec = &contentsSpec{modelled: contentKeys("documentId", "qualifiedNam
 
 var agentContentsSpec = &contentsSpec{
 	modelled: contentKeys("description", "systemPrompt", "userPrompt", "usageType", "variables", "tools",
-		"knowledgebaseTools", "model", "entity", "maxTokens", "toolChoice", "temperature", "topP"),
+		"knowledgebaseTools", "model", "entity", "maxTokens", "toolChoice", "temperature", "topP",
+		"enableBackendStreaming", "enableUIStreaming"),
 	objects: map[string]*contentsSpec{"model": docRefSpec, "entity": docRefSpec},
 	lists: map[string]*contentsSpec{
 		"tools": {
-			modelled: contentKeys("id", "name", "description", "enabled", "toolType", "document"),
-			objects:  map[string]*contentsSpec{"document": docRefSpec},
+			modelled: contentKeys("id", "name", "description", "enabled", "toolType", "document",
+				"userAccessApproval", "displayTitle", "displayDescription"),
+			objects: map[string]*contentsSpec{"document": docRefSpec},
 		},
 		"knowledgebaseTools": {
 			modelled: contentKeys("id", "name", "description", "enabled", "toolType", "document",
-				"collectionIdentifier", "maxResults"),
+				"collectionIdentifier", "maxResults", "minSimilarity", "isVisible"),
 			objects: map[string]*contentsSpec{"document": docRefSpec},
 		},
 	},

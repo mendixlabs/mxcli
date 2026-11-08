@@ -214,6 +214,18 @@ alter agent AgentTest.ResearchAssistant
     add knowledge base ExtraDocs ( Source: AgentTest.ProductDocs, Collection: 'extra', MaxResults: 3 )
     add mcp service AgentTest.WebSearch ( Description: 'web search', Enabled: true );
 
+-- Human-in-the-loop and streaming (ako/mxcli#2021, #2022): approval and
+-- display text on a tool, retrieval settings on a knowledge base, streaming
+-- on the agent.
+alter agent AgentTest.ResearchAssistant
+    set EnableBackendStreaming = true
+    add mcp service AgentTest.WebSearch ( Enabled: true, UserAccessApproval: UserConfirmationRequired, DisplayTitle: 'Search the web' )
+    add knowledge base Faq ( Source: AgentTest.ProductDocs, MaxResults: 5, MinSimilarity: 0.3, IsVisible: false );
+
+alter agent AgentTest.ResearchAssistant
+    drop knowledge base Faq
+    drop mcp service AgentTest.WebSearch;
+
 -- ALTER AGENT: drop collection entries (TOOL by name, MCP SERVICE by
 -- qualified name, KNOWLEDGE BASE by per-agent name).
 alter agent AgentTest.ResearchAssistant

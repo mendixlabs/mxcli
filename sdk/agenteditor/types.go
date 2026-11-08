@@ -240,6 +240,10 @@ type Agent struct {
 	ToolChoice   string        `json:"toolChoice,omitempty"`
 	Temperature  *float64      `json:"temperature,omitempty"`
 	TopP         *float64      `json:"topP,omitempty"`
+	// Response streaming (Agent Editor 2.2.1+, #2022), stored on the agent,
+	// not the model. nil when the document holds none.
+	EnableBackendStreaming *bool `json:"enableBackendStreaming,omitempty"`
+	EnableUIStreaming      *bool `json:"enableUIStreaming,omitempty"`
 }
 
 // GetName returns the agent's name.
@@ -262,7 +266,15 @@ type AgentTool struct {
 	Enabled     bool    `json:"enabled,omitempty"`
 	ToolType    string  `json:"toolType,omitempty"` // "MCP" | "Microflow" | ""
 	Document    *DocRef `json:"document,omitempty"`
-	// Microflow-tool-specific fields are not yet observed in the wild.
+	// Agent Editor 2.2+ (#2021): whether the user sees the tool call, and
+	// whether it waits for the user's approval — HiddenForUser,
+	// VisibleForUser or UserConfirmationRequired (GenAICommons.
+	// ENUM_UserAccessApproval). "" when the document holds none.
+	UserAccessApproval string `json:"userAccessApproval,omitempty"`
+	// The title and description shown to the user for the call; the model
+	// sees Name and Description. nil when the document holds none.
+	DisplayTitle       *string `json:"displayTitle,omitempty"`
+	DisplayDescription *string `json:"displayDescription,omitempty"`
 }
 
 // AgentKBTool is an entry in the agent's `knowledgebaseTools` JSON array.
@@ -275,4 +287,8 @@ type AgentKBTool struct {
 	Document             *DocRef `json:"document,omitempty"`
 	CollectionIdentifier string  `json:"collectionIdentifier,omitempty"`
 	MaxResults           int     `json:"maxResults,omitempty"`
+	// The least similarity a chunk needs to be returned, and whether the
+	// user sees the retrieval. nil when the document holds none.
+	MinSimilarity *float64 `json:"minSimilarity,omitempty"`
+	IsVisible     *bool    `json:"isVisible,omitempty"`
 }

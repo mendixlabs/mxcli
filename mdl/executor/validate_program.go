@@ -329,6 +329,11 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// under --references, where it would only fire with -p (#836).
 	violations = append(violations, ValidateGrantRoles(prog)...)
 
+	// Warn on an AI model or knowledge base Provider no Studio Pro document has
+	// been seen to hold. mxbuild never reads it, so a typo builds and only
+	// shows in Studio Pro (ako/mxcli#2023).
+	violations = append(violations, ValidateAgentProviders(prog)...)
+
 	// Flag an after-startup microflow that does not return Boolean (CE0142).
 	// The reference RESOLVES — the name exists — so #274's existence check has
 	// nothing to say; the constraint is on the thing the setting names. When the

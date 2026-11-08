@@ -27,7 +27,7 @@ If `OR MODIFY` is specified and the knowledge base already exists, its propertie
 :   The qualified name of the knowledge base document.
 
 `Provider: MxCloudGenAI`
-:   The provider. `MxCloudGenAI` is the only supported value.
+:   The provider. `MxCloudGenAI` is the only supported value; `mxcli check` warns on any other (MDL-AGENT01).
 
 `key: module.KeyConstant`
 :   A qualified reference to a String constant that holds the Portal resource key for the knowledge base.

@@ -275,7 +275,7 @@ Agent schema observations:
 - **`maxTokens`**: Optional. Can be set by the user to restrict the number of tokens to consume in one agent call.
 - **`toolChoice`**: Optional. Agent-level inference parameters. Enum values for `toolChoice` observed: `"Auto"` (capitalized, not the lowercase `auto` used by `GenAICommons.ENUM_ToolChoice` at runtime). Other values: `"None"`, `"Any"`, `"Tool"`. If tool choice is set to `Tool`, then also the `toolChoiceToolName` needs to be set by the unique name referencing one tool in `tools[]`. Only tools where `toolType` = "Microflow" can become tool choice.
 - **`temperature`**, **`topP`**: Optional. Can be set by the user to influence the randomness of the response.
-- **No `UserAccessApproval`/`Access` field** on tools. That's a runtime-only concern (set on `AgentCommons.Tool` entity, not the document). **This is a correction to earlier versions of this proposal.**
+- **`userAccessApproval`, `displayTitle`, `displayDescription`** on tools (Agent Editor 2.2+). *Superseded 2026-11-08 (ako/mxcli#2021):* an earlier version of this section called approval runtime-only. Studio Pro 11.12–11.16 documents store it per tool, with values `HiddenForUser`, `VisibleForUser` and `UserConfirmationRequired`. MDL keys: `UserAccessApproval`, `DisplayTitle`, `DisplayDescription`. Knowledge base tools have no approval key; they store `isVisible`. The agent also stores `enableBackendStreaming`, `enableUIStreaming` (#2022) and `selectedModel`.
 
 ### Observed documents in test3 project
 
@@ -441,7 +441,7 @@ CALL AGENT WITHOUT HISTORY $Agent CONTEXT $Review INTO $Response;
 | `KNOWLEDGE BASE <Name> { Source: <doc>, Collection, MaxResults, ... }` | `<Name>` is the per-agent identifier stored in JSON `name`; `Source:` references the KB document. Matches `Agent007`'s `My_mem` KB entry |
 | `TOOL <Name> { Microflow: <QualifiedName>, Description, Enabled }` | Microflow tool references a microflow by qualified name; the writer encodes this in `tools[]` with `toolType: "Microflow"` and `document: { qualifiedName: <microflow>, documentId: <uuid> }`. Target microflows must return a `String`; input parameters are restricted to primitives and `GenAICommons.Request`/`GenAICommons.Tool` types. |
 | `Variables: (...)` is the input-schema analog of REST CLIENT's `Parameters: (...)` | Declares what the caller must supply; values flow in via the `CONTEXT` object at the `CALL AGENT` site. Inline form matches REST CLIENT's `Parameters: ($id: String)` |
-| No `Access:` on tool blocks | `UserAccessApproval` is NOT stored in the agent document JSON — it's a runtime-only concern on the `AgentCommons.Tool` entity. (Earlier drafts of this proposal incorrectly placed it on the block.) |
+| `UserAccessApproval:` on tool and mcp service blocks | Stored per tool in the agent document (measured on 11.12–11.16, ako/mxcli#2021). Keyed by the document property name, not `Access`. |
 | Body omitted when there are no tools/KB/MCP | Same concession REST CLIENT makes implicitly — empty bodies are awkward; drop them |
 | Prompts as string literals | Consistent with other MDL string properties; `{{var}}` placeholders are just text |
 | Auto-generated `id` UUIDs on block entries | Each tool/KB entry has a UUID `id` in the JSON (Studio Pro-generated). The MDL writer will generate these; they round-trip stably through `DESCRIBE` |
