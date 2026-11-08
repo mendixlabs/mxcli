@@ -3,8 +3,10 @@
 package modelsdkbackend
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/modelsdk/codec"
@@ -20,7 +22,7 @@ const customBlobDocType = "CustomBlobDocuments$CustomBlobDocument"
 
 // customBlobDocToGen builds the CustomBlobDocument envelope (Contents JSON +
 // metadata) as a codec element. Mirrors sdk/mpr.writeCustomBlobDocument.
-func customBlobDocToGen(unitID, name, documentation, exportLevel string, excluded bool, customType, readableType, contentsJSON string) element.Element {
+func customBlobDocToGen(unitID, name, documentation, exportLevel string, excluded bool, customType, readableType, contentsJSON, createdBy string) element.Element {
 	g := newElem(customBlobDocType, unitID)
 	addStr(g, "Contents", contentsJSON)
 	addStr(g, "CustomDocumentType", customType)
@@ -28,7 +30,7 @@ func customBlobDocToGen(unitID, name, documentation, exportLevel string, exclude
 	addBool(g, "Excluded", excluded)
 	addStr(g, "ExportLevel", orDefault(exportLevel, "Hidden"))
 	meta := newElem("CustomBlobDocuments$CustomBlobDocumentMetadata", "")
-	addStr(meta, "CreatedByExtension", agenteditor.CreatedByExtensionID)
+	addStr(meta, "CreatedByExtension", orDefault(createdBy, agenteditor.CreatedByExtensionID))
 	addStr(meta, "ReadableTypeName", readableType)
 	addPart(g, "Metadata", meta)
 	addStr(g, "Name", name)
@@ -36,9 +38,19 @@ func customBlobDocToGen(unitID, name, documentation, exportLevel string, exclude
 }
 
 // writeCustomBlob encodes the envelope and inserts (create) or rewrites (update)
-// the unit.
+// the unit. A rewrite writes onto the stored Contents and keeps the stored
+// creating extension (an imported agent says extension/agent-importer).
 func (b *Backend) writeCustomBlob(unitID, containerID, name, documentation, exportLevel string, excluded bool, customType, readableType, contentsJSON string, update bool) error {
-	el := customBlobDocToGen(unitID, name, documentation, exportLevel, excluded, customType, readableType, contentsJSON)
+	createdBy := ""
+	if update {
+		stored := b.readStoredCustomBlob(unitID)
+		var err error
+		if contentsJSON, err = carryStoredContents(stored.contents, contentsJSON, contentsSpecFor(customType)); err != nil {
+			return err
+		}
+		createdBy = stored.createdBy
+	}
+	el := customBlobDocToGen(unitID, name, documentation, exportLevel, excluded, customType, readableType, contentsJSON, createdBy)
 	raw, err := (&codec.Encoder{}).Encode(el)
 	if err != nil {
 		return fmt.Errorf("encode custom blob: %w", err)
@@ -304,7 +316,7 @@ func encodeKnowledgeBaseContents(k *agenteditor.KnowledgeBase) (string, error) {
 		ProviderFields providerFields `json:"providerFields"`
 	}
 	return marshalJSON(contentsShape{
-		Name:     "",
+		Name:     k.InnerName,
 		Provider: k.Provider,
 		ProviderFields: providerFields{
 			Environment:      k.Environment,
@@ -398,9 +410,31 @@ func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 }
 
 func marshalJSON(v any) (string, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	// Agent Editor stores <, > and & as themselves (prompts are full of them).
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
 		return "", err
 	}
-	return string(b), nil
+	return string(bytes.TrimRight(buf.Bytes(), "\n")), nil
+}
+
+// formatLikeStored lays raw out the way stored is: Agent Editor 2.6 saves
+// Contents indented by two spaces, earlier versions and the agent importer
+// compact. A rewrite in the other layout differed from the stored bytes, so
+// every restatement of an unchanged document wrote it.
+func formatLikeStored(raw []byte, stored string) (string, error) {
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, raw); err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(stored, "{\n") {
+		return compact.String(), nil
+	}
+	var out bytes.Buffer
+	if err := json.Indent(&out, compact.Bytes(), "", "  "); err != nil {
+		return "", err
+	}
+	return out.String(), nil
 }

@@ -115,6 +115,7 @@ type KnowledgeBase struct {
 	Excluded      bool     `json:"excluded,omitempty"`
 	ExportLevel   string   `json:"exportLevel,omitempty"`
 
+	InnerName        string       `json:"innerName,omitempty"` // Contents.name: the Portal knowledge base name
 	Provider         string       `json:"provider,omitempty"`
 	Environment      string       `json:"environment,omitempty"`
 	DeepLinkURL      string       `json:"deepLinkURL,omitempty"`
@@ -189,7 +190,7 @@ func (a *Agent) GetContainerID() model.ID { return a.ContainerID }
 // AgentVar is an entry in the agent's `variables` JSON array.
 type AgentVar struct {
 	Key                 string `json:"key"`
-	IsAttributeInEntity bool   `json:"isAttributeInEntity,omitempty"`
+	IsAttributeInEntity bool   `json:"isAttributeInEntity"` // Agent Editor writes false too
 }
 
 // AgentTool is an entry in the agent's `tools` JSON array.

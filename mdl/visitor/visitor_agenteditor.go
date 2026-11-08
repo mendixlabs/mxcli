@@ -304,19 +304,7 @@ func (b *Builder) ExitCreateAgentStatement(ctx *parser.CreateAgentStatementConte
 				}
 				stmt.KBTools = append(stmt.KBTools, kbd)
 			} else if blk.TOOL() != nil {
-				// TOOL ToolName { ... }
-				td := ast.AgentToolDef{
-					ToolType: "Microflow",
-					Enabled:  true,
-				}
-				if iok := blk.IdentifierOrKeyword(); iok != nil {
-					td.Name = iok.GetText()
-				}
-				td.Description = blockProps["description"]
-				if v, ok := blockProps["enabled"]; ok {
-					td.Enabled = strings.EqualFold(v, "true")
-				}
-				stmt.Tools = append(stmt.Tools, td)
+				stmt.Tools = append(stmt.Tools, toolBlockDef(blk, blockProps))
 			}
 		}
 	}
@@ -327,6 +315,29 @@ func (b *Builder) ExitCreateAgentStatement(ctx *parser.CreateAgentStatementConte
 		}
 	}
 	b.statements = append(b.statements, stmt)
+}
+
+// toolBlockDef reads a `tool Name ( … )` block of an agent body, on create and
+// on alter … add.
+func toolBlockDef(blk *parser.AgentBodyBlockContext, props map[string]string) ast.AgentToolDef {
+	td := ast.AgentToolDef{ToolType: "Microflow", Enabled: true}
+	if iok := blk.IdentifierOrKeyword(); iok != nil {
+		td.Name = iok.GetText()
+	}
+	if v := props["tooltype"]; v != "" {
+		td.ToolType = v
+	}
+	// describe prints the microflow a tool runs as Document. Ignoring it left
+	// the rewritten tool wired to nothing.
+	if doc, ok := props["document"]; ok {
+		dqn := parseQualifiedNameString(doc)
+		td.Document = &dqn
+	}
+	td.Description = props["description"]
+	if v, ok := props["enabled"]; ok {
+		td.Enabled = strings.EqualFold(v, "true")
+	}
+	return td
 }
 
 // parseQualifiedNameString splits "Module.Name" into a QualifiedName.

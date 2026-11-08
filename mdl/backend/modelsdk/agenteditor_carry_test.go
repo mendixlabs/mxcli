@@ -1,0 +1,180 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package modelsdkbackend
+
+import (
+	"encoding/json"
+	"os"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/mendixlabs/mxcli/sdk/agenteditor"
+)
+
+// Contents saved by Studio Pro 11.16, free text shortened. GraphExplorer was
+// created in Agent Editor (mx-test-projects/ICXGraphPilot); WorkInstructionAgent
+// and KB_WorkInstructions come from mx-test-projects/FactoryManagement.
+const (
+	graphExplorerFixture        = "testdata/agenteditor/ICXGraphPilot.GraphExplorer.11_16.json"
+	workInstructionAgentFixture = "testdata/agenteditor/FactoryManagement.WorkInstructionAgent.11_16.json"
+	workInstructionsKBFixture   = "testdata/agenteditor/FactoryManagement.KB_WorkInstructions.11_16.json"
+)
+
+func readContentsFixture(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimRight(string(b), "\n")
+}
+
+func decodeMap(t *testing.T, s string) map[string]any {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal([]byte(s), &m); err != nil {
+		t.Fatalf("%v in %s", err, s)
+	}
+	return m
+}
+
+// typedAgent is what the reader makes of stored Contents: only the keys mxcli
+// models.
+func typedAgent(t *testing.T, contents string) *agenteditor.Agent {
+	t.Helper()
+	a := &agenteditor.Agent{}
+	if err := json.Unmarshal([]byte(contents), a); err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+// An `alter agent … set Temperature` rewrote Contents from the typed fields,
+// and the streaming switches, the selected model and each tool's approval and
+// display title were gone. A rewrite keeps every key it does not write.
+func TestCarryStoredContents_AgentKeepsWhatItDoesNotModel(t *testing.T) {
+	stored := readContentsFixture(t, graphExplorerFixture)
+	a := typedAgent(t, stored)
+	temp := 0.3
+	a.Temperature = &temp
+
+	rebuilt, err := encodeAgentContents(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Control: the rebuild alone loses them, so the carry below is what keeps them.
+	if m := decodeMap(t, rebuilt); m["enableBackendStreaming"] != nil || m["selectedModel"] != nil {
+		t.Fatalf("the encoder now writes the unmodelled keys itself; this test no longer covers the carry: %s", rebuilt)
+	}
+
+	got, err := carryStoredContents(stored, rebuilt, agentContentsSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := decodeMap(t, stored)
+	want["temperature"] = 0.3
+	if g := decodeMap(t, got); !reflect.DeepEqual(g, want) {
+		t.Errorf("carried contents differ from stored + temperature:\n got %s\nwant %v", got, want)
+	}
+	// Studio Pro's key order is kept, and the new key goes last.
+	if order := decodeObjectKeys(t, got); !reflect.DeepEqual(order, append(decodeObjectKeys(t, stored), "temperature")) {
+		t.Errorf("key order %v", order)
+	}
+}
+
+// A knowledge base tool's minSimilarity is kept, paired with its stored entry
+// by id.
+func TestCarryStoredContents_KnowledgeBaseToolByID(t *testing.T) {
+	stored := readContentsFixture(t, workInstructionAgentFixture)
+	a := typedAgent(t, stored)
+	a.KBTools[0].MaxResults = 7
+	rebuilt, err := encodeAgentContents(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := carryStoredContents(stored, rebuilt, agentContentsSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kb := decodeMap(t, got)["knowledgebaseTools"].([]any)[0].(map[string]any)
+	if kb["minSimilarity"] != 0.2 || kb["maxResults"] != float64(7) {
+		t.Errorf("knowledge base tool %v, want minSimilarity 0.2 kept and maxResults 7 written", kb)
+	}
+
+	// Control: a tool the statement adds pairs with nothing and gets nothing.
+	a.KBTools[0].ID = "new-tool"
+	rebuilt, _ = encodeAgentContents(a)
+	got, _ = carryStoredContents(stored, rebuilt, agentContentsSpec)
+	if kb := decodeMap(t, got)["knowledgebaseTools"].([]any)[0].(map[string]any); kb["minSimilarity"] != nil {
+		t.Errorf("an unpaired tool got the stored tool's minSimilarity: %v", kb)
+	}
+}
+
+// A modelled optional key the statement cleared stays cleared: carrying it
+// back would make the value impossible to remove.
+func TestCarryStoredContents_ClearedModelledKeyStaysOut(t *testing.T) {
+	stored := readContentsFixture(t, graphExplorerFixture)
+	a := typedAgent(t, stored)
+	a.Model = nil
+	rebuilt, _ := encodeAgentContents(a)
+	got, err := carryStoredContents(stored, rebuilt, agentContentsSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := decodeMap(t, got)["model"]; ok {
+		t.Errorf("a cleared model came back from the stored contents: %s", got)
+	}
+}
+
+// `alter knowledge base` wrote the Portal knowledge base name as "".
+func TestEncodeKnowledgeBaseContents_KeepsName(t *testing.T) {
+	stored := readContentsFixture(t, workInstructionsKBFixture)
+	k := &agenteditor.KnowledgeBase{InnerName: "WorkInstructions", Provider: "MxCloudGenAI", ModelName: "cohere.embed-english-v3"}
+	rebuilt, err := encodeKnowledgeBaseContents(k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := carryStoredContents(stored, rebuilt, knowledgeBaseContentsSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := decodeMap(t, got)["name"]; n != "WorkInstructions" {
+		t.Errorf("name = %v, want WorkInstructions", n)
+	}
+}
+
+// A restatement that changes nothing writes the stored bytes back: Agent
+// Editor 2.6 saves Contents indented (GraphExplorer), older documents compact
+// (WorkInstructionAgent). Rewriting one layout in the other made every
+// restatement of an unchanged agent a write.
+func TestCarryStoredContents_UnchangedIsByteIdentical(t *testing.T) {
+	for _, path := range []string{graphExplorerFixture, workInstructionAgentFixture} {
+		stored := readContentsFixture(t, path)
+		rebuilt, err := encodeAgentContents(typedAgent(t, stored))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := carryStoredContents(stored, rebuilt, agentContentsSpec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != stored {
+			t.Errorf("%s: an unchanged agent is rewritten:\n got %s\nwant %s", path, got, stored)
+		}
+	}
+	// Control: the indented fixture really is indented, the other compact.
+	if !strings.HasPrefix(readContentsFixture(t, graphExplorerFixture), "{\n  ") ||
+		strings.Contains(readContentsFixture(t, workInstructionAgentFixture), "\n") {
+		t.Fatal("the fixtures no longer cover both layouts")
+	}
+}
+
+func decodeObjectKeys(t *testing.T, s string) []string {
+	t.Helper()
+	obj, ok := decodeObject(json.RawMessage(s))
+	if !ok {
+		t.Fatalf("not an object: %s", s)
+	}
+	return obj.keys
+}

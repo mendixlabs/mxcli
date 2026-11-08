@@ -11,12 +11,12 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | lines | section |
 |---|---|
 | 24-50 | Overview |
-| 51-139 | Syntax |
-| 140-166 | Altering existing documents |
-| 167-195 | Gotchas |
-| 196-217 | Common Patterns |
-| 218-282 | Calling Agents from Microflows |
-| 283-285 | AI agent documents |
+| 51-140 | Syntax |
+| 141-167 | Altering existing documents |
+| 168-196 | Gotchas |
+| 197-218 | Common Patterns |
+| 219-283 | Calling Agents from Microflows |
+| 284-286 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -130,7 +130,8 @@ prompt here.$$,
     Enabled: true
   )
 
-  tool MyMicroflowTool (
+  tool FetchCustomer (
+    Document: Module.Tool_FetchCustomer,   -- the microflow the tool runs
     description: 'Fetch customer data',
     Enabled: true
   )
@@ -154,7 +155,7 @@ alter consumed mcp service Module.MyMCP
 -- Agent: SET for scalars, ADD/DROP for tools, MCP services, knowledge bases
 alter agent Module.MyAgent
     set SystemPrompt = 'New prompt', Temperature = 0.7, MaxTokens = 4096
-    add tool MyMicroflow ( Description: '...', Enabled: true )
+    add tool MyTool ( Document: Module.MyMicroflow, Description: '...', Enabled: true )
     add mcp service Module.WeatherSvc ( Description: '...', Enabled: true )
     add knowledge base Docs ( Source: Module.MyKB, Collection: 'docs', MaxResults: 5 )
     drop tool OldTool

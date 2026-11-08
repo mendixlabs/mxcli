@@ -1012,8 +1012,13 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 {
   [MCP SERVICE Module.ServiceName ( Enabled: true )]
   [KNOWLEDGE BASE AliaName ( Source: Module.KB, Collection: 'col', MaxResults: 5, Enabled: true )]
-  [TOOL MicroflowName ( Description: 'desc', Enabled: true )]
-};`,
+  [TOOL ToolName ( Document: Module.Microflow, Description: 'desc', Enabled: true )]
+};
+
+A TOOL's Document is the microflow it runs. On OR MODIFY, the tools,
+knowledge bases and entity keep their stored identity, and settings MDL has
+no spelling for (tool approval, display title, streaming) keep their stored
+values.`,
 		Example: "create agent MyModule.Assistant (\n  UsageType: Chat,\n  Model: MyModule.GPT4,\n  SystemPrompt: $$You are a helpful assistant.$$,\n  UserPrompt: 'Ask me anything.'\n)\n{\n  MCP SERVICE MyModule.WebSearch ( Enabled: true )\n};",
 		SeeAlso: []string{"agents", "agents.model", "agents.knowledge-base", "agents.mcp-service"},
 	})
