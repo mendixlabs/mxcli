@@ -159,6 +159,7 @@ type MockBackend struct {
 	SetProjectDemoUsersEnabledFunc       func(unitID model.ID, enabled bool) error
 	SetProjectStrictModeFunc             func(unitID model.ID, enabled bool) error
 	SetProjectAdminUserNameFunc          func(unitID model.ID, name string) error
+	SetProjectAdminUserRoleFunc          func(unitID model.ID, role string) error
 	SetProjectAdminPasswordFunc          func(unitID model.ID, password string) error
 	SetProjectGuestAccessFunc            func(unitID model.ID, enabled bool, guestUserRole string) error
 	AddUserRoleFunc                      func(unitID model.ID, name string, moduleRoles []string, manageAllRoles bool) error

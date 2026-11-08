@@ -1206,6 +1206,11 @@ func (unsupportedBackend) SetProjectAdminUserName(_ model.ID, _ string) (err0 er
 	return
 }
 
+func (unsupportedBackend) SetProjectAdminUserRole(_ model.ID, _ string) (err0 error) {
+	err0 = errUnsupported("SetProjectAdminUserRole")
+	return
+}
+
 func (unsupportedBackend) SetProjectDemoUsersEnabled(_ model.ID, _ bool) (err0 error) {
 	err0 = errUnsupported("SetProjectDemoUsersEnabled")
 	return

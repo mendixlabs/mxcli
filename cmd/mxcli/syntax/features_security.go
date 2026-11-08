@@ -145,11 +145,11 @@ func init() {
 
 	Register(SyntaxFeature{
 		Path:    "security.project-security",
-		Summary: "Set project security level, strict mode, demo user and guest access toggles, admin user name and password",
+		Summary: "Set project security level, strict mode, demo user and guest access toggles, admin user name, role and password",
 		Keywords: []string{
 			"project security", "app security", "alter app security", "security level", "prototype",
 			"production", "off", "strict mode", "SEC005", "admin user", "AdminUserName", "MxAdmin",
-			"admin password", "AdminPassword", "CE0129",
+			"admin password", "AdminPassword", "CE0129", "admin user role", "AdminUserRole", "CE0130",
 		},
 		Syntax: "ALTER APP SECURITY (\n" +
 			"  [SecurityLevel: OFF|PROTOTYPE|PRODUCTION,]\n" +
@@ -158,6 +158,7 @@ func init() {
 			"  [GuestUserRole: <UserRole>,]\n" +
 			"  [StrictMode: TRUE|FALSE,]         -- clears lint rule SEC005\n" +
 			"  [AdminUserName: '<name>',]        -- the built-in administrator (default MxAdmin)\n" +
+			"  [AdminUserRole: <UserRole>,]      -- its user role (App Security > Administrator)\n" +
 			"  [AdminPassword: '<password>']     -- its password; empty is CE0129\n" +
 			");\n\n" +
 			"-- Set any subset of the properties, in create's ( Key: value ) list. The\n" +
@@ -166,13 +167,18 @@ func init() {
 			"-- AdminPassword is stored in the model as written, as Studio Pro stores it;\n" +
 			"-- '' is refused (CE0129 \"Administrator password has not been set\" at\n" +
 			"-- prototype and production level). mxbuild does not check it against the\n" +
-			"-- password policy. `describe app security` says whether one is set.",
+			"-- password policy. `describe app security` says whether one is set.\n" +
+			"-- AdminUserRole must name an existing user role. DROP USER ROLE refuses the\n" +
+			"-- administrator's role: mx check does not report the dangling name and\n" +
+			"-- every build then crashes. Move the administrator first, then drop.",
 		Example: "mdl 1;\n" +
 			"ALTER APP SECURITY ( SecurityLevel: PRODUCTION );\n" +
 			"ALTER APP SECURITY ( EnableDemoUsers: FALSE );\n" +
 			"ALTER APP SECURITY ( StrictMode: TRUE );\n" +
 			"ALTER APP SECURITY ( AdminUserName: 'appadmin' );\n" +
-			"ALTER APP SECURITY ( AdminPassword: 'N3w-Admin-Passw0rd' );  -- resolves CE0129",
+			"ALTER APP SECURITY ( AdminPassword: 'N3w-Admin-Passw0rd' );  -- resolves CE0129\n" +
+			"ALTER APP SECURITY ( AdminUserRole: AppAdmin );  -- then the template role can go\n" +
+			"DROP USER ROLE Administrator;",
 		SeeAlso: []string{"security.demo-user", "security.guest-access"},
 	})
 

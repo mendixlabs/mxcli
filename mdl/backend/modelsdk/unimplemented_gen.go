@@ -1097,6 +1097,10 @@ func (unimplemented) SetProjectAdminUserName(_ model.ID, _ string) error {
 	return errUnimplemented("SetProjectAdminUserName")
 }
 
+func (unimplemented) SetProjectAdminUserRole(_ model.ID, _ string) error {
+	return errUnimplemented("SetProjectAdminUserRole")
+}
+
 func (unimplemented) SetProjectDemoUsersEnabled(_ model.ID, _ bool) error {
 	return errUnimplemented("SetProjectDemoUsersEnabled")
 }
