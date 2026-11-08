@@ -15,7 +15,9 @@ create ai model M.Typo (Provider: TotallyMadeUp, Key: @M.K);
 create ai model M.Case (Provider: mxcloudgenai, Key: @M.K);
 create ai model M.Good (Provider: MxCloudGenAI, Key: @M.K);
 create ai model M.Default (Key: @M.K);
-create knowledge base M.KB (Provider: AzureAIFoundry, Key: @M.K);
+create ai model M.Azure (Provider: Azure, Key: @M.K);
+create ai model M.Fuse (Provider: Fuse, Key: @M.K);
+create knowledge base M.KB (Provider: Azure, Key: @M.K);
 create knowledge base M.GoodKB (Provider: MxCloudGenAI, Key: @M.K);
 alter ai model M.Good set Provider = 'Other';
 alter knowledge base M.GoodKB set ModelName = 'x';
@@ -37,9 +39,10 @@ alter knowledge base M.GoodKB set ModelName = 'x';
 			t.Errorf("%s: %q, want it to mention %q", name, got[name], want)
 		}
 	}
-	// Controls: the measured value, an unstated one (the default is
-	// MxCloudGenAI) and an alter that leaves the provider alone say nothing.
-	for _, name := range []string{"M.Default", "M.GoodKB"} {
+	// Controls: the values Agent Editor's import accepts, an unstated one (the
+	// default is MxCloudGenAI) and an alter that leaves the provider alone say
+	// nothing. Azure is a model provider only: as a knowledge base's it warns.
+	for _, name := range []string{"M.Default", "M.Azure", "M.Fuse", "M.GoodKB"} {
 		if got[name] != "" {
 			t.Errorf("%s warned: %s", name, got[name])
 		}

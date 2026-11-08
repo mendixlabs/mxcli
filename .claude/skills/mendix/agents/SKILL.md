@@ -11,12 +11,12 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | lines | section |
 |---|---|
 | 24-50 | Overview |
-| 51-135 | Syntax |
-| 136-162 | Altering existing documents |
-| 163-191 | Gotchas |
-| 192-213 | Common Patterns |
-| 214-249 | Calling Agents from Microflows |
-| 250-252 | AI agent documents |
+| 51-139 | Syntax |
+| 140-166 | Altering existing documents |
+| 167-195 | Gotchas |
+| 196-217 | Common Patterns |
+| 218-253 | Calling Agents from Microflows |
+| 254-256 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -60,19 +60,23 @@ create ai model Module.MyModel (
 );
 ```
 
-**`Provider` is free-form; `check` warns on an unmeasured value (MDL-AGENT01).**
-MDL passes the value straight through, and mxbuild contains no agent-editor
-strings, so `mx check` and the build stay green on a typo; the fault surfaces
-only when Studio Pro opens the document. `mxcli check` therefore warns, without a
-project, when a model's Provider is not one read from a Studio Pro-saved
-document (so far only `MxCloudGenAI`), when its case is off, and when a
-knowledge base uses anything but `MxCloudGenAI` (the only provider Agent Editor
-supports for one).
+**`Provider` is free-form; `check` warns on a value Agent Editor rejects (MDL-AGENT01).**
 
-It is a warning, not an error: Agent Editor adds providers (Azure AI Foundry for
-models since Agents Kit 2.1) and mxcli has not measured that value yet. **Take a
-new value from a model document Studio Pro created**, rather than from memory,
-and expect the warning until it is added to the measured list.
+| Document | Provider | Connector it imports through |
+|---|---|---|
+| AI model | `MxCloudGenAI` | MxGenAIConnector |
+| AI model | `Azure` (Azure AI Foundry) | OpenAIConnector |
+| AI model | `Fuse` (Agent Editor 2.7+) | FuseConnector |
+| Knowledge base | `MxCloudGenAI` only | MxGenAIConnector |
+
+MDL passes the value straight through, and mxbuild contains no agent-editor
+strings, so `mx check` and the build stay green on a typo. The fault surfaces at
+startup, when `ASU_AgentEditor` fails the import with "Model provider is not
+one of the allowed types". `mxcli check` therefore warns, without a project, on
+any other value or the wrong case. The values come from
+`javasource/agenteditorcommons/actions/ImportDeployedModel.java`, whose
+`getImportMicroflow` switch is the authority; read it in the app when a newer
+Agent Editor may have added one. It warns rather than refuses for that reason.
 
 ### Knowledge Base
 

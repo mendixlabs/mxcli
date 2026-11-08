@@ -10,25 +10,26 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/linter"
 )
 
-// agentProviderRule warns on an agent-editor Provider no Studio Pro document
-// has been seen to hold (ako/mxcli#2023).
+// agentProviderRule warns on an agent-editor Provider that Agent Editor's
+// runtime import does not accept (ako/mxcli#2023).
 //
-// The value is free-form in MDL and nothing downstream reads it: mxbuild holds
-// no agent-editor strings, so `Provider: MxCloudGenAl` writes, builds and
-// round-trips, and only Studio Pro opening the document shows the typo. It
-// warns rather than refuses, because a new Agent Editor adds providers (the
-// docs name Azure AI Foundry for models since Agents Kit 2.1) and a value
-// mxcli has not measured yet must stay writable.
+// The value is free-form in MDL and mxbuild holds no agent-editor strings, so
+// `Provider: MxCloudGenAl` writes, builds and round-trips. The first thing to
+// read it is ASU_AgentEditor at startup, whose import fails with "Model
+// provider is not one of the allowed types". It warns rather than refuses,
+// because a new Agent Editor adds providers and a value mxcli has not read yet
+// must stay writable.
 const agentProviderRule = "MDL-AGENT01"
 
-// measuredModelProviders are the Provider values read from Studio Pro-saved
-// Model documents: mx-test-projects (FactoryManagement, ICXGraphPilot,
-// EvoraICX and two more, Mendix 11.10-11.16). Add a value here only from a
-// saved document.
-var measuredModelProviders = []string{"MxCloudGenAI"}
+// measuredModelProviders are the values AgentEditorCommons'
+// ImportDeployedModel.getImportMicroflow switches on: MxCloudGenAI and Azure
+// (Azure AI Foundry, through OpenAIConnector) in Agent Editor 2.2.1 and the
+// version ICXGraphPilot ships; Fuse added by 2.7.0. Any other value fails the
+// import. Add a value here only from that switch or a saved document.
+var measuredModelProviders = []string{"MxCloudGenAI", "Azure", "Fuse"}
 
-// knowledgeBaseProvider is the one provider Agent Editor supports for a
-// knowledge base, per its documentation and every measured document.
+// knowledgeBaseProvider is the one provider ImportConsumedKnowledgeBase
+// accepts, in every Agent Editor version measured.
 const knowledgeBaseProvider = "MxCloudGenAI"
 
 // ValidateAgentProviders warns on a Model or Knowledge Base Provider outside
@@ -52,11 +53,11 @@ func ValidateAgentProviders(prog *ast.Program) []linter.Violation {
 			Severity: linter.SeverityWarning,
 			Message:  fmt.Sprintf("%s %s: Provider %q %s", kind, name, provider, why),
 			Location: linter.Location{DocumentType: kind, DocumentName: name.String()},
-			Suggestion: suggestion + " Nothing but Studio Pro reads the value, so a typo builds and " +
-				"only shows when the document is opened there.",
+			Suggestion: suggestion + " mxbuild does not read the value, so a typo builds and " +
+				"only fails when ASU_AgentEditor imports the document at startup.",
 		})
 	}
-	modelWhy := "is not a provider seen in a Studio Pro-saved model (" + strings.Join(measuredModelProviders, ", ") + ")"
+	modelWhy := "is not a provider Agent Editor imports (" + strings.Join(measuredModelProviders, ", ") + ")"
 	kbWhy := "is not supported for a knowledge base: Agent Editor supports only " + knowledgeBaseProvider
 	for _, stmt := range prog.Statements {
 		switch s := stmt.(type) {
