@@ -111,7 +111,7 @@ func TestReactUnsupportedWidgetRule_SkipsNativePages(t *testing.T) {
 			('p2', 'Login_Native', 'MyFirstModule.Login_Native', 'MyFirstModule', '', '', '', 'Atlas_Core.NativePhone_Default', '', 1)`,
 		`CREATE TABLE widgets (Id TEXT, Name TEXT, WidgetType TEXT, ContainerId TEXT, ContainerQualifiedName TEXT,
 			ContainerType TEXT, ModuleName TEXT, EntityRef TEXT, AttributeRef TEXT, MicroflowRef TEXT, NanoflowRef TEXT,
-			PageRef TEXT, ParentWidgetId TEXT, Depth INTEGER, Class TEXT, Style TEXT, DynamicClasses TEXT,
+			PageRef TEXT, SnippetRef TEXT, ParentWidgetId TEXT, Depth INTEGER, Class TEXT, Style TEXT, DynamicClasses TEXT,
 			ActionType TEXT, HasConfirmation INTEGER)`,
 		`INSERT INTO widgets (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
 			ModuleName, EntityRef, AttributeRef, MicroflowRef, NanoflowRef) VALUES
@@ -153,7 +153,7 @@ func TestReactUnsupportedWidgetRule_LayoutWidgets(t *testing.T) {
 			Title TEXT, URL TEXT, LayoutRef TEXT, Description TEXT, WidgetCount INTEGER)`,
 		`CREATE TABLE widgets (Id TEXT, Name TEXT, WidgetType TEXT, ContainerId TEXT, ContainerQualifiedName TEXT,
 			ContainerType TEXT, ModuleName TEXT, EntityRef TEXT, AttributeRef TEXT, MicroflowRef TEXT, NanoflowRef TEXT,
-			PageRef TEXT, ParentWidgetId TEXT, Depth INTEGER, Class TEXT, Style TEXT, DynamicClasses TEXT,
+			PageRef TEXT, SnippetRef TEXT, ParentWidgetId TEXT, Depth INTEGER, Class TEXT, Style TEXT, DynamicClasses TEXT,
 			ActionType TEXT, HasConfirmation INTEGER)`,
 		`INSERT INTO widgets (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType, ModuleName) VALUES
 			('w1', 'imgLogoWeb', 'Forms$StaticImageViewer', 'l1', 'MyFirstModule.Lay_Web', 'LAYOUT', 'MyFirstModule'),

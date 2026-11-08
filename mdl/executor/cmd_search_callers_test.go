@@ -24,16 +24,17 @@ func TestCallerRefKinds(t *testing.T) {
 
 	// Every way one document can INVOKE another.
 	for _, k := range []string{
-		"call",       // microflow/nanoflow call activity — the only one that used to count
-		"action",     // widget action: the reported button case
-		"show_page",  // a microflow, or a button, opening a page
-		"calculate",  // calculated attribute running a microflow
-		"home_page",  // navigation
-		"login_page", //
-		"menu_item",  //
-		"schedule",   // entry point: a scheduled event runs the microflow
-		"publish",    // entry point: a published REST operation runs the microflow (#1126)
-		"settings",   // entry point: after-startup / before-shutdown / health check
+		"call",         // microflow/nanoflow call activity — the only one that used to count
+		"action",       // widget action: the reported button case
+		"show_page",    // a microflow, or a button, opening a page
+		"snippet_call", // a page, snippet or layout placing a snippet (ako/mxcli#2017)
+		"calculate",    // calculated attribute running a microflow
+		"home_page",    // navigation
+		"login_page",   //
+		"menu_item",    //
+		"schedule",     // entry point: a scheduled event runs the microflow
+		"publish",      // entry point: a published REST operation runs the microflow (#1126)
+		"settings",     // entry point: after-startup / before-shutdown / health check
 		// An entity event handler runs its microflow on every create/commit/
 		// delete of the entity. Omitting it reported the hottest code in the
 		// app as uncalled (mendixlabs/mxcli#1127).

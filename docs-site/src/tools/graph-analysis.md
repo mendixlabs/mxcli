@@ -82,7 +82,7 @@ They also read different edges, on purpose:
 | `graph_cycles` | structural kinds only | which documents are tangled together |
 | `graph_module_cycles` | every kind, like `graph_module_coupling` | which modules cannot be extracted independently |
 
-The asset graph excludes navigational kinds (`layout`, `show_page`,
+The asset graph excludes navigational kinds (`layout`, `show_page`, `snippet_call`,
 `datasource`, `widget`, `sync`, …) because they blur community and layer
 clustering. A module cycle is a different claim: a page bound to a layout in
 another module really is a dependency of that module, and on a blank Mendix app

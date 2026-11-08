@@ -937,6 +937,7 @@ type Widget struct {
 	MicroflowRef           string // Qualified name of an action/datasource microflow, if any
 	NanoflowRef            string // Qualified name of an action/datasource nanoflow, if any
 	PageRef                string // Qualified name of the page the widget's action opens, if any
+	SnippetRef             string // Qualified name of the snippet a snippet call places, if any
 
 	// Tree position and appearance (mendixlabs/mxcli#1268); see
 	// catalog.rawWidgetInfo for the exact semantics.
@@ -955,7 +956,7 @@ func (ctx *LintContext) Widgets() iter.Seq[Widget] {
 		rows, err := ctx.db.Query(fmt.Sprintf(`
 			SELECT w.Id, w.Name, w.WidgetType, w.ContainerId, w.ContainerQualifiedName,
 			       w.ContainerType, w.ModuleName, w.EntityRef, w.AttributeRef,
-			       w.MicroflowRef, w.NanoflowRef, w.PageRef,
+			       w.MicroflowRef, w.NanoflowRef, w.PageRef, w.SnippetRef,
 			       w.ParentWidgetId, w.Depth, w.Class, w.Style, w.DynamicClasses,
 			       w.ActionType, w.HasConfirmation
 			FROM widgets w
@@ -971,11 +972,11 @@ func (ctx *LintContext) Widgets() iter.Seq[Widget] {
 
 		for rows.Next() {
 			var w Widget
-			var containerID, containerQName, containerType, entityRef, attrRef, mfRef, nfRef, pageRef sql.NullString
+			var containerID, containerQName, containerType, entityRef, attrRef, mfRef, nfRef, pageRef, snippetRef sql.NullString
 			var parentID, class, style, dynClasses, actionType sql.NullString
 			var depth, hasConfirmation sql.NullInt64
 			err := rows.Scan(&w.ID, &w.Name, &w.WidgetType, &containerID, &containerQName,
-				&containerType, &w.ModuleName, &entityRef, &attrRef, &mfRef, &nfRef, &pageRef,
+				&containerType, &w.ModuleName, &entityRef, &attrRef, &mfRef, &nfRef, &pageRef, &snippetRef,
 				&parentID, &depth, &class, &style, &dynClasses, &actionType, &hasConfirmation)
 			if err != nil {
 				ctx.recordQueryError("Widgets (row scan)", err)
@@ -989,6 +990,7 @@ func (ctx *LintContext) Widgets() iter.Seq[Widget] {
 			w.MicroflowRef = mfRef.String
 			w.NanoflowRef = nfRef.String
 			w.PageRef = pageRef.String
+			w.SnippetRef = snippetRef.String
 			w.ParentWidgetID = parentID.String
 			w.Depth = int(depth.Int64)
 			w.Class = class.String

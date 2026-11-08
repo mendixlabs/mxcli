@@ -1318,6 +1318,7 @@ func widgetToStarlark(w Widget) starlark.Value {
 		"microflow_ref": starlark.String(w.MicroflowRef),
 		"nanoflow_ref":  starlark.String(w.NanoflowRef),
 		"page_ref":      starlark.String(w.PageRef),
+		"snippet_ref":   starlark.String(w.SnippetRef),
 		// Tree position, appearance and primary action (mendixlabs/mxcli#1268).
 		// `class` is a Starlark keyword, hence class_name.
 		"parent_widget_id": starlark.String(w.ParentWidgetID),
