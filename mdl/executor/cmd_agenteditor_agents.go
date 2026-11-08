@@ -125,6 +125,12 @@ func describeAgentEditorAgent(ctx *ExecContext, name ast.QualifiedName) error {
 	if a.TopP != nil {
 		lines = append(lines, fmt.Sprintf("  TopP: %g", *a.TopP))
 	}
+	if a.EnableBackendStreaming != nil {
+		lines = append(lines, fmt.Sprintf("  EnableBackendStreaming: %t", *a.EnableBackendStreaming))
+	}
+	if a.EnableUIStreaming != nil {
+		lines = append(lines, fmt.Sprintf("  EnableUIStreaming: %t", *a.EnableUIStreaming))
+	}
 	if a.SystemPrompt != "" {
 		lines = append(lines, fmt.Sprintf("  SystemPrompt: %s", formatAgentString(ctx, a.SystemPrompt)))
 	}
@@ -169,25 +175,12 @@ func describeAgentEditorAgent(ctx *ExecContext, name ast.QualifiedName) error {
 // emitToolBlock writes one tool or mcp service child of the agent body, its
 // properties in ( ) (R2).
 func emitToolBlock(ctx *ExecContext, t agenteditor.AgentTool) {
-	switch t.ToolType {
-	case "mcp":
-		if t.Document == nil {
-			// malformed — skip
-			return
-		}
+	var props []string
+	if isMCPTool(t) && t.Document != nil && t.Document.QualifiedName != "" {
+		// Studio Pro stores "MCP"; comparing to "mcp" printed every MCP tool as
+		// a generic tool block.
 		fmt.Fprintf(ctx.Output, "  mcp service %s (\n", t.Document.QualifiedName)
-		// The comma belongs to Enabled when a Description follows it; without
-		// it the block was a parse error (ako/mxcli#707). Same shape as the
-		// generic tool block below.
-		fmt.Fprintf(ctx.Output, "    Enabled: %t", t.Enabled)
-		if t.Description != "" {
-			fmt.Fprintln(ctx.Output, ",")
-			fmt.Fprintf(ctx.Output, "    Description: %s\n", mdlQuoted(t.Description))
-		} else {
-			fmt.Fprintln(ctx.Output)
-		}
-		fmt.Fprintln(ctx.Output, "  )")
-	default:
+	} else {
 		// Microflow or unknown tool type — emit generic TOOL block.
 		name := t.Name
 		if name == "" {
@@ -195,20 +188,26 @@ func emitToolBlock(ctx *ExecContext, t agenteditor.AgentTool) {
 		}
 		fmt.Fprintf(ctx.Output, "  tool %s (\n", name)
 		if t.ToolType != "" {
-			fmt.Fprintf(ctx.Output, "    ToolType: %s,\n", t.ToolType)
+			props = append(props, "ToolType: "+t.ToolType)
 		}
 		if t.Document != nil && t.Document.QualifiedName != "" {
-			fmt.Fprintf(ctx.Output, "    Document: %s,\n", t.Document.QualifiedName)
+			props = append(props, "Document: "+t.Document.QualifiedName)
 		}
-		fmt.Fprintf(ctx.Output, "    Enabled: %t", t.Enabled)
-		if t.Description != "" {
-			fmt.Fprintln(ctx.Output, ",")
-			fmt.Fprintf(ctx.Output, "    Description: %s\n", mdlQuoted(t.Description))
-		} else {
-			fmt.Fprintln(ctx.Output)
-		}
-		fmt.Fprintln(ctx.Output, "  )")
 	}
+	props = append(props, fmt.Sprintf("Enabled: %t", t.Enabled))
+	if t.Description != "" {
+		props = append(props, "Description: "+mdlQuoted(t.Description))
+	}
+	if t.UserAccessApproval != "" {
+		props = append(props, "UserAccessApproval: "+t.UserAccessApproval)
+	}
+	if t.DisplayTitle != nil {
+		props = append(props, "DisplayTitle: "+mdlQuoted(*t.DisplayTitle))
+	}
+	if t.DisplayDescription != nil {
+		props = append(props, "DisplayDescription: "+mdlQuoted(*t.DisplayDescription))
+	}
+	emitBlockProps(ctx, props)
 }
 
 // emitKBBlock writes one knowledge base child of the agent body, its
@@ -219,19 +218,38 @@ func emitKBBlock(ctx *ExecContext, kb agenteditor.AgentKBTool) {
 		name = "KB_" + strings.ReplaceAll(kb.ID, "-", "")[:8]
 	}
 	fmt.Fprintf(ctx.Output, "  knowledge base %s (\n", name)
+	var props []string
 	if kb.Document != nil && kb.Document.QualifiedName != "" {
-		fmt.Fprintf(ctx.Output, "    Source: %s,\n", kb.Document.QualifiedName)
+		props = append(props, "Source: "+kb.Document.QualifiedName)
 	}
 	if kb.CollectionIdentifier != "" {
-		fmt.Fprintf(ctx.Output, "    Collection: %s,\n", mdlQuoted(kb.CollectionIdentifier))
+		props = append(props, "Collection: "+mdlQuoted(kb.CollectionIdentifier))
 	}
 	if kb.MaxResults != 0 {
-		fmt.Fprintf(ctx.Output, "    MaxResults: %d,\n", kb.MaxResults)
+		props = append(props, fmt.Sprintf("MaxResults: %d", kb.MaxResults))
+	}
+	if kb.MinSimilarity != nil {
+		props = append(props, fmt.Sprintf("MinSimilarity: %g", *kb.MinSimilarity))
 	}
 	if kb.Description != "" {
-		fmt.Fprintf(ctx.Output, "    Description: %s,\n", mdlQuoted(kb.Description))
+		props = append(props, "Description: "+mdlQuoted(kb.Description))
 	}
-	fmt.Fprintf(ctx.Output, "    Enabled: %t\n", kb.Enabled)
+	props = append(props, fmt.Sprintf("Enabled: %t", kb.Enabled))
+	if kb.IsVisible != nil {
+		props = append(props, fmt.Sprintf("IsVisible: %t", *kb.IsVisible))
+	}
+	emitBlockProps(ctx, props)
+}
+
+// emitBlockProps writes a body block's properties, one per line, and closes it.
+func emitBlockProps(ctx *ExecContext, props []string) {
+	for i, p := range props {
+		sep := ","
+		if i == len(props)-1 {
+			sep = ""
+		}
+		fmt.Fprintf(ctx.Output, "    %s%s\n", p, sep)
+	}
 	fmt.Fprintln(ctx.Output, "  )")
 }
 

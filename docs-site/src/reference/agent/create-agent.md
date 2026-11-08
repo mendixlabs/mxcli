@@ -103,6 +103,27 @@ If `OR MODIFY` is specified and the agent already exists, its properties and bod
 `ToolChoice`
 :   Optional. `Auto` (let the model decide), `None` (no tools), or `Required` (always use a tool).
 
+`EnableBackendStreaming`, `EnableUIStreaming`
+:   Optional, `true` or `false`. Response streaming for the agent (Agent Editor 2.2.1+). Streaming is set on the agent, not on its model. The Studio Pro playground does not show it; it works at runtime with a chat agent in Conversational UI.
+
+### Tool and MCP service settings
+
+`UserAccessApproval`
+:   Optional. `HiddenForUser`: the call runs without being shown. `VisibleForUser`: the call is shown and runs. `UserConfirmationRequired`: the call is shown and waits for the user's approval. Agent Editor 2.2+.
+
+`DisplayTitle`, `DisplayDescription`
+:   Optional. The title and description shown to the user for the call. The model still sees the tool's name and `Description`.
+
+### Knowledge base settings
+
+`MinSimilarity`
+:   Optional. The least similarity, between 0 and 1, a chunk needs to be returned.
+
+`IsVisible`
+:   Optional, `true` or `false`. Whether the user sees the retrieval.
+
+On `OR MODIFY`, a setting the statement leaves out keeps its stored value.
+
 ## Examples
 
 ### Simple task agent
@@ -128,6 +149,26 @@ CREATE AGENT MyModule."Translator" (
     UserPrompt: 'Hello world'
 );
 
+```
+
+### Agent whose tool needs the user's approval
+
+```sql
+CREATE AGENT MyModule."Support" (
+    UsageType: Chat,
+    model: MyModule.GPT4Model,
+    EnableBackendStreaming: true,
+    SystemPrompt: 'Help the customer with their orders.'
+)
+{
+    TOOL CancelOrder (
+        Document: MyModule.Tool_CancelOrder,
+        Description: 'Cancel an order by its number',
+        UserAccessApproval: UserConfirmationRequired,
+        DisplayTitle: 'Cancel order'
+    )
+    KNOWLEDGE BASE Faq (Source: MyModule.FaqKB, MaxResults: 5, MinSimilarity: 0.3)
+};
 ```
 
 ### Agent with multi-line dollar-quoted prompt

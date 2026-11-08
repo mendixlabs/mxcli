@@ -52,7 +52,8 @@ func typedAgent(t *testing.T, contents string) *agenteditor.Agent {
 
 // An `alter agent … set Temperature` rewrote Contents from the typed fields,
 // and the streaming switches, the selected model and each tool's approval and
-// display title were gone. A rewrite keeps every key it does not write.
+// display title were gone. mxcli now models all of them but selectedModel; a
+// rewrite keeps that one, and any key a later Agent Editor adds.
 func TestCarryStoredContents_AgentKeepsWhatItDoesNotModel(t *testing.T) {
 	stored := readContentsFixture(t, graphExplorerFixture)
 	a := typedAgent(t, stored)
@@ -64,7 +65,7 @@ func TestCarryStoredContents_AgentKeepsWhatItDoesNotModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Control: the rebuild alone loses them, so the carry below is what keeps them.
-	if m := decodeMap(t, rebuilt); m["enableBackendStreaming"] != nil || m["selectedModel"] != nil {
+	if m := decodeMap(t, rebuilt); m["selectedModel"] != nil {
 		t.Fatalf("the encoder now writes the unmodelled keys itself; this test no longer covers the carry: %s", rebuilt)
 	}
 
@@ -83,10 +84,15 @@ func TestCarryStoredContents_AgentKeepsWhatItDoesNotModel(t *testing.T) {
 	}
 }
 
-// A knowledge base tool's minSimilarity is kept, paired with its stored entry
-// by id.
+// A key on a knowledge base tool that mxcli does not model is kept, paired
+// with its stored entry by id. ("futureKey" stands in for what a later Agent
+// Editor adds: every key the fixture holds is modelled now.)
 func TestCarryStoredContents_KnowledgeBaseToolByID(t *testing.T) {
-	stored := readContentsFixture(t, workInstructionAgentFixture)
+	stored := strings.Replace(readContentsFixture(t, workInstructionAgentFixture),
+		`"minSimilarity":0.2`, `"minSimilarity":0.2,"futureKey":"kept"`, 1)
+	if !strings.Contains(stored, "futureKey") {
+		t.Fatal("fixture no longer holds minSimilarity 0.2")
+	}
 	a := typedAgent(t, stored)
 	a.KBTools[0].MaxResults = 7
 	rebuilt, err := encodeAgentContents(a)
@@ -98,16 +104,16 @@ func TestCarryStoredContents_KnowledgeBaseToolByID(t *testing.T) {
 		t.Fatal(err)
 	}
 	kb := decodeMap(t, got)["knowledgebaseTools"].([]any)[0].(map[string]any)
-	if kb["minSimilarity"] != 0.2 || kb["maxResults"] != float64(7) {
-		t.Errorf("knowledge base tool %v, want minSimilarity 0.2 kept and maxResults 7 written", kb)
+	if kb["futureKey"] != "kept" || kb["minSimilarity"] != 0.2 || kb["maxResults"] != float64(7) {
+		t.Errorf("knowledge base tool %v, want futureKey and minSimilarity kept and maxResults 7 written", kb)
 	}
 
 	// Control: a tool the statement adds pairs with nothing and gets nothing.
 	a.KBTools[0].ID = "new-tool"
 	rebuilt, _ = encodeAgentContents(a)
 	got, _ = carryStoredContents(stored, rebuilt, agentContentsSpec)
-	if kb := decodeMap(t, got)["knowledgebaseTools"].([]any)[0].(map[string]any); kb["minSimilarity"] != nil {
-		t.Errorf("an unpaired tool got the stored tool's minSimilarity: %v", kb)
+	if kb := decodeMap(t, got)["knowledgebaseTools"].([]any)[0].(map[string]any); kb["futureKey"] != nil {
+		t.Errorf("an unpaired tool got the stored tool's futureKey: %v", kb)
 	}
 }
 

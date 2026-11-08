@@ -996,6 +996,7 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 		Keywords: []string{
 			"create agent", "drop agent", "usagetype", "systemprompt", "userprompt",
 			"variables", "toolchoice", "temperature", "topp", "maxtokens",
+			"useraccessapproval", "approval", "streaming", "displaytitle", "minsimilarity",
 		},
 		Syntax: `CREATE [OR MODIFY] AGENT Module.Name [FOLDER 'path'] (
   UsageType: Task|Chat,
@@ -1005,20 +1006,24 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
   [Temperature: 0.7,]
   [TopP: 0.9,]
   [ToolChoice: Auto|None|Required,]
+  [EnableBackendStreaming: true|false, EnableUIStreaming: true|false,]
   [Variables: ("Key": EntityAttribute|String),]
   SystemPrompt: 'prompt or $$multi-line$$',
   [UserPrompt: 'prompt']
 )
 {
-  [MCP SERVICE Module.ServiceName ( Enabled: true )]
-  [KNOWLEDGE BASE AliaName ( Source: Module.KB, Collection: 'col', MaxResults: 5, Enabled: true )]
-  [TOOL ToolName ( Document: Module.Microflow, Description: 'desc', Enabled: true )]
+  [MCP SERVICE Module.ServiceName ( Enabled: true [, UserAccessApproval: …] )]
+  [KNOWLEDGE BASE AliaName ( Source: Module.KB, Collection: 'col', MaxResults: 5,
+      [MinSimilarity: 0.2, IsVisible: true|false,] Enabled: true )]
+  [TOOL ToolName ( Document: Module.Microflow, Description: 'desc', Enabled: true,
+      [UserAccessApproval: HiddenForUser|VisibleForUser|UserConfirmationRequired,]
+      [DisplayTitle: 'shown to the user', DisplayDescription: '…'] )]
 };
 
 A TOOL's Document is the microflow it runs. On OR MODIFY, the tools,
 knowledge bases and entity keep their stored identity, and settings MDL has
-no spelling for (tool approval, display title, streaming) keep their stored
-values.`,
+no spelling for (the selected model) keep their stored values, and so does
+a setting the statement leaves out.`,
 		Example: "create agent MyModule.Assistant (\n  UsageType: Chat,\n  Model: MyModule.GPT4,\n  SystemPrompt: $$You are a helpful assistant.$$,\n  UserPrompt: 'Ask me anything.'\n)\n{\n  MCP SERVICE MyModule.WebSearch ( Enabled: true )\n};",
 		SeeAlso: []string{"agents", "agents.model", "agents.knowledge-base", "agents.mcp-service"},
 	})
