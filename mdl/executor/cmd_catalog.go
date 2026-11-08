@@ -1078,10 +1078,13 @@ func parallelDescribeContext(ctx *ExecContext, out io.Writer, id model.ID) *Exec
 		// Pins the describe to this document rather than to whichever
 		// document of this name the lookup prefers (#1185).
 		describeID: id,
-		// The text feeds the search index, where layout annotations do not
-		// matter, and telling derived layout from authored rebuilds each flow
-		// several times — it made a full source refresh 2.3x slower (#766).
-		describeFullLayout: true,
+		// The canonical description, as DESCRIBE prints it (ako/mxcli#2036).
+		// The text is read as MDL, not only searched: tools generate scripts
+		// from it, and with every stored layout annotation kept (#766 did so
+		// to skip the derivation, 2.3x faster cold) those scripts stated
+		// layout DESCRIBE leaves out — 376 of one project's 858 microflows.
+		// Telling derived layout from authored costs on a cold build; the
+		// incremental source build (#1790) carries unchanged rows after it.
 	}
 }
 
