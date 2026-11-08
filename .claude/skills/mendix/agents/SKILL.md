@@ -15,8 +15,8 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | 139-165 | Altering existing documents |
 | 166-194 | Gotchas |
 | 195-216 | Common Patterns |
-| 217-252 | Calling Agents from Microflows |
-| 253-255 | AI agent documents |
+| 217-281 | Calling Agents from Microflows |
+| 282-284 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -216,39 +216,68 @@ list agents in module;
 
 ## Calling Agents from Microflows
 
-Dedicated `call agent` MDL syntax is **not yet implemented**. Use `call java action` with the AgentCommons Java actions instead:
+Studio Pro's *Call Agent* and *New Chat for Agent* toolbox actions are **Java
+actions exposed as microflow actions**, so `call java action` writes exactly the
+activity the toolbox inserts. There is no separate `call agent` statement, and
+none is needed (ako/mxcli#2024, measured on 11.16 projects).
+
+For an agent made with `create agent` (an Agent Editor document), use the
+**AgentEditorCommons** actions. They take the agent document by its qualified
+name, in quotes, with no retrieve:
 
 ```sql
--- Single-call (Task) agent — no chat history
-$response = call java action AgentCommons.Agent_Call_WithoutHistory(
-  agent = $agent,
-  UserMessage = $UserInput
+-- Task agent, no chat history. Pass a FileCollection to send a PDF or image.
+$Response = call java action AgentEditorCommons.Agent_CallDocument_WithoutHistory(
+  Agent = 'Module.MyAgent',
+  OptionalContextObject = $Invoice,
+  OptionalRequest = empty,
+  OptionalFileCollection = empty
 );
 
--- Conversational agent — with chat history
-$response = call java action AgentCommons.Agent_Call_WithHistory(
-  agent = $agent,
-  ChatContext = $ChatContext,
-  UserMessage = $UserInput
+-- Chat agent, with history: the Request comes from the chat's preprocessing.
+$Response = call java action AgentEditorCommons.Agent_CallDocument_WithHistory(
+  Agent = 'Module.MyAgent',
+  Request = $Request,
+  OptionalContextObject = empty
 );
 
--- Create a ChatContext wired to an agent (for ConversationalUI)
-$ChatContext = call java action AgentCommons.ChatContext_Create_ForAgent(
-  agent = $agent,
-  ActionMicroflow = Module.HandleToolCall,
-  context = $ContextObject
+-- A ChatContext wired to the agent, for Conversational UI.
+$ChatContext = call java action AgentEditorCommons.ChatContext_Create_ForAgentDocument(
+  Agent = 'Module.MyAgent',
+  ActionMicroflow = 'Module.ChatContext_ActionMicroflow',
+  ContextObject = $Customer,
+  OverwritingDeployedModel = empty
 );
 ```
 
-Retrieve the `AgentCommons.Agent` entity by qualified name before calling:
+`OptionalContextObject` / `ContextObject` fills the prompt's `{{variables}}` from
+the object's attributes; its entity must be the agent's `Entity`.
+
+The **AgentCommons** actions take an `AgentCommons.Agent` object instead of the
+document: an agent built at runtime, or one `ASU_AgentEditor` imported from a
+document. They have the same parameters: `Agent_Call_WithoutHistory(Agent, OptionalContextObject,
+OptionalRequest, OptionalFileCollection)`,
+`Agent_Call_WithHistory(Agent, Request, OptionalContextObject)` and
+`ChatContext_Create_ForAgent(Agent, ActionMicroflow, ContextObject,
+OverwritingDeployedModel)`.
 
 ```sql
-retrieve $agent from AgentCommons.Agent
-  where [QualifiedName = 'Module.MyAgent']
+-- _QualifiedName is the document's name, filled by ASU_AgentEditor; Title is not a stable key.
+retrieve $Agent from AgentCommons.Agent
+  where _QualifiedName = 'Module.MyAgent'
   first;
+$Response = call java action AgentCommons.Agent_Call_WithoutHistory(
+  Agent = $Agent, OptionalContextObject = $Invoice,
+  OptionalRequest = empty, OptionalFileCollection = empty
+);
 ```
 
-The `AgentCommons.Agent` entity is populated at runtime by `ASU_AgentEditor` from the agent documents you create with `create agent`.
+**A document reference is checked, a runtime retrieve is not.** `check
+--references` resolves `Agent = 'Module.MyAgent'`, so a script that calls an
+agent by document passes only once that agent exists. When a tool microflow
+calls a flow that calls the agent that uses the tool, no statement order works
+on a fresh project: break the cycle with the AgentCommons form and a retrieve
+by `_QualifiedName`, which is what `Agent_CallDocument_*` does internally.
 
 ## AI agent documents
 
