@@ -115,15 +115,7 @@ func (b *Builder) appendAgentBodyBlock(stmt *ast.AlterAgentStmt, blk *parser.Age
 		stmt.AddKBs = append(stmt.AddKBs, kbd)
 
 	case blk.TOOL() != nil:
-		td := ast.AgentToolDef{ToolType: "Microflow", Enabled: true}
-		if iok := blk.IdentifierOrKeyword(); iok != nil {
-			td.Name = iok.GetText()
-		}
-		td.Description = blockProps["description"]
-		if v, ok := blockProps["enabled"]; ok {
-			td.Enabled = strings.EqualFold(v, "true")
-		}
-		stmt.AddTools = append(stmt.AddTools, td)
+		stmt.AddTools = append(stmt.AddTools, toolBlockDef(blk, blockProps))
 	}
 }
 

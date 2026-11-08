@@ -147,6 +147,7 @@ func (b *Backend) ListAgentEditorKnowledgeBases() ([]*agenteditor.KnowledgeBase,
 			if err := json.Unmarshal([]byte(u.wrap.Contents), &p); err != nil {
 				return nil, fmt.Errorf("unmarshal KnowledgeBase Contents: %w", err)
 			}
+			k.InnerName = p.Name
 			k.Provider = p.Provider
 			k.Environment = p.ProviderFields.Environment
 			k.DeepLinkURL = p.ProviderFields.DeepLinkURL
