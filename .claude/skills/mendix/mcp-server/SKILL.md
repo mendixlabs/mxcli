@@ -10,9 +10,9 @@ description: "Publish a Mendix app as an MCP server so external agents can call 
 
 | lines | section |
 |---|---|
-| 43-161 | Runtime configuration |
-| 162-182 | Gotchas |
-| 183-207 | Reading and migrating an existing setup |
+| 43-174 | Runtime configuration |
+| 175-203 | Gotchas |
+| 204-228 | Reading and migrating an existing setup |
 
 <!-- /skill-index -->
 # Publishing an MCP Server
@@ -65,7 +65,9 @@ begin
   if $User = empty then
     return empty;
   end if;
-  $Valid = call java action System.VerifyPassword(userName = $UserName/Value, password = $Password/Value);
+  -- Never let this microflow throw: an error is a 500, which also stops a client's OAuth flow.
+  $Valid = call java action System.VerifyPassword(userName = $UserName/Value, password = $Password/Value)
+    on error without rollback begin return empty; end error;
   if $Valid then
     return $User;
   end if;
@@ -96,6 +98,8 @@ begin
 end;
 
 -- Start the server and register its tools and prompts. Call it after startup.
+-- Each call handles its own error, so a server that cannot start logs and
+-- returns false instead of stopping the runtime.
 create microflow MyModule.MCP_Initialize ()
 returns Boolean
 begin
@@ -105,14 +109,20 @@ begin
     Version = '1.0.0',
     ProtocolVersion = MCPServer.ENUM_ProtocolVersion.v2025_03_26,
     AuthenticationMicroflow = 'MyModule.MCP_Authenticate'
-  );
+  ) on error without rollback begin
+    log error node 'MCPServer' 'Could not start the Customers MCP server';
+    return false;
+  end error;
   $Tool = call java action MCPServer.AddTool(
     McpServer = $McpServer,
     Name = 'count_customers',
     Description = 'Count the customers whose name starts with NamePrefix.',
     ExecutingMicroflow = 'MyModule.MCPTool_CountCustomers',
     Schema = '{"type": "object", "properties": {"NamePrefix": {"type": "string"}}, "required": ["NamePrefix"]}'
-  );
+  ) on error without rollback begin
+    log error node 'MCPServer' 'Could not register tool count_customers';
+    return false;
+  end error;
   $Arguments = create list of MCPServer.PromptArgument;
   call microflow MCPServer.PopulatePromptArgList(PromptArgumentList = $Arguments, Name = 'CustomerName', Description = 'The customer to summarize', Required = true);
   $Prompt = call java action MCPServer.AddPrompt(
@@ -121,7 +131,10 @@ begin
     Description = 'Draft an account summary for one customer.',
     Parameters = $Arguments,
     Microflow = 'MyModule.MCPPrompt_CustomerReport'
-  );
+  ) on error without rollback begin
+    log error node 'MCPServer' 'Could not register prompt customer_report';
+    return false;
+  end error;
   return true;
 end;
 ```
@@ -174,10 +187,18 @@ matter to the calling model; the property names must match the parameter names.
 - **Reserved names and paths.** 4.2.2 documents `sse` and `mcp` as reserved in
   the server `Name`; 5.4 refuses a `Path` that is `mcp`, ends in `/mcp`, or
   contains `/`.
-- **The current user in a tool microflow depends on the version.** The 3.0
-  action documentation says the user is not in scope of a tool or prompt
-  microflow; 4.x drops that sentence. FactoryManagement grants its tool
-  microflows to the role its authenticated users hold.
+- **Tools run as the authenticated user (5.4, measured).** A tool that filters
+  on `$currentUser` returned only that user's data over a live MCP client, so
+  grant each tool and prompt microflow to the roles those users hold. The 3.0
+  action documentation said the user was not in scope of a tool microflow.
+- **`CreateMCPServer` needs the application root URL.** 5.4 builds the endpoint
+  from it and throws a NullPointerException when it is unset, as
+  `mxcli run --local` leaves it for a model holding the stock
+  `http://localhost:8080/`. Unhandled in an after-startup microflow, that stops
+  the runtime ("Starting Mendix Runtime failed"), and `mxcli test --local` with
+  it. Pass `--runtime-setting ApplicationRootUrl=http://localhost:8080/` to
+  `run --local`, and keep the `on error` handlers above so a server that cannot
+  start never blocks startup.
 - **The client must speak the same protocol version** as `ProtocolVersion`.
 
 ## Reading and migrating an existing setup
