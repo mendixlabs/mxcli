@@ -238,6 +238,27 @@ var consumedMCPServiceSchema = propSchema{on: "a consumed MCP service", keys: []
 	{"Documentation", textShapes},
 }}
 
+// ServerName is stored but not in Studio Pro's editor: a new document gets its
+// own name, a duplicate keeps the original's.
+var publishedMCPServiceSchema = propSchema{on: "a published MCP service", keys: []propKey{
+	{"ServerName", []propShape{shapeString}},
+	{"EndpointPath", []propShape{shapeString}},
+	{"Version", []propShape{shapeString}},
+	{"ProtocolVersion", nameShapes},
+	{"AuthenticationEnabled", []propShape{shapeBool}},
+	{"AuthenticationMicroflow", []propShape{shapeQName}},
+	{"AuthorizationServerUrl", []propShape{shapeString}},
+	{"Scopes", []propShape{shapeString}},
+	{"Documentation", textShapes},
+}}
+
+var publishedMCPToolSchema = propSchema{on: "a published MCP service's tool block", keys: []propKey{
+	{"Microflow", []propShape{shapeQName}},
+	{"Description", textShapes},
+	{"Title", []propShape{shapeString}},
+	{"Schema", textShapes},
+}}
+
 var agentSchema = propSchema{on: "an agent", keys: []propKey{
 	{"UsageType", nameShapes},
 	{"Description", textShapes},

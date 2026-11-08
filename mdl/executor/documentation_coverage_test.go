@@ -54,6 +54,7 @@ var docCarryDone = map[string]bool{
 	"CreateModelStmt":                true,
 	"CreateKnowledgeBaseStmt":        true,
 	"CreateConsumedMCPServiceStmt":   true,
+	"CreatePublishedMCPServiceStmt":  true,
 	"CreateAgentStmt":                true,
 	"CreateModuleStmt":               true,
 	// mendixlabs/mxcli#1510: covered by TestIntegrationDocumentation_Issue1510

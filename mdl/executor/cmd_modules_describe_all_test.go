@@ -206,14 +206,15 @@ func TestDescribeModuleWithAll_ReportsDescribeFailure(t *testing.T) {
 				return nil, nil
 			},
 			// The mock refuses a list it was not given; these return nothing.
-			ListMessageDefinitionCollectionsFunc:   func() ([]*model.MessageDefinitionCollection, error) { return nil, nil },
-			ListRulesFunc:                          func() ([]*microflows.Rule, error) { return nil, nil },
-			ListNanoflowsFunc:                      func() ([]*microflows.Nanoflow, error) { return nil, nil },
-			ListMenuDocumentsFunc:                  func() ([]*types.MenuDocument, error) { return nil, nil },
-			ListAgentEditorModelsFunc:              func() ([]*agenteditor.Model, error) { return nil, nil },
-			ListAgentEditorKnowledgeBasesFunc:      func() ([]*agenteditor.KnowledgeBase, error) { return nil, nil },
-			ListAgentEditorConsumedMCPServicesFunc: func() ([]*agenteditor.ConsumedMCPService, error) { return nil, nil },
-			ListAgentEditorAgentsFunc:              func() ([]*agenteditor.Agent, error) { return nil, nil },
+			ListMessageDefinitionCollectionsFunc:    func() ([]*model.MessageDefinitionCollection, error) { return nil, nil },
+			ListRulesFunc:                           func() ([]*microflows.Rule, error) { return nil, nil },
+			ListNanoflowsFunc:                       func() ([]*microflows.Nanoflow, error) { return nil, nil },
+			ListMenuDocumentsFunc:                   func() ([]*types.MenuDocument, error) { return nil, nil },
+			ListAgentEditorModelsFunc:               func() ([]*agenteditor.Model, error) { return nil, nil },
+			ListAgentEditorKnowledgeBasesFunc:       func() ([]*agenteditor.KnowledgeBase, error) { return nil, nil },
+			ListAgentEditorConsumedMCPServicesFunc:  func() ([]*agenteditor.ConsumedMCPService, error) { return nil, nil },
+			ListAgentEditorPublishedMCPServicesFunc: func() ([]*agenteditor.PublishedMCPService, error) { return nil, nil },
+			ListAgentEditorAgentsFunc:               func() ([]*agenteditor.Agent, error) { return nil, nil },
 		}
 		ctx, buf := newMockCtx(t, withBackend(mb), withHierarchy(mkHierarchy(mod)))
 		err := describeModule(ctx, "Sales", true)

@@ -197,6 +197,60 @@ func (b *Backend) ListAgentEditorConsumedMCPServices() ([]*agenteditor.ConsumedM
 	return out, nil
 }
 
+func (b *Backend) ListAgentEditorPublishedMCPServices() ([]*agenteditor.PublishedMCPService, error) {
+	units, err := b.listCustomBlobs(agenteditor.CustomTypePublishedMCPService)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*agenteditor.PublishedMCPService, 0, len(units))
+	for _, u := range units {
+		p := &agenteditor.PublishedMCPService{}
+		p.ID = model.ID(u.unitID)
+		p.TypeName = customBlobDocType
+		p.ContainerID = model.ID(u.containerID)
+		p.Name = u.wrap.Name
+		p.Documentation = u.wrap.Documentation
+		p.Excluded = u.wrap.Excluded
+		p.ExportLevel = u.wrap.ExportLevel
+		if u.wrap.Contents != "" {
+			if err := decodePublishedMCPServiceContents(u.wrap.Contents, p); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+func decodePublishedMCPServiceContents(contents string, p *agenteditor.PublishedMCPService) error {
+	var c struct {
+		ServerName              string                         `json:"serverName"`
+		EndpointPath            string                         `json:"endpointPath"`
+		Version                 string                         `json:"version"`
+		ProtocolVersion         string                         `json:"protocolVersion"`
+		AuthenticationEnabled   bool                           `json:"authenticationEnabled"`
+		AuthenticationMicroflow *agenteditor.DocRef            `json:"authenticationMicroflow"`
+		AuthorizationServerURL  string                         `json:"authorizationServerUrl"`
+		Scopes                  string                         `json:"scopes"`
+		Tools                   []agenteditor.PublishedMCPTool `json:"tools"`
+		Documentation           string                         `json:"documentation"`
+	}
+	if err := json.Unmarshal([]byte(contents), &c); err != nil {
+		return fmt.Errorf("unmarshal PublishedMCPService Contents: %w", err)
+	}
+	p.ServerName = c.ServerName
+	p.EndpointPath = c.EndpointPath
+	p.Version = c.Version
+	p.ProtocolVersion = c.ProtocolVersion
+	p.AuthenticationEnabled = c.AuthenticationEnabled
+	p.AuthenticationMicroflow = c.AuthenticationMicroflow
+	p.AuthorizationServerURL = c.AuthorizationServerURL
+	p.Scopes = c.Scopes
+	p.Tools = c.Tools
+	p.InnerDocumentation = c.Documentation
+	return nil
+}
+
 func (b *Backend) ListAgentEditorAgents() ([]*agenteditor.Agent, error) {
 	units, err := b.listCustomBlobs(agenteditor.CustomTypeAgent)
 	if err != nil {

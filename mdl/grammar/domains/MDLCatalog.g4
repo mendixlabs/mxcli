@@ -57,6 +57,7 @@ showStatement
     | showOrList AGENTS (IN (qualifiedName | IDENTIFIER))?
     | showOrList KNOWLEDGE BASES (IN (qualifiedName | IDENTIFIER))?
     | showOrList CONSUMED MCP SERVICES (IN (qualifiedName | IDENTIFIER))?
+    | showOrList PUBLISHED MCP SERVICES (IN (qualifiedName | IDENTIFIER))?
     | showOrList JSON STRUCTURES (IN (qualifiedName | IDENTIFIER))?
     | showOrList MESSAGE DEFINITION COLLECTION (IN (qualifiedName | IDENTIFIER))?
     | showOrList MESSAGE DEFINITIONS (IN (qualifiedName | IDENTIFIER))?
@@ -211,6 +212,7 @@ describeStatement
     | DESCRIBE AGENT qualifiedName                      // DESCRIBE AGENT Module.Name (agent-editor)
     | DESCRIBE KNOWLEDGE BASE qualifiedName             // DESCRIBE KNOWLEDGE BASE Module.Name
     | DESCRIBE CONSUMED MCP SERVICE qualifiedName       // DESCRIBE CONSUMED MCP SERVICE Module.Name
+    | DESCRIBE PUBLISHED MCP SERVICE qualifiedName      // DESCRIBE PUBLISHED MCP SERVICE Module.Name
     | DESCRIBE JSON STRUCTURE qualifiedName              // DESCRIBE JSON STRUCTURE Module.Name
     | DESCRIBE MESSAGE DEFINITION COLLECTION qualifiedName
     | DESCRIBE MESSAGE DEFINITION qualifiedName

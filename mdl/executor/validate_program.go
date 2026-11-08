@@ -67,6 +67,10 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 				assocStmt.CreateOrModify, assocStmt.IfNotExists, "association", assocStmt.Name.String())...)
 			violations = append(violations, ValidateAssociationModules(assocStmt)...)
 		}
+		// A published MCP service the runtime would not start (ako/mxcli#2020).
+		if pubStmt, ok := stmt.(*ast.CreatePublishedMCPServiceStmt); ok {
+			violations = append(violations, ValidatePublishedMCPService(pubStmt)...)
+		}
 		// Every other guarded create carries the same contradiction (#731).
 		// Entities and associations report it above, from their own flags.
 		violations = append(violations, validateCreateGuardContradiction(stmt)...)

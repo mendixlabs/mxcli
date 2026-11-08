@@ -134,6 +134,8 @@ func statementCaseGates(stmt ast.Statement) []versionGate {
 		return []versionGate{agentDocumentGate("agent_model", "create model")}
 	case *ast.CreateConsumedMCPServiceStmt:
 		return []versionGate{agentDocumentGate("agent_consumed_mcp_service", "create consumed mcp service")}
+	case *ast.CreatePublishedMCPServiceStmt:
+		return []versionGate{agentDocumentGate("agent_published_mcp_service", "create published mcp service")}
 	case *ast.CreateKnowledgeBaseStmt:
 		return []versionGate{agentDocumentGate("agent_knowledge_base", "create knowledge base")}
 	case *ast.CreateAgentStmt:

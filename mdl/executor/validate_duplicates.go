@@ -164,6 +164,8 @@ func stmtCreateKind(stmt ast.Statement) (docType, name string, idempotent bool) 
 		return "knowledge-base", s.Name.String(), s.CreateOrModify
 	case *ast.CreateConsumedMCPServiceStmt:
 		return "consumed-mcp-service", s.Name.String(), s.CreateOrModify
+	case *ast.CreatePublishedMCPServiceStmt:
+		return "published-mcp-service", s.Name.String(), s.CreateOrModify
 	case *ast.CreateAgentStmt:
 		return "agent", s.Name.String(), s.CreateOrModify
 	case *ast.CreateImageCollectionStmt:
@@ -267,6 +269,8 @@ func stmtDropInfo(stmt ast.Statement) (docType, name string) {
 		return "knowledge-base", s.Name.String()
 	case *ast.DropConsumedMCPServiceStmt:
 		return "consumed-mcp-service", s.Name.String()
+	case *ast.DropPublishedMCPServiceStmt:
+		return "published-mcp-service", s.Name.String()
 	case *ast.DropAgentStmt:
 		return "agent", s.Name.String()
 	case *ast.DropImageCollectionStmt:
@@ -336,6 +340,8 @@ func friendlyDocType(docType string) string {
 		return "business event service"
 	case "consumed-mcp-service":
 		return "consumed MCP service"
+	case "published-mcp-service":
+		return "published MCP service"
 	case "data-transformer":
 		return "data transformer"
 	case "export-mapping":
@@ -520,6 +526,8 @@ func (ps *projectNameSets) setFor(docType string) map[string]bool {
 		set = listedQualifiedNames(h, ctx.Backend.ListAgentEditorKnowledgeBases)
 	case "consumed-mcp-service":
 		set = listedQualifiedNames(h, ctx.Backend.ListAgentEditorConsumedMCPServices)
+	case "published-mcp-service":
+		set = listedQualifiedNames(h, ctx.Backend.ListAgentEditorPublishedMCPServices)
 	case "agent":
 		set = listedQualifiedNames(h, ctx.Backend.ListAgentEditorAgents)
 	case "image-collection":

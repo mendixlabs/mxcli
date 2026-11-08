@@ -657,6 +657,17 @@ func (b *Builder) ExitShowStatement(ctx *parser.ShowStatementContext) {
 			}
 		}
 		b.statements = append(b.statements, stmt)
+	} else if ctx.PUBLISHED() != nil && ctx.MCP() != nil && ctx.SERVICES() != nil {
+		// LIST PUBLISHED MCP SERVICES [IN module]
+		stmt := &ast.ShowStmt{ObjectType: ast.ShowPublishedMCPServices}
+		if ctx.IN() != nil {
+			if qn := ctx.QualifiedName(); qn != nil {
+				stmt.InModule = getQualifiedNameText(qn)
+			} else if id := ctx.IDENTIFIER(); id != nil {
+				stmt.InModule = id.GetText()
+			}
+		}
+		b.statements = append(b.statements, stmt)
 	} else if ctx.PUBLISHED() != nil && ctx.REST() != nil && ctx.SERVICES() != nil {
 		// SHOW PUBLISHED REST SERVICES [IN module] - must come before REST CLIENTS check
 		stmt := &ast.ShowStmt{ObjectType: ast.ShowPublishedRestServices}
@@ -1271,6 +1282,11 @@ func (b *Builder) ExitDescribeStatement(ctx *parser.DescribeStatementContext) {
 		// DESCRIBE KNOWLEDGE BASE Module.Name
 		b.statements = append(b.statements, &ast.DescribeStmt{
 			ObjectType: ast.DescribeKnowledgeBase,
+			Name:       name,
+		})
+	} else if ctx.PUBLISHED() != nil && ctx.MCP() != nil && ctx.SERVICE() != nil {
+		b.statements = append(b.statements, &ast.DescribeStmt{
+			ObjectType: ast.DescribePublishedMCPService,
 			Name:       name,
 		})
 	} else if ctx.CONSUMED() != nil && ctx.MCP() != nil && ctx.SERVICE() != nil {

@@ -9,6 +9,7 @@ mdl 1;
 --
 -- Features demonstrated:
 --   - CREATE/DROP CONSUMED MCP SERVICE
+--   - CREATE/ALTER/DROP PUBLISHED MCP SERVICE (with tool blocks)
 --   - CREATE/DROP KNOWLEDGE BASE
 --   - CREATE/DROP AGENT (simple, with variables, with body blocks)
 --   - Dollar-quoted multi-line prompts ($$...$$)
@@ -220,8 +221,47 @@ alter agent AgentTest.ResearchAssistant
     drop mcp service AgentTest.WebSearch;
 
 -- ============================================================================
+-- LEVEL 11: Published MCP Service (Agent Editor 2.6+, MCP Server 5.x)
+-- ============================================================================
+--
+-- The app publishes its own MCP server: each tool is a microflow, started at
+-- app startup by AgentEditorCommons through MCPServer.CreateMCPServer and
+-- MCPServer.AddTool. Needs the MCP Server module 5.x.
+
+create microflow AgentTest.MCPTool_CountCustomers (
+  $NamePrefix: String
+)
+returns String as $Result
+begin
+  return 'none yet';
+end;
+
+create published mcp service AgentTest.CustomerMCP (
+  EndpointPath: 'customers',
+  Version: '1.0.0',
+  ProtocolVersion: v2025_03_26,
+  Documentation: 'Customer tools for external agents'
+) {
+  tool count_customers (
+    Microflow: AgentTest.MCPTool_CountCustomers,
+    Description: 'Count the customers whose name starts with NamePrefix.',
+    Title: 'Count customers'
+  )
+};
+
+list published mcp services in AgentTest;
+describe published mcp service AgentTest.CustomerMCP;
+
+alter published mcp service AgentTest.CustomerMCP
+    set Version = '1.1.0'
+    add tool count_all ( Microflow: AgentTest.MCPTool_CountCustomers, Description: 'Count every customer.' )
+    drop tool count_customers;
+
+-- ============================================================================
 -- Cleanup (reverse dependency order: agents first, then their dependencies)
 -- ============================================================================
+
+drop published mcp service AgentTest.CustomerMCP;
 
 drop agent AgentTest.ResearchAssistant;
 drop agent AgentTest.CodeReviewer;

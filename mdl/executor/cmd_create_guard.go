@@ -205,6 +205,8 @@ func createGuardTargetOf(stmt ast.Statement) (createGuardTarget, bool) {
 		return doc("model", s.Name, func(ctx *ExecContext) (any, error) { return ctx.Backend.ListAgentEditorModels() })
 	case *ast.CreateConsumedMCPServiceStmt:
 		return doc("consumed mcp service", s.Name, func(ctx *ExecContext) (any, error) { return ctx.Backend.ListAgentEditorConsumedMCPServices() })
+	case *ast.CreatePublishedMCPServiceStmt:
+		return doc("published mcp service", s.Name, func(ctx *ExecContext) (any, error) { return ctx.Backend.ListAgentEditorPublishedMCPServices() })
 	case *ast.CreateKnowledgeBaseStmt:
 		return doc("knowledge base", s.Name, func(ctx *ExecContext) (any, error) { return ctx.Backend.ListAgentEditorKnowledgeBases() })
 	case *ast.CreateAgentStmt:
