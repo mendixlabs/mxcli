@@ -518,6 +518,7 @@ func decodeAgentEditorKnowledgeBase(unitID, containerID string, wrap *customBlob
 	if err := json.Unmarshal([]byte(wrap.Contents), &payload); err != nil {
 		return nil, fmt.Errorf("unmarshal KnowledgeBase Contents JSON: %w", err)
 	}
+	k.InnerName = payload.Name
 	k.Provider = payload.Provider
 	k.Environment = payload.ProviderFields.Environment
 	k.DeepLinkURL = payload.ProviderFields.DeepLinkURL

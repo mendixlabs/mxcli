@@ -63,13 +63,13 @@ The optional body block (inside `{ }`) attaches tools and knowledge bases to the
 
 - **MCP SERVICE** — attaches a consumed MCP service by its qualified name
 - **KNOWLEDGE BASE** — attaches a knowledge base with retrieval settings
-- **TOOL** — attaches a tool
+- **TOOL** — attaches a microflow tool; `Document: Module.Microflow` is the microflow it runs
 
 Each attachment is a child of the agent, so its properties are in `( )`. The older brace form (`TOOL Name { … }`) still parses but warns (MDL-DEPR071); `mxcli fmt --upgrade` rewrites it.
 
 ### OR MODIFY
 
-If `OR MODIFY` is specified and the agent already exists, its properties and body blocks are updated in place. The document UUID is preserved.
+If `OR MODIFY` is specified and the agent already exists, its properties and body blocks are updated in place. The document UUID is preserved, and so is each tool's and knowledge base's identity: a tool keeps its stored entry when its type and name match (an MCP service when the service matches). Settings that MDL cannot spell keep their stored values, both on `OR MODIFY` and on `ALTER AGENT`: a tool's user approval and display title and description, the agent's streaming switches and selected model, and a knowledge base tool's minimum similarity.
 
 ## Parameters
 
