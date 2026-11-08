@@ -13,37 +13,38 @@ import (
 
 // Reference kinds for the refs table
 const (
-	RefKindCall       = "call"       // Microflow calls microflow (also: a workflow's handler, a consumed OData service's configuration microflow)
-	RefKindCreate     = "create"     // Microflow creates entity
-	RefKindRetrieve   = "retrieve"   // Microflow retrieves entity
-	RefKindShowPage   = "show_page"  // Microflow shows page
-	RefKindGeneralize = "generalize" // Entity extends entity
-	RefKindAssociate  = "associate"  // Association targets entity
-	RefKindLayout     = "layout"     // Page uses layout
-	RefKindDatasource = "datasource" // Page/widget uses entity via datasource
-	RefKindParameter  = "parameter"  // Page parameter entity type
-	RefKindAction     = "action"     // Widget calls microflow/nanoflow
-	RefKindHomePage   = "home_page"  // Navigation home page reference
-	RefKindLoginPage  = "login_page" // Navigation login page reference
-	RefKindMenuItem   = "menu_item"  // Navigation menu item page reference
-	RefKindChange     = "change"     // Microflow changes an entity object
-	RefKindDelete     = "delete"     // Microflow deletes an entity object
-	RefKindCommit     = "commit"     // Microflow commits an entity object (commit action, or create/change with commit)
-	RefKindCalculate  = "calculate"  // Calculated attribute uses a microflow
-	RefKindReturn     = "return"     // Microflow/nanoflow returns an entity type
-	RefKindSchedule   = "schedule"   // Scheduled event runs a microflow
-	RefKindValidate   = "validate"   // Attribute validation rule uses a regular expression
-	RefKindWidget     = "widget"     // Page/snippet uses a pluggable or custom widget
-	RefKindSettings   = "settings"   // A project setting names a microflow
-	RefKindSync       = "sync"       // An offline navigation profile synchronizes an entity
-	RefKindPublish    = "publish"    // A published service runs a microflow (REST operation, OData resource or action, authentication)
-	RefKindEvent      = "event"      // An event handler runs a microflow (entity event, or a business event a service subscribes to)
-	RefKindMember     = "member"     // A document binds, reads or writes an attribute, or navigates an association
-	RefKindXPath      = "xpath"      // An XPath constraint names an attribute, association or enumeration value
-	RefKindType       = "type"       // An attribute, parameter or variable is typed as an enumeration
-	RefKindValue      = "value"      // An expression names an enumeration value
-	RefKindMapping    = "mapping"    // An import or export mapping maps an entity, or a message definition exposes one
-	RefKindSplit      = "split"      // A decision branches on an object being a specialization
+	RefKindCall        = "call"         // Microflow calls microflow (also: a workflow's handler, a consumed OData service's configuration microflow)
+	RefKindCreate      = "create"       // Microflow creates entity
+	RefKindRetrieve    = "retrieve"     // Microflow retrieves entity
+	RefKindShowPage    = "show_page"    // Microflow shows page
+	RefKindGeneralize  = "generalize"   // Entity extends entity
+	RefKindAssociate   = "associate"    // Association targets entity
+	RefKindLayout      = "layout"       // Page uses layout
+	RefKindSnippetCall = "snippet_call" // Page, snippet or layout calls a snippet
+	RefKindDatasource  = "datasource"   // Page/widget uses entity via datasource
+	RefKindParameter   = "parameter"    // Page parameter entity type
+	RefKindAction      = "action"       // Widget calls microflow/nanoflow
+	RefKindHomePage    = "home_page"    // Navigation home page reference
+	RefKindLoginPage   = "login_page"   // Navigation login page reference
+	RefKindMenuItem    = "menu_item"    // Navigation menu item page reference
+	RefKindChange      = "change"       // Microflow changes an entity object
+	RefKindDelete      = "delete"       // Microflow deletes an entity object
+	RefKindCommit      = "commit"       // Microflow commits an entity object (commit action, or create/change with commit)
+	RefKindCalculate   = "calculate"    // Calculated attribute uses a microflow
+	RefKindReturn      = "return"       // Microflow/nanoflow returns an entity type
+	RefKindSchedule    = "schedule"     // Scheduled event runs a microflow
+	RefKindValidate    = "validate"     // Attribute validation rule uses a regular expression
+	RefKindWidget      = "widget"       // Page/snippet uses a pluggable or custom widget
+	RefKindSettings    = "settings"     // A project setting names a microflow
+	RefKindSync        = "sync"         // An offline navigation profile synchronizes an entity
+	RefKindPublish     = "publish"      // A published service runs a microflow (REST operation, OData resource or action, authentication)
+	RefKindEvent       = "event"        // An event handler runs a microflow (entity event, or a business event a service subscribes to)
+	RefKindMember      = "member"       // A document binds, reads or writes an attribute, or navigates an association
+	RefKindXPath       = "xpath"        // An XPath constraint names an attribute, association or enumeration value
+	RefKindType        = "type"         // An attribute, parameter or variable is typed as an enumeration
+	RefKindValue       = "value"        // An expression names an enumeration value
+	RefKindMapping     = "mapping"      // An import or export mapping maps an entity, or a message definition exposes one
+	RefKindSplit       = "split"        // A decision branches on an object being a specialization
 )
 
 // RefKinds is every value that reaches refs.RefKind. It is the vocabulary a
@@ -60,7 +61,7 @@ var RefKinds = []string{
 	RefKindCalculate, RefKindReturn, RefKindSchedule, RefKindValidate,
 	RefKindWidget, RefKindSettings, RefKindSync, RefKindPublish,
 	RefKindEvent, RefKindMember, RefKindXPath, RefKindType,
-	RefKindValue, RefKindMapping, RefKindSplit,
+	RefKindValue, RefKindMapping, RefKindSplit, RefKindSnippetCall,
 }
 
 // Object types recorded in refs.SourceType and refs.TargetType — the catalog's
@@ -107,8 +108,9 @@ const (
 
 // RefSourceObjectTypes is every value that reaches refs.SourceType, and
 // RefTargetObjectTypes every value that reaches refs.TargetType. The two differ:
-// a LAYOUT or a WIDGET is only ever pointed AT, and a SCHEDULED_EVENT or a
-// PROJECT_SETTINGS only ever points. Documenting one list for both would put
+// a WIDGET is only ever pointed AT, and a SCHEDULED_EVENT or a
+// PROJECT_SETTINGS only ever points. A LAYOUT is both: a page uses one, and
+// since ako/mxcli#1302 a layout's own widgets make edges of their own. Documenting one list for both would put
 // values in front of rule authors that their filter can never match.
 var (
 	RefSourceObjectTypes = []string{
@@ -119,6 +121,7 @@ var (
 		RefObjectRule,
 		RefObjectPage,
 		RefObjectSnippet,
+		RefObjectLayout,
 		RefObjectWorkflow,
 		RefObjectNavigation,
 		RefObjectScheduledEvent,
@@ -141,6 +144,7 @@ var (
 		RefObjectNanoflow,
 		RefObjectRule,
 		RefObjectPage,
+		RefObjectSnippet,
 		RefObjectLayout,
 		RefObjectWorkflow,
 		RefObjectWidget,
@@ -733,6 +737,9 @@ func (b *Builder) buildReferences() error {
 			// only from a button had no inbound reference and `show callers` /
 			// `show references` reported it as unused (issue #773).
 			{"PageRef", RefObjectPage, RefKindShowPage},
+			// A snippet call: page, snippet or layout → the snippet it places
+			// (ako/mxcli#2017).
+			{"SnippetRef", RefObjectSnippet, RefKindSnippetCall},
 		}
 		for _, p := range widgetProjections {
 			res, perr := b.tx.Exec(

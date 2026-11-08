@@ -143,7 +143,7 @@ SEVERITY = "error"
 def check():
     out = []
     for d in module_dependencies():
-        if d.ref_kind in ("layout", "show_page"):  # ignore UI navigation
+        if d.ref_kind in ("layout", "show_page", "snippet_call"):  # ignore UI navigation
             continue
         ls, lt = layer_of(d.source_module + ".x"), layer_of(d.target_module + ".x")
         # (resolve a real asset per module in practice; shown simplified)
