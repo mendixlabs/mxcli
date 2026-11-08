@@ -11,12 +11,12 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | lines | section |
 |---|---|
 | 24-50 | Overview |
-| 51-138 | Syntax |
-| 139-165 | Altering existing documents |
-| 166-194 | Gotchas |
-| 195-216 | Common Patterns |
-| 217-252 | Calling Agents from Microflows |
-| 253-255 | AI agent documents |
+| 51-148 | Syntax |
+| 149-175 | Altering existing documents |
+| 176-204 | Gotchas |
+| 205-226 | Common Patterns |
+| 227-262 | Calling Agents from Microflows |
+| 263-265 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -131,10 +131,20 @@ prompt here.$$,
   tool FetchCustomer (
     Document: Module.Tool_FetchCustomer,   -- the microflow the tool runs
     description: 'Fetch customer data',
-    Enabled: true
+    Enabled: true,
+    UserAccessApproval: UserConfirmationRequired,  -- or HiddenForUser | VisibleForUser
+    DisplayTitle: 'Look up customer'               -- shown to the user, not the model
   )
 };
 ```
+
+Human-in-the-loop and streaming (Agent Editor 2.2+): `UserAccessApproval` and
+`DisplayTitle` / `DisplayDescription` on a `tool` or `mcp service` block;
+`MinSimilarity` and `IsVisible` on a `knowledge base` block;
+`EnableBackendStreaming` / `EnableUIStreaming` on the **agent**, not the model.
+Streaming is not shown in Studio Pro's playground; it works at runtime with a
+chat agent in Conversational UI. On `create or modify`, a setting left out keeps
+its stored value.
 
 ## Altering existing documents
 

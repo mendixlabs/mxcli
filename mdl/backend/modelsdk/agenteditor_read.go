@@ -227,6 +227,8 @@ func (b *Backend) ListAgentEditorAgents() ([]*agenteditor.Agent, error) {
 				ToolChoice         string                    `json:"toolChoice"`
 				Temperature        *float64                  `json:"temperature"`
 				TopP               *float64                  `json:"topP"`
+				EnableBackend      *bool                     `json:"enableBackendStreaming"`
+				EnableUI           *bool                     `json:"enableUIStreaming"`
 			}
 			if err := json.Unmarshal([]byte(u.wrap.Contents), &p); err != nil {
 				return nil, fmt.Errorf("unmarshal Agent Contents: %w", err)
@@ -244,6 +246,8 @@ func (b *Backend) ListAgentEditorAgents() ([]*agenteditor.Agent, error) {
 			a.ToolChoice = p.ToolChoice
 			a.Temperature = p.Temperature
 			a.TopP = p.TopP
+			a.EnableBackendStreaming = p.EnableBackend
+			a.EnableUIStreaming = p.EnableUI
 		}
 		out = append(out, a)
 	}

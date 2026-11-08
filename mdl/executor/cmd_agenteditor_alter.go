@@ -274,6 +274,16 @@ func applyAgentChange(ctx *ExecContext, a *agenteditor.Agent, key, val string) e
 			return fmt.Errorf("alter agent %s: model not found: %s", a.Name, val)
 		}
 		a.Model = &agenteditor.DocRef{DocumentID: string(m.ID), QualifiedName: qn.String()}
+	case "enablebackendstreaming", "enableuistreaming":
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return fmt.Errorf("alter agent %s: %s takes true or false (got %q)", a.Name, key, val)
+		}
+		if strings.EqualFold(key, "enablebackendstreaming") {
+			a.EnableBackendStreaming = &b
+		} else {
+			a.EnableUIStreaming = &b
+		}
 	case "entity":
 		qn := parseQualifiedNameStr(val)
 		a.Entity = carryEntityRef(&agenteditor.DocRef{QualifiedName: qn.String()}, a.Entity)
@@ -293,6 +303,10 @@ func buildAgentToolFromDef(ctx *ExecContext, verb string, agentName *ast.Qualifi
 		Description: td.Description,
 		Enabled:     td.Enabled,
 		ToolType:    td.ToolType,
+
+		UserAccessApproval: td.UserAccessApproval,
+		DisplayTitle:       td.DisplayTitle,
+		DisplayDescription: td.DisplayDescription,
 	}
 	if td.Document == nil {
 		return tool, nil
@@ -324,6 +338,8 @@ func buildAgentKBToolFromDef(ctx *ExecContext, verb string, agentName *ast.Quali
 		Enabled:              kbd.Enabled,
 		CollectionIdentifier: kbd.Collection,
 		MaxResults:           kbd.MaxResults,
+		MinSimilarity:        kbd.MinSimilarity,
+		IsVisible:            kbd.IsVisible,
 	}
 	if kbd.Source != nil {
 		kb := findAgentEditorKnowledgeBase(ctx, kbd.Source.Module, kbd.Source.Name)

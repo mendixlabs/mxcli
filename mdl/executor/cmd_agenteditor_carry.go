@@ -10,7 +10,10 @@ import (
 
 // carryAgentIdentity gives a restated agent the identities its stored twin
 // holds and the statement cannot spell: each tool's and knowledge base tool's
-// id, and the entity reference's documentId.
+// id, and the entity reference's documentId. A setting the statement leaves
+// out (a tool's UserAccessApproval and display text, a knowledge base tool's
+// MinSimilarity and IsVisible, the agent's streaming switches) keeps its
+// stored value, so a script written before they had MDL does not reset them.
 //
 // The ids are what the write path pairs a restated tool with its stored entry
 // by, so they decide whether the tool keeps what Agent Editor stored on it
@@ -24,6 +27,7 @@ func carryAgentIdentity(a, stored *agenteditor.Agent) {
 			if !used[j] && sameAgentTool(a.Tools[i], st) {
 				used[j] = true
 				a.Tools[i].ID = st.ID
+				keepToolUserSettings(&a.Tools[i], st)
 				if isMCPTool(st) {
 					// describe prints an MCP tool by its service; the stored
 					// entry's own name is Agent Editor's.
@@ -39,11 +43,35 @@ func carryAgentIdentity(a, stored *agenteditor.Agent) {
 			if !usedKB[j] && st.Name == a.KBTools[i].Name {
 				usedKB[j] = true
 				a.KBTools[i].ID = st.ID
+				if a.KBTools[i].MinSimilarity == nil {
+					a.KBTools[i].MinSimilarity = st.MinSimilarity
+				}
+				if a.KBTools[i].IsVisible == nil {
+					a.KBTools[i].IsVisible = st.IsVisible
+				}
 				break
 			}
 		}
 	}
 	a.Entity = carryEntityRef(a.Entity, stored.Entity)
+	if a.EnableBackendStreaming == nil {
+		a.EnableBackendStreaming = stored.EnableBackendStreaming
+	}
+	if a.EnableUIStreaming == nil {
+		a.EnableUIStreaming = stored.EnableUIStreaming
+	}
+}
+
+func keepToolUserSettings(t *agenteditor.AgentTool, stored agenteditor.AgentTool) {
+	if t.UserAccessApproval == "" {
+		t.UserAccessApproval = stored.UserAccessApproval
+	}
+	if t.DisplayTitle == nil {
+		t.DisplayTitle = stored.DisplayTitle
+	}
+	if t.DisplayDescription == nil {
+		t.DisplayDescription = stored.DisplayDescription
+	}
 }
 
 // carryEntityRef keeps the stored entity reference's documentId when the
