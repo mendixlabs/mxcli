@@ -132,8 +132,29 @@ var brainCaptureCmd = &cobra.Command{
 			if dup, err := store.FindContent(e.ContentKey()); err != nil {
 				brainFatal(err)
 			} else if dup.ID != "" {
+				if globalJSONFlag {
+					brainJSON(newCaptureReport(dup, false, "already_committed"))
+					return
+				}
 				fmt.Printf("Already committed as %s — not added again.\n", dup.ID)
 				return
+			}
+		}
+		// Already queued, found by content before an id is minted: the id below
+		// is free of the queued twin's by construction, so reporting the
+		// duplicate after Append named an id no entry has (ako/mxcli#1953).
+		if staged, err := queue.Load(); err != nil {
+			brainFatal(err)
+		} else {
+			for _, q := range staged {
+				if q.ContentKey() == e.ContentKey() {
+					if globalJSONFlag {
+						brainJSON(newCaptureReport(q, false, "already_queued"))
+						return
+					}
+					fmt.Printf("Already queued as %s — not added again.\n", q.ID)
+					return
+				}
 			}
 		}
 		// The content-derived id may already be the handle of an entry whose
@@ -146,6 +167,14 @@ var brainCaptureCmd = &cobra.Command{
 		added, err := queue.Append(e)
 		if err != nil {
 			brainFatal(err)
+		}
+		if globalJSONFlag {
+			status := "queued"
+			if !added {
+				status = "already_queued"
+			}
+			brainJSON(newCaptureReport(e, added, status))
+			return
 		}
 		if !added {
 			fmt.Printf("Already queued as %s — not added again.\n", e.ID)
@@ -248,6 +277,10 @@ var brainPromoteCmd = &cobra.Command{
 		}
 		if _, err := queue.Drop(e.ID); err != nil {
 			brainFatal(err)
+		}
+		if globalJSONFlag {
+			brainJSON(promoteReport{ID: e.ID, Kind: string(e.EntryKind()), Shard: shard, Path: store.ShardPath(shard)})
+			return
 		}
 		fmt.Printf("Promoted %s into %s\n", e.ID, store.ShardPath(shard))
 	},
@@ -1185,6 +1218,35 @@ func brainJSON(v any) {
 		brainFatal(err)
 	}
 	fmt.Println(string(b))
+}
+
+// captureReport is `brain capture --json` (ako/mxcli#1953): the id a caller
+// promotes by, what the entry is and where it would land, and whether this
+// call added it. A duplicate is still an object — Added false, Status saying
+// whether the twin is queued or already committed — and exits as it always
+// has, so a script never has to read a sentence to learn the id.
+type captureReport struct {
+	ID     string `json:"id"`
+	Kind   string `json:"kind"`
+	Slice  string `json:"slice,omitempty"`
+	Open   bool   `json:"open,omitempty"`
+	Shard  string `json:"shard"`
+	Added  bool   `json:"added"`
+	Status string `json:"status"` // queued | already_queued | already_committed
+}
+
+func newCaptureReport(e brain.Entry, added bool, status string) captureReport {
+	return captureReport{ID: e.ID, Kind: string(e.EntryKind()), Slice: e.Slice, Open: e.Open,
+		Shard: e.Shard(), Added: added, Status: status}
+}
+
+// promoteReport is `brain promote --json`: the entry and the shard file it was
+// written into.
+type promoteReport struct {
+	ID    string `json:"id"`
+	Kind  string `json:"kind"`
+	Shard string `json:"shard"`
+	Path  string `json:"path"`
 }
 
 // stagedEntry is one queued entry as a machine sees it. The shard is included

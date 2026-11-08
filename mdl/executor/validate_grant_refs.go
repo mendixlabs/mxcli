@@ -4,6 +4,7 @@ package executor
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -83,6 +84,13 @@ type grantResolver struct {
 	// changes it. Read on first use; "" when it cannot be read.
 	adminRole     string
 	adminRoleRead bool
+
+	// demoRoles is each demo user's roles (lower-cased user name → roles) as
+	// the script has them so far: stored, then created, extended and dropped
+	// in statement order. Read on first use; nil when it cannot be read.
+	demoRoles     map[string][]string
+	demoNames     map[string]string // lower-cased → as stored or created
+	demoRolesRead bool
 	entities      map[string]bool
 	docs          map[string]map[string]bool
 	xpath         *grantXPathResolver // built on the first WHERE
@@ -121,6 +129,25 @@ func (g *grantResolver) record(stmt ast.Statement) {
 	case *ast.AlterProjectSecurityStmt:
 		if s.AdminUserRole != "" {
 			g.adminRoleRead, g.adminRole = true, s.AdminUserRole
+		}
+	case *ast.CreateDemoUserStmt:
+		if d := g.demoUsers(); d != nil {
+			key := strings.ToLower(s.UserName)
+			if _, exists := d[key]; exists && s.CreateOrModify {
+				// create or modify adds roles, never removes one.
+				for _, r := range s.UserRoles {
+					if !slices.ContainsFunc(d[key], func(h string) bool { return strings.EqualFold(h, r) }) {
+						d[key] = append(d[key], r)
+					}
+				}
+			} else if !exists {
+				d[key] = append([]string(nil), s.UserRoles...)
+				g.demoNames[key] = s.UserName
+			}
+		}
+	case *ast.DropDemoUserStmt:
+		if d := g.demoUsers(); d != nil {
+			delete(d, strings.ToLower(s.UserName))
 		}
 	case *ast.CreateODataServiceStmt:
 		g.scriptServices["odata:"+s.Name.String()] = true
@@ -225,6 +252,16 @@ func (g *grantResolver) check(stmt ast.Statement) []string {
 		if admin := g.administratorRole(); admin != "" && strings.EqualFold(admin, s.Name) {
 			add(adminUserRoleDropRefusal(s.Name))
 		}
+		// And the drop a demo user's role makes (CE1613).
+		var holders []string
+		for _, u := range g.demoUserNames() {
+			if slices.ContainsFunc(g.demoRoles[u.key], func(r string) bool { return strings.EqualFold(r, s.Name) }) {
+				holders = append(holders, u.name)
+			}
+		}
+		if len(holders) > 0 {
+			add(demoUserRoleDropRefusal(s.Name, holders))
+		}
 	case *ast.CreatePageStmtV3, *ast.CreateSnippetStmtV3, *ast.AlterPageStmt:
 		// `Visible: roles (…)` stores the names unresolved, as `create user
 		// role` does — a dangling one is CE1613 a build later (#1460).
@@ -251,6 +288,42 @@ func (g *grantResolver) administratorRole() string {
 		}
 	}
 	return g.adminRole
+}
+
+// demoUsers returns the script's view of the demo users' roles, reading the
+// stored ones on first use.
+func (g *grantResolver) demoUsers() map[string][]string {
+	if !g.demoRolesRead {
+		g.demoRolesRead = true
+		if ps, err := g.ctx.Backend.GetProjectSecurity(); err == nil && ps != nil {
+			g.demoRoles = map[string][]string{}
+			g.demoNames = map[string]string{}
+			for _, du := range ps.DemoUsers {
+				key := strings.ToLower(du.UserName)
+				g.demoRoles[key] = append([]string(nil), du.UserRoles...)
+				g.demoNames[key] = du.UserName
+			}
+		}
+	}
+	return g.demoRoles
+}
+
+type demoUserName struct{ key, name string }
+
+// demoUserNames lists the demo users the script has so far, in name order,
+// with the spelling they were stored or created with.
+func (g *grantResolver) demoUserNames() []demoUserName {
+	d := g.demoUsers()
+	out := make([]demoUserName, 0, len(d))
+	for key := range d {
+		name := g.demoNames[key]
+		if name == "" {
+			name = key
+		}
+		out = append(out, demoUserName{key, name})
+	}
+	slices.SortFunc(out, func(a, b demoUserName) int { return strings.Compare(a.key, b.key) })
+	return out
 }
 
 // missing words one unresolved name, with the reorder hint when the script

@@ -770,6 +770,16 @@ At runtime, `AgentEditorCommons.ASU_AgentEditor` reads the constant and creates 
 
 #### 4.4 `CALL AGENT` / `NEW CHAT FOR AGENT` Microflow Activities
 
+> **Status 2026-11-08 (ako/mxcli#2024): not needed as a new activity.** Measured on
+> 11.16 projects, Studio Pro's *Call Agent* and *New Chat for Agent* toolbox actions
+> are `Microflows$JavaActionCallAction`s to Java actions exposed as microflow
+> actions, with no marker. For Agent Editor documents those are
+> `AgentEditorCommons.Agent_CallDocument_WithHistory` / `_WithoutHistory` and
+> `ChatContext_Create_ForAgentDocument`, whose `Agent` argument is a
+> `Microflows$CustomBlobDocumentCodeActionParameterValue`. `call java action`
+> already writes them (`Agent = 'Module.Agent'`). The statements below would only
+> be shorthand for those calls.
+
 New MDL microflow statements mapping to the Agents Kit toolbox actions (see the "New MDL Statement" section under "Building Smart Apps" for syntax):
 
 | MDL Statement | Java Action | Purpose |
