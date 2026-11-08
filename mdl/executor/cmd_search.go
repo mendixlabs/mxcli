@@ -43,9 +43,12 @@ import (
 // Those are uses of a TYPE or a LAYOUT, not invocations, and folding them in
 // would make `show callers of <entity>` a synonym for `show references to`.
 var callerRefKinds = []string{
-	RefKindCallerCall,      // microflow/nanoflow call activity
-	RefKindCallerAction,    // widget action: button, on-change, on-click
-	RefKindCallerShowPage,  // microflow show-page activity, or a widget action opening a page
+	RefKindCallerCall,     // microflow/nanoflow call activity
+	RefKindCallerAction,   // widget action: button, on-change, on-click
+	RefKindCallerShowPage, // microflow show-page activity, or a widget action opening a page
+	// A page, snippet or layout placing a snippet. Recorded as show_page until
+	// ako/mxcli#2017, so leaving it out would turn every snippet uncalled.
+	RefKindCallerSnippetCall,
 	RefKindCallerCalculate, // calculated attribute
 	RefKindCallerHomePage,  // navigation
 	RefKindCallerLoginPage,
@@ -59,17 +62,18 @@ var callerRefKinds = []string{
 // Kind literals, kept next to the set that uses them so the SQL below cannot
 // drift from mdl/catalog's constants unnoticed.
 const (
-	RefKindCallerCall      = "call"
-	RefKindCallerAction    = "action"
-	RefKindCallerShowPage  = "show_page"
-	RefKindCallerCalculate = "calculate"
-	RefKindCallerHomePage  = "home_page"
-	RefKindCallerLoginPage = "login_page"
-	RefKindCallerMenuItem  = "menu_item"
-	RefKindCallerSchedule  = "schedule"
-	RefKindCallerPublish   = "publish"
-	RefKindCallerSettings  = "settings"
-	RefKindCallerEvent     = "event"
+	RefKindCallerCall        = "call"
+	RefKindCallerAction      = "action"
+	RefKindCallerShowPage    = "show_page"
+	RefKindCallerSnippetCall = "snippet_call"
+	RefKindCallerCalculate   = "calculate"
+	RefKindCallerHomePage    = "home_page"
+	RefKindCallerLoginPage   = "login_page"
+	RefKindCallerMenuItem    = "menu_item"
+	RefKindCallerSchedule    = "schedule"
+	RefKindCallerPublish     = "publish"
+	RefKindCallerSettings    = "settings"
+	RefKindCallerEvent       = "event"
 )
 
 // callerRefKindsSQL renders callerRefKinds as a SQL IN list.
