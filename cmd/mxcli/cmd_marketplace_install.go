@@ -304,6 +304,7 @@ func installModuleFromFile(ctx context.Context, mpkPath, mprPath string, allowFo
 	}
 	fmt.Fprintf(out, "Imported module %q %s into %s\n", moduleName, label, filepath.Base(mprPath))
 	reportFormatChange(mprPath, out)
+	syncInstalledJarDependencies(out, mprPath)
 	return nil
 }
 
@@ -318,6 +319,8 @@ func reportTransplantInstall(out io.Writer, mprPath, mendixVer, moduleName, labe
 		res.UnitsCopied, len(res.FilesInstalled))
 	reportSkippedFiles(out, res.FilesSkipped)
 	reportSecurityReconcile(out, res)
+	// Before the repairs, whose output ends with the Next step.
+	syncInstalledJarDependencies(out, mprPath)
 	runPostInstallRepairs(out, out, mprPath, mendixVer, moduleRepairs)
 }
 

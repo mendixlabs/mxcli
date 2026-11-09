@@ -191,6 +191,8 @@ func runMarketplaceUpdate(cmd *cobra.Command, args []string) error {
 		res.DependentsRemoved = drift.DependentNames()
 	}
 	reportUpdate(out, res)
+	// A new version can declare new managed Java dependencies (ako/mxcli#2028).
+	syncInstalledJarDependencies(out, mprPath)
 	return nil
 }
 

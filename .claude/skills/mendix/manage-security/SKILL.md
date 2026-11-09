@@ -11,13 +11,13 @@ description: "Configure Mendix security in MDL — module and user roles, access
 | lines | section |
 |---|---|
 | 27-35 | When to Use This Skill |
-| 36-43 | Security Concepts |
-| 44-120 | The System-module ceiling — decide the role model around this FIRST |
-| 121-567 | Syntax Reference |
-| 568-582 | Starlark Lint Rule APIs |
-| 583-644 | Common Workflow: Setting Up Module Security |
-| 645-654 | Common Mistakes |
-| 655-664 | Validation |
+| 36-44 | Security Concepts |
+| 45-121 | The System-module ceiling — decide the role model around this FIRST |
+| 122-568 | Syntax Reference |
+| 569-583 | Starlark Lint Rule APIs |
+| 584-645 | Common Workflow: Setting Up Module Security |
+| 646-655 | Common Mistakes |
+| 656-665 | Validation |
 
 <!-- /skill-index -->
 # Security Management Skill
@@ -40,6 +40,7 @@ Use when the user asks to:
 - **Access Rules** control CRUD rights on entities per module role
 - **Microflow/Page Access** controls which module roles can execute/view specific elements
 - **Project Security Level** determines enforcement: `off`, `prototype`, or `production`
+  - **A blank app (`mxcli new`) ships at `off`.** At `off` the runtime applies no access rule, page or microflow grant, and creates no demo user — every user sees every page and every row. `prototype` guards pages and microflows but **not entity access**, so XPath constraints on access rules have no effect. Only `production` applies entity access. check, `mx check` and `test --local` all pass at every level; lint SEC013 reports the gap. Set `alter app security ( SecurityLevel: production );` before writing access rules you mean to rely on.
 
 ## The System-module ceiling — decide the role model around this FIRST
 
