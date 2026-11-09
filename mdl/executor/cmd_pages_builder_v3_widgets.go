@@ -95,9 +95,11 @@ func (pb *pageBuilder) buildDataViewV3(w *ast.WidgetV3) (*pages.DataView, error)
 		// Save and restore entity context so nested DataViews work correctly
 		oldContext := pb.entityContext
 		oldArgCtx := pb.argCtx
+		pb.enterOuterEntityContext(oldContext)
 		pb.entityContext = entityName
 		pb.argCtx = enteringDataWidget(ds, entityName)
 		defer func() {
+			pb.leaveOuterEntityContext()
 			pb.entityContext = oldContext
 			pb.argCtx = oldArgCtx
 		}()
@@ -371,9 +373,11 @@ func (pb *pageBuilder) buildListViewV3(w *ast.WidgetV3) (*pages.ListView, error)
 		// Save and restore entity context so nested containers work correctly
 		oldContext := pb.entityContext
 		oldArgCtx := pb.argCtx
+		pb.enterOuterEntityContext(oldContext)
 		pb.entityContext = entityName
 		pb.argCtx = enteringDataWidget(ds, entityName)
 		defer func() {
+			pb.leaveOuterEntityContext()
 			pb.entityContext = oldContext
 			pb.argCtx = oldArgCtx
 		}()
@@ -1618,8 +1622,7 @@ func (pb *pageBuilder) buildSnippetCallParams(sc *pages.SnippetCallWidget, snipp
 			// Omitted. Legal exactly when the surrounding data context supplies
 			// the parameter's entity; otherwise nothing can satisfy it and the
 			// author gets the guidance rather than a build error later.
-			if pb.entityContext != "" && declared.EntityName != "" &&
-				strings.EqualFold(pb.entityContext, declared.EntityName) {
+			if pb.contextSupplies(declared.EntityName) {
 				continue
 			}
 			return mdlerrors.NewValidationf(
@@ -2002,4 +2005,45 @@ func widgetIconSpec(w *ast.WidgetV3) *ast.WidgetIcon {
 		}
 	}
 	return nil
+}
+
+// enterOuterEntityContext records the context a data container is entered
+// from, so a snippet call below it can see every enclosing container's entity;
+// leaveOuterEntityContext undoes it.
+func (pb *pageBuilder) enterOuterEntityContext(entity string) {
+	pb.outerEntityContexts = append(pb.outerEntityContexts, entity)
+}
+
+func (pb *pageBuilder) leaveOuterEntityContext() {
+	if n := len(pb.outerEntityContexts); n > 0 {
+		pb.outerEntityContexts = pb.outerEntityContexts[:n-1]
+	}
+}
+
+// contextSupplies reports whether a data container around the current widget
+// — the nearest or any enclosing one — supplies an object for a snippet
+// parameter of entity want. Studio Pro stores such a call with no parameter
+// mapping and mx check accepts it; measured on 11.14 with TestApp's
+// WorkflowCommons.ManageTaskAssignments, whose $Account (Administration.Account)
+// comes from a System.User data view two containers out (ako/mxcli#2055). An
+// entity in want's generalisation chain or one specialising it counts.
+func (pb *pageBuilder) contextSupplies(want string) bool {
+	if want == "" {
+		return false
+	}
+	related := func(ctx string) bool {
+		if ctx == "" {
+			return false
+		}
+		return strings.EqualFold(ctx, want) || pb.entityInChain(ctx, want) || pb.entityInChain(want, ctx)
+	}
+	if related(pb.entityContext) {
+		return true
+	}
+	for _, ctx := range pb.outerEntityContexts {
+		if related(ctx) {
+			return true
+		}
+	}
+	return false
 }

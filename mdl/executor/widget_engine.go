@@ -357,7 +357,9 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	// Save and restore entity context (DataSource mappings may change it)
 	oldEntityContext := e.pageBuilder.entityContext
 	oldArgCtx := e.pageBuilder.argCtx
+	e.pageBuilder.enterOuterEntityContext(oldEntityContext)
 	defer func() {
+		e.pageBuilder.leaveOuterEntityContext()
 		e.pageBuilder.entityContext = oldEntityContext
 		e.pageBuilder.argCtx = oldArgCtx
 	}()
