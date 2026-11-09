@@ -58,6 +58,7 @@ var categoryMapping = map[string]string{
 	"SEC010":  "Security",
 	"SEC011":  "Security",
 	"SEC012":  "Security",
+	"SEC013":  "Security",
 	"CONV006": "Security",
 	"CONV007": "Security",
 	"CONV008": "Security",
