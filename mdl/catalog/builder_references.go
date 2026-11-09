@@ -22,7 +22,7 @@ const (
 	RefKindLayout      = "layout"       // Page uses layout
 	RefKindSnippetCall = "snippet_call" // Page, snippet or layout calls a snippet
 	RefKindDatasource  = "datasource"   // Page/widget uses entity via datasource
-	RefKindParameter   = "parameter"    // Page parameter entity type
+	RefKindParameter   = "parameter"    // Page, snippet or flow parameter entity type
 	RefKindAction      = "action"       // Widget calls microflow/nanoflow
 	RefKindHomePage    = "home_page"    // Navigation home page reference
 	RefKindLoginPage   = "login_page"   // Navigation login page reference
@@ -39,10 +39,10 @@ const (
 	RefKindSync        = "sync"         // An offline navigation profile synchronizes an entity
 	RefKindPublish     = "publish"      // A published service runs a microflow (REST operation, OData resource or action, authentication)
 	RefKindEvent       = "event"        // An event handler runs a microflow (entity event, or a business event a service subscribes to)
-	RefKindMember      = "member"       // A document binds, reads or writes an attribute, or navigates an association
+	RefKindMember      = "member"       // A document binds, reads or writes an attribute, navigates an association, or reaches the entity an association step arrives at
 	RefKindXPath       = "xpath"        // An XPath constraint names an attribute, association or enumeration value
-	RefKindType        = "type"         // An attribute, parameter or variable is typed as an enumeration
-	RefKindValue       = "value"        // An expression names an enumeration value
+	RefKindType        = "type"         // An attribute, parameter or variable is typed as an enumeration, or a result variable, created list or entity-type argument as an entity
+	RefKindValue       = "value"        // An expression names an enumeration value (an ENUMERATION target when that value does not exist)
 	RefKindMapping     = "mapping"      // An import or export mapping maps an entity, or a message definition exposes one
 	RefKindSplit       = "split"        // A decision branches on an object being a specialization
 	RefKindMappingCall = "mapping_call" // A flow applies an import or export mapping (import/export action, REST or web service call)

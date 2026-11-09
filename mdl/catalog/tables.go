@@ -7,6 +7,14 @@ package catalog
 //
 // History:
 //
+//	37 (entity type edges): refs gains entity targets for a result variable's
+//	    type, a created list, an entity-type argument, a snippet parameter and
+//	    the entity an association step reaches, and a value edge to an
+//	    enumeration whose named value does not exist; annotation and text
+//	    prose and module-role names no longer produce member edges
+//	    (ako/mxcli#1829). Without the bump a cached catalog keeps answering
+//	    "not referenced" for those entities.
+//
 //	36 (mapping edges): refs gains mapping_call edges from a flow to each
 //	    import / export mapping it applies (import and export actions, REST
 //	    and web service calls) and structure edges from a mapping to its JSON
@@ -195,7 +203,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "36"
+const CatalogSchemaVersion = "37"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
