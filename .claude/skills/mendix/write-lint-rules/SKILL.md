@@ -11,11 +11,11 @@ description: "Write custom Starlark lint rules in .claude/lint-rules/ that run b
 | lines | section |
 |---|---|
 | 25-67 | Rule File Structure |
-| 68-165 | Available Query Functions |
-| 166-551 | Object Properties |
-| 552-565 | Helper Functions |
-| 566-652 | Common Patterns |
-| 653-661 | Validation |
+| 68-166 | Available Query Functions |
+| 167-552 | Object Properties |
+| 553-566 | Helper Functions |
+| 567-653 | Common Patterns |
+| 654-662 | Validation |
 
 <!-- /skill-index -->
 # Writing Custom Starlark Lint Rules
@@ -106,12 +106,13 @@ Without this, a rule that reads a full-only table under a fast build gets
 | `entity_event_handlers()` | list of entity_event_handler | Every before/after event handler on a non-system entity: which moment, which event, which microflow |
 | `navigation_menu_items()` | list of navigation_menu_item | Every navigation menu item of every profile, at every depth. Navigation belongs to the project, so no module filter applies |
 | `jar_dependencies()` | list of jar_dependency | Maven dependencies declared by non-system, non-marketplace modules |
+| `jar_files()` | list of jar_file | The `.jar` files on disk in `userlib/` and `vendorlib/` (top level, as the runtime reads them), with the library name and version split from the file name and the modules whose `.RequiredLib` marker names each. Read from disk at each call, not from the catalog; `[]` without a project path. Use it to find one library on the classpath in two versions |
 | `strings(language = None)` | list of catalog_string | User-facing and documentary text, one row per text and language; pass `language` (`"nl_NL"`) to narrow. An untranslated language has **no row**. Needs a FULL catalog, which `mxcli lint` builds automatically for a rule that calls it |
 | `layouts()` | list of layout | All non-system layouts |
 | `published_rest_operations()` | list of published_rest_operation | Operations of published REST services, with the microflow behind each |
 
 The fields of `module`, `folder`, `annotation`, `association`, `entity_event_handler`,
-`navigation_menu_item`, `jar_dependency`, `catalog_string`, `layout` and
+`navigation_menu_item`, `jar_dependency`, `jar_file`, `catalog_string`, `layout` and
 `published_rest_operation` are in [catalog-tables.md](catalog-tables.md).
 
 ### Graph-analysis functions (architecture rules)
