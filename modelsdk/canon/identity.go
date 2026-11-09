@@ -141,6 +141,17 @@ func Reconcile(contents, stored []byte, opts ...Option) (out []byte, unchanged b
 	// no-op elision could never fire for one (issue #949).
 	contents = CarryPersistentIDs(contents, stored)
 
+	// A property MDL cannot state: a tab container's default tab. The writer
+	// points it at the first tab, so a round trip rewrote a page whose stored
+	// default was null and reset any other choice (ako/mxcli#1897). Needs the
+	// transplanted $IDs, so it runs after TransplantIDs.
+	contents = CarryDefaultTabPages(contents, stored)
+
+	// The rest of what MDL cannot state: an expression's surrounding whitespace
+	// and an empty screen-reader label Studio Pro stores as a ClientTemplate
+	// (ako/mxcli#1897).
+	contents = CarryUnexpressed(contents, stored)
+
 	if alwaysWrite() {
 		return contents, false
 	}
