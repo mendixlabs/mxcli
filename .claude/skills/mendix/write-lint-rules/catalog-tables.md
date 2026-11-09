@@ -1,6 +1,6 @@
 # Catalog-table builtins: object properties
 
-The structs returned by `modules()`, `associations()`, `entity_event_handlers()`,
+The structs returned by `modules()`, `folders()`, `associations()`, `entity_event_handlers()`,
 `navigation_menu_items()`, `jar_dependencies()`, `strings()`, `layouts()`,
 `published_rest_operations()` and `widgets()`. The functions themselves are listed in
 [SKILL.md](SKILL.md) under "Available Query Functions". Every builtin leaves out
@@ -15,6 +15,23 @@ Returned by `modules()`.
 | `id` | string | Module UUID |
 | `name` | string | `"Sales"` |
 | `domain_model_documentation` | string | The module's domain model's documentation (Studio Pro's Documentation pane with nothing selected on the canvas). A Mendix module has no documentation of its own; this is the module-level text an author can write. `""` when none |
+
+### folder
+Returned by `folders()`. One per folder, empty folders included (ako/mxcli#1436).
+
+| Property | Type | Example |
+|----------|------|---------|
+| `id` | string | Folder UUID |
+| `name` | string | `"Order"` |
+| `module_name` | string | `"Sales"` |
+| `path` | string | `"Objects/Order"` — spelled as a document's `folder`, so `f.path == d.folder` matches the documents in it. A name that itself holds `/` is not escaped |
+| `parent_path` | string | `"Objects"`; `""` for a folder directly in the module |
+| `depth` | int | `1` for a folder directly in the module; counted from the parents, not from the slashes in `path` |
+| `document_count` | int | Documents directly in this folder, not in its subfolders |
+| `folder_count` | int | Folders directly in this folder |
+
+An empty folder has `document_count == 0 and folder_count == 0`. A folder
+with `document_count == 0` alone may still hold subfolders.
 
 ### association
 Returned by `associations()`.

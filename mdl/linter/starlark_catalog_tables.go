@@ -115,6 +115,30 @@ func (r *StarlarkRule) builtinModules(_ *starlark.Thread, _ *starlark.Builtin, a
 	return starlark.NewList(out), nil
 }
 
+func (r *StarlarkRule) builtinFolders(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if r.ctx == nil {
+		return starlark.NewList(nil), nil
+	}
+	var out []starlark.Value
+	for f := range r.ctx.Folders() {
+		out = append(out, folderToStarlark(f))
+	}
+	return starlark.NewList(out), nil
+}
+
+func folderToStarlark(f Folder) starlark.Value {
+	return starlarkstruct.FromStringDict(starlark.String("folder"), starlark.StringDict{
+		"id":             starlark.String(f.ID),
+		"name":           starlark.String(f.Name),
+		"module_name":    starlark.String(f.ModuleName),
+		"path":           starlark.String(f.Path),
+		"parent_path":    starlark.String(f.ParentPath),
+		"depth":          starlark.MakeInt(f.Depth),
+		"document_count": starlark.MakeInt(f.DocumentCount),
+		"folder_count":   starlark.MakeInt(f.FolderCount),
+	})
+}
+
 func associationToStarlark(a Association) starlark.Value {
 	return starlarkstruct.FromStringDict(starlark.String("association"), starlark.StringDict{
 		"name":                      starlark.String(a.Name),

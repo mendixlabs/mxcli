@@ -7,6 +7,12 @@ package catalog
 //
 // History:
 //
+//	38 (folders): folders_data + view, one row per folder with its path,
+//	    parent and direct document and subfolder counts, including empty
+//	    folders, which no document's Folder column can show
+//	    (ako/mxcli#1436). Without the bump a cached catalog has the table
+//	    but no rows, and folders() answers [] with no warning.
+//
 //	37 (entity type edges): refs gains entity targets for a result variable's
 //	    type, a created list, an entity-type argument, a snippet parameter and
 //	    the entity an association step reaches, and a value edge to an
@@ -203,7 +209,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "37"
+const CatalogSchemaVersion = "38"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -281,6 +287,24 @@ func (c *Catalog) createTables() error {
 			SnapshotId TEXT
 		)`,
 		viewWithFullSnapshot("modules"),
+
+		// folders: one row per Projects$Folder, empty ones included. A
+		// document's Folder column names only the folders that hold a
+		// document, so an empty folder appeared nowhere else
+		// (ako/mxcli#1436). Path is spelled as that column spells it.
+		`CREATE TABLE IF NOT EXISTS folders_data (
+			Id TEXT PRIMARY KEY,
+			Name TEXT,
+			ModuleName TEXT,
+			Path TEXT,
+			ParentPath TEXT DEFAULT '',
+			Depth INTEGER DEFAULT 1,
+			DocumentCount INTEGER DEFAULT 0,
+			FolderCount INTEGER DEFAULT 0,
+			ProjectId TEXT,
+			SnapshotId TEXT
+		)`,
+		viewWithFullSnapshot("folders"),
 
 		// entities
 		`CREATE TABLE IF NOT EXISTS entities_data (
@@ -1642,6 +1666,7 @@ func (c *Catalog) createTables() error {
 
 		// Indexes for common queries — target the underlying *_data tables.
 		`CREATE INDEX IF NOT EXISTS idx_modules_name ON modules_data(Name)`,
+		`CREATE INDEX IF NOT EXISTS idx_folders_module ON folders_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_entities_name ON entities_data(Name)`,
 		`CREATE INDEX IF NOT EXISTS idx_entities_module ON entities_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_microflows_name ON microflows_data(Name)`,

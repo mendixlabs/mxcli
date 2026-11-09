@@ -1,0 +1,25 @@
+mdl 1;
+-- ako/mxcli#1436: the catalog held no folders, so a Starlark rule saw a folder
+-- only through the `folder` of a document in it, and an empty folder did not
+-- exist for it.
+--
+-- Run on a fresh app, then:
+--   mxcli -p App.mpr -c "refresh catalog force"
+--   mxcli -p App.mpr -c "select Path, ParentPath, Depth, DocumentCount, FolderCount from CATALOG.FOLDERS where ModuleName = 'Bug1436' order by Path"
+-- Expected:
+--   Objects        ''        1  1  1
+--   Objects/Empty  Objects   2  0  0
+-- Before the fix CATALOG.FOLDERS did not exist (and, its name being a keyword,
+-- the select printed nothing at all), and LIST FOLDERS was the only place the
+-- empty folder showed.
+
+create module Bug1436;
+
+-- Created in Objects/Empty, then moved up: Objects/Empty stays, empty.
+create microflow Bug1436.ACT_Probe ()
+folder 'Objects/Empty'
+begin
+  return;
+end;
+
+move microflow Bug1436.ACT_Probe to folder 'Objects';
