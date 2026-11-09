@@ -990,6 +990,18 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 	})
 
 	Register(SyntaxFeature{
+		Path:     "agents.published-mcp-service",
+		Features: []string{"agent_documents/agent_published_mcp_service"},
+		Summary:  "CREATE/ALTER/DROP PUBLISHED MCP SERVICE: publish the app's microflows as an MCP server (Agent Editor 2.6+, MCP Server 5.x)",
+		Keywords: []string{"published mcp service", "mcp server", "publish mcp", "mcp tool", "expose microflow", "oauth"},
+		Syntax: "CREATE [OR MODIFY] PUBLISHED MCP SERVICE Module.Name [FOLDER 'path'] (\n  [ServerName: 'Name',]  -- default: the document name\n  EndpointPath: 'path',  -- served at <app URL>/path/mcp\n  Version: '1.0.0',\n  ProtocolVersion: v2025_03_26\n  [, AuthenticationEnabled: true, AuthenticationMicroflow: Module.Auth]\n  [, AuthorizationServerUrl: 'https://...', Scopes: 'a b']\n  [, Documentation: '...']\n) [{\n  tool name ( Microflow: Module.Tool [, Description: '...'] [, Title: '...'] [, Schema: '...'] )\n}];\n" +
+			"ALTER PUBLISHED MCP SERVICE Module.Name SET Key = value | ADD TOOL name ( ... ) | DROP TOOL name;\n" +
+			"DESCRIBE PUBLISHED MCP SERVICE Module.Name;\nLIST PUBLISHED MCP SERVICES [IN Module];\nDROP PUBLISHED MCP SERVICE Module.Name;",
+		Example: "create published mcp service MyModule.CustomerMCP (\n  EndpointPath: 'customers',\n  Version: '1.0.0',\n  ProtocolVersion: v2025_03_26\n) {\n  tool count_customers ( Microflow: MyModule.MCPTool_CountCustomers, Description: 'Count customers.' )\n};",
+		SeeAlso: []string{"agents", "agents.mcp-service"},
+	})
+
+	Register(SyntaxFeature{
 		Path:     "agents.agent",
 		Features: []string{"agent_documents/agent"},
 		Summary:  "CREATE/DROP AGENT documents with variables, tools, KB tools, and MCP service tools",

@@ -12,7 +12,7 @@ description: "Publish a Mendix app as an MCP server so external agents can call 
 |---|---|
 | 43-174 | Runtime configuration |
 | 175-203 | Gotchas |
-| 204-228 | Reading and migrating an existing setup |
+| 204-233 | Reading and migrating an existing setup |
 
 <!-- /skill-index -->
 # Publishing an MCP Server
@@ -25,7 +25,7 @@ Two ways to configure it exist:
 | Where it lives | A microflow that runs at startup and calls the module's Java actions | A *Published MCP service* document (Agent Editor), edited in Studio Pro |
 | Module versions | MCP Server 3.x and later (measured 3.0.0, 4.0.0, 4.2.2, 5.4.0) | MCP Server 5.x with Agent Editor 2.6+ (measured 5.4.0 / 2.6.0) |
 | Prompts | Yes (`AddPrompt`) | No: the document holds tools only |
-| MDL | `call java action MCPServer.*`, below | Not supported yet (ako/mxcli#2020) |
+| MDL | `call java action MCPServer.*`, below | `create published mcp service` (agents skill) |
 
 The two are the same mechanism. At startup AgentEditorCommons reads every
 Published MCP service document and calls `MCPServer.CreateMCPServer` and
@@ -224,5 +224,10 @@ carry over unchanged; the registration calls map onto the document's keys:
 | `AddPrompt` | no equivalent: keep a runtime microflow for prompts |
 
 After the move, remove the initialize call from the after-startup microflow, so
-the server is not created twice. The MDL statement for the document is
-ako/mxcli#2020.
+the server is not created twice. Write the document with
+`create published mcp service` (`./mxcli syntax agents.published-mcp-service`):
+`EndpointPath`, `Version`, `ProtocolVersion`, `AuthenticationEnabled`,
+`AuthenticationMicroflow`, `AuthorizationServerUrl` and `Scopes` take the
+values of the `CreateMCPServer` call (its `Name` is `ServerName`, which defaults
+to the document name), and each `AddTool` becomes a
+`tool name ( Microflow: …, Description: …, Title: …, Schema: … )` block.

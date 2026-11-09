@@ -216,6 +216,58 @@ func (b *Backend) DeleteAgentEditorConsumedMCPService(id string) error {
 }
 
 // ---------------------------------------------------------------------------
+// Published MCP service
+// ---------------------------------------------------------------------------
+
+func (b *Backend) CreateAgentEditorPublishedMCPService(p *agenteditor.PublishedMCPService) error {
+	if p == nil {
+		return fmt.Errorf("CreateAgentEditorPublishedMCPService: nil service")
+	}
+	if b.writer == nil {
+		return fmt.Errorf("CreateAgentEditorPublishedMCPService: not connected for writing")
+	}
+	if p.Name == "" {
+		return fmt.Errorf("CreateAgentEditorPublishedMCPService: name is required")
+	}
+	if p.ContainerID == "" {
+		return fmt.Errorf("CreateAgentEditorPublishedMCPService: container ID is required")
+	}
+	if p.ID == "" {
+		p.ID = model.ID(mmpr.GenerateID())
+	}
+	contents, err := encodePublishedMCPServiceContents(p)
+	if err != nil {
+		return err
+	}
+	// Only Agent Editor 2.6+ has this document, and 2.6 indents Contents.
+	if contents, err = formatLikeStored([]byte(contents), "{\n"); err != nil {
+		return err
+	}
+	return b.writeCustomBlob(string(p.ID), string(p.ContainerID), p.Name, p.Documentation, p.ExportLevel, p.Excluded, agenteditor.CustomTypePublishedMCPService, agenteditor.ReadablePublishedMCPService, contents, false)
+}
+
+func (b *Backend) UpdateAgentEditorPublishedMCPService(p *agenteditor.PublishedMCPService) error {
+	if p == nil {
+		return fmt.Errorf("UpdateAgentEditorPublishedMCPService: nil service")
+	}
+	if b.writer == nil {
+		return fmt.Errorf("UpdateAgentEditorPublishedMCPService: not connected for writing")
+	}
+	contents, err := encodePublishedMCPServiceContents(p)
+	if err != nil {
+		return err
+	}
+	return b.writeCustomBlob(string(p.ID), string(p.ContainerID), p.Name, p.Documentation, p.ExportLevel, p.Excluded, agenteditor.CustomTypePublishedMCPService, agenteditor.ReadablePublishedMCPService, contents, true)
+}
+
+func (b *Backend) DeleteAgentEditorPublishedMCPService(id string) error {
+	if b.writer == nil {
+		return fmt.Errorf("DeleteAgentEditorPublishedMCPService: not connected for writing")
+	}
+	return b.writer.DeleteUnit(id)
+}
+
+// ---------------------------------------------------------------------------
 // Agent
 // ---------------------------------------------------------------------------
 
@@ -342,6 +394,61 @@ func encodeConsumedMCPServiceContents(c *agenteditor.ConsumedMCPService) (string
 		Documentation:            c.InnerDocumentation,
 		Version:                  c.Version,
 		ConnectionTimeoutSeconds: c.ConnectionTimeoutSeconds,
+	})
+}
+
+// encodePublishedMCPServiceContents writes the keys in the order Agent Editor
+// 2.6 saves them: authenticationMicroflow last, after documentation, when it is
+// set. authorizationServerUrl and scopes, which the Studio Pro 11.16 sample does
+// not hold, follow it; their place is inferred from the runtime reader.
+func encodePublishedMCPServiceContents(p *agenteditor.PublishedMCPService) (string, error) {
+	// Agent Editor writes a tool's sourceMicroflow qualifiedName first, and
+	// the authenticationMicroflow documentId first (as agenteditor.DocRef).
+	type microflowRef struct {
+		QualifiedName string `json:"qualifiedName"`
+		DocumentID    string `json:"documentId"`
+	}
+	ref := func(r *agenteditor.DocRef) *microflowRef {
+		if r == nil {
+			return nil
+		}
+		return &microflowRef{QualifiedName: r.QualifiedName, DocumentID: r.DocumentID}
+	}
+	type toolEntry struct {
+		UUID            string        `json:"uuid"`
+		Name            string        `json:"name"`
+		Description     string        `json:"description"`
+		SourceMicroflow *microflowRef `json:"sourceMicroflow,omitempty"`
+		Title           string        `json:"title"`
+		Schema          string        `json:"schema,omitempty"`
+	}
+	type contentsShape struct {
+		ServerName              string              `json:"serverName"`
+		EndpointPath            string              `json:"endpointPath"`
+		Version                 string              `json:"version"`
+		ProtocolVersion         string              `json:"protocolVersion"`
+		AuthenticationEnabled   bool                `json:"authenticationEnabled"`
+		Tools                   []toolEntry         `json:"tools"`
+		Documentation           string              `json:"documentation"`
+		AuthenticationMicroflow *agenteditor.DocRef `json:"authenticationMicroflow,omitempty"`
+		AuthorizationServerURL  string              `json:"authorizationServerUrl,omitempty"`
+		Scopes                  string              `json:"scopes,omitempty"`
+	}
+	tools := make([]toolEntry, 0, len(p.Tools))
+	for _, t := range p.Tools {
+		tools = append(tools, toolEntry{UUID: t.UUID, Name: t.Name, Description: t.Description, SourceMicroflow: ref(t.SourceMicroflow), Title: t.Title, Schema: t.Schema})
+	}
+	return marshalJSON(contentsShape{
+		ServerName:              p.ServerName,
+		EndpointPath:            p.EndpointPath,
+		Version:                 p.Version,
+		ProtocolVersion:         p.ProtocolVersion,
+		AuthenticationEnabled:   p.AuthenticationEnabled,
+		AuthenticationMicroflow: p.AuthenticationMicroflow,
+		AuthorizationServerURL:  p.AuthorizationServerURL,
+		Scopes:                  p.Scopes,
+		Tools:                   tools,
+		Documentation:           p.InnerDocumentation,
 	})
 }
 

@@ -26,8 +26,11 @@ type contentsSpec struct {
 	modelled map[string]bool
 	// objects are object-valued keys merged key by key.
 	objects map[string]*contentsSpec
-	// lists are array keys whose entries pair with a stored entry by "id".
+	// lists are array keys whose entries pair with a stored entry by idKey.
 	lists map[string]*contentsSpec
+	// idKey is the key a list entry pairs by: "id", or "uuid" for a published
+	// MCP service's tools.
+	idKey string
 }
 
 func contentKeys(keys ...string) map[string]bool {
@@ -77,6 +80,19 @@ var consumedMCPServiceContentsSpec = &contentsSpec{
 	modelled: contentKeys("protocolVersion", "documentation", "version", "connectionTimeoutSeconds"),
 }
 
+var publishedMCPServiceContentsSpec = &contentsSpec{
+	modelled: contentKeys("serverName", "endpointPath", "version", "protocolVersion", "authenticationEnabled",
+		"authenticationMicroflow", "authorizationServerUrl", "scopes", "tools", "documentation"),
+	objects: map[string]*contentsSpec{"authenticationMicroflow": docRefSpec},
+	lists: map[string]*contentsSpec{
+		"tools": {
+			modelled: contentKeys("uuid", "name", "description", "sourceMicroflow", "title", "schema"),
+			objects:  map[string]*contentsSpec{"sourceMicroflow": docRefSpec},
+			idKey:    "uuid",
+		},
+	},
+}
+
 func contentsSpecFor(customType string) *contentsSpec {
 	switch customType {
 	case agenteditor.CustomTypeAgent:
@@ -87,6 +103,8 @@ func contentsSpecFor(customType string) *contentsSpec {
 		return knowledgeBaseContentsSpec
 	case agenteditor.CustomTypeConsumedMCPService:
 		return consumedMCPServiceContentsSpec
+	case agenteditor.CustomTypePublishedMCPService:
+		return publishedMCPServiceContentsSpec
 	}
 	return nil
 }
@@ -189,14 +207,14 @@ func mergeValue(key string, stored, written json.RawMessage, spec *contentsSpec)
 	}
 	byID := map[string]json.RawMessage{}
 	for _, si := range sItems {
-		if id := entryID(si); id != "" {
+		if id := entryID(si, item.idKey); id != "" {
 			byID[id] = si
 		}
 	}
 	out := make([]json.RawMessage, 0, len(wItems))
 	for _, wi := range wItems {
-		si, ok := byID[entryID(wi)]
-		if !ok || entryID(wi) == "" {
+		si, ok := byID[entryID(wi, item.idKey)]
+		if !ok || entryID(wi, item.idKey) == "" {
 			out = append(out, wi)
 			continue
 		}
@@ -227,12 +245,17 @@ func isZeroJSON(raw json.RawMessage) bool {
 	return false
 }
 
-func entryID(raw json.RawMessage) string {
-	var e struct {
-		ID string `json:"id"`
+func entryID(raw json.RawMessage, idKey string) string {
+	if idKey == "" {
+		idKey = "id"
 	}
-	_ = json.Unmarshal(raw, &e)
-	return e.ID
+	var e map[string]json.RawMessage
+	if json.Unmarshal(raw, &e) != nil {
+		return ""
+	}
+	var id string
+	_ = json.Unmarshal(e[idKey], &id)
+	return id
 }
 
 // orderedObject is a JSON object with its key order.

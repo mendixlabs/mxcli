@@ -11,12 +11,12 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | lines | section |
 |---|---|
 | 24-50 | Overview |
-| 51-150 | Syntax |
-| 151-177 | Altering existing documents |
-| 178-206 | Gotchas |
-| 207-228 | Common Patterns |
-| 229-293 | Calling Agents from Microflows |
-| 294-296 | AI agent documents |
+| 51-166 | Syntax |
+| 167-193 | Altering existing documents |
+| 194-222 | Gotchas |
+| 223-244 | Common Patterns |
+| 245-309 | Calling Agents from Microflows |
+| 310-312 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -98,6 +98,22 @@ create consumed mcp service Module.WebSearch (
   ConnectionTimeoutSeconds: 30,
   documentation: 'Web search MCP server'
 );
+```
+
+### Published MCP Service
+
+The other direction: the app publishes its microflows as an MCP server
+(Agent Editor 2.6+, MCP Server 5.x). `./mxcli syntax agents.published-mcp-service`
+has the full syntax; the `mcp-server` skill covers the contracts of the tool and
+authentication microflows and the runtime-configured alternative.
+
+```sql
+mdl 1;
+create published mcp service Module.CustomerMCP (
+  EndpointPath: 'customers', Version: '1.0.0', ProtocolVersion: v2025_03_26
+) {
+  tool count_customers ( Microflow: Module.MCPTool_CountCustomers, Description: 'Count customers.' )
+};
 ```
 
 ### Agent (full syntax)

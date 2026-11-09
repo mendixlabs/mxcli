@@ -286,6 +286,7 @@
   - [CREATE AI MODEL](reference/agent/create-model.md)
   - [CREATE KNOWLEDGE BASE](reference/agent/create-knowledge-base.md)
   - [CREATE CONSUMED MCP SERVICE](reference/agent/create-consumed-mcp-service.md)
+  - [CREATE PUBLISHED MCP SERVICE](reference/agent/create-published-mcp-service.md)
   - [CREATE AGENT](reference/agent/create-agent.md)
 - [Business Event Statements](reference/business-event/README.md)
   - [CREATE BUSINESS EVENT SERVICE](reference/business-event/create-business-event-service.md)

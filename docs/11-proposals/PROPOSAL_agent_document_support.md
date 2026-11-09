@@ -136,6 +136,47 @@ For MCP tool discovery inside Studio Pro, user can add headers in the UI. Those 
 
 Enum values for `protocolVersion`: `"v2024_11_05"` or `"v2025_03_26"`. Use `v2025_03_26` for newer MCP servers that support streamable http transport, `v2024_11_05` for servers that only support SSE transport.
 
+### PUBLISHED MCP SERVICE — `Contents` JSON schema
+
+> **Status 2026-11-08 (ako/mxcli#2020): implemented** as `create published mcp service`.
+> Measured on Studio Pro 11.16 with Agent Editor 2.6.0 and MCP Server 5.4.0
+> (mx-test-projects/AgentBuilderStarterApp). `CustomDocumentType` is
+> `agenteditor.publishedMCPService`, `ReadableTypeName` "Published MCP service",
+> Contents indented by two spaces:
+
+```json
+{
+  "serverName": "Published_MCP_service",
+  "endpointPath": "published_mcp_service",
+  "version": "1.0.0",
+  "protocolVersion": "v2025_03_26",
+  "authenticationEnabled": false,
+  "tools": [
+    {
+      "uuid": "06e34e7d-8103-43f3-aa12-4243d3858956",
+      "name": "tool1",
+      "description": "tool1 is cool",
+      "sourceMicroflow": { "qualifiedName": "AgentTest.mcptool1", "documentId": "<microflow unit ID>" },
+      "title": "ewdwe"
+    }
+  ],
+  "documentation": "this is an mcp server"
+}
+```
+
+With *Requires authentication* on, Studio Pro writes `"authenticationEnabled": true` and
+appends `"authenticationMicroflow": { "documentId": "<microflow unit ID>", "qualifiedName":
+"AgentTest.auth_mf" }` after `documentation`, documentId first (the reverse of a tool's
+`sourceMicroflow`). A Studio Pro duplicate (`Published_MCP_service_2`) keeps the original's
+`serverName`, which the editor does not show, and its tool keeps the original's `uuid`: a uuid is
+unique per document, not per app. `AgentDocumentUtils.initPublishedMCPService` (AgentEditorCommons
+2.6.0) also reads `authorizationServerUrl` and `scopes`, and a tool's optional `schema`; no saved
+document holds them yet, so their position (after `authenticationMicroflow`) is inferred. It passes them to `MCPServer.CreateMCPServer(Path, Name,
+Version, ProtocolVersion, AuthenticationMicroflow, AuthorizationServerUrl, Scopes)` and
+`MCPServer.AddTool(McpServer, Name, Description, ExecutingMicroflow, Schema, Title)`, so model
+configuration and a startup microflow calling those actions (runtime configuration) map one to
+one. The document holds no prompts.
+
 ### AGENT — `Contents` JSON schema
 
 Simple agent (observed in `AgentEditorCommons.TranslationAgent`):
