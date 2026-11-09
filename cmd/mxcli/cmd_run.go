@@ -311,6 +311,11 @@ Examples:
 				fmt.Fprintln(os.Stderr, "Error: --test-endpoint has nothing to do with --setup (which never boots the app)")
 				os.Exit(1)
 			}
+			// Ignored before the endpoint's Java source exists, so a commit made
+			// while the app runs cannot pick it up (ako/mxcli#2033).
+			if err := ensureTestEndpointIgnored(projectPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not git-ignore the test endpoint's source: %v\n", err)
+			}
 			var err error
 			hosted, err = testrunner.InstallHostedEndpoint(projectPath, os.Stdout)
 			if err != nil {
