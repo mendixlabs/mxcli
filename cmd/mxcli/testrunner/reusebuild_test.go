@@ -94,6 +94,44 @@ func TestHashProjectTree_IgnoresSkipDirs(t *testing.T) {
 	}
 }
 
+// TestHashProjectTree_IgnoresThemeCache guards the real-app finding: mxbuild
+// rewrites theme-cache/web/theme.compiled.css with a fresh cache-busting
+// token on every build even with no theme/model change, so counting it as an
+// input would make the key never repeat across two separate 'mxcli test'
+// invocations and defeat --reuse-build entirely.
+func TestHashProjectTree_IgnoresThemeCache(t *testing.T) {
+	mpr := newTestProject(t)
+	dir := filepath.Dir(mpr)
+	before, err := hashProjectTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cacheDir := filepath.Join(dir, "theme-cache", "web")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, "theme.compiled.css"), []byte("src: url(a.ttf?1)"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	after1, err := hashProjectTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before != after1 {
+		t.Fatal("hash changed when theme-cache/ was created")
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, "theme.compiled.css"), []byte("src: url(a.ttf?2)"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	after2, err := hashProjectTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after1 != after2 {
+		t.Fatal("hash changed when theme-cache content changed (cache-busting token) — this is the bug that defeats --reuse-build on every real app")
+	}
+}
+
 func TestTestBuildKey_ChangesWithGeneratedMDL(t *testing.T) {
 	mpr := newTestProject(t)
 	opts := RunOptions{ProjectPath: mpr}

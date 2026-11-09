@@ -35,9 +35,20 @@ import (
 const reuseRecordName = "test-build.json"
 
 // reuseSkipDirs are not inputs of the build: outputs, caches and VCS state.
+//
+// theme-cache is a build output, not a source: mxbuild rewrites
+// theme-cache/web/theme.compiled.css on every build with a fresh
+// cache-busting query string on each font/asset url() even when no theme or
+// model content changed (e.g. "Atlas_Styling.ttf?<nanosecond token>"). Without
+// this exclusion the key never repeats across two separate 'mxcli test'
+// invocations — only within one process's --watch loop, which never re-reads
+// the tree from disk — so --reuse-build would silently rebuild every time on
+// any app using the Atlas Core theme (effectively all of them) and never pay
+// for itself. Found by running --reuse-build twice in a row against a real
+// app and seeing it rebuild both times.
 var reuseSkipDirs = map[string]bool{
 	".git": true, ".mxcli": true, "deployment": true, ".mpr-snapshots": true,
-	".mendix-cache": true, "node_modules": true,
+	".mendix-cache": true, "node_modules": true, "theme-cache": true,
 }
 
 type reuseRecord struct {
