@@ -297,7 +297,7 @@ rather than trusting a list here:
 | `create` / `change` / `delete` / `retrieve` | flow acts on an entity object |
 | `commit` | flow commits an entity object: a commit action, or a create / change that commits (`Yes` or `YesWithoutEvents`), beside its `create` / `change` edge |
 | `return` | flow returns an entity type |
-| `parameter` | page or flow parameter entity type |
+| `parameter` | page, snippet or flow parameter entity type |
 | `generalize` | entity extends entity |
 | `associate` | association targets entity |
 | `layout` | page uses a layout |
@@ -315,6 +315,10 @@ rather than trusting a list here:
 | `mapping_call` | flow applies an import or export mapping: an import / export action, or a REST or web service call's request or response mapping |
 | `structure` | import or export mapping is built on a JSON structure |
 | `validate` | attribute validation rule uses a regular expression |
+| `member` | document binds, reads or writes an attribute, navigates an association, or reaches the entity an association step arrives at |
+| `xpath` | XPath constraint names an attribute, association, enumeration value, or an entity reached through an association |
+| `type` | attribute, parameter or variable typed as an enumeration; an entity named as a type (an action's result variable, a created list, an entity-type argument to a Java or JavaScript action) |
+| `value` | expression names an enumeration value; an `ENUMERATION` target when the value named does not exist, so the document is rebuilt when it is added |
 | `widget` | page or snippet uses a pluggable / custom widget |
 
 `change`, `delete` and `commit` act on a *variable*, so the entity is resolved

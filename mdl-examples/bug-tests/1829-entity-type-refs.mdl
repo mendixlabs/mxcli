@@ -1,0 +1,44 @@
+mdl 1;
+-- ako/mxcli#1829: a document that names an entity only as a type, or reaches
+-- it only through an association, had no refs edge to it. On FactoryManagement
+-- the ref coverage trace found 65 such reads, and `show references to` the
+-- entity left the document out.
+--
+-- Each flow and the snippet below names a Bug1829 entity through one
+-- construct only. Run on a fresh app, then:
+--   mxcli -p App.mpr -c "refresh catalog full force"
+--   mxcli -p App.mpr -c "select SourceName, RefKind, TargetName from CATALOG.REFS where SourceName like 'Bug1829b.%' order by 1, 2"
+-- Expected, among the rows:
+--   Bug1829b.CreateList    type       Bug1829.Line
+--   Bug1829b.PathEnd       member     Bug1829.Order
+--   Bug1829b.Snip          parameter  Bug1829.Line
+-- Before the fix none of these rows existed.
+--
+-- A flow naming an enumeration value that does not exist yet gets a `value`
+-- edge to the enumeration, so it is rebuilt when the value is added. `exec`
+-- refuses such a reference, so that case is in the catalog fixture test
+-- (setupIncrementalProbes, step "add an enumeration value"), not here.
+
+create module Bug1829;
+create module Bug1829b;
+
+create persistent entity Bug1829.Order (Code: String(20));
+create persistent entity Bug1829.Line (Qty: Integer);
+
+create persistent entity Bug1829b.Holder (Name: String(20));
+create association Bug1829b.Holder_Order from Bug1829b.Holder to Bug1829.Order;
+
+create microflow Bug1829b.CreateList ()
+begin
+  $Lines = create list of Bug1829.Line;
+end;
+
+create microflow Bug1829b.PathEnd ($H: Bug1829b.Holder) returns Boolean as $Has
+begin
+  declare $Has Boolean = $H/Bug1829b.Holder_Order/Bug1829.Order != empty;
+  return $Has;
+end;
+
+create snippet Bug1829b.Snip (Params: ($L: Bug1829.Line)) {
+  container ctnLine {}
+};
