@@ -37,6 +37,14 @@ const (
 		`"status":"Failure","message":"Compilation of the app bundle failed."}`
 
 	bundleFailedMessage = "Compilation of the app bundle failed."
+
+	// Second serve build after an ALTER PAGE edit, macOS mxbuild 11.15.0: the
+	// same failure, reported by resource key instead of English text.
+	real1115MacOSMissingClientDirsByKey = "One or more errors occurred. " +
+		"(AggregateException_ctor_DefaultMessage (IO_PathNotFound_Path, " +
+		"/w/W1115/deployment/web/pages/MyFirstModule.Home_Web.js)) " +
+		"(AggregateException_ctor_DefaultMessage (IO_PathNotFound_Path, " +
+		"/w/W1115/deployment/web/layouts/Atlas_Core.Atlas_TopBar.js))"
 )
 
 // deploy1114 is the shape a 11.14 first build leaves: web/dist and nothing
@@ -74,6 +82,41 @@ func TestLegacyClientBuildHintExplainsBothRealFailures(t *testing.T) {
 				t.Errorf("%s: hint missing %q:\n%s", name, want, hint)
 			}
 		}
+	}
+}
+
+// macOS (and Linux) mxbuild report the identical first-build-only failure by
+// resource key, not English text (measured on 11.15.0). The English-text match
+// alone would leave --watch reporting "could not be applied" forever on these
+// platforms, since missingClientDirs would never recognize the failure.
+func TestLegacyClientBuildHintRecognizesMacOSKeyForm(t *testing.T) {
+	hint := legacyClientBuildHint(deploy1114(t), real1115MacOSMissingClientDirsByKey, "")
+	if hint == "" {
+		t.Fatal("must be explained: this is the same shape as the English-text message")
+	}
+	for _, want := range []string{"not a problem with your model", "web/pages/", "run --local --screenshot"} {
+		if !strings.Contains(hint, want) {
+			t.Errorf("hint missing %q:\n%s", want, hint)
+		}
+	}
+}
+
+// The key form names a FILE ("…/web/pages/X.js"), not the directory. When an
+// earlier serve build left the directory behind (e.g. mid-session after one
+// successful incremental build), a plain directory-exists check would wrongly
+// conclude nothing is missing and the hint would stay silent on a build that
+// is failing for exactly this reason.
+func TestLegacyClientBuildHintMacOSKeyForm_DirExistsFileMissing(t *testing.T) {
+	dir := deploy1114(t)
+	if err := os.MkdirAll(filepath.Join(dir, "web", "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hint := legacyClientBuildHint(dir, real1115MacOSMissingClientDirsByKey, "")
+	if hint == "" {
+		t.Fatal("must still be explained: the directory exists but the file mxbuild wants does not")
+	}
+	if !strings.Contains(hint, "web/pages/ files") {
+		t.Errorf("hint must name the missing files, not just the directory:\n%s", hint)
 	}
 }
 
