@@ -7,6 +7,13 @@
 #
 # This promotes loose coupling between modules and better encapsulation.
 #
+# Exempt: the System workflow entities (System.Workflow*). Mendix requires them
+# on a page — a task page takes a System.WorkflowUserTask parameter
+# (CE7410/CE7412), and `complete task` / `open user task` / `open workflow` only
+# work inside a System.WorkflowUserTask or System.Workflow data container
+# (CE1843) — so there is no view entity or microflow to use instead
+# (ako/mxcli#2034).
+#
 # Widget properties:
 #   .id                       - Widget ID
 #   .name                     - Widget name
@@ -30,6 +37,10 @@ def get_module_from_qualified_name(qualified_name):
         return ""
     return qualified_name.split(".")[0]
 
+def is_platform_required(entity_ref):
+    """The System workflow entities a task page or task inbox must use."""
+    return entity_ref.startswith("System.Workflow")
+
 def check():
     """
     Check that widgets don't reference entities from other modules.
@@ -43,6 +54,8 @@ def check():
     for widget in widgets():
         # Skip widgets without entity references
         if not widget.entity_ref:
+            continue
+        if is_platform_required(widget.entity_ref):
             continue
 
         # Get the module of the referenced entity

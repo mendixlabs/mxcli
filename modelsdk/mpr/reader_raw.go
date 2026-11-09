@@ -173,18 +173,18 @@ func rawUnitBSONType(objectType string) string {
 	}
 }
 
-// PERF NOTE (from the misc branch's catalog work — issue #651): this resolves
-// by re-reading and re-bson.Unmarshalling every unit of the type on EVERY call.
-// `refresh catalog source` calls it once per document (thousands of times), so
-// it is O(N²) — it took ~6 hours on a large app. sdk/mpr fixed this by building
-// a one-time index keyed by "$Type\x00QualifiedName" → unit, decoding only the
-// `Name` field (a small struct, not map[string]any). This engine inherits the
-// same O(N²); it should adopt the same name index (the contentCache here helps
-// the constant factor but not the algorithm).
-//
 // GetRawUnitByName returns the raw BSON contents for a unit by qualified
 // name. Supported object types match sdk/mpr.Reader.GetRawUnitByName.
 // Entity and association names dispatch to the domain-model walker.
+//
+// A lookup used to read every unit of the type on every call (issue #651). A
+// flow build resolves each `call microflow` target through here, so one large
+// flow in a large project read every microflow once per callee — past the
+// statement limit (ako/mxcli#2043). The scan now records where each name is
+// (nameIndex), and a later lookup reads that one unit. The entry is only a
+// hint: the unit is read and its name, type and module checked again, so a
+// unit renamed, moved or removed behind the reader's back is not returned;
+// a miss, or a stale hint, scans as before.
 func (r *Reader) GetRawUnitByName(objectType, qualifiedName string) (*types.RawUnitInfo, error) {
 	switch strings.ToLower(objectType) {
 	case "entity":
@@ -198,16 +198,26 @@ func (r *Reader) GetRawUnitByName(objectType, qualifiedName string) (*types.RawU
 		return nil, fmt.Errorf("unsupported object type: %s", objectType)
 	}
 
-	units, err := r.listUnitsByType(typePrefix)
-	if err != nil {
-		return nil, err
-	}
-
 	moduleMap, containerParent, err := r.buildModuleResolution()
 	if err != nil {
 		return nil, err
 	}
 
+	if u, ok := r.indexedUnit(typePrefix, qualifiedName); ok {
+		if info := r.unitNamed(u, qualifiedName, moduleMap, containerParent); info != nil {
+			return info, nil
+		}
+	}
+
+	units, err := r.listUnitsByType(typePrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	// The whole type is read, so every name is recorded, and the match is
+	// returned after: the next lookup of any of them reads one unit.
+	index := make(map[string]rawUnit, len(units))
+	var found *types.RawUnitInfo
 	for _, u := range units {
 		contents, err := r.resolveContents(u.ID, u.Contents)
 		if err != nil {
@@ -226,17 +236,89 @@ func (r *Reader) GetRawUnitByName(objectType, qualifiedName string) (*types.RawU
 		if moduleName != "" {
 			fullName = moduleName + "." + name
 		}
-		if fullName == qualifiedName {
-			return &types.RawUnitInfo{
+		index[fullName] = rawUnit{ID: u.ID, ContainerID: u.ContainerID, Type: u.Type}
+		if fullName == qualifiedName && found == nil {
+			found = &types.RawUnitInfo{
 				ID:            u.ID,
 				QualifiedName: fullName,
 				Type:          u.Type,
 				ModuleName:    moduleName,
 				Contents:      contents,
-			}, nil
+			}
 		}
 	}
+	r.storeNameIndex(typePrefix, index)
+	if found != nil {
+		return found, nil
+	}
 	return nil, fmt.Errorf("%s not found: %s", objectType, qualifiedName)
+}
+
+// indexedUnit is the unit the name index last recorded under qualifiedName
+// for the type, if any. A hint only — see unitNamed.
+func (r *Reader) indexedUnit(typePrefix, qualifiedName string) (rawUnit, bool) {
+	r.nameIndexMu.Lock()
+	defer r.nameIndexMu.Unlock()
+	u, ok := r.nameIndex[typePrefix][qualifiedName]
+	return u, ok
+}
+
+func (r *Reader) storeNameIndex(typePrefix string, index map[string]rawUnit) {
+	r.nameIndexMu.Lock()
+	defer r.nameIndexMu.Unlock()
+	if r.nameIndex == nil {
+		r.nameIndex = map[string]map[string]rawUnit{}
+	}
+	r.nameIndex[typePrefix] = index
+}
+
+// clearNameIndex drops every recorded name; InvalidateCache calls it with
+// every write.
+func (r *Reader) clearNameIndex() {
+	r.nameIndexMu.Lock()
+	r.nameIndex = nil
+	r.nameIndexMu.Unlock()
+}
+
+// unitNamed reads u and returns it when it is still qualifiedName, of the type
+// it was indexed as and in the module that name says; nil when anything has
+// changed since the index was made, or it cannot be read.
+func (r *Reader) unitNamed(u rawUnit, qualifiedName string, moduleMap, containerParent map[string]string) *types.RawUnitInfo {
+	var contents []byte
+	if p, ok := r.packagedUnit(u.ID); ok {
+		contents = p.Contents
+	} else if r.version == MPRVersionV2 {
+		c, err := r.readMprContents(u.ID)
+		if err != nil {
+			return nil
+		}
+		contents = c
+	} else {
+		return nil // v1 keeps contents in the Unit table; the scan reads them
+	}
+	raw := bson.Raw(contents)
+	if raw.Validate() != nil {
+		return nil
+	}
+	if t, _ := raw.Lookup("$Type").StringValueOK(); t != "" && t != u.Type {
+		return nil
+	}
+	name, _ := raw.Lookup("Name").StringValueOK()
+	moduleName := ResolveModuleName(u.ContainerID, moduleMap, containerParent)
+	fullName := name
+	if moduleName != "" {
+		fullName = moduleName + "." + name
+	}
+	if fullName != qualifiedName {
+		return nil
+	}
+	return &types.RawUnitInfo{
+		ID:            u.ID,
+		QualifiedName: fullName,
+		Type:          u.Type,
+		ModuleName:    moduleName,
+		Contents:      contents,
+	}
 }
 
 // rawUnitName is a unit's top-level Name ("" when it has none), read without

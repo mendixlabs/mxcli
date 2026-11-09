@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"time"
@@ -309,8 +310,11 @@ type Executor struct {
 	registry         *Registry                          // statement dispatch registry
 	catalogMu        sync.RWMutex                       // protects catalog field from background goroutine writes
 	untimedMu        sync.Mutex                         // protects untimed
-	untimed          *untimedWork                       // the running statement's untimed-work tracker (see untimed_work.go)
-	catalogGen       uint64                             // monotonic generation counter for catalog swaps
+	// running counts statement goroutines still running, including one the
+	// wall-clock guard gave up on: Close waits for them (ako/mxcli#2043).
+	running    sync.WaitGroup
+	untimed    *untimedWork // the running statement's untimed-work tracker (see untimed_work.go)
+	catalogGen uint64       // monotonic generation counter for catalog swaps
 
 	// Files changed beside the model (ako/mxcli#1618): a program run's, for
 	// its summary line, and whether the caller wants them reported at all —
@@ -469,7 +473,7 @@ func (e *Executor) Execute(stmt ast.Statement) error {
 	if executeTimeout <= 0 {
 		// No wall-clock guard for exempt statements (e.g. REFRESH CATALOG on a
 		// large project). The output-line guard still bounds runaway output.
-		err = e.executeInner(baseCtx, stmt)
+		err = e.executeRecovered(baseCtx, stmt)
 	} else {
 		ctx, cancel := context.WithCancel(baseCtx)
 		defer cancel()
@@ -477,8 +481,14 @@ func (e *Executor) Execute(stmt ast.Statement) error {
 		type result struct{ err error }
 		ch := make(chan result, 1)
 		begun := time.Now()
+		// The goroutine outlives a timeout: handlers are not context-aware, so
+		// the statement runs on after Execute has returned. Close waits for it,
+		// and a panic in it is recovered — unrecovered, a panic in any goroutine
+		// ends the process, and exec's rollback with it (ako/mxcli#2043).
+		e.running.Add(1)
 		go func() {
-			ch <- result{e.executeInner(ctx, stmt)}
+			defer e.running.Done()
+			ch <- result{e.executeRecovered(ctx, stmt)}
 		}()
 
 		timer := time.NewTimer(executeTimeout)
@@ -514,6 +524,46 @@ func (e *Executor) Execute(stmt ast.Statement) error {
 		e.logger.Command(stmtTypeName(stmt), stmtSummary(stmt), time.Since(start), err)
 	}
 	return err
+}
+
+// executeRecovered is executeInner with a panic turned into the statement's
+// error. A handler defect must fail its statement, not the process: `exec`
+// rolls the script back on a statement's error, and a panic used to skip that
+// and leave every earlier statement written (ako/mxcli#2043).
+func (e *Executor) executeRecovered(ctx context.Context, stmt ast.Statement) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = statementPanicError(r, debug.Stack())
+		}
+	}()
+	return e.executeInner(ctx, stmt)
+}
+
+// statementPanicError is the error for a statement whose handler panicked. The
+// stack goes with it: it is the defect report.
+func statementPanicError(r any, stack []byte) error {
+	return fmt.Errorf("internal error while running the statement: %v\n"+
+		"This is a defect in mxcli; please report it with the stack below.\n%s", r, stack)
+}
+
+// abandonedStatementWait bounds how long Close waits for a statement the
+// wall-clock guard gave up on. A variable so a test need not wait it out.
+var abandonedStatementWait = 2 * time.Minute
+
+// WaitForAbandonedStatements waits up to limit for the statements Execute
+// returned from on a timeout to stop, and reports whether they did.
+func (e *Executor) WaitForAbandonedStatements(limit time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		e.running.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(limit):
+		return false
+	}
 }
 
 // executeTimeoutError is the error for a statement the wall-clock guard
@@ -770,8 +820,16 @@ func (e *Executor) CacheUnitReads() (release func()) {
 // Close closes the connection to the project and all SQL connections.
 func (e *Executor) Close() error {
 	var closeErr error
+	// A statement the wall-clock guard gave up on may still be reading or
+	// writing the project. Disconnecting under it made it read a nil reader and
+	// panic, and a caller's rollback could run alongside it (ako/mxcli#2043).
+	if !e.WaitForAbandonedStatements(abandonedStatementWait) {
+		closeErr = fmt.Errorf("a statement that timed out was still running after %v; closing the project under it", abandonedStatementWait)
+	}
 	if e.backend != nil && e.backend.IsConnected() {
-		closeErr = e.backend.Disconnect()
+		if err := e.backend.Disconnect(); err != nil && closeErr == nil {
+			closeErr = err
+		}
 		e.backend = nil
 	}
 	if e.sqlMgr != nil {

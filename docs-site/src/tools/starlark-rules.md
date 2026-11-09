@@ -19,7 +19,7 @@ In addition to the built-in Go rules, mxcli bundles 29 Starlark-based lint rules
 
 | Rule | Description |
 |------|-------------|
-| **ARCH001** | Cross-module data -- Detects tight coupling between modules via direct data access |
+| **ARCH001** | Cross-module data -- Detects tight coupling between modules via direct data access. The System workflow entities (`System.Workflow*`) are exempt: a task page and a task inbox must use them |
 | **ARCH002** | Microflow-based writes -- Ensures data modifications go through microflows |
 | **ARCH003** | Entity business keys -- Checks that entities have meaningful business key attributes |
 
