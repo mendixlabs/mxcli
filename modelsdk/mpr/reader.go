@@ -58,6 +58,11 @@ type Reader struct {
 	// calls. nil means caching is off. contentMu guards it and cacheScopes.
 	contentMu    sync.Mutex
 	contentCache map[string][]byte
+	// nameIndex is where GetRawUnitByName last found each qualified name, by
+	// type: a hint it verifies before use, cleared by InvalidateCache
+	// (ako/mxcli#2043). nameIndexMu guards it.
+	nameIndexMu sync.Mutex
+	nameIndex   map[string]map[string]rawUnit
 	// cacheScopes counts the open CacheUnitReads scopes; the cache is dropped
 	// when the last one closes. -1 means EnableContentCache turned it on for
 	// the reader's lifetime, which no scope ends.
