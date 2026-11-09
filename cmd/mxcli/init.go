@@ -36,6 +36,8 @@ const mendixGitignore = `# Mendix project
 /deployment/
 /javasource/*/proxies/
 /javasource/system/
+# Generated while 'mxcli run --test-endpoint' hosts the test endpoint (ako/mxcli#2033).
+/javasource/mxtest/
 /modeler-merge-marker
 /nativemobile/builds/
 /packages/
@@ -481,8 +483,9 @@ Container Runtime:
 			// be in there regardless, because it holds machine-local constant values
 			// (which may be secrets), the run/test handshake and its token, and
 			// runtime logs. Only the create-if-missing branch above covered it.
-			if _, err := ensureStoreIgnored(filepath.Join(absDir, mprFile)); err != nil {
-				fmt.Fprintf(os.Stderr, "  Warning: could not ensure .mxcli/ is git-ignored: %v\n", err)
+			// The same goes for the test endpoint's generated Java source.
+			if err := ensureTestEndpointIgnored(filepath.Join(absDir, mprFile)); err != nil {
+				fmt.Fprintf(os.Stderr, "  Warning: could not ensure .mxcli/ and javasource/mxtest/ are git-ignored: %v\n", err)
 			}
 		}
 
