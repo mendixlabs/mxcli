@@ -130,7 +130,7 @@ Error: project check failed: exit status 1
 `mxcli docker check` is faster than a full build (`mxcli docker build`) because it only validates the project structure without compiling or packaging. This makes it useful for:
 
 - **Quick validation** after making MDL changes
-- **Pre-build gate** -- `mxcli docker build` runs `mx check` automatically before building (use `--skip-check` to bypass). That check runs on the build's widget-normalised copy, as `docker check --update-widgets` does, so it does not report stale widget definitions; `docker check` does
+- **Pre-build gate** -- `mxcli docker build` runs the same check automatically before building, on the project as stored (use `--skip-check` to bypass; `--update-widgets` checks and builds a widget-normalised copy instead)
 - **CI pipelines** -- fail fast on invalid projects before spending time on a full build
 - **Iterative development** -- check after each MDL script execution to catch errors early
 

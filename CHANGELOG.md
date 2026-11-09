@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **`docker build`, `docker run` and `docker reload` check and build the project as stored** (ako/mxcli#1794) — they ran `mx update-widgets` on their temporary copy first, so a project whose stored widget definitions are stale built, while `docker check`, `run --local` and Studio Pro all reported the CE0463s: the deployment was not built from what is committed. A stale widget now fails the build, each CE0463 labelled as one `mxcli fix widgets` clears or one that persists, as `docker check` labels them. `--update-widgets` builds a widget-normalised copy as before, leaving the project as it is; `--no-update-widgets` skips the labelling re-check.
 - **A secret `run` flag value starting with `@` is refused unless it is `@env:`, `@file:` or `@@`** — `--db-password`, `--db-admin-password`, `--screenshot-password`, `--hub-secret` and `--debug-pass` follow the `--constant` rule; write `@@…` for a password that really starts with `@`.
 - **A `--constant` value starting with `@` is refused unless it is `@env:`, `@file:` or `@@`** (mendixlabs/mxcli#1765) — it used to be applied literally; now a mistyped `@evn:TOKEN` is not quietly used as the constant's value. Write `@@…` for a value that really starts with `@`.
 
