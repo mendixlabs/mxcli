@@ -867,6 +867,29 @@ func widgetValueMap(w *ast.WidgetV3, def *WidgetDefinition) (values map[string]s
 			values[key] = val
 		}
 	}
+	// A widgets slot filled by a child block (`emptyplaceholder { … }`) is set as
+	// surely as a `key: value` property, but has no property to read. Counting
+	// it lets MDL-WIDGET10 see a slot the configuration hides: a Data grid 2
+	// placeholder under showEmptyPlaceholder "none" built and then failed mx
+	// check with CE0463 (ako/mxcli#1862).
+	if slots, _ := selectedChildSlots(def, w); len(slots) > 0 {
+		for _, c := range w.Children {
+			if c == nil || len(c.Children) == 0 {
+				continue
+			}
+			for _, cs := range slots {
+				if strings.EqualFold(cs.MDLContainer, defaultSlotContainer) {
+					continue // the catch-all template is not a choice the script made
+				}
+				if strings.EqualFold(cs.MDLContainer, c.Type) || strings.EqualFold(cs.PropertyKey, c.Name) ||
+					(strings.EqualFold(c.Type, "container") && strings.EqualFold(cs.MDLContainer, c.Name)) {
+					key := strings.ToLower(cs.PropertyKey)
+					values[key] = slotFilledValue
+					explicit[key] = true
+				}
+			}
+		}
+	}
 	// Direct MDL properties named after a widget key (not covered by a mapping).
 	for k, raw := range w.Properties {
 		lk := strings.ToLower(k)
@@ -880,6 +903,10 @@ func widgetValueMap(w *ast.WidgetV3, def *WidgetDefinition) (values map[string]s
 	}
 	return values, explicit
 }
+
+// slotFilledValue stands for a widgets slot holding widgets in the value map;
+// a slot's default is empty, so a hidden filled slot is reported as an error.
+const slotFilledValue = "(widgets)"
 
 // lookupWidgetProp reads a widget property from the MDL by name (case-insensitive)
 // as a string, reporting whether it was present.
