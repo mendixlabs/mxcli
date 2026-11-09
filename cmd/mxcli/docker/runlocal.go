@@ -631,7 +631,12 @@ func projectSourceMTime(projectPath string) time.Time {
 // as projectSourceMTime), so it is reliable on container filesystems where
 // inotify is not — no watcher fd involved.
 func themeSourceMTime(projectPath string) time.Time {
+	return themeSourceMTimeExcept(projectPath, nil)
+}
+
+func themeSourceMTimeExcept(projectPath string, scaffold buildScaffold) time.Time {
 	dir := filepath.Dir(projectPath)
+	themesource := filepath.Join(dir, "themesource")
 	var newest time.Time
 	for _, sub := range []string{"theme", "themesource"} {
 		root := filepath.Join(dir, sub)
@@ -641,9 +646,19 @@ func themeSourceMTime(projectPath string) time.Time {
 			}
 			switch strings.ToLower(filepath.Ext(path)) {
 			case ".scss", ".css", ".js", ".json":
-				if info, err := d.Info(); err == nil && info.ModTime().After(newest) {
-					newest = info.ModTime()
+				info, err := d.Info()
+				if err != nil || !info.ModTime().After(newest) {
+					return nil
 				}
+				if len(scaffold) > 0 {
+					if rel, rerr := filepath.Rel(themesource, path); rerr == nil {
+						folder, _, _ := strings.Cut(filepath.ToSlash(rel), "/")
+						if builtAt, ok := scaffold[folder]; ok && !info.ModTime().After(builtAt) {
+							return nil
+						}
+					}
+				}
+				newest = info.ModTime()
 			}
 			return nil
 		})
@@ -655,11 +670,57 @@ func themeSourceMTime(projectPath string) time.Time {
 // source (projectSourceMTime) and the theme source (themeSourceMTime). Either a
 // model edit or a theme edit re-triggers the build.
 func sourceMTime(projectPath string) time.Time {
+	return sourceMTimeExcept(projectPath, nil)
+}
+
+// sourceMTimeExcept is sourceMTime without the theme scaffold a build wrote
+// (see buildScaffold): the watch loop's change signal.
+func sourceMTimeExcept(projectPath string, scaffold buildScaffold) time.Time {
 	m := projectSourceMTime(projectPath)
-	if t := themeSourceMTime(projectPath); t.After(m) {
+	if t := themeSourceMTimeExcept(projectPath, scaffold); t.After(m) {
 		return t
 	}
 	return m
+}
+
+// buildScaffold is the theme source a build wrote itself, by themesource/
+// module folder: files in that folder no newer than the time are build output.
+//
+// mxbuild creates themesource/<module>/ (settings.json, design-properties.json,
+// main.js, …) for a module that has none. Those are .json/.js files under the
+// watched theme source, newer than the boot's baseline, so the watcher took
+// them for an edit: `run --test-endpoint` adds the MxTest module, the boot
+// build scaffolds themesource/mxtest/, and build #2 followed with nothing
+// edited — ~30 s of 404s on dist/pages and a forced client reload
+// (ako/mxcli#2033). Only a folder the build CREATED is counted, and only up to
+// the build's end, so an edit to an existing theme file during the build, or a
+// later edit to the new folder, still rebuilds.
+type buildScaffold map[string]time.Time
+
+// themeModuleFolders lists the module folders under themesource/.
+func themeModuleFolders(projectPath string) map[string]bool {
+	out := map[string]bool{}
+	entries, err := os.ReadDir(filepath.Join(filepath.Dir(projectPath), "themesource"))
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			out[e.Name()] = true
+		}
+	}
+	return out
+}
+
+// record adds the themesource/ module folders that exist now but were not in
+// before — the ones the build that just finished created — with builtAt as the
+// time up to which their files are its output.
+func (s buildScaffold) record(projectPath string, before map[string]bool, builtAt time.Time) {
+	for name := range themeModuleFolders(projectPath) {
+		if !before[name] {
+			s[name] = builtAt
+		}
+	}
 }
 
 // RunLocal boots the warm local dev loop: resolve tooling, start mxbuild --serve
@@ -780,10 +841,13 @@ func RunLocal(opts LocalRunOptions) error {
 	bootSource := sourceMTime(opts.ProjectPath)
 	opts.State.BuildStarted(1, bootSource)
 	fmt.Fprintln(w, "Building (first build is cold, ~10-15s)...")
+	scaffold := buildScaffold{}
+	themeBefore := themeModuleFolders(opts.ProjectPath)
 	build, err := serve.Build(BuildRequest{Target: TargetDeploy, ProjectFilePath: opts.ProjectPath})
 	if err != nil {
 		return fmt.Errorf("initial build: %w", err)
 	}
+	scaffold.record(opts.ProjectPath, themeBefore, time.Now())
 	if !build.OK() {
 		return fmt.Errorf("initial build failed: %s\n%s", build.Message, buildFailureDetail(build))
 	}
@@ -1058,7 +1122,7 @@ func RunLocal(opts LocalRunOptions) error {
 	// 7. Stay up until interrupted. With --watch, rebuild + hot-apply on every
 	// project change; otherwise just keep the runtime serving.
 	if opts.Watch {
-		return watchAndApply(opts, serve, rt, bundler, mxbuildPath, bootSource)
+		return watchAndApply(opts, serve, rt, bundler, mxbuildPath, bootSource, scaffold)
 	}
 	fmt.Fprintln(w, "(run with --watch to rebuild and hot-apply on changes; Ctrl-C to stop)")
 	if waitForInterruptOrExit(rt.Exited()) {
@@ -1373,8 +1437,8 @@ const sourceSettleWindow = 2
 // for, and rebuilding a project mid-write is worse than rebuilding it late. It
 // returns as soon as the source has been quiet for sourceSettleWindow polls, so
 // an ordinary single-file save costs one extra poll.
-func settleSource(projectPath string, seen time.Time, poll time.Duration, sigCh <-chan os.Signal) time.Time {
-	return settleSourceWith(projectPath, seen, sigCh, func() <-chan time.Time { return time.After(poll) })
+func settleSource(source func() time.Time, seen time.Time, poll time.Duration, sigCh <-chan os.Signal) time.Time {
+	return settleSourceWith(source, seen, sigCh, func() <-chan time.Time { return time.After(poll) })
 }
 
 // settleSourceWith is settleSource with the poll timer injected, so a test can
@@ -1386,7 +1450,7 @@ func settleSource(projectPath string, seen time.Time, poll time.Duration, sigCh 
 // runner with no defect present, which is what this seam exists to stop.
 // Each call must return a freshly-armed channel: the window is "quiet for N
 // consecutive polls", so reusing one channel would collapse the wait.
-func settleSourceWith(projectPath string, seen time.Time, sigCh <-chan os.Signal, tick func() <-chan time.Time) time.Time {
+func settleSourceWith(source func() time.Time, seen time.Time, sigCh <-chan os.Signal, tick func() <-chan time.Time) time.Time {
 	quiet := 0
 	for {
 		select {
@@ -1394,7 +1458,7 @@ func settleSourceWith(projectPath string, seen time.Time, sigCh <-chan os.Signal
 			return time.Time{}
 		case <-tick():
 		}
-		now := sourceMTime(projectPath)
+		now := source()
 		if now.After(seen) {
 			seen = now
 			quiet = 0
@@ -1412,7 +1476,10 @@ func settleSourceWith(projectPath string, seen time.Time, sigCh <-chan os.Signal
 //
 // bootSource is the source mtime the boot build was made from; the loop starts
 // from it so a change made during the boot is not lost (see RunLocal).
-func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, bundler *bundlerSupervisor, mxbuildPath string, bootSource time.Time) error {
+//
+// scaffold is the theme source builds wrote themselves, which is not a change
+// (see buildScaffold); each rebuild adds to it.
+func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, bundler *bundlerSupervisor, mxbuildPath string, bootSource time.Time, scaffold buildScaffold) error {
 	w := opts.Stdout
 	// Every recovery re-bundle goes through the supervisor under --watch, so a
 	// one-shot never runs alongside the incremental bundler (#971).
@@ -1447,7 +1514,8 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 			// re-arms this channel, so only an unasked-for exit lands here.
 			return runtimeStoppedError(rt)
 		case <-ticker.C:
-			now := sourceMTime(opts.ProjectPath)
+			source := func() time.Time { return sourceMTimeExcept(opts.ProjectPath, scaffold) }
+			now := source()
 			if !now.After(last) {
 				continue
 			}
@@ -1462,7 +1530,7 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 			// the stale build is what you are left with, with no way out the tool
 			// offers. Settling first means the watcher can only ever observe a
 			// model that has stopped changing.
-			now = settleSource(opts.ProjectPath, now, opts.PollInterval, sigCh)
+			now = settleSource(source, now, opts.PollInterval, sigCh)
 			if now.IsZero() {
 				// Interrupted while settling.
 				fmt.Fprintln(w, "\nShutting down...")
@@ -1506,9 +1574,12 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 			// The build goes through serveRecovery, which restarts mxbuild --serve
 			// when a build leaves state only a fresh process clears — e.g. an
 			// "applied" reload whose dist/ lost every page (mendixlabs/mxcli#1580).
+			themeBefore := themeModuleFolders(opts.ProjectPath)
 			build, freshBundle, err := bundler.BuildReleasingWebDir(func() (*BuildResult, error) {
 				return builds.Build(BuildRequest{Target: TargetDeploy, ProjectFilePath: opts.ProjectPath})
 			})
+			// A module created since the last build gets its theme scaffold now.
+			scaffold.record(opts.ProjectPath, themeBefore, time.Now())
 			if err != nil {
 				fmt.Fprintf(opts.Stderr, "  build error: %v\n", err)
 				fail("build", err.Error(), nil)
