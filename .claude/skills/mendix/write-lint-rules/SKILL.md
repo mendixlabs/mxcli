@@ -498,7 +498,7 @@ def count_not(node):
 | `module_name` | string | `"Sales"` |
 | `entity_ref` | string | Entity qualified name, for a create object, a database retrieve, and a delete — the entity of the deleted variable when the flow types it (a parameter, a create or retrieve output, a loop iterator); empty when it cannot |
 | `service_ref` | string | Called service document (REST / web service / OData client); empty when the activity calls none |
-| `action_ref` | string | Operation or action within that service; for a microflow, nanoflow, Java action or JavaScript action call, the called document, e.g. `"Sales.SUB_Process"` (`service_ref` then empty). Empty when the activity calls nothing |
+| `action_ref` | string | Operation or action within that service; for a microflow, nanoflow, Java action or JavaScript action call, the called document, e.g. `"Sales.SUB_Process"` (`service_ref` then empty). For an import or export action, the mapping; for a REST call with mappings, the response mapping, else the request one. Empty when the activity calls nothing |
 | `queue_ref` | string | Microflow or Java action call run in a task queue: the queue, e.g. `"Sales.OrderQueue"`. The call runs asynchronously, outside the loop and transaction it appears in. Empty for a call that runs in place |
 | `use_request_timeout` | bool | Call REST service or Call web service: whether "Use a timeout" is enabled. False for other action types |
 | `timeout_expression` | string | Call REST service or Call web service: the timeout in seconds, stored as an expression, e.g. `"300"` |
