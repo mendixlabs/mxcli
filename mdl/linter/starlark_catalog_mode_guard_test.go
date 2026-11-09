@@ -62,6 +62,7 @@ var builtinModes = map[string]builtinProbe{
 	"attributes_for":            {CatalogFast, "[a for n in ENTITY_NAMES for a in attributes_for(n)]"},
 	"modules":                   {CatalogFast, "modules()"},
 	"folders":                   {CatalogFast, "folders()"},
+	"annotations":               {CatalogFast, "annotations()"},
 	"associations":              {CatalogFast, "associations()"},
 	"entity_event_handlers":     {CatalogFast, "entity_event_handlers()"},
 	"navigation_menu_items":     {CatalogFast, "navigation_menu_items()"},

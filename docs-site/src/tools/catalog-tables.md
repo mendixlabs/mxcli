@@ -92,6 +92,23 @@ JOIN CATALOG.MODULES m ON m.Name = f.ModuleName
 WHERE m.Source = '' AND f.DocumentCount = 0 AND f.FolderCount = 0;
 ```
 
+### CATALOG.ANNOTATIONS
+
+One row per **domain model** annotation, in every module. A microflow's
+annotations are rows of `CATALOG.ACTIVITIES` (`ActivityType = 'Annotation'`).
+
+| Column | Description |
+|--------|-------------|
+| `Id` | Annotation UUID |
+| `DomainModelId` | The domain model holding it |
+| `ModuleName` | Module of that domain model |
+| `Caption` | The full text, newlines kept |
+| `X`, `Y`, `Width` | Place and width on the domain model canvas |
+
+```sql
+SELECT ModuleName, Caption FROM CATALOG.ANNOTATIONS WHERE Caption LIKE '%TODO%';
+```
+
 ### CATALOG.ASSOCIATIONS
 
 Information about entity associations, same-module and cross-module.
