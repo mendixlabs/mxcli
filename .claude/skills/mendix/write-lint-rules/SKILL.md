@@ -12,10 +12,10 @@ description: "Write custom Starlark lint rules in .claude/lint-rules/ that run b
 |---|---|
 | 25-67 | Rule File Structure |
 | 68-164 | Available Query Functions |
-| 165-549 | Object Properties |
-| 550-563 | Helper Functions |
-| 564-650 | Common Patterns |
-| 651-659 | Validation |
+| 165-550 | Object Properties |
+| 551-564 | Helper Functions |
+| 565-651 | Common Patterns |
+| 652-660 | Validation |
 
 <!-- /skill-index -->
 # Writing Custom Starlark Lint Rules
@@ -269,6 +269,7 @@ def check():
 | `qualified_name` | string | `"Sales.ApiTimeout.Slow"` — the name `refs_from()` and an expression's `getCaption(Sales.ApiTimeout.Slow)` use |
 | `caption` | string | Caption in the project's default language: `"400"` |
 | `ordinal` | int | Position in the enumeration, from 0 |
+| `id` | string | The value's UUID. A caption in another language is the `strings(language = "nl_NL")` row with `context == "Enumerations$EnumerationValue.Caption"` and `element_id == v.id` |
 
 ### constant
 | Property | Type | Example |
