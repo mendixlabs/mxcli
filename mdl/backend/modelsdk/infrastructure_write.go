@@ -26,6 +26,23 @@ func (b *Backend) UpdateQualifiedNameInAllUnits(oldName, newName string) (int, e
 	if err != nil {
 		return 0, fmt.Errorf("UpdateQualifiedNameInAllUnits: list units: %w", err)
 	}
+	// A path step — `[Src.Assoc/Src.Entity/Attr = 1]` in an access rule,
+	// `$O/Src.Assoc/Name` in an expression — names an entity or an association,
+	// and only those: an enumeration renamed must not rewrite an association
+	// that shares its name. By the time a move or rename sweeps, the element
+	// already carries newName, so that is what decides (ako/mxcli#1836).
+	paths := b.isDomainElementName(newName)
+	rewrite := func(s string) (any, bool) {
+		if v, ok := replaceQualifiedNameRef(s, oldName, newName); ok {
+			return v, true
+		}
+		if paths {
+			if v, n := types.RewritePathSteps(s, oldName, newName); n > 0 {
+				return v, true
+			}
+		}
+		return s, false
+	}
 	updated := 0
 	for _, id := range ids {
 		raw, err := b.reader.GetRawUnitBytes(id)
@@ -36,7 +53,7 @@ func (b *Backend) UpdateQualifiedNameInAllUnits(oldName, newName string) (int, e
 		if err := bson.Unmarshal(raw, &doc); err != nil {
 			continue
 		}
-		if replaced, ok := replaceQNInValue(doc, oldName, newName); ok {
+		if replaced, ok := replaceQNInValueWith(doc, rewrite); ok {
 			contents, err := bson.Marshal(replaced)
 			if err != nil {
 				return updated, fmt.Errorf("UpdateQualifiedNameInAllUnits: marshal %s: %w", id, err)
@@ -253,16 +270,59 @@ func replaceQNInValueCounted(v any, oldName, newName string, count *int) any {
 	return v
 }
 
-// replaceQNInValue recursively rewrites qualified-name references in a decoded
-// BSON value, returning the (possibly mutated) value and whether anything changed.
-func replaceQNInValue(v any, oldName, newName string) (any, bool) {
+// isDomainElementName reports whether qn names an entity, an association or a
+// cross-module association in the project.
+func (b *Backend) isDomainElementName(qn string) bool {
+	mod, name, ok := strings.Cut(qn, ".")
+	if !ok || name == "" || strings.Contains(name, ".") {
+		return false
+	}
+	modules, err := b.ListModules()
+	if err != nil {
+		return false
+	}
+	var modID model.ID
+	for _, m := range modules {
+		if m.Name == mod {
+			modID = m.ID
+		}
+	}
+	if modID == "" {
+		return false
+	}
+	dm, err := b.GetDomainModel(modID)
+	if err != nil || dm == nil {
+		return false
+	}
+	for _, e := range dm.Entities {
+		if e.Name == name {
+			return true
+		}
+	}
+	for _, a := range dm.Associations {
+		if a.Name == name {
+			return true
+		}
+	}
+	for _, a := range dm.CrossAssociations {
+		if a.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// replaceQNInValueWith recursively applies rewrite to every string in a decoded
+// BSON value, returning the (possibly mutated) value and whether anything
+// changed.
+func replaceQNInValueWith(v any, rewrite func(string) (any, bool)) (any, bool) {
 	switch val := v.(type) {
 	case string:
-		return replaceQualifiedNameRef(val, oldName, newName)
-	case bson.D: // also matches bson.D (alias)
+		return rewrite(val)
+	case bson.D:
 		changed := false
 		for i, elem := range val {
-			if nv, ok := replaceQNInValue(elem.Value, oldName, newName); ok {
+			if nv, ok := replaceQNInValueWith(elem.Value, rewrite); ok {
 				val[i].Value = nv
 				changed = true
 			}
@@ -271,7 +331,7 @@ func replaceQNInValue(v any, oldName, newName string) (any, bool) {
 	case bson.A:
 		changed := false
 		for i, elem := range val {
-			if nv, ok := replaceQNInValue(elem, oldName, newName); ok {
+			if nv, ok := replaceQNInValueWith(elem, rewrite); ok {
 				val[i] = nv
 				changed = true
 			}
@@ -280,7 +340,7 @@ func replaceQNInValue(v any, oldName, newName string) (any, bool) {
 	case []any:
 		changed := false
 		for i, elem := range val {
-			if nv, ok := replaceQNInValue(elem, oldName, newName); ok {
+			if nv, ok := replaceQNInValueWith(elem, rewrite); ok {
 				val[i] = nv
 				changed = true
 			}
