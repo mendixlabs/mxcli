@@ -1277,6 +1277,7 @@ func enumerationValuesToStarlark(values []EnumerationValue) *starlark.List {
 	out := make([]starlark.Value, 0, len(values))
 	for _, v := range values {
 		out = append(out, starlarkstruct.FromStringDict(starlark.String("enumeration_value"), starlark.StringDict{
+			"id":             starlark.String(v.ID),
 			"name":           starlark.String(v.Name),
 			"qualified_name": starlark.String(v.QualifiedName),
 			"caption":        starlark.String(v.Caption),
