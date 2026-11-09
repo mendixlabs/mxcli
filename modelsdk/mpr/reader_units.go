@@ -439,6 +439,7 @@ func (r *Reader) buildUnitCache() error {
 // Should be called after any write operation.
 func (r *Reader) InvalidateCache() {
 	r.unitCacheValid = false
+	r.clearNameIndex()
 	// Clear content cache entries but keep the map non-nil so caching stays active.
 	// If contentCache is nil (per-request mode), remain disabled.
 	r.contentMu.Lock()
