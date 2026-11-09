@@ -65,6 +65,10 @@ type pageBuilder struct {
 
 	// Entity context for resolving short attribute names inside DataViews
 	entityContext string // Qualified entity name (e.g., "Module.Entity")
+	// outerEntityContexts are the entities of the data containers enclosing the
+	// current one, outermost first: a snippet parameter a call omits is taken
+	// from any of them, not only the nearest (ako/mxcli#2055).
+	outerEntityContexts []string
 
 	// What this point of the walk knows about the object a SHOW_PAGE widget
 	// action would bind its argument to: whether it is knowable at all, whether

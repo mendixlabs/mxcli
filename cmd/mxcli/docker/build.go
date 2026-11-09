@@ -4,6 +4,7 @@ package docker
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -34,8 +35,15 @@ type BuildOptions struct {
 	// SkipCheck skips the 'mx check' pre-build validation.
 	SkipCheck bool
 
-	// SkipUpdateWidgets skips the 'mx update-widgets' step before checking.
+	// SkipUpdateWidgets skips the update-widgets re-check that labels the
+	// stored project's CE0463 errors (--no-update-widgets).
 	SkipUpdateWidgets bool
+
+	// UpdateWidgetsFirst runs 'mx update-widgets' on the temporary copy before
+	// the check and builds that widget-normalised copy (--update-widgets): the
+	// behaviour before ako/mxcli#1794. By default the project is checked and
+	// built as stored.
+	UpdateWidgetsFirst bool
 
 	// Stdout for output messages.
 	Stdout io.Writer
@@ -44,13 +52,14 @@ type BuildOptions struct {
 // buildSteps is what buildOnCopy needs once the tools are resolved. An empty
 // MxPath skips update-widgets and the check (--skip-check, or no mx found).
 type buildSteps struct {
-	ProjectPath       string // absolute
-	MxPath            string
-	MxBuildPath       string
-	JavaHome          string
-	OutputDir         string // absolute
-	SkipUpdateWidgets bool
-	DryRun            bool
+	ProjectPath        string // absolute
+	MxPath             string
+	MxBuildPath        string
+	JavaHome           string
+	OutputDir          string // absolute
+	SkipUpdateWidgets  bool
+	UpdateWidgetsFirst bool
+	DryRun             bool
 }
 
 // mxbuildCmd runs MxBuild. A package variable so tests can substitute a stub
@@ -98,24 +107,47 @@ func buildOnCopy(s buildSteps, w, stderr io.Writer) error {
 	fmt.Fprintln(w, "  they are given; the project on disk is not changed, only the output directory is written).")
 
 	if s.MxPath != "" {
-		if !s.SkipUpdateWidgets {
-			// Normalise pluggable widget definitions so neither the check nor
-			// MxBuild reports CE0463 for definitions that only need a resync.
-			fmt.Fprintln(w, "Normalising widget definitions on the temporary copy (the project keeps its own;")
-			fmt.Fprintln(w, "  `mxcli fix widgets` applies the normalisation to it)...")
+		// The project is checked — and built — as stored, as `docker check`
+		// checks it (#646): a build that normalised widget definitions on its
+		// copy succeeded on a project whose stored widgets `docker check`,
+		// `run --local` and Studio Pro all report as stale, so "it built" did
+		// not mean "what is committed builds" (ako/mxcli#1794).
+		// --update-widgets is the old behaviour.
+		normalised := false
+		if s.UpdateWidgetsFirst {
+			fmt.Fprintln(w, "Normalising widget definitions on the temporary copy (--update-widgets; the project")
+			fmt.Fprintln(w, "  keeps its own, `mxcli fix widgets` applies the normalisation to it)...")
 			if err := updateWidgetsCmd(s.MxPath, workMpr, out, errOut); err != nil {
 				out.Flush()
 				fmt.Fprintf(w, "Warning: update-widgets failed (continuing): %v\n", err)
+			} else {
+				normalised = true
 			}
 		}
 		fmt.Fprintln(w, "Checking project for errors...")
-		err := mxCheckCmd(s.MxPath, workMpr, nil, out, errOut)
+		var checkOut, checkErrOut bytes.Buffer
+		err := mxCheckCmd(s.MxPath, workMpr, nil, io.MultiWriter(out, &checkOut), io.MultiWriter(errOut, &checkErrOut))
 		out.Flush()
 		errOut.Flush()
 		if err != nil {
-			return fmt.Errorf("project has errors (fix them or use --skip-check to bypass): %w", err)
+			hint := "fix them, or use --skip-check to bypass"
+			if !normalised {
+				if stored := ce0463Lines(checkOut.String() + "\n" + checkErrOut.String()); len(stored) > 0 {
+					if !s.SkipUpdateWidgets {
+						recheckCE0463(w, out, s.MxPath, workMpr, s.ProjectPath, stored, checkOut.String())
+					}
+					hint = "`mxcli fix widgets` resyncs the stale widget definitions in the project; " +
+						"--update-widgets builds a widget-normalised copy instead, leaving the project as it is; " +
+						"--skip-check bypasses the check"
+				}
+			}
+			return fmt.Errorf("project has errors (%s): %w", hint, err)
 		}
 		fmt.Fprintln(w, "  Project check passed.")
+		if normalised {
+			fmt.Fprintln(w, "Note: this builds a widget-normalised copy (--update-widgets); the project as stored")
+			fmt.Fprintln(w, "  may still have stale widget definitions — `mxcli fix widgets` applies the normalisation to it.")
+		}
 	}
 	if s.DryRun {
 		return nil
@@ -214,13 +246,14 @@ func Build(opts BuildOptions) error {
 		}
 	}
 	if err := buildOnCopy(buildSteps{
-		ProjectPath:       projectPath,
-		MxPath:            mxPath,
-		MxBuildPath:       mxbuildPath,
-		JavaHome:          javaHome,
-		OutputDir:         outputDir,
-		SkipUpdateWidgets: opts.SkipUpdateWidgets,
-		DryRun:            opts.DryRun,
+		ProjectPath:        projectPath,
+		MxPath:             mxPath,
+		MxBuildPath:        mxbuildPath,
+		JavaHome:           javaHome,
+		OutputDir:          outputDir,
+		SkipUpdateWidgets:  opts.SkipUpdateWidgets,
+		UpdateWidgetsFirst: opts.UpdateWidgetsFirst,
+		DryRun:             opts.DryRun,
 	}, w, os.Stderr); err != nil {
 		return err
 	}
@@ -314,6 +347,10 @@ type RunOptions struct {
 
 	// SkipCheck skips the 'mx check' pre-build validation.
 	SkipCheck bool
+
+	// UpdateWidgetsFirst builds a widget-normalised copy (--update-widgets);
+	// see BuildOptions.UpdateWidgetsFirst.
+	UpdateWidgetsFirst bool
 
 	// Fresh removes volumes before starting.
 	Fresh bool
@@ -417,10 +454,11 @@ func Run(opts RunOptions) error {
 	// Step 5: Build
 	fmt.Fprintln(w, "")
 	buildOpts := BuildOptions{
-		ProjectPath: opts.ProjectPath,
-		MxBuildPath: opts.MxBuildPath,
-		SkipCheck:   opts.SkipCheck,
-		Stdout:      w,
+		ProjectPath:        opts.ProjectPath,
+		MxBuildPath:        opts.MxBuildPath,
+		SkipCheck:          opts.SkipCheck,
+		UpdateWidgetsFirst: opts.UpdateWidgetsFirst,
+		Stdout:             w,
 	}
 	if err := Build(buildOpts); err != nil {
 		return fmt.Errorf("docker build: %w", err)
