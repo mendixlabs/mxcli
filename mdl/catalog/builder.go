@@ -444,6 +444,7 @@ func (b *Builder) phases() []buildPhase {
 		{"modules", b.buildModules},
 		{"folders", b.buildFolders},
 		{"entities", b.buildEntities},
+		{"domain model annotations", b.buildDomainModelAnnotations},
 		{"entity event handlers", b.buildEntityEventHandlers},
 		{"associations", b.buildAssociations},
 		{"enumerations", b.buildEnumerations},

@@ -460,6 +460,50 @@ func (ctx *LintContext) Modules() iter.Seq[Module] {
 	}
 }
 
+// Annotation is one domain model annotation (ako/mxcli#1300). A microflow's
+// annotations are activities, read through activities_for().
+type Annotation struct {
+	ID         string
+	ModuleName string
+	Caption    string // the full text, newlines kept
+	X, Y       int
+	Width      int
+}
+
+// Annotations iterates the domain model annotations outside System and
+// Marketplace modules.
+func (ctx *LintContext) Annotations() iter.Seq[Annotation] {
+	return func(yield func(Annotation) bool) {
+		rows, err := ctx.db.Query(fmt.Sprintf(`
+			SELECT a.Id, COALESCE(a.ModuleName, ''), COALESCE(a.Caption, ''),
+			       COALESCE(a.X, 0), COALESCE(a.Y, 0), COALESCE(a.Width, 0)
+			FROM annotations a
+			LEFT JOIN modules m ON a.ModuleName = m.Name
+			WHERE %s
+			ORDER BY a.ModuleName, a.Y, a.X, a.Id
+		`, notPlatformModule("m")))
+		if err != nil {
+			ctx.recordQueryError("Annotations", err)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var a Annotation
+			if err := rows.Scan(&a.ID, &a.ModuleName, &a.Caption, &a.X, &a.Y, &a.Width); err != nil {
+				ctx.recordQueryError("Annotations (row scan)", err)
+				continue
+			}
+			if ctx.IsExcluded(a.ModuleName) {
+				continue
+			}
+			if !yield(a) {
+				return
+			}
+		}
+	}
+}
+
 // Folder is one folder of a module, empty folders included (ako/mxcli#1436).
 // A document's Folder field names only folders that hold a document, so an
 // empty folder appears nowhere else.

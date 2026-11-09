@@ -115,6 +115,28 @@ func (r *StarlarkRule) builtinModules(_ *starlark.Thread, _ *starlark.Builtin, a
 	return starlark.NewList(out), nil
 }
 
+func (r *StarlarkRule) builtinAnnotations(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if r.ctx == nil {
+		return starlark.NewList(nil), nil
+	}
+	var out []starlark.Value
+	for a := range r.ctx.Annotations() {
+		out = append(out, annotationToStarlark(a))
+	}
+	return starlark.NewList(out), nil
+}
+
+func annotationToStarlark(a Annotation) starlark.Value {
+	return starlarkstruct.FromStringDict(starlark.String("annotation"), starlark.StringDict{
+		"id":          starlark.String(a.ID),
+		"module_name": starlark.String(a.ModuleName),
+		"caption":     starlark.String(a.Caption),
+		"x":           starlark.MakeInt(a.X),
+		"y":           starlark.MakeInt(a.Y),
+		"width":       starlark.MakeInt(a.Width),
+	})
+}
+
 func (r *StarlarkRule) builtinFolders(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if r.ctx == nil {
 		return starlark.NewList(nil), nil

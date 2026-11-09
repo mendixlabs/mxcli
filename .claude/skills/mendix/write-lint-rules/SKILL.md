@@ -11,11 +11,11 @@ description: "Write custom Starlark lint rules in .claude/lint-rules/ that run b
 | lines | section |
 |---|---|
 | 25-67 | Rule File Structure |
-| 68-164 | Available Query Functions |
-| 165-550 | Object Properties |
-| 551-564 | Helper Functions |
-| 565-651 | Common Patterns |
-| 652-660 | Validation |
+| 68-165 | Available Query Functions |
+| 166-551 | Object Properties |
+| 552-565 | Helper Functions |
+| 566-652 | Common Patterns |
+| 653-661 | Validation |
 
 <!-- /skill-index -->
 # Writing Custom Starlark Lint Rules
@@ -101,6 +101,7 @@ Without this, a rule that reads a full-only table under a fast build gets
 | `xpath_expressions()` | list of xpath_expression | All XPath constraint expressions in the catalog (access rules, retrieve actions, widgets) (full catalog — auto-detected) |
 | `modules()` | list of module | The user's modules (not System, not Marketplace), with their domain model's documentation |
 | `folders()` | list of folder | Every folder of the user's modules, **empty folders included**, with its path, parent and the documents and folders directly in it. A document's `folder` only names folders that hold a document, so check a module's folder layout with this |
+| `annotations()` | list of annotation | Every **domain model** annotation in the user's modules, with its full caption (newlines kept) and its place on the canvas. A microflow's annotations are activities: read them with `activities_for()` (`activity_type == "Annotation"`) |
 | `associations()` | list of association | All non-system associations, same-module and cross-module, with the delete behaviour of both ends |
 | `entity_event_handlers()` | list of entity_event_handler | Every before/after event handler on a non-system entity: which moment, which event, which microflow |
 | `navigation_menu_items()` | list of navigation_menu_item | Every navigation menu item of every profile, at every depth. Navigation belongs to the project, so no module filter applies |
@@ -109,7 +110,7 @@ Without this, a rule that reads a full-only table under a fast build gets
 | `layouts()` | list of layout | All non-system layouts |
 | `published_rest_operations()` | list of published_rest_operation | Operations of published REST services, with the microflow behind each |
 
-The fields of `module`, `folder`, `association`, `entity_event_handler`,
+The fields of `module`, `folder`, `annotation`, `association`, `entity_event_handler`,
 `navigation_menu_item`, `jar_dependency`, `catalog_string`, `layout` and
 `published_rest_operation` are in [catalog-tables.md](catalog-tables.md).
 

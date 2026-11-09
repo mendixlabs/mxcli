@@ -1,6 +1,6 @@
 # Catalog-table builtins: object properties
 
-The structs returned by `modules()`, `folders()`, `associations()`, `entity_event_handlers()`,
+The structs returned by `modules()`, `folders()`, `annotations()`, `associations()`, `entity_event_handlers()`,
 `navigation_menu_items()`, `jar_dependencies()`, `strings()`, `layouts()`,
 `published_rest_operations()` and `widgets()`. The functions themselves are listed in
 [SKILL.md](SKILL.md) under "Available Query Functions". Every builtin leaves out
@@ -32,6 +32,21 @@ Returned by `folders()`. One per folder, empty folders included (ako/mxcli#1436)
 
 An empty folder has `document_count == 0 and folder_count == 0`. A folder
 with `document_count == 0` alone may still hold subfolders.
+
+### annotation
+Returned by `annotations()`. One per domain model annotation (ako/mxcli#1300).
+
+| Property | Type | Example |
+|----------|------|---------|
+| `id` | string | Annotation UUID |
+| `module_name` | string | `"Sales"` — the module whose domain model holds it |
+| `caption` | string | `"TODO split sales\nper region"` — the full text, newlines kept |
+| `x` | int | `60` — left edge on the domain model canvas |
+| `y` | int | `40` — top edge on the canvas |
+| `width` | int | `400` |
+
+A "no TODO notes" rule needs both this and the microflow annotations, which
+are activities: `activities_for(flow)` with `activity_type == "Annotation"`.
 
 ### association
 Returned by `associations()`.

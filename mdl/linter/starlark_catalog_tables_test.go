@@ -61,6 +61,11 @@ func catalogTablesFixture(t *testing.T) *catalog.Catalog {
 				IsIncluded, ProjectId, SnapshotId)
 			VALUES (?,?,?,?,?,?,?,?,?)`,
 			"j-"+mod, mod, "org.example", "lib", "org.example:lib", "1.2.3", 0, "p", "s")
+		// A domain model annotation (ako/mxcli#1300); the newline must survive.
+		exec(`INSERT INTO annotations_data (Id, DomainModelId, ModuleName, Caption, X, Y, Width,
+				ProjectId, SnapshotId)
+			VALUES (?,?,?,?,?,?,?,?,?)`,
+			"an-"+mod, "dm-"+mod, mod, "TODO split\nper region", 60, 40, 400, "p", "s")
 		// An empty folder: nothing else in the catalog names it (ako/mxcli#1436).
 		exec(`INSERT INTO folders_data (Id, Name, ModuleName, Path, ParentPath, Depth, DocumentCount,
 				FolderCount, ProjectId, SnapshotId)
@@ -176,6 +181,9 @@ func TestCatalogTableBuiltins(t *testing.T) {
 		{"published_rest_operations()", []string{
 			"deprecated=True|http_method=Get|microflow=Sales.PRS_GetOrder|module_name=Sales|path=/{id}|" +
 				"resource=orders|service=Sales.OrderApi|summary=Get one order",
+		}},
+		{"annotations()", []string{
+			"caption=TODO split\nper region|id=an-Sales|module_name=Sales|width=400|x=60|y=40",
 		}},
 		{"folders()", []string{
 			"depth=1|document_count=0|folder_count=0|id=fo-Sales|module_name=Sales|name=UI|parent_path=|path=UI",

@@ -7,6 +7,11 @@ package catalog
 //
 // History:
 //
+//	39 (domain model annotations): annotations_data + view, one row per
+//	    domain model annotation with its full caption and canvas position
+//	    (ako/mxcli#1300). Without the bump a cached catalog has the table but
+//	    no rows, and annotations() answers [] -- a "no TODO notes" rule passes.
+//
 //	38 (folders): folders_data + view, one row per folder with its path,
 //	    parent and direct document and subfolder counts, including empty
 //	    folders, which no document's Folder column can show
@@ -209,7 +214,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "38"
+const CatalogSchemaVersion = "39"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -305,6 +310,22 @@ func (c *Catalog) createTables() error {
 			SnapshotId TEXT
 		)`,
 		viewWithFullSnapshot("folders"),
+
+		// annotations: one row per domain model annotation. A microflow's
+		// annotations are activities (activities_data); a domain model's were
+		// in no table (ako/mxcli#1300). Caption is the full text, newlines kept.
+		`CREATE TABLE IF NOT EXISTS annotations_data (
+			Id TEXT PRIMARY KEY,
+			DomainModelId TEXT,
+			ModuleName TEXT,
+			Caption TEXT,
+			X INTEGER DEFAULT 0,
+			Y INTEGER DEFAULT 0,
+			Width INTEGER DEFAULT 0,
+			ProjectId TEXT,
+			SnapshotId TEXT
+		)`,
+		viewWithFullSnapshot("annotations"),
 
 		// entities
 		`CREATE TABLE IF NOT EXISTS entities_data (
@@ -1667,6 +1688,7 @@ func (c *Catalog) createTables() error {
 		// Indexes for common queries — target the underlying *_data tables.
 		`CREATE INDEX IF NOT EXISTS idx_modules_name ON modules_data(Name)`,
 		`CREATE INDEX IF NOT EXISTS idx_folders_module ON folders_data(ModuleName)`,
+		`CREATE INDEX IF NOT EXISTS idx_annotations_module ON annotations_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_entities_name ON entities_data(Name)`,
 		`CREATE INDEX IF NOT EXISTS idx_entities_module ON entities_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_microflows_name ON microflows_data(Name)`,
