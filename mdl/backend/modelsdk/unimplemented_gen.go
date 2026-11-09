@@ -92,6 +92,10 @@ func (unimplemented) CreateAgentEditorModel(_ *agenteditor.Model) error {
 	return errUnimplemented("CreateAgentEditorModel")
 }
 
+func (unimplemented) CreateAgentEditorPublishedMCPService(_ *agenteditor.PublishedMCPService) error {
+	return errUnimplemented("CreateAgentEditorPublishedMCPService")
+}
+
 func (unimplemented) CreateAssociation(_ model.ID, _ *domainmodel.Association) error {
 	return errUnimplemented("CreateAssociation")
 }
@@ -243,6 +247,10 @@ func (unimplemented) DeleteAgentEditorKnowledgeBase(_ string) error {
 
 func (unimplemented) DeleteAgentEditorModel(_ string) error {
 	return errUnimplemented("DeleteAgentEditorModel")
+}
+
+func (unimplemented) DeleteAgentEditorPublishedMCPService(_ string) error {
+	return errUnimplemented("DeleteAgentEditorPublishedMCPService")
 }
 
 func (unimplemented) DeleteAssociation(_ model.ID, _ model.ID) error {
@@ -616,6 +624,11 @@ func (unimplemented) ListAgentEditorKnowledgeBases() ([]*agenteditor.KnowledgeBa
 func (unimplemented) ListAgentEditorModels() ([]*agenteditor.Model, error) {
 	var r0 []*agenteditor.Model
 	return r0, errUnimplemented("ListAgentEditorModels")
+}
+
+func (unimplemented) ListAgentEditorPublishedMCPServices() ([]*agenteditor.PublishedMCPService, error) {
+	var r0 []*agenteditor.PublishedMCPService
+	return r0, errUnimplemented("ListAgentEditorPublishedMCPServices")
 }
 
 func (unimplemented) ListAllUnitIDs() ([]string, error) {
@@ -1135,6 +1148,10 @@ func (unimplemented) UpdateAgentEditorKnowledgeBase(_ *agenteditor.KnowledgeBase
 
 func (unimplemented) UpdateAgentEditorModel(_ *agenteditor.Model) error {
 	return errUnimplemented("UpdateAgentEditorModel")
+}
+
+func (unimplemented) UpdateAgentEditorPublishedMCPService(_ *agenteditor.PublishedMCPService) error {
+	return errUnimplemented("UpdateAgentEditorPublishedMCPService")
 }
 
 func (unimplemented) UpdateAllowedRoles(_ model.ID, _ []string) error {

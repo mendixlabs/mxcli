@@ -1183,6 +1183,10 @@ func (b *Builder) ExitDropStatement(ctx *parser.DropStatementContext) {
 		b.statements = append(b.statements, &ast.DropConsumedMCPServiceStmt{
 			Name: buildQualifiedName(names[0]),
 		})
+	} else if ctx.PUBLISHED() != nil && ctx.MCP() != nil && ctx.SERVICE() != nil {
+		b.statements = append(b.statements, &ast.DropPublishedMCPServiceStmt{
+			Name: buildQualifiedName(names[0]),
+		})
 	} else if ctx.KNOWLEDGE() != nil && ctx.BASE() != nil {
 		b.statements = append(b.statements, &ast.DropKnowledgeBaseStmt{
 			Name: buildQualifiedName(names[0]),
