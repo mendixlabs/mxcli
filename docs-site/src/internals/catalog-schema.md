@@ -312,6 +312,8 @@ rather than trusting a list here:
 | `event` | event handler runs a microflow: an entity event, or a business event a service subscribes to |
 | `settings` | a project setting (after-startup / before-shutdown / health check) names a microflow |
 | `sync` | offline navigation profile synchronizes an entity |
+| `mapping_call` | flow applies an import or export mapping: an import / export action, or a REST or web service call's request or response mapping |
+| `structure` | import or export mapping is built on a JSON structure |
 | `validate` | attribute validation rule uses a regular expression |
 | `widget` | page or snippet uses a pluggable / custom widget |
 

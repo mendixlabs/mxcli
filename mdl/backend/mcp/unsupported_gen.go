@@ -104,6 +104,11 @@ func (unsupportedBackend) CreateAgentEditorModel(_ *agenteditor.Model) (err0 err
 	return
 }
 
+func (unsupportedBackend) CreateAgentEditorPublishedMCPService(_ *agenteditor.PublishedMCPService) (err0 error) {
+	err0 = errUnsupported("CreateAgentEditorPublishedMCPService")
+	return
+}
+
 func (unsupportedBackend) CreateAssociation(_ model.ID, _ *domainmodel.Association) (err0 error) {
 	err0 = errUnsupported("CreateAssociation")
 	return
@@ -291,6 +296,11 @@ func (unsupportedBackend) DeleteAgentEditorKnowledgeBase(_ string) (err0 error) 
 
 func (unsupportedBackend) DeleteAgentEditorModel(_ string) (err0 error) {
 	err0 = errUnsupported("DeleteAgentEditorModel")
+	return
+}
+
+func (unsupportedBackend) DeleteAgentEditorPublishedMCPService(_ string) (err0 error) {
+	err0 = errUnsupported("DeleteAgentEditorPublishedMCPService")
 	return
 }
 
@@ -704,6 +714,11 @@ func (unsupportedBackend) ListAgentEditorKnowledgeBases() (r0 []*agenteditor.Kno
 
 func (unsupportedBackend) ListAgentEditorModels() (r0 []*agenteditor.Model, err1 error) {
 	err1 = errUnsupported("ListAgentEditorModels")
+	return
+}
+
+func (unsupportedBackend) ListAgentEditorPublishedMCPServices() (r0 []*agenteditor.PublishedMCPService, err1 error) {
+	err1 = errUnsupported("ListAgentEditorPublishedMCPServices")
 	return
 }
 
@@ -1253,6 +1268,11 @@ func (unsupportedBackend) UpdateAgentEditorKnowledgeBase(_ *agenteditor.Knowledg
 
 func (unsupportedBackend) UpdateAgentEditorModel(_ *agenteditor.Model) (err0 error) {
 	err0 = errUnsupported("UpdateAgentEditorModel")
+	return
+}
+
+func (unsupportedBackend) UpdateAgentEditorPublishedMCPService(_ *agenteditor.PublishedMCPService) (err0 error) {
+	err0 = errUnsupported("UpdateAgentEditorPublishedMCPService")
 	return
 }
 

@@ -11,12 +11,12 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | lines | section |
 |---|---|
 | 24-50 | Overview |
-| 51-139 | Syntax |
-| 140-166 | Altering existing documents |
-| 167-195 | Gotchas |
-| 196-217 | Common Patterns |
-| 218-282 | Calling Agents from Microflows |
-| 283-285 | AI agent documents |
+| 51-166 | Syntax |
+| 167-193 | Altering existing documents |
+| 194-222 | Gotchas |
+| 223-244 | Common Patterns |
+| 245-309 | Calling Agents from Microflows |
+| 310-312 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -100,6 +100,22 @@ create consumed mcp service Module.WebSearch (
 );
 ```
 
+### Published MCP Service
+
+The other direction: the app publishes its microflows as an MCP server
+(Agent Editor 2.6+, MCP Server 5.x). `./mxcli syntax agents.published-mcp-service`
+has the full syntax; the `mcp-server` skill covers the contracts of the tool and
+authentication microflows and the runtime-configured alternative.
+
+```sql
+mdl 1;
+create published mcp service Module.CustomerMCP (
+  EndpointPath: 'customers', Version: '1.0.0', ProtocolVersion: v2025_03_26
+) {
+  tool count_customers ( Microflow: Module.MCPTool_CountCustomers, Description: 'Count customers.' )
+};
+```
+
 ### Agent (full syntax)
 
 ```sql
@@ -130,12 +146,23 @@ prompt here.$$,
     Enabled: true
   )
 
-  tool MyMicroflowTool (
+  tool FetchCustomer (
+    Document: Module.Tool_FetchCustomer,   -- the microflow the tool runs
     description: 'Fetch customer data',
-    Enabled: true
+    Enabled: true,
+    UserAccessApproval: UserConfirmationRequired,  -- or HiddenForUser | VisibleForUser
+    DisplayTitle: 'Look up customer'               -- shown to the user, not the model
   )
 };
 ```
+
+Human-in-the-loop and streaming (Agent Editor 2.2+): `UserAccessApproval` and
+`DisplayTitle` / `DisplayDescription` on a `tool` or `mcp service` block;
+`MinSimilarity` and `IsVisible` on a `knowledge base` block;
+`EnableBackendStreaming` / `EnableUIStreaming` on the **agent**, not the model.
+Streaming is not shown in Studio Pro's playground; it works at runtime with a
+chat agent in Conversational UI. On `create or modify`, a setting left out keeps
+its stored value.
 
 ## Altering existing documents
 
@@ -154,7 +181,7 @@ alter consumed mcp service Module.MyMCP
 -- Agent: SET for scalars, ADD/DROP for tools, MCP services, knowledge bases
 alter agent Module.MyAgent
     set SystemPrompt = 'New prompt', Temperature = 0.7, MaxTokens = 4096
-    add tool MyMicroflow ( Description: '...', Enabled: true )
+    add tool MyTool ( Document: Module.MyMicroflow, Description: '...', Enabled: true )
     add mcp service Module.WeatherSvc ( Description: '...', Enabled: true )
     add knowledge base Docs ( Source: Module.MyKB, Collection: 'docs', MaxResults: 5 )
     drop tool OldTool

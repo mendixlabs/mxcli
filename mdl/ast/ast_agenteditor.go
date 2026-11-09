@@ -90,6 +90,68 @@ type AlterConsumedMCPServiceStmt struct {
 
 func (s *AlterConsumedMCPServiceStmt) isStatement() {}
 
+// CreatePublishedMCPServiceStmt represents (ako/mxcli#2020):
+//
+//	CREATE PUBLISHED MCP SERVICE Module.Name (
+//	  [ServerName: 'Orders',] EndpointPath: 'orders', Version: '1.0.0',
+//	  ProtocolVersion: v2025_03_26,
+//	  [AuthenticationEnabled: true, AuthenticationMicroflow: Module.Auth,]
+//	  [AuthorizationServerUrl: '...', Scopes: '...',]
+//	  Documentation: '...'
+//	) { tool name ( Microflow: Module.Tool, Description: '...', Title: '...', Schema: '...' ) };
+type CreatePublishedMCPServiceStmt struct {
+	CreateGuard
+	Folder                  string
+	Name                    QualifiedName
+	OuterDocumentation      string // /** ... */ doc comment
+	DocumentationSet        bool
+	ServerName              string // empty: the stored value, or the document name on create
+	EndpointPath            string
+	Version                 string
+	ProtocolVersion         string
+	AuthenticationEnabled   bool
+	AuthenticationMicroflow *QualifiedName
+	AuthorizationServerURL  string
+	Scopes                  string
+	InnerDocumentation      string // Contents.documentation field
+	Tools                   []PublishedMCPToolDef
+	CreateOrModify          bool
+}
+
+func (s *CreatePublishedMCPServiceStmt) isStatement() {}
+
+// PublishedMCPToolDef is a `tool name ( … )` block of a published MCP service.
+type PublishedMCPToolDef struct {
+	Name        string
+	Microflow   *QualifiedName
+	Description string
+	Title       string
+	Schema      string
+}
+
+// DropPublishedMCPServiceStmt represents: DROP PUBLISHED MCP SERVICE Module.Name
+type DropPublishedMCPServiceStmt struct {
+	DropGuard
+	Name QualifiedName
+}
+
+func (s *DropPublishedMCPServiceStmt) isStatement() {}
+
+// AlterPublishedMCPServiceStmt represents:
+//
+//	ALTER PUBLISHED MCP SERVICE Module.Name
+//	    SET key = value (, key = value)* | ADD TOOL name ( … ) | DROP TOOL name
+//
+// The actions apply in order.
+type AlterPublishedMCPServiceStmt struct {
+	Name      QualifiedName
+	Sets      map[string]string
+	AddTools  []PublishedMCPToolDef
+	DropTools []string
+}
+
+func (s *AlterPublishedMCPServiceStmt) isStatement() {}
+
 // CreateKnowledgeBaseStmt represents:
 //
 //	CREATE KNOWLEDGE BASE Module.Name (
@@ -145,14 +207,18 @@ type CreateAgentStmt struct {
 	Entity           *QualifiedName // reference to a domain entity
 	MaxTokens        *int
 	ToolChoice       string
-	Temperature      *float64
-	TopP             *float64
-	SystemPrompt     string
-	UserPrompt       string
-	Variables        []AgentVarDef
-	Tools            []AgentToolDef
-	KBTools          []AgentKBToolDef
-	CreateOrModify   bool // true for CREATE OR MODIFY / CREATE OR REPLACE
+	// Response streaming (#2022). Left out, a create or modify keeps the
+	// stored value.
+	EnableBackendStreaming *bool
+	EnableUIStreaming      *bool
+	Temperature            *float64
+	TopP                   *float64
+	SystemPrompt           string
+	UserPrompt             string
+	Variables              []AgentVarDef
+	Tools                  []AgentToolDef
+	KBTools                []AgentKBToolDef
+	CreateOrModify         bool // true for CREATE OR MODIFY / CREATE OR REPLACE
 }
 
 func (s *CreateAgentStmt) isStatement() {}
@@ -199,6 +265,11 @@ type AgentToolDef struct {
 	Document    *QualifiedName
 	Description string
 	Enabled     bool
+	// Agent Editor 2.2+ (#2021). Left out, a create or modify keeps the stored
+	// value: "" / nil means the statement does not say.
+	UserAccessApproval string
+	DisplayTitle       *string
+	DisplayDescription *string
 }
 
 // AgentKBToolDef represents a KNOWLEDGE BASE block in CREATE AGENT body.
@@ -209,4 +280,7 @@ type AgentKBToolDef struct {
 	MaxResults  int
 	Description string
 	Enabled     bool
+	// Left out, a create or modify keeps the stored value.
+	MinSimilarity *float64
+	IsVisible     *bool
 }

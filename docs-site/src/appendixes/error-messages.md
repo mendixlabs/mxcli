@@ -262,6 +262,25 @@ The registry of deprecated spellings is `mdl/deprecation/deprecation.go`. It hol
 ## mxcli Parser Errors
 
 
+### MDL-MCPSERVER01: A published MCP service the runtime will not start
+
+```
+published mcp service Shop.OrdersMCP: EndpointPath "mcp" is reserved: it cannot be
+'mcp' or end in '/mcp' [MDL-MCPSERVER01]
+```
+
+**Cause:** A published MCP service document is not validated by mxbuild; AgentEditorCommons
+reads it at startup and calls `MCPServer.CreateMCPServer`, which throws for a reserved or
+sub-path `EndpointPath` (`mcp`, `…/mcp`, any `/`), a missing `Version`,
+`EndpointPath` or `ProtocolVersion`, `Scopes` without an `AuthorizationServerUrl`, an
+`AuthorizationServerUrl` without an `AuthenticationMicroflow` or not an absolute http(s) URL.
+The app still starts, without that server, and logs the error. A tool without a `Microflow`, or
+two tools with one name, is refused too. As a warning: `AuthenticationMicroflow`,
+`AuthorizationServerUrl` and `Scopes` are ignored while `AuthenticationEnabled` is false, and
+`AuthenticationEnabled: true` with no authentication microflow accepts every request.
+
+**Solution:** Fix the property the message names; `create published mcp service` documents each.
+
 ### MDL-LISTOP02: A list operation nested inside another one
 
 ```

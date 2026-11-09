@@ -329,6 +329,10 @@ features:
     agent:
       min_version: "11.9.0"
       mdl: "CREATE AGENT Module.Name (UsageType: Task|Chat, Model: ..., SystemPrompt: '...')"
+    agent_published_mcp_service:
+      min_version: "11.9.0"
+      mdl: "CREATE PUBLISHED MCP SERVICE Module.Name (ServerName: '...', EndpointPath: '...', ...) { tool ... }"
+      notes: "agenteditor.publishedMCPService, read at startup by AgentEditorCommons and started through MCP Server 5.x. Measured on Studio Pro 11.16 with Agent Editor 2.6.0 and MCP Server 5.4.0 (ako/mxcli#2020); the floor is the agent-document floor, the first Studio Pro version that can hold the document is not measured."
 
   workflows:
     basic:

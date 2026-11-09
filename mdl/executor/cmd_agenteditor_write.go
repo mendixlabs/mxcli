@@ -169,6 +169,8 @@ func execCreateKnowledgeBase(ctx *ExecContext, s *ast.CreateKnowledgeBaseStmt) e
 	}
 
 	if existing != nil {
+		// The Portal knowledge base name: MDL has no spelling for it.
+		k.InnerName = existing.InnerName
 		k.ID = existing.ID
 		// Excluded is model state, not script state (#914).
 		k.Excluded = existing.Excluded
@@ -254,6 +256,9 @@ func execCreateAgent(ctx *ExecContext, s *ast.CreateAgentStmt) error {
 		ToolChoice:    s.ToolChoice,
 		Temperature:   s.Temperature,
 		TopP:          s.TopP,
+
+		EnableBackendStreaming: s.EnableBackendStreaming,
+		EnableUIStreaming:      s.EnableUIStreaming,
 	}
 	// A rewrite that carried no doc comment keeps the stored one (#1018).
 	if existingAgent != nil {
@@ -291,46 +296,24 @@ func execCreateAgent(ctx *ExecContext, s *ast.CreateAgentStmt) error {
 
 	// Tools (MCP SERVICE and TOOL blocks)
 	for _, td := range s.Tools {
-		at := agenteditor.AgentTool{
-			Name:        td.Name,
-			Description: td.Description,
-			Enabled:     td.Enabled,
-			ToolType:    td.ToolType,
+		at, err := buildAgentToolFromDef(ctx, "create agent", &s.Name, td)
+		if err != nil {
+			return err
 		}
-		if td.Document != nil && td.ToolType == "mcp" {
-			// Resolve MCP service document reference
-			svc := findAgentEditorConsumedMCPService(ctx, td.Document.Module, td.Document.Name)
-			if svc == nil {
-				return fmt.Errorf("create agent %s: consumed mcp service not found: %s", s.Name, td.Document)
-			}
-			at.Document = &agenteditor.DocRef{
-				DocumentID:    string(svc.ID),
-				QualifiedName: td.Document.String(),
-			}
-		}
-		a.Tools = append(a.Tools, at)
+		a.Tools = append(a.Tools, *at)
 	}
 
 	// Knowledge base tools
 	for _, kbd := range s.KBTools {
-		akt := agenteditor.AgentKBTool{
-			Name:                 kbd.Name,
-			Description:          kbd.Description,
-			Enabled:              kbd.Enabled,
-			CollectionIdentifier: kbd.Collection,
-			MaxResults:           kbd.MaxResults,
+		akt, err := buildAgentKBToolFromDef(ctx, "create agent", &s.Name, kbd)
+		if err != nil {
+			return err
 		}
-		if kbd.Source != nil {
-			kb := findAgentEditorKnowledgeBase(ctx, kbd.Source.Module, kbd.Source.Name)
-			if kb == nil {
-				return fmt.Errorf("create agent %s: knowledge base not found: %s", s.Name, kbd.Source)
-			}
-			akt.Document = &agenteditor.DocRef{
-				DocumentID:    string(kb.ID),
-				QualifiedName: kbd.Source.String(),
-			}
-		}
-		a.KBTools = append(a.KBTools, akt)
+		a.KBTools = append(a.KBTools, *akt)
+	}
+
+	if existingAgent != nil {
+		carryAgentIdentity(a, existingAgent)
 	}
 
 	if existingAgent != nil {

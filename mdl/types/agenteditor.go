@@ -21,14 +21,17 @@ const (
 	CustomTypeModel              = "agenteditor.model"
 	CustomTypeKnowledgeBase      = "agenteditor.knowledgebase"
 	CustomTypeConsumedMCPService = "agenteditor.consumedMCPService"
+	// Agent Editor 2.6+ with MCP Server 5.x (ako/mxcli#2020).
+	CustomTypePublishedMCPService = "agenteditor.publishedMCPService"
 )
 
 // ReadableTypeName values (BSON wrapper Metadata.ReadableTypeName).
 const (
-	ReadableAgent              = "Agent"
-	ReadableModel              = "Model"
-	ReadableKnowledgeBase      = "Knowledge base"
-	ReadableConsumedMCPService = "Consumed MCP service"
+	ReadableAgent               = "Agent"
+	ReadableModel               = "Model"
+	ReadableKnowledgeBase       = "Knowledge base"
+	ReadableConsumedMCPService  = "Consumed MCP service"
+	ReadablePublishedMCPService = "Published MCP service"
 )
 
 // CreatedByExtensionID is the value used for the Metadata.CreatedByExtension
@@ -115,6 +118,7 @@ type KnowledgeBase struct {
 	Excluded      bool     `json:"excluded,omitempty"`
 	ExportLevel   string   `json:"exportLevel,omitempty"`
 
+	InnerName        string       `json:"innerName,omitempty"` // Contents.name: the Portal knowledge base name
 	Provider         string       `json:"provider,omitempty"`
 	Environment      string       `json:"environment,omitempty"`
 	DeepLinkURL      string       `json:"deepLinkURL,omitempty"`
@@ -154,6 +158,64 @@ func (c *ConsumedMCPService) GetName() string { return c.Name }
 // GetContainerID returns the container ID.
 func (c *ConsumedMCPService) GetContainerID() model.ID { return c.ContainerID }
 
+// PublishedMCPService represents an agent-editor Published MCP Service document
+// (CustomDocumentType = "agenteditor.publishedMCPService", Agent Editor 2.6+
+// with MCP Server 5.x). At startup AgentEditorCommons reads it and calls
+// MCPServer.CreateMCPServer and MCPServer.AddTool, so each field is one of
+// those actions' parameters (ako/mxcli#2020).
+//
+// Contents JSON schema (Studio Pro 11.16, Agent Editor 2.6.0):
+//
+//	{
+//	  "serverName": "...", "endpointPath": "...", "version": "1.0.0",
+//	  "protocolVersion": "v2025_03_26", "authenticationEnabled": false,
+//	  "tools": [{ "uuid", "name", "description",
+//	              "sourceMicroflow": { "qualifiedName", "documentId" }, "title" }],
+//	  "documentation": "..."
+//	}
+//
+// With authentication on, Studio Pro appends authenticationMicroflow
+// { "documentId", "qualifiedName" } after documentation. The runtime reader
+// also takes authorizationServerUrl, scopes and a tool's schema; no saved
+// document holds those yet. ServerName is stored but not shown in the editor:
+// a duplicated document keeps the original's.
+type PublishedMCPService struct {
+	model.BaseElement
+	ContainerID   model.ID `json:"containerId"`
+	Name          string   `json:"name"`
+	Documentation string   `json:"documentation,omitempty"`
+	Excluded      bool     `json:"excluded,omitempty"`
+	ExportLevel   string   `json:"exportLevel,omitempty"`
+
+	ServerName              string             `json:"serverName,omitempty"`
+	EndpointPath            string             `json:"endpointPath,omitempty"`
+	Version                 string             `json:"version,omitempty"`
+	ProtocolVersion         string             `json:"protocolVersion,omitempty"`
+	AuthenticationEnabled   bool               `json:"authenticationEnabled,omitempty"`
+	AuthenticationMicroflow *DocRef            `json:"authenticationMicroflow,omitempty"`
+	AuthorizationServerURL  string             `json:"authorizationServerUrl,omitempty"`
+	Scopes                  string             `json:"scopes,omitempty"`
+	Tools                   []PublishedMCPTool `json:"tools,omitempty"`
+	InnerDocumentation      string             `json:"innerDocumentation,omitempty"` // Contents.documentation
+}
+
+// GetName returns the published MCP service's name.
+func (p *PublishedMCPService) GetName() string { return p.Name }
+
+// GetContainerID returns the container ID.
+func (p *PublishedMCPService) GetContainerID() model.ID { return p.ContainerID }
+
+// PublishedMCPTool is an entry in a published MCP service's `tools` array: a
+// microflow exposed as an MCP tool.
+type PublishedMCPTool struct {
+	UUID            string  `json:"uuid,omitempty"`
+	Name            string  `json:"name,omitempty"`
+	Description     string  `json:"description,omitempty"`
+	SourceMicroflow *DocRef `json:"sourceMicroflow,omitempty"`
+	Title           string  `json:"title,omitempty"`
+	Schema          string  `json:"schema,omitempty"`
+}
+
 // Agent represents an agent-editor Agent document
 // (CustomDocumentType = "agenteditor.agent"). Scaffolded for future
 // implementation — parsing not yet wired.
@@ -178,6 +240,10 @@ type Agent struct {
 	ToolChoice   string        `json:"toolChoice,omitempty"`
 	Temperature  *float64      `json:"temperature,omitempty"`
 	TopP         *float64      `json:"topP,omitempty"`
+	// Response streaming (Agent Editor 2.2.1+, #2022), stored on the agent,
+	// not the model. nil when the document holds none.
+	EnableBackendStreaming *bool `json:"enableBackendStreaming,omitempty"`
+	EnableUIStreaming      *bool `json:"enableUIStreaming,omitempty"`
 }
 
 // GetName returns the agent's name.
@@ -189,7 +255,7 @@ func (a *Agent) GetContainerID() model.ID { return a.ContainerID }
 // AgentVar is an entry in the agent's `variables` JSON array.
 type AgentVar struct {
 	Key                 string `json:"key"`
-	IsAttributeInEntity bool   `json:"isAttributeInEntity,omitempty"`
+	IsAttributeInEntity bool   `json:"isAttributeInEntity"` // Agent Editor writes false too
 }
 
 // AgentTool is an entry in the agent's `tools` JSON array.
@@ -200,7 +266,15 @@ type AgentTool struct {
 	Enabled     bool    `json:"enabled,omitempty"`
 	ToolType    string  `json:"toolType,omitempty"` // "MCP" | "Microflow" | ""
 	Document    *DocRef `json:"document,omitempty"`
-	// Microflow-tool-specific fields are not yet observed in the wild.
+	// Agent Editor 2.2+ (#2021): whether the user sees the tool call, and
+	// whether it waits for the user's approval — HiddenForUser,
+	// VisibleForUser or UserConfirmationRequired (GenAICommons.
+	// ENUM_UserAccessApproval). "" when the document holds none.
+	UserAccessApproval string `json:"userAccessApproval,omitempty"`
+	// The title and description shown to the user for the call; the model
+	// sees Name and Description. nil when the document holds none.
+	DisplayTitle       *string `json:"displayTitle,omitempty"`
+	DisplayDescription *string `json:"displayDescription,omitempty"`
 }
 
 // AgentKBTool is an entry in the agent's `knowledgebaseTools` JSON array.
@@ -213,4 +287,8 @@ type AgentKBTool struct {
 	Document             *DocRef `json:"document,omitempty"`
 	CollectionIdentifier string  `json:"collectionIdentifier,omitempty"`
 	MaxResults           int     `json:"maxResults,omitempty"`
+	// The least similarity a chunk needs to be returned, and whether the
+	// user sees the retrieval. nil when the document holds none.
+	MinSimilarity *float64 `json:"minSimilarity,omitempty"`
+	IsVisible     *bool    `json:"isVisible,omitempty"`
 }

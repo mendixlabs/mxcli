@@ -238,6 +238,8 @@ func (b *Builder) ExitCreateAgentStatement(ctx *parser.CreateAgentStatementConte
 	stmt.SystemPrompt = props["systemprompt"]
 	stmt.UserPrompt = props["userprompt"]
 	stmt.ToolChoice = props["toolchoice"]
+	stmt.EnableBackendStreaming = boolProp(props, "enablebackendstreaming")
+	stmt.EnableUIStreaming = boolProp(props, "enableuistreaming")
 
 	if v, ok := props["maxtokens"]; ok {
 		var n int
@@ -281,6 +283,7 @@ func (b *Builder) ExitCreateAgentStatement(ctx *parser.CreateAgentStatementConte
 					td.Enabled = strings.EqualFold(v, "true")
 				}
 				td.Description = blockProps["description"]
+				b.toolUserSettings(&td, blockProps)
 				stmt.Tools = append(stmt.Tools, td)
 			} else if blk.KNOWLEDGE() != nil && blk.BASE() != nil {
 				// KNOWLEDGE BASE block
@@ -302,21 +305,10 @@ func (b *Builder) ExitCreateAgentStatement(ctx *parser.CreateAgentStatementConte
 				if v, ok := blockProps["enabled"]; ok {
 					kbd.Enabled = strings.EqualFold(v, "true")
 				}
+				kbRetrievalSettings(&kbd, blockProps)
 				stmt.KBTools = append(stmt.KBTools, kbd)
 			} else if blk.TOOL() != nil {
-				// TOOL ToolName { ... }
-				td := ast.AgentToolDef{
-					ToolType: "Microflow",
-					Enabled:  true,
-				}
-				if iok := blk.IdentifierOrKeyword(); iok != nil {
-					td.Name = iok.GetText()
-				}
-				td.Description = blockProps["description"]
-				if v, ok := blockProps["enabled"]; ok {
-					td.Enabled = strings.EqualFold(v, "true")
-				}
-				stmt.Tools = append(stmt.Tools, td)
+				stmt.Tools = append(stmt.Tools, b.toolBlockDef(blk, blockProps))
 			}
 		}
 	}
@@ -327,6 +319,77 @@ func (b *Builder) ExitCreateAgentStatement(ctx *parser.CreateAgentStatementConte
 		}
 	}
 	b.statements = append(b.statements, stmt)
+}
+
+// toolBlockDef reads a `tool Name ( … )` block of an agent body, on create and
+// on alter … add.
+func (b *Builder) toolBlockDef(blk *parser.AgentBodyBlockContext, props map[string]string) ast.AgentToolDef {
+	td := ast.AgentToolDef{ToolType: "Microflow", Enabled: true}
+	if iok := blk.IdentifierOrKeyword(); iok != nil {
+		td.Name = iok.GetText()
+	}
+	if v := props["tooltype"]; v != "" {
+		td.ToolType = v
+	}
+	// describe prints the microflow a tool runs as Document. Ignoring it left
+	// the rewritten tool wired to nothing.
+	if doc, ok := props["document"]; ok {
+		dqn := parseQualifiedNameString(doc)
+		td.Document = &dqn
+	}
+	td.Description = props["description"]
+	if v, ok := props["enabled"]; ok {
+		td.Enabled = strings.EqualFold(v, "true")
+	}
+	b.toolUserSettings(&td, props)
+	return td
+}
+
+// userAccessApprovals are GenAICommons.ENUM_UserAccessApproval's values, the
+// ones Agent Editor stores on a tool.
+var userAccessApprovals = []string{"HiddenForUser", "VisibleForUser", "UserConfirmationRequired"}
+
+// toolUserSettings reads what a tool or mcp service block says about the
+// user's view of the call (#2021).
+func (b *Builder) toolUserSettings(td *ast.AgentToolDef, props map[string]string) {
+	if v, ok := props["useraccessapproval"]; ok {
+		found := false
+		for _, a := range userAccessApprovals {
+			if strings.EqualFold(v, a) {
+				td.UserAccessApproval, found = a, true
+			}
+		}
+		if !found {
+			b.addError(fmt.Errorf("tool %s: UserAccessApproval takes %s, not %q", td.Name, strings.Join(userAccessApprovals, ", "), v))
+		}
+	}
+	if v, ok := props["displaytitle"]; ok {
+		td.DisplayTitle = &v
+	}
+	if v, ok := props["displaydescription"]; ok {
+		td.DisplayDescription = &v
+	}
+}
+
+// kbRetrievalSettings reads a knowledge base block's MinSimilarity and
+// IsVisible.
+func kbRetrievalSettings(kbd *ast.AgentKBToolDef, props map[string]string) {
+	if v, ok := props["minsimilarity"]; ok {
+		var f float64
+		fmt.Sscanf(v, "%g", &f)
+		kbd.MinSimilarity = &f
+	}
+	kbd.IsVisible = boolProp(props, "isvisible")
+}
+
+// boolProp is a true/false property, nil when the list leaves it out.
+func boolProp(props map[string]string, key string) *bool {
+	v, ok := props[key]
+	if !ok {
+		return nil
+	}
+	b := strings.EqualFold(v, "true")
+	return &b
 }
 
 // parseQualifiedNameString splits "Module.Name" into a QualifiedName.

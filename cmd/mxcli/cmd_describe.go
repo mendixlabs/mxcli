@@ -65,6 +65,7 @@ Types:
   aimodel          Describe an AI model (also: "ai model"; old: model)
   knowledgebase    Describe a knowledge base (also: "knowledge base")
   consumedmcpservice  Describe a consumed MCP service (also: "consumed mcp service")
+  publishedmcpservice Describe a published MCP service (also: "published mcp service")
   datatransformer  Describe a data transformer (also: "data transformer")
   modulerole       Describe a module role
   userrole         Describe a user role
@@ -135,8 +136,8 @@ Example:
 		mdlCmd, ok := describeMDLCommand(objectType, name)
 		if !ok {
 			fmt.Fprintf(os.Stderr, "Unknown type: %s\n", strings.Join(args[:len(args)-1], " "))
-			fmt.Fprintln(os.Stderr, "Valid types: module, entity, association, enumeration, constant, microflow, nanoflow, rule, workflow, page, snippet, layout, javaaction, javascriptaction, jsonstructure, importmapping, exportmapping, consumedrestservice, consumedodataservice, publishedodataservice, publishedrestservice, imagecollection, menu, taskqueue, scheduledevent, businesseventservice, databaseconnection, agent, aimodel, knowledgebase, consumedmcpservice, datatransformer, modulerole, userrole, appsecurity, settings, demouser, navigation, systemoverview")
-			fmt.Fprintln(os.Stderr, "Multi-word types also accepted: json structure, import mapping, export mapping, consumed rest service, consumed odata service, published odata service, published rest service, task queue, app security, image collection, scheduled event, regular expression, business event service, ai model, knowledge base, consumed mcp service, data transformer, etc.")
+			fmt.Fprintln(os.Stderr, "Valid types: module, entity, association, enumeration, constant, microflow, nanoflow, rule, workflow, page, snippet, layout, javaaction, javascriptaction, jsonstructure, importmapping, exportmapping, consumedrestservice, consumedodataservice, publishedodataservice, publishedrestservice, imagecollection, menu, taskqueue, scheduledevent, businesseventservice, databaseconnection, agent, aimodel, knowledgebase, consumedmcpservice, publishedmcpservice, datatransformer, modulerole, userrole, appsecurity, settings, demouser, navigation, systemoverview")
+			fmt.Fprintln(os.Stderr, "Multi-word types also accepted: json structure, import mapping, export mapping, consumed rest service, consumed odata service, published odata service, published rest service, task queue, app security, image collection, scheduled event, regular expression, business event service, ai model, knowledge base, consumed mcp service, published mcp service, data transformer, etc.")
 			os.Exit(1)
 		}
 		all, _ := cmd.Flags().GetBool("all")
@@ -341,6 +342,8 @@ func describeMDLCommand(objectType, name string) (mdlCmd string, ok bool) {
 		return fmt.Sprintf("DESCRIBE KNOWLEDGE BASE %s", name), true
 	case "CONSUMEDMCPSERVICE", "CONSUMED MCP SERVICE", "MCP SERVICE":
 		return fmt.Sprintf("DESCRIBE CONSUMED MCP SERVICE %s", name), true
+	case "PUBLISHEDMCPSERVICE", "PUBLISHED MCP SERVICE":
+		return fmt.Sprintf("DESCRIBE PUBLISHED MCP SERVICE %s", name), true
 	case "DATATRANSFORMER", "DATA TRANSFORMER":
 		return fmt.Sprintf("DESCRIBE DATA TRANSFORMER %s", name), true
 	case "SYSTEMOVERVIEW", "DOMAINMODEL", "DOMAIN MODEL":

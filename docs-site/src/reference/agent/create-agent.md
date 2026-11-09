@@ -63,13 +63,13 @@ The optional body block (inside `{ }`) attaches tools and knowledge bases to the
 
 - **MCP SERVICE** — attaches a consumed MCP service by its qualified name
 - **KNOWLEDGE BASE** — attaches a knowledge base with retrieval settings
-- **TOOL** — attaches a tool
+- **TOOL** — attaches a microflow tool; `Document: Module.Microflow` is the microflow it runs
 
 Each attachment is a child of the agent, so its properties are in `( )`. The older brace form (`TOOL Name { … }`) still parses but warns (MDL-DEPR071); `mxcli fmt --upgrade` rewrites it.
 
 ### OR MODIFY
 
-If `OR MODIFY` is specified and the agent already exists, its properties and body blocks are updated in place. The document UUID is preserved.
+If `OR MODIFY` is specified and the agent already exists, its properties and body blocks are updated in place. The document UUID is preserved, and so is each tool's and knowledge base's identity: a tool keeps its stored entry when its type and name match (an MCP service when the service matches). Settings that MDL cannot spell keep their stored values, both on `OR MODIFY` and on `ALTER AGENT`: a tool's user approval and display title and description, the agent's streaming switches and selected model, and a knowledge base tool's minimum similarity.
 
 ## Parameters
 
@@ -103,6 +103,27 @@ If `OR MODIFY` is specified and the agent already exists, its properties and bod
 `ToolChoice`
 :   Optional. `Auto` (let the model decide), `None` (no tools), or `Required` (always use a tool).
 
+`EnableBackendStreaming`, `EnableUIStreaming`
+:   Optional, `true` or `false`. Response streaming for the agent (Agent Editor 2.2.1+). Streaming is set on the agent, not on its model. The Studio Pro playground does not show it; it works at runtime with a chat agent in Conversational UI.
+
+### Tool and MCP service settings
+
+`UserAccessApproval`
+:   Optional. `HiddenForUser`: the call runs without being shown. `VisibleForUser`: the call is shown and runs. `UserConfirmationRequired`: the call is shown and waits for the user's approval. Agent Editor 2.2+.
+
+`DisplayTitle`, `DisplayDescription`
+:   Optional. The title and description shown to the user for the call. The model still sees the tool's name and `Description`.
+
+### Knowledge base settings
+
+`MinSimilarity`
+:   Optional. The least similarity, between 0 and 1, a chunk needs to be returned.
+
+`IsVisible`
+:   Optional, `true` or `false`. Whether the user sees the retrieval.
+
+On `OR MODIFY`, a setting the statement leaves out keeps its stored value.
+
 ## Examples
 
 ### Simple task agent
@@ -128,6 +149,26 @@ CREATE AGENT MyModule."Translator" (
     UserPrompt: 'Hello world'
 );
 
+```
+
+### Agent whose tool needs the user's approval
+
+```sql
+CREATE AGENT MyModule."Support" (
+    UsageType: Chat,
+    model: MyModule.GPT4Model,
+    EnableBackendStreaming: true,
+    SystemPrompt: 'Help the customer with their orders.'
+)
+{
+    TOOL CancelOrder (
+        Document: MyModule.Tool_CancelOrder,
+        Description: 'Cancel an order by its number',
+        UserAccessApproval: UserConfirmationRequired,
+        DisplayTitle: 'Cancel order'
+    )
+    KNOWLEDGE BASE Faq (Source: MyModule.FaqKB, MaxResults: 5, MinSimilarity: 0.3)
+};
 ```
 
 ### Agent with multi-line dollar-quoted prompt

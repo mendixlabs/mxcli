@@ -194,6 +194,7 @@ func init() {
 			"-- Agents\n" +
 			"DROP AI MODEL Module.Name;\n" +
 			"DROP CONSUMED MCP SERVICE Module.Name;\n" +
+			"DROP PUBLISHED MCP SERVICE Module.Name;\n" +
 			"DROP KNOWLEDGE BASE Module.Name;\n" +
 			"DROP AGENT Module.Name;\n\n" +
 			"-- Project structure\n" +

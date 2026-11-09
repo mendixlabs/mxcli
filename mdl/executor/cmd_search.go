@@ -49,6 +49,8 @@ var callerRefKinds = []string{
 	// A page, snippet or layout placing a snippet. Recorded as show_page until
 	// ako/mxcli#2017, so leaving it out would turn every snippet uncalled.
 	RefKindCallerSnippetCall,
+	// A flow applying an import or export mapping (ako/mxcli#1861).
+	RefKindCallerMappingCall,
 	RefKindCallerCalculate, // calculated attribute
 	RefKindCallerHomePage,  // navigation
 	RefKindCallerLoginPage,
@@ -66,6 +68,7 @@ const (
 	RefKindCallerAction      = "action"
 	RefKindCallerShowPage    = "show_page"
 	RefKindCallerSnippetCall = "snippet_call"
+	RefKindCallerMappingCall = "mapping_call"
 	RefKindCallerCalculate   = "calculate"
 	RefKindCallerHomePage    = "home_page"
 	RefKindCallerLoginPage   = "login_page"
