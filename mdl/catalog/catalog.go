@@ -104,6 +104,7 @@ func (c *Catalog) SetBuilt(built bool) {
 func (c *Catalog) Tables() []string {
 	return []string{
 		"CATALOG.MODULES",
+		"CATALOG.FOLDERS",
 		"CATALOG.ENTITIES",
 		"CATALOG.ASSOCIATIONS",
 		"CATALOG.ATTRIBUTES",

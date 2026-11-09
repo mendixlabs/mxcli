@@ -428,6 +428,7 @@ func (r *StarlarkRule) buildPredeclared() starlark.StringDict {
 		"layouts":                   starlark.NewBuiltin("layouts", r.builtinLayouts),
 		"published_rest_operations": starlark.NewBuiltin("published_rest_operations", r.builtinPublishedRestOperations),
 		"modules":                   starlark.NewBuiltin("modules", r.builtinModules),
+		"folders":                   starlark.NewBuiltin("folders", r.builtinFolders),
 
 		// Graph-analysis facts (populated by `refresh catalog communities`).
 		"community_of":         starlark.NewBuiltin("community_of", r.builtinCommunityOf),

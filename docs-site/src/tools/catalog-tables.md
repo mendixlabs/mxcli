@@ -68,6 +68,30 @@ SELECT Name FROM CATALOG.MODULES
 WHERE Source = '' AND COALESCE(DomainModelDocumentation, '') = '';
 ```
 
+### CATALOG.FOLDERS
+
+One row per folder, in every module, empty folders included. A document's
+`Folder` column names only the folders that hold a document, so an empty folder
+appears nowhere else.
+
+| Column | Description |
+|--------|-------------|
+| `Id` | Folder UUID |
+| `Name` | Folder name |
+| `ModuleName` | Module the folder is in |
+| `Path` | `Objects/Order` — spelled as a document's `Folder` column, so the two join. A folder name that itself holds `/` is not escaped (`LIST FOLDERS` prints it as `\/`) |
+| `ParentPath` | Path of the enclosing folder; `''` directly in the module |
+| `Depth` | `1` directly in the module |
+| `DocumentCount` | Documents directly in the folder, not in its subfolders |
+| `FolderCount` | Folders directly in the folder |
+
+```sql
+-- Empty folders in your own modules
+SELECT f.ModuleName, f.Path FROM CATALOG.FOLDERS f
+JOIN CATALOG.MODULES m ON m.Name = f.ModuleName
+WHERE m.Source = '' AND f.DocumentCount = 0 AND f.FolderCount = 0;
+```
+
 ### CATALOG.ASSOCIATIONS
 
 Information about entity associations, same-module and cross-module.

@@ -460,6 +460,55 @@ func (ctx *LintContext) Modules() iter.Seq[Module] {
 	}
 }
 
+// Folder is one folder of a module, empty folders included (ako/mxcli#1436).
+// A document's Folder field names only folders that hold a document, so an
+// empty folder appears nowhere else.
+type Folder struct {
+	ID            string
+	Name          string
+	ModuleName    string
+	Path          string // "Objects/Order", spelled as a document's Folder field
+	ParentPath    string // "" for a folder directly in the module
+	Depth         int    // 1 for a folder directly in the module
+	DocumentCount int    // documents directly in this folder
+	FolderCount   int    // folders directly in this folder
+}
+
+// Folders iterates the folders outside System and Marketplace modules.
+func (ctx *LintContext) Folders() iter.Seq[Folder] {
+	return func(yield func(Folder) bool) {
+		rows, err := ctx.db.Query(fmt.Sprintf(`
+			SELECT f.Id, COALESCE(f.Name, ''), COALESCE(f.ModuleName, ''), COALESCE(f.Path, ''),
+			       COALESCE(f.ParentPath, ''), COALESCE(f.Depth, 1),
+			       COALESCE(f.DocumentCount, 0), COALESCE(f.FolderCount, 0)
+			FROM folders f
+			LEFT JOIN modules m ON f.ModuleName = m.Name
+			WHERE %s
+			ORDER BY f.ModuleName, f.Path
+		`, notPlatformModule("m")))
+		if err != nil {
+			ctx.recordQueryError("Folders", err)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var f Folder
+			if err := rows.Scan(&f.ID, &f.Name, &f.ModuleName, &f.Path, &f.ParentPath,
+				&f.Depth, &f.DocumentCount, &f.FolderCount); err != nil {
+				ctx.recordQueryError("Folders (row scan)", err)
+				continue
+			}
+			if ctx.IsExcluded(f.ModuleName) {
+				continue
+			}
+			if !yield(f) {
+				return
+			}
+		}
+	}
+}
+
 // ConstantValue is a constant's value in one run configuration
 // (Settings → Configurations), which overrides the constant's default there.
 type ConstantValue struct {

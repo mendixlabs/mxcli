@@ -26,6 +26,7 @@ var projectWideTables = map[string]string{
 	"projects":                          "the build's own record",
 	"snapshots":                         "the build's own record",
 	"modules_data":                      "a module is no per-document pass's unit; a module change rebuilds everything",
+	"folders_data":                      "a folder's counts change when a document moves in or out, which rebuilds only that document",
 	"navigation_profiles_data":          "the navigation document; a change to it rebuilds everything",
 	"navigation_menu_items":             "the navigation document",
 	"navigation_role_homes":             "the navigation document",
