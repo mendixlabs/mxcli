@@ -11,12 +11,12 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | lines | section |
 |---|---|
 | 24-50 | Overview |
-| 51-137 | Syntax |
-| 138-164 | Altering existing documents |
-| 165-193 | Gotchas |
-| 194-215 | Common Patterns |
-| 216-280 | Calling Agents from Microflows |
-| 281-283 | AI agent documents |
+| 51-166 | Syntax |
+| 167-193 | Altering existing documents |
+| 194-222 | Gotchas |
+| 223-244 | Common Patterns |
+| 245-309 | Calling Agents from Microflows |
+| 310-312 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -60,21 +60,23 @@ create ai model Module.MyModel (
 );
 ```
 
-**`Provider` is free-form, and nothing validates it.** MDL passes the value
-straight through; `MxCloudGenAI` is only the default applied when you omit the
-property, not the only accepted value. `Provider: OpenAI` parses, writes, and
-round-trips through `describe ai model` — as does `Provider: TotallyMadeUp`.
+**`Provider` is free-form; `check` warns on a value Agent Editor rejects (MDL-AGENT01).**
 
-That means a typo is caught by **nothing** in the headless path. Agent Editor
-documents are stored as custom blobs, and mxbuild contains no agent-editor
-strings at all, so `mx check` and the build both stay green and the fault
-surfaces only when Studio Pro opens the document.
+| Document | Provider | Connector it imports through |
+|---|---|---|
+| AI model | `MxCloudGenAI` | MxGenAIConnector |
+| AI model | `Azure` (Azure AI Foundry) | OpenAIConnector |
+| AI model | `Fuse` (Agent Editor 2.7+) | FuseConnector |
+| Knowledge base | `MxCloudGenAI` only | MxGenAIConnector |
 
-mxcli deliberately does not enforce an allowlist, because the authoritative set
-of provider values is not available to it: the agent editor is a Studio Pro
-*extension*, its enum is not in `generated/metamodel` and not in mxbuild. Guessing
-a list risks rejecting a value Mendix accepts. **Take the value from a model
-document Studio Pro created**, rather than from memory or from this file.
+MDL passes the value straight through, and mxbuild contains no agent-editor
+strings, so `mx check` and the build stay green on a typo. The fault surfaces at
+startup, when `ASU_AgentEditor` fails the import with "Model provider is not
+one of the allowed types". `mxcli check` therefore warns, without a project, on
+any other value or the wrong case. The values come from
+`javasource/agenteditorcommons/actions/ImportDeployedModel.java`, whose
+`getImportMicroflow` switch is the authority; read it in the app when a newer
+Agent Editor may have added one. It warns rather than refuses for that reason.
 
 ### Knowledge Base
 
@@ -96,6 +98,22 @@ create consumed mcp service Module.WebSearch (
   ConnectionTimeoutSeconds: 30,
   documentation: 'Web search MCP server'
 );
+```
+
+### Published MCP Service
+
+The other direction: the app publishes its microflows as an MCP server
+(Agent Editor 2.6+, MCP Server 5.x). `./mxcli syntax agents.published-mcp-service`
+has the full syntax; the `mcp-server` skill covers the contracts of the tool and
+authentication microflows and the runtime-configured alternative.
+
+```sql
+mdl 1;
+create published mcp service Module.CustomerMCP (
+  EndpointPath: 'customers', Version: '1.0.0', ProtocolVersion: v2025_03_26
+) {
+  tool count_customers ( Microflow: Module.MCPTool_CountCustomers, Description: 'Count customers.' )
+};
 ```
 
 ### Agent (full syntax)
@@ -128,12 +146,23 @@ prompt here.$$,
     Enabled: true
   )
 
-  tool MyMicroflowTool (
+  tool FetchCustomer (
+    Document: Module.Tool_FetchCustomer,   -- the microflow the tool runs
     description: 'Fetch customer data',
-    Enabled: true
+    Enabled: true,
+    UserAccessApproval: UserConfirmationRequired,  -- or HiddenForUser | VisibleForUser
+    DisplayTitle: 'Look up customer'               -- shown to the user, not the model
   )
 };
 ```
+
+Human-in-the-loop and streaming (Agent Editor 2.2+): `UserAccessApproval` and
+`DisplayTitle` / `DisplayDescription` on a `tool` or `mcp service` block;
+`MinSimilarity` and `IsVisible` on a `knowledge base` block;
+`EnableBackendStreaming` / `EnableUIStreaming` on the **agent**, not the model.
+Streaming is not shown in Studio Pro's playground; it works at runtime with a
+chat agent in Conversational UI. On `create or modify`, a setting left out keeps
+its stored value.
 
 ## Altering existing documents
 
@@ -152,7 +181,7 @@ alter consumed mcp service Module.MyMCP
 -- Agent: SET for scalars, ADD/DROP for tools, MCP services, knowledge bases
 alter agent Module.MyAgent
     set SystemPrompt = 'New prompt', Temperature = 0.7, MaxTokens = 4096
-    add tool MyMicroflow ( Description: '...', Enabled: true )
+    add tool MyTool ( Document: Module.MyMicroflow, Description: '...', Enabled: true )
     add mcp service Module.WeatherSvc ( Description: '...', Enabled: true )
     add knowledge base Docs ( Source: Module.MyKB, Collection: 'docs', MaxResults: 5 )
     drop tool OldTool

@@ -238,6 +238,27 @@ var consumedMCPServiceSchema = propSchema{on: "a consumed MCP service", keys: []
 	{"Documentation", textShapes},
 }}
 
+// ServerName is stored but not in Studio Pro's editor: a new document gets its
+// own name, a duplicate keeps the original's.
+var publishedMCPServiceSchema = propSchema{on: "a published MCP service", keys: []propKey{
+	{"ServerName", []propShape{shapeString}},
+	{"EndpointPath", []propShape{shapeString}},
+	{"Version", []propShape{shapeString}},
+	{"ProtocolVersion", nameShapes},
+	{"AuthenticationEnabled", []propShape{shapeBool}},
+	{"AuthenticationMicroflow", []propShape{shapeQName}},
+	{"AuthorizationServerUrl", []propShape{shapeString}},
+	{"Scopes", []propShape{shapeString}},
+	{"Documentation", textShapes},
+}}
+
+var publishedMCPToolSchema = propSchema{on: "a published MCP service's tool block", keys: []propKey{
+	{"Microflow", []propShape{shapeQName}},
+	{"Description", textShapes},
+	{"Title", []propShape{shapeString}},
+	{"Schema", textShapes},
+}}
+
 var agentSchema = propSchema{on: "an agent", keys: []propKey{
 	{"UsageType", nameShapes},
 	{"Description", textShapes},
@@ -250,20 +271,26 @@ var agentSchema = propSchema{on: "an agent", keys: []propKey{
 	{"TopP", []propShape{shapeNumber}},
 	{"SystemPrompt", textShapes},
 	{"UserPrompt", textShapes},
+	{"EnableBackendStreaming", []propShape{shapeBool}},
+	{"EnableUIStreaming", []propShape{shapeBool}},
 }}
 
 var agentMCPServiceSchema = propSchema{on: "an agent's mcp service block", keys: []propKey{
 	{"Enabled", []propShape{shapeBool}},
 	{"Description", textShapes},
+	{"UserAccessApproval", []propShape{shapeName}},
+	{"DisplayTitle", textShapes},
+	{"DisplayDescription", textShapes},
 }}
 
-// ToolType and Document are what describe writes for a tool; create does not
-// read them yet, the tool's kind and target coming from the block itself.
 var agentToolSchema = propSchema{on: "an agent's tool block", keys: []propKey{
 	{"Enabled", []propShape{shapeBool}},
 	{"Description", textShapes},
 	{"ToolType", []propShape{shapeName}},
 	{"Document", []propShape{shapeQName}},
+	{"UserAccessApproval", []propShape{shapeName}},
+	{"DisplayTitle", textShapes},
+	{"DisplayDescription", textShapes},
 }}
 
 var agentKnowledgeBaseSchema = propSchema{on: "an agent's knowledge base block", keys: []propKey{
@@ -272,6 +299,8 @@ var agentKnowledgeBaseSchema = propSchema{on: "an agent's knowledge base block",
 	{"Description", textShapes},
 	{"MaxResults", []propShape{shapeNumber}},
 	{"Enabled", []propShape{shapeBool}},
+	{"MinSimilarity", []propShape{shapeNumber}},
+	{"IsVisible", []propShape{shapeBool}},
 }}
 
 // ---------------------------------------------------------------------------

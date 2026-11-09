@@ -518,6 +518,7 @@ func decodeAgentEditorKnowledgeBase(unitID, containerID string, wrap *customBlob
 	if err := json.Unmarshal([]byte(wrap.Contents), &payload); err != nil {
 		return nil, fmt.Errorf("unmarshal KnowledgeBase Contents JSON: %w", err)
 	}
+	k.InnerName = payload.Name
 	k.Provider = payload.Provider
 	k.Environment = payload.ProviderFields.Environment
 	k.DeepLinkURL = payload.ProviderFields.DeepLinkURL
@@ -597,6 +598,8 @@ func decodeAgentEditorAgent(unitID, containerID string, wrap *customBlobWrapper)
 		ToolChoice         string              `json:"toolChoice"`
 		Temperature        *float64            `json:"temperature"`
 		TopP               *float64            `json:"topP"`
+		EnableBackend      *bool               `json:"enableBackendStreaming"`
+		EnableUI           *bool               `json:"enableUIStreaming"`
 	}
 	if err := json.Unmarshal([]byte(wrap.Contents), &payload); err != nil {
 		return nil, fmt.Errorf("unmarshal Agent Contents JSON: %w", err)
@@ -614,6 +617,8 @@ func decodeAgentEditorAgent(unitID, containerID string, wrap *customBlobWrapper)
 	a.ToolChoice = payload.ToolChoice
 	a.Temperature = payload.Temperature
 	a.TopP = payload.TopP
+	a.EnableBackendStreaming = payload.EnableBackend
+	a.EnableUIStreaming = payload.EnableUI
 	return a, nil
 }
 

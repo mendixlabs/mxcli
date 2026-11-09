@@ -150,6 +150,8 @@ func execShow(ctx *ExecContext, s *ast.ShowStmt) error {
 		return listAgentEditorKnowledgeBases(ctx, s.InModule)
 	case ast.ShowConsumedMCPServices:
 		return listAgentEditorConsumedMCPServices(ctx, s.InModule)
+	case ast.ShowPublishedMCPServices:
+		return listAgentEditorPublishedMCPServices(ctx, s.InModule)
 	case ast.ShowRestClients:
 		return listRestClients(ctx, s.InModule)
 	case ast.ShowPublishedRestServices:
@@ -318,6 +320,8 @@ func describeByKind(ctx *ExecContext, s *ast.DescribeStmt) error {
 		return describeAgentEditorKnowledgeBase(ctx, s.Name)
 	case ast.DescribeConsumedMCPService:
 		return describeAgentEditorConsumedMCPService(ctx, s.Name)
+	case ast.DescribePublishedMCPService:
+		return describeAgentEditorPublishedMCPService(ctx, s.Name)
 	case ast.DescribeRestClient:
 		return describeRestClient(ctx, s.Name)
 	case ast.DescribePublishedRestService:
@@ -440,6 +444,8 @@ func describeObjectTypeLabel(t ast.DescribeObjectType) string {
 		return "knowledgebase"
 	case ast.DescribeConsumedMCPService:
 		return "consumedmcpservice"
+	case ast.DescribePublishedMCPService:
+		return "publishedmcpservice"
 	case ast.DescribeRestClient:
 		return "restclient"
 	case ast.DescribePublishedRestService:

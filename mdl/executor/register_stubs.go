@@ -630,6 +630,15 @@ func registerAgentEditorHandlers(r *Registry) {
 	r.Register(&ast.AlterConsumedMCPServiceStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
 		return execAlterConsumedMCPService(ctx, stmt.(*ast.AlterConsumedMCPServiceStmt))
 	})
+	r.Register(&ast.CreatePublishedMCPServiceStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
+		return execCreatePublishedMCPService(ctx, stmt.(*ast.CreatePublishedMCPServiceStmt))
+	})
+	r.Register(&ast.DropPublishedMCPServiceStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
+		return execDropPublishedMCPService(ctx, stmt.(*ast.DropPublishedMCPServiceStmt))
+	})
+	r.Register(&ast.AlterPublishedMCPServiceStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
+		return execAlterPublishedMCPService(ctx, stmt.(*ast.AlterPublishedMCPServiceStmt))
+	})
 	r.Register(&ast.AlterAgentStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
 		return execAlterAgent(ctx, stmt.(*ast.AlterAgentStmt))
 	})

@@ -28,6 +28,7 @@ func TestCallerRefKinds(t *testing.T) {
 		"action",       // widget action: the reported button case
 		"show_page",    // a microflow, or a button, opening a page
 		"snippet_call", // a page, snippet or layout placing a snippet (ako/mxcli#2017)
+		"mapping_call", // a flow applying an import or export mapping (ako/mxcli#1861)
 		"calculate",    // calculated attribute running a microflow
 		"home_page",    // navigation
 		"login_page",   //
@@ -52,6 +53,8 @@ func TestCallerRefKinds(t *testing.T) {
 	for _, k := range []string{
 		"datasource", "parameter", "return", "retrieve",
 		"create", "change", "delete", "associate", "generalize", "layout",
+		// A mapping built on a JSON structure uses it as a type.
+		"structure",
 		// `sync` reads as an entry point and is not one: an offline profile
 		// names an ENTITY it downloads, which is a use of a type.
 		"sync",

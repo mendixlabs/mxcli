@@ -229,6 +229,7 @@ createStatement
       | createDataTransformerStatement
       | createModelStatement
       | createConsumedMCPServiceStatement
+      | createPublishedMCPServiceStatement
       | createKnowledgeBaseStatement
       | createAgentStatement
       | createNanoflowStatement
@@ -290,6 +291,7 @@ alterStatement
     | ALTER aiModelKw qualifiedName SET agentEditorAlterAssignment (COMMA agentEditorAlterAssignment)*
     | ALTER KNOWLEDGE BASE qualifiedName SET agentEditorAlterAssignment (COMMA agentEditorAlterAssignment)*
     | ALTER CONSUMED MCP SERVICE qualifiedName SET agentEditorAlterAssignment (COMMA agentEditorAlterAssignment)*
+    | ALTER PUBLISHED MCP SERVICE qualifiedName alterPublishedMCPServiceAction+
     | ALTER AGENT qualifiedName alterAgentAction+
     | alterModuleSetStatement
     | alterModuleJarDepStatement
@@ -919,6 +921,7 @@ dropStatement
     | DROP DATA TRANSFORMER ifExists? qualifiedName
     | DROP aiModelKw ifExists? qualifiedName                           // DROP AI MODEL Module.Name (agent-editor)
     | DROP CONSUMED MCP SERVICE ifExists? qualifiedName                // DROP CONSUMED MCP SERVICE Module.Name
+    | DROP PUBLISHED MCP SERVICE ifExists? qualifiedName               // DROP PUBLISHED MCP SERVICE Module.Name
     | DROP KNOWLEDGE BASE ifExists? qualifiedName                      // DROP KNOWLEDGE BASE Module.Name
     | DROP AGENT ifExists? qualifiedName                               // DROP AGENT Module.Name
     | DROP CONFIGURATION ifExists? STRING_LITERAL

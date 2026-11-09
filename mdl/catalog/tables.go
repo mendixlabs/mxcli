@@ -7,6 +7,13 @@ package catalog
 //
 // History:
 //
+//	36 (mapping edges): refs gains mapping_call edges from a flow to each
+//	    import / export mapping it applies (import and export actions, REST
+//	    and web service calls) and structure edges from a mapping to its JSON
+//	    structure; activities.ActionRef names an import / export action's
+//	    mapping (ako/mxcli#1861). Without the bump a cached catalog keeps
+//	    answering "not referenced" for every mapping in use.
+//
 //	35 (snippet call edges): widgets gains SnippetRef, and a snippet call
 //	    becomes a snippet_call edge to a SNIPPET instead of a show_page edge to
 //	    a PAGE (ako/mxcli#2017). The linter selects SnippetRef, so against a
@@ -188,7 +195,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "35"
+const CatalogSchemaVersion = "36"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.

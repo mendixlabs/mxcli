@@ -67,6 +67,10 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 				assocStmt.CreateOrModify, assocStmt.IfNotExists, "association", assocStmt.Name.String())...)
 			violations = append(violations, ValidateAssociationModules(assocStmt)...)
 		}
+		// A published MCP service the runtime would not start (ako/mxcli#2020).
+		if pubStmt, ok := stmt.(*ast.CreatePublishedMCPServiceStmt); ok {
+			violations = append(violations, ValidatePublishedMCPService(pubStmt)...)
+		}
 		// Every other guarded create carries the same contradiction (#731).
 		// Entities and associations report it above, from their own flags.
 		violations = append(violations, validateCreateGuardContradiction(stmt)...)
@@ -324,6 +328,11 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// rejects it with CE0148. Needs no project, so it runs here rather than
 	// under --references, where it would only fire with -p (#836).
 	violations = append(violations, ValidateGrantRoles(prog)...)
+
+	// Warn on an AI model or knowledge base Provider no Studio Pro document has
+	// been seen to hold. mxbuild never reads it, so a typo builds and only
+	// shows in Studio Pro (ako/mxcli#2023).
+	violations = append(violations, ValidateAgentProviders(prog)...)
 
 	// Flag an after-startup microflow that does not return Boolean (CE0142).
 	// The reference RESOLVES — the name exists — so #274's existence check has

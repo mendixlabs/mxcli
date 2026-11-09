@@ -3,8 +3,10 @@
 package modelsdkbackend
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/modelsdk/codec"
@@ -20,7 +22,7 @@ const customBlobDocType = "CustomBlobDocuments$CustomBlobDocument"
 
 // customBlobDocToGen builds the CustomBlobDocument envelope (Contents JSON +
 // metadata) as a codec element. Mirrors sdk/mpr.writeCustomBlobDocument.
-func customBlobDocToGen(unitID, name, documentation, exportLevel string, excluded bool, customType, readableType, contentsJSON string) element.Element {
+func customBlobDocToGen(unitID, name, documentation, exportLevel string, excluded bool, customType, readableType, contentsJSON, createdBy string) element.Element {
 	g := newElem(customBlobDocType, unitID)
 	addStr(g, "Contents", contentsJSON)
 	addStr(g, "CustomDocumentType", customType)
@@ -28,7 +30,7 @@ func customBlobDocToGen(unitID, name, documentation, exportLevel string, exclude
 	addBool(g, "Excluded", excluded)
 	addStr(g, "ExportLevel", orDefault(exportLevel, "Hidden"))
 	meta := newElem("CustomBlobDocuments$CustomBlobDocumentMetadata", "")
-	addStr(meta, "CreatedByExtension", agenteditor.CreatedByExtensionID)
+	addStr(meta, "CreatedByExtension", orDefault(createdBy, agenteditor.CreatedByExtensionID))
 	addStr(meta, "ReadableTypeName", readableType)
 	addPart(g, "Metadata", meta)
 	addStr(g, "Name", name)
@@ -36,9 +38,19 @@ func customBlobDocToGen(unitID, name, documentation, exportLevel string, exclude
 }
 
 // writeCustomBlob encodes the envelope and inserts (create) or rewrites (update)
-// the unit.
+// the unit. A rewrite writes onto the stored Contents and keeps the stored
+// creating extension (an imported agent says extension/agent-importer).
 func (b *Backend) writeCustomBlob(unitID, containerID, name, documentation, exportLevel string, excluded bool, customType, readableType, contentsJSON string, update bool) error {
-	el := customBlobDocToGen(unitID, name, documentation, exportLevel, excluded, customType, readableType, contentsJSON)
+	createdBy := ""
+	if update {
+		stored := b.readStoredCustomBlob(unitID)
+		var err error
+		if contentsJSON, err = carryStoredContents(stored.contents, contentsJSON, contentsSpecFor(customType)); err != nil {
+			return err
+		}
+		createdBy = stored.createdBy
+	}
+	el := customBlobDocToGen(unitID, name, documentation, exportLevel, excluded, customType, readableType, contentsJSON, createdBy)
 	raw, err := (&codec.Encoder{}).Encode(el)
 	if err != nil {
 		return fmt.Errorf("encode custom blob: %w", err)
@@ -204,6 +216,58 @@ func (b *Backend) DeleteAgentEditorConsumedMCPService(id string) error {
 }
 
 // ---------------------------------------------------------------------------
+// Published MCP service
+// ---------------------------------------------------------------------------
+
+func (b *Backend) CreateAgentEditorPublishedMCPService(p *agenteditor.PublishedMCPService) error {
+	if p == nil {
+		return fmt.Errorf("CreateAgentEditorPublishedMCPService: nil service")
+	}
+	if b.writer == nil {
+		return fmt.Errorf("CreateAgentEditorPublishedMCPService: not connected for writing")
+	}
+	if p.Name == "" {
+		return fmt.Errorf("CreateAgentEditorPublishedMCPService: name is required")
+	}
+	if p.ContainerID == "" {
+		return fmt.Errorf("CreateAgentEditorPublishedMCPService: container ID is required")
+	}
+	if p.ID == "" {
+		p.ID = model.ID(mmpr.GenerateID())
+	}
+	contents, err := encodePublishedMCPServiceContents(p)
+	if err != nil {
+		return err
+	}
+	// Only Agent Editor 2.6+ has this document, and 2.6 indents Contents.
+	if contents, err = formatLikeStored([]byte(contents), "{\n"); err != nil {
+		return err
+	}
+	return b.writeCustomBlob(string(p.ID), string(p.ContainerID), p.Name, p.Documentation, p.ExportLevel, p.Excluded, agenteditor.CustomTypePublishedMCPService, agenteditor.ReadablePublishedMCPService, contents, false)
+}
+
+func (b *Backend) UpdateAgentEditorPublishedMCPService(p *agenteditor.PublishedMCPService) error {
+	if p == nil {
+		return fmt.Errorf("UpdateAgentEditorPublishedMCPService: nil service")
+	}
+	if b.writer == nil {
+		return fmt.Errorf("UpdateAgentEditorPublishedMCPService: not connected for writing")
+	}
+	contents, err := encodePublishedMCPServiceContents(p)
+	if err != nil {
+		return err
+	}
+	return b.writeCustomBlob(string(p.ID), string(p.ContainerID), p.Name, p.Documentation, p.ExportLevel, p.Excluded, agenteditor.CustomTypePublishedMCPService, agenteditor.ReadablePublishedMCPService, contents, true)
+}
+
+func (b *Backend) DeleteAgentEditorPublishedMCPService(id string) error {
+	if b.writer == nil {
+		return fmt.Errorf("DeleteAgentEditorPublishedMCPService: not connected for writing")
+	}
+	return b.writer.DeleteUnit(id)
+}
+
+// ---------------------------------------------------------------------------
 // Agent
 // ---------------------------------------------------------------------------
 
@@ -304,7 +368,7 @@ func encodeKnowledgeBaseContents(k *agenteditor.KnowledgeBase) (string, error) {
 		ProviderFields providerFields `json:"providerFields"`
 	}
 	return marshalJSON(contentsShape{
-		Name:     "",
+		Name:     k.InnerName,
 		Provider: k.Provider,
 		ProviderFields: providerFields{
 			Environment:      k.Environment,
@@ -333,6 +397,61 @@ func encodeConsumedMCPServiceContents(c *agenteditor.ConsumedMCPService) (string
 	})
 }
 
+// encodePublishedMCPServiceContents writes the keys in the order Agent Editor
+// 2.6 saves them: authenticationMicroflow last, after documentation, when it is
+// set. authorizationServerUrl and scopes, which the Studio Pro 11.16 sample does
+// not hold, follow it; their place is inferred from the runtime reader.
+func encodePublishedMCPServiceContents(p *agenteditor.PublishedMCPService) (string, error) {
+	// Agent Editor writes a tool's sourceMicroflow qualifiedName first, and
+	// the authenticationMicroflow documentId first (as agenteditor.DocRef).
+	type microflowRef struct {
+		QualifiedName string `json:"qualifiedName"`
+		DocumentID    string `json:"documentId"`
+	}
+	ref := func(r *agenteditor.DocRef) *microflowRef {
+		if r == nil {
+			return nil
+		}
+		return &microflowRef{QualifiedName: r.QualifiedName, DocumentID: r.DocumentID}
+	}
+	type toolEntry struct {
+		UUID            string        `json:"uuid"`
+		Name            string        `json:"name"`
+		Description     string        `json:"description"`
+		SourceMicroflow *microflowRef `json:"sourceMicroflow,omitempty"`
+		Title           string        `json:"title"`
+		Schema          string        `json:"schema,omitempty"`
+	}
+	type contentsShape struct {
+		ServerName              string              `json:"serverName"`
+		EndpointPath            string              `json:"endpointPath"`
+		Version                 string              `json:"version"`
+		ProtocolVersion         string              `json:"protocolVersion"`
+		AuthenticationEnabled   bool                `json:"authenticationEnabled"`
+		Tools                   []toolEntry         `json:"tools"`
+		Documentation           string              `json:"documentation"`
+		AuthenticationMicroflow *agenteditor.DocRef `json:"authenticationMicroflow,omitempty"`
+		AuthorizationServerURL  string              `json:"authorizationServerUrl,omitempty"`
+		Scopes                  string              `json:"scopes,omitempty"`
+	}
+	tools := make([]toolEntry, 0, len(p.Tools))
+	for _, t := range p.Tools {
+		tools = append(tools, toolEntry{UUID: t.UUID, Name: t.Name, Description: t.Description, SourceMicroflow: ref(t.SourceMicroflow), Title: t.Title, Schema: t.Schema})
+	}
+	return marshalJSON(contentsShape{
+		ServerName:              p.ServerName,
+		EndpointPath:            p.EndpointPath,
+		Version:                 p.Version,
+		ProtocolVersion:         p.ProtocolVersion,
+		AuthenticationEnabled:   p.AuthenticationEnabled,
+		AuthenticationMicroflow: p.AuthenticationMicroflow,
+		AuthorizationServerURL:  p.AuthorizationServerURL,
+		Scopes:                  p.Scopes,
+		Tools:                   tools,
+		Documentation:           p.InnerDocumentation,
+	})
+}
+
 func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 	type toolEntry struct {
 		ID          string              `json:"id"`
@@ -341,6 +460,10 @@ func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 		Enabled     bool                `json:"enabled"`
 		ToolType    string              `json:"toolType"`
 		Document    *agenteditor.DocRef `json:"document,omitempty"`
+		// Written only when set, so a document without them stays without.
+		UserAccessApproval string  `json:"userAccessApproval,omitempty"`
+		DisplayTitle       *string `json:"displayTitle,omitempty"`
+		DisplayDescription *string `json:"displayDescription,omitempty"`
 	}
 	type kbToolEntry struct {
 		ID                   string              `json:"id"`
@@ -351,6 +474,8 @@ func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 		Document             *agenteditor.DocRef `json:"document,omitempty"`
 		CollectionIdentifier string              `json:"collectionIdentifier,omitempty"`
 		MaxResults           int                 `json:"maxResults,omitempty"`
+		MinSimilarity        *float64            `json:"minSimilarity,omitempty"`
+		IsVisible            *bool               `json:"isVisible,omitempty"`
 	}
 	type contentsShape struct {
 		Description        string                 `json:"description"`
@@ -366,15 +491,19 @@ func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 		ToolChoice         string                 `json:"toolChoice,omitempty"`
 		Temperature        *float64               `json:"temperature,omitempty"`
 		TopP               *float64               `json:"topP,omitempty"`
+		EnableBackend      *bool                  `json:"enableBackendStreaming,omitempty"`
+		EnableUI           *bool                  `json:"enableUIStreaming,omitempty"`
 	}
 
 	tools := make([]toolEntry, 0, len(a.Tools))
 	for _, t := range a.Tools {
-		tools = append(tools, toolEntry{ID: t.ID, Name: t.Name, Description: t.Description, Enabled: t.Enabled, ToolType: t.ToolType, Document: t.Document})
+		tools = append(tools, toolEntry{ID: t.ID, Name: t.Name, Description: t.Description, Enabled: t.Enabled, ToolType: t.ToolType, Document: t.Document,
+			UserAccessApproval: t.UserAccessApproval, DisplayTitle: t.DisplayTitle, DisplayDescription: t.DisplayDescription})
 	}
 	kbTools := make([]kbToolEntry, 0, len(a.KBTools))
 	for _, kb := range a.KBTools {
-		kbTools = append(kbTools, kbToolEntry{ID: kb.ID, Name: kb.Name, Description: kb.Description, Enabled: kb.Enabled, ToolType: kb.ToolType, Document: kb.Document, CollectionIdentifier: kb.CollectionIdentifier, MaxResults: kb.MaxResults})
+		kbTools = append(kbTools, kbToolEntry{ID: kb.ID, Name: kb.Name, Description: kb.Description, Enabled: kb.Enabled, ToolType: kb.ToolType, Document: kb.Document, CollectionIdentifier: kb.CollectionIdentifier, MaxResults: kb.MaxResults,
+			MinSimilarity: kb.MinSimilarity, IsVisible: kb.IsVisible})
 	}
 	vars := a.Variables
 	if vars == nil {
@@ -394,13 +523,37 @@ func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 		ToolChoice:         a.ToolChoice,
 		Temperature:        a.Temperature,
 		TopP:               a.TopP,
+		EnableBackend:      a.EnableBackendStreaming,
+		EnableUI:           a.EnableUIStreaming,
 	})
 }
 
 func marshalJSON(v any) (string, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	// Agent Editor stores <, > and & as themselves (prompts are full of them).
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
 		return "", err
 	}
-	return string(b), nil
+	return string(bytes.TrimRight(buf.Bytes(), "\n")), nil
+}
+
+// formatLikeStored lays raw out the way stored is: Agent Editor 2.6 saves
+// Contents indented by two spaces, earlier versions and the agent importer
+// compact. A rewrite in the other layout differed from the stored bytes, so
+// every restatement of an unchanged document wrote it.
+func formatLikeStored(raw []byte, stored string) (string, error) {
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, raw); err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(stored, "{\n") {
+		return compact.String(), nil
+	}
+	var out bytes.Buffer
+	if err := json.Indent(&out, compact.Bytes(), "", "  "); err != nil {
+		return "", err
+	}
+	return out.String(), nil
 }
