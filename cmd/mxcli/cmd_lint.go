@@ -481,6 +481,8 @@ func builtinLintRules() []linter.Rule {
 		rules.NewImageSourceRule(),
 		rules.NewReactUnsupportedWidgetRule(),
 		rules.NewSnippetCallAppearanceRule(),
+		rules.NewAgentWithoutSelectedModelRule(),
+		rules.NewConsumedMCPServiceWithoutEndpointRule(),
 		rules.NewEmptyContainerRule(),
 		rules.NewGallerySelectionListenerRule(),
 		rules.NewDataViewLayoutGridRule(),
