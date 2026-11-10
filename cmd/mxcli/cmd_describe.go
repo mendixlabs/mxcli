@@ -405,6 +405,7 @@ var objectTypeToDescribe = map[string]string{
 	"AI_MODEL":               "aimodel",
 	"KNOWLEDGE_BASE":         "knowledgebase",
 	"CONSUMED_MCP_SERVICE":   "consumedmcpservice",
+	"PUBLISHED_MCP_SERVICE":  "publishedmcpservice",
 	"JAVASCRIPT_ACTION":      "javascriptaction",
 }
 

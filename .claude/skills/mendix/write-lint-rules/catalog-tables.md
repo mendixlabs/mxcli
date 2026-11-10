@@ -144,6 +144,7 @@ Returned by `strings(language = None)`.
 | `context` | string | What the text is. Translatable text names its stored type and property: `"Forms$Page.Title"`, `"Forms$TabPage.Caption"`, `"Enumerations$EnumerationValue.Caption"`; the rest a lower-case label: `"documentation"` (of an entity, attribute, constant, page, … — `object_type` says which; a module's domain model documentation is `"domain_model_documentation"`), `"page_url"`, `"log_node"`, `"log_message"`, … |
 | `language` | string | `"en_US"`; `""` for text that is not translatable (documentation, URLs) |
 | `element_id` | string | UUID of the element carrying the text |
+| `widget_id` | string | UUID of the widget around the text, matching `widgets().id`; `""` outside a widget (a page's own title). A tab page's caption names the tab page, which `widgets()` does not list. A button's caption row has `element_id` of its `Forms$ClientTemplate` and its confirmation rows that of a `Forms$ConfirmationInfo`, so collect a widget's texts in every language by `widget_id`, not `element_id` |
 | `module_name` | string | `"Sales"` |
 
 ### layout
@@ -201,6 +202,8 @@ Returned by `widgets()` (full catalog — auto-detected).
 | `dynamic_classes` | string | The `Dynamic classes` expression (Appearance), else `""` |
 | `action_type` | string | Stored type of the widget's primary action — the button's action, else a container's on-click action, else a list view's or image's click action: `"Forms$DeleteClientAction"`, `"Forms$MicroflowAction"`, `"Forms$CallNanoflowClientAction"`, `"Forms$FormAction"` (show page), `"Forms$SaveChangesClientAction"`, `"Forms$CancelChangesClientAction"`, `"Forms$ClosePageClientAction"`, `"Forms$CreateObjectClientAction"`, `"Forms$OpenLinkClientAction"`, `"Forms$NoAction"`; `""` for a widget with no action property. Pluggable widgets' actions (inside their property bag) are not read |
 | `has_confirmation` | bool | The primary action asks for confirmation. Only a microflow, nanoflow or workflow call can; a delete action (`"Forms$DeleteClientAction"`) has no confirmation setting at all, so "a delete must confirm" is enforced as "no button uses the delete action directly — call a microflow or nanoflow with a confirmation" |
+| `caption` | string | `"Delete sale"` — the widget's own caption in the project's default language (buttons and labels; an input's label and a dynamic text's content are not its caption); `""` when it has none. Other languages: `strings(language = …)` rows with `widget_id == w.id` |
+| `tooltip` | string | The tooltip in the project's default language; `""` when none is set |
 
 ```python
 # Inline styles, classes outside an allow-list, and direct delete buttons.

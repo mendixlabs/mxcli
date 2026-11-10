@@ -264,6 +264,8 @@ One row per widget **instance** on a page or snippet. Full build only
 | `Class`, `Style`, `DynamicClasses` | The widget's Appearance |
 | `ActionType` | Stored type of the primary action — `Action` (buttons), else `OnClickAction` (containers), else `ClickAction` (list views, images): `Forms$DeleteClientAction`, `Forms$MicroflowAction`, `Forms$CallNanoflowClientAction`, `Forms$FormAction` (show page), `Forms$NoAction`, …; empty for a widget without one. A pluggable widget's actions are not read |
 | `HasConfirmation` | 1 when the primary action asks for confirmation. Only microflow, nanoflow and workflow calls have that setting; a delete action never does |
+| `Caption` | The widget's own caption in the project's default language (buttons and labels; an input's label and a dynamic text's content are not its caption); `''` when it has none |
+| `Tooltip` | The widget's tooltip in the project's default language; `''` when none is set |
 
 ```sql
 -- Widgets nested more than five deep, deepest first
@@ -470,6 +472,69 @@ with the suggestion *Remove if unused* — on code that runs on every commit
 The edge carries neither the moment nor the event; `refs` has no column for
 them, and a kind per combination would put eight kinds into every consumer's
 list to say one thing. Which moment and which event is this table's question.
+
+## Agent Tables
+
+The Agent Editor's documents, with the settings their JSON contents hold
+([ako/mxcli#2075](https://github.com/ako/mxcli/issues/2075)). A boolean that a
+document does not store, as an older Agent Editor does not, is `NULL` rather
+than `0`, so a query can tell "off" from "never set".
+
+### CATALOG.AGENTS
+
+| Column | Description |
+|--------|-------------|
+| `UsageType` | `Chat` or `Task` |
+| `Model` | The AI model document, qualified name |
+| `SelectedModel`, `SelectedModelName` | The model picked from the provider's list, by id and display name (`NULL` if none) |
+| `ToolChoice`, `MaxTokens`, `Temperature`, `TopP` | Generation settings, `NULL` or empty when not set |
+| `EnableBackendStreaming`, `EnableUIStreaming` | `1`, `0`, or `NULL` when the document does not store the switch |
+| `Entity` | The context entity, qualified name |
+| `Variables` | The prompt variable keys, comma-separated |
+| `ToolCount`, `KnowledgeBaseCount`, `MCPServiceCount` | Entries in the agent's tool lists. `ToolCount` excludes MCP services |
+
+### CATALOG.AGENT_TOOLS
+
+One row per entry of an agent's tools list: a microflow, nanoflow or agent it
+calls, or a consumed MCP service (`ToolType = 'MCP'`).
+
+| Column | Description |
+|--------|-------------|
+| `AgentId`, `Agent` | The agent's id and qualified name |
+| `Name`, `Description` | What the model sees |
+| `ToolType` | `Microflow`, `MCP`, or empty |
+| `Document` | The microflow, nanoflow, agent or MCP service, qualified name |
+| `Enabled` | `1` or `0` |
+| `UserAccessApproval` | `HiddenForUser`, `VisibleForUser`, `UserConfirmationRequired`, or empty when not stored |
+| `DisplayTitle`, `DisplayDescription` | What the user sees of the call, `NULL` when not stored |
+
+`CATALOG.AGENT_MCP_SERVICES` is the same rows filtered to `ToolType = 'MCP'`,
+with `Document` named `Service`.
+
+```sql
+-- Tools an agent can run without the user's approval
+SELECT Agent, Name, Document FROM CATALOG.AGENT_TOOLS
+WHERE Enabled = 1 AND UserAccessApproval <> 'UserConfirmationRequired';
+```
+
+### CATALOG.AGENT_KNOWLEDGE_BASES
+
+One row per entry of an agent's knowledge base tools list: `Agent`, `Name`,
+`Description`, `KnowledgeBase` (qualified name), `Collection`, `MaxResults`,
+`MinSimilarity`, `IsVisible` and `Enabled`.
+
+### Models, knowledge bases and MCP services
+
+| Table | Columns beyond the document's |
+|-------|-------------------------------|
+| `CATALOG.AI_MODELS` | `Provider`, `ModelType`, `DisplayName`, `KeyConstant` |
+| `CATALOG.KNOWLEDGE_BASES` | `Provider`, `KeyConstant` |
+| `CATALOG.CONSUMED_MCP_SERVICES` | `ProtocolVersion`, `Version`, `ConnectionTimeoutSeconds` |
+| `CATALOG.PUBLISHED_MCP_SERVICES` | `ServerName`, `EndpointPath`, `Version`, `ProtocolVersion`, `AuthenticationEnabled`, `AuthenticationMicroflow`, `ToolCount` |
+
+What an agent references (its tools, model, knowledge bases and context entity)
+and what a published MCP service runs are also edges in `CATALOG.REFS`, so
+`show callers` and `show impact` see them.
 
 ## Graph-Analysis Tables
 
