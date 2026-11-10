@@ -7,6 +7,11 @@ package catalog
 //
 // History:
 //
+//	40 (widget texts): widgets gains Caption and Tooltip (default language),
+//	    strings gains WidgetId, the widget a caption, tooltip or confirmation
+//	    text belongs to (ako/mxcli#1303). Without the bump a cached catalog
+//	    lacks the columns and every query naming them fails.
+//
 //	39 (domain model annotations): annotations_data + view, one row per
 //	    domain model annotation with its full caption and canvas position
 //	    (ako/mxcli#1300). Without the bump a cached catalog has the table but
@@ -214,7 +219,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "39"
+const CatalogSchemaVersion = "40"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -916,6 +921,11 @@ func (c *Catalog) createTables() error {
 			-- only microflow, nanoflow and workflow calls can.
 			ActionType TEXT,
 			HasConfirmation INTEGER DEFAULT 0,
+			-- The widget's own Caption and Tooltip in the project's default
+			-- language (ako/mxcli#1303); a button's caption was otherwise only
+			-- in strings, under its Forms$ClientTemplate's id.
+			Caption TEXT DEFAULT '',
+			Tooltip TEXT DEFAULT '',
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,
@@ -1627,7 +1637,10 @@ func (c *Catalog) createTables() error {
 				ProjectId, ProjectName, SnapshotId, SnapshotDate, SnapshotSource
 			FROM jar_dependencies`,
 
-		// FTS5 virtual tables for full-text search
+		// FTS5 virtual tables for full-text search. WidgetId is the widget a
+		// text belongs to (ako/mxcli#1303): ElementId is the text's direct
+		// owner, which for a button caption is its Forms$ClientTemplate.
+		// UNINDEXED, since an id is no search term.
 		`CREATE VIRTUAL TABLE IF NOT EXISTS strings USING fts5(
 			QualifiedName,
 			ObjectType,
@@ -1635,7 +1648,8 @@ func (c *Catalog) createTables() error {
 			StringContext,
 			Language,
 			ElementId,
-			ModuleName
+			ModuleName,
+			WidgetId UNINDEXED
 		)`,
 
 		// What the source rows were described from: every unit's content

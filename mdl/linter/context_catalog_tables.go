@@ -232,6 +232,7 @@ type CatalogString struct {
 	Language      string // "" for text that is not translatable
 	ElementID     string
 	ModuleName    string
+	WidgetID      string // the widget the text belongs to (ako/mxcli#1303); "" outside a widget
 }
 
 // Strings iterates the catalog's strings outside System and Marketplace modules,
@@ -249,7 +250,8 @@ func (ctx *LintContext) Strings(language string) iter.Seq[CatalogString] {
 		rows, err := ctx.db.Query(fmt.Sprintf(`
 			SELECT COALESCE(s.QualifiedName, ''), COALESCE(s.ObjectType, ''),
 			       COALESCE(s.StringValue, ''), COALESCE(s.StringContext, ''),
-			       COALESCE(s.Language, ''), COALESCE(s.ElementId, ''), COALESCE(s.ModuleName, '')
+			       COALESCE(s.Language, ''), COALESCE(s.ElementId, ''), COALESCE(s.ModuleName, ''),
+			       COALESCE(s.WidgetId, '')
 			FROM strings s
 			LEFT JOIN modules m ON s.ModuleName = m.Name
 			WHERE %s AND %s AND %s
@@ -264,7 +266,7 @@ func (ctx *LintContext) Strings(language string) iter.Seq[CatalogString] {
 		for rows.Next() {
 			var s CatalogString
 			if err := rows.Scan(&s.QualifiedName, &s.ObjectType, &s.Value, &s.Context,
-				&s.Language, &s.ElementID, &s.ModuleName); err != nil {
+				&s.Language, &s.ElementID, &s.ModuleName, &s.WidgetID); err != nil {
 				ctx.recordQueryError("Strings (row scan)", err)
 				continue
 			}

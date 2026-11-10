@@ -81,9 +81,9 @@ func catalogTablesFixture(t *testing.T) *catalog.Catalog {
 			"o-"+mod, "svc-"+mod, mod+".OrderApi", "orders", "Get", "/{id}", "Get one order",
 			mod+".PRS_GetOrder", 1, mod, "p", "s")
 		for _, lang := range []string{"en_US", "nl_NL"} {
-			exec(`INSERT INTO strings (QualifiedName, ObjectType, StringValue, StringContext, Language, ElementId, ModuleName)
-				VALUES (?,?,?,?,?,?,?)`,
-				mod+".Order_Overview", "PAGE", "Orders "+lang, "Forms$Page.Title", lang, "w-"+mod, mod)
+			exec(`INSERT INTO strings (QualifiedName, ObjectType, StringValue, StringContext, Language, ElementId, ModuleName, WidgetId)
+				VALUES (?,?,?,?,?,?,?,?)`,
+				mod+".Order_Overview", "PAGE", "Orders "+lang, "Forms$ClientTemplate.Template", lang, "tpl-"+mod, mod, "btn-"+mod)
 		}
 	}
 	// Navigation belongs to the project: no module, no module filter.
@@ -163,14 +163,14 @@ func TestCatalogTableBuiltins(t *testing.T) {
 				"module_name=Sales|version=1.2.3",
 		}},
 		{"strings()", []string{
-			"context=Forms$Page.Title|element_id=w-Sales|language=en_US|module_name=Sales|object_type=PAGE|" +
-				"qualified_name=Sales.Order_Overview|value=Orders en_US",
-			"context=Forms$Page.Title|element_id=w-Sales|language=nl_NL|module_name=Sales|object_type=PAGE|" +
-				"qualified_name=Sales.Order_Overview|value=Orders nl_NL",
+			"context=Forms$ClientTemplate.Template|element_id=tpl-Sales|language=en_US|module_name=Sales|object_type=PAGE|" +
+				"qualified_name=Sales.Order_Overview|value=Orders en_US|widget_id=btn-Sales",
+			"context=Forms$ClientTemplate.Template|element_id=tpl-Sales|language=nl_NL|module_name=Sales|object_type=PAGE|" +
+				"qualified_name=Sales.Order_Overview|value=Orders nl_NL|widget_id=btn-Sales",
 		}},
 		{`strings(language = "nl_NL")`, []string{
-			"context=Forms$Page.Title|element_id=w-Sales|language=nl_NL|module_name=Sales|object_type=PAGE|" +
-				"qualified_name=Sales.Order_Overview|value=Orders nl_NL",
+			"context=Forms$ClientTemplate.Template|element_id=tpl-Sales|language=nl_NL|module_name=Sales|object_type=PAGE|" +
+				"qualified_name=Sales.Order_Overview|value=Orders nl_NL|widget_id=btn-Sales",
 		}},
 		// An untranslated language has no row, rather than an empty one.
 		{`strings("de_DE")`, nil},

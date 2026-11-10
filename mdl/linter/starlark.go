@@ -1332,6 +1332,8 @@ func widgetToStarlark(w Widget) starlark.Value {
 		"dynamic_classes":  starlark.String(w.DynamicClasses),
 		"action_type":      starlark.String(w.ActionType),
 		"has_confirmation": starlark.Bool(w.HasConfirmation),
+		"caption":          starlark.String(w.Caption),
+		"tooltip":          starlark.String(w.Tooltip),
 	})
 }
 
