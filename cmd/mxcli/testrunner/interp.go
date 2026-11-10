@@ -68,7 +68,7 @@ type execThrows struct {
 
 // execStep is one statement of a test body. Op decides which fields apply.
 type execStep struct {
-	Op string `json:"op"` // declare, set, create, change, commit, delete, call, retrieve, count
+	Op string `json:"op"` // declare, set, create, change, commit, delete, call, retrieve, count, aggregate
 	// Var is the variable the step writes (declare, set, create, call output,
 	// retrieve, count) or the object it acts on (change, commit, delete).
 	Var    string `json:"var,omitempty"`
@@ -85,7 +85,11 @@ type execStep struct {
 	Args   []execArg `json:"args,omitempty"` // call
 	XPath  string    `json:"xpath,omitempty"`
 	First  bool      `json:"first,omitempty"`
-	Of     string    `json:"of,omitempty"` // count: the list variable
+	Of     string    `json:"of,omitempty"`    // count, aggregate: the list variable
+	Agg    string    `json:"agg,omitempty"`   // aggregate: count, sum, average, minimum, maximum
+	Attr   string    `json:"attr,omitempty"`  // aggregate: the attribute summed or compared
+	Assoc  string    `json:"assoc,omitempty"` // retrieve over an association: the association
+	From   string    `json:"from,omitempty"`  // retrieve over an association: the start object
 	Line   int       `json:"line,omitempty"`
 }
 
@@ -307,8 +311,13 @@ func compileStep(st ast.MicroflowStatement, use func(string) string) (execStep, 
 			return execStep{}, r
 		}
 		switch {
+		case s.StartVariable != "" && (s.Where != nil || len(s.SortColumns) > 0 || s.First || s.Limit != "" || s.Offset != ""):
+			return execStep{}, "a retrieve over an association with where, sort by, first, limit or offset"
 		case s.StartVariable != "":
-			return execStep{}, "a retrieve over an association"
+			if r := use("$" + s.StartVariable); r != "" {
+				return execStep{}, r
+			}
+			return execStep{Op: "retrieve", Var: s.Variable, Assoc: s.Source.String(), From: s.StartVariable}, ""
 		case len(s.SortColumns) > 0:
 			return execStep{}, "a retrieve with sort by"
 		case s.Limit != "" || s.Offset != "":
@@ -324,8 +333,31 @@ func compileStep(st ast.MicroflowStatement, use func(string) string) (execStep, 
 			xpath += strings.Join(strings.Fields(c), " ")
 		}
 		return execStep{Op: "retrieve", Var: s.Variable, Entity: entity, XPath: xpath, First: s.First}, ""
+
+	case *ast.AggregateListStmt:
+		if r := plainErrorHandling(s.ErrorHandling); r != "" {
+			return execStep{}, r
+		}
+		agg, ok := execAggregates[s.Operation]
+		if !ok || s.IsExpression {
+			return execStep{}, "the statement " + statementKind(st)
+		}
+		if r := use("$" + s.InputVariable); r != "" {
+			return execStep{}, r
+		}
+		return execStep{Op: "aggregate", Var: s.OutputVariable, Of: s.InputVariable, Agg: agg, Attr: s.Attribute}, ""
 	}
 	return execStep{}, "the statement " + statementKind(st)
+}
+
+// execAggregates are the list aggregates the executor computes. The expression
+// form (`sum $l by expression`), reduce, all and any are not among them.
+var execAggregates = map[ast.AggregateListOperationType]string{
+	ast.AggregateCount:   "count",
+	ast.AggregateSum:     "sum",
+	ast.AggregateAverage: "average",
+	ast.AggregateMinimum: "minimum",
+	ast.AggregateMaximum: "maximum",
 }
 
 // plainErrorHandling accepts the error handling the executor reproduces: none,
@@ -350,12 +382,43 @@ func commitFlag(c ast.CommitFlag) (commit, events bool) {
 	return false, false
 }
 
-// statementKind names a statement type for a routing message.
+// statementKind names a statement for a routing message the way the test's
+// author wrote it: "the statement count / sum … by" tells them what to rewrite,
+// "the statement AggregateList" does not.
 func statementKind(st ast.MicroflowStatement) string {
-	name := fmt.Sprintf("%T", st)
-	name = strings.TrimPrefix(name, "*ast.")
-	name = strings.TrimSuffix(name, "Stmt")
+	switch s := st.(type) {
+	case *ast.AggregateListStmt:
+		switch {
+		case s.Operation == ast.AggregateReduce:
+			return "reduce"
+		case s.Operation == ast.AggregateAll || s.Operation == ast.AggregateAny:
+			return "all / any"
+		case s.IsExpression:
+			return "an aggregate by expression (" + strings.ToLower(s.Operation.String()) + " … by an expression)"
+		}
+	case *ast.ListOperationStmt:
+		return "a list operation (" + strings.ToLower(s.Operation.String()) + ")"
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(fmt.Sprintf("%T", st), "*ast."), "Stmt")
+	if mdl, ok := mdlStatementNames[name]; ok {
+		return mdl
+	}
 	return name
+}
+
+// mdlStatementNames spells statement types the way MDL writes them.
+var mdlStatementNames = map[string]string{
+	"If": "if", "EnumSplit": "case", "InheritanceSplit": "split type", "Loop": "loop", "While": "while",
+	"Break": "break", "Continue": "continue", "Return": "return", "RaiseError": "raise error",
+	"CastObject": "cast", "Rollback": "rollback", "CallJavaAction": "call java action",
+	"CallNanoflow": "call nanoflow", "CallJavaScriptAction": "call javascript action",
+	"CallExternalAction": "call external action", "CallWebService": "call web service",
+	"RestCall": "rest call", "SendRestRequest": "send rest request", "ImportFromMapping": "import from mapping",
+	"ExportToMapping": "export to mapping", "TransformJson": "transform json",
+	"ExecuteDatabaseQuery": "execute database query", "CreateList": "create list", "AddToList": "add to",
+	"RemoveFromList": "remove from", "ClearList": "clear", "Log": "log", "ShowPage": "show page",
+	"ClosePage": "close page", "ShowMessage": "show message", "ValidationFeedback": "validation feedback",
+	"SendEmail": "send email", "DownloadFile": "download file",
 }
 
 // expressionVariables lists the $variables an expression in Mendix's grammar
@@ -411,24 +474,38 @@ func firstUndeclared(expr string, declared map[string]bool) string {
 	return ""
 }
 
-// compileSuiteForExec compiles every test for the executor. It returns the
-// reason the suite has to take the microflow route when one test cannot be
-// compiled: a run takes one route, so a suite is either injected and built or
-// not touched at all. A test whose assertions are already an ERROR does not
-// decide the route; it is reported without running either way.
-func compileSuiteForExec(suite *TestSuite) (map[string]*execProgram, string) {
-	out := make(map[string]*execProgram, len(suite.Tests))
+// compileSuiteForExec compiles every test it can for the executor. The others
+// are returned with the reason each needs the microflow route: a run sends the
+// first kind to the running app and injects and builds only the second, so one
+// unsupported statement no longer costs the whole suite a build. A test whose
+// assertions are already an ERROR is in neither; it is reported without running.
+func compileSuiteForExec(suite *TestSuite) (programs map[string]*execProgram, needBuild map[string]string) {
+	programs = make(map[string]*execProgram, len(suite.Tests))
+	needBuild = map[string]string{}
 	for _, tc := range suite.Tests {
 		if len(tc.AssertionErrors) > 0 {
 			continue
 		}
 		p, reason := compileForExec(tc)
 		if reason != "" {
-			return nil, fmt.Sprintf("test %q: %s", tc.Name, reason)
+			needBuild[tc.ID] = reason
+			continue
 		}
-		out[tc.ID] = p
+		programs[tc.ID] = p
 	}
-	return out, ""
+	return programs, needBuild
+}
+
+// suiteWith is suite with only the tests keep accepts.
+func suiteWith(suite *TestSuite, keep func(TestCase) bool) *TestSuite {
+	sub := *suite
+	sub.Tests = nil
+	for _, tc := range suite.Tests {
+		if keep(tc) {
+			sub.Tests = append(sub.Tests, tc)
+		}
+	}
+	return &sub
 }
 
 // staleModelError refuses to run tests straight against an app whose model on
