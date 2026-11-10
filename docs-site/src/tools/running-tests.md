@@ -185,6 +185,15 @@ rebuild, or restart its app, for the injection, `run status` shows
 the watcher finds nothing to build. An edit made in the meantime is built once
 the run ends. A hold whose run died is ignored.
 
+A run that builds (`--local`, or a built test under `--attach`) writes the
+`deployment/` folder the dev loop serves from too — mxbuild cannot put it
+elsewhere. When it did, the dev loop builds its own back once the run ends, so a
+later `--attach` finds the app's build; that one build can be a restart (measured:
+after `--local`, a restart; after a mixed `--attach`, a reload). A `--test-endpoint`
+dev loop's endpoint is left in place by `--local`, which chains to the project's
+own after-startup microflow rather than to the endpoint (ako/mxcli#2119). For a
+gate in the middle of such a loop, `--attach` costs nothing to the running app.
+
 `--attach` skips even the first boot, at one cost worth knowing: the tests run
 against the running app's database rather than a scratch one, so they can leave
 data behind in the app you are looking at. It needs the dev loop to have been

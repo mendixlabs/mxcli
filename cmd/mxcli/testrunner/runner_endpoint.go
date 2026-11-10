@@ -256,6 +256,12 @@ func endpointCleanupCommands(st projectState, flows []string, mxTestPresent bool
 	for _, name := range flows {
 		cmds = append(cmds, "DROP MICROFLOW "+name)
 	}
+	// A dev loop hosting the endpoint still serves it: dropping it left the
+	// after-startup setting naming a microflow that no longer existed, and the
+	// dev loop's next build failed with CE1613 (ako/mxcli#2119).
+	if st.hosted {
+		return cmds
+	}
 	return append(cmds,
 		"DROP MICROFLOW "+endpointStartupFlow,
 		"DROP JAVA ACTION "+endpointRegisterAction,
