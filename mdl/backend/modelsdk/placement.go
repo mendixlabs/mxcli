@@ -31,6 +31,20 @@ func (b *Backend) MoveDocument(unitID, containerID model.ID) error {
 // table — restricting to the document containment is what keeps a folder named
 // like a document from being returned as one.
 func (b *Backend) FindDocumentUnit(moduleName, name string) (*types.DocumentUnit, error) {
+	docs, err := b.findDocumentUnits(moduleName, name, true)
+	if err != nil || len(docs) == 0 {
+		return nil, err
+	}
+	return docs[0], nil
+}
+
+// FindDocumentUnits returns every document named name in moduleName, of any
+// type. See backend.DocumentPlacementBackend.
+func (b *Backend) FindDocumentUnits(moduleName, name string) ([]*types.DocumentUnit, error) {
+	return b.findDocumentUnits(moduleName, name, false)
+}
+
+func (b *Backend) findDocumentUnits(moduleName, name string, firstOnly bool) ([]*types.DocumentUnit, error) {
 	if b.reader == nil {
 		return nil, fmt.Errorf("FindDocumentUnit: not connected")
 	}
@@ -50,13 +64,13 @@ func (b *Backend) FindDocumentUnit(moduleName, name string) (*types.DocumentUnit
 	}
 	containers := b.containerSetForModule(moduleID)
 
-	var found *types.DocumentUnit
+	var found []*types.DocumentUnit
 	err = b.eachDocumentUnit(func(doc *types.DocumentUnit) bool {
 		if doc.Name != name || !containers[string(doc.ContainerID)] {
 			return true
 		}
-		found = doc
-		return false
+		found = append(found, doc)
+		return !firstOnly
 	})
 	if err != nil {
 		return nil, fmt.Errorf("FindDocumentUnit: %w", err)
