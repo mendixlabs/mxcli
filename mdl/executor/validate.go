@@ -623,6 +623,10 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// toString(<Decimal>) into a String(n): builds, and overflows the attribute
 	// on commit (mendixlabs/mxcli#1515). Warns, never blocks.
 	validateToStringIntoShortAttribute(ctx, prog, sc)
+	// A create or modify that leaves an agent without a selected model or a
+	// consumed MCP service without an endpoint: MDL-AGENT02/03 for the case
+	// only the project can see (ako/mxcli#2089). Warns, never blocks.
+	warnAgentDocumentsLeftUnset(ctx, prog, sc)
 	return errors, sc.warnings
 }
 
