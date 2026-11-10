@@ -119,6 +119,8 @@ func agentEditorDetail(doc any) agentEditorColumns {
 		c.add("ProtocolVersion", d.ProtocolVersion)
 		c.add("Version", d.Version)
 		c.add("ConnectionTimeoutSeconds", d.ConnectionTimeoutSeconds)
+		c.add("Endpoint", docRefName(d.Endpoint))
+		c.add("AuthenticationMicroflow", docRefName(d.AuthenticationMicroflow))
 	case *types.PublishedMCPService:
 		c.add("ServerName", d.ServerName)
 		c.add("EndpointPath", d.EndpointPath)

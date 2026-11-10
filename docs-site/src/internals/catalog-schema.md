@@ -319,6 +319,7 @@ rather than trusting a list here:
 | `tool` | agent draws on a knowledge base or consumed MCP service (a tool microflow, nanoflow or agent is a `call`) |
 | `model` | agent runs on an AI model |
 | `key` | AI model or knowledge base reads its key from a constant |
+| `endpoint` | consumed MCP service reads its server URL from a constant (its credentials microflow is a `call`) |
 | `validate` | attribute validation rule uses a regular expression |
 | `member` | document binds, reads or writes an attribute, navigates an association, or reaches the entity an association step arrives at |
 | `xpath` | XPath constraint names an attribute, association, enumeration value, or an entity reached through an association |

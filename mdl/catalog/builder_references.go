@@ -50,6 +50,7 @@ const (
 	RefKindTool        = "tool"         // An agent draws on a knowledge base or consumed MCP service (a tool microflow, nanoflow or agent is a call)
 	RefKindModel       = "model"        // An agent runs on an AI model
 	RefKindKey         = "key"          // An AI model or knowledge base reads its key from a constant
+	RefKindEndpoint    = "endpoint"     // A consumed MCP service reads its server URL from a constant
 )
 
 // RefKinds is every value that reaches refs.RefKind. It is the vocabulary a
@@ -68,7 +69,7 @@ var RefKinds = []string{
 	RefKindEvent, RefKindMember, RefKindXPath, RefKindType,
 	RefKindValue, RefKindMapping, RefKindSplit, RefKindSnippetCall,
 	RefKindMappingCall, RefKindStructure, RefKindTool, RefKindModel,
-	RefKindKey,
+	RefKindKey, RefKindEndpoint,
 }
 
 // Object types recorded in refs.SourceType and refs.TargetType — the catalog's
