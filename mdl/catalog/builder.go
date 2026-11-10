@@ -138,6 +138,10 @@ type Builder struct {
 	// and emitted by buildReferences (a later pass). Carried on the Builder
 	// rather than re-queried because CatalogTx has no Query.
 	scheduledEventRefs []scheduledEventRef
+	// agentDocRefs are the decoded agent-editor documents, whose edges
+	// buildReferences writes once every table their names resolve against is
+	// filled (ako/mxcli#2074).
+	agentDocRefs []agentDocRefs
 
 	// Entity → regular-expression edges from attribute validation rules,
 	// collected while cataloguing regexes and emitted by buildReferences.
@@ -747,6 +751,7 @@ func (b *Builder) resetCollected() {
 	b.databaseConnectionCache = nil
 	b.moduleSettingsCache = nil
 	b.scheduledEventRefs = nil
+	b.agentDocRefs = nil
 	b.regexRuleRefs = nil
 	b.publishedRestRefs = nil
 	b.eventHandlerRefs = nil

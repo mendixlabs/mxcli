@@ -295,7 +295,7 @@ rather than trusting a list here:
 
 | RefKind | Edge |
 |---------|------|
-| `call` | flow calls a microflow / nanoflow / rule / Java action / REST operation; a workflow calls a handler microflow; a consumed OData service calls its configuration / headers / error-handling microflow |
+| `call` | flow calls a microflow / nanoflow / rule / Java action / REST operation; a workflow calls a handler microflow; a consumed OData service calls its configuration / headers / error-handling microflow; an agent calls its tool microflow, nanoflow or agent; a flow passes a microflow or agent document as a Java action parameter, which the action runs |
 | `create` / `change` / `delete` / `retrieve` | flow acts on an entity object |
 | `commit` | flow commits an entity object: a commit action, or a create / change that commits (`Yes` or `YesWithoutEvents`), beside its `create` / `change` edge |
 | `return` | flow returns an entity type |
@@ -316,6 +316,9 @@ rather than trusting a list here:
 | `sync` | offline navigation profile synchronizes an entity |
 | `mapping_call` | flow applies an import or export mapping: an import / export action, or a REST or web service call's request or response mapping |
 | `structure` | import or export mapping is built on a JSON structure |
+| `tool` | agent draws on a knowledge base or consumed MCP service (a tool microflow, nanoflow or agent is a `call`) |
+| `model` | agent runs on an AI model |
+| `key` | AI model or knowledge base reads its key from a constant |
 | `validate` | attribute validation rule uses a regular expression |
 | `member` | document binds, reads or writes an attribute, navigates an association, or reaches the entity an association step arrives at |
 | `xpath` | XPath constraint names an attribute, association, enumeration value, or an entity reached through an association |

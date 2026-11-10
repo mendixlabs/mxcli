@@ -7,6 +7,13 @@ package catalog
 //
 // History:
 //
+//	41 (agent and code action edges): refs gains edges from agent-editor
+//	    documents (an agent's tool `call`s, `tool`, `model`, `type`; a model's
+//	    or knowledge base's `key`) and a `call` from a flow to a microflow or
+//	    agent document it passes as a Java action parameter (ako/mxcli#2074).
+//	    Without the bump a cached catalog keeps answering "(no callers
+//	    found)" for every agent tool. (40 is the widget-texts schema of
+//	    ako/mxcli#1303, merged separately.)
 //	40 (widget texts): widgets gains Caption and Tooltip (default language),
 //	    strings gains WidgetId, the widget a caption, tooltip or confirmation
 //	    text belongs to (ako/mxcli#1303). Without the bump a cached catalog
@@ -219,7 +226,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "40"
+const CatalogSchemaVersion = "41"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.

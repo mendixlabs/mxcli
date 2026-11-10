@@ -730,3 +730,26 @@ func ListModules(r *mmpr.Reader) ([]Unit[*genProj.Module], error) {
 func ListFolders(r *mmpr.Reader) ([]Unit[*genProj.Folder], error) {
 	return ListUnitsWithContainer[*genProj.Folder](r)
 }
+
+// DecodeAgentEditorUnit decodes one agent-editor CustomBlobDocument from its
+// stored bytes into a *types.Agent, *types.Model, *types.KnowledgeBase or
+// *types.ConsumedMCPService, chosen by its CustomDocumentType. It returns nil
+// for any other custom document type. The catalog reads the raw units, and
+// uses this to see what an agent document references (ako/mxcli#2074).
+func DecodeAgentEditorUnit(unitID, containerID string, contents []byte) (any, error) {
+	wrap, err := parseCustomBlobWrapper(contents)
+	if err != nil {
+		return nil, err
+	}
+	switch wrap.CustomDocumentType {
+	case types.CustomTypeAgent:
+		return decodeAgentEditorAgent(unitID, containerID, wrap)
+	case types.CustomTypeModel:
+		return decodeAgentEditorModel(unitID, containerID, wrap)
+	case types.CustomTypeKnowledgeBase:
+		return decodeAgentEditorKnowledgeBase(unitID, containerID, wrap)
+	case types.CustomTypeConsumedMCPService:
+		return decodeAgentEditorConsumedMCPService(unitID, containerID, wrap)
+	}
+	return nil, nil
+}

@@ -4,6 +4,8 @@ package catalog
 
 import (
 	"go.mongodb.org/mongo-driver/v2/bson"
+
+	"github.com/mendixlabs/mxcli/modelsdk/mprread"
 )
 
 // agentEditorTable maps a CustomBlobDocument's CustomDocumentType to its catalog
@@ -82,6 +84,16 @@ func (b *Builder) buildAgentEditorDocs() error {
 			return err
 		}
 		count++
+
+		// What the document references; resolved and written by
+		// buildReferences (ako/mxcli#2074). A payload that does not decode
+		// still has its row above, only no edges.
+		if decoded, err := mprread.DecodeAgentEditorUnit(string(u.ID), string(u.ContainerID), u.Contents); err == nil && decoded != nil {
+			b.agentDocRefs = append(b.agentDocRefs, agentDocRefs{
+				owner: string(u.ID), sourceType: agentEditorSourceType(decoded),
+				source: qualifiedName, moduleName: moduleName, doc: decoded,
+			})
+		}
 	}
 	b.disown()
 

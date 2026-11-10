@@ -1,0 +1,44 @@
+mdl 1;
+-- ako/mxcli#2074: an agent-editor document produced no refs, and a microflow
+-- passed as a microflow-typed Java action parameter was no reference, so both
+-- showed "(no callers found)" and sat in GRAPH_DEAD_ASSETS.
+--
+-- Needs an app with Agent Editor and AgentCommons (the Agent Builder starter
+-- app has both). Run, then:
+--   mxcli -p App.mpr -c "refresh catalog full force"
+--   mxcli -p App.mpr -c "show callers of Bug2074.Tool_GetOrder"
+--     expected: Bug2074.SupportAgent
+--   mxcli -p App.mpr -c "show callers of Bug2074.Chat_Action"
+--     expected: Bug2074.ChatContext_Create
+-- Before the fix both said "(no callers found)".
+
+create module Bug2074;
+
+create microflow Bug2074.Tool_GetOrder ($OrderId: String) returns String as $Result
+begin
+  declare $Result String = 'order ' + $OrderId;
+  return $Result;
+end;
+
+create agent Bug2074.SupportAgent (
+  UsageType: Chat,
+  SystemPrompt: 'You answer questions about orders.'
+) {
+  tool GetOrder (
+    ToolType: Microflow,
+    Document: Bug2074.Tool_GetOrder,
+    Description: 'Look an order up by its id'
+  )
+};
+
+create microflow Bug2074.Chat_Action ($ChatContext: ConversationalUI.ChatContext) returns Boolean as $Ok
+begin
+  declare $Ok Boolean = true;
+  return $Ok;
+end;
+
+create microflow Bug2074.ChatContext_Create ($Agent: AgentCommons.Agent) returns ConversationalUI.ChatContext as $ChatContext
+begin
+  $ChatContext = call java action AgentCommons.ChatContext_Create_ForAgent(OverwritingDeployedModel = empty, ActionMicroflow = 'Bug2074.Chat_Action', Agent = $Agent, ContextObject = empty);
+  return $ChatContext;
+end;
