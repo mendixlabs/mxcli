@@ -40,6 +40,7 @@ func validateGrantReferences(ctx *ExecContext, prog *ast.Program) []error {
 	}
 	g := &grantResolver{ctx: ctx, sc: newScriptContext(), whole: newScriptContext()}
 	g.whole.collectDefinitions(prog)
+	g.scriptEnums, g.unjudgedEnums = scriptEnumerationValues(prog)
 	g.scriptModuleRoles, g.scriptUserRoles = map[string]bool{}, map[string]bool{}
 	g.laterModuleRoles, g.laterUserRoles = map[string]bool{}, map[string]bool{}
 	g.scriptServices, g.laterServices = map[string]bool{}, map[string]bool{}
@@ -94,6 +95,11 @@ type grantResolver struct {
 	entities      map[string]bool
 	docs          map[string]map[string]bool
 	xpath         *grantXPathResolver // built on the first WHERE
+	types         *memberTypeIndex    // built on the first WHERE (xpathFormProblems)
+	// scriptEnums is each enumeration the script creates and its keys;
+	// unjudgedEnums those it alters, renames or moves.
+	scriptEnums   map[string][]string
+	unjudgedEnums map[string]bool
 }
 
 func (g *grantResolver) recordLater(stmt ast.Statement) {
@@ -183,6 +189,7 @@ func (g *grantResolver) check(stmt ast.Statement) []string {
 		if entityOK {
 			add(g.memberProblem(s.Entity, s.Rights))
 			add(g.xpathProblem(s.Entity, s.XPathConstraint))
+			out = append(out, g.xpathFormProblems(s.Entity, s.XPathConstraint)...)
 		}
 	case *ast.RevokeEntityAccessStmt:
 		g.entityTargetProblem(s.Entity, &out)
@@ -623,15 +630,23 @@ func (g *grantResolver) xpathProblem(qn ast.QualifiedName, xpath string) string 
 	}
 	stored := accessRuleXPathConstraint(g.ctx, xpath, name)
 	var bad []string
+	onlyAttributes := true
 	for _, b := range unresolvableXPathStepsWith(g.ctx, g.xpath.model, stored, name, g.xpath.resolve) {
 		bad = append(bad, fmt.Sprintf("%s %q", b.kind, b.name))
+		onlyAttributes = onlyAttributes && b.kind == "attribute"
 	}
 	if len(bad) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("the access rule's constraint names %s, which %s neither an attribute nor an association of %s — "+
-		"mxbuild reports CE1613 \"The selected … no longer exists\" at the access rule",
-		strings.Join(bad, ", "), plural(len(bad), "is", "are"), name)
+	// Measured on 11.14.0 at Production: an unknown association is CE1613, an
+	// unknown attribute CE0161 "Error(s) in XPath constraint." — and mx check
+	// reports no CE0161 at all while any CE1613 stands.
+	report := "mxbuild reports CE1613 \"The selected … no longer exists\" at the access rule"
+	if onlyAttributes {
+		report = "MxBuild rejects this (CE0161 \"Error(s) in XPath constraint.\") at the access rule"
+	}
+	return fmt.Sprintf("the access rule's constraint names %s, which %s neither an attribute nor an association of %s — %s",
+		strings.Join(bad, ", "), plural(len(bad), "is", "are"), name, report)
 }
 
 // grantXPathResolver caches the XPath walk's inputs for a script's grants.
