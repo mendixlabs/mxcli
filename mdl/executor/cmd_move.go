@@ -181,7 +181,7 @@ func moveActionSource(ctx *ExecContext, docType ast.DocumentType, fromModule, to
 // the target container. Anything it cannot establish — no such document, a
 // different doctype under that name — is left to the mover, which reports it.
 func alreadyPlaced(ctx *ExecContext, s *ast.MoveStmt, targetContainerID model.ID) bool {
-	doc, err := ctx.Backend.FindDocumentUnit(s.Name.Module, s.Name.Name)
+	doc, err := findDocumentOfKind(ctx, s.DocumentType.CanonicalSpelling(), s.Name)
 	if err != nil || doc == nil || doc.ContainerID != targetContainerID {
 		return false
 	}

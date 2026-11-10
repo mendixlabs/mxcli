@@ -83,6 +83,7 @@ mxcli search -p app.mpr "error" -q --format names | head -1 | awk '{print $2}' |
 - Log messages and log node names of microflows
 - Page URLs and the paths, resources and operation summaries of published REST services
 - Workflow names, descriptions, task names and activity captions
+- Agents' system and user prompts, descriptions, and the descriptions of their tools and knowledge bases, with the title a tool call shows the user (`ObjectType` `AGENT`; `StringContext` `system_prompt`, `user_prompt`, `agent_description`, `tool_description`, `tool_display_title`, `tool_display_description`, `knowledge_base_description`), and a published MCP service's tool descriptions and titles (`PUBLISHED_MCP_SERVICE`; `mcp_tool_description`, `mcp_tool_title`)
 - Element names: the qualified name is a searchable column too, so `SEARCH 'Customer'` also returns the rows of elements named Customer that have some indexed text
 - **Documentation of project elements.** A hit's `ObjectType` names the element and its `StringContext` is `documentation`:
 
@@ -101,7 +102,7 @@ mxcli search -p app.mpr "error" -q --format names | head -1 | awk '{print $2}' |
   | Consumed and published REST service, business event service | `CONSUMED_REST_SERVICE`, `PUBLISHED_REST_SERVICE`, `BUSINESS_EVENT_SERVICE` |
   | Import mapping, export mapping, JSON structure, data transformer | `IMPORT_MAPPING`, `EXPORT_MAPPING`, `JSON_STRUCTURE`, `DATA_TRANSFORMER` |
   | Scheduled event, task queue, regular expression, image and icon collection, menu | `SCHEDULED_EVENT`, `TASK_QUEUE`, `REGULAR_EXPRESSION`, `IMAGE_COLLECTION`, `ICON_COLLECTION`, `MENU` |
-  | Agent, AI model, knowledge base, consumed MCP service | `AGENT`, `AI_MODEL`, `KNOWLEDGE_BASE`, `CONSUMED_MCP_SERVICE` |
+  | Agent, AI model, knowledge base, consumed and published MCP service | `AGENT`, `AI_MODEL`, `KNOWLEDGE_BASE`, `CONSUMED_MCP_SERVICE`, `PUBLISHED_MCP_SERVICE` |
   | A module's domain model documentation | `MODULE`, with `StringContext` `domain_model_documentation` |
 
   This is the complete set: every document type whose catalog table carries a documentation text. Not covered: the documentation of an enumeration value (Mendix has no such field) and the summary text of a remote service's contract entities (written by the remote service, not by the project).

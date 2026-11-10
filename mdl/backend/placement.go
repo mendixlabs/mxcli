@@ -40,6 +40,13 @@ type DocumentPlacementBackend interface {
 	// there is no such document.
 	FindDocumentUnit(moduleName, name string) (*types.DocumentUnit, error)
 
+	// FindDocumentUnits returns every top-level document named name inside
+	// moduleName. A name is unique per document type, not per module: a
+	// microflow and a scheduled event may share one (mendixlabs/mxcli#1792),
+	// so a caller that knows the kind it wants picks it from these rather
+	// than take whichever FindDocumentUnit meets first.
+	FindDocumentUnits(moduleName, name string) ([]*types.DocumentUnit, error)
+
 	// ListDocumentUnits returns every top-level document in the project with
 	// its container, name and type.
 	//

@@ -1,0 +1,49 @@
+mdl 1;
+-- ako/mxcli#2075: the catalog listed agent-editor documents by name only, so
+-- "which agents can run a tool without the user's approval" needed one
+-- describe agent per agent and text parsing.
+--
+-- Needs an app with Agent Editor 2.6+ (the Agent Builder starter app). Run, then:
+--   mxcli -p App.mpr -c "refresh catalog full force"
+--   mxcli -p App.mpr -c "select Agent, Name, Document, UserAccessApproval from CATALOG.AGENT_TOOLS where Agent like 'Bug2075.%'"
+--     expected: Bug2075.RefundAgent | IssueRefund | Bug2075.Tool_IssueRefund | VisibleForUser
+--   mxcli -p App.mpr -c "select UsageType, ToolChoice, MaxTokens, EnableBackendStreaming, ToolCount from CATALOG.AGENTS where QualifiedName = 'Bug2075.RefundAgent'"
+--     expected: Task | Auto | 1024 | 1 | 1
+--   mxcli -p App.mpr -c "select EndpointPath, ToolCount from CATALOG.PUBLISHED_MCP_SERVICES where QualifiedName = 'Bug2075.RefundMCP'"
+--     expected: refunds | 1
+--   mxcli -p App.mpr -c "show callers of Bug2075.Tool_IssueRefund"
+--     expected: Bug2075.RefundAgent and Bug2075.RefundMCP
+-- Before the fix the columns and tables did not exist, and the published MCP
+-- service was no caller.
+
+create module Bug2075;
+
+create microflow Bug2075.Tool_IssueRefund ($OrderId: String) returns String as $Result
+begin
+  declare $Result String = 'refunded ' + $OrderId;
+  return $Result;
+end;
+
+create agent Bug2075.RefundAgent (
+  UsageType: Task,
+  ToolChoice: Auto,
+  MaxTokens: 1024,
+  EnableBackendStreaming: true, EnableUIStreaming: false,
+  SystemPrompt: 'You issue refunds for orders.',
+  UserPrompt: 'Refund order {{OrderId}}'
+) {
+  tool IssueRefund (
+    Document: Bug2075.Tool_IssueRefund,
+    Description: 'Refund an order by its id',
+    Enabled: true,
+    UserAccessApproval: VisibleForUser
+  )
+};
+
+create published mcp service Bug2075.RefundMCP (
+  EndpointPath: 'refunds',
+  Version: '1.0.0',
+  ProtocolVersion: v2025_03_26
+) {
+  tool issue_refund ( Microflow: Bug2075.Tool_IssueRefund, Description: 'Refund an order.' )
+};
