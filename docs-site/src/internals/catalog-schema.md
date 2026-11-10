@@ -310,7 +310,7 @@ rather than trusting a list here:
 | `home_page` / `login_page` / `menu_item` | navigation profile references a page, or a microflow (home microflow, menu item that calls one) |
 | `calculate` | calculated attribute uses a microflow |
 | `schedule` | scheduled event runs a microflow |
-| `publish` | published service runs a microflow: a REST operation, an OData resource's read / insert / update / delete microflow, an OData action, a REST or OData service's custom authentication microflow |
+| `publish` | published service runs a microflow: a REST operation, an OData resource's read / insert / update / delete microflow, an OData action, a REST or OData service's custom authentication microflow; a published MCP service's tool microflow and authentication microflow |
 | `event` | event handler runs a microflow: an entity event, or a business event a service subscribes to |
 | `settings` | a project setting (after-startup / before-shutdown / health check) names a microflow |
 | `sync` | offline navigation profile synchronizes an entity |
