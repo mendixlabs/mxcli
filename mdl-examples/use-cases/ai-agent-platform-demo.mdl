@@ -332,6 +332,9 @@ create constant AICustSupport."LLMKey"
 create constant AICustSupport."KBKey"
   ( Type: string, DefaultValue: '' );
 
+create constant AICustSupport."WebSearchUrl"
+  ( Type: string, DefaultValue: 'https://example.com/mcp' );
+
 -- Model document (visible in Studio Pro Agent Editor — developer UX)
 create ai model AICustSupport."GPT4TurboModel" (
   Provider:    MxCloudGenAI,
@@ -349,6 +352,7 @@ create knowledge base AICustSupport."SupportKnowledgeBase" (
 -- Consumed MCP service: real-time web search tool (MCP 2025-03-26 / A2A)
 create consumed mcp service AICustSupport."WebSearchMCP" (
   ProtocolVersion:          v2025_03_26,
+  Endpoint:                 @AICustSupport.WebSearchUrl,
   version:                  '1.0',
   ConnectionTimeoutSeconds: 30,
   documentation:            'Real-time web search for current product and support information'

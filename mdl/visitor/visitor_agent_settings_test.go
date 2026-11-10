@@ -96,3 +96,22 @@ alter agent M.A set SelectedModel = 'eu.anthropic.claude-haiku-5';`)
 		t.Errorf("alter set SelectedModel: %+v", alt.Sets)
 	}
 }
+
+// ako/mxcli#2060: a consumed MCP service's endpoint constant and credentials
+// microflow.
+func TestConsumedMCPService_EndpointAndCredentials(t *testing.T) {
+	prog := mustBuild(t, `create consumed mcp service M.Svc (
+  ProtocolVersion: v2025_03_26,
+  Endpoint: @M.Url,
+  AuthenticationMicroflow: M.GetCredentials
+);
+create or modify consumed mcp service M.Kept (ProtocolVersion: v2025_03_26);`)
+	s := prog.Statements[0].(*ast.CreateConsumedMCPServiceStmt)
+	if s.Endpoint == nil || s.Endpoint.String() != "M.Url" || s.AuthenticationMicroflow == nil || s.AuthenticationMicroflow.String() != "M.GetCredentials" {
+		t.Errorf("endpoint %v, credentials %v", s.Endpoint, s.AuthenticationMicroflow)
+	}
+	// Control: left out, nothing is said.
+	if k := prog.Statements[1].(*ast.CreateConsumedMCPServiceStmt); k.Endpoint != nil || k.AuthenticationMicroflow != nil {
+		t.Errorf("unstated references set: %v %v", k.Endpoint, k.AuthenticationMicroflow)
+	}
+}

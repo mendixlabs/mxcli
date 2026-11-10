@@ -1122,6 +1122,23 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 		}
 	case *ast.CreatePublishedRestServiceStmt:
 		return validatePublishedRestAuthMicroflow(ctx, s.Authentication, sc)
+	case *ast.CreateConsumedMCPServiceStmt:
+		return validateConsumedMCPRefs(ctx, sc, s.Name, s.Endpoint, s.AuthenticationMicroflow)
+	case *ast.AlterConsumedMCPServiceStmt:
+		var endpoint, mf *ast.QualifiedName
+		for k, v := range s.Changes {
+			if v == "" {
+				continue
+			}
+			qn := parseQualifiedNameStr(v)
+			switch strings.ToLower(k) {
+			case "endpoint":
+				endpoint = &qn
+			case "authenticationmicroflow":
+				mf = &qn
+			}
+		}
+		return validateConsumedMCPRefs(ctx, sc, s.Name, endpoint, mf)
 	case *ast.CreateMessageDefinitionCollectionStmt:
 		return messageDefinitionMemberErrors(ctx, sc, s.Name.String(), s.Definitions...)
 	case *ast.CreateMessageDefinitionStmt:
@@ -2414,4 +2431,31 @@ func validatePublishedRestAuthMicroflow(ctx *ExecContext, auth *ast.PublishedRes
 		return nil
 	}
 	return mdlerrors.NewValidationf("MDL-REST04: authentication microflow not found: %s", auth.Microflow)
+}
+
+// validateConsumedMCPRefs checks a consumed MCP service's Endpoint and
+// AuthenticationMicroflow (#2060). The endpoint must be a String constant:
+// AgentEditorCommons reads its value as the server URL. MCPClient calls the
+// credentials microflow with no arguments and reads its result as a list of
+// System.HttpHeader (ConsumedMCPService_CreateMCPClient), so a parameter or
+// another return type fails at runtime. A constant or microflow the script
+// itself creates is known by name only, so its type is left to exec.
+func validateConsumedMCPRefs(ctx *ExecContext, sc *scriptContext, name ast.QualifiedName, endpoint, mf *ast.QualifiedName) error {
+	var problems []string
+	if endpoint != nil && !sc.constants[endpoint.String()] {
+		if _, err := consumedMCPEndpointRef(ctx, *endpoint); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
+	if mf != nil && !sc.microflows[mf.String()] {
+		if live, ok := liveMicroflowsByQualifiedName(ctx)[mf.String()]; !ok {
+			problems = append(problems, "AuthenticationMicroflow not found: "+mf.String())
+		} else if p := consumedMCPCredentialsProblem(live); p != "" {
+			problems = append(problems, "AuthenticationMicroflow "+mf.String()+" "+p)
+		}
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	return mdlerrors.NewValidationf("consumed mcp service %s: %s", name, strings.Join(problems, "; "))
 }

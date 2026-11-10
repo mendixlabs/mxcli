@@ -61,6 +61,17 @@ func execCreateConsumedMCPService(ctx *ExecContext, s *ast.CreateConsumedMCPServ
 	// A rewrite that carried no doc comment keeps the stored one (#1018).
 	if existing != nil {
 		c.Documentation = carriedDocumentation(s.DocumentationSet, s.OuterDocumentation, existing.Documentation)
+		c.Endpoint, c.AuthenticationMicroflow = existing.Endpoint, existing.AuthenticationMicroflow
+	}
+	if s.Endpoint != nil {
+		if c.Endpoint, err = consumedMCPEndpointRef(ctx, *s.Endpoint); err != nil {
+			return fmt.Errorf("consumed mcp service %s: %w", s.Name, err)
+		}
+	}
+	if s.AuthenticationMicroflow != nil {
+		if c.AuthenticationMicroflow, err = publishedMCPMicroflowRef(ctx, *s.AuthenticationMicroflow); err != nil {
+			return fmt.Errorf("consumed mcp service %s: AuthenticationMicroflow: %w", s.Name, err)
+		}
 	}
 
 	if existing != nil {
