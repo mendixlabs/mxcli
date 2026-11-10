@@ -1500,6 +1500,8 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 	// apply so "did my change take?" is answerable from the log without guessing.
 	// The initial boot build is generation 1.
 	gen := 1
+	holds := &watchHoldGate{projectPath: opts.ProjectPath}
+	holdAnnounced := false
 	ticker := time.NewTicker(opts.PollInterval)
 	defer ticker.Stop()
 
@@ -1517,6 +1519,29 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 		case <-ticker.C:
 			source := func() time.Time { return sourceMTimeExcept(opts.ProjectPath, scaffold) }
 			now := source()
+			// Another mxcli process (a `test --attach`) may be changing the
+			// project and putting it back: wait for it, then build only if the
+			// model did not come back as it was (watchhold.go).
+			switch verdict, hold := holds.tick(last); verdict {
+			case holdWait:
+				if !holdAnnounced {
+					fmt.Fprintf(w, "  a test run (pid %d) is changing the project; not rebuilding until it is done\n", hold.PID)
+					opts.State.Held(hold.PID)
+					holdAnnounced = true
+				}
+				continue
+			case holdAbsorbed:
+				fmt.Fprintf(w, "  the test run (pid %d) is done and the model is as it was before it; nothing to rebuild\n", hold.PID)
+				opts.State.Held(0)
+				opts.State.Covered(now)
+				holdAnnounced = false
+				last = now
+				continue
+			case holdReleased:
+				fmt.Fprintf(w, "  the test run (pid %d) is done; the model changed meanwhile, so rebuilding\n", hold.PID)
+				opts.State.Held(0)
+				holdAnnounced = false
+			}
 			if !now.After(last) {
 				continue
 			}
