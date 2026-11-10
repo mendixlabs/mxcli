@@ -249,6 +249,8 @@ CREATE TABLE WIDGETS (
     DynamicClasses          TEXT,
     ActionType              TEXT,    -- $Type of Action / OnClickAction / ClickAction
     HasConfirmation         INTEGER, -- 1 when that action has a ConfirmationInfo
+    Caption                 TEXT,    -- own Caption, project's default language
+    Tooltip                 TEXT,    -- own Tooltip, project's default language
     ProjectId               TEXT,
     SnapshotId              TEXT
 );
@@ -389,7 +391,12 @@ CREATE VIRTUAL TABLE STRINGS USING fts5(
     Language,       -- Language code, empty for non-translatable strings
     ElementId,      -- The owning element's $ID — what distinguishes an
                     -- enumeration's twelve values from each other
-    ModuleName
+    ModuleName,
+    WidgetId UNINDEXED -- The widget around the text: a button's caption is
+                    -- owned by its Forms$ClientTemplate and its confirmation
+                    -- by a Forms$ConfirmationInfo, so ElementId is never the
+                    -- button. '' outside a widget, and for non-translatable rows.
+                    -- A tab page's caption names the tab page, not in widgets
 );
 ```
 

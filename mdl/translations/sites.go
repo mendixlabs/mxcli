@@ -3,6 +3,8 @@
 package translations
 
 import (
+	"strings"
+
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/mendixlabs/mxcli/modelsdk/codec"
@@ -32,6 +34,14 @@ type Site struct {
 	ElementID string
 	// OwnerName is the owner's Name ("tabPage2"), empty when it has none.
 	OwnerName string
+	// WidgetID is the $ID of the nearest named Forms$ or CustomWidgets$
+	// element around the text below the document root: the widget a caption,
+	// tooltip or confirmation text belongs to. ElementID is the text's direct
+	// owner, which for a button's caption is its Forms$ClientTemplate and for
+	// its confirmation the Forms$ConfirmationInfo, neither of them the button
+	// (ako/mxcli#1303). Empty for text that is not inside a widget, such as a
+	// page's own title.
+	WidgetID string
 	// Targets is language code → text, exactly as stored. A language present
 	// with an empty string is a text that exists but is not translated yet.
 	Targets map[string]string
@@ -41,8 +51,8 @@ type Site struct {
 // order. Order is stable so a caller writing rows gets a deterministic result.
 func SitesIn(doc bson.D) []Site {
 	var out []Site
-	var walk func(v any, ownerType, ownerID, ownerName, prop string)
-	walk = func(v any, ownerType, ownerID, ownerName, prop string) {
+	var walk func(v any, ownerType, ownerID, ownerName, prop, widgetID string, root bool)
+	walk = func(v any, ownerType, ownerID, ownerName, prop, widgetID string, root bool) {
 		switch n := v.(type) {
 		case bson.D:
 			if ty, _ := lookup(n, "$Type").(string); ty == "Texts$Text" {
@@ -51,6 +61,7 @@ func SitesIn(doc bson.D) []Site {
 					Property:  prop,
 					ElementID: ownerID,
 					OwnerName: ownerName,
+					WidgetID:  widgetID,
 					Targets:   translationsOf(n),
 				})
 				return
@@ -59,24 +70,27 @@ func SitesIn(doc bson.D) []Site {
 			// it. A node without one (an anonymous sub-document) leaves the
 			// owner as it was, so the text is still attributed to a real
 			// element rather than to nothing.
-			nt, nid, nname := ownerType, ownerID, ownerName
+			nt, nid, nname, nwidget := ownerType, ownerID, ownerName, widgetID
 			if ty, _ := lookup(n, "$Type").(string); ty != "" {
 				nt = ty
 				nid = elementIDOf(n)
 				nname, _ = lookup(n, "Name").(string)
+				if !root && nname != "" && (strings.HasPrefix(ty, "Forms$") || strings.HasPrefix(ty, "CustomWidgets$")) {
+					nwidget = nid
+				}
 			}
 			for _, e := range n {
-				walk(e.Value, nt, nid, nname, e.Key)
+				walk(e.Value, nt, nid, nname, e.Key, nwidget, false)
 			}
 		case bson.A:
 			// An array element inherits the property its array hangs off, so a
 			// text inside `Widgets` is not reported as living at "Widgets".
 			for _, e := range n {
-				walk(e, ownerType, ownerID, ownerName, prop)
+				walk(e, ownerType, ownerID, ownerName, prop, widgetID, false)
 			}
 		}
 	}
-	walk(doc, "", "", "", "")
+	walk(doc, "", "", "", "", "", true)
 	return out
 }
 

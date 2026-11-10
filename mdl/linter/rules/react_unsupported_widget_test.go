@@ -112,7 +112,7 @@ func TestReactUnsupportedWidgetRule_SkipsNativePages(t *testing.T) {
 		`CREATE TABLE widgets (Id TEXT, Name TEXT, WidgetType TEXT, ContainerId TEXT, ContainerQualifiedName TEXT,
 			ContainerType TEXT, ModuleName TEXT, EntityRef TEXT, AttributeRef TEXT, MicroflowRef TEXT, NanoflowRef TEXT,
 			PageRef TEXT, SnippetRef TEXT, ParentWidgetId TEXT, Depth INTEGER, Class TEXT, Style TEXT, DynamicClasses TEXT,
-			ActionType TEXT, HasConfirmation INTEGER)`,
+			ActionType TEXT, HasConfirmation INTEGER, Caption TEXT, Tooltip TEXT)`,
 		`INSERT INTO widgets (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
 			ModuleName, EntityRef, AttributeRef, MicroflowRef, NanoflowRef) VALUES
 			('w1', 'imgWith', 'Forms$StaticImageViewer', 'p1', 'MyFirstModule.Logboek_Images', 'PAGE', 'MyFirstModule', '', '', '', ''),
@@ -154,7 +154,7 @@ func TestReactUnsupportedWidgetRule_LayoutWidgets(t *testing.T) {
 		`CREATE TABLE widgets (Id TEXT, Name TEXT, WidgetType TEXT, ContainerId TEXT, ContainerQualifiedName TEXT,
 			ContainerType TEXT, ModuleName TEXT, EntityRef TEXT, AttributeRef TEXT, MicroflowRef TEXT, NanoflowRef TEXT,
 			PageRef TEXT, SnippetRef TEXT, ParentWidgetId TEXT, Depth INTEGER, Class TEXT, Style TEXT, DynamicClasses TEXT,
-			ActionType TEXT, HasConfirmation INTEGER)`,
+			ActionType TEXT, HasConfirmation INTEGER, Caption TEXT, Tooltip TEXT)`,
 		`INSERT INTO widgets (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType, ModuleName) VALUES
 			('w1', 'imgLogoWeb', 'Forms$StaticImageViewer', 'l1', 'MyFirstModule.Lay_Web', 'LAYOUT', 'MyFirstModule'),
 			('w2', 'imgLogoNative', 'Forms$StaticImageViewer', 'l2', 'MyFirstModule.Lay_Native', 'LAYOUT', 'MyFirstModule')`,

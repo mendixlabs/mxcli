@@ -127,3 +127,45 @@ func siteKeys(m map[string]Site) []string {
 	}
 	return out
 }
+
+// ako/mxcli#1303: a button's caption is a Texts$Text inside a
+// Forms$ClientTemplate, and its confirmation texts sit in a ConfirmationInfo
+// inside the action, so ElementID is the template's or the confirmation's id,
+// never the button's. WidgetID is the nearest named widget around the text.
+// The page's own title has none: its owner is the document.
+func TestSitesIn_WidgetID_Issue1303(t *testing.T) {
+	txt := func(s string) bson.D {
+		return bson.D{{Key: "$Type", Value: "Texts$Text"}, {Key: "Items", Value: bson.A{int32(3),
+			bson.D{{Key: "$Type", Value: "Texts$Translation"}, {Key: "LanguageCode", Value: "en_US"}, {Key: "Text", Value: s}}}}}
+	}
+	doc := bson.D{
+		{Key: "$Type", Value: "Forms$Page"}, {Key: "$ID", Value: "page"}, {Key: "Name", Value: "Sale_Edit"},
+		{Key: "Title", Value: txt("Edit sale")},
+		{Key: "Widgets", Value: bson.A{int32(3), bson.D{
+			{Key: "$Type", Value: "Forms$DataView"}, {Key: "$ID", Value: "dv"}, {Key: "Name", Value: "dvSale"},
+			{Key: "Widgets", Value: bson.A{int32(3), bson.D{
+				{Key: "$Type", Value: "Forms$ActionButton"}, {Key: "$ID", Value: "btn"}, {Key: "Name", Value: "btnRemove"},
+				{Key: "Caption", Value: bson.D{{Key: "$Type", Value: "Forms$ClientTemplate"}, {Key: "$ID", Value: "tpl"},
+					{Key: "Template", Value: txt("Remove")}}},
+				{Key: "Action", Value: bson.D{{Key: "$Type", Value: "Forms$MicroflowAction"}, {Key: "$ID", Value: "act"},
+					{Key: "MicroflowSettings", Value: bson.D{{Key: "$Type", Value: "Forms$MicroflowSettings"}, {Key: "$ID", Value: "set"},
+						{Key: "ConfirmationInfo", Value: bson.D{{Key: "$Type", Value: "Forms$ConfirmationInfo"}, {Key: "$ID", Value: "conf"},
+							{Key: "Question", Value: txt("Delete this sale?")}}}}}}},
+			}}},
+		}}},
+	}
+	got := map[string][2]string{}
+	for _, s := range SitesIn(doc) {
+		got[s.Targets["en_US"]] = [2]string{s.ElementID, s.WidgetID}
+	}
+	want := map[string][2]string{
+		"Edit sale":         {"page", ""},
+		"Remove":            {"tpl", "btn"},
+		"Delete this sale?": {"conf", "btn"},
+	}
+	for text, w := range want {
+		if got[text] != w {
+			t.Errorf("%q: (element, widget) = %v, want %v", text, got[text], w)
+		}
+	}
+}
