@@ -1,0 +1,48 @@
+mdl 1;
+-- ako/mxcli#2094 (mendixlabs/mxcli#1795): exec and check took 0.3–0.9 s per
+-- statement on a large MPR v1 project, whatever the statement changed. Every
+-- typed listing rescanned the whole Unit table, and every lookup by name read
+-- every microflow's contents. The reader now keeps the scan and each unit's
+-- name until a write or another process's commit says they may have changed.
+--
+-- This script checks the kept listing follows the script's own writes: a
+-- microflow renamed to a name of the SAME LENGTH (so the blob length does not
+-- move) must be found by its new name by the very next statement, and no
+-- longer by its old one.
+--
+-- Run on a fresh app (MPR v1 or v2):
+--   mxcli exec mdl-examples/bug-tests/2094-lookups-after-writes.mdl -p App.mpr
+-- Expected: every statement succeeds, and
+--   mxcli -p App.mpr -c "describe microflow Bug2094.Caller"
+-- shows `call microflow Bug2094.Get_B()`.
+-- With a listing that ignored the script's own writes, the call to Get_B
+-- failed as an unknown microflow (or `drop microflow if exists Bug2094.Get_A`
+-- dropped the renamed one).
+
+create module Bug2094;
+
+create persistent entity Bug2094.Cfg (Name: String(100));
+
+create microflow Bug2094.Get_A () returns Bug2094.Cfg
+begin
+  retrieve $c from Bug2094.Cfg first;
+  return $c;
+end;
+
+rename microflow Bug2094.Get_A to Get_B;
+
+-- Found by the new name in the next statement.
+create or modify microflow Bug2094.Get_B () returns Bug2094.Cfg
+begin
+  retrieve $c from Bug2094.Cfg first;
+  log info node 'Bug2094' 'got it';
+  return $c;
+end;
+
+-- And no longer by the old one: this must skip, not drop Get_B.
+drop microflow if exists Bug2094.Get_A;
+
+create microflow Bug2094.Caller ()
+begin
+  $c = call microflow Bug2094.Get_B();
+end;
