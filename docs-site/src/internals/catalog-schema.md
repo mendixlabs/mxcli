@@ -390,7 +390,8 @@ CREATE VIRTUAL TABLE STRINGS USING fts5(
                     -- <owner $Type>.<property>, e.g. Forms$ActionButton.Caption.
                     -- Non-translatable strings keep a plain label: page_url,
                     -- log_node, log_message, documentation, rest_path,
-                    -- task_name, domain_model_documentation, ...
+                    -- task_name, domain_model_documentation, an agent's
+                    -- system_prompt / user_prompt / tool_description, ...
     Language,       -- Language code, empty for non-translatable strings
     ElementId,      -- The owning element's $ID — what distinguishes an
                     -- enumeration's twelve values from each other

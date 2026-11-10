@@ -7,6 +7,10 @@ package catalog
 //
 // History:
 //
+//	43 (agent prompts): strings gains an agent's description, system and
+//	    user prompts, and its tool and knowledge base descriptions
+//	    (ako/mxcli#2075). Without the bump a cached catalog keeps answering
+//	    no hits for a prompt's text.
 //	42 (agent details): agents, ai_models, knowledge_bases and
 //	    consumed_mcp_services gain the settings their JSON Contents holds;
 //	    new published_mcp_services, agent_tools (with the agent_mcp_services
@@ -231,7 +235,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "42"
+const CatalogSchemaVersion = "43"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
