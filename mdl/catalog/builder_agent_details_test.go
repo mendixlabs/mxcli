@@ -81,6 +81,10 @@ func agentDetailsFixture(t *testing.T) *Catalog {
 		agentEditorRawUnit(t, "m-1", "Gpt", types.CustomTypeModel, `{"type":"Text","name":"gpt","displayName":"GPT",
 			"provider":"MxCloudGenAI","providerFields":{"key":{"qualifiedName":"Agents.GptKey"}}}`),
 		agentEditorRawUnit(t, "mcp-1", "JiraMCP", types.CustomTypeConsumedMCPService,
+			`{"endpoint":{"qualifiedName":"Agents.JiraUrl"},"protocolVersion":"v2025_03_26","version":"1.0",
+			  "connectionTimeoutSeconds":30,"authenticationMicroflow":{"qualifiedName":"Agents.Jira_GetHeaders"}}`),
+		// Control: a service with no endpoint, the #2060 failure, reads empty.
+		agentEditorRawUnit(t, "mcp-2", "NoEndpointMCP", types.CustomTypeConsumedMCPService,
 			`{"protocolVersion":"v2025_03_26","version":"1.0","connectionTimeoutSeconds":30}`),
 		agentEditorRawUnit(t, "pub-1", "Published_MCP_service", types.CustomTypePublishedMCPService,
 			agentEditorFixtureContents(t, "AgentBuilderStarterApp.Published_MCP_service.11_16.json")),
@@ -172,8 +176,13 @@ func TestAgentDetails_Issue2075(t *testing.T) {
 		FROM agent_tools ORDER BY Agent, Name`,
 		"Agents.GraphExplorer|Tool_ExceuteSparql|Microflow|GraphPilot_Explorer.Tool_ExecuteSparql|1|VisibleForUser|Tool: Execute Sparql",
 		"Agents.RefundAgent|IssueRefund|Microflow|Agents.Tool_IssueRefund|1|UserConfirmationRequired|∅",
-		"Agents.RefundAgent|Jira|MCP|Agents.JiraMCP|0||∅",
 	)
+	// AGENT_TOOLS holds what ToolCount counts; the MCP services are in
+	// AGENT_MCP_SERVICES only (ako/mxcli#2090).
+	assertAgentRows(t, cat, `SELECT a.Name, a.ToolCount, (SELECT count(*) FROM agent_tools t WHERE t.Agent = a.QualifiedName),
+			a.MCPServiceCount, (SELECT count(*) FROM agent_mcp_services m WHERE m.Agent = a.QualifiedName)
+		FROM agents a WHERE a.Name = 'RefundAgent'`,
+		"RefundAgent|1|1|1|1")
 	assertAgentRows(t, cat, `SELECT Agent, Service, Enabled FROM agent_mcp_services`,
 		"Agents.RefundAgent|Agents.JiraMCP|0")
 	assertAgentRows(t, cat, `SELECT Agent, Name, KnowledgeBase, Collection, MaxResults, MinSimilarity, IsVisible, Enabled
@@ -184,8 +193,11 @@ func TestAgentDetails_Issue2075(t *testing.T) {
 		"Gpt|MxCloudGenAI|Text|GPT|Agents.GptKey")
 	assertAgentRows(t, cat, `SELECT Name, Provider, KeyConstant FROM knowledge_bases`,
 		"KB_WorkInstructions|MxCloudGenAI|AgenticAssistants.KB_WorkInstructionsKey")
-	assertAgentRows(t, cat, `SELECT Name, ProtocolVersion, Version, ConnectionTimeoutSeconds FROM consumed_mcp_services`,
-		"JiraMCP|v2025_03_26|1.0|30")
+	assertAgentRows(t, cat, `SELECT Name, ProtocolVersion, Version, ConnectionTimeoutSeconds,
+			Endpoint, AuthenticationMicroflow
+		FROM consumed_mcp_services ORDER BY Name`,
+		"JiraMCP|v2025_03_26|1.0|30|Agents.JiraUrl|Agents.Jira_GetHeaders",
+		"NoEndpointMCP|v2025_03_26|1.0|30||")
 	assertAgentRows(t, cat, `SELECT Name, ServerName, EndpointPath, Version, ProtocolVersion, AuthenticationEnabled, AuthenticationMicroflow, ToolCount
 		FROM published_mcp_services`,
 		"Published_MCP_service|Published_MCP_service|published_mcp_service|1.0.0|v2025_03_26|0||1")
@@ -211,5 +223,32 @@ func TestPublishedMCPServiceRefs_Issue2075(t *testing.T) {
 	want := "publish MICROFLOW AgentTest.mcptool1|publish MICROFLOW Agents.MCP_Auth"
 	if got := strings.Join(edgeStrings(agentEditorRefs(doc, resolveFixture)), "|"); got != want {
 		t.Errorf("published MCP service edges = %q, want %q", got, want)
+	}
+}
+
+// A consumed MCP service reads its server URL from a String constant and
+// calls its credentials microflow for the request headers: without the edges
+// GRAPH_DEAD_ASSETS lists both, and `show callers` finds no user
+// (ako/mxcli#2090).
+func TestConsumedMCPServiceRefs_Issue2090(t *testing.T) {
+	u := agentEditorRawUnit(t, "mcp-1", "JiraMCP", types.CustomTypeConsumedMCPService,
+		`{"endpoint":{"qualifiedName":"Agents.JiraUrl"},"protocolVersion":"v2025_03_26",
+		  "authenticationMicroflow":{"qualifiedName":"Agents.Jira_GetHeaders"}}`)
+	doc, err := mprread.DecodeAgentEditorUnit("mcp-1", string(agentDetailsModuleID), u.Contents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "call MICROFLOW Agents.Jira_GetHeaders|endpoint CONSTANT Agents.JiraUrl"
+	if got := strings.Join(edgeStrings(agentEditorRefs(doc, resolveFixture)), "|"); got != want {
+		t.Errorf("consumed MCP service edges = %q, want %q", got, want)
+	}
+	// Control: a service with neither has no edges.
+	bare := agentEditorRawUnit(t, "mcp-2", "Bare", types.CustomTypeConsumedMCPService, `{"version":"1.0"}`)
+	doc, err = mprread.DecodeAgentEditorUnit("mcp-2", string(agentDetailsModuleID), bare.Contents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := edgeStrings(agentEditorRefs(doc, resolveFixture)); len(got) != 0 {
+		t.Errorf("bare service edges = %q, want none", got)
 	}
 }

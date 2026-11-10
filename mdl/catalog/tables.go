@@ -7,6 +7,13 @@ package catalog
 //
 // History:
 //
+//	45 (agent tools and MCP endpoints): agent_tools no longer holds an
+//	    agent's MCP services, which agent_mcp_services already lists, so it
+//	    matches ToolCount; consumed_mcp_services gains Endpoint and
+//	    AuthenticationMicroflow, and refs an `endpoint` edge to the constant
+//	    and a `call` to the microflow (ako/mxcli#2090). Views are CREATE VIEW
+//	    IF NOT EXISTS, so without the bump a cached catalog keeps both. Its own
+//	    number: #1299's flows took 44 in parallel.
 //	44 (sequence flows): new flows table, one row per sequence and
 //	    annotation flow of a microflow, nanoflow or rule; activities gains
 //	    X, Y, Width and Height, the object's canvas box (ako/mxcli#1299).
@@ -240,7 +247,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "44"
+const CatalogSchemaVersion = "45"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -843,6 +850,7 @@ func (c *Catalog) createTables() error {
 			Id TEXT PRIMARY KEY, Name TEXT, QualifiedName TEXT, ModuleName TEXT,
 			Folder TEXT, Description TEXT,
 			ProtocolVersion TEXT, Version TEXT, ConnectionTimeoutSeconds INTEGER,
+			Endpoint TEXT, AuthenticationMicroflow TEXT,
 			ProjectId TEXT, SnapshotId TEXT
 		)`,
 		viewWithFullSnapshot("consumed_mcp_services"),
@@ -856,7 +864,10 @@ func (c *Catalog) createTables() error {
 		)`,
 		viewWithFullSnapshot("published_mcp_services"),
 		// One row per entry of an agent's tools list: a microflow, nanoflow
-		// or agent it calls, or a consumed MCP service (ToolType 'MCP').
+		// or agent it calls, or a consumed MCP service (ToolType 'MCP'). The
+		// agent_tools view holds the tools ToolCount counts, agent_mcp_services
+		// the MCP services MCPServiceCount counts, as the Agent Editor lists
+		// them apart (ako/mxcli#2090).
 		`CREATE TABLE IF NOT EXISTS agent_tools_data (
 			Id TEXT, AgentId TEXT, Agent TEXT, ModuleName TEXT,
 			Name TEXT, ToolType TEXT, Document TEXT, Enabled INTEGER,
@@ -864,13 +875,15 @@ func (c *Catalog) createTables() error {
 			DisplayTitle TEXT, DisplayDescription TEXT,
 			ProjectId TEXT, SnapshotId TEXT
 		)`,
-		viewWithFullSnapshot("agent_tools"),
+		viewWithFullSnapshotOver("agent_tools", "agent_tools_data") + ` WHERE IFNULL(t.ToolType, '') <> 'MCP'`,
 		// The MCP service tools, under the names the Agent Editor shows them.
 		`CREATE VIEW IF NOT EXISTS agent_mcp_services AS
-			SELECT Id, AgentId, Agent, ModuleName, Name, Document AS Service,
-				Enabled, UserAccessApproval, Description,
-				ProjectId, ProjectName, SnapshotId, SnapshotDate, SnapshotSource
-			FROM agent_tools WHERE ToolType = 'MCP'`,
+			SELECT t.Id, t.AgentId, t.Agent, t.ModuleName, t.Name, t.Document AS Service,
+				t.Enabled, t.UserAccessApproval, t.Description,
+				t.ProjectId, s.ProjectName, t.SnapshotId, s.SnapshotDate, s.SnapshotSource
+			FROM agent_tools_data t
+			LEFT JOIN snapshots s ON s.SnapshotId = t.SnapshotId
+			WHERE t.ToolType = 'MCP'`,
 		// One row per entry of an agent's knowledge base tools list.
 		`CREATE TABLE IF NOT EXISTS agent_knowledge_bases_data (
 			Id TEXT, AgentId TEXT, Agent TEXT, ModuleName TEXT,
