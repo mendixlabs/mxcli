@@ -202,6 +202,11 @@ Examples:
 
 		webClientTimeout, _ := cmd.Flags().GetDuration("web-client-timeout")
 		testEndpoint, _ := cmd.Flags().GetBool("test-endpoint")
+		allowCall, _ := cmd.Flags().GetBool("allow-call")
+		if allowCall && !testEndpoint {
+			fmt.Fprintln(os.Stderr, "Error: --allow-call switches on a route of the test endpoint; it needs --test-endpoint")
+			os.Exit(1)
+		}
 		ensureDB, _ := cmd.Flags().GetBool("ensure-db")
 		appPort, _ := cmd.Flags().GetInt("app-port")
 		adminPort, _ := cmd.Flags().GetInt("admin-port")
@@ -317,7 +322,7 @@ Examples:
 				fmt.Fprintf(os.Stderr, "Warning: could not git-ignore the test endpoint's source: %v\n", err)
 			}
 			var err error
-			hosted, err = testrunner.InstallHostedEndpoint(projectPath, os.Stdout)
+			hosted, err = testrunner.InstallHostedEndpoint(projectPath, allowCall, os.Stdout)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
@@ -418,6 +423,7 @@ func init() {
 	runCmd.Flags().Bool("detach", false, "Run in the background and return once the app is serving (or failed to boot); manage it with 'mxcli run status|wait|stop|restart'. Output goes to <projectDir>/.mxcli/run.log")
 	runCmd.Flags().Duration("web-client-timeout", 0, "Limit for one web client bundle build, e.g. 10m (default $MXCLI_WEB_CLIENT_TIMEOUT, else 5m); on timeout the tail of deployment/log/web-client-build.log is printed")
 	runCmd.Flags().Bool("test-endpoint", false, "Host mxcli's token-guarded test endpoint so 'mxcli test --attach' can run tests against this app without booting its own runtime (removed on exit)")
+	runCmd.Flags().Bool("allow-call", false, "With --test-endpoint: let 'mxcli test --attach' run a test straight against this app, without injecting or building it, when every statement of the test is one the endpoint can execute. The endpoint then calls the microflows a test names and reads and writes data in a system context, so it is off unless asked for")
 	runCmd.Flags().Bool("ensure-db", false, "Provision the local Postgres + app database if missing (fresh-session bootstrap)")
 	runCmd.Flags().Bool("setup", false, "Prepare prerequisites (cache MxBuild+runtime, ensure DB) and exit without booting — for a SessionStart hook")
 	runCmd.Flags().Int("app-port", 0, "HTTP port for the app (default 8080)")

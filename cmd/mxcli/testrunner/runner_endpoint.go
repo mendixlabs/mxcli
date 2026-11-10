@@ -124,16 +124,22 @@ func runSuite(client *endpointClient, admin docker.M2EEOptions, suite *TestSuite
 	// is missing is reported as an error against that test rather than failing
 	// the run.
 	present := make(map[string]bool)
-	names, err := client.list()
-	if err != nil {
-		return nil, fmt.Errorf("listing test microflows: %w", err)
-	}
-	for _, n := range names {
-		present[n] = true
+	if opts.execPrograms == nil {
+		names, err := client.list()
+		if err != nil {
+			return nil, fmt.Errorf("listing test microflows: %w", err)
+		}
+		for _, n := range names {
+			present[n] = true
+		}
 	}
 
 	result := &SuiteResult{Name: suite.Name, Started: time.Now()}
-	fmt.Fprintf(w, "Running %d test(s) over the test endpoint...\n", len(suite.Tests))
+	if opts.execPrograms != nil {
+		fmt.Fprintf(w, "Running %d test(s) in the running app (no injection, no build)...\n", len(suite.Tests))
+	} else {
+		fmt.Fprintf(w, "Running %d test(s) over the test endpoint...\n", len(suite.Tests))
+	}
 
 	// leaked counts tests whose requested rollback did not happen.
 	leaked := 0
@@ -144,17 +150,22 @@ func runSuite(client *endpointClient, admin docker.M2EEOptions, suite *TestSuite
 			continue
 		}
 
-		flow := testFlowName(tc)
-		if !present[flow] {
-			res := newResult(tc)
-			res.Status = StatusError
-			res.Message = fmt.Sprintf("microflow %s was not created — the test body may not have compiled", flow)
-			result.Tests = append(result.Tests, res)
-			continue
-		}
-
 		rollback := rollsBack(tc)
-		rr, err := client.run(flow, rollback)
+		var rr *runResponse
+		var err error
+		if prog := opts.execPrograms[tc.ID]; prog != nil {
+			rr, err = client.exec(prog)
+		} else {
+			flow := testFlowName(tc)
+			if !present[flow] {
+				res := newResult(tc)
+				res.Status = StatusError
+				res.Message = fmt.Sprintf("microflow %s was not created — the test body may not have compiled", flow)
+				result.Tests = append(result.Tests, res)
+				continue
+			}
+			rr, err = client.run(flow, rollback)
+		}
 		if err != nil {
 			// A transport failure is not a verdict. Report it against this test
 			// and keep going; if the runtime died the rest will say so too.

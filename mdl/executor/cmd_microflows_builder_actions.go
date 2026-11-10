@@ -3334,3 +3334,11 @@ func qualifyNamesInSource(source string, names map[string]string) string {
 	}
 	return out.String()
 }
+
+// RetrieveXPathConstraint is the XPath constraint a `retrieve … where` stores,
+// for a caller outside the executor that runs the retrieve itself: the test
+// runner's interpreter route sends it to the running app instead of writing a
+// Retrieve activity, and must send the same constraint the activity would hold.
+func RetrieveXPathConstraint(where ast.Expression, entity string) string {
+	return retrieveXPathConstraint(where, entity)
+}

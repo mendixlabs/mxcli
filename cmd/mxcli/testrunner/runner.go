@@ -39,6 +39,11 @@ type RunOptions struct {
 	// SkipBuild skips the MxBuild step (reuse existing deployment).
 	SkipBuild bool
 
+	// execPrograms, keyed on test ID, sends those tests to the endpoint's exec
+	// route instead of running a generated microflow (interp.go). Set only by
+	// an attach to an app started with --allow-call.
+	execPrograms map[string]*execProgram
+
 	// Local runs the app with mxcli's own local runtime (`run --local`) instead
 	// of a Docker container, and drives the tests over the test endpoint.
 	Local bool
