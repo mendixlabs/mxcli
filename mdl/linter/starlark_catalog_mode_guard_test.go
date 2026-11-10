@@ -63,6 +63,7 @@ var builtinModes = map[string]builtinProbe{
 	"modules":                   {CatalogFast, "modules()"},
 	"folders":                   {CatalogFast, "folders()"},
 	"annotations":               {CatalogFast, "annotations()"},
+	"jar_files":                 {CatalogFast, "jar_files()"},
 	"associations":              {CatalogFast, "associations()"},
 	"entity_event_handlers":     {CatalogFast, "entity_event_handlers()"},
 	"navigation_menu_items":     {CatalogFast, "navigation_menu_items()"},

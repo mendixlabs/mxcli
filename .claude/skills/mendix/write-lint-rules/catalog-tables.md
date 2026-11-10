@@ -1,7 +1,7 @@
 # Catalog-table builtins: object properties
 
 The structs returned by `modules()`, `folders()`, `annotations()`, `associations()`, `entity_event_handlers()`,
-`navigation_menu_items()`, `jar_dependencies()`, `strings()`, `layouts()`,
+`navigation_menu_items()`, `jar_dependencies()`, `jar_files()`, `strings()`, `layouts()`,
 `published_rest_operations()` and `widgets()`. The functions themselves are listed in
 [SKILL.md](SKILL.md) under "Available Query Functions". Every builtin leaves out
 System and Marketplace modules, except `navigation_menu_items()`, whose rows
@@ -104,6 +104,34 @@ Returned by `jar_dependencies()`.
 | `version` | string | `"3.14.0"` |
 | `coordinate` | string | `"org.apache.commons:commons-lang3"` — group and artifact, without the version, so it identifies the library across versions |
 | `is_included` | bool | Studio Pro's "Included" setting; False when the dependency is declared but not included |
+
+### jar_file
+Returned by `jar_files()` (ako/mxcli#1304). Read from the project folder at
+each call: the jars are not in the `.mpr`, so the catalog does not hold them.
+
+| Property | Type | Example |
+|----------|------|---------|
+| `folder` | string | `"userlib"` or `"vendorlib"` |
+| `file_name` | string | `"commons-lang3-3.12.0.jar"` |
+| `name` | string | `"commons-lang3"` — the file name up to the last `-` followed by a digit, so `log4j-1.2-api-2.17.1.jar` is `log4j-1.2-api` |
+| `version` | string | `"3.12.0"`; `""` when the file name carries no version |
+| `required_by` | list of string | `["MyFirstModule"]` — modules with a `<file_name>.<Module>.RequiredLib` marker beside the jar, as a Marketplace module ships one |
+
+The same `name` in two versions is one library on the classpath twice:
+
+```python
+def check():
+    seen = {}
+    for j in jar_files():
+        seen.setdefault(j.name, []).append(j)
+    out = []
+    for name, jars in seen.items():
+        versions = sorted({j.version for j in jars})
+        if len(versions) > 1:
+            out.append(violation(message = "%s on the classpath in versions %s" % (name, ", ".join(versions)),
+                                 location = location(module = "", document_type = "project", document_name = "")))
+    return out
+```
 
 ### catalog_string
 Returned by `strings(language = None)`.
