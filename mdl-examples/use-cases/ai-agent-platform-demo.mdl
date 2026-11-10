@@ -361,6 +361,7 @@ create agent AICustSupport."SupportAgent" (
   UsageType:   Conversational,
   description: 'AI first-line support agent with RAG and web-search capability',
   model:       AICustSupport.GPT4TurboModel,
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   MaxTokens:   8192,
   ToolChoice:  Auto,
   variables:   ("CustomerTier": EntityAttribute, "CasePriority": EntityAttribute),
@@ -396,6 +397,7 @@ Guidelines:
 create agent AICustSupport."ResponseGuardrail" (
   UsageType: task,
   model:     AICustSupport.GPT4TurboModel,
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   SystemPrompt: $$You are a content safety and policy compliance checker.
 
 Evaluate the proposed AI response for:

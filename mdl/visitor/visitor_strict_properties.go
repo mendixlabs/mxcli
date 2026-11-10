@@ -273,6 +273,8 @@ var agentSchema = propSchema{on: "an agent", keys: []propKey{
 	{"UserPrompt", textShapes},
 	{"EnableBackendStreaming", []propShape{shapeBool}},
 	{"EnableUIStreaming", []propShape{shapeBool}},
+	{"SelectedModel", []propShape{shapeString}},
+	{"SelectedModelName", []propShape{shapeString}},
 }}
 
 var agentMCPServiceSchema = propSchema{on: "an agent's mcp service block", keys: []propKey{

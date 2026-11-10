@@ -72,3 +72,27 @@ func TestAgentSettings_AlterAdd(t *testing.T) {
 		t.Errorf("alter add %+v %+v", s.AddTools[0], s.AddKBs[0])
 	}
 }
+
+// ako/mxcli#2031: the model an agent uses on a multi-model resource.
+func TestAgentSettings_SelectedModel(t *testing.T) {
+	prog := mustBuild(t, `create agent M.A (
+  UsageType: Task,
+  Model: M.Model,
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
+  SelectedModelName: 'Anthropic Claude Sonnet 5'
+);
+create or modify agent M.B (UsageType: Task);
+alter agent M.A set SelectedModel = 'eu.anthropic.claude-haiku-5';`)
+	a := prog.Statements[0].(*ast.CreateAgentStmt)
+	if a.SelectedModel == nil || *a.SelectedModel != "eu.anthropic.claude-sonnet-5" ||
+		a.SelectedModelName == nil || *a.SelectedModelName != "Anthropic Claude Sonnet 5" {
+		t.Errorf("selected model %v / %v", a.SelectedModel, a.SelectedModelName)
+	}
+	// Control: left out, nothing is said, so a create or modify keeps the stored value.
+	if b := prog.Statements[1].(*ast.CreateAgentStmt); b.SelectedModel != nil || b.SelectedModelName != nil {
+		t.Errorf("unstated selected model set: %v %v", b.SelectedModel, b.SelectedModelName)
+	}
+	if alt := prog.Statements[2].(*ast.AlterAgentStmt); alt.Sets["selectedmodel"] != "eu.anthropic.claude-haiku-5" {
+		t.Errorf("alter set SelectedModel: %+v", alt.Sets)
+	}
+}

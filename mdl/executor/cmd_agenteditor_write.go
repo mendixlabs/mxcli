@@ -312,9 +312,12 @@ func execCreateAgent(ctx *ExecContext, s *ast.CreateAgentStmt) error {
 		a.KBTools = append(a.KBTools, *akt)
 	}
 
+	var storedModel *agenteditor.SelectedModel
 	if existingAgent != nil {
 		carryAgentIdentity(a, existingAgent)
+		storedModel = existingAgent.SelectedModel
 	}
+	a.SelectedModel = selectedModelFrom(s.SelectedModel, s.SelectedModelName, storedModel)
 
 	if existingAgent != nil {
 		a.ID = existingAgent.ID

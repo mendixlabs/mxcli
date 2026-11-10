@@ -244,9 +244,10 @@ type Agent struct {
 	// not the model. nil when the document holds none.
 	EnableBackendStreaming *bool `json:"enableBackendStreaming,omitempty"`
 	EnableUIStreaming      *bool `json:"enableUIStreaming,omitempty"`
-	// The model picked from the provider's list in the Agent Editor (its id
-	// and display name), next to the Model document. nil when the document
-	// holds none. Read-only: the writer carries it as a stored key.
+	// SelectedModel is the model the agent uses on a multi-model resource: its
+	// id, which the import matches against DeployedModel.Model, and the display
+	// name Studio Pro shows. Agent Editor 2.2+ refuses to import an agent
+	// without one (#2031). nil when the document holds none.
 	SelectedModel *AgentSelectedModel `json:"selectedModel,omitempty"`
 }
 
