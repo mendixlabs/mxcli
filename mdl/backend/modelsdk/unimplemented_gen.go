@@ -442,6 +442,11 @@ func (unimplemented) FindDocumentUnit(_ string, _ string) (*types.DocumentUnit, 
 	return r0, errUnimplemented("FindDocumentUnit")
 }
 
+func (unimplemented) FindDocumentUnits(_ string, _ string) ([]*types.DocumentUnit, error) {
+	var r0 []*types.DocumentUnit
+	return r0, errUnimplemented("FindDocumentUnits")
+}
+
 func (unimplemented) FindViewEntitySourceDocumentID(_ string, _ string) (model.ID, error) {
 	var r0 model.ID
 	return r0, errUnimplemented("FindViewEntitySourceDocumentID")

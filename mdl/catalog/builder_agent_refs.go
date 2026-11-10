@@ -43,6 +43,8 @@ func agentEditorSourceType(doc any) string {
 		return RefObjectKnowledgeBase
 	case *types.ConsumedMCPService:
 		return RefObjectConsumedMCPService
+	case *types.PublishedMCPService:
+		return RefObjectPublishedMCPService
 	}
 	return ""
 }
@@ -55,7 +57,10 @@ func agentEditorSourceType(doc any) string {
 //     `call`, so `show callers` and the dead-asset view see it; a consumed MCP
 //     service or a knowledge base it draws on is a `tool`;
 //   - an agent runs on its `model`, and is typed on its context entity (`type`);
-//   - a model or knowledge base reads its key from a constant (`key`).
+//   - a model or knowledge base reads its key from a constant (`key`);
+//   - a published MCP service runs each tool's microflow and its
+//     authentication microflow (`publish`, as a published REST or OData
+//     service does; ako/mxcli#2075).
 func agentEditorRefs(doc any, resolve func(string) string) []docRef {
 	var out []docRef
 	add := func(qn, targetType, kind string) {
@@ -106,6 +111,15 @@ func agentEditorRefs(doc any, resolve func(string) string) []docRef {
 	case *types.KnowledgeBase:
 		if d.Key != nil {
 			add(d.Key.QualifiedName, RefObjectConstant, RefKindKey)
+		}
+	case *types.PublishedMCPService:
+		for _, tool := range d.Tools {
+			if tool.SourceMicroflow != nil {
+				add(tool.SourceMicroflow.QualifiedName, RefObjectMicroflow, RefKindPublish)
+			}
+		}
+		if d.AuthenticationMicroflow != nil {
+			add(d.AuthenticationMicroflow.QualifiedName, RefObjectMicroflow, RefKindPublish)
 		}
 	}
 	return out
