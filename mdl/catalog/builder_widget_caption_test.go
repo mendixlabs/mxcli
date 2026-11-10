@@ -29,11 +29,11 @@ func TestWidgetCaptionAndTooltip_Issue1303(t *testing.T) {
 		"Widgets": bsonList(
 			wid("b1", "btnDelete", "Forms$ActionButton", map[string]any{
 				"CaptionTemplate": clientTemplate(rawText("en_US", "Delete sale", "nl_NL", "Verkoop verwijderen")),
-				"Tooltip": rawText("en_US", "Deletes it", "nl_NL", "Verwijdert hem"),
+				"Tooltip":         rawText("en_US", "Deletes it", "nl_NL", "Verwijdert hem"),
 			}),
 			wid("b2", "btnRemove", "Forms$ActionButton", map[string]any{
 				"CaptionTemplate": clientTemplate(rawText("en_US", "Remove")),
-				"Tooltip": rawText(), // a tooltip never set: no translations
+				"Tooltip":         rawText(), // a tooltip never set: no translations
 			}),
 			wid("t1", "text1", "Forms$Label", map[string]any{
 				"Caption": rawText("en_US", "Total"),
