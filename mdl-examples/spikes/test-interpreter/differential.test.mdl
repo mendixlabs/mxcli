@@ -84,13 +84,13 @@ $c = create Spike.Customer (Name = 'Agg') commit;
 $i1 = create Spike.Invoice (InvoiceNo = 'AGG', Amount = 10.25, Qty = 2, Spike.Invoice_Customer = $c) commit;
 $i2 = create Spike.Invoice (InvoiceNo = 'AGG', Amount = 4.5, Qty = 5, Spike.Invoice_Customer = $c) commit;
 retrieve $rows from Spike.Invoice where InvoiceNo = 'AGG';
-$n = count($rows);
-$sumA = sum($rows.Amount);
-$avgA = average($rows.Amount);
-$minA = minimum($rows.Amount);
-$maxQ = maximum($rows.Qty);
-$sumQ = sum($rows.Qty);
-$avgQ = average($rows.Qty);
+$n = count $rows;
+$sumA = sum $rows by Amount;
+$avgA = average $rows by Amount;
+$minA = minimum $rows by Amount;
+$maxQ = maximum $rows by Qty;
+$sumQ = sum $rows by Qty;
+$avgQ = average $rows by Qty;
 /
 
 /**
@@ -98,13 +98,13 @@ $avgQ = average($rows.Qty);
  * @expect toString($n) + '|' + toString($sumA) + '|' + toString($avgA) + '|' + toString($minA) + '|' + toString($maxQ) + '|' + toString($sumQ) + '|' + toString($avgQ) = 'show'
  */
 retrieve $rows from Spike.Invoice where InvoiceNo = 'NONE';
-$n = count($rows);
-$sumA = sum($rows.Amount);
-$avgA = average($rows.Amount);
-$minA = minimum($rows.Amount);
-$maxQ = maximum($rows.Qty);
-$sumQ = sum($rows.Qty);
-$avgQ = average($rows.Qty);
+$n = count $rows;
+$sumA = sum $rows by Amount;
+$avgA = average $rows by Amount;
+$minA = minimum $rows by Amount;
+$maxQ = maximum $rows by Qty;
+$sumQ = sum $rows by Qty;
+$avgQ = average $rows by Qty;
 /
 
 /**
@@ -124,7 +124,7 @@ $c = create Spike.Customer (Name = 'Rev') commit;
 $i1 = create Spike.Invoice (InvoiceNo = 'R1', Spike.Invoice_Customer = $c) commit;
 $i2 = create Spike.Invoice (InvoiceNo = 'R2', Spike.Invoice_Customer = $c) commit;
 retrieve $invs from $c/Spike.Invoice_Customer;
-$k = count($invs);
+$k = count $invs;
 /
 
 /**

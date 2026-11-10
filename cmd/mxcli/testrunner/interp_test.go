@@ -190,8 +190,8 @@ func TestCompileForExec_AggregatesAndAssociationRetrieve(t *testing.T) {
  * @expect $n = 2 and $total > 0
  */
 retrieve $rows from M.Line;
-$n = count($rows);
-$total = sum($rows.Amount);
+$n = count $rows;
+$total = sum $rows by Amount;
 $o = create M.Order;
 retrieve $lines from $o/M.Line_Order;
 /
