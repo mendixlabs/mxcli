@@ -155,6 +155,19 @@ Examples:
 			projectPath = abs
 		}
 
+		// A test endpoint an earlier run left behind (killed with its container,
+		// say) is removed by any run, not only by the next --test-endpoint one,
+		// which does it while installing its own: the swapped after-startup
+		// setting otherwise stays in the project file until someone commits it.
+		if hosting, _ := cmd.Flags().GetBool("test-endpoint"); !hosting {
+			if _, err := testrunner.RestoreAbandonedEndpoint(projectPath, os.Stdout); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+			}
+			if msg := testrunner.LeftoverEndpointWarning(projectPath); msg != "" {
+				fmt.Fprintf(os.Stderr, "Warning: %s\n", msg)
+			}
+		}
+
 		// Resolved before --detach as well as in the detached child, so a
 		// missing variable or a world-readable file is reported here, in the
 		// foreground, rather than in a log after the parent has returned.
