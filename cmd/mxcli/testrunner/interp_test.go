@@ -79,11 +79,13 @@ set $n = 1;
 // that names what kept it there.
 func TestCompileForExec_RoutesTheRestToMicroflows(t *testing.T) {
 	for _, c := range []struct{ body, reason string }{
-		{"if 1 = 1 then\n  declare $x Integer = 1;\nend if;", "If"},
-		{"loop $i in $list begin\nend loop;", "Loop"},
+		{"if 1 = 1 then\n  declare $x Integer = 1;\nend if;", "the statement if"},
+		{"declare $list List of M.E = empty;\nloop $i in $list begin\nend loop;", "the statement loop"},
 		{"$r = call microflow M.F() on error continue;", "ON ERROR"},
 		{"retrieve $l from M.E sort by Name asc;", "sort"},
-		{"retrieve $l from $o/M.Assoc;", "association"},
+		{"$o = create M.E;\nretrieve $l from $o/M.Assoc where Name = 'x';", "over an association with where"},
+		{"retrieve $l from M.E;\n$f = find $l by Name = 'x';", "list operation (find)"},
+		{"$b = call java action M.J();", "the statement call java action"},
 		{"set $x = 1;", "$x is read before anything declares it"},
 		{"$r = call microflow M.F(A = $missing);", "$missing is read before"},
 	} {
@@ -176,5 +178,73 @@ func TestEndpointExecJava(t *testing.T) {
 		if !strings.Contains(GenerateEndpointMDL(""), want) {
 			t.Errorf("the endpoint script does not contain %q", want)
 		}
+	}
+}
+
+// Aggregates written as statements and a retrieve over an association compile,
+// so a suite of ordinary assertion helpers stays on the executor.
+func TestCompileForExec_AggregatesAndAssociationRetrieve(t *testing.T) {
+	p, reason := compileOne(t, `mdl 1;
+/**
+ * @test t
+ * @expect $n = 2 and $total > 0
+ */
+retrieve $rows from M.Line;
+$n = count($rows);
+$total = sum($rows.Amount);
+$o = create M.Order;
+retrieve $lines from $o/M.Line_Order;
+/
+`)
+	if reason != "" {
+		t.Fatalf("not interpretable: %s", reason)
+	}
+	n, total, lines := p.Steps[1], p.Steps[2], p.Steps[4]
+	if n.Op != "aggregate" || n.Agg != "count" || n.Of != "rows" || n.Var != "n" {
+		t.Errorf("count step = %+v", n)
+	}
+	if total.Op != "aggregate" || total.Agg != "sum" || total.Attr != "Amount" {
+		t.Errorf("sum step = %+v", total)
+	}
+	if lines.Op != "retrieve" || lines.Assoc != "M.Line_Order" || lines.From != "o" || lines.XPath != "" {
+		t.Errorf("association retrieve step = %+v", lines)
+	}
+}
+
+// One test the executor cannot run sends only that test through inject and
+// build; the others still run in the app.
+func TestCompileSuiteForExec_RoutesPerTest(t *testing.T) {
+	tests, err := parseMDLTests(`mdl 1;
+/**
+ * @test fast
+ * @expect $n = 1
+ */
+declare $n Integer = 1;
+/
+
+/**
+ * @test slow
+ * @expect $n = 1
+ */
+declare $n Integer = 0;
+if true then
+  set $n = 1;
+end if;
+/
+`, "t.test.mdl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	suite := &TestSuite{Name: "s", Tests: tests}
+	programs, needBuild := compileSuiteForExec(suite)
+	if len(programs) != 1 || programs[tests[0].ID] == nil {
+		t.Errorf("programs = %v, want only %s", programs, tests[0].ID)
+	}
+	if !strings.Contains(needBuild[tests[1].ID], "the statement if") || len(needBuild) != 1 {
+		t.Errorf("needBuild = %v", needBuild)
+	}
+	inject := suiteWith(suite, func(tc TestCase) bool { return programs[tc.ID] == nil })
+	if len(inject.Tests) != 1 || inject.Tests[0].Name != "slow" || len(suite.Tests) != 2 {
+		t.Errorf("injected %d test(s) (%v), suite now holds %d", len(inject.Tests), inject.Tests, len(suite.Tests))
 	}
 }

@@ -1,0 +1,32 @@
+mdl 1;
+-- Setup for differential.test.mdl: the microflows its tests call, added to the
+-- app the evaluate-expression spike builds (../evaluate-expression.mdl).
+
+create java action Spike.Fail(Message: String) returns Boolean
+as $$
+throw new com.mendix.core.CoreException(Message);
+$$;
+
+create microflow Spike.ApplyDiscount (Amount: Decimal, Code: String) returns Decimal as $Result
+begin
+  if $Amount < 0 then
+    $Failed = call java action Spike.Fail(Message = 'Amount must be positive');
+  end if;
+  if $Code = 'SAVE10' then
+    return $Amount * 0.9;
+  end if;
+  return $Amount;
+end;
+
+create microflow Spike.Invoice_Pay (Invoice: Spike.Invoice)
+begin
+  change $Invoice (Status = Spike.Status.PAID);
+  commit $Invoice;
+end;
+
+create microflow Spike.Seed ()
+begin
+  $C = create Spike.Customer (Name = 'Seeded') commit;
+end;
+
+alter settings runtime ( AfterStartupMicroflow: '' );

@@ -207,6 +207,13 @@ Examples:
 			fmt.Fprintln(os.Stderr, "Error: --allow-call switches on a route of the test endpoint; it needs --test-endpoint")
 			os.Exit(1)
 		}
+		if allowCall && hub != "" {
+			// The tunnel client reaches the app from loopback, so the endpoint's
+			// loopback check does not keep hub traffic out of the exec route.
+			fmt.Fprintln(os.Stderr, "Warning: --allow-call with --hub: the hub tunnel reaches the app from loopback, so the test endpoint's\n"+
+				"  loopback check does not keep hub traffic out. The run's token is the only guard on the route that\n"+
+				"  calls microflows in a system context; drop --allow-call when the hub URL is shared.")
+		}
 		ensureDB, _ := cmd.Flags().GetBool("ensure-db")
 		appPort, _ := cmd.Flags().GetInt("app-port")
 		adminPort, _ := cmd.Flags().GetInt("admin-port")

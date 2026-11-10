@@ -1,0 +1,138 @@
+mdl 1;
+-- Differential tests for the test runner's interpreter route (--allow-call).
+--
+-- Every test here must get the same verdict, and the same failure message, on
+-- both routes. The tests that FAIL do so on purpose: their message carries the
+-- actual values, so comparing messages compares values.
+--
+--   cd <the spike app> && ./mxcli exec app.mdl -p EvSpike.mpr
+--   ./mxcli run --local --detach --watch --db-type hsqldb --test-endpoint --allow-call -p EvSpike.mpr
+--   ./mxcli test differential.test.mdl -p EvSpike.mpr --attach > exec.out
+--   ./mxcli run stop -p EvSpike.mpr
+--   ./mxcli run --local --detach --watch --db-type hsqldb --test-endpoint -p EvSpike.mpr
+--   ./mxcli test differential.test.mdl -p EvSpike.mpr --attach > built.out
+--   diff the PASS/FAIL/ERROR lines of the two, durations aside.
+--
+-- Measured on 11.12.1: identical. The first run of this comparison found that
+-- Mendix's average over an empty list is empty, not 0; the executor now agrees.
+-- The last test uses `if`, so with --allow-call it runs as a built microflow in
+-- the same run as the rest (per-test routing).
+
+/**
+ * @test Discount applied for SAVE10
+ * @expect $result = 90.0
+ */
+$result = call microflow Spike.ApplyDiscount(Amount = 100.0, Code = 'SAVE10');
+/
+
+/**
+ * @test A wrong expectation fails and shows the actual value
+ * @expect $result = 91.0
+ */
+$result = call microflow Spike.ApplyDiscount(Amount = 100.0, Code = 'SAVE10');
+/
+
+/**
+ * @test Negative amount is refused
+ * @throws 'Amount must be positive'
+ */
+$result = call microflow Spike.ApplyDiscount(Amount = -5.0, Code = 'SAVE10');
+/
+
+/**
+ * @test A @throws with the wrong message fails
+ * @throws 'something else'
+ */
+$result = call microflow Spike.ApplyDiscount(Amount = -5.0, Code = 'SAVE10');
+/
+
+/**
+ * @test Paying an invoice marks it paid
+ * @expect $inv/Status = Spike.Status.PAID
+ * @expect $inv/Spike.Invoice_Customer/Spike.Customer/Name = 'Acme'
+ */
+$cust = create Spike.Customer (Name = 'Acme');
+$inv = create Spike.Invoice (InvoiceNo = 'INV-1', Amount = 250.5, Qty = 3, Status = Spike.Status.OPEN, Spike.Invoice_Customer = $cust);
+commit $cust;
+call microflow Spike.Invoice_Pay(Invoice = $inv);
+/
+
+/**
+ * @test Retrieve and count see the test's own commits
+ * @setup Spike.Seed
+ * @expect count($paid) = 1
+ * @expect $one/InvoiceNo = 'INV-9'
+ */
+$inv = create Spike.Invoice (InvoiceNo = 'INV-9', Status = Spike.Status.PAID) commit;
+retrieve $paid from Spike.Invoice where Status = Spike.Status.PAID and InvoiceNo = $inv/InvoiceNo;
+retrieve $one from Spike.Invoice where InvoiceNo = 'INV-9' first;
+/
+
+/**
+ * @test Variables, set and arithmetic
+ * @expect $n = 12
+ */
+declare $n Integer = 5;
+set $n = $n + 7;
+/
+
+/**
+ * @test Aggregates over two rows (shows the values)
+ * @expect toString($n) + '|' + toString($sumA) + '|' + toString($avgA) + '|' + toString($minA) + '|' + toString($maxQ) + '|' + toString($sumQ) + '|' + toString($avgQ) = 'show'
+ */
+$c = create Spike.Customer (Name = 'Agg') commit;
+$i1 = create Spike.Invoice (InvoiceNo = 'AGG', Amount = 10.25, Qty = 2, Spike.Invoice_Customer = $c) commit;
+$i2 = create Spike.Invoice (InvoiceNo = 'AGG', Amount = 4.5, Qty = 5, Spike.Invoice_Customer = $c) commit;
+retrieve $rows from Spike.Invoice where InvoiceNo = 'AGG';
+$n = count($rows);
+$sumA = sum($rows.Amount);
+$avgA = average($rows.Amount);
+$minA = minimum($rows.Amount);
+$maxQ = maximum($rows.Qty);
+$sumQ = sum($rows.Qty);
+$avgQ = average($rows.Qty);
+/
+
+/**
+ * @test Aggregates over no rows (shows the values)
+ * @expect toString($n) + '|' + toString($sumA) + '|' + toString($avgA) + '|' + toString($minA) + '|' + toString($maxQ) + '|' + toString($sumQ) + '|' + toString($avgQ) = 'show'
+ */
+retrieve $rows from Spike.Invoice where InvoiceNo = 'NONE';
+$n = count($rows);
+$sumA = sum($rows.Amount);
+$avgA = average($rows.Amount);
+$minA = minimum($rows.Amount);
+$maxQ = maximum($rows.Qty);
+$sumQ = sum($rows.Qty);
+$avgQ = average($rows.Qty);
+/
+
+/**
+ * @test Owner side of a reference finds an uncommitted object
+ * @expect $cc/Name = 'Owner'
+ */
+$c = create Spike.Customer (Name = 'Owner');
+$i = create Spike.Invoice (InvoiceNo = 'ASSOC', Spike.Invoice_Customer = $c);
+retrieve $cc from $i/Spike.Invoice_Customer;
+/
+
+/**
+ * @test Other side of a reference is the committed list
+ * @expect $k = 2
+ */
+$c = create Spike.Customer (Name = 'Rev') commit;
+$i1 = create Spike.Invoice (InvoiceNo = 'R1', Spike.Invoice_Customer = $c) commit;
+$i2 = create Spike.Invoice (InvoiceNo = 'R2', Spike.Invoice_Customer = $c) commit;
+retrieve $invs from $c/Spike.Invoice_Customer;
+$k = count($invs);
+/
+
+/**
+ * @test A decision still runs, through inject and build
+ * @expect $n = 2
+ */
+declare $n Integer = 1;
+if $n = 1 then
+  set $n = 2;
+end if;
+/
