@@ -981,6 +981,20 @@ func (pd *patchDiff) gap(ins []ast.MicroflowStatement, stored []ast.MicroflowSta
 			}
 			return pd.statements(d.ElseBody, s.ElseBody)
 		}
+		if d, s, ok := sameCaseShell(ins[0], del[0]); ok {
+			// The same `case` with a change in a branch: splice each branch
+			// like an if's, rather than replace the split — which the splice
+			// cannot do for more than two paths (mendixlabs/mxcli#1778).
+			if err := pd.movedNode(d, s); err != nil {
+				return err
+			}
+			for i := range d.Cases {
+				if err := pd.statements(d.Cases[i].Body, s.Cases[i].Body); err != nil {
+					return err
+				}
+			}
+			return pd.statements(d.ElseBody, s.ElseBody)
+		}
 		if sameHandlerShell(ins[0], del[0]) {
 			return pd.handlerEdit(ins[0], del[0])
 		}
@@ -1008,6 +1022,19 @@ func (pd *patchDiff) gap(ins []ast.MicroflowStatement, stored []ast.MicroflowSta
 	// at the loop, which is diffed in place like a loop on its own, and the
 	// changes on either side of it are runs of their own (ako/mxcli#942,
 	// ako/mxcli#1693).
+	// A stored `case` declared again with a change in a branch, in a run with
+	// other changes, is split out the same way: replacing the run would take
+	// the split out, which the splice cannot do for more than two paths
+	// (mendixlabs/mxcli#1778).
+	if i, j, ok := casePair(ins, del); ok && (len(ins) > 1 || len(del) > 1) {
+		if err := pd.gap(ins[:i], stored, si, si+j); err != nil {
+			return err
+		}
+		if err := pd.gap(ins[i:i+1], stored, si+j, si+j+1); err != nil {
+			return err
+		}
+		return pd.gap(ins[i+1:], stored, si+j+1, sEnd)
+	}
 	if i, j, ok := loopPair(ins, del); ok {
 		if err := pd.gap(ins[:i], stored, si, si+j); err != nil {
 			return err
@@ -1176,6 +1203,36 @@ func sameIfShell(declared, stored ast.MicroflowStatement) (*ast.IfStmt, *ast.IfS
 	}
 	dShell, sShell := *d, *s
 	dShell.ThenBody, dShell.ElseBody, sShell.ThenBody, sShell.ElseBody = nil, nil, nil, nil
+	if !sameExceptPositions(&dShell, &sShell) {
+		return nil, nil, false
+	}
+	return d, s, true
+}
+
+// sameCaseShell reports whether two statements are the same `case` — the
+// same subject, annotations and branches, each branch deciding on the same
+// values in the same order, and an else on both or neither — differing at most
+// inside its branches and in where the split is drawn. A branch's activities
+// are top-level nodes of the stored graph, as an if's are, so each branch is
+// spliced like one.
+//
+// The branches are paired by position, not by value: describe prints them in
+// the order the stored flows leave the split, and a script restating the flow
+// keeps that order. A reordered or regrouped branch is a change of the split
+// itself, which is still replaced (and refused for more than two paths).
+func sameCaseShell(declared, stored ast.MicroflowStatement) (*ast.EnumSplitStmt, *ast.EnumSplitStmt, bool) {
+	d, ok1 := declared.(*ast.EnumSplitStmt)
+	s, ok2 := stored.(*ast.EnumSplitStmt)
+	if !ok1 || !ok2 || len(d.Cases) != len(s.Cases) || (len(d.ElseBody) == 0) != (len(s.ElseBody) == 0) {
+		return nil, nil, false
+	}
+	dShell, sShell := *d, *s
+	dShell.Cases, sShell.Cases = make([]ast.EnumSplitCase, len(d.Cases)), make([]ast.EnumSplitCase, len(s.Cases))
+	for i := range d.Cases {
+		dShell.Cases[i] = ast.EnumSplitCase{Value: d.Cases[i].Value, Values: d.Cases[i].Values}
+		sShell.Cases[i] = ast.EnumSplitCase{Value: s.Cases[i].Value, Values: s.Cases[i].Values}
+	}
+	dShell.ElseBody, sShell.ElseBody = nil, nil
 	if !sameExceptPositions(&dShell, &sShell) {
 		return nil, nil, false
 	}
@@ -1368,6 +1425,19 @@ func loopPair(ins, del []ast.MicroflowStatement) (int, int, bool) {
 	for i, d := range ins {
 		for j, st := range del {
 			if sameLoopShell(d, st) {
+				return i, j, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+// casePair finds, in a run of unmatched statements, a declared `case` that is
+// a stored one restated (sameCaseShell): its index in ins and in del.
+func casePair(ins, del []ast.MicroflowStatement) (int, int, bool) {
+	for i, d := range ins {
+		for j, st := range del {
+			if _, _, ok := sameCaseShell(d, st); ok {
 				return i, j, true
 			}
 		}

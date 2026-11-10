@@ -11,11 +11,11 @@ description: "Write custom Starlark lint rules in .claude/lint-rules/ that run b
 | lines | section |
 |---|---|
 | 25-67 | Rule File Structure |
-| 68-166 | Available Query Functions |
-| 167-552 | Object Properties |
-| 553-566 | Helper Functions |
-| 567-653 | Common Patterns |
-| 654-662 | Validation |
+| 68-167 | Available Query Functions |
+| 168-574 | Object Properties |
+| 575-588 | Helper Functions |
+| 589-675 | Common Patterns |
+| 676-684 | Validation |
 
 <!-- /skill-index -->
 # Writing Custom Starlark Lint Rules
@@ -43,7 +43,7 @@ def check():
 
 Some builtins need a deeper catalog than the default fast build:
 
-- `refs_to`, `refs_from`, `widgets`, `xpath_expressions`, `activities_for`,
+- `refs_to`, `refs_from`, `widgets`, `xpath_expressions`, `activities_for`, `flows_for`,
   `permissions`, `permissions_for`, `strings` and the `widget_count` field of a
   page or snippet need **`REFRESH CATALOG FULL`** — the `refs`, `widgets`,
   `xpath_expressions`, `activities`, `permissions` and `strings` tables and the
@@ -88,6 +88,7 @@ Without this, a rule that reads a full-only table under a fast build gets
 | `rest_operations()` | list of rest_operation | Operations on consumed REST services, including their `timeout` |
 | `attributes_for(entity_qualified_name)` | list of attribute | Attributes for a specific entity |
 | `activities_for(microflow_qualified_name, nested = False)` | list of activity | Activities of a microflow, nanoflow or rule, in flow order (full catalog — auto-detected). By default only the top level: a loop is one activity and its body is left out. `nested = True` adds every object inside a loop, at any depth, right after its loop, with `parent_loop_id` and `loop_depth` set |
+| `flows_for(microflow_qualified_name)` | list of flow | The sequence flows and annotation flows of a microflow, nanoflow or rule, loop bodies included (full catalog — auto-detected). `origin_id` / `destination_id` are activity `id`s from `activities_for(…, nested = True)`. Walk from an activity whose `error_handling_type` is `"Custom"` or `"CustomWithoutRollBack"` along the flow with `is_error_handler` to reach its handler; read a split's branches from `case_value` |
 | `permissions()` | list of permission | All permissions across all element types (full catalog — auto-detected) |
 | `permissions_for(entity_qualified_name)` | list of permission | Access rules for a specific entity (full catalog — auto-detected) |
 | `refs_to(target_name)` | list of reference | Cross-references *to* a target (full catalog — auto-detected) |
@@ -517,6 +518,27 @@ def count_not(node):
 | `commit_type` | string | Create or change object: exactly `"Yes"`, `"YesWithoutEvents"` or `"No"`. Empty for other actions |
 | `with_events` | bool | True for a commit action with events, and for a create or change object with `commit_type` `"Yes"` |
 | `retrieve_source` | string | Retrieve: exactly `"database"` or `"association"`. For `"database"`, `entity_ref` is the retrieved entity |
+| `x` | int | Canvas position: the object's stored **middle** point, as `describe` prints it in `@position(x, y)`. Inside a loop (`parent_loop_id` set) it is relative to the loop's box, so compare positions only between objects with the same `parent_loop_id` |
+| `y` | int | Canvas position, middle point; grows **downwards** |
+| `width` | int | The object's box width on the canvas |
+| `height` | int | The object's box height on the canvas |
+
+### flow
+One row per flow line of a microflow, nanoflow or rule, from `flows_for()`.
+
+| Property | Type | Example |
+|----------|------|---------|
+| `id` | string | Flow UUID |
+| `flow_type` | string | Exactly `"SequenceFlow"` or `"AnnotationFlow"` |
+| `microflow_id` | string | Parent flow document UUID |
+| `microflow_qualified_name` | string | `"Sales.ACT_Customer_Create"` |
+| `module_name` | string | `"Sales"` |
+| `origin_id` | string | `id` of the activity the flow leaves. For an annotation flow, the annotation |
+| `destination_id` | string | `id` of the activity the flow enters. For an annotation flow, the object the note is attached to |
+| `is_error_handler` | bool | True for the flow out of an activity into its custom error handler (`on error … begin … end error` in `describe`) |
+| `case_value` | string | A split's branch: `"true"` / `"false"`, an enumeration value or `"(empty)"`, or the entity of an inheritance split's branch, e.g. `"Sales.SpecialOrder"`. Empty for an unconditional flow |
+| `origin_connection_index` | int | Side of the origin the line leaves: `0` top, `1` right, `2` bottom, `3` left |
+| `destination_connection_index` | int | Side of the destination the line enters, same numbering |
 
 ### rest_client
 | Property | Type | Example |
