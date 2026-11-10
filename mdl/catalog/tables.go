@@ -7,6 +7,14 @@ package catalog
 //
 // History:
 //
+//	41 (agent and code action edges): refs gains edges from agent-editor
+//	    documents (an agent's tool `call`s, `tool`, `model`, `type`; a model's
+//	    or knowledge base's `key`) and a `call` from a flow to a microflow or
+//	    agent document it passes as a Java action parameter (ako/mxcli#2074).
+//	    Without the bump a cached catalog keeps answering "(no callers
+//	    found)" for every agent tool. (40 is the widget-texts schema of
+//	    ako/mxcli#1303, merged separately.)
+//
 //	39 (domain model annotations): annotations_data + view, one row per
 //	    domain model annotation with its full caption and canvas position
 //	    (ako/mxcli#1300). Without the bump a cached catalog has the table but
@@ -214,7 +222,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "39"
+const CatalogSchemaVersion = "41"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.

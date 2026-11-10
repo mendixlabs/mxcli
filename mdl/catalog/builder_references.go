@@ -47,6 +47,9 @@ const (
 	RefKindSplit       = "split"        // A decision branches on an object being a specialization
 	RefKindMappingCall = "mapping_call" // A flow applies an import or export mapping (import/export action, REST or web service call)
 	RefKindStructure   = "structure"    // An import or export mapping is built on a JSON structure
+	RefKindTool        = "tool"         // An agent draws on a knowledge base or consumed MCP service (a tool microflow, nanoflow or agent is a call)
+	RefKindModel       = "model"        // An agent runs on an AI model
+	RefKindKey         = "key"          // An AI model or knowledge base reads its key from a constant
 )
 
 // RefKinds is every value that reaches refs.RefKind. It is the vocabulary a
@@ -64,7 +67,8 @@ var RefKinds = []string{
 	RefKindWidget, RefKindSettings, RefKindSync, RefKindPublish,
 	RefKindEvent, RefKindMember, RefKindXPath, RefKindType,
 	RefKindValue, RefKindMapping, RefKindSplit, RefKindSnippetCall,
-	RefKindMappingCall, RefKindStructure,
+	RefKindMappingCall, RefKindStructure, RefKindTool, RefKindModel,
+	RefKindKey,
 }
 
 // Object types recorded in refs.SourceType and refs.TargetType — the catalog's
@@ -108,6 +112,13 @@ const (
 	// Message definitions: the pre-11.15 collection and the 11.15+ document.
 	RefObjectMessageDefinitionCollection = "MESSAGE_DEFINITION_COLLECTION"
 	RefObjectMessageDefinition           = "MESSAGE_DEFINITION"
+	// Agent-editor documents and the constant a model's key is read from
+	// (ako/mxcli#2074), named as the objects view names them.
+	RefObjectAgent              = "AGENT"
+	RefObjectAIModel            = "AI_MODEL"
+	RefObjectKnowledgeBase      = "KNOWLEDGE_BASE"
+	RefObjectConsumedMCPService = "CONSUMED_MCP_SERVICE"
+	RefObjectConstant           = "CONSTANT"
 )
 
 // RefSourceObjectTypes is every value that reaches refs.SourceType, and
@@ -139,6 +150,9 @@ var (
 		RefObjectExportMapping,
 		RefObjectMessageDefinitionCollection,
 		RefObjectMessageDefinition,
+		RefObjectAgent,
+		RefObjectAIModel,
+		RefObjectKnowledgeBase,
 	}
 
 	RefTargetObjectTypes = []string{
@@ -162,6 +176,11 @@ var (
 		RefObjectImportMapping,
 		RefObjectExportMapping,
 		RefObjectJsonStructure,
+		RefObjectAgent,
+		RefObjectAIModel,
+		RefObjectKnowledgeBase,
+		RefObjectConsumedMCPService,
+		RefObjectConstant,
 	}
 )
 
@@ -571,6 +590,7 @@ func (b *Builder) buildReferences() error {
 	snapshotID := b.snapshot.ID
 	refCount := 0
 	assocs := b.associationEnds()
+	resolveDoc := b.agentEditorResolver()
 
 	// emitActionRefs walks the action activities of a microflow or nanoflow and
 	// records the document reference each action makes. Nanoflows share the same
@@ -622,6 +642,9 @@ func (b *Builder) buildReferences() error {
 			}
 			for _, m := range microflowMappingRefs(act.Action) {
 				emit(m.targetType, m.name, RefKindMappingCall)
+			}
+			for _, r := range codeActionParameterRefs(act.Action, resolveDoc) {
+				emit(r.targetType, r.target, r.kind)
 			}
 		}
 	}
@@ -979,6 +1002,10 @@ func (b *Builder) buildReferences() error {
 	// and QUAL004 said "is not called from anywhere" with the suggestion
 	// "Remove if unused" — on a microflow that runs nightly in production.
 	refCount += b.extractScheduledEventRefs(stmt, projectID, snapshotID)
+
+	// Agent-editor documents call their tools and use their model, knowledge
+	// bases and MCP services (ako/mxcli#2074).
+	refCount += b.extractAgentEditorRefs(stmt, resolveDoc, projectID, snapshotID)
 
 	// Attribute validation rules use a named regular expression, so
 	// `show references to <regex>` can answer which entities depend on a shared
