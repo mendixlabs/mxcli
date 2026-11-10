@@ -114,11 +114,12 @@ const (
 	RefObjectMessageDefinition           = "MESSAGE_DEFINITION"
 	// Agent-editor documents and the constant a model's key is read from
 	// (ako/mxcli#2074), named as the objects view names them.
-	RefObjectAgent              = "AGENT"
-	RefObjectAIModel            = "AI_MODEL"
-	RefObjectKnowledgeBase      = "KNOWLEDGE_BASE"
-	RefObjectConsumedMCPService = "CONSUMED_MCP_SERVICE"
-	RefObjectConstant           = "CONSTANT"
+	RefObjectAgent               = "AGENT"
+	RefObjectAIModel             = "AI_MODEL"
+	RefObjectKnowledgeBase       = "KNOWLEDGE_BASE"
+	RefObjectConsumedMCPService  = "CONSUMED_MCP_SERVICE"
+	RefObjectPublishedMCPService = "PUBLISHED_MCP_SERVICE"
+	RefObjectConstant            = "CONSTANT"
 )
 
 // RefSourceObjectTypes is every value that reaches refs.SourceType, and
@@ -153,6 +154,7 @@ var (
 		RefObjectAgent,
 		RefObjectAIModel,
 		RefObjectKnowledgeBase,
+		RefObjectPublishedMCPService,
 	}
 
 	RefTargetObjectTypes = []string{

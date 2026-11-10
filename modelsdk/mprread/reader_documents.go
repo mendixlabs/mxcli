@@ -585,21 +585,22 @@ func decodeAgentEditorAgent(unitID, containerID string, wrap *customBlobWrapper)
 		return a, nil
 	}
 	var payload struct {
-		Description        string              `json:"description"`
-		SystemPrompt       string              `json:"systemPrompt"`
-		UserPrompt         string              `json:"userPrompt"`
-		UsageType          string              `json:"usageType"`
-		Variables          []types.AgentVar    `json:"variables"`
-		Tools              []types.AgentTool   `json:"tools"`
-		KnowledgebaseTools []types.AgentKBTool `json:"knowledgebaseTools"`
-		Model              *types.DocRef       `json:"model"`
-		Entity             *types.DocRef       `json:"entity"`
-		MaxTokens          *int                `json:"maxTokens"`
-		ToolChoice         string              `json:"toolChoice"`
-		Temperature        *float64            `json:"temperature"`
-		TopP               *float64            `json:"topP"`
-		EnableBackend      *bool               `json:"enableBackendStreaming"`
-		EnableUI           *bool               `json:"enableUIStreaming"`
+		Description        string                    `json:"description"`
+		SystemPrompt       string                    `json:"systemPrompt"`
+		UserPrompt         string                    `json:"userPrompt"`
+		UsageType          string                    `json:"usageType"`
+		Variables          []types.AgentVar          `json:"variables"`
+		Tools              []types.AgentTool         `json:"tools"`
+		KnowledgebaseTools []types.AgentKBTool       `json:"knowledgebaseTools"`
+		Model              *types.DocRef             `json:"model"`
+		Entity             *types.DocRef             `json:"entity"`
+		MaxTokens          *int                      `json:"maxTokens"`
+		ToolChoice         string                    `json:"toolChoice"`
+		Temperature        *float64                  `json:"temperature"`
+		TopP               *float64                  `json:"topP"`
+		EnableBackend      *bool                     `json:"enableBackendStreaming"`
+		EnableUI           *bool                     `json:"enableUIStreaming"`
+		SelectedModel      *types.AgentSelectedModel `json:"selectedModel"`
 	}
 	if err := json.Unmarshal([]byte(wrap.Contents), &payload); err != nil {
 		return nil, fmt.Errorf("unmarshal Agent Contents JSON: %w", err)
@@ -619,7 +620,49 @@ func decodeAgentEditorAgent(unitID, containerID string, wrap *customBlobWrapper)
 	a.TopP = payload.TopP
 	a.EnableBackendStreaming = payload.EnableBackend
 	a.EnableUIStreaming = payload.EnableUI
+	a.SelectedModel = payload.SelectedModel
 	return a, nil
+}
+
+func decodeAgentEditorPublishedMCPService(unitID, containerID string, wrap *customBlobWrapper) (*types.PublishedMCPService, error) {
+	p := &types.PublishedMCPService{}
+	p.ID = model.ID(unitID)
+	p.TypeName = customBlobDocBsonType
+	p.ContainerID = model.ID(containerID)
+	p.Name = wrap.Name
+	p.Documentation = wrap.Documentation
+	p.Excluded = wrap.Excluded
+	p.ExportLevel = wrap.ExportLevel
+
+	if wrap.Contents == "" {
+		return p, nil
+	}
+	var payload struct {
+		ServerName              string                   `json:"serverName"`
+		EndpointPath            string                   `json:"endpointPath"`
+		Version                 string                   `json:"version"`
+		ProtocolVersion         string                   `json:"protocolVersion"`
+		AuthenticationEnabled   bool                     `json:"authenticationEnabled"`
+		AuthenticationMicroflow *types.DocRef            `json:"authenticationMicroflow"`
+		AuthorizationServerURL  string                   `json:"authorizationServerUrl"`
+		Scopes                  string                   `json:"scopes"`
+		Tools                   []types.PublishedMCPTool `json:"tools"`
+		Documentation           string                   `json:"documentation"`
+	}
+	if err := json.Unmarshal([]byte(wrap.Contents), &payload); err != nil {
+		return nil, fmt.Errorf("unmarshal PublishedMCPService Contents JSON: %w", err)
+	}
+	p.ServerName = payload.ServerName
+	p.EndpointPath = payload.EndpointPath
+	p.Version = payload.Version
+	p.ProtocolVersion = payload.ProtocolVersion
+	p.AuthenticationEnabled = payload.AuthenticationEnabled
+	p.AuthenticationMicroflow = payload.AuthenticationMicroflow
+	p.AuthorizationServerURL = payload.AuthorizationServerURL
+	p.Scopes = payload.Scopes
+	p.Tools = payload.Tools
+	p.InnerDocumentation = payload.Documentation
+	return p, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -750,6 +793,8 @@ func DecodeAgentEditorUnit(unitID, containerID string, contents []byte) (any, er
 		return decodeAgentEditorKnowledgeBase(unitID, containerID, wrap)
 	case types.CustomTypeConsumedMCPService:
 		return decodeAgentEditorConsumedMCPService(unitID, containerID, wrap)
+	case types.CustomTypePublishedMCPService:
+		return decodeAgentEditorPublishedMCPService(unitID, containerID, wrap)
 	}
 	return nil, nil
 }

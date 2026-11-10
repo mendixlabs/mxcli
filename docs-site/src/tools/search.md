@@ -102,7 +102,7 @@ mxcli search -p app.mpr "error" -q --format names | head -1 | awk '{print $2}' |
   | Consumed and published REST service, business event service | `CONSUMED_REST_SERVICE`, `PUBLISHED_REST_SERVICE`, `BUSINESS_EVENT_SERVICE` |
   | Import mapping, export mapping, JSON structure, data transformer | `IMPORT_MAPPING`, `EXPORT_MAPPING`, `JSON_STRUCTURE`, `DATA_TRANSFORMER` |
   | Scheduled event, task queue, regular expression, image and icon collection, menu | `SCHEDULED_EVENT`, `TASK_QUEUE`, `REGULAR_EXPRESSION`, `IMAGE_COLLECTION`, `ICON_COLLECTION`, `MENU` |
-  | Agent, AI model, knowledge base, consumed MCP service | `AGENT`, `AI_MODEL`, `KNOWLEDGE_BASE`, `CONSUMED_MCP_SERVICE` |
+  | Agent, AI model, knowledge base, consumed and published MCP service | `AGENT`, `AI_MODEL`, `KNOWLEDGE_BASE`, `CONSUMED_MCP_SERVICE`, `PUBLISHED_MCP_SERVICE` |
   | A module's domain model documentation | `MODULE`, with `StringContext` `domain_model_documentation` |
 
   This is the complete set: every document type whose catalog table carries a documentation text. Not covered: the documentation of an enumeration value (Mendix has no such field) and the summary text of a remote service's contract entities (written by the remote service, not by the project).
