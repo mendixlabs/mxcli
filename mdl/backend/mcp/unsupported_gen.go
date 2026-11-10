@@ -534,6 +534,11 @@ func (unsupportedBackend) FindDocumentUnit(_ string, _ string) (r0 *types.Docume
 	return
 }
 
+func (unsupportedBackend) FindDocumentUnits(_ string, _ string) (r0 []*types.DocumentUnit, err1 error) {
+	err1 = errUnsupported("FindDocumentUnits")
+	return
+}
+
 func (unsupportedBackend) FindViewEntitySourceDocumentID(_ string, _ string) (r0 model.ID, err1 error) {
 	err1 = errUnsupported("FindViewEntitySourceDocumentID")
 	return

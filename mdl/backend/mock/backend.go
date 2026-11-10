@@ -57,6 +57,7 @@ type MockBackend struct {
 	// DocumentPlacementBackend
 	MoveDocumentFunc      func(unitID, containerID model.ID) error
 	FindDocumentUnitFunc  func(moduleName, name string) (*types.DocumentUnit, error)
+	FindDocumentUnitsFunc func(moduleName, name string) ([]*types.DocumentUnit, error)
 	ListDocumentUnitsFunc func() ([]*types.DocumentUnit, error)
 
 	// DomainModelBackend
