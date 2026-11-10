@@ -1,0 +1,31 @@
+mdl 1;
+-- ako/mxcli#2075: CATALOG.STRINGS indexed only an agent's documentation, so
+-- search could not find its prompts or tool descriptions.
+--
+-- Needs an app with Agent Editor (the Agent Builder starter app). Run, then:
+--   mxcli -p App.mpr -c "refresh catalog full force"
+--   mxcli -p App.mpr -c "search 'quarantined warehouse'"
+--     expected: Bug2075P.StockAgent, StringContext system_prompt
+--   mxcli -p App.mpr -c "search 'reorder threshold'"
+--     expected: Bug2075P.StockAgent, StringContext tool_description
+-- Before the fix both found no string match.
+
+create module Bug2075P;
+
+create microflow Bug2075P.Tool_CheckStock ($Sku: String) returns String as $Result
+begin
+  declare $Result String = 'in stock: ' + $Sku;
+  return $Result;
+end;
+
+create agent Bug2075P.StockAgent (
+  UsageType: Task,
+  SystemPrompt: 'You answer stock questions. Never ship from a quarantined warehouse.',
+  UserPrompt: 'Check stock for {{Sku}}'
+) {
+  tool CheckStock (
+    Document: Bug2075P.Tool_CheckStock,
+    Description: 'Compare stock with the reorder threshold',
+    Enabled: true
+  )
+};

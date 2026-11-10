@@ -7,6 +7,11 @@ package catalog
 //
 // History:
 //
+//	43 (agent prompts): strings gains an agent's description, system and
+//	    user prompts, and its tool and knowledge base descriptions
+//	    (ako/mxcli#2075). Without the bump a cached catalog keeps answering
+//	    no hits for a prompt's text. (42 is the agent-details schema of
+//	    ako/mxcli#2080, merged separately.)
 //	41 (agent and code action edges): refs gains edges from agent-editor
 //	    documents (an agent's tool `call`s, `tool`, `model`, `type`; a model's
 //	    or knowledge base's `key`) and a `call` from a flow to a microflow or
@@ -226,7 +231,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "41"
+const CatalogSchemaVersion = "43"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.

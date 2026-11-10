@@ -163,6 +163,16 @@ func (b *Builder) buildStrings() error {
 		b.disown()
 	}
 
+	// Agent prompts and tool descriptions, from the documents the agent pass
+	// decoded; each row belongs to its agent's unit (ako/mxcli#2075).
+	for _, d := range b.agentDocRefs {
+		b.as(d.owner)
+		for _, r := range agentStrings(d) {
+			insert(r.QualifiedName, r.ObjectType, r.StringValue, r.StringContext, r.Language, r.ElementID, r.ModuleName)
+		}
+	}
+	b.disown()
+
 	b.buildTranslatableStrings(insertText)
 
 	docRows, err := b.buildDocumentationStrings()
