@@ -285,7 +285,21 @@ mxcli test tests/ -p app.mpr --run "String concatenation" --run "Boolean logic"
 
 ---
 
-## Phase 2: HTTP-Based Execution (Future)
+## Phase 2: HTTP-Based Execution
+
+> **What shipped (2026-11).** Phase 2 arrived in two parts, not as written below.
+> First, a persistent endpoint that runs **generated** microflows: each test is
+> injected as `MxTest.Test_*`, built once, and invoked over HTTP with a rollback
+> (`mxcli test --local [--watch]`, `--attach`). Second, the interpreter this
+> section describes, as an opt-in route of the same endpoint
+> (`run --local --test-endpoint --allow-call`): mxcli compiles a `.test.mdl` test
+> into steps, and the app runs them with the Core API, every expression evaluated
+> by `Core.evaluateExpression` instead of an expression engine of its own. That
+> needs no build when only a test changes. `.test.mdl` stays the only test
+> language. The wire format is internal and versioned, not the user-facing JSON
+> below, and a test the executor cannot run takes the generated-microflow route
+> with the same verdicts. See `docs-site/src/tools/running-tests.md` and
+> `cmd/mxcli/testrunner/interp.go`.
 
 Phase 2 replaces the after-startup pattern with a persistent HTTP endpoint in the runtime,
 enabling test execution without restarts.

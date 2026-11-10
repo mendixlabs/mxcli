@@ -25,6 +25,8 @@ type HostedEndpoint struct {
 	Token string
 	// Env is the entry to add to the runtime process environment.
 	Env []string
+	// AllowExec switches on the endpoint's exec route (--allow-call).
+	AllowExec bool
 
 	projectPath string
 	state       projectState
@@ -37,7 +39,11 @@ type HostedEndpoint struct {
 //
 // The project's own after-startup microflow is chained rather than displaced, so
 // the app still boots the way the developer expects.
-func InstallHostedEndpoint(projectPath string, w io.Writer) (*HostedEndpoint, error) {
+//
+// allowExec switches on the exec route (--allow-call): the runtime is given
+// endpointAllowExecEnv, and the handshake says so. Without it the route answers
+// 403, whatever a caller sends.
+func InstallHostedEndpoint(projectPath string, allowExec bool, w io.Writer) (*HostedEndpoint, error) {
 	token, err := newEndpointToken()
 	if err != nil {
 		return nil, err
@@ -63,9 +69,14 @@ func InstallHostedEndpoint(projectPath string, w io.Writer) (*HostedEndpoint, er
 	h := &HostedEndpoint{
 		Token:       token,
 		Env:         []string{endpointTokenEnv + "=" + token},
+		AllowExec:   allowExec,
 		projectPath: projectPath,
 		state:       state,
 		out:         w,
+	}
+
+	if allowExec {
+		h.Env = append(h.Env, endpointAllowExecEnv+"=1")
 	}
 
 	fmt.Fprintln(w, "Installing the mxcli test endpoint (for 'mxcli test --attach')...")
@@ -98,6 +109,7 @@ func (h *HostedEndpoint) Publish(info docker.LocalAppInfo) error {
 		ServePort: info.ServePort,
 		AdminPass: info.AdminPass,
 		Token:     h.Token,
+		AllowExec: h.AllowExec,
 		Started:   nowFunc(),
 	})
 	if err != nil {
