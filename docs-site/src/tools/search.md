@@ -83,7 +83,7 @@ mxcli search -p app.mpr "error" -q --format names | head -1 | awk '{print $2}' |
 - Log messages and log node names of microflows
 - Page URLs and the paths, resources and operation summaries of published REST services
 - Workflow names, descriptions, task names and activity captions
-- Agents' system and user prompts, descriptions, and the descriptions of their tools and knowledge bases, with the title a tool call shows the user (`ObjectType` `AGENT`; `StringContext` `system_prompt`, `user_prompt`, `agent_description`, `tool_description`, `tool_display_title`, `tool_display_description`, `knowledge_base_description`)
+- Agents' system and user prompts, descriptions, and the descriptions of their tools and knowledge bases, with the title a tool call shows the user (`ObjectType` `AGENT`; `StringContext` `system_prompt`, `user_prompt`, `agent_description`, `tool_description`, `tool_display_title`, `tool_display_description`, `knowledge_base_description`), and a published MCP service's tool descriptions and titles (`PUBLISHED_MCP_SERVICE`; `mcp_tool_description`, `mcp_tool_title`)
 - Element names: the qualified name is a searchable column too, so `SEARCH 'Customer'` also returns the rows of elements named Customer that have some indexed text
 - **Documentation of project elements.** A hit's `ObjectType` names the element and its `StringContext` is `documentation`:
 

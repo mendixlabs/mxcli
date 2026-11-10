@@ -50,7 +50,23 @@ func TestAgentStrings_Issue2075(t *testing.T) {
 		t.Errorf("agent strings:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 
-	// Control: a document that is not an agent has no prompt rows.
+	// A published MCP service's tool descriptions are what the client's model reads.
+	svc := &types.PublishedMCPService{
+		BaseElement: model.BaseElement{ID: "pub-1"},
+		Tools: []types.PublishedMCPTool{
+			{UUID: "u1", Name: "issue_refund", Description: "Refund an order.", Title: "Issue refund"},
+			{Name: "bare"}, // no text: no row
+		},
+	}
+	got = nil
+	for _, r := range agentStrings(agentDocRefs{sourceType: RefObjectPublishedMCPService, source: "Shop.RefundMCP", moduleName: "Shop", doc: svc}) {
+		got = append(got, strings.Join([]string{r.QualifiedName, r.ObjectType, r.StringContext, r.ElementID, r.StringValue}, "|"))
+	}
+	if want := "Shop.RefundMCP|PUBLISHED_MCP_SERVICE|mcp_tool_description|u1|Refund an order.\nShop.RefundMCP|PUBLISHED_MCP_SERVICE|mcp_tool_title|u1|Issue refund"; strings.Join(got, "\n") != want {
+		t.Errorf("published MCP service strings:\n%s", strings.Join(got, "\n"))
+	}
+
+	// Control: a document that is neither has no rows.
 	if rows := agentStrings(agentDocRefs{doc: &types.Model{}}); len(rows) != 0 {
 		t.Errorf("model rows: %v", rows)
 	}
