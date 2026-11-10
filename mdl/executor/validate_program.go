@@ -197,6 +197,12 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 		}
 	}
 
+	// A user task an ALTER WORKFLOW leaves with a single outcome holding
+	// activities (MDL-WF02, CE1876): judged after every ALTER of the script,
+	// since a later one can still add the second outcome. With a project, the
+	// stored workflow says which outcomes a task already has.
+	violations = append(violations, validateAlterWorkflowSingleOutcomes(prog, project)...)
+
 	// Check for intra-script duplicate definitions (CREATE X … CREATE X without DROP)
 	violations = append(violations, CheckScriptDuplicates(prog)...)
 

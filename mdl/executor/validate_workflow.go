@@ -84,22 +84,7 @@ func ValidateWorkflow(stmt *ast.CreateWorkflowStmt) []linter.Violation {
 			}
 			// MDL-WF02 — a single outcome must not carry a nested flow.
 			if len(n.Outcomes) == 1 && len(n.Outcomes[0].Activities) > 0 {
-				msg := fmt.Sprintf("user task %s has a single outcome with nested activities — MxBuild rejects this (CE1876)", label)
-				suggestion := "Move the activities to the workflow's main flow after the user task, or add a second outcome."
-				// "Move them to the main flow" is wrong advice for an End: moved
-				// there it is a parse error, and the workflow ends at its own
-				// `end workflow` anyway.
-				if onlyEnd(n.Outcomes[0].Activities) {
-					msg = fmt.Sprintf("user task %s has a single outcome that holds `end workflow` — a single outcome may not hold activities at all, so MxBuild rejects this (CE1876), and nothing after the task could be reached", label)
-					suggestion = "Add a second outcome that continues, if the task is meant to decide whether the workflow ends; otherwise remove `end workflow;` — the workflow ends at its own `end workflow` after the task."
-				}
-				out = append(out, linter.Violation{
-					RuleID:     "MDL-WF02",
-					Severity:   linter.SeverityError,
-					Location:   loc,
-					Message:    msg,
-					Suggestion: suggestion,
-				})
+				out = append(out, singleOutcomeViolation(label, onlyEnd(n.Outcomes[0].Activities), loc))
 			}
 		case *ast.WorkflowDecisionNode:
 			out = append(out, checkWorkflowOutcomeNames(n.Outcomes, "decision", loc)...)
@@ -370,8 +355,10 @@ func workflowActivityBoundaryEvents(a ast.WorkflowActivityNode) []ast.WorkflowBo
 // does, so guarding only CREATE would leave each one a keyword away.
 //
 // The other rules are not simply un-ported. MDL-WF01/WF02 describe a state a
-// later op in the same script can still repair (`SET ACTIVITY … PAGE`), and
-// MDL-WF05 resolves jump targets against activities the statement cannot see.
+// later op in the same script can still repair (`SET ACTIVITY … PAGE`, `INSERT
+// OUTCOME`), and MDL-WF05 resolves jump targets against activities the
+// statement cannot see. MDL-WF02 is therefore judged on the state the whole
+// script leaves the workflow in, by validateAlterWorkflowSingleOutcomes.
 // An inserted activity's outcome SET, by contrast, is complete where it is
 // written — `INSERT OUTCOME` cannot extend it, since on a decision it writes a
 // UserTaskOutcome into a ConditionOutcome list and yields a model Mendix cannot
