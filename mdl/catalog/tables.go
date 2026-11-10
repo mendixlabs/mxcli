@@ -7,6 +7,11 @@ package catalog
 //
 // History:
 //
+//	44 (sequence flows): new flows table, one row per sequence and
+//	    annotation flow of a microflow, nanoflow or rule; activities gains
+//	    X, Y, Width and Height, the object's canvas box (ako/mxcli#1299).
+//	    Without the bump a cached catalog lacks the table and the columns,
+//	    and flows_for() and activities_for() fail with "no such column".
 //	43 (agent prompts): strings gains an agent's description, system and
 //	    user prompts, and its tool and knowledge base descriptions
 //	    (ako/mxcli#2075). Without the bump a cached catalog keeps answering
@@ -235,7 +240,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "43"
+const CatalogSchemaVersion = "44"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -906,10 +911,40 @@ func (c *Catalog) createTables() error {
 			WithEvents INTEGER DEFAULT 0,
 			RetrieveSource TEXT DEFAULT '',
 			QueueRef TEXT DEFAULT '',
+			-- The canvas box: X / Y the stored middle point (describe's
+			-- @position), Width / Height its size.
+			X INTEGER DEFAULT 0,
+			Y INTEGER DEFAULT 0,
+			Width INTEGER DEFAULT 0,
+			Height INTEGER DEFAULT 0,
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,
 		viewWithFullSnapshot("activities"),
+
+		// flows — one row per sequence flow and annotation flow of a flow
+		// body (ako/mxcli#1299). OriginId / DestinationId are activities.Id.
+		// An annotation flow runs from the note to the object it annotates.
+		// CaseValue is the branch a split's outgoing flow takes: "true" /
+		// "false", an enumeration value or "(empty)", an inheritance split's
+		// entity; "" for an unconditional flow.
+		`CREATE TABLE IF NOT EXISTS flows_data (
+			Id TEXT PRIMARY KEY,
+			FlowType TEXT,
+			Sequence INTEGER DEFAULT 0,
+			MicroflowId TEXT,
+			MicroflowQualifiedName TEXT,
+			ModuleName TEXT,
+			OriginId TEXT,
+			DestinationId TEXT,
+			IsErrorHandler INTEGER DEFAULT 0,
+			CaseValue TEXT DEFAULT '',
+			OriginConnectionIndex INTEGER DEFAULT 0,
+			DestinationConnectionIndex INTEGER DEFAULT 0,
+			ProjectId TEXT,
+			SnapshotId TEXT
+		)`,
+		viewWithFullSnapshot("flows"),
 
 		// widget_definitions — widgets AVAILABLE in the project (.mpk / .def.json)
 		`CREATE TABLE IF NOT EXISTS widget_definitions_data (
@@ -1784,6 +1819,7 @@ func (c *Catalog) createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_layouts_module ON layouts_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_activities_microflow ON activities_data(MicroflowId)`,
 		`CREATE INDEX IF NOT EXISTS idx_activities_type ON activities_data(ActivityType)`,
+		`CREATE INDEX IF NOT EXISTS idx_flows_microflow ON flows_data(MicroflowQualifiedName)`,
 		`CREATE INDEX IF NOT EXISTS idx_widgets_container ON widgets_data(ContainerId)`,
 		`CREATE INDEX IF NOT EXISTS idx_widgets_type ON widgets_data(WidgetType)`,
 		`CREATE INDEX IF NOT EXISTS idx_widgets_parent ON widgets_data(ParentWidgetId)`,

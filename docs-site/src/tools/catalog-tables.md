@@ -203,6 +203,8 @@ query written then that should keep its old result filters on
 | `CommitType` | Create/change object: `Yes`, `YesWithoutEvents` or `No` |
 | `WithEvents` | 1 for a commit with events, and a create/change with `CommitType` `Yes` |
 | `RetrieveSource` | `database` or `association` |
+| `X`, `Y` | The object's stored middle point on the canvas, as `describe` prints it in `@position`. Y grows downwards. Inside a loop it is relative to the loop's box, not to the canvas |
+| `Width`, `Height` | The object's box size |
 
 ```sql
 -- Database retrieves inside a loop (N+1 queries)
@@ -214,6 +216,38 @@ WHERE ActionType = 'RetrieveAction' AND RetrieveSource = 'database' AND ParentLo
 SELECT MicroflowQualifiedName, ActionRef
 FROM CATALOG.ACTIVITIES
 WHERE ActionType = 'MicroflowCallAction' AND ParentLoopId <> '' AND QueueRef = '';
+```
+
+### CATALOG.FLOWS
+
+One row per sequence flow and annotation flow of a microflow, nanoflow or rule,
+loop bodies included. Populated by `REFRESH CATALOG FULL`. Both ends are
+`CATALOG.ACTIVITIES.Id` values.
+
+| Column | Description |
+|--------|-------------|
+| `Id` | The flow's ID |
+| `FlowType` | `SequenceFlow` or `AnnotationFlow` |
+| `MicroflowId`, `MicroflowQualifiedName`, `ModuleName` | The flow document it belongs to |
+| `Sequence` | Stored order: each collection's sequence flows, then its annotation flows |
+| `OriginId`, `DestinationId` | The activity the line leaves and enters. An annotation flow runs from the annotation to the object it is attached to |
+| `IsErrorHandler` | 1 for the flow into an activity's custom error handler (`on error … begin … end error` in `describe`) |
+| `CaseValue` | The branch a split's flow takes: `true` / `false`, an enumeration value or `(empty)`, or an inheritance split's entity. Empty for an unconditional flow |
+| `OriginConnectionIndex`, `DestinationConnectionIndex` | The side the line leaves and enters: 0 top, 1 right, 2 bottom, 3 left |
+
+```sql
+-- Custom error handlers whose first activity logs below level Error
+SELECT f.MicroflowQualifiedName, a.LogLevel
+FROM CATALOG.FLOWS f
+JOIN CATALOG.ACTIVITIES a ON a.Id = f.DestinationId
+WHERE f.IsErrorHandler = 1 AND a.ActionType = 'LogMessageAction' AND a.LogLevel <> 'Error';
+
+-- The activity each annotation is attached to
+SELECT f.MicroflowQualifiedName, n.Caption, a.ActionType
+FROM CATALOG.FLOWS f
+JOIN CATALOG.ACTIVITIES n ON n.Id = f.OriginId
+JOIN CATALOG.ACTIVITIES a ON a.Id = f.DestinationId
+WHERE f.FlowType = 'AnnotationFlow';
 ```
 
 ### CATALOG.PAGES
