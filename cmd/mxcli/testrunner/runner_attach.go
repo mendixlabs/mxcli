@@ -5,6 +5,8 @@ package testrunner
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
@@ -174,6 +176,25 @@ func runAttached(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 		return result, err
 	}
 
+	// An app started with --allow-call runs a compiled test itself, so a suite
+	// whose every test compiles is neither injected nor built (interp.go).
+	if app.hs.AllowExec && !opts.Watch {
+		if programs, reason := compileSuiteForExec(suite); reason != "" {
+			fmt.Fprintf(w, "  injecting and building, because %s\n", reason)
+		} else {
+			if err := refuseStaleModel(opts.ProjectPath); err != nil {
+				return nil, err
+			}
+			direct := opts
+			direct.execPrograms = programs
+			result, err := runSuite(app.client, app.adminOptions(), suite, direct, w)
+			if err != nil {
+				return nil, err
+			}
+			return report(result, nil)
+		}
+	}
+
 	fmt.Fprintln(w, "Injecting test microflows...")
 	if err := execMDLScript(opts.ProjectPath, GenerateTestFlows(suite), "mxtest-flows-*.mdl"); err != nil {
 		return finish(nil, fmt.Errorf("injecting test microflows: %w", err))
@@ -207,4 +228,18 @@ func dropTestFlows(projectPath string, suite *TestSuite) []string {
 		cmds = append(cmds, "DROP MICROFLOW "+name)
 	}
 	return cmds
+}
+
+// refuseStaleModel is staleModelError for the project's own build: the model on
+// disk against deployment/model/model.mdp, which every build rewrites.
+func refuseStaleModel(projectPath string) error {
+	built, err := os.Stat(filepath.Join(filepath.Dir(projectPath), "deployment", "model", "model.mdp"))
+	if err != nil {
+		return fmt.Errorf("cannot tell which model the running app was built from (%v); restart the dev loop", err)
+	}
+	watching := false
+	if st, err := docker.ReadRunState(projectPath); err == nil && st != nil {
+		watching = st.Watch
+	}
+	return staleModelError(projectPath, docker.ProjectSourceMTime(projectPath), built.ModTime(), watching)
 }
