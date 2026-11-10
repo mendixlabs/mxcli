@@ -15,8 +15,8 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | 195-221 | Altering existing documents |
 | 222-273 | Gotchas |
 | 274-296 | Common Patterns |
-| 297-361 | Calling Agents from Microflows |
-| 362-364 | AI agent documents |
+| 297-364 | Calling Agents from Microflows |
+| 365-367 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -295,6 +295,9 @@ list agents in module;
 ```
 
 ## Calling Agents from Microflows
+
+Registering models, seeding runtime agents from JSON, chat pages and loading
+knowledge bases at runtime are in the `genai-runtime` skill.
 
 Studio Pro's *Call Agent* and *New Chat for Agent* toolbox actions are **Java
 actions exposed as microflow actions**, so `call java action` writes exactly the
