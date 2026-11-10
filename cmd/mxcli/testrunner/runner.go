@@ -299,6 +299,15 @@ func runEndpoint(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 		return nil, fmt.Errorf("capturing project state: %w", err)
 	}
 
+	// A `run --local --watch` dev loop on this project would rebuild — and may
+	// restart its app — for the endpoint and test microflows this run injects
+	// (ako/mxcli#2063). Held, it waits, and on release finds the model as it
+	// was: the cleanup puts the project file back byte for byte. Released when
+	// this function returns, after that cleanup.
+	if err := docker.HoldWatch(opts.ProjectPath, os.Getpid()); err == nil {
+		defer docker.ReleaseWatch(opts.ProjectPath)
+	}
+
 	fmt.Fprintln(w, "Generating test endpoint and test microflows...")
 	chain := state.afterStartup
 	if opts.SkipAppStartup {

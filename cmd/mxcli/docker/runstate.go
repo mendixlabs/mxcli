@@ -122,6 +122,9 @@ type RunState struct {
 	// (`run status`, `run wait`) judges "change pending" by the signal the
 	// watcher uses — SourceMTimeOf.
 	Scaffold map[string]time.Time `json:"scaffold,omitempty"`
+	// HeldBy is the process holding the watcher (a `test --attach` changing the
+	// project for its run, watchhold.go); 0 when nothing does.
+	HeldBy int `json:"heldBy,omitempty"`
 	// Last is the newest finished generation.
 	Last    *BuildOutcome `json:"last,omitempty"`
 	Updated time.Time     `json:"updated"`
@@ -269,6 +272,23 @@ func (r *RunStateRecorder) Scaffold(s buildScaffold) {
 		cp[k] = v
 	}
 	r.update(func(st *RunState) { st.Scaffold = cp })
+}
+
+// Covered records that the latest build covers source up to t without a new
+// build: the watcher found the model it already serves (a hold released over an
+// unchanged model). Without it `run status` read the project's newer mtimes as a
+// change pending, and `run wait` waited for a build that was never coming.
+func (r *RunStateRecorder) Covered(t time.Time) {
+	r.update(func(st *RunState) {
+		if st.Last != nil && t.After(st.Last.Source) {
+			st.Last.Source = t
+		}
+	})
+}
+
+// Held records which process holds the watcher, or 0 when the hold ended.
+func (r *RunStateRecorder) Held(pid int) {
+	r.update(func(st *RunState) { st.HeldBy = pid })
 }
 
 // BuildStarted records that generation gen is being built from source.

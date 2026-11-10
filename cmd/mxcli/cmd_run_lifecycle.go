@@ -594,6 +594,8 @@ func statusLine(st *docker.RunState, p statusProbes, source, now time.Time) (str
 		covered = st.Last.Source
 	}
 	switch {
+	case st.HeldBy != 0 && p.alive(st.HeldBy):
+		parts = append(parts, fmt.Sprintf("held by a test run (pid %d); a change waits for it", st.HeldBy))
 	case st.Building:
 		parts = append(parts, fmt.Sprintf("building #%d", st.Gen))
 	case source.After(covered) && st.Watch:

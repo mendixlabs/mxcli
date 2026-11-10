@@ -177,6 +177,14 @@ mxcli test tests/ -p app.mpr --local --mxbuild-path "C:\Program Files\Mendix\11.
 `--watch` is the everyday loop: edit a test *or* the microflow under test, and
 the verdict lands in about two seconds.
 
+A test run that writes its test microflows into a project a `run --local --watch`
+dev loop is watching (`--local`, or `--attach` with a test that has to be built)
+holds that dev loop's watcher while it owns the project: the dev loop does not
+rebuild, or restart its app, for the injection, `run status` shows
+`held by a test run (pid …)`, and when the run has put the project back exactly
+the watcher finds nothing to build. An edit made in the meantime is built once
+the run ends. A hold whose run died is ignored.
+
 `--attach` skips even the first boot, at one cost worth knowing: the tests run
 against the running app's database rather than a scratch one, so they can leave
 data behind in the app you are looking at. It needs the dev loop to have been
