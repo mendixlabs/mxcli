@@ -449,7 +449,8 @@ progress from 65/65 to 63/65 and the number was the only symptom.
 | `brain init` | Creates `docs/brain/`. Refuses a `docs/brain/` it did not write |
 | `brain capture "<text>" [-a @Anchor]…` | Queues an entry. Never commits |
 | `brain staged [--since <id>] [--slice <n>] [--fail-if-empty]` | Lists the queue with the shard each entry would land in |
-| `brain promote <id> [--to <shard>]` | Writes it into its shard |
+| `brain capture --from-json <file\|->` | Queues a JSON array of entries as one act: all validated first, duplicates skipped |
+| `brain promote <id>… [--to <shard>]` | Writes them into their shards, all or none |
 | `brain drop <id>` | Removes it from the queue or from its shard |
 | `brain capture "<text>" --source <doc>[#<locator>]` | Records which document, and where in it, the entry came from |
 | `brain edit <id> ["<text>"] [-a @Anchor]… [--source <doc>]` | Rewrites it in place, staged or committed; the id does not change |
@@ -471,9 +472,37 @@ act on the answers rather than read them. `capture --json` returns the entry's
 `id`, `kind`, `slice`, `shard`, `added` and a `status` of `queued`,
 `already_queued` or `already_committed` (a duplicate is reported with its
 twin's id, and exits 0 as before); `promote --json` returns the `id`, `kind`,
-`shard` and the shard file's `path`. `brain staged --since <id>` is the
+`shard`, the shard file's `path` and a `status` of `promoted` or
+`already_promoted`. `brain staged --since <id>` is the
 slice boundary: note `last_id` before handing a slice off, pass it back
 afterwards, and `--fail-if-empty` exits 1 on a slice that recorded nothing.
+
+### Many entries at once
+
+A tool that turns a specification into fifty requirements, and a person who
+accepts them all, should not mean fifty captures and fifty promotes — each is a
+place to stop half way. Both commands take a batch, and a batch is one act:
+
+```bash
+mxcli brain capture --from-json requirements.json -p app.mpr --json
+mxcli brain promote 1a2b3c 4d5e6f 7a8b9c -p app.mpr
+```
+
+`--from-json` reads a JSON array (`-` for stdin) of
+`{"text" | "title"+"body", "anchors": [...], "slice"?, "open"?, "source"?}`,
+the input fields `staged --json` prints. Every item is checked before anything
+is queued, so one bad item fails the batch and names its index (`items[3]`).
+A duplicate — of a committed entry, a queued one, or an earlier item — is
+skipped and reported with the existing id, so the same list twice is a no-op.
+
+`promote` with several ids resolves every id and checks each shard's cap with
+**all** of the batch's additions to it before writing anything; additions that
+each fit can still overrun the shard together, and then nothing is written.
+`--to` applies to every id. The shards are written first, then the queue once:
+interrupted between the two, the entries are committed and still queued, and
+running the same `promote` again completes it. With `--json`, both return
+`results` (one per item, in input order) plus totals; `promote` with a single
+id keeps its single-object shape.
 
 `--since` rather than `--slice`, because `capture --slice` is what makes an entry
 a *requirement* — a decision found while building a slice carries no slice at
