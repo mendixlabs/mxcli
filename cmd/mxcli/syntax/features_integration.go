@@ -1009,10 +1009,12 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 			"create agent", "drop agent", "usagetype", "systemprompt", "userprompt",
 			"variables", "toolchoice", "temperature", "topp", "maxtokens",
 			"useraccessapproval", "approval", "streaming", "displaytitle", "minsimilarity",
+			"selectedmodel", "selected model",
 		},
 		Syntax: `CREATE [OR MODIFY] AGENT Module.Name [FOLDER 'path'] (
   UsageType: Task|Chat,
   Model: Module.MyModel,
+  SelectedModel: 'model id', [SelectedModelName: 'display name',]
   [Description: 'text',]
   [MaxTokens: N,]
   [Temperature: 0.7,]
@@ -1032,11 +1034,13 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
       [DisplayTitle: 'shown to the user', DisplayDescription: '…'] )]
 };
 
-A TOOL's Document is the microflow it runs. On OR MODIFY, the tools,
-knowledge bases and entity keep their stored identity, and settings MDL has
-no spelling for (the selected model) keep their stored values, and so does
-a setting the statement leaves out.`,
-		Example: "create agent MyModule.Assistant (\n  UsageType: Chat,\n  Model: MyModule.GPT4,\n  SystemPrompt: $$You are a helpful assistant.$$,\n  UserPrompt: 'Ask me anything.'\n)\n{\n  MCP SERVICE MyModule.WebSearch ( Enabled: true )\n};",
+A TOOL's Document is the microflow it runs. SelectedModel is the id of the
+model the Model document's resource offers (e.g. 'eu.anthropic.claude-sonnet-5');
+Agent Editor 2.2+ refuses to import an agent without one, and that stops the
+import of every agent (check: MDL-AGENT02). SelectedModelName defaults to the
+id. On OR MODIFY, the tools, knowledge bases and entity keep their stored
+identity, and a setting the statement leaves out keeps its stored value.`,
+		Example: "create agent MyModule.Assistant (\n  UsageType: Chat,\n  Model: MyModule.GPT4,\n  SelectedModel: 'eu.anthropic.claude-sonnet-5',\n  SystemPrompt: $$You are a helpful assistant.$$,\n  UserPrompt: 'Ask me anything.'\n)\n{\n  MCP SERVICE MyModule.WebSearch ( Enabled: true )\n};",
 		SeeAlso: []string{"agents", "agents.model", "agents.knowledge-base", "agents.mcp-service"},
 	})
 }

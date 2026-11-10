@@ -1101,6 +1101,7 @@ the `AgentEditorCommons` marketplace module and Mendix 11.9+.
 create agent Module.MyAgent (
   UsageType: task,
   model: Module.MyModel,
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   MaxTokens: 4096,
   Temperature: 0.7,
   TopP: 0.9,

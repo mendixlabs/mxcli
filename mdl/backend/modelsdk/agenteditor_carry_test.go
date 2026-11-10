@@ -52,10 +52,16 @@ func typedAgent(t *testing.T, contents string) *agenteditor.Agent {
 
 // An `alter agent … set Temperature` rewrote Contents from the typed fields,
 // and the streaming switches, the selected model and each tool's approval and
-// display title were gone. mxcli now models all of them but selectedModel; a
-// rewrite keeps that one, and any key a later Agent Editor adds.
+// display title were gone. mxcli models all of them now; a rewrite still keeps
+// any key it does not model ("futureKey" stands in for what a later Agent
+// Editor adds), at its stored position.
 func TestCarryStoredContents_AgentKeepsWhatItDoesNotModel(t *testing.T) {
-	stored := readContentsFixture(t, graphExplorerFixture)
+	stored := strings.Replace(readContentsFixture(t, graphExplorerFixture),
+		`"enableBackendStreaming": true,`, `"enableBackendStreaming": true,
+  "futureKey": "kept",`, 1)
+	if !strings.Contains(stored, "futureKey") {
+		t.Fatal("fixture changed; futureKey not injected")
+	}
 	a := typedAgent(t, stored)
 	temp := 0.3
 	a.Temperature = &temp
@@ -64,9 +70,9 @@ func TestCarryStoredContents_AgentKeepsWhatItDoesNotModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Control: the rebuild alone loses them, so the carry below is what keeps them.
-	if m := decodeMap(t, rebuilt); m["selectedModel"] != nil {
-		t.Fatalf("the encoder now writes the unmodelled keys itself; this test no longer covers the carry: %s", rebuilt)
+	// Control: the rebuild alone loses it, so the carry below is what keeps it.
+	if m := decodeMap(t, rebuilt); m["futureKey"] != nil {
+		t.Fatalf("the encoder writes futureKey itself; this test no longer covers the carry: %s", rebuilt)
 	}
 
 	got, err := carryStoredContents(stored, rebuilt, agentContentsSpec)
@@ -81,6 +87,44 @@ func TestCarryStoredContents_AgentKeepsWhatItDoesNotModel(t *testing.T) {
 	// Studio Pro's key order is kept, and the new key goes last.
 	if order := decodeObjectKeys(t, got); !reflect.DeepEqual(order, append(decodeObjectKeys(t, stored), "temperature")) {
 		t.Errorf("key order %v", order)
+	}
+}
+
+// ako/mxcli#2031: Agent Editor 2.2+ refuses to import an agent without
+// selectedModel ("Model with name  is referenced but could not be found"), and
+// mxcli could not write one. It is modelled now: the encoder writes it where
+// Studio Pro does (after model, before entity), and clearing it removes it.
+func TestEncodeAgentContents_SelectedModel(t *testing.T) {
+	stored := readContentsFixture(t, graphExplorerFixture)
+	a := typedAgent(t, stored)
+	if a.SelectedModel == nil || a.SelectedModel.ID != "eu.anthropic.claude-sonnet-5" || a.SelectedModel.Name != "Anthropic Claude Sonnet 5" {
+		t.Fatalf("selectedModel not read: %+v", a.SelectedModel)
+	}
+	rebuilt, err := encodeAgentContents(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sm, _ := decodeMap(t, rebuilt)["selectedModel"].(map[string]any)
+	if sm["id"] != "eu.anthropic.claude-sonnet-5" || sm["name"] != "Anthropic Claude Sonnet 5" {
+		t.Errorf("selectedModel not written: %s", rebuilt)
+	}
+	keys := decodeObjectKeys(t, rebuilt)
+	pos := map[string]int{}
+	for i, k := range keys {
+		pos[k] = i
+	}
+	if !(pos["model"] < pos["selectedModel"] && pos["selectedModel"] < pos["entity"]) {
+		t.Errorf("selectedModel not between model and entity: %v", keys)
+	}
+
+	a.SelectedModel = nil
+	rebuilt, _ = encodeAgentContents(a)
+	got, err := carryStoredContents(stored, rebuilt, agentContentsSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := decodeMap(t, got)["selectedModel"]; ok {
+		t.Errorf("a cleared selectedModel came back from the stored contents: %s", got)
 	}
 }
 

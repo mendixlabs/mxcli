@@ -585,21 +585,22 @@ func decodeAgentEditorAgent(unitID, containerID string, wrap *customBlobWrapper)
 		return a, nil
 	}
 	var payload struct {
-		Description        string              `json:"description"`
-		SystemPrompt       string              `json:"systemPrompt"`
-		UserPrompt         string              `json:"userPrompt"`
-		UsageType          string              `json:"usageType"`
-		Variables          []types.AgentVar    `json:"variables"`
-		Tools              []types.AgentTool   `json:"tools"`
-		KnowledgebaseTools []types.AgentKBTool `json:"knowledgebaseTools"`
-		Model              *types.DocRef       `json:"model"`
-		Entity             *types.DocRef       `json:"entity"`
-		MaxTokens          *int                `json:"maxTokens"`
-		ToolChoice         string              `json:"toolChoice"`
-		Temperature        *float64            `json:"temperature"`
-		TopP               *float64            `json:"topP"`
-		EnableBackend      *bool               `json:"enableBackendStreaming"`
-		EnableUI           *bool               `json:"enableUIStreaming"`
+		Description        string               `json:"description"`
+		SystemPrompt       string               `json:"systemPrompt"`
+		UserPrompt         string               `json:"userPrompt"`
+		UsageType          string               `json:"usageType"`
+		Variables          []types.AgentVar     `json:"variables"`
+		Tools              []types.AgentTool    `json:"tools"`
+		KnowledgebaseTools []types.AgentKBTool  `json:"knowledgebaseTools"`
+		Model              *types.DocRef        `json:"model"`
+		Entity             *types.DocRef        `json:"entity"`
+		MaxTokens          *int                 `json:"maxTokens"`
+		ToolChoice         string               `json:"toolChoice"`
+		Temperature        *float64             `json:"temperature"`
+		TopP               *float64             `json:"topP"`
+		EnableBackend      *bool                `json:"enableBackendStreaming"`
+		EnableUI           *bool                `json:"enableUIStreaming"`
+		SelectedModel      *types.SelectedModel `json:"selectedModel"`
 	}
 	if err := json.Unmarshal([]byte(wrap.Contents), &payload); err != nil {
 		return nil, fmt.Errorf("unmarshal Agent Contents JSON: %w", err)
@@ -619,6 +620,7 @@ func decodeAgentEditorAgent(unitID, containerID string, wrap *customBlobWrapper)
 	a.TopP = payload.TopP
 	a.EnableBackendStreaming = payload.EnableBackend
 	a.EnableUIStreaming = payload.EnableUI
+	a.SelectedModel = payload.SelectedModel
 	return a, nil
 }
 
