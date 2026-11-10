@@ -45,6 +45,10 @@ type Handshake struct {
 	Token string `json:"token"`
 	// Started is when the dev loop published this, for a clearer stale message.
 	Started time.Time `json:"started"`
+	// AllowExec records that the app was started with --allow-call, so its
+	// endpoint runs compiled tests (interp.go) and an attach can skip injecting
+	// and building them.
+	AllowExec bool `json:"allowExec,omitempty"`
 }
 
 // HandshakePath is the handshake file's location for a project.
