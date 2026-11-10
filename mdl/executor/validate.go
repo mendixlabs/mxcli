@@ -327,14 +327,14 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 		if s.ObjectType == "module" && s.NewName != "" {
 			sc.renamedModules[s.NewName] = true
 		} else if s.Name.Module != "" && s.NewName != "" && !s.DryRun {
-			sc.indirectDocs[s.ObjectType+":"+s.Name.Module+"."+s.NewName] = true
+			sc.markIndirectDoc(s.ObjectType, s.Name.Module+"."+s.NewName)
 		}
 	case *ast.MoveStmt:
 		if s.DocumentType == ast.DocumentTypeEntity && s.TargetModule != "" {
 			sc.indirectEntities[s.TargetModule+"."+s.Name.Name] = true
 		}
 		if s.TargetModule != "" {
-			sc.indirectDocs[moveTargetKind(s.DocumentType)+":"+s.TargetModule+"."+s.Name.Name] = true
+			sc.markIndirectDoc(moveTargetKind(s.DocumentType), s.TargetModule+"."+s.Name.Name)
 		}
 	case *ast.ExecuteScriptStmt:
 		sc.opaqueScript = true
@@ -1498,6 +1498,38 @@ func carriedExclusion(ctx *ExecContext, kind string, qn ast.QualifiedName, rewri
 		excluded = true
 	}
 	return excluded
+}
+
+// markIndirectDoc records a document an earlier statement of the script puts
+// under qn without creating it — a RENAME, or a MOVE to another module.
+//
+// It goes into indirectDocs, and into the kind's own script-defined set as
+// well: every reference check (show page, call microflow, a page's snippet
+// call, …) consults that set, so a document known only to indirectDocs was
+// "not found" by the name exec would find it under (mendixlabs/mxcli#1790).
+func (sc *scriptContext) markIndirectDoc(kind, qn string) {
+	if kind == "" {
+		return
+	}
+	sc.indirectDocs[kind+":"+qn] = true
+	switch kind {
+	case "page":
+		sc.pages[qn] = true
+	case "snippet":
+		sc.snippets[qn] = true
+	case "layout":
+		sc.layouts[qn] = true
+	case "microflow":
+		sc.microflows[qn] = true
+	case "nanoflow":
+		sc.nanoflows[qn] = true
+	case "enumeration":
+		sc.enumerations[qn] = true
+	case "constant":
+		sc.constants[qn] = true
+	case "workflow":
+		sc.workflows[qn] = true
+	}
 }
 
 // validateFlowBodyReferences validates references in any flow body (microflow or nanoflow).
