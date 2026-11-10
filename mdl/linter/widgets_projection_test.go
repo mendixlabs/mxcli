@@ -4,6 +4,7 @@ package linter_test
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mendixlabs/mxcli/mdl/catalog"
@@ -105,5 +106,54 @@ def check():
 	want := "w-1|3|btn-danger|color: red;|'x'|Forms$MicroflowAction|True|Sales.Order_Edit"
 	if vs[0].Message != want {
 		t.Errorf("projection = %q\nwant         %q", vs[0].Message, want)
+	}
+}
+
+// ako/mxcli#1303: with two buttons on a page a rule could not tell which
+// caption belonged to the one without a confirmation: widgets() had no caption,
+// and the strings() caption row's element_id is the button's
+// Forms$ClientTemplate, not the button. A row now carries caption and tooltip
+// in the default language, and each strings() row the widget_id, so the
+// Dutch caption is found by the widget's id.
+func TestWidgets_CaptionTooltipAndTheirTranslations(t *testing.T) {
+	cat, err := catalog.NewFromFile(filepath.Join(t.TempDir(), "cat.db"))
+	if err != nil {
+		t.Fatalf("NewFromFile: %v", err)
+	}
+	defer cat.Close()
+	db := cat.CatalogDB()
+	for _, q := range []string{
+		`INSERT INTO modules_data (Id, Name, ProjectId, SnapshotId) VALUES ('mod-1', 'Sales', 'default', 's1')`,
+		`INSERT INTO widgets_data (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
+			ModuleName, ActionType, HasConfirmation, Caption, Tooltip, ProjectId, SnapshotId) VALUES
+			('b1', 'btnDelete', 'Forms$ActionButton', 'p', 'Sales.Sale_Edit', 'PAGE', 'Sales', 'Forms$MicroflowAction', 0, 'Delete sale', 'Deletes it', 'default', 's1'),
+			('b2', 'btnRemove', 'Forms$ActionButton', 'p', 'Sales.Sale_Edit', 'PAGE', 'Sales', 'Forms$MicroflowAction', 1, 'Remove', '', 'default', 's1')`,
+		`INSERT INTO strings (QualifiedName, ObjectType, StringValue, StringContext, Language, ElementId, ModuleName, WidgetId) VALUES
+			('Sales.Sale_Edit', 'PAGE', 'Verkoop verwijderen', 'Forms$ClientTemplate.Template', 'nl_NL', 'tpl1', 'Sales', 'b1'),
+			('Sales.Sale_Edit', 'PAGE', 'Weghalen', 'Forms$ClientTemplate.Template', 'nl_NL', 'tpl2', 'Sales', 'b2'),
+			('Sales.Sale_Edit', 'PAGE', 'Deze verkoop verwijderen?', 'Forms$ConfirmationInfo.Question', 'nl_NL', 'conf2', 'Sales', 'b2')`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	vs, _ := runSrc(t, linter.NewLintContext(cat, nil), `
+def check():
+    nl = {}
+    for s in strings(language = "nl_NL"):
+        nl.setdefault(s.widget_id, []).append(s.value)
+    out = []
+    for w in widgets():
+        out.append(violation(message = "%s|%s|%s|%s|%s" % (w.name, w.caption, w.tooltip, w.has_confirmation, ",".join(sorted(nl.get(w.id, []))))))
+    return out
+`)
+	var got []string
+	for _, v := range vs {
+		got = append(got, v.Message)
+	}
+	want := "btnDelete|Delete sale|Deletes it|False|Verkoop verwijderen;" +
+		"btnRemove|Remove||True|Deze verkoop verwijderen?,Weghalen"
+	if strings.Join(got, ";") != want {
+		t.Errorf("got  %q\nwant %q", strings.Join(got, ";"), want)
 	}
 }

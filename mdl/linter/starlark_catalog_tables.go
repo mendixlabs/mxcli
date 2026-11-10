@@ -222,6 +222,7 @@ func catalogStringToStarlark(s CatalogString) starlark.Value {
 		"context":        starlark.String(s.Context),
 		"language":       starlark.String(s.Language),
 		"element_id":     starlark.String(s.ElementID),
+		"widget_id":      starlark.String(s.WidgetID),
 		"module_name":    starlark.String(s.ModuleName),
 	})
 }

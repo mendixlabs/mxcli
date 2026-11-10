@@ -264,6 +264,8 @@ One row per widget **instance** on a page or snippet. Full build only
 | `Class`, `Style`, `DynamicClasses` | The widget's Appearance |
 | `ActionType` | Stored type of the primary action — `Action` (buttons), else `OnClickAction` (containers), else `ClickAction` (list views, images): `Forms$DeleteClientAction`, `Forms$MicroflowAction`, `Forms$CallNanoflowClientAction`, `Forms$FormAction` (show page), `Forms$NoAction`, …; empty for a widget without one. A pluggable widget's actions are not read |
 | `HasConfirmation` | 1 when the primary action asks for confirmation. Only microflow, nanoflow and workflow calls have that setting; a delete action never does |
+| `Caption` | The widget's own caption in the project's default language (buttons and labels; an input's label and a dynamic text's content are not its caption); `''` when it has none |
+| `Tooltip` | The widget's tooltip in the project's default language; `''` when none is set |
 
 ```sql
 -- Widgets nested more than five deep, deepest first

@@ -14,6 +14,10 @@ package catalog
 //	    Without the bump a cached catalog keeps answering "(no callers
 //	    found)" for every agent tool. (40 is the widget-texts schema of
 //	    ako/mxcli#1303, merged separately.)
+//	40 (widget texts): widgets gains Caption and Tooltip (default language),
+//	    strings gains WidgetId, the widget a caption, tooltip or confirmation
+//	    text belongs to (ako/mxcli#1303). Without the bump a cached catalog
+//	    lacks the columns and every query naming them fails.
 //
 //	39 (domain model annotations): annotations_data + view, one row per
 //	    domain model annotation with its full caption and canvas position
@@ -924,6 +928,11 @@ func (c *Catalog) createTables() error {
 			-- only microflow, nanoflow and workflow calls can.
 			ActionType TEXT,
 			HasConfirmation INTEGER DEFAULT 0,
+			-- The widget's own Caption and Tooltip in the project's default
+			-- language (ako/mxcli#1303); a button's caption was otherwise only
+			-- in strings, under its Forms$ClientTemplate's id.
+			Caption TEXT DEFAULT '',
+			Tooltip TEXT DEFAULT '',
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,
@@ -1635,7 +1644,10 @@ func (c *Catalog) createTables() error {
 				ProjectId, ProjectName, SnapshotId, SnapshotDate, SnapshotSource
 			FROM jar_dependencies`,
 
-		// FTS5 virtual tables for full-text search
+		// FTS5 virtual tables for full-text search. WidgetId is the widget a
+		// text belongs to (ako/mxcli#1303): ElementId is the text's direct
+		// owner, which for a button caption is its Forms$ClientTemplate.
+		// UNINDEXED, since an id is no search term.
 		`CREATE VIRTUAL TABLE IF NOT EXISTS strings USING fts5(
 			QualifiedName,
 			ObjectType,
@@ -1643,7 +1655,8 @@ func (c *Catalog) createTables() error {
 			StringContext,
 			Language,
 			ElementId,
-			ModuleName
+			ModuleName,
+			WidgetId UNINDEXED
 		)`,
 
 		// What the source rows were described from: every unit's content

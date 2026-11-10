@@ -37,9 +37,9 @@ func (b *Builder) buildPages() error {
 		widgetStmt, err = b.tx.Prepare(`
 			INSERT INTO widgets_data (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
 				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, SnippetRef, Description,
-				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation,
+				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation, Caption, Tooltip,
 				ProjectId, SnapshotId)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`)
 		if err != nil {
 			return err
@@ -128,6 +128,7 @@ func (b *Builder) buildPages() error {
 					"",
 					w.ParentID, w.Depth, w.Class, w.Style, w.DynamicClasses,
 					w.ActionType, w.HasConfirmation,
+					pickTranslation(w.CaptionTexts, b.defaultLanguage()), pickTranslation(w.TooltipTexts, b.defaultLanguage()),
 					projectID, snapshotID,
 				); err != nil {
 					return fmt.Errorf("insert widget %s for page %s: %w", w.Name, qualifiedName, err)
@@ -172,9 +173,9 @@ func (b *Builder) buildSnippets() error {
 		widgetStmt, err = b.tx.Prepare(`
 			INSERT INTO widgets_data (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
 				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, SnippetRef, Description,
-				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation,
+				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation, Caption, Tooltip,
 				ProjectId, SnapshotId)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`)
 		if err != nil {
 			return err
@@ -227,6 +228,7 @@ func (b *Builder) buildSnippets() error {
 					w.EntityRef, w.AttributeRef, w.MicroflowRef, w.NanoflowRef, w.PageRef, w.SnippetRef, "",
 					w.ParentID, w.Depth, w.Class, w.Style, w.DynamicClasses,
 					w.ActionType, w.HasConfirmation,
+					pickTranslation(w.CaptionTexts, b.defaultLanguage()), pickTranslation(w.TooltipTexts, b.defaultLanguage()),
 					projectID, snapshotID,
 				); err != nil {
 					return fmt.Errorf("insert widget %s for snippet %s: %w", w.Name, qualifiedName, err)
@@ -356,6 +358,57 @@ type rawWidgetInfo struct {
 	// has no confirmation setting in the model at all.
 	ActionType      string
 	HasConfirmation bool
+
+	// CaptionTexts and TooltipTexts are the widget's own Caption and Tooltip,
+	// language code → text (ako/mxcli#1303). The row stores the project's
+	// default language, picked at insert time as pages.Title is.
+	CaptionTexts map[string]string
+	TooltipTexts map[string]string
+}
+
+// widgetTexts reads a widget's own caption and tooltip. Measured on
+// CitrusGrove (Mendix 10.24), a button stores its caption as CaptionTemplate,
+// a Forms$ClientTemplate holding the Texts$Text under Template; a label stores
+// Caption as a Texts$Text directly. A tooltip is a Texts$Text. A text with no
+// translations, as an unset tooltip is stored, reads as nil. An input's
+// LabelTemplate and a dynamic text's Content are not its caption; they reach a
+// rule through strings().widget_id.
+func widgetTexts(w map[string]any) (caption, tooltip map[string]string) {
+	text := func(v any) map[string]string {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return nil
+		}
+		if extractString(m["$Type"]) == "Forms$ClientTemplate" {
+			if m, ok = m["Template"].(map[string]any); !ok {
+				return nil
+			}
+		}
+		if extractString(m["$Type"]) != "Texts$Text" {
+			return nil
+		}
+		var out map[string]string
+		for _, it := range getBsonArrayElements(m["Items"]) {
+			tr, ok := it.(map[string]any)
+			if !ok {
+				continue
+			}
+			lang, txt := extractString(tr["LanguageCode"]), extractString(tr["Text"])
+			if lang == "" || txt == "" {
+				continue
+			}
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[lang] = txt
+		}
+		return out
+	}
+	caption = text(w["CaptionTemplate"])
+	if caption == nil {
+		caption = text(w["Caption"])
+	}
+	return caption, text(w["Tooltip"])
 }
 
 // widgetPrimaryAction returns the $Type of a widget's primary action and whether
@@ -630,6 +683,7 @@ func walkWidget(w map[string]any, parentID string, depth int) []rawWidgetInfo {
 	widget.AllRefs = scanWidgetAllRefs(w)
 	widget.Class, widget.Style, widget.DynamicClasses = widgetAppearance(w)
 	widget.ActionType, widget.HasConfirmation = widgetPrimaryAction(w)
+	widget.CaptionTexts, widget.TooltipTexts = widgetTexts(w)
 	widget.ParentID, widget.Depth = parentID, depth
 
 	// Index user-authored containers, but skip the synthetic
@@ -1007,9 +1061,9 @@ func (b *Builder) buildLayouts() error {
 		widgetStmt, err = b.tx.Prepare(`
 			INSERT INTO widgets_data (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
 				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, SnippetRef, Description,
-				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation,
+				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation, Caption, Tooltip,
 				ProjectId, SnapshotId)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`)
 		if err != nil {
 			return err
@@ -1065,6 +1119,7 @@ func (b *Builder) buildLayouts() error {
 				w.EntityRef, w.AttributeRef, w.MicroflowRef, w.NanoflowRef, w.PageRef, w.SnippetRef, "",
 				w.ParentID, w.Depth, w.Class, w.Style, w.DynamicClasses,
 				w.ActionType, w.HasConfirmation,
+				pickTranslation(w.CaptionTexts, b.defaultLanguage()), pickTranslation(w.TooltipTexts, b.defaultLanguage()),
 				projectID, snapshotID,
 			); err != nil {
 				return fmt.Errorf("insert widget %s for layout %s: %w", w.Name, qualifiedName, err)

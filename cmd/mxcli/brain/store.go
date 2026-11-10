@@ -127,10 +127,9 @@ func (s *Store) saveShardWith(shard string, entries []Entry, frontmatter string)
 		}
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(RenderShardWithFrontmatter(shard, entries, frontmatter)), 0644)
+	// Atomically: a crash mid-write must not leave a half-written shard, which
+	// would read back as a shorter one and silently lose the tail (#2054).
+	return writeFileAtomic(path, []byte(RenderShardWithFrontmatter(shard, entries, frontmatter)))
 }
 
 // Frontmatter returns the YAML block at the top of a shard, or "" if the shard
