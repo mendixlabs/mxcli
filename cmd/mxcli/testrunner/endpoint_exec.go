@@ -192,6 +192,10 @@ const endpointExecJava = `
             } else {
                 com.mendix.core.Core.delete(ctx, object(vars, var));
             }
+        } else if ("retrieve".equals(op) && !str(st.get("assoc")).isEmpty()) {
+            vars.put(var, retrieveByAssociation(ctx, vars, str(st.get("from")), str(st.get("assoc"))));
+        } else if ("aggregate".equals(op)) {
+            vars.put(var, aggregate(ctx, vars.get(str(st.get("of"))), str(st.get("agg")), str(st.get("attr"))));
         } else if ("retrieve".equals(op)) {
             String xpath = bindXPath(ctx, vars, str(st.get("xpath")));
             java.util.List<com.mendix.systemwideinterfaces.core.IMendixObject> rows =
@@ -207,6 +211,60 @@ const endpointExecJava = `
         } else {
             throw new IllegalArgumentException("unknown step " + op);
         }
+    }
+
+    // retrieveByAssociation follows an association as a microflow's retrieve
+    // does. From the owner of a reference it is the one object, read through the
+    // evaluator so an object not yet committed is found too; otherwise (the other
+    // side, or a reference set) it is the list the database holds.
+    private Object retrieveByAssociation(com.mendix.systemwideinterfaces.core.IContext ctx,
+                                         java.util.Map<String, Object> vars,
+                                         String from, String assoc) throws Exception {
+        com.mendix.systemwideinterfaces.core.IMendixObject start = object(vars, from);
+        com.mendix.systemwideinterfaces.core.meta.IMetaAssociation owned = null;
+        for (com.mendix.systemwideinterfaces.core.meta.IMetaAssociation a : start.getMetaObject().getMetaAssociationsParent()) {
+            if (a.getName().equals(assoc)) owned = a;
+        }
+        if (owned != null && owned.getType() == com.mendix.systemwideinterfaces.core.meta.IMetaAssociation.AssociationType.REFERENCE) {
+            return eval(ctx, vars, "\u0024" + from + "/" + assoc + "/" + owned.getChild().getName());
+        }
+        return new java.util.ArrayList<com.mendix.systemwideinterfaces.core.IMendixObject>(
+            com.mendix.core.Core.retrieveByPath(ctx, start, assoc));
+    }
+
+    // aggregate is a microflow's Aggregate list activity over an attribute.
+    private Object aggregate(com.mendix.systemwideinterfaces.core.IContext ctx, Object list,
+                             String agg, String attr) throws Exception {
+        java.util.List<?> rows = list instanceof java.util.List ? (java.util.List<?>) list : java.util.Collections.emptyList();
+        if ("count".equals(agg)) return Long.valueOf(rows.size());
+        java.util.List<Object> values = new java.util.ArrayList<Object>();
+        for (Object o : rows) {
+            Object v = ((com.mendix.systemwideinterfaces.core.IMendixObject) o).getValue(ctx, attr);
+            if (v instanceof Integer) v = Long.valueOf(((Integer) v).longValue());
+            if (v != null) values.add(v);
+        }
+        if ("sum".equals(agg) || "average".equals(agg)) {
+            boolean decimal = false;
+            java.math.BigDecimal sum = java.math.BigDecimal.ZERO;
+            for (Object v : values) {
+                if (v instanceof java.math.BigDecimal) decimal = true;
+                sum = sum.add(v instanceof java.math.BigDecimal ? (java.math.BigDecimal) v : java.math.BigDecimal.valueOf(((Number) v).longValue()));
+            }
+            if ("average".equals(agg)) {
+                // Empty, not zero: what Mendix's own Aggregate list activity
+                // returns for an empty list (measured against the generated route).
+                if (values.isEmpty()) return null;
+                return sum.divide(java.math.BigDecimal.valueOf(values.size()), java.math.MathContext.DECIMAL128);
+            }
+            return decimal ? (Object) sum : (Object) Long.valueOf(sum.longValueExact());
+        }
+        Object best = null;
+        for (Object v : values) {
+            @SuppressWarnings("unchecked")
+            int c = best == null ? 0 : ((Comparable<Object>) v).compareTo(best);
+            if (best == null || ("minimum".equals(agg) ? c < 0 : c > 0)) best = v;
+        }
+        return best;
     }
 
     private void execCall(com.mendix.systemwideinterfaces.core.IContext ctx,
