@@ -509,6 +509,10 @@ func (m *mcpPageMutator) InsertTabPages(targetRef string, _ backend.InsertPositi
 	return fmt.Errorf("adding tab pages at %s is not yet supported by the MCP backend", targetRef)
 }
 
+func (m *mcpPageMutator) InsertLayoutGridRows(gridRef string, _ []*pages.LayoutGridRow) error {
+	return fmt.Errorf("adding layout grid rows to %s is not yet supported by the MCP backend", gridRef)
+}
+
 func (m *mcpPageMutator) InsertNavigationListItems(targetRef string, _ backend.InsertPosition, _ []*pages.NavigationListItem) error {
 	return fmt.Errorf("adding navigation list items at %s is not yet supported by the MCP backend", targetRef)
 }
