@@ -140,3 +140,31 @@ func TestRunStateCovered(t *testing.T) {
 		t.Errorf("Covered moved the source back to %v", st.Last.Source)
 	}
 }
+
+// ako/mxcli#2119: a test run that builds writes the deployment the dev loop
+// serves from. The model comes back unchanged, but the deployment is the test
+// run's, and the next --attach found a build it could only apply by restart.
+// So the watcher builds once (a reload) when the deployment moved under it.
+func TestWatchHoldGate_ResyncsADeploymentTheRunRebuilt(t *testing.T) {
+	dir := t.TempDir()
+	mpr := filepath.Join(dir, "App.mpr")
+	touch(t, mpr, time.Now().Add(-time.Hour))
+	mdp := filepath.Join(dir, "deployment", "model", "model.mdp")
+	touch(t, mdp, time.Now().Add(-time.Hour))
+	old := holdAlive
+	holdAlive = func(int) bool { return true }
+	t.Cleanup(func() { holdAlive = old })
+	if err := HoldWatch(mpr, 4242); err != nil {
+		t.Fatal(err)
+	}
+	g := &watchHoldGate{projectPath: mpr}
+	last := time.Now()
+	if v, _ := g.tick(last); v != holdWait {
+		t.Fatalf("verdict %v, want holdWait", v)
+	}
+	touch(t, mdp, time.Now()) // the test run's build
+	ReleaseWatch(mpr)
+	if v, _ := g.tick(last); v != holdResync {
+		t.Errorf("released over the same model with a rebuilt deployment: verdict %v, want holdResync", v)
+	}
+}

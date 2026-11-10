@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -42,8 +43,24 @@ type WatchHold struct {
 	// Source is the dev loop's change signal (SourceMTimeOf) when the hold
 	// began. An edit the watcher had not built yet makes it newer than the
 	// watcher's baseline, and then the release builds even if the digest matches.
-	Source  time.Time `json:"source"`
-	Started time.Time `json:"started"`
+	Source time.Time `json:"source"`
+	// Deployment identifies deployment/model/model.mdp when the hold began. A
+	// test run that builds writes the deployment the dev loop also serves from
+	// (mxbuild cannot put it elsewhere), so a model that came back unchanged can
+	// still leave a deployment that is the test run's: then the watcher builds
+	// once, to put its own back (ako/mxcli#2119).
+	Deployment string    `json:"deployment,omitempty"`
+	Started    time.Time `json:"started"`
+}
+
+// deploymentIdentity is the size and modification time of the deployment's
+// model, or "" when there is none.
+func deploymentIdentity(projectPath string) string {
+	fi, err := os.Stat(filepath.Join(filepath.Dir(projectPath), "deployment", "model", "model.mdp"))
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%d:%d", fi.Size(), fi.ModTime().UnixNano())
 }
 
 func watchHoldPath(projectPath string) string {
@@ -58,7 +75,8 @@ func HoldWatch(projectPath string, pid int) error {
 		return err
 	}
 	st, _ := ReadRunState(projectPath)
-	h := WatchHold{PID: pid, Digest: digest, Source: SourceMTimeOf(projectPath, st), Started: time.Now()}
+	h := WatchHold{PID: pid, Digest: digest, Source: SourceMTimeOf(projectPath, st),
+		Deployment: deploymentIdentity(projectPath), Started: time.Now()}
 	body, err := json.Marshal(h)
 	if err != nil {
 		return err
@@ -165,6 +183,7 @@ const (
 	holdWait                        // a live hold: do not build
 	holdAbsorbed                    // released, and the model is as before: move the baseline, do not build
 	holdReleased                    // released, and something changed: build as usual
+	holdResync                      // released over the same model, but the run rebuilt the shared deployment: build once
 )
 
 // tick reports what the watcher should do now. last is the watcher's baseline,
@@ -185,8 +204,11 @@ func (g *watchHoldGate) tick(last time.Time) (holdVerdict, *WatchHold) {
 	if h.Source.After(last) {
 		return holdReleased, h
 	}
-	if d, err := ModelDigest(g.projectPath); err == nil && d == h.Digest {
-		return holdAbsorbed, h
+	if d, err := ModelDigest(g.projectPath); err != nil || d != h.Digest {
+		return holdReleased, h
 	}
-	return holdReleased, h
+	if deploymentIdentity(g.projectPath) != h.Deployment {
+		return holdResync, h
+	}
+	return holdAbsorbed, h
 }

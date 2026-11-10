@@ -1502,6 +1502,7 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 	gen := 1
 	holds := &watchHoldGate{projectPath: opts.ProjectPath}
 	holdAnnounced := false
+	resync := false
 	ticker := time.NewTicker(opts.PollInterval)
 	defer ticker.Stop()
 
@@ -1541,10 +1542,19 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 				fmt.Fprintf(w, "  the test run (pid %d) is done; the model changed meanwhile, so rebuilding\n", hold.PID)
 				opts.State.Held(0)
 				holdAnnounced = false
+			case holdResync:
+				// The model is the one this app serves, but the test run's build
+				// replaced the deployment both share; build it back now, as a
+				// reload, rather than leave the next apply to find it.
+				fmt.Fprintf(w, "  the test run (pid %d) is done; it rebuilt the shared deployment, so building this app's back\n", hold.PID)
+				opts.State.Held(0)
+				holdAnnounced = false
+				resync = true
 			}
-			if !now.After(last) {
+			if !now.After(last) && !resync {
 				continue
 			}
+			resync = false
 			// Wait for the writer to finish before reading the model.
 			//
 			// An `mxcli exec` of a real script rewrites the .mpr and many

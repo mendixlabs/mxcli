@@ -294,6 +294,12 @@ func runEndpoint(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 	// must succeed: without it cleanup cannot tell an existing MxTest module from
 	// the one it is about to create, nor restore the original after-startup — and
 	// the generated startup flow needs to know what to chain.
+	// An endpoint a dead run left behind would be captured as the project's own
+	// after-startup and chained to (ako/mxcli#2119); take it out first, as `run`
+	// does.
+	if _, err := RestoreAbandonedEndpoint(opts.ProjectPath, w); err != nil {
+		return nil, err
+	}
 	state, err := captureProjectState(opts.ProjectPath)
 	if err != nil {
 		return nil, fmt.Errorf("capturing project state: %w", err)
@@ -309,7 +315,7 @@ func runEndpoint(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 	}
 
 	fmt.Fprintln(w, "Generating test endpoint and test microflows...")
-	chain := state.afterStartup
+	chain := state.chain()
 	if opts.SkipAppStartup {
 		chain = ""
 	}
@@ -335,7 +341,9 @@ func runEndpoint(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 	finish := func(result *SuiteResult, runErr error) (*SuiteResult, error) {
 		fmt.Fprintln(w, "Cleaning up...")
 		cleanupErr := cleanupEndpoint(opts.ProjectPath, state, cleanupSuite, w)
-		removeGeneratedJavaSource(opts.ProjectPath, w)
+		if !state.hosted { // the hosting dev loop's endpoint keeps its source
+			removeGeneratedJavaSource(opts.ProjectPath, w)
+		}
 		restoreProjectFile(state, cleanupErr, w)
 		reportCleanup(w, cleanupErr, survivingTestFlows(opts.ProjectPath))
 		if cleanupErr == nil {
@@ -361,7 +369,10 @@ func runEndpoint(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 			return finish(nil, fmt.Errorf("preparing project for the test run (%s): %w", cmd, err))
 		}
 	}
-	fmt.Fprintln(w, "  "+describeStartup(state.afterStartup, opts.SkipAppStartup))
+	fmt.Fprintln(w, "  "+describeStartup(state.chain(), opts.SkipAppStartup))
+	if state.hosted {
+		fmt.Fprintf(w, "  the dev loop hosting %s keeps it; this run removes only its test microflows\n", endpointStartupFlow)
+	}
 
 	// --watch keeps the runtime and the build server up and re-runs on every
 	// change, so it owns the loop — including printing each run's results, which
@@ -660,6 +671,47 @@ type projectState struct {
 	// already exist. A pre-existing MxTest module belongs to the user and must
 	// survive cleanup with everything but the generated TestRunner intact.
 	createdMxTest bool
+
+	// hosted reports that a live `run --local --test-endpoint` dev loop owns the
+	// endpoint already in the project: afterStartup is then that endpoint's
+	// MxTest.RegisterEndpoint, and hostedChain the after-startup microflow it
+	// chains to — the project's own (ako/mxcli#2119). A test run chains to
+	// hostedChain, and its cleanup leaves the dev loop's endpoint as it found it.
+	hosted      bool
+	hostedChain string
+}
+
+// chain is the after-startup microflow a run's endpoint chains to: the
+// project's own, never the endpoint's own startup flow — which a run made while
+// a dev loop hosts the endpoint read as "the after-startup microflow", chained
+// to itself, and failed to boot with a StackOverflowError (ako/mxcli#2119).
+func (st projectState) chain() string {
+	if st.hosted {
+		return st.hostedChain
+	}
+	return st.afterStartup
+}
+
+// classifyHostedEndpoint decides what an after-startup setting that is already
+// the endpoint's means. rec is the restore record a hosting run wrote; alive
+// tells whether its owner still runs.
+//
+// The endpoint's own startup flow with a live owner is hosted: chain to what the
+// owner recorded. With no live owner it is a leftover nothing should chain to —
+// the caller removes an abandoned one first, so what remains has no record of
+// what it replaced, and the run refuses rather than guess.
+func classifyHostedEndpoint(projectPath, afterStartup string, rec *restoreRecord, alive func(int) bool) (hosted bool, chain string, err error) {
+	if afterStartup != endpointStartupFlow {
+		return false, "", nil
+	}
+	if rec != nil && rec.PID > 0 && alive(rec.PID) {
+		return true, rec.AfterStartup, nil
+	}
+	msg := LeftoverEndpointWarning(projectPath)
+	if msg == "" {
+		msg = "the project's after-startup microflow is " + endpointStartupFlow + ", the mxcli test endpoint's, and no run of this project is hosting it"
+	}
+	return false, "", fmt.Errorf("%s", msg)
 }
 
 // captureProjectState reads everything cleanup needs to restore, before anything
@@ -671,6 +723,10 @@ func captureProjectState(projectPath string) (projectState, error) {
 		return st, fmt.Errorf("reading after-startup setting: %w", err)
 	}
 	st.afterStartup = af
+	rec, _, _ := readRestoreRecord(projectPath)
+	if st.hosted, st.hostedChain, err = classifyHostedEndpoint(projectPath, af, rec, pidAlive); err != nil {
+		return st, err
+	}
 
 	exists, err := moduleExists(projectPath, mxTestModule)
 	if err != nil {
