@@ -226,7 +226,7 @@ var communityBuiltins = []string{
 // any builtin whose answer differs and is not listed here.
 var fullBuiltins = []string{
 	"refs_to", "refs_from",
-	"widgets", "xpath_expressions", "activities_for",
+	"widgets", "xpath_expressions", "activities_for", "flows_for",
 	"permissions", "permissions_for",
 	"strings",
 }
@@ -448,6 +448,7 @@ func (r *StarlarkRule) buildPredeclared() starlark.StringDict {
 		"rest_clients":         starlark.NewBuiltin("rest_clients", r.builtinRestClients),
 		"rest_operations":      starlark.NewBuiltin("rest_operations", r.builtinRestOperations),
 		"activities_for":       starlark.NewBuiltin("activities_for", r.builtinActivitiesFor),
+		"flows_for":            starlark.NewBuiltin("flows_for", r.builtinFlowsFor),
 
 		// Project-level queries
 		"user_roles":       starlark.NewBuiltin("user_roles", r.builtinUserRoles),
@@ -1035,6 +1036,25 @@ func (r *StarlarkRule) builtinActivitiesFor(_ *starlark.Thread, _ *starlark.Buil
 	return starlark.NewList(activities), nil
 }
 
+// builtinFlowsFor returns the sequence and annotation flows of a microflow,
+// nanoflow or rule (ako/mxcli#1299), loop bodies included.
+func (r *StarlarkRule) builtinFlowsFor(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if r.ctx == nil {
+		return starlark.NewList(nil), nil
+	}
+	var microflowQualifiedName starlark.String
+	if err := starlark.UnpackArgs("flows_for", args, kwargs,
+		"microflow_qualified_name", &microflowQualifiedName,
+	); err != nil {
+		return nil, err
+	}
+	var flows []starlark.Value
+	for f := range r.ctx.FlowsFor(string(microflowQualifiedName)) {
+		flows = append(flows, flowToStarlark(f))
+	}
+	return starlark.NewList(flows), nil
+}
+
 // builtinUserRoles returns all user roles from project security.
 func (r *StarlarkRule) builtinUserRoles(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if r.ctx == nil {
@@ -1485,6 +1505,27 @@ func activityToStarlark(a Activity) starlark.Value {
 		"with_events":              starlark.Bool(a.WithEvents),
 		"retrieve_source":          starlark.String(a.RetrieveSource),
 		"queue_ref":                starlark.String(a.QueueRef),
+		"x":                        starlark.MakeInt(a.X),
+		"y":                        starlark.MakeInt(a.Y),
+		"width":                    starlark.MakeInt(a.Width),
+		"height":                   starlark.MakeInt(a.Height),
+	})
+}
+
+// flowToStarlark converts a Flow to a Starlark struct.
+func flowToStarlark(f Flow) starlark.Value {
+	return starlarkstruct.FromStringDict(starlark.String("flow"), starlark.StringDict{
+		"id":                           starlark.String(f.ID),
+		"flow_type":                    starlark.String(f.FlowType),
+		"microflow_id":                 starlark.String(f.MicroflowID),
+		"microflow_qualified_name":     starlark.String(f.MicroflowQualifiedName),
+		"module_name":                  starlark.String(f.ModuleName),
+		"origin_id":                    starlark.String(f.OriginID),
+		"destination_id":               starlark.String(f.DestinationID),
+		"is_error_handler":             starlark.Bool(f.IsErrorHandler),
+		"case_value":                   starlark.String(f.CaseValue),
+		"origin_connection_index":      starlark.MakeInt(f.OriginConnectionIndex),
+		"destination_connection_index": starlark.MakeInt(f.DestinationConnectionIndex),
 	})
 }
 

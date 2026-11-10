@@ -74,6 +74,7 @@ var builtinModes = map[string]builtinProbe{
 	"widgets":           {CatalogFull, "widgets()"},
 	"xpath_expressions": {CatalogFull, "xpath_expressions()"},
 	"activities_for":    {CatalogFull, "[a for n in FLOW_NAMES for a in activities_for(n)]"},
+	"flows_for":         {CatalogFull, "[f for n in FLOW_NAMES for f in flows_for(n)]"},
 	"permissions":       {CatalogFull, "permissions()"},
 	"permissions_for":   {CatalogFull, "[p for n in ENTITY_NAMES for p in permissions_for(n)]"},
 	"refs_to":           {CatalogFull, "[r for n in REF_NAMES for r in refs_to(n)]"},

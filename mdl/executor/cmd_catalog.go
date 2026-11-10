@@ -80,6 +80,7 @@ func execShowCatalogTables(ctx *ExecContext) error {
 var fullOnlyTables = map[string]bool{
 	"widgets":           true,
 	"activities":        true,
+	"flows":             true,
 	"refs":              true,
 	"xpath_expressions": true,
 	"strings":           true,

@@ -765,6 +765,32 @@ func applyInsertWidgetMutator(ctx *ExecContext, mutator backend.PageMutator, op 
 				"Use one INSERT for the tab pages and another for the widgets")
 	}
 
+	// Special path: adding rows to a layout grid (mendixlabs/mxcli#1791). A row
+	// lives in the grid's Rows list and is not a widget: the builder asked for
+	// a name it never stores, and InsertWidget refused the grid as "not a
+	// simple container". A row has no stored name, so INTO the grid is the only
+	// position the mutator can address.
+	if allLayoutGridRows(op.Widgets) {
+		if !into {
+			return mdlerrors.NewValidation(fmt.Sprintf(
+				"a layout grid row has no name to insert %s, so rows are added with "+
+					"`insert into <layoutgrid> { row { … } }`, which appends them; to place widgets "+
+					"in an existing row, insert into or next to a widget in its column",
+				strings.ToLower(op.Position)))
+		}
+		rows, err := buildLayoutGridRowsFromAST(ctx, op.Widgets, moduleName, moduleID, entityCtx, mutator)
+		if err != nil {
+			return mdlerrors.NewBackend("build layout grid rows", err)
+		}
+		return mutator.InsertLayoutGridRows(op.Target.Widget, rows)
+	}
+	if hasLayoutGridRow(op.Widgets) {
+		return mdlerrors.NewValidation(
+			"mixing `row` blocks with ordinary widgets in one INSERT is not supported: " +
+				"rows go in a layout grid's list of rows, widgets inside a row's column. " +
+				"Use one INSERT for the rows and another for the widgets")
+	}
+
 	// Special path: adding items to a navigation list (#1388). An item lives in
 	// the list's Items and is not a widget, so the builder refuses one on its own
 	// ("item must be a direct child of navigationlist") and InsertWidget would
@@ -1358,6 +1384,49 @@ func allNavigationListItems(widgets []*ast.WidgetV3) bool {
 func hasNavigationListItem(widgets []*ast.WidgetV3) bool {
 	for _, w := range widgets {
 		if strings.EqualFold(w.Type, "item") {
+			return true
+		}
+	}
+	return false
+}
+
+// buildLayoutGridRowsFromAST builds the rows an INSERT adds to a layout grid,
+// with the same builder CREATE PAGE uses for a layout grid's children.
+func buildLayoutGridRowsFromAST(ctx *ExecContext, nodes []*ast.WidgetV3, moduleName string, moduleID model.ID, entityContext string, mutator backend.PageMutator) ([]*pages.LayoutGridRow, error) {
+	pb := newAlterPageBuilder(ctx, moduleName, moduleID, entityContext, mutator)
+	pb.isDocumentWidget = alterDocumentWidgets(mutator, nodes)
+	out := make([]*pages.LayoutGridRow, 0, len(nodes))
+	for _, node := range nodes {
+		if err := refuseNativeWidgetProps(pb.ctx, "layoutgrid row", node); err != nil {
+			return nil, err
+		}
+		row, err := pb.buildLayoutGridRowV3(node)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+// allLayoutGridRows reports whether every inserted node is a layout grid row.
+func allLayoutGridRows(widgets []*ast.WidgetV3) bool {
+	if len(widgets) == 0 {
+		return false
+	}
+	for _, w := range widgets {
+		if !strings.EqualFold(w.Type, "row") {
+			return false
+		}
+	}
+	return true
+}
+
+// hasLayoutGridRow reports whether ANY inserted node is a layout grid row, so
+// a mixed insert is refused rather than half-applied.
+func hasLayoutGridRow(widgets []*ast.WidgetV3) bool {
+	for _, w := range widgets {
+		if strings.EqualFold(w.Type, "row") {
 			return true
 		}
 	}

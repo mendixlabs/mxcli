@@ -1,0 +1,34 @@
+mdl 1;
+-- ako/mxcli#1299 (mendixlabs/mxcli#1308): a Starlark rule could not see the
+-- sequence flows of a microflow, so it could not tell which log belongs to
+-- which custom error handler, which activity an annotation is attached to, or
+-- which branch of a split is true; activities had no canvas position.
+--
+-- Run on a fresh app, then:
+--   mxcli -p App.mpr -c "refresh catalog full force"
+--   mxcli -p App.mpr -c "SELECT a.LogLevel FROM CATALOG.FLOWS f JOIN CATALOG.ACTIVITIES a ON a.Id = f.DestinationId WHERE f.MicroflowQualifiedName = 'Bug1299.Act_Store' AND f.IsErrorHandler = 1 ORDER BY a.LogLevel"
+-- Expected: Error, Warning (one row per handler).
+--   mxcli -p App.mpr -c "SELECT a.ActionType FROM CATALOG.FLOWS f JOIN CATALOG.ACTIVITIES a ON a.Id = f.DestinationId WHERE f.MicroflowQualifiedName = 'Bug1299.Act_Store' AND f.FlowType = 'AnnotationFlow'"
+-- Expected: ChangeObjectAction.
+--   mxcli -p App.mpr -c "SELECT CaseValue FROM CATALOG.FLOWS WHERE MicroflowQualifiedName = 'Bug1299.Act_Store' AND CaseValue <> '' ORDER BY CaseValue"
+-- Expected: false, true.
+-- Before the fix CATALOG.FLOWS did not exist, and a rule calling flows_for()
+-- was skipped as "undefined: flows_for".
+
+create module Bug1299;
+
+create persistent entity Bug1299.Sale (Amount: Integer);
+
+create microflow Bug1299.Act_Store ($Sale: Bug1299.Sale)
+begin
+  @annotation 'Amount is reset before storing'
+  change $Sale (Amount = 0);
+  commit $Sale without events on error without rollback begin
+    log warning node 'Bug1299' 'First commit failed';
+  end error;
+  if $Sale/Amount > 10 then
+    commit $Sale with events on error without rollback begin
+      log error node 'Bug1299' 'Second commit failed';
+    end error;
+  end if;
+end;
