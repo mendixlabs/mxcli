@@ -123,8 +123,16 @@ func runSuite(client *endpointClient, admin docker.M2EEOptions, suite *TestSuite
 	// Ask the app which test microflows it actually has. A test whose microflow
 	// is missing is reported as an error against that test rather than failing
 	// the run.
+	// Tests without a compiled program run as generated microflows, so the app
+	// is asked which of those it has whenever there is at least one.
+	direct := 0
+	for _, tc := range suite.Tests {
+		if opts.execPrograms[tc.ID] != nil {
+			direct++
+		}
+	}
 	present := make(map[string]bool)
-	if opts.execPrograms == nil {
+	if direct < len(suite.Tests) {
 		names, err := client.list()
 		if err != nil {
 			return nil, fmt.Errorf("listing test microflows: %w", err)
@@ -135,10 +143,14 @@ func runSuite(client *endpointClient, admin docker.M2EEOptions, suite *TestSuite
 	}
 
 	result := &SuiteResult{Name: suite.Name, Started: time.Now()}
-	if opts.execPrograms != nil {
-		fmt.Fprintf(w, "Running %d test(s) in the running app (no injection, no build)...\n", len(suite.Tests))
-	} else {
+	switch {
+	case direct == 0:
 		fmt.Fprintf(w, "Running %d test(s) over the test endpoint...\n", len(suite.Tests))
+	case direct == len(suite.Tests):
+		fmt.Fprintf(w, "Running %d test(s) in the running app (no injection, no build)...\n", len(suite.Tests))
+	default:
+		fmt.Fprintf(w, "Running %d test(s): %d in the running app, %d as built test microflows...\n",
+			len(suite.Tests), direct, len(suite.Tests)-direct)
 	}
 
 	// leaked counts tests whose requested rollback did not happen.

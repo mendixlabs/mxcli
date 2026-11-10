@@ -141,9 +141,15 @@ func runAttached(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 
 	// Only the generated test microflows are ours to remove.
 	injected := suite
+	// snapshot is the project file before the injection, put back after it so
+	// the dev loop sees the model it had (see holdDevLoop).
+	var snapshot projectSnapshot
 	finish := func(result *SuiteResult, runErr error) (*SuiteResult, error) {
 		fmt.Fprintln(w, "Cleaning up...")
 		cleanupErr := runMDLCommands(opts.ProjectPath, dropTestFlows(opts.ProjectPath, injected))
+		if err := snapshot.restore(cleanupErr == nil); err != nil {
+			fmt.Fprintf(w, "  note: %v\n", err)
+		}
 		if cleanupErr == nil {
 			// Leave the app serving a model that matches the project on disk;
 			// otherwise the developer's next page load still runs the test flows.
@@ -176,34 +182,55 @@ func runAttached(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 		return result, err
 	}
 
-	// An app started with --allow-call runs a compiled test itself, so a suite
-	// whose every test compiles is neither injected nor built (interp.go).
+	// An app started with --allow-call runs a compiled test itself (interp.go):
+	// those tests are neither injected nor built. Only the tests it cannot run
+	// are, so one unsupported statement no longer costs the whole suite a build.
+	toInject := suite
 	if app.hs.AllowExec && !opts.Watch {
-		if programs, reason := compileSuiteForExec(suite); reason != "" {
-			fmt.Fprintf(w, "  injecting and building, because %s\n", reason)
-		} else {
+		programs, needBuild := compileSuiteForExec(suite)
+		if len(programs) > 0 {
 			if err := refuseStaleModel(opts.ProjectPath); err != nil {
 				return nil, err
 			}
-			direct := opts
-			direct.execPrograms = programs
-			result, err := runSuite(app.client, app.adminOptions(), suite, direct, w)
+			opts.execPrograms = programs
+		}
+		if len(needBuild) == 0 {
+			result, err := runSuite(app.client, app.adminOptions(), suite, opts, w)
 			if err != nil {
 				return nil, err
 			}
 			return report(result, nil)
 		}
+		for _, tc := range suite.Tests {
+			if reason, ok := needBuild[tc.ID]; ok {
+				fmt.Fprintf(w, "  injecting and building %q: %s\n", tc.Name, reason)
+			}
+		}
+		toInject = suiteWith(suite, func(tc TestCase) bool { return programs[tc.ID] == nil })
+		injected = toInject
+	}
+
+	// The dev loop watches the project this run is about to write to. Held, it
+	// does not rebuild (and restart the app) for the injection, and on release
+	// it finds the model as it was. Released when this function returns, after
+	// finish has taken the injection out and put the project file back.
+	snapshot = takeProjectSnapshot(opts.ProjectPath)
+	if err := docker.HoldWatch(opts.ProjectPath, os.Getpid()); err != nil {
+		fmt.Fprintf(w, "  note: could not hold the dev loop's watcher (%v); it may rebuild for the test microflows\n", err)
+	} else {
+		defer docker.ReleaseWatch(opts.ProjectPath)
+		fmt.Fprintln(w, "  the dev loop's watcher is held for this run; the app is not rebuilt for the test microflows")
 	}
 
 	fmt.Fprintln(w, "Injecting test microflows...")
-	if err := execMDLScript(opts.ProjectPath, GenerateTestFlows(suite), "mxtest-flows-*.mdl"); err != nil {
+	if err := execMDLScript(opts.ProjectPath, GenerateTestFlows(toInject), "mxtest-flows-*.mdl"); err != nil {
 		return finish(nil, fmt.Errorf("injecting test microflows: %w", err))
 	}
 	if _, err := app.applyModelChange(opts.ProjectPath); err != nil {
 		// Same treatment the --local boot gives a rejected build: attribute each
 		// error to the generated microflow it was found in, and name the document
 		// when it belongs to the project instead (mendixlabs/mxcli#1104).
-		return report(finish(resultsForBuildFailure(err, suite)))
+		return report(finish(resultsForBuildFailure(err, toInject)))
 	}
 
 	if opts.Watch {

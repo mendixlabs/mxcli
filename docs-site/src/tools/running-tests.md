@@ -177,6 +177,14 @@ mxcli test tests/ -p app.mpr --local --mxbuild-path "C:\Program Files\Mendix\11.
 `--watch` is the everyday loop: edit a test *or* the microflow under test, and
 the verdict lands in about two seconds.
 
+A test run that writes its test microflows into a project a `run --local --watch`
+dev loop is watching (`--local`, or `--attach` with a test that has to be built)
+holds that dev loop's watcher while it owns the project: the dev loop does not
+rebuild, or restart its app, for the injection, `run status` shows
+`held by a test run (pid …)`, and when the run has put the project back exactly
+the watcher finds nothing to build. An edit made in the meantime is built once
+the run ends. A hold whose run died is ignored.
+
 `--attach` skips even the first boot, at one cost worth knowing: the tests run
 against the running app's database rather than a scratch one, so they can leave
 data behind in the app you are looking at. It needs the dev loop to have been
@@ -205,14 +213,17 @@ mxcli test tests/ -p app.mpr --attach                                 # terminal
 ```
 
 You still write `.test.mdl`. The executor runs these statements: `declare`,
-`set`, `create`, `change`, `commit`, `delete`, `call microflow`, and a database
-`retrieve` with an optional `where` and `first`. It also handles `@expect`
-(including `count(...)`), `@throws`, `@setup` and `@cleanup`. A test with
-anything else (a decision, a loop, a retrieve over an association or with
-`sort by`/`limit`, an `on error` clause other than `rollback`, a nanoflow or a
-Java action call) makes the run take the usual route. mxcli prints which test and
-which statement decided that, and the verdicts are the same on both routes.
-The route is taken by a one-shot `--attach`; `test --attach --watch` still
+`set`, `create`, `change`, `commit`, `delete`, `call microflow`, a database
+`retrieve` with an optional `where` and `first`, a `retrieve` over an
+association, and the list aggregates `count`, `sum`, `average`, `minimum` and
+`maximum` over an attribute. It also handles `@expect` (including `count(...)`),
+`@throws`, `@setup`, `@cleanup` and `@verify`. A test with anything else (a
+decision, a loop, a list operation such as `find` or `filter`, a retrieve with
+`sort by`/`limit`, an aggregate by expression, an `on error` clause other than
+`rollback`, a nanoflow or Java action call) is injected and built as before.
+Only that test is: the rest of the run still goes straight to the app, and mxcli
+prints which test and which statement decided it. The verdicts are the same on
+both routes. This applies to a one-shot `--attach`; `test --attach --watch` still
 injects and builds.
 
 Three things are checked before a test runs, because the runtime's evaluator
@@ -230,7 +241,9 @@ returns *empty* for a name it does not know instead of failing:
 runs microflows the runner generated. With it, the endpoint calls the microflows
 a test names and reads and writes data in a system context. It still needs the
 run's token and a loopback caller, accepts only POST, and is off unless you pass
-the flag.
+the flag. Under `--hub` the loopback check does not help: the tunnel client
+connects from loopback, so the token is the only guard, and `run` warns when both
+flags are given.
 
 ## How tests execute
 
