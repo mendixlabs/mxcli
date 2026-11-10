@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	modelsdk "github.com/mendixlabs/mxcli"
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
 )
 
@@ -141,4 +142,52 @@ func RestoreAbandonedEndpoint(projectPath string, w io.Writer) (bool, error) {
 	removeRestoreRecord(projectPath)
 	fmt.Fprintln(w, "  test endpoint removed; project restored")
 	return true, nil
+}
+
+// afterStartupOf reads the project's after-startup microflow. A seam: the
+// warning below is tested without a project file.
+var afterStartupOf = func(projectPath string) (string, error) {
+	reader, err := modelsdk.Open(projectPath)
+	if err != nil {
+		return "", err
+	}
+	defer reader.Disconnect()
+	ps, err := reader.GetProjectSettings()
+	if err != nil || ps == nil || ps.Model == nil {
+		return "", err
+	}
+	return ps.Model.AfterStartupMicroflow, nil
+}
+
+// LeftoverEndpointWarning says so when the project's after-startup microflow is
+// still the test endpoint's and no run of this project is hosting it, and ""
+// otherwise.
+//
+// --test-endpoint swaps the setting for the lifetime of its run, and puts it
+// back when the run ends — but a run killed with the container (a cloud session
+// being recycled) never gets to, and nothing else looks at the setting until a
+// `run stop`. Meanwhile the project file carries the swap, and a commit takes it
+// along. So `run` and `check -p` look, and say how to undo it: with a restore
+// record, `run stop` restores exactly what was there; without one (the .mxcli/
+// folder went too), only the user knows what the setting was.
+func LeftoverEndpointWarning(projectPath string) string {
+	rec, _, _ := readRestoreRecord(projectPath)
+	if rec != nil && rec.PID > 0 && pidAlive(rec.PID) {
+		return "" // a live run hosts it, and removes it when it ends
+	}
+	af, err := afterStartupOf(projectPath)
+	if err != nil || af != endpointStartupFlow {
+		return ""
+	}
+	if rec != nil {
+		return fmt.Sprintf("the project's after-startup microflow is %s, the mxcli test endpoint's, left by a run (pid %d) "+
+			"that ended without removing it. Do not commit it:\n"+
+			"  mxcli run stop -p %s    # removes the endpoint and restores the after-startup microflow",
+			endpointStartupFlow, rec.PID, projectPath)
+	}
+	return fmt.Sprintf("the project's after-startup microflow is %s, the mxcli test endpoint's, and no run of this "+
+		"project is hosting it; nothing records what it replaced. Do not commit it: set your own back and drop the module:\n"+
+		"  mxcli -p %s -c \"alter settings runtime (AfterStartupMicroflow: '<yours, or empty>')\"\n"+
+		"  mxcli -p %s -c \"drop module %s\"",
+		endpointStartupFlow, projectPath, projectPath, mxTestModule)
 }

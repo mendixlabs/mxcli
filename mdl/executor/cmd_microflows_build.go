@@ -306,32 +306,10 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 		return nil, err
 	}
 
-	// Build entity resolver function for parameter/return types
-	entityResolver := func(qn ast.QualifiedName) model.ID {
-		// Get all domain models and build module name map
-		dms, err := ctx.Backend.ListDomainModels()
-		if err != nil {
-			return ""
-		}
-		modules, _ := ctx.Backend.ListModules()
-		moduleNames := make(map[model.ID]string)
-		for _, m := range modules {
-			moduleNames[m.ID] = m.Name
-		}
-		// Search for entity in all domain models
-		for _, dm := range dms {
-			modName := moduleNames[dm.ContainerID]
-			if modName != qn.Module {
-				continue
-			}
-			for _, ent := range dm.Entities {
-				if ent.Name == qn.Name {
-					return ent.ID
-				}
-			}
-		}
-		return ""
-	}
+	// Build entity resolver function for parameter/return types: it decodes
+	// only the domain model of the module a type names (ako/mxcli#2094).
+	resolver := newFlowEntityResolver(ctx)
+	entityResolver := resolver.resolve
 
 	// Validate and add parameters
 	for i, p := range s.Parameters {
@@ -343,6 +321,9 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 		if p.Type.EntityRef != nil && !isBuiltinModuleEntity(p.Type.EntityRef.Module) {
 			entityID := entityResolver(*p.Type.EntityRef)
 			if entityID == "" {
+				if resolver.err != nil {
+					return nil, mdlerrors.NewBackend("read domain models", resolver.err)
+				}
 				// Bare qualified name in microflow context is treated as TypeEntity by the
 				// visitor, but it may actually be an enumeration. Try enum lookup before failing.
 				if retyped, ok := bareEnumerationType(ctx, p.Type); ok {
@@ -382,6 +363,9 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 		if s.ReturnType.Type.EntityRef != nil && !isBuiltinModuleEntity(s.ReturnType.Type.EntityRef.Module) {
 			entityID := entityResolver(*s.ReturnType.Type.EntityRef)
 			if entityID == "" {
+				if resolver.err != nil {
+					return nil, mdlerrors.NewBackend("read domain models", resolver.err)
+				}
 				// A bare qualified name may be an enumeration, as for parameters above.
 				if retyped, ok := bareEnumerationType(ctx, s.ReturnType.Type); ok && s.ReturnType.Type.Kind == ast.TypeEntity {
 					s.ReturnType.Type = retyped
@@ -640,37 +624,12 @@ func buildNanoflowFromStmt(ctx *ExecContext, s *ast.CreateNanoflowStmt, opts bui
 		nf.AllowedModuleRoles = existingAllowedRoles
 	}
 
-	// Load metadata needed by the entity resolver up front so backend read
-	// failures are returned as actionable errors instead of being treated as
-	// "entity not found".
-	dms, err := ctx.Backend.ListDomainModels()
-	if err != nil {
-		return nil, mdlerrors.NewBackend("list domain models", err)
-	}
-	modules, err := ctx.Backend.ListModules()
-	if err != nil {
-		return nil, mdlerrors.NewBackend("list modules", err)
-	}
-	moduleNames := make(map[model.ID]string)
-	for _, m := range modules {
-		moduleNames[m.ID] = m.Name
-	}
-
-	// Build entity resolver function for parameter/return types
-	entityResolver := func(qn ast.QualifiedName) model.ID {
-		for _, dm := range dms {
-			modName := moduleNames[dm.ContainerID]
-			if modName != qn.Module {
-				continue
-			}
-			for _, ent := range dm.Entities {
-				if ent.Name == qn.Name {
-					return ent.ID
-				}
-			}
-		}
-		return ""
-	}
+	// The entity resolver decodes only the domain model of the module a type
+	// names, on the first lookup (ako/mxcli#2094). A backend failure is
+	// returned where the entity is looked up, as an actionable error rather
+	// than as "entity not found".
+	resolver := newFlowEntityResolver(ctx)
+	entityResolver := resolver.resolve
 
 	// Validate and add parameters
 	for i, p := range s.Parameters {
@@ -679,6 +638,9 @@ func buildNanoflowFromStmt(ctx *ExecContext, s *ast.CreateNanoflowStmt, opts bui
 		if p.Type.EntityRef != nil && !isBuiltinModuleEntity(p.Type.EntityRef.Module) {
 			entityID := entityResolver(*p.Type.EntityRef)
 			if entityID == "" {
+				if resolver.err != nil {
+					return nil, mdlerrors.NewBackend("read domain models", resolver.err)
+				}
 				// Bare qualified name in microflow context is treated as TypeEntity by the
 				// visitor, but it may actually be an enumeration. Try enum lookup before failing.
 				if retyped, ok := bareEnumerationType(ctx, p.Type); ok {
@@ -714,6 +676,9 @@ func buildNanoflowFromStmt(ctx *ExecContext, s *ast.CreateNanoflowStmt, opts bui
 		if s.ReturnType.Type.EntityRef != nil && !isBuiltinModuleEntity(s.ReturnType.Type.EntityRef.Module) {
 			entityID := entityResolver(*s.ReturnType.Type.EntityRef)
 			if entityID == "" {
+				if resolver.err != nil {
+					return nil, mdlerrors.NewBackend("read domain models", resolver.err)
+				}
 				// A bare qualified name may be an enumeration, as for parameters above.
 				if retyped, ok := bareEnumerationType(ctx, s.ReturnType.Type); ok && s.ReturnType.Type.Kind == ast.TypeEntity {
 					s.ReturnType.Type = retyped

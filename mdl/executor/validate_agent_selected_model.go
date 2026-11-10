@@ -17,8 +17,8 @@ import (
 // deployed model where Model = SelectedModelID (measured in AgentEditorCommons
 // 2.2.1 and 2.6.0; 1.1.0 does not read it). The refusal comes at startup, from
 // ASU_AgentEditor, and it stops the import of every agent document, not just
-// this one. A create or modify is not flagged: left out, it keeps the stored
-// selected model.
+// this one. A create or modify is left to warnAgentDocumentsLeftUnset, which
+// can see whether there is a stored selected model to keep (#2089).
 const agentSelectedModelRule = "MDL-AGENT02"
 
 // ValidateAgentSelectedModel warns on a create agent with no SelectedModel.

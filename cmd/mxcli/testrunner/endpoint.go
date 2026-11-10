@@ -224,6 +224,11 @@ com.mendix.core.Core.addRequestHandler("` + endpointPath + `", new com.mendix.ex
             return;
         }
 
+        if ("` + endpointExecRoute + `".equals(path)) {
+            doExec(request, response, out);
+            return;
+        }
+
         if (!"run".equals(path)) {
             response.setStatus(com.mendix.m2ee.api.IMxRuntimeResponse.NOT_FOUND);
             out.write("{\"error\":\"no such route\",\"path\":" + esc(path) + "}");
@@ -308,6 +313,7 @@ com.mendix.core.Core.addRequestHandler("` + endpointPath + `", new com.mendix.ex
         out.write(b.toString());
         out.flush();
     }
+` + endpointExecJava + `
 });
 
 log.info("MxTest: test endpoint registered at /` + endpointPath + `");

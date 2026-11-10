@@ -149,6 +149,7 @@ Two more rules follow from the walk:
 | `--local` | ~30s | `<project>_test` | no |
 | `--local --watch` | ~30s once, then ~2s | `<project>_test` | no |
 | `--attach` | none | **the running app's** | no |
+| `--attach` to an app started with `--allow-call` | none, and no build when the tests compile for the executor | **the running app's** | no |
 
 ```bash
 # No Docker daemon needed
@@ -176,6 +177,23 @@ mxcli test tests/ -p app.mpr --local --mxbuild-path "C:\Program Files\Mendix\11.
 `--watch` is the everyday loop: edit a test *or* the microflow under test, and
 the verdict lands in about two seconds.
 
+A test run that writes its test microflows into a project a `run --local --watch`
+dev loop is watching (`--local`, or `--attach` with a test that has to be built)
+holds that dev loop's watcher while it owns the project: the dev loop does not
+rebuild, or restart its app, for the injection, `run status` shows
+`held by a test run (pid …)`, and when the run has put the project back exactly
+the watcher finds nothing to build. An edit made in the meantime is built once
+the run ends. A hold whose run died is ignored.
+
+A run that builds (`--local`, or a built test under `--attach`) writes the
+`deployment/` folder the dev loop serves from too — mxbuild cannot put it
+elsewhere. When it did, the dev loop builds its own back once the run ends, so a
+later `--attach` finds the app's build; that one build can be a restart (measured:
+after `--local`, a restart; after a mixed `--attach`, a reload). A `--test-endpoint`
+dev loop's endpoint is left in place by `--local`, which chains to the project's
+own after-startup microflow rather than to the endpoint (ako/mxcli#2119). For a
+gate in the middle of such a loop, `--attach` costs nothing to the running app.
+
 `--attach` skips even the first boot, at one cost worth knowing: the tests run
 against the running app's database rather than a scratch one, so they can leave
 data behind in the app you are looking at. It needs the dev loop to have been
@@ -188,6 +206,53 @@ and says nothing about whether the runtime needs a restart. So the attach builds
 on a fresh serve process instead, and a fresh process's first build asks for a
 restart whatever changed — which an attach cannot do, the runtime being the other
 process's. Use `--local` on 11.14.0; 11.15.0 builds incrementally again.
+
+### Running a test without building it (`--allow-call`)
+
+An attach normally injects the suite's test microflows and builds them into the
+running app. When that app was started with `--allow-call`, a test whose
+statements the endpoint can execute is not injected or built at all: mxcli
+compiles it into a list of steps, the app runs them with the Mendix runtime API,
+and every expression goes to Mendix's own evaluator (`Core.evaluateExpression`).
+Editing a test then costs one HTTP round trip.
+
+```bash
+mxcli run  --local --watch --test-endpoint --allow-call -p app.mpr    # terminal 1
+mxcli test tests/ -p app.mpr --attach                                 # terminal 2
+```
+
+You still write `.test.mdl`. The executor runs these statements: `declare`,
+`set`, `create`, `change`, `commit`, `delete`, `call microflow`, a database
+`retrieve` with an optional `where` and `first`, a `retrieve` over an
+association, and the list aggregates `count`, `sum`, `average`, `minimum` and
+`maximum` over an attribute. It also handles `@expect` (including `count(...)`),
+`@throws`, `@setup`, `@cleanup` and `@verify`. A test with anything else (a
+decision, a loop, a list operation such as `find` or `filter`, a retrieve with
+`sort by`/`limit`, an aggregate by expression, an `on error` clause other than
+`rollback`, a nanoflow or Java action call) is injected and built as before.
+Only that test is: the rest of the run still goes straight to the app, and mxcli
+prints which test and which statement decided it. The verdicts are the same on
+both routes. This applies to a one-shot `--attach`; `test --attach --watch` still
+injects and builds.
+
+Three things are checked before a test runs, because the runtime's evaluator
+returns *empty* for a name it does not know instead of failing:
+
+- every `$variable` an expression reads must be declared earlier in the test
+  (checked by mxcli, then again by the app);
+- every enumeration value an expression names must exist, so
+  `Module.Enum.TYPO` is an ERROR rather than a comparison against empty;
+- the model on disk must not be newer than the build the app is serving. If it
+  is, the run is refused: with `--watch`, `mxcli run wait -p app.mpr` lets the dev
+  loop apply the change; without it, `mxcli run restart -p app.mpr`.
+
+`--allow-call` widens what the endpoint can do. Without it, the endpoint only
+runs microflows the runner generated. With it, the endpoint calls the microflows
+a test names and reads and writes data in a system context. It still needs the
+run's token and a loopback caller, accepts only POST, and is off unless you pass
+the flag. Under `--hub` the loopback check does not help: the tunnel client
+connects from loopback, so the token is the only guard, and `run` warns when both
+flags are given.
 
 ## How tests execute
 

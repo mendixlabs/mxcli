@@ -1572,6 +1572,10 @@ type Activity struct {
 	// asynchronously, so a loop-scoped rule should not follow it
 	// (mendixlabs/mxcli#1305).
 	QueueRef string
+	// X / Y is the object's stored middle point on the canvas (describe's
+	// @position) and Width / Height its size (ako/mxcli#1299). Y grows
+	// downwards.
+	X, Y, Width, Height int
 }
 
 // ActivitiesFor returns an iterator over the top-level activities of a flow —
@@ -1601,7 +1605,8 @@ func (ctx *LintContext) ActivitiesIn(microflowQualifiedName string, nested bool)
 			       COALESCE(ErrorHandlingType, ''),
 			       COALESCE(LogLevel, ''), COALESCE(LogNodeExpression, ''), COALESCE(LogMessage, ''),
 			       COALESCE(CommitType, ''), COALESCE(WithEvents, 0), COALESCE(RetrieveSource, ''),
-			       COALESCE(QueueRef, '')
+			       COALESCE(QueueRef, ''),
+			       COALESCE(X, 0), COALESCE(Y, 0), COALESCE(Width, 0), COALESCE(Height, 0)
 			FROM activities
 			WHERE MicroflowQualifiedName = ?
 			  AND (? OR COALESCE(ParentLoopId, '') = '')
@@ -1628,7 +1633,8 @@ func (ctx *LintContext) ActivitiesIn(microflowQualifiedName string, nested bool)
 				&a.ErrorHandlingType,
 				&a.LogLevel, &a.LogNodeExpression, &a.LogMessage,
 				&a.CommitType, &withEvents, &a.RetrieveSource,
-				&a.QueueRef)
+				&a.QueueRef,
+				&a.X, &a.Y, &a.Width, &a.Height)
 			if err != nil {
 				ctx.recordQueryError("ActivitiesFor (row scan)", err)
 				continue
@@ -1644,6 +1650,60 @@ func (ctx *LintContext) ActivitiesIn(microflowQualifiedName string, nested bool)
 			a.WithEvents = withEvents != 0
 
 			if !yield(a) {
+				return
+			}
+		}
+	}
+}
+
+// Flow is one sequence flow or annotation flow of a microflow, nanoflow or
+// rule (ako/mxcli#1299). OriginID and DestinationID are Activity.ID values,
+// loop bodies included; an annotation flow runs from the note to the object
+// it annotates. CaseValue is the branch a split's flow takes ("true" /
+// "false", an enumeration value or "(empty)", an inheritance split's entity),
+// "" for an unconditional flow.
+type Flow struct {
+	ID                         string
+	FlowType                   string
+	MicroflowID                string
+	MicroflowQualifiedName     string
+	ModuleName                 string
+	OriginID                   string
+	DestinationID              string
+	IsErrorHandler             bool
+	CaseValue                  string
+	OriginConnectionIndex      int
+	DestinationConnectionIndex int
+}
+
+// FlowsFor returns the flows of a microflow, nanoflow or rule in stored
+// order, the sequence flows of each collection before its annotation flows.
+func (ctx *LintContext) FlowsFor(microflowQualifiedName string) iter.Seq[Flow] {
+	return func(yield func(Flow) bool) {
+		rows, err := ctx.db.Query(`
+			SELECT Id, FlowType, MicroflowId, MicroflowQualifiedName, ModuleName,
+			       OriginId, DestinationId, COALESCE(IsErrorHandler, 0), COALESCE(CaseValue, ''),
+			       COALESCE(OriginConnectionIndex, 0), COALESCE(DestinationConnectionIndex, 0)
+			FROM flows
+			WHERE MicroflowQualifiedName = ?
+			ORDER BY Sequence
+		`, microflowQualifiedName)
+		if err != nil {
+			ctx.recordQueryError("FlowsFor", err)
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var f Flow
+			var errHandler int
+			if err := rows.Scan(&f.ID, &f.FlowType, &f.MicroflowID, &f.MicroflowQualifiedName, &f.ModuleName,
+				&f.OriginID, &f.DestinationID, &errHandler, &f.CaseValue,
+				&f.OriginConnectionIndex, &f.DestinationConnectionIndex); err != nil {
+				ctx.recordQueryError("FlowsFor (row scan)", err)
+				continue
+			}
+			f.IsErrorHandler = errHandler != 0
+			if !yield(f) {
 				return
 			}
 		}

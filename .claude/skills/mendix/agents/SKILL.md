@@ -11,12 +11,12 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | lines | section |
 |---|---|
 | 24-50 | Overview |
-| 51-192 | Syntax |
-| 193-219 | Altering existing documents |
-| 220-268 | Gotchas |
-| 269-291 | Common Patterns |
-| 292-356 | Calling Agents from Microflows |
-| 357-359 | AI agent documents |
+| 51-194 | Syntax |
+| 195-221 | Altering existing documents |
+| 222-273 | Gotchas |
+| 274-296 | Common Patterns |
+| 297-364 | Calling Agents from Microflows |
+| 365-367 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -108,7 +108,9 @@ server URL. At startup Agent Editor reads the constant's value and, when there
 is none, skips the service ("No value could be found for the local
 configuration for the constant"), so an agent's `mcp service` block gets no
 tools. `check` warns on a `create` without it (MDL-AGENT03), and
-`check --references` refuses a constant that is not a String.
+`check --references` and `exec` on a `create or modify` that leaves a new or
+stored service without one; `check --references` refuses a constant that is
+not a String. `mxcli lint` reports a stored service without one (MPR015).
 
 `AuthenticationMicroflow` supplies credentials: MCP Client calls it with **no
 parameters** and sends the `List of System.HttpHeader` it returns with every
@@ -225,7 +227,10 @@ the models the Model document's resource offers. Without it, `ASU_AgentEditor`
 logs "Model with name  is referenced but could not be found for the Agent" at
 startup and **stops importing every agent document**, not just that one. `mx
 check` and the build stay green. `mxcli check` warns on a `create agent`
-without it (MDL-AGENT02).
+without it (MDL-AGENT02), and `check --references` and `exec` on a
+`create or modify agent` that leaves a new or stored agent without one.
+`mxcli lint` reports a stored agent without one (MPR014). Agent Editor 1.x
+does not read it, so neither warns there.
 
 ```sql
 mdl 1;
@@ -290,6 +295,9 @@ list agents in module;
 ```
 
 ## Calling Agents from Microflows
+
+Registering models, seeding runtime agents from JSON, chat pages and loading
+knowledge bases at runtime are in the `genai-runtime` skill.
 
 Studio Pro's *Call Agent* and *New Chat for Agent* toolbox actions are **Java
 actions exposed as microflow actions**, so `call java action` writes exactly the

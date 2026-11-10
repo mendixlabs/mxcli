@@ -443,7 +443,7 @@ func runStatus(projectPath string, out io.Writer) int {
 		fmt.Fprintf(out, "unknown: %v\n", err)
 		return runExitFailed
 	}
-	line, code := statusLine(st, liveStatusProbes(), docker.SourceMTime(projectPath), time.Now())
+	line, code := statusLine(st, liveStatusProbes(), docker.SourceMTimeOf(projectPath, st), time.Now())
 	fmt.Fprintln(out, line)
 	return code
 }
@@ -455,7 +455,7 @@ func runStatusSummary(projectPath string) string {
 	if err != nil || st == nil {
 		return ""
 	}
-	line, _ := statusLine(st, liveStatusProbes(), docker.SourceMTime(projectPath), time.Now())
+	line, _ := statusLine(st, liveStatusProbes(), docker.SourceMTimeOf(projectPath, st), time.Now())
 	return line
 }
 
@@ -594,6 +594,8 @@ func statusLine(st *docker.RunState, p statusProbes, source, now time.Time) (str
 		covered = st.Last.Source
 	}
 	switch {
+	case st.HeldBy != 0 && p.alive(st.HeldBy):
+		parts = append(parts, fmt.Sprintf("held by a test run (pid %d); a change waits for it", st.HeldBy))
 	case st.Building:
 		parts = append(parts, fmt.Sprintf("building #%d", st.Gen))
 	case source.After(covered) && st.Watch:
@@ -614,7 +616,11 @@ func statusLine(st *docker.RunState, p statusProbes, source, now time.Time) (str
 // --- wait --------------------------------------------------------------
 
 func runWait(projectPath string, timeout time.Duration, since int, out io.Writer) int {
-	target := docker.SourceMTime(projectPath)
+	// The run's own signal, without the theme scaffold its builds wrote: judged
+	// by the unfiltered one, a hosted dev loop's MxTest scaffold was a change no
+	// build would ever cover, and the wait ran into its timeout.
+	first, _ := docker.ReadRunState(projectPath)
+	target := docker.SourceMTimeOf(projectPath, first)
 	deadline := time.Now().Add(timeout)
 	for {
 		st, err := docker.ReadRunState(projectPath)

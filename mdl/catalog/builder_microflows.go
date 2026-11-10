@@ -69,8 +69,8 @@ func (b *Builder) buildMicroflows() error {
 	}
 	defer paramStmt.Close()
 
-	// Prepare activity statement only in full mode
-	var actStmt *Stmt
+	// Prepare the activity and flow statements only in full mode
+	var actStmt, flowStmt *Stmt
 	if b.fullMode {
 		actStmt, err = b.tx.Prepare(`
 			INSERT INTO activities_data (Id, Name, Caption, ActivityType, Sequence, MicroflowId, MicroflowQualifiedName,
@@ -79,14 +79,24 @@ func (b *Builder) buildMicroflows() error {
 				ParentLoopId, LoopDepth,
 				AutoGenerateCaption, ConditionExpression, ConditionRule, ErrorHandlingType,
 				LogLevel, LogNodeExpression, LogMessage, CommitType, WithEvents, RetrieveSource,
-				QueueRef, ProjectId, SnapshotId)
+				QueueRef, X, Y, Width, Height, ProjectId, SnapshotId)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-				?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`)
 		if err != nil {
 			return err
 		}
 		defer actStmt.Close()
+		flowStmt, err = b.tx.Prepare(`
+			INSERT INTO flows_data (Id, FlowType, Sequence, MicroflowId, MicroflowQualifiedName, ModuleName,
+				OriginId, DestinationId, IsErrorHandler, CaseValue,
+				OriginConnectionIndex, DestinationConnectionIndex, ProjectId, SnapshotId)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`)
+		if err != nil {
+			return err
+		}
+		defer flowStmt.Close()
 	}
 
 	// A delete names a variable, not an entity; its EntityRef is resolved the
@@ -189,6 +199,9 @@ func (b *Builder) buildMicroflows() error {
 				return err
 			}
 			actCount += n
+			if err := insertSequenceFlows(flowStmt, string(mf.ID), qualifiedName, moduleName, mf.ObjectCollection, projectID, snapshotID); err != nil {
+				return err
+			}
 		}
 	}
 	b.disown()
@@ -247,6 +260,9 @@ func (b *Builder) buildMicroflows() error {
 				return err
 			}
 			actCount += n
+			if err := insertSequenceFlows(flowStmt, string(nf.ID), qualifiedName, moduleName, nf.ObjectCollection, projectID, snapshotID); err != nil {
+				return err
+			}
 		}
 	}
 	b.disown()
@@ -301,6 +317,9 @@ func (b *Builder) buildMicroflows() error {
 				return err
 			}
 			actCount += n
+			if err := insertSequenceFlows(flowStmt, string(rule.ID), qualifiedName, moduleName, rule.ObjectCollection, projectID, snapshotID); err != nil {
+				return err
+			}
 		}
 	}
 	b.disown()
@@ -556,6 +575,11 @@ func insertFlowActivities(stmt *Stmt, flowID, qualifiedName, moduleName string,
 			}
 			seq++
 			r := describeFlowObject(obj, varEntity)
+			pos := obj.GetPosition()
+			var size model.Size
+			if sized, ok := obj.(interface{ GetSize() model.Size }); ok {
+				size = sized.GetSize()
+			}
 			if _, err := stmt.Exec(
 				string(obj.GetID()),
 				r.name,
@@ -586,6 +610,7 @@ func insertFlowActivities(stmt *Stmt, flowID, qualifiedName, moduleName string,
 				boolInt(r.withEvents),
 				r.retrieveSource,
 				r.queueRef,
+				pos.X, pos.Y, size.Width, size.Height,
 				projectID, snapshotID,
 			); err != nil {
 				return err
@@ -602,6 +627,86 @@ func insertFlowActivities(stmt *Stmt, flowID, qualifiedName, moduleName string,
 		return seq, err
 	}
 	return seq, nil
+}
+
+// Values of flows_data.FlowType.
+const (
+	FlowTypeSequence   = "SequenceFlow"
+	FlowTypeAnnotation = "AnnotationFlow"
+)
+
+// insertSequenceFlows writes one flows_data row per sequence flow and per
+// annotation flow of a flow body (ako/mxcli#1299): which object leads to
+// which, whether it is an error handler flow, and the branch a split's flow
+// takes. Origin and destination are the activities_data Ids.
+//
+// Mendix 11 keeps every flow on the document, loop bodies' included; a loop's
+// own collection is walked too, for a model that keeps them there. Sequence
+// numbers the rows in stored order, sequence flows before annotation flows of
+// the same collection.
+func insertSequenceFlows(stmt *Stmt, flowID, qualifiedName, moduleName string,
+	oc *microflows.MicroflowObjectCollection, projectID, snapshotID string) error {
+	if stmt == nil || oc == nil {
+		return nil
+	}
+	seq := 0
+	var walk func(oc *microflows.MicroflowObjectCollection) error
+	walk = func(oc *microflows.MicroflowObjectCollection) error {
+		for _, f := range oc.Flows {
+			if f == nil {
+				continue
+			}
+			seq++
+			if _, err := stmt.Exec(string(f.ID), FlowTypeSequence, seq, flowID, qualifiedName, moduleName,
+				string(f.OriginID), string(f.DestinationID), boolInt(f.IsErrorHandler), caseValueText(f.CaseValue),
+				f.OriginConnectionIndex, f.DestinationConnectionIndex, projectID, snapshotID); err != nil {
+				return err
+			}
+		}
+		for _, f := range oc.AnnotationFlows {
+			if f == nil {
+				continue
+			}
+			seq++
+			sides := f.SidesOrDefault()
+			if _, err := stmt.Exec(string(f.ID), FlowTypeAnnotation, seq, flowID, qualifiedName, moduleName,
+				string(f.OriginID), string(f.DestinationID), 0, "",
+				sides.Origin, sides.Destination, projectID, snapshotID); err != nil {
+				return err
+			}
+		}
+		for _, obj := range oc.Objects {
+			if loop, ok := obj.(*microflows.LoopedActivity); ok && loop.ObjectCollection != nil {
+				if err := walk(loop.ObjectCollection); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	return walk(oc)
+}
+
+// caseValueText is the branch a split's outgoing flow takes, as describe
+// spells it: "true" / "false" (stored as an enumeration case), an enumeration
+// value or "(empty)", an inheritance split's entity, or "" for none.
+func caseValueText(cv microflows.CaseValue) string {
+	switch c := cv.(type) {
+	case *microflows.EnumerationCase:
+		return c.Value
+	case microflows.EnumerationCase:
+		return c.Value
+	case *microflows.BooleanCase:
+		if c.Value {
+			return "true"
+		}
+		return "false"
+	case *microflows.ExpressionCase:
+		return c.Expression
+	case *microflows.InheritanceCase:
+		return c.EntityQualifiedName
+	}
+	return ""
 }
 
 // Values of activities_data.RetrieveSource — where a retrieve reads from.

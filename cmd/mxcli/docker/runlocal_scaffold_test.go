@@ -82,3 +82,50 @@ func TestBuildScaffoldRecordsOnlyNewFolders(t *testing.T) {
 		t.Errorf("scaffold = %v, want only the folder the build created", s)
 	}
 }
+
+// The readers of the run state — `run status`, `run wait` — compare the source
+// against the build that covers it, and used the unfiltered signal: a hosted
+// dev loop (`--test-endpoint`) reported "change pending" for as long as it ran,
+// for the scaffold of its own MxTest module, and never built it, because the
+// watcher (above) correctly does not count it. The scaffold the run recorded
+// is in its state, so a reader filters exactly what the watcher filters.
+func TestSourceMTimeOfRunStateIgnoresTheRecordedScaffold(t *testing.T) {
+	dir := t.TempDir()
+	mpr := filepath.Join(dir, "App.mpr")
+	t0 := time.Now().Add(-time.Hour)
+	touch(t, mpr, t0)
+	before := themeModuleFolders(mpr)
+	touch(t, filepath.Join(dir, "themesource", "mxtest", "settings.json"), t0.Add(time.Minute))
+	builtAt := t0.Add(2 * time.Minute)
+	scaffold := buildScaffold{}
+	scaffold.record(mpr, before, builtAt)
+
+	rec := NewRunStateRecorder(mpr, os.Getpid(), false, true, nil, "")
+	rec.Scaffold(scaffold)
+	st := rec.State()
+
+	if !SourceMTime(mpr).After(t0) {
+		t.Fatal("control: the unfiltered signal should see the scaffold")
+	}
+	if got := SourceMTimeOf(mpr, &st); got.After(t0) {
+		t.Errorf("a reader of the run state sees the run's own scaffold as a change (%v after %v)", got, t0)
+	}
+	if got := SourceMTimeOf(mpr, nil); !got.Equal(SourceMTime(mpr)) {
+		t.Errorf("with no run state the signal is the unfiltered one, got %v", got)
+	}
+
+	// The record survives the state file, as `run status` reads it from disk.
+	disk, err := ReadRunState(mpr)
+	if err != nil || disk == nil {
+		t.Fatalf("ReadRunState = %v, %v", disk, err)
+	}
+	if got := SourceMTimeOf(mpr, disk); got.After(t0) {
+		t.Errorf("the scaffold did not survive the state file: %v", disk.Scaffold)
+	}
+
+	// A later edit to the scaffolded folder is still a change.
+	touch(t, filepath.Join(dir, "themesource", "mxtest", "settings.json"), builtAt.Add(time.Second))
+	if !SourceMTimeOf(mpr, disk).After(t0) {
+		t.Error("a later edit to the scaffolded folder was ignored")
+	}
+}

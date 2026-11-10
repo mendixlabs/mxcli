@@ -132,7 +132,7 @@ func flowKindsFixtureDB(t *testing.T) catalog.CatalogDB {
 			Description TEXT, AutoGenerateCaption INTEGER, ConditionExpression TEXT,
 			ConditionRule TEXT, ErrorHandlingType TEXT, LogLevel TEXT, LogNodeExpression TEXT,
 			LogMessage TEXT, CommitType TEXT, WithEvents INTEGER, RetrieveSource TEXT,
-			QueueRef TEXT)`,
+			QueueRef TEXT, X INTEGER, Y INTEGER, Width INTEGER, Height INTEGER)`,
 		`INSERT INTO activities (Id, Name, Caption, ActivityType, ActionType, MicroflowId,
 			MicroflowQualifiedName, ModuleName, EntityRef, ServiceRef, ActionRef,
 			UseRequestTimeout, TimeoutExpression, Sequence, ParentLoopId, LoopDepth) VALUES

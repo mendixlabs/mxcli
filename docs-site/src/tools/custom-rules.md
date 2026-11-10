@@ -50,7 +50,7 @@ skill lists them all. `violation(...)` and `location(...)` build the result.
 ## Catalog depth
 
 Some builtins read data that only a full catalog build produces (`widgets()`,
-`xpath_expressions()`, `activities_for()`, `permissions()`,
+`xpath_expressions()`, `activities_for()`, `flows_for()`, `permissions()`,
 `permissions_for()`, `refs_to()` / `refs_from()`, a page's `widget_count`), and
 the graph builtins (`cycles()`, `layer_of()`, …) need the communities build.
 `mxcli lint` detects them in the rule's source and builds the catalog deep

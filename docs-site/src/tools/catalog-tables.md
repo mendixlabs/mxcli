@@ -203,6 +203,8 @@ query written then that should keep its old result filters on
 | `CommitType` | Create/change object: `Yes`, `YesWithoutEvents` or `No` |
 | `WithEvents` | 1 for a commit with events, and a create/change with `CommitType` `Yes` |
 | `RetrieveSource` | `database` or `association` |
+| `X`, `Y` | The object's stored middle point on the canvas, as `describe` prints it in `@position`. Y grows downwards. Inside a loop it is relative to the loop's box, not to the canvas |
+| `Width`, `Height` | The object's box size |
 
 ```sql
 -- Database retrieves inside a loop (N+1 queries)
@@ -214,6 +216,38 @@ WHERE ActionType = 'RetrieveAction' AND RetrieveSource = 'database' AND ParentLo
 SELECT MicroflowQualifiedName, ActionRef
 FROM CATALOG.ACTIVITIES
 WHERE ActionType = 'MicroflowCallAction' AND ParentLoopId <> '' AND QueueRef = '';
+```
+
+### CATALOG.FLOWS
+
+One row per sequence flow and annotation flow of a microflow, nanoflow or rule,
+loop bodies included. Populated by `REFRESH CATALOG FULL`. Both ends are
+`CATALOG.ACTIVITIES.Id` values.
+
+| Column | Description |
+|--------|-------------|
+| `Id` | The flow's ID |
+| `FlowType` | `SequenceFlow` or `AnnotationFlow` |
+| `MicroflowId`, `MicroflowQualifiedName`, `ModuleName` | The flow document it belongs to |
+| `Sequence` | Stored order: each collection's sequence flows, then its annotation flows |
+| `OriginId`, `DestinationId` | The activity the line leaves and enters. An annotation flow runs from the annotation to the object it is attached to |
+| `IsErrorHandler` | 1 for the flow into an activity's custom error handler (`on error … begin … end error` in `describe`) |
+| `CaseValue` | The branch a split's flow takes: `true` / `false`, an enumeration value or `(empty)`, or an inheritance split's entity. Empty for an unconditional flow |
+| `OriginConnectionIndex`, `DestinationConnectionIndex` | The side the line leaves and enters: 0 top, 1 right, 2 bottom, 3 left |
+
+```sql
+-- Custom error handlers whose first activity logs below level Error
+SELECT f.MicroflowQualifiedName, a.LogLevel
+FROM CATALOG.FLOWS f
+JOIN CATALOG.ACTIVITIES a ON a.Id = f.DestinationId
+WHERE f.IsErrorHandler = 1 AND a.ActionType = 'LogMessageAction' AND a.LogLevel <> 'Error';
+
+-- The activity each annotation is attached to
+SELECT f.MicroflowQualifiedName, n.Caption, a.ActionType
+FROM CATALOG.FLOWS f
+JOIN CATALOG.ACTIVITIES n ON n.Id = f.OriginId
+JOIN CATALOG.ACTIVITIES a ON a.Id = f.DestinationId
+WHERE f.FlowType = 'AnnotationFlow';
 ```
 
 ### CATALOG.PAGES
@@ -495,21 +529,22 @@ than `0`, so a query can tell "off" from "never set".
 
 ### CATALOG.AGENT_TOOLS
 
-One row per entry of an agent's tools list: a microflow, nanoflow or agent it
-calls, or a consumed MCP service (`ToolType = 'MCP'`).
+One row per entry of an agent's tools list that `ToolCount` counts: a
+microflow, nanoflow or agent it calls. Its consumed MCP services are in
+`CATALOG.AGENT_MCP_SERVICES`, as `MCPServiceCount` counts them.
 
 | Column | Description |
 |--------|-------------|
 | `AgentId`, `Agent` | The agent's id and qualified name |
 | `Name`, `Description` | What the model sees |
-| `ToolType` | `Microflow`, `MCP`, or empty |
-| `Document` | The microflow, nanoflow, agent or MCP service, qualified name |
+| `ToolType` | `Microflow`, or empty |
+| `Document` | The microflow, nanoflow or agent, qualified name |
 | `Enabled` | `1` or `0` |
 | `UserAccessApproval` | `HiddenForUser`, `VisibleForUser`, `UserConfirmationRequired`, or empty when not stored |
 | `DisplayTitle`, `DisplayDescription` | What the user sees of the call, `NULL` when not stored |
 
-`CATALOG.AGENT_MCP_SERVICES` is the same rows filtered to `ToolType = 'MCP'`,
-with `Document` named `Service`.
+`CATALOG.AGENT_MCP_SERVICES` has the same columns for the agent's MCP services,
+with `Document` named `Service` and no `ToolType`.
 
 ```sql
 -- Tools an agent can run without the user's approval
@@ -529,11 +564,12 @@ One row per entry of an agent's knowledge base tools list: `Agent`, `Name`,
 |-------|-------------------------------|
 | `CATALOG.AI_MODELS` | `Provider`, `ModelType`, `DisplayName`, `KeyConstant` |
 | `CATALOG.KNOWLEDGE_BASES` | `Provider`, `KeyConstant` |
-| `CATALOG.CONSUMED_MCP_SERVICES` | `ProtocolVersion`, `Version`, `ConnectionTimeoutSeconds` |
+| `CATALOG.CONSUMED_MCP_SERVICES` | `ProtocolVersion`, `Version`, `ConnectionTimeoutSeconds`, `Endpoint` (the String constant holding the server URL, empty when none: the service connects nowhere), `AuthenticationMicroflow` |
 | `CATALOG.PUBLISHED_MCP_SERVICES` | `ServerName`, `EndpointPath`, `Version`, `ProtocolVersion`, `AuthenticationEnabled`, `AuthenticationMicroflow`, `ToolCount` |
 
-What an agent references (its tools, model, knowledge bases and context entity)
-and what a published MCP service runs are also edges in `CATALOG.REFS`, so
+What an agent references (its tools, model, knowledge bases and context entity),
+what a consumed MCP service reads and calls (its endpoint constant and
+credentials microflow) and what a published MCP service runs are also edges in `CATALOG.REFS`, so
 `show callers` and `show impact` see them.
 
 ## Graph-Analysis Tables

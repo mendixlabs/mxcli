@@ -848,6 +848,7 @@ func RunLocal(opts LocalRunOptions) error {
 		return fmt.Errorf("initial build: %w", err)
 	}
 	scaffold.record(opts.ProjectPath, themeBefore, time.Now())
+	opts.State.Scaffold(scaffold)
 	if !build.OK() {
 		return fmt.Errorf("initial build failed: %s\n%s", build.Message, buildFailureDetail(build))
 	}
@@ -1499,6 +1500,9 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 	// apply so "did my change take?" is answerable from the log without guessing.
 	// The initial boot build is generation 1.
 	gen := 1
+	holds := &watchHoldGate{projectPath: opts.ProjectPath}
+	holdAnnounced := false
+	resync := false
 	ticker := time.NewTicker(opts.PollInterval)
 	defer ticker.Stop()
 
@@ -1516,9 +1520,41 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 		case <-ticker.C:
 			source := func() time.Time { return sourceMTimeExcept(opts.ProjectPath, scaffold) }
 			now := source()
-			if !now.After(last) {
+			// Another mxcli process (a `test --attach`) may be changing the
+			// project and putting it back: wait for it, then build only if the
+			// model did not come back as it was (watchhold.go).
+			switch verdict, hold := holds.tick(last); verdict {
+			case holdWait:
+				if !holdAnnounced {
+					fmt.Fprintf(w, "  a test run (pid %d) is changing the project; not rebuilding until it is done\n", hold.PID)
+					opts.State.Held(hold.PID)
+					holdAnnounced = true
+				}
+				continue
+			case holdAbsorbed:
+				fmt.Fprintf(w, "  the test run (pid %d) is done and the model is as it was before it; nothing to rebuild\n", hold.PID)
+				opts.State.Held(0)
+				opts.State.Covered(now)
+				holdAnnounced = false
+				last = now
+				continue
+			case holdReleased:
+				fmt.Fprintf(w, "  the test run (pid %d) is done; the model changed meanwhile, so rebuilding\n", hold.PID)
+				opts.State.Held(0)
+				holdAnnounced = false
+			case holdResync:
+				// The model is the one this app serves, but the test run's build
+				// replaced the deployment both share; build it back now, as a
+				// reload, rather than leave the next apply to find it.
+				fmt.Fprintf(w, "  the test run (pid %d) is done; it rebuilt the shared deployment, so building this app's back\n", hold.PID)
+				opts.State.Held(0)
+				holdAnnounced = false
+				resync = true
+			}
+			if !now.After(last) && !resync {
 				continue
 			}
+			resync = false
 			// Wait for the writer to finish before reading the model.
 			//
 			// An `mxcli exec` of a real script rewrites the .mpr and many
@@ -1580,6 +1616,7 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 			})
 			// A module created since the last build gets its theme scaffold now.
 			scaffold.record(opts.ProjectPath, themeBefore, time.Now())
+			opts.State.Scaffold(scaffold)
 			if err != nil {
 				fmt.Fprintf(opts.Stderr, "  build error: %v\n", err)
 				fail("build", err.Error(), nil)

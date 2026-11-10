@@ -740,6 +740,9 @@ func (w *Writer) updateUnit(unitID string, contents []byte, opts ...canon.Option
 	_, err = w.reader.db.Exec(`
 		UPDATE Unit SET Contents = ?, ContentsHash = ? WHERE UnitID = ?
 	`, contents, contentsHashOf(contents), unitIDBlob)
+	// The reader keeps its scan of the Unit table until told it is stale
+	// (ako/mxcli#2094), as the v2 branch above and every other write does.
+	w.reader.InvalidateCache()
 	return err
 }
 

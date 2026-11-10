@@ -597,3 +597,68 @@ func (ctx *LintContext) ConstantValues() iter.Seq[ConstantValue] {
 		}
 	}
 }
+
+// AgentDocument is an agent or consumed MCP service the Agent Editor stores,
+// with the one setting its import cannot do without (ako/mxcli#2089): an
+// agent's selected model id, a consumed MCP service's endpoint constant.
+type AgentDocument struct {
+	QualifiedName string
+	ModuleName    string
+	Setting       string // empty when the document has none
+}
+
+// Agents iterates the agents outside System and the Marketplace, with their
+// selected model id.
+func (ctx *LintContext) Agents() iter.Seq[AgentDocument] {
+	return ctx.agentDocuments("Agents", "agents", "SelectedModel")
+}
+
+// ConsumedMCPServices iterates the consumed MCP services outside System and
+// the Marketplace, with their endpoint constant.
+func (ctx *LintContext) ConsumedMCPServices() iter.Seq[AgentDocument] {
+	return ctx.agentDocuments("ConsumedMCPServices", "consumed_mcp_services", "Endpoint")
+}
+
+func (ctx *LintContext) agentDocuments(what, table, column string) iter.Seq[AgentDocument] {
+	return func(yield func(AgentDocument) bool) {
+		rows, err := ctx.db.Query(fmt.Sprintf(`
+			SELECT d.QualifiedName, d.ModuleName, COALESCE(d.%s, '')
+			FROM %s d
+			LEFT JOIN modules m ON m.Name = d.ModuleName
+			WHERE %s
+			ORDER BY d.QualifiedName
+		`, column, table, notPlatformModule("m")))
+		if err != nil {
+			ctx.recordQueryError(what, err)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var d AgentDocument
+			if err := rows.Scan(&d.QualifiedName, &d.ModuleName, &d.Setting); err != nil {
+				ctx.recordQueryError(what+" (row scan)", err)
+				continue
+			}
+			if ctx.IsExcluded(d.ModuleName) {
+				continue
+			}
+			if !yield(d) {
+				return
+			}
+		}
+	}
+}
+
+// MarketplaceModuleVersion is the Marketplace version of the named module,
+// or "" when the project has no such module or it records none.
+func (ctx *LintContext) MarketplaceModuleVersion(name string) string {
+	var v sql.NullString
+	if err := ctx.db.QueryRow(`SELECT AppStoreVersion FROM modules WHERE Name = ?`, name).Scan(&v); err != nil {
+		if err != sql.ErrNoRows {
+			ctx.recordQueryError("MarketplaceModuleVersion", err)
+		}
+		return ""
+	}
+	return v.String
+}

@@ -109,16 +109,7 @@ func (r *Reader) ListUnitHeaders(typeName string) ([]UnitHeaderRef, error) {
 // listStoredUnitHeaders is ListUnitHeaders for the units the .mpr stores.
 func (r *Reader) listStoredUnitHeaders(typeName string) ([]UnitHeaderRef, error) {
 	if r.version != MPRVersionV2 {
-		units, err := r.listUnitsByType(typeName)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]UnitHeaderRef, 0, len(units))
-		for _, u := range units {
-			e := unitIndexEntryOf(u.Contents)
-			out = append(out, UnitHeaderRef{ID: u.ID, ContainerID: u.ContainerID, Name: e.Name, Excluded: e.Excluded})
-		}
-		return out, nil
+		return r.listUnitHeadersV1(typeName)
 	}
 	if !r.unitCacheValid {
 		if err := r.buildUnitCache(); err != nil {
@@ -439,6 +430,7 @@ func (r *Reader) buildUnitCache() error {
 // Should be called after any write operation.
 func (r *Reader) InvalidateCache() {
 	r.unitCacheValid = false
+	r.invalidateV1Listing()
 	r.clearNameIndex()
 	// Clear content cache entries but keep the map non-nil so caching stays active.
 	// If contentCache is nil (per-request mode), remain disabled.

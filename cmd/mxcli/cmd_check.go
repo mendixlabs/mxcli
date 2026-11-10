@@ -313,6 +313,14 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 	//   - MDL067 is dropped for a flow already stored the way the script
 	//     commits — the filter exec's preflight applies.
 	//   - MDL-WORKFLOW10 reads a called microflow the script does not create.
+	// A test endpoint left in the project by a run that never removed it would
+	// be committed with the script's changes; say so while it can still be undone.
+	if projectPath != "" && !isStructured {
+		if msg := testrunner.LeftoverEndpointWarning(projectPath); msg != "" {
+			fmt.Fprintf(os.Stderr, "Warning: %s\n", msg)
+		}
+	}
+
 	var exec *executor.Executor
 	if projectPath != "" {
 		e, logger := newLoggedExecutorTo("check", progressSink(format))

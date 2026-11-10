@@ -123,17 +123,35 @@ func runSuite(client *endpointClient, admin docker.M2EEOptions, suite *TestSuite
 	// Ask the app which test microflows it actually has. A test whose microflow
 	// is missing is reported as an error against that test rather than failing
 	// the run.
-	present := make(map[string]bool)
-	names, err := client.list()
-	if err != nil {
-		return nil, fmt.Errorf("listing test microflows: %w", err)
+	// Tests without a compiled program run as generated microflows, so the app
+	// is asked which of those it has whenever there is at least one.
+	direct := 0
+	for _, tc := range suite.Tests {
+		if opts.execPrograms[tc.ID] != nil {
+			direct++
+		}
 	}
-	for _, n := range names {
-		present[n] = true
+	present := make(map[string]bool)
+	if direct < len(suite.Tests) {
+		names, err := client.list()
+		if err != nil {
+			return nil, fmt.Errorf("listing test microflows: %w", err)
+		}
+		for _, n := range names {
+			present[n] = true
+		}
 	}
 
 	result := &SuiteResult{Name: suite.Name, Started: time.Now()}
-	fmt.Fprintf(w, "Running %d test(s) over the test endpoint...\n", len(suite.Tests))
+	switch {
+	case direct == 0:
+		fmt.Fprintf(w, "Running %d test(s) over the test endpoint...\n", len(suite.Tests))
+	case direct == len(suite.Tests):
+		fmt.Fprintf(w, "Running %d test(s) in the running app (no injection, no build)...\n", len(suite.Tests))
+	default:
+		fmt.Fprintf(w, "Running %d test(s): %d in the running app, %d as built test microflows...\n",
+			len(suite.Tests), direct, len(suite.Tests)-direct)
+	}
 
 	// leaked counts tests whose requested rollback did not happen.
 	leaked := 0
@@ -144,17 +162,22 @@ func runSuite(client *endpointClient, admin docker.M2EEOptions, suite *TestSuite
 			continue
 		}
 
-		flow := testFlowName(tc)
-		if !present[flow] {
-			res := newResult(tc)
-			res.Status = StatusError
-			res.Message = fmt.Sprintf("microflow %s was not created — the test body may not have compiled", flow)
-			result.Tests = append(result.Tests, res)
-			continue
-		}
-
 		rollback := rollsBack(tc)
-		rr, err := client.run(flow, rollback)
+		var rr *runResponse
+		var err error
+		if prog := opts.execPrograms[tc.ID]; prog != nil {
+			rr, err = client.exec(prog)
+		} else {
+			flow := testFlowName(tc)
+			if !present[flow] {
+				res := newResult(tc)
+				res.Status = StatusError
+				res.Message = fmt.Sprintf("microflow %s was not created — the test body may not have compiled", flow)
+				result.Tests = append(result.Tests, res)
+				continue
+			}
+			rr, err = client.run(flow, rollback)
+		}
 		if err != nil {
 			// A transport failure is not a verdict. Report it against this test
 			// and keep going; if the runtime died the rest will say so too.
@@ -232,6 +255,12 @@ func endpointCleanupCommands(st projectState, flows []string, mxTestPresent bool
 	// cleanup_leftovers.go.
 	for _, name := range flows {
 		cmds = append(cmds, "DROP MICROFLOW "+name)
+	}
+	// A dev loop hosting the endpoint still serves it: dropping it left the
+	// after-startup setting naming a microflow that no longer existed, and the
+	// dev loop's next build failed with CE1613 (ako/mxcli#2119).
+	if st.hosted {
+		return cmds
 	}
 	return append(cmds,
 		"DROP MICROFLOW "+endpointStartupFlow,
