@@ -11,12 +11,12 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | lines | section |
 |---|---|
 | 24-50 | Overview |
-| 51-166 | Syntax |
-| 167-193 | Altering existing documents |
-| 194-222 | Gotchas |
-| 223-244 | Common Patterns |
-| 245-309 | Calling Agents from Microflows |
-| 310-312 | AI agent documents |
+| 51-192 | Syntax |
+| 193-219 | Altering existing documents |
+| 220-268 | Gotchas |
+| 269-291 | Common Patterns |
+| 292-356 | Calling Agents from Microflows |
+| 357-359 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -92,12 +92,37 @@ create knowledge base Module.ProductDocs (
 
 ```sql
 mdl 1;
+create constant Module.WebSearchUrl (Type: string, DefaultValue: 'https://example.com/mcp');
 create consumed mcp service Module.WebSearch (
   ProtocolVersion: v2025_03_26,
+  Endpoint: @Module.WebSearchUrl,                -- String constant: the server URL
+  AuthenticationMicroflow: Module.GetMcpHeaders, -- optional: returns the request headers
   version: '1.0',
   ConnectionTimeoutSeconds: 30,
   documentation: 'Web search MCP server'
 );
+```
+
+**`Endpoint` is what makes it connect.** It names a String constant holding the
+server URL. At startup Agent Editor reads the constant's value and, when there
+is none, skips the service ("No value could be found for the local
+configuration for the constant"), so an agent's `mcp service` block gets no
+tools. `check` warns on a `create` without it (MDL-AGENT03), and
+`check --references` refuses a constant that is not a String.
+
+`AuthenticationMicroflow` supplies credentials: MCP Client calls it with **no
+parameters** and sends the `List of System.HttpHeader` it returns with every
+request (`check --references` refuses any other signature):
+
+```sql
+mdl 1;
+create microflow Module.GetMcpHeaders ()
+returns list of System.HttpHeader as $Headers
+begin
+  $Headers = create list of System.HttpHeader;
+  call microflow MCPClient.HttpHeader_CreateAndAddToList(HttpHeaderList = $Headers, Key = 'Authorization', Value = 'Bearer ' + @Module.WebSearchToken);
+  return $Headers;
+end;
 ```
 
 ### Published MCP Service
@@ -123,6 +148,7 @@ mdl 1;
 create agent Module.MyAgent (
   UsageType: task,              -- Task | Conversational
   model: Module.MyModel,        -- must exist
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   description: 'Agent description',
   MaxTokens: 4096,
   Temperature: 0.7,             -- float
@@ -193,6 +219,26 @@ Property names match `CREATE` (`SystemPrompt`, `UserPrompt`, `Temperature`, `Max
 
 ## Gotchas
 
+### An agent needs `SelectedModel`, or no agent imports
+Agent Editor 2.2+ imports an agent only with a selected model: the id of one of
+the models the Model document's resource offers. Without it, `ASU_AgentEditor`
+logs "Model with name  is referenced but could not be found for the Agent" at
+startup and **stops importing every agent document**, not just that one. `mx
+check` and the build stay green. `mxcli check` warns on a `create agent`
+without it (MDL-AGENT02).
+
+```sql
+mdl 1;
+alter agent Module.MyAgent set SelectedModel = 'eu.anthropic.claude-sonnet-5';
+```
+
+The runtime reads only the id and matches it against
+`GenAICommons.DeployedModel.Model`. `SelectedModelName` is the display name
+Studio Pro stores; it defaults to the id. To list the ids a resource offers,
+with the app running (reported in ako/mxcli#2031, not measured here):
+`mxcli oql "select Model from MxGenAIConnector.MxCloudDeployedModel"`. Or read
+an agent Studio Pro saved: `describe agent` prints its `SelectedModel`.
+
 ### Dollar-quoting for multi-line prompts
 Single-quoted strings cannot span lines. Use `$$...$$` for any SystemPrompt or UserPrompt that contains newlines. DESCRIBE always emits `$$...$$` when the value contains newlines, so DESCRIBE output re-parses cleanly.
 
@@ -229,6 +275,7 @@ create ai model Module.M (Provider: MxCloudGenAI, key: @Module.K);
 create agent Module.A (
   UsageType: task,
   model: Module.M,
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   SystemPrompt: 'You are a helpful assistant.',
   UserPrompt: 'Ask me anything.'
 );

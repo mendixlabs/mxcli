@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"path/filepath"
 	"strings"
 )
@@ -18,14 +19,41 @@ func yamlSingleQuote(s string) string {
 	return "'" + s + "'"
 }
 
-// wrapSkillContent prepends OpenCode-compatible YAML frontmatter to a skill file.
-// OpenCode requires each skill to live in its own subdirectory as SKILL.md and
-// the file must start with YAML frontmatter containing name, description, and
-// compatibility fields.
+// wrapSkillContent gives a skill the frontmatter OpenCode reads: its name, its
+// description, and the opencode marker. A skill that already has frontmatter
+// (the Agent Skills layout every bundled skill uses) keeps its own description
+// and is given ONE block: prepending a second one, described by the skill's
+// first heading, made OpenCode read "Agents" where the skill says "… Use when
+// adding GenAI features", and the description is what decides whether a skill
+// is invoked at all (ako/mxcli#1822).
 func wrapSkillContent(skillName string, content []byte) []byte {
-	description := extractSkillDescription(content)
+	description, body := splitSkillFrontmatter(content)
+	if description == "" {
+		description = extractSkillDescription(body)
+	}
 	frontmatter := fmt.Sprintf("---\nname: %s\ndescription: %s\ncompatibility: opencode\n---\n\n", yamlSingleQuote(skillName), yamlSingleQuote(description))
-	return append([]byte(frontmatter), content...)
+	return append([]byte(frontmatter), body...)
+}
+
+// splitSkillFrontmatter returns the description a skill's leading YAML
+// frontmatter declares ("" when it has none, or none readable) and the content
+// after that frontmatter. Content without frontmatter is returned whole.
+func splitSkillFrontmatter(content []byte) (description string, body []byte) {
+	text := string(content)
+	if !strings.HasPrefix(text, "---\n") {
+		return "", content
+	}
+	head, rest, ok := strings.Cut(text[len("---\n"):], "\n---\n")
+	if !ok {
+		return "", content
+	}
+	var fm struct {
+		Description string `yaml:"description"`
+	}
+	if err := yaml.Unmarshal([]byte(head), &fm); err != nil {
+		return "", content
+	}
+	return strings.TrimSpace(fm.Description), []byte(strings.TrimLeft(rest, "\n"))
 }
 
 // extractSkillDescription returns a one-line description for the skill by

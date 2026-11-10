@@ -428,6 +428,9 @@ func (r *StarlarkRule) buildPredeclared() starlark.StringDict {
 		"layouts":                   starlark.NewBuiltin("layouts", r.builtinLayouts),
 		"published_rest_operations": starlark.NewBuiltin("published_rest_operations", r.builtinPublishedRestOperations),
 		"modules":                   starlark.NewBuiltin("modules", r.builtinModules),
+		"folders":                   starlark.NewBuiltin("folders", r.builtinFolders),
+		"annotations":               starlark.NewBuiltin("annotations", r.builtinAnnotations),
+		"jar_files":                 starlark.NewBuiltin("jar_files", r.builtinJarFiles),
 
 		// Graph-analysis facts (populated by `refresh catalog communities`).
 		"community_of":         starlark.NewBuiltin("community_of", r.builtinCommunityOf),
@@ -1276,6 +1279,7 @@ func enumerationValuesToStarlark(values []EnumerationValue) *starlark.List {
 	out := make([]starlark.Value, 0, len(values))
 	for _, v := range values {
 		out = append(out, starlarkstruct.FromStringDict(starlark.String("enumeration_value"), starlark.StringDict{
+			"id":             starlark.String(v.ID),
 			"name":           starlark.String(v.Name),
 			"qualified_name": starlark.String(v.QualifiedName),
 			"caption":        starlark.String(v.Caption),
@@ -1328,6 +1332,8 @@ func widgetToStarlark(w Widget) starlark.Value {
 		"dynamic_classes":  starlark.String(w.DynamicClasses),
 		"action_type":      starlark.String(w.ActionType),
 		"has_confirmation": starlark.Bool(w.HasConfirmation),
+		"caption":          starlark.String(w.Caption),
+		"tooltip":          starlark.String(w.Tooltip),
 	})
 }
 

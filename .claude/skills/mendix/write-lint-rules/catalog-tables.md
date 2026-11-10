@@ -1,7 +1,7 @@
 # Catalog-table builtins: object properties
 
-The structs returned by `modules()`, `associations()`, `entity_event_handlers()`,
-`navigation_menu_items()`, `jar_dependencies()`, `strings()`, `layouts()`,
+The structs returned by `modules()`, `folders()`, `annotations()`, `associations()`, `entity_event_handlers()`,
+`navigation_menu_items()`, `jar_dependencies()`, `jar_files()`, `strings()`, `layouts()`,
 `published_rest_operations()` and `widgets()`. The functions themselves are listed in
 [SKILL.md](SKILL.md) under "Available Query Functions". Every builtin leaves out
 System and Marketplace modules, except `navigation_menu_items()`, whose rows
@@ -15,6 +15,38 @@ Returned by `modules()`.
 | `id` | string | Module UUID |
 | `name` | string | `"Sales"` |
 | `domain_model_documentation` | string | The module's domain model's documentation (Studio Pro's Documentation pane with nothing selected on the canvas). A Mendix module has no documentation of its own; this is the module-level text an author can write. `""` when none |
+
+### folder
+Returned by `folders()`. One per folder, empty folders included (ako/mxcli#1436).
+
+| Property | Type | Example |
+|----------|------|---------|
+| `id` | string | Folder UUID |
+| `name` | string | `"Order"` |
+| `module_name` | string | `"Sales"` |
+| `path` | string | `"Objects/Order"` — spelled as a document's `folder`, so `f.path == d.folder` matches the documents in it. A name that itself holds `/` is not escaped |
+| `parent_path` | string | `"Objects"`; `""` for a folder directly in the module |
+| `depth` | int | `1` for a folder directly in the module; counted from the parents, not from the slashes in `path` |
+| `document_count` | int | Documents directly in this folder, not in its subfolders |
+| `folder_count` | int | Folders directly in this folder |
+
+An empty folder has `document_count == 0 and folder_count == 0`. A folder
+with `document_count == 0` alone may still hold subfolders.
+
+### annotation
+Returned by `annotations()`. One per domain model annotation (ako/mxcli#1300).
+
+| Property | Type | Example |
+|----------|------|---------|
+| `id` | string | Annotation UUID |
+| `module_name` | string | `"Sales"` — the module whose domain model holds it |
+| `caption` | string | `"TODO split sales\nper region"` — the full text, newlines kept |
+| `x` | int | `60` — left edge on the domain model canvas |
+| `y` | int | `40` — top edge on the canvas |
+| `width` | int | `400` |
+
+A "no TODO notes" rule needs both this and the microflow annotations, which
+are activities: `activities_for(flow)` with `activity_type == "Annotation"`.
 
 ### association
 Returned by `associations()`.
@@ -73,6 +105,34 @@ Returned by `jar_dependencies()`.
 | `coordinate` | string | `"org.apache.commons:commons-lang3"` — group and artifact, without the version, so it identifies the library across versions |
 | `is_included` | bool | Studio Pro's "Included" setting; False when the dependency is declared but not included |
 
+### jar_file
+Returned by `jar_files()` (ako/mxcli#1304). Read from the project folder at
+each call: the jars are not in the `.mpr`, so the catalog does not hold them.
+
+| Property | Type | Example |
+|----------|------|---------|
+| `folder` | string | `"userlib"` or `"vendorlib"` |
+| `file_name` | string | `"commons-lang3-3.12.0.jar"` |
+| `name` | string | `"commons-lang3"` — the file name up to the last `-` followed by a digit, so `log4j-1.2-api-2.17.1.jar` is `log4j-1.2-api` |
+| `version` | string | `"3.12.0"`; `""` when the file name carries no version |
+| `required_by` | list of string | `["MyFirstModule"]` — modules with a `<file_name>.<Module>.RequiredLib` marker beside the jar, as a Marketplace module ships one |
+
+The same `name` in two versions is one library on the classpath twice:
+
+```python
+def check():
+    seen = {}
+    for j in jar_files():
+        seen.setdefault(j.name, []).append(j)
+    out = []
+    for name, jars in seen.items():
+        versions = sorted({j.version for j in jars})
+        if len(versions) > 1:
+            out.append(violation(message = "%s on the classpath in versions %s" % (name, ", ".join(versions)),
+                                 location = location(module = "", document_type = "project", document_name = "")))
+    return out
+```
+
 ### catalog_string
 Returned by `strings(language = None)`.
 
@@ -84,6 +144,7 @@ Returned by `strings(language = None)`.
 | `context` | string | What the text is. Translatable text names its stored type and property: `"Forms$Page.Title"`, `"Forms$TabPage.Caption"`, `"Enumerations$EnumerationValue.Caption"`; the rest a lower-case label: `"documentation"` (of an entity, attribute, constant, page, … — `object_type` says which; a module's domain model documentation is `"domain_model_documentation"`), `"page_url"`, `"log_node"`, `"log_message"`, … |
 | `language` | string | `"en_US"`; `""` for text that is not translatable (documentation, URLs) |
 | `element_id` | string | UUID of the element carrying the text |
+| `widget_id` | string | UUID of the widget around the text, matching `widgets().id`; `""` outside a widget (a page's own title). A tab page's caption names the tab page, which `widgets()` does not list. A button's caption row has `element_id` of its `Forms$ClientTemplate` and its confirmation rows that of a `Forms$ConfirmationInfo`, so collect a widget's texts in every language by `widget_id`, not `element_id` |
 | `module_name` | string | `"Sales"` |
 
 ### layout
@@ -141,6 +202,8 @@ Returned by `widgets()` (full catalog — auto-detected).
 | `dynamic_classes` | string | The `Dynamic classes` expression (Appearance), else `""` |
 | `action_type` | string | Stored type of the widget's primary action — the button's action, else a container's on-click action, else a list view's or image's click action: `"Forms$DeleteClientAction"`, `"Forms$MicroflowAction"`, `"Forms$CallNanoflowClientAction"`, `"Forms$FormAction"` (show page), `"Forms$SaveChangesClientAction"`, `"Forms$CancelChangesClientAction"`, `"Forms$ClosePageClientAction"`, `"Forms$CreateObjectClientAction"`, `"Forms$OpenLinkClientAction"`, `"Forms$NoAction"`; `""` for a widget with no action property. Pluggable widgets' actions (inside their property bag) are not read |
 | `has_confirmation` | bool | The primary action asks for confirmation. Only a microflow, nanoflow or workflow call can; a delete action (`"Forms$DeleteClientAction"`) has no confirmation setting at all, so "a delete must confirm" is enforced as "no button uses the delete action directly — call a microflow or nanoflow with a confirmation" |
+| `caption` | string | `"Delete sale"` — the widget's own caption in the project's default language (buttons and labels; an input's label and a dynamic text's content are not its caption); `""` when it has none. Other languages: `strings(language = …)` rows with `widget_id == w.id` |
+| `tooltip` | string | The tooltip in the project's default language; `""` when none is set |
 
 ```python
 # Inline styles, classes outside an allow-list, and direct delete buttons.

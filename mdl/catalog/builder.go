@@ -138,6 +138,10 @@ type Builder struct {
 	// and emitted by buildReferences (a later pass). Carried on the Builder
 	// rather than re-queried because CatalogTx has no Query.
 	scheduledEventRefs []scheduledEventRef
+	// agentDocRefs are the decoded agent-editor documents, whose edges
+	// buildReferences writes once every table their names resolve against is
+	// filled (ako/mxcli#2074).
+	agentDocRefs []agentDocRefs
 
 	// Entity → regular-expression edges from attribute validation rules,
 	// collected while cataloguing regexes and emitted by buildReferences.
@@ -219,6 +223,9 @@ type hierarchy struct {
 	moduleNames     map[model.ID]string
 	containerParent map[model.ID]model.ID
 	folderNames     map[model.ID]string
+	// unitTypes is each unit's $Type, so the folders pass can count the
+	// documents a folder holds directly (ako/mxcli#1436).
+	unitTypes map[model.ID]string
 }
 
 func (b *Builder) buildHierarchy() error {
@@ -227,6 +234,7 @@ func (b *Builder) buildHierarchy() error {
 		moduleNames:     make(map[model.ID]string),
 		containerParent: make(map[model.ID]model.ID),
 		folderNames:     make(map[model.ID]string),
+		unitTypes:       make(map[model.ID]string),
 	}
 
 	// Load modules
@@ -243,6 +251,7 @@ func (b *Builder) buildHierarchy() error {
 	units, _ := b.reader.ListUnits()
 	for _, u := range units {
 		h.containerParent[u.ID] = u.ContainerID
+		h.unitTypes[u.ID] = u.Type
 	}
 
 	// Load folders
@@ -437,7 +446,9 @@ type buildPhase struct {
 func (b *Builder) phases() []buildPhase {
 	return []buildPhase{
 		{"modules", b.buildModules},
+		{"folders", b.buildFolders},
 		{"entities", b.buildEntities},
+		{"domain model annotations", b.buildDomainModelAnnotations},
 		{"entity event handlers", b.buildEntityEventHandlers},
 		{"associations", b.buildAssociations},
 		{"enumerations", b.buildEnumerations},
@@ -740,6 +751,7 @@ func (b *Builder) resetCollected() {
 	b.databaseConnectionCache = nil
 	b.moduleSettingsCache = nil
 	b.scheduledEventRefs = nil
+	b.agentDocRefs = nil
 	b.regexRuleRefs = nil
 	b.publishedRestRefs = nil
 	b.eventHandlerRefs = nil

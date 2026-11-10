@@ -58,11 +58,9 @@ import (
 // fails in both directions: a check that starts passing must be struck off, and
 // one that starts failing must be explained.
 var studioProKnownLossy = map[string]string{
-	// Losses this suite found beyond the ones ako/mxcli#705 reported. They are
-	// the whole-document verdict only; the #705 slices are checked separately.
-	"page Administration.Account_Overview|document": "DataGrid2 object rebuilt from the " +
-		"widget template (property order, column texts, filter captions), layout-grid " +
-		"column weights 12 -> -1, tab-container nulls",
+	// Empty. The last entry, page Administration.Account_Overview|document,
+	// passes since its tab container's null default tab is carried
+	// (ako/mxcli#1897).
 }
 
 type studioProCase struct {

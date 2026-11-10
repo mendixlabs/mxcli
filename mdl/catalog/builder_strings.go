@@ -30,12 +30,29 @@ func (b *Builder) buildStrings() error {
 	}
 	defer stmt.Close()
 
+	widgetStmt, err := b.tx.Prepare(`
+		INSERT INTO strings (QualifiedName, ObjectType, StringValue, StringContext, Language, ElementId, ModuleName, WidgetId)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer widgetStmt.Close()
+
 	count := 0
 	insert := func(qn, objType, value, ctx, lang, elementID, module string) {
 		if value == "" {
 			return
 		}
 		stmt.Exec(qn, objType, value, ctx, lang, elementID, module)
+		count++
+	}
+	// The translatable walk knows the widget around each text (ako/mxcli#1303).
+	insertText := func(r stringRow) {
+		if r.StringValue == "" {
+			return
+		}
+		widgetStmt.Exec(r.QualifiedName, r.ObjectType, r.StringValue, r.StringContext, r.Language, r.ElementID, r.ModuleName, r.WidgetID)
 		count++
 	}
 
@@ -146,7 +163,17 @@ func (b *Builder) buildStrings() error {
 		b.disown()
 	}
 
-	b.buildTranslatableStrings(insert)
+	// Agent prompts and tool descriptions, from the documents the agent pass
+	// decoded; each row belongs to its agent's unit (ako/mxcli#2075).
+	for _, d := range b.agentDocRefs {
+		b.as(d.owner)
+		for _, r := range agentStrings(d) {
+			insert(r.QualifiedName, r.ObjectType, r.StringValue, r.StringContext, r.Language, r.ElementID, r.ModuleName)
+		}
+	}
+	b.disown()
+
+	b.buildTranslatableStrings(insertText)
 
 	docRows, err := b.buildDocumentationStrings()
 	if err != nil {
@@ -242,7 +269,7 @@ func (b *Builder) buildDocumentationStrings() (int, error) {
 // changes them — the same split this is closing.
 // The caller's insert closure counts the rows it writes, so nothing is counted
 // here — doing both reported twice the rows the table actually holds.
-func (b *Builder) buildTranslatableStrings(insert func(string, string, string, string, string, string, string)) {
+func (b *Builder) buildTranslatableStrings(insert func(stringRow)) {
 	units, err := b.lister().ListRawUnitsByType("")
 	if err != nil {
 		return
@@ -267,7 +294,7 @@ func (b *Builder) buildTranslatableStrings(insert func(string, string, string, s
 		}
 
 		for _, r := range translatableRows(u.Type, qn, moduleName, u.Contents) {
-			insert(r.QualifiedName, r.ObjectType, r.StringValue, r.StringContext, r.Language, r.ElementID, r.ModuleName)
+			insert(r)
 		}
 	}
 	b.disown()
@@ -282,6 +309,7 @@ type stringRow struct {
 	Language      string
 	ElementID     string
 	ModuleName    string
+	WidgetID      string // the widget the text belongs to; "" outside a widget
 }
 
 // translatableRows turns one unit's stored bytes into index rows, one per
@@ -310,6 +338,7 @@ func translatableRows(unitType, qualifiedName, moduleName string, raw []byte) []
 				Language:      lang,
 				ElementID:     site.ElementID,
 				ModuleName:    moduleName,
+				WidgetID:      site.WidgetID,
 			})
 		}
 	}

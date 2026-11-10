@@ -268,6 +268,9 @@ catalogTableName
     | OBJECTS       // keyword token — must be listed explicitly
     | COMMUNITIES   // keyword token (SHOW COMMUNITIES) — must be listed explicitly for CATALOG.COMMUNITIES
     | QUEUES        // keyword token (SHOW QUEUES) — must be listed explicitly for CATALOG.QUEUES
+    | FOLDERS       // keyword token (LIST FOLDERS) — must be listed explicitly for CATALOG.FOLDERS (ako/mxcli#1436)
+    | AGENTS        // keyword token (SHOW AGENTS) — CATALOG.AGENTS parsed to nothing until TestEveryCatalogTableParses caught it
+    | ANNOTATIONS   // keyword token (LIST ANNOTATIONS) — for CATALOG.ANNOTATIONS (ako/mxcli#1300)
     | SOURCE_KW     // For CATALOG.SOURCE FTS table
     | ODATA         // For CATALOG.ODATA_CLIENTS and CATALOG.ODATA_SERVICES (via IDENTIFIER)
     | IDENTIFIER    // For tables like activities, xpath_expressions, projects, snapshots, refs, strings, odata_clients, odata_services, java_actions

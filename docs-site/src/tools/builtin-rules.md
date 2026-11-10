@@ -40,7 +40,7 @@ The **lint rules** below run with `mxcli lint`. There is also a separate group o
 |------|-------------|
 | **CONV011** | No commit in loop -- Detects COMMIT statements, and CREATE / CHANGE with a COMMIT clause, inside LOOP blocks (performance anti-pattern) |
 | **CONV012** | Exclusive split captions -- Checks that decision branches have meaningful captions |
-| **CONV013** | Error handling on external calls -- Ensures external service calls have error handling |
+| **CONV013** | Error handling on external calls -- Ensures external service calls have error handling. Not reported: a call inside a loop, where Mendix allows only Rollback (CE0644), and a call to a Java action that exists to throw (`Throw…`, e.g. `CommunityCommons.ThrowException`), whose Rollback is the point |
 | **CONV014** | No continue error handling -- Warns against using CONTINUE error handling without logging |
 | **CONV020** | Created object never persisted -- A microflow creates an object of a persistent entity without commit, and never commits, returns or passes it on, so the object is discarded when the microflow ends ([details](#conv020-details)) |
 | **CONV021** | Create/change then commit -- A Create or Change object activity without commit, directly followed by a Commit of the same object; one create/change with Commit set does both ([details](#conv021-details)) |

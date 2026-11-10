@@ -59,6 +59,10 @@ var callerRefKinds = []string{
 	RefKindCallerPublish,  // published REST operation: the microflow behind the endpoint
 	RefKindCallerSettings, // project setting: after-startup, before-shutdown, health check
 	RefKindCallerEvent,    // entity event handler: the microflow it runs
+	// An agent's knowledge bases, MCP services and model are used when it
+	// runs, by no flow (ako/mxcli#2074); its tool microflows are calls.
+	RefKindCallerTool,
+	RefKindCallerModel,
 }
 
 // Kind literals, kept next to the set that uses them so the SQL below cannot
@@ -77,6 +81,8 @@ const (
 	RefKindCallerPublish     = "publish"
 	RefKindCallerSettings    = "settings"
 	RefKindCallerEvent       = "event"
+	RefKindCallerTool        = "tool"
+	RefKindCallerModel       = "model"
 )
 
 // callerRefKindsSQL renders callerRefKinds as a SQL IN list.

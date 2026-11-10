@@ -55,3 +55,35 @@ func TestRewriteExpressionReferences(t *testing.T) {
 		})
 	}
 }
+
+// ako/mxcli#1836 (mendixlabs/mxcli#1687): a MOVE of entities between modules
+// left the access-rule XPath `[Src.Order_Customer/Src.Customer/Name = 'x']`
+// naming the old module — its steps are path steps, which
+// RewriteExpressionReferences leaves alone on purpose (an enumeration renamed
+// must not rewrite an association of the same name). RewritePathSteps is the
+// rewrite for when the renamed element IS an entity or an association.
+func TestRewritePathSteps(t *testing.T) {
+	cases := []struct {
+		name, in, old, new, want string
+		n                        int
+	}{
+		{"xpath, first step", `[Src.Order_Customer/Src.Customer/Name = 'x']`, "Src.Order_Customer", "Dst.Order_Customer", `[Dst.Order_Customer/Src.Customer/Name = 'x']`, 1},
+		{"xpath, entity step", `[Src.Order_Customer/Src.Customer/Name = 'x']`, "Src.Customer", "Dst.Customer", `[Src.Order_Customer/Dst.Customer/Name = 'x']`, 1},
+		{"microflow path", `$O/Src.Order_Customer/Name != empty`, "Src.Order_Customer", "Dst.Order_Customer", `$O/Dst.Order_Customer/Name != empty`, 1},
+		{"specialisation in a path", `[Src.Order_Customer/Src.Customer]`, "Src.Customer", "Dst.Customer", `[Src.Order_Customer/Dst.Customer]`, 1},
+		{"inside parentheses", `[(Src.A_B/Src.B/X = 1)]`, "Src.A_B", "Dst.A_B", `[(Dst.A_B/Src.B/X = 1)]`, 1},
+		{"a longer name is another element", `[Src.Order_CustomerX/Src.CustomerY/N = 1]`, "Src.Customer", "Dst.Customer", `[Src.Order_CustomerX/Src.CustomerY/N = 1]`, 0},
+		{"another module's element", `[Other.Customer/Name = 1]`, "Src.Customer", "Dst.Customer", `[Other.Customer/Name = 1]`, 0},
+		{"inside a literal", `[Name = 'Src.Customer/x']`, "Src.Customer", "Dst.Customer", `[Name = 'Src.Customer/x']`, 0},
+		{"a member access is RewriteExpressionReferences' case", `Src.Customer.Name`, "Src.Customer", "Dst.Customer", `Src.Customer.Name`, 0},
+		{"a variable's attribute", `$Src.Customer`, "Src.Customer", "Dst.Customer", `$Src.Customer`, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, n := RewritePathSteps(c.in, c.old, c.new)
+			if got != c.want || n != c.n {
+				t.Errorf("RewritePathSteps(%q, %q, %q) = %q, %d; want %q, %d", c.in, c.old, c.new, got, n, c.want, c.n)
+			}
+		})
+	}
+}

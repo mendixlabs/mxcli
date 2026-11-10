@@ -232,6 +232,7 @@ type CatalogString struct {
 	Language      string // "" for text that is not translatable
 	ElementID     string
 	ModuleName    string
+	WidgetID      string // the widget the text belongs to (ako/mxcli#1303); "" outside a widget
 }
 
 // Strings iterates the catalog's strings outside System and Marketplace modules,
@@ -249,7 +250,8 @@ func (ctx *LintContext) Strings(language string) iter.Seq[CatalogString] {
 		rows, err := ctx.db.Query(fmt.Sprintf(`
 			SELECT COALESCE(s.QualifiedName, ''), COALESCE(s.ObjectType, ''),
 			       COALESCE(s.StringValue, ''), COALESCE(s.StringContext, ''),
-			       COALESCE(s.Language, ''), COALESCE(s.ElementId, ''), COALESCE(s.ModuleName, '')
+			       COALESCE(s.Language, ''), COALESCE(s.ElementId, ''), COALESCE(s.ModuleName, ''),
+			       COALESCE(s.WidgetId, '')
 			FROM strings s
 			LEFT JOIN modules m ON s.ModuleName = m.Name
 			WHERE %s AND %s AND %s
@@ -264,7 +266,7 @@ func (ctx *LintContext) Strings(language string) iter.Seq[CatalogString] {
 		for rows.Next() {
 			var s CatalogString
 			if err := rows.Scan(&s.QualifiedName, &s.ObjectType, &s.Value, &s.Context,
-				&s.Language, &s.ElementID, &s.ModuleName); err != nil {
+				&s.Language, &s.ElementID, &s.ModuleName, &s.WidgetID); err != nil {
 				ctx.recordQueryError("Strings (row scan)", err)
 				continue
 			}
@@ -454,6 +456,99 @@ func (ctx *LintContext) Modules() iter.Seq[Module] {
 				continue
 			}
 			if !yield(mod) {
+				return
+			}
+		}
+	}
+}
+
+// Annotation is one domain model annotation (ako/mxcli#1300). A microflow's
+// annotations are activities, read through activities_for().
+type Annotation struct {
+	ID         string
+	ModuleName string
+	Caption    string // the full text, newlines kept
+	X, Y       int
+	Width      int
+}
+
+// Annotations iterates the domain model annotations outside System and
+// Marketplace modules.
+func (ctx *LintContext) Annotations() iter.Seq[Annotation] {
+	return func(yield func(Annotation) bool) {
+		rows, err := ctx.db.Query(fmt.Sprintf(`
+			SELECT a.Id, COALESCE(a.ModuleName, ''), COALESCE(a.Caption, ''),
+			       COALESCE(a.X, 0), COALESCE(a.Y, 0), COALESCE(a.Width, 0)
+			FROM annotations a
+			LEFT JOIN modules m ON a.ModuleName = m.Name
+			WHERE %s
+			ORDER BY a.ModuleName, a.Y, a.X, a.Id
+		`, notPlatformModule("m")))
+		if err != nil {
+			ctx.recordQueryError("Annotations", err)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var a Annotation
+			if err := rows.Scan(&a.ID, &a.ModuleName, &a.Caption, &a.X, &a.Y, &a.Width); err != nil {
+				ctx.recordQueryError("Annotations (row scan)", err)
+				continue
+			}
+			if ctx.IsExcluded(a.ModuleName) {
+				continue
+			}
+			if !yield(a) {
+				return
+			}
+		}
+	}
+}
+
+// Folder is one folder of a module, empty folders included (ako/mxcli#1436).
+// A document's Folder field names only folders that hold a document, so an
+// empty folder appears nowhere else.
+type Folder struct {
+	ID            string
+	Name          string
+	ModuleName    string
+	Path          string // "Objects/Order", spelled as a document's Folder field
+	ParentPath    string // "" for a folder directly in the module
+	Depth         int    // 1 for a folder directly in the module
+	DocumentCount int    // documents directly in this folder
+	FolderCount   int    // folders directly in this folder
+}
+
+// Folders iterates the folders outside System and Marketplace modules.
+func (ctx *LintContext) Folders() iter.Seq[Folder] {
+	return func(yield func(Folder) bool) {
+		rows, err := ctx.db.Query(fmt.Sprintf(`
+			SELECT f.Id, COALESCE(f.Name, ''), COALESCE(f.ModuleName, ''), COALESCE(f.Path, ''),
+			       COALESCE(f.ParentPath, ''), COALESCE(f.Depth, 1),
+			       COALESCE(f.DocumentCount, 0), COALESCE(f.FolderCount, 0)
+			FROM folders f
+			LEFT JOIN modules m ON f.ModuleName = m.Name
+			WHERE %s
+			ORDER BY f.ModuleName, f.Path
+		`, notPlatformModule("m")))
+		if err != nil {
+			ctx.recordQueryError("Folders", err)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var f Folder
+			if err := rows.Scan(&f.ID, &f.Name, &f.ModuleName, &f.Path, &f.ParentPath,
+				&f.Depth, &f.DocumentCount, &f.FolderCount); err != nil {
+				ctx.recordQueryError("Folders (row scan)", err)
+				continue
+			}
+			if ctx.IsExcluded(f.ModuleName) {
+				continue
+			}
+			if !yield(f) {
 				return
 			}
 		}

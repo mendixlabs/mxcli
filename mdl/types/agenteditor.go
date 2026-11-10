@@ -150,6 +150,12 @@ type ConsumedMCPService struct {
 	Version                  string `json:"version,omitempty"`
 	InnerDocumentation       string `json:"innerDocumentation,omitempty"` // Contents.documentation
 	ConnectionTimeoutSeconds int    `json:"connectionTimeoutSeconds,omitempty"`
+	// Endpoint is the String constant holding the server URL; without one
+	// AgentEditorCommons does not import the service (#2060).
+	Endpoint *DocRef `json:"endpoint,omitempty"`
+	// AuthenticationMicroflow returns the HTTP headers sent to the server
+	// (no parameters, List of System.HttpHeader).
+	AuthenticationMicroflow *DocRef `json:"authenticationMicroflow,omitempty"`
 }
 
 // GetName returns the MCP service's name.
@@ -244,6 +250,17 @@ type Agent struct {
 	// not the model. nil when the document holds none.
 	EnableBackendStreaming *bool `json:"enableBackendStreaming,omitempty"`
 	EnableUIStreaming      *bool `json:"enableUIStreaming,omitempty"`
+	// SelectedModel is the model the agent uses on a multi-model resource: its
+	// id, which the import matches against DeployedModel.Model, and the display
+	// name Studio Pro shows. Agent Editor 2.2+ refuses to import an agent
+	// without one (#2031). nil when the document holds none.
+	SelectedModel *AgentSelectedModel `json:"selectedModel,omitempty"`
+}
+
+// AgentSelectedModel is the agent's `selectedModel` JSON object.
+type AgentSelectedModel struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // GetName returns the agent's name.

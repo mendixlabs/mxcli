@@ -571,12 +571,15 @@ func generateCopilotInstructions(projectName, mprPath string) string {
 }
 
 func generateOpenCodeConfig(projectName, mprPath string) string {
+	// AGENTS.md only. `instructions` inlines each matched file's whole body
+	// into the system prompt; the two skill globs this listed put 150 files,
+	// 2.7 MB — ~73% of a 1M window — in front of every session (ako/mxcli#1822).
+	// OpenCode discovers .opencode/skills/ itself and loads a skill's body when
+	// its description matches, which is what the skills are written for.
 	return `{
   "$schema": "https://opencode.ai/config.json",
   "instructions": [
-    "AGENTS.md",
-    ".opencode/skills/**/SKILL.md",
-    ".ai-context/skills/*/SKILL.md"
+    "AGENTS.md"
   ]
 }
 `

@@ -6,6 +6,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -94,11 +95,34 @@ var brainInitCmd = &cobra.Command{
 }
 
 var brainCaptureCmd = &cobra.Command{
-	Use:   "capture <text>",
+	Use:   "capture <text> | --from-json <file|->",
 	Short: "Queue something worth remembering (does not commit it)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Queue an entry for a person to review and promote.
+
+--from-json <file|-> queues a JSON array of entries in one act, each
+{"text" | "title"+"body", "anchors": [...], "slice"?, "open"?, "source"?}.
+Every item is validated before anything is queued, so one bad item fails the
+batch with its index named. A duplicate of something committed, queued or
+earlier in the batch is skipped and reported with the existing id, so the same
+list captured twice is a no-op.`,
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := brainProjectDir(cmd)
+		if from, _ := cmd.Flags().GetString("from-json"); from != "" {
+			if len(args) > 0 {
+				brainFatal(fmt.Errorf("give the entry as text or --from-json, not both"))
+			}
+			for _, f := range []string{"anchor", "slice", "open", "source"} {
+				if cmd.Flags().Changed(f) {
+					brainFatal(fmt.Errorf("--%s does not combine with --from-json; set it per item in the JSON", f))
+				}
+			}
+			runBrainCaptureBatch(dir, from)
+			return
+		}
+		if len(args) != 1 {
+			brainFatal(fmt.Errorf("capture needs the entry's text, or --from-json <file|->"))
+		}
 		anchors, _ := cmd.Flags().GetStringSlice("anchor")
 		slice, _ := cmd.Flags().GetString("slice")
 		// --slice is the only signal needed: a requirement is a requirement
@@ -252,38 +276,113 @@ append-only, so its own order is the honest timeline.`,
 }
 
 var brainPromoteCmd = &cobra.Command{
-	Use:   "promote <id>",
-	Short: "Write a staged entry into its shard (the human step)",
-	Args:  cobra.ExactArgs(1),
+	Use:   "promote <id>...",
+	Short: "Write staged entries into their shards (the human step)",
+	Long: `Commit staged entries into the shards their anchors route them to.
+
+Several ids are promoted as one act: every id is resolved and every target
+shard's cap is checked with all of the batch's additions before anything is
+written, so a batch either lands whole or not at all. --to applies to every id.
+
+If a promote is interrupted after the shards are written and before the queue
+is, the entries are both committed and still queued; re-running the same
+command completes it. An id already in its shard with the same content counts
+as promoted.`,
+	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := brainProjectDir(cmd)
 		store, queue := brain.NewStore(dir), brain.NewQueue(dir)
-		if !store.Exists() {
-			brainFatal(fmt.Errorf("no store yet — run 'mxcli brain init' first"))
-		}
-		e, ok, err := queue.Get(args[0])
+		to, _ := cmd.Flags().GetString("to")
+		results, err := brain.PromoteBatch(store, queue, args, to)
 		if err != nil {
 			brainFatal(err)
 		}
-		if !ok {
-			brainFatal(fmt.Errorf("no staged entry with id %s", args[0]))
-		}
-		shard := e.Shard()
-		if to, _ := cmd.Flags().GetString("to"); to != "" {
-			shard = to
-		}
-		if err := store.Promote(e, shard); err != nil {
-			brainFatal(err)
-		}
-		if _, err := queue.Drop(e.ID); err != nil {
-			brainFatal(err)
+		reports := make([]promoteReport, 0, len(results))
+		promoted := 0
+		for _, r := range results {
+			if r.Status == brain.StatusPromoted {
+				promoted++
+			}
+			reports = append(reports, promoteReport{ID: r.Entry.ID, Kind: string(r.Entry.EntryKind()),
+				Shard: r.Shard, Path: store.ShardPath(r.Shard), Status: r.Status})
 		}
 		if globalJSONFlag {
-			brainJSON(promoteReport{ID: e.ID, Kind: string(e.EntryKind()), Shard: shard, Path: store.ShardPath(shard)})
+			// One id keeps the single object #2032 introduced, so existing
+			// callers are unaffected; several get one result per id.
+			if len(args) == 1 && len(reports) == 1 {
+				brainJSON(reports[0])
+				return
+			}
+			brainJSON(map[string]any{"results": reports, "promoted": promoted,
+				"already_promoted": len(reports) - promoted, "total": len(reports)})
 			return
 		}
-		fmt.Printf("Promoted %s into %s\n", e.ID, store.ShardPath(shard))
+		for _, r := range reports {
+			if r.Status == brain.StatusPromoted {
+				fmt.Printf("Promoted %s into %s\n", r.ID, r.Path)
+			} else {
+				fmt.Printf("Already promoted %s in %s\n", r.ID, r.Path)
+			}
+		}
+		if len(reports) > 1 {
+			fmt.Printf("\n%d promoted, %d already promoted.\n", promoted, len(reports)-promoted)
+		}
 	},
+}
+
+// runBrainCaptureBatch is `capture --from-json`: read, validate every item,
+// then queue the survivors in one write.
+func runBrainCaptureBatch(dir, from string) {
+	var (
+		r   io.Reader = os.Stdin
+		err error
+	)
+	if from != "-" {
+		f, ferr := os.Open(from)
+		if ferr != nil {
+			brainFatal(ferr)
+		}
+		defer f.Close()
+		r = f
+	}
+	items, err := brain.ParseBatch(r)
+	if err != nil {
+		brainFatal(err)
+	}
+	entries, err := brain.BuildBatch(items, time.Now(), func(raw string) (string, error) {
+		return brainSource(dir, raw)
+	})
+	if err != nil {
+		brainFatal(err)
+	}
+	results, err := brain.CaptureBatch(brain.NewStore(dir), brain.NewQueue(dir), entries)
+	if err != nil {
+		brainFatal(err)
+	}
+	added := 0
+	reports := make([]captureReport, 0, len(results))
+	for _, res := range results {
+		if res.Added {
+			added++
+		}
+		reports = append(reports, newCaptureReport(res.Entry, res.Added, res.Status))
+	}
+	if globalJSONFlag {
+		brainJSON(map[string]any{"results": reports, "added": added,
+			"skipped": len(reports) - added, "total": len(reports)})
+		return
+	}
+	for _, rep := range reports {
+		switch rep.Status {
+		case brain.StatusQueued:
+			fmt.Printf("Queued %s -> would promote into %s\n", rep.ID, shardLabel(rep.Shard))
+		case brain.StatusAlreadyCommitted:
+			fmt.Printf("Already committed as %s — not added again.\n", rep.ID)
+		default:
+			fmt.Printf("Already queued as %s — not added again.\n", rep.ID)
+		}
+	}
+	fmt.Printf("\n%d queued, %d already present.\n", added, len(reports)-added)
 }
 
 var brainDropCmd = &cobra.Command{
@@ -1181,6 +1280,8 @@ func init() {
 	brainListCmd.Flags().String("slice", "", "Only this slice's entries")
 	brainListCmd.Flags().String("kind", "", "Only decisions or only requirements (decision|requirement)")
 	brainListCmd.Flags().Bool("open", false, "Only open questions; --open=false for only settled entries")
+	brainCaptureCmd.Flags().String("from-json", "",
+		"Queue a JSON array of entries from a file, or - for stdin, as one act")
 	brainPromoteCmd.Flags().String("to", "",
 		"Override the derived shard (use 'project' for a cross-cutting fact)")
 	brainStagedCmd.Flags().String("since", "",
@@ -1247,6 +1348,9 @@ type promoteReport struct {
 	Kind  string `json:"kind"`
 	Shard string `json:"shard"`
 	Path  string `json:"path"`
+	// Status is promoted, or already_promoted for an id already committed
+	// with the same content (a re-run after an interrupted promote).
+	Status string `json:"status"`
 }
 
 // stagedEntry is one queued entry as a machine sees it. The shard is included

@@ -249,6 +249,8 @@ CREATE TABLE WIDGETS (
     DynamicClasses          TEXT,
     ActionType              TEXT,    -- $Type of Action / OnClickAction / ClickAction
     HasConfirmation         INTEGER, -- 1 when that action has a ConfirmationInfo
+    Caption                 TEXT,    -- own Caption, project's default language
+    Tooltip                 TEXT,    -- own Tooltip, project's default language
     ProjectId               TEXT,
     SnapshotId              TEXT
 );
@@ -293,7 +295,7 @@ rather than trusting a list here:
 
 | RefKind | Edge |
 |---------|------|
-| `call` | flow calls a microflow / nanoflow / rule / Java action / REST operation; a workflow calls a handler microflow; a consumed OData service calls its configuration / headers / error-handling microflow |
+| `call` | flow calls a microflow / nanoflow / rule / Java action / REST operation; a workflow calls a handler microflow; a consumed OData service calls its configuration / headers / error-handling microflow; an agent calls its tool microflow, nanoflow or agent; a flow passes a microflow or agent document as a Java action parameter, which the action runs |
 | `create` / `change` / `delete` / `retrieve` | flow acts on an entity object |
 | `commit` | flow commits an entity object: a commit action, or a create / change that commits (`Yes` or `YesWithoutEvents`), beside its `create` / `change` edge |
 | `return` | flow returns an entity type |
@@ -308,12 +310,15 @@ rather than trusting a list here:
 | `home_page` / `login_page` / `menu_item` | navigation profile references a page, or a microflow (home microflow, menu item that calls one) |
 | `calculate` | calculated attribute uses a microflow |
 | `schedule` | scheduled event runs a microflow |
-| `publish` | published service runs a microflow: a REST operation, an OData resource's read / insert / update / delete microflow, an OData action, a REST or OData service's custom authentication microflow |
+| `publish` | published service runs a microflow: a REST operation, an OData resource's read / insert / update / delete microflow, an OData action, a REST or OData service's custom authentication microflow; a published MCP service's tool microflow and authentication microflow |
 | `event` | event handler runs a microflow: an entity event, or a business event a service subscribes to |
 | `settings` | a project setting (after-startup / before-shutdown / health check) names a microflow |
 | `sync` | offline navigation profile synchronizes an entity |
 | `mapping_call` | flow applies an import or export mapping: an import / export action, or a REST or web service call's request or response mapping |
 | `structure` | import or export mapping is built on a JSON structure |
+| `tool` | agent draws on a knowledge base or consumed MCP service (a tool microflow, nanoflow or agent is a `call`) |
+| `model` | agent runs on an AI model |
+| `key` | AI model or knowledge base reads its key from a constant |
 | `validate` | attribute validation rule uses a regular expression |
 | `member` | document binds, reads or writes an attribute, navigates an association, or reaches the entity an association step arrives at |
 | `xpath` | XPath constraint names an attribute, association, enumeration value, or an entity reached through an association |
@@ -385,11 +390,17 @@ CREATE VIRTUAL TABLE STRINGS USING fts5(
                     -- <owner $Type>.<property>, e.g. Forms$ActionButton.Caption.
                     -- Non-translatable strings keep a plain label: page_url,
                     -- log_node, log_message, documentation, rest_path,
-                    -- task_name, domain_model_documentation, ...
+                    -- task_name, domain_model_documentation, an agent's
+                    -- system_prompt / user_prompt / tool_description, ...
     Language,       -- Language code, empty for non-translatable strings
     ElementId,      -- The owning element's $ID — what distinguishes an
                     -- enumeration's twelve values from each other
-    ModuleName
+    ModuleName,
+    WidgetId UNINDEXED -- The widget around the text: a button's caption is
+                    -- owned by its Forms$ClientTemplate and its confirmation
+                    -- by a Forms$ConfirmationInfo, so ElementId is never the
+                    -- button. '' outside a widget, and for non-translatable rows.
+                    -- A tab page's caption names the tab page, not in widgets
 );
 ```
 

@@ -793,6 +793,9 @@ type Enumeration struct {
 // EnumerationValue is one value of an enumeration, with its caption in the
 // project's default language.
 type EnumerationValue struct {
+	// ID is the value's $ID: the element_id of its captions in strings(), one
+	// row per language (ako/mxcli#1301).
+	ID            string
 	Name          string
 	QualifiedName string // Module.Enumeration.Value, as refs_from() names it
 	Caption       string
@@ -805,7 +808,7 @@ type EnumerationValue struct {
 func (ctx *LintContext) enumerationValues() map[string][]EnumerationValue {
 	out := map[string][]EnumerationValue{}
 	rows, err := ctx.db.Query(`
-		SELECT EnumerationQualifiedName, Name, COALESCE(Caption, ''), COALESCE(Ordinal, 0)
+		SELECT EnumerationQualifiedName, COALESCE(Id, ''), Name, COALESCE(Caption, ''), COALESCE(Ordinal, 0)
 		FROM enumeration_values
 		ORDER BY EnumerationQualifiedName, Ordinal, Name`)
 	if err != nil {
@@ -816,7 +819,7 @@ func (ctx *LintContext) enumerationValues() map[string][]EnumerationValue {
 	for rows.Next() {
 		var enum string
 		var v EnumerationValue
-		if err := rows.Scan(&enum, &v.Name, &v.Caption, &v.Ordinal); err != nil {
+		if err := rows.Scan(&enum, &v.ID, &v.Name, &v.Caption, &v.Ordinal); err != nil {
 			ctx.recordQueryError("EnumerationValues (row scan)", err)
 			continue
 		}
@@ -948,6 +951,10 @@ type Widget struct {
 	DynamicClasses  string
 	ActionType      string // stored $Type of the primary action, e.g. "Forms$DeleteClientAction"
 	HasConfirmation bool   // only microflow / nanoflow / workflow calls can have one
+	// Caption and Tooltip in the project's default language (ako/mxcli#1303).
+	// Other languages: strings() rows whose widget_id is this widget's ID.
+	Caption string
+	Tooltip string
 }
 
 // Widgets returns an iterator over all widgets (excluding system modules).
@@ -958,7 +965,7 @@ func (ctx *LintContext) Widgets() iter.Seq[Widget] {
 			       w.ContainerType, w.ModuleName, w.EntityRef, w.AttributeRef,
 			       w.MicroflowRef, w.NanoflowRef, w.PageRef, w.SnippetRef,
 			       w.ParentWidgetId, w.Depth, w.Class, w.Style, w.DynamicClasses,
-			       w.ActionType, w.HasConfirmation
+			       w.ActionType, w.HasConfirmation, w.Caption, w.Tooltip
 			FROM widgets w
 			LEFT JOIN modules m ON w.ModuleName = m.Name
 			WHERE %s AND %s
@@ -973,11 +980,11 @@ func (ctx *LintContext) Widgets() iter.Seq[Widget] {
 		for rows.Next() {
 			var w Widget
 			var containerID, containerQName, containerType, entityRef, attrRef, mfRef, nfRef, pageRef, snippetRef sql.NullString
-			var parentID, class, style, dynClasses, actionType sql.NullString
+			var parentID, class, style, dynClasses, actionType, caption, tooltip sql.NullString
 			var depth, hasConfirmation sql.NullInt64
 			err := rows.Scan(&w.ID, &w.Name, &w.WidgetType, &containerID, &containerQName,
 				&containerType, &w.ModuleName, &entityRef, &attrRef, &mfRef, &nfRef, &pageRef, &snippetRef,
-				&parentID, &depth, &class, &style, &dynClasses, &actionType, &hasConfirmation)
+				&parentID, &depth, &class, &style, &dynClasses, &actionType, &hasConfirmation, &caption, &tooltip)
 			if err != nil {
 				ctx.recordQueryError("Widgets (row scan)", err)
 				continue
@@ -998,6 +1005,8 @@ func (ctx *LintContext) Widgets() iter.Seq[Widget] {
 			w.DynamicClasses = dynClasses.String
 			w.ActionType = actionType.String
 			w.HasConfirmation = hasConfirmation.Int64 != 0
+			w.Caption = caption.String
+			w.Tooltip = tooltip.String
 
 			if ctx.IsExcluded(w.ModuleName) {
 				continue

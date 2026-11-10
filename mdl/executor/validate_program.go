@@ -333,6 +333,8 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// been seen to hold. mxbuild never reads it, so a typo builds and only
 	// shows in Studio Pro (ako/mxcli#2023).
 	violations = append(violations, ValidateAgentProviders(prog)...)
+	violations = append(violations, ValidateAgentSelectedModel(prog)...)
+	violations = append(violations, ValidateConsumedMCPEndpoint(prog)...)
 
 	// Flag an after-startup microflow that does not return Boolean (CE0142).
 	// The reference RESOLVES — the name exists — so #274's existence check has

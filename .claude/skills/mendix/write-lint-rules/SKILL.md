@@ -11,11 +11,11 @@ description: "Write custom Starlark lint rules in .claude/lint-rules/ that run b
 | lines | section |
 |---|---|
 | 25-67 | Rule File Structure |
-| 68-163 | Available Query Functions |
-| 164-548 | Object Properties |
-| 549-562 | Helper Functions |
-| 563-649 | Common Patterns |
-| 650-658 | Validation |
+| 68-166 | Available Query Functions |
+| 167-552 | Object Properties |
+| 553-566 | Helper Functions |
+| 567-653 | Common Patterns |
+| 654-662 | Validation |
 
 <!-- /skill-index -->
 # Writing Custom Starlark Lint Rules
@@ -100,16 +100,19 @@ Without this, a rule that reads a full-only table under a fast build gets
 | `languages()` | list of language | The languages **enabled** in the project settings, in settings order (requires MPR reader; `[]` without one). Use it to scope per-language checks: `strings()` has a row for every stored translation, including languages the project never enabled |
 | `xpath_expressions()` | list of xpath_expression | All XPath constraint expressions in the catalog (access rules, retrieve actions, widgets) (full catalog — auto-detected) |
 | `modules()` | list of module | The user's modules (not System, not Marketplace), with their domain model's documentation |
+| `folders()` | list of folder | Every folder of the user's modules, **empty folders included**, with its path, parent and the documents and folders directly in it. A document's `folder` only names folders that hold a document, so check a module's folder layout with this |
+| `annotations()` | list of annotation | Every **domain model** annotation in the user's modules, with its full caption (newlines kept) and its place on the canvas. A microflow's annotations are activities: read them with `activities_for()` (`activity_type == "Annotation"`) |
 | `associations()` | list of association | All non-system associations, same-module and cross-module, with the delete behaviour of both ends |
 | `entity_event_handlers()` | list of entity_event_handler | Every before/after event handler on a non-system entity: which moment, which event, which microflow |
 | `navigation_menu_items()` | list of navigation_menu_item | Every navigation menu item of every profile, at every depth. Navigation belongs to the project, so no module filter applies |
 | `jar_dependencies()` | list of jar_dependency | Maven dependencies declared by non-system, non-marketplace modules |
+| `jar_files()` | list of jar_file | The `.jar` files on disk in `userlib/` and `vendorlib/` (top level, as the runtime reads them), with the library name and version split from the file name and the modules whose `.RequiredLib` marker names each. Read from disk at each call, not from the catalog; `[]` without a project path. Use it to find one library on the classpath in two versions |
 | `strings(language = None)` | list of catalog_string | User-facing and documentary text, one row per text and language; pass `language` (`"nl_NL"`) to narrow. An untranslated language has **no row**. Needs a FULL catalog, which `mxcli lint` builds automatically for a rule that calls it |
 | `layouts()` | list of layout | All non-system layouts |
 | `published_rest_operations()` | list of published_rest_operation | Operations of published REST services, with the microflow behind each |
 
-The fields of `module`, `association`, `entity_event_handler`,
-`navigation_menu_item`, `jar_dependency`, `catalog_string`, `layout` and
+The fields of `module`, `folder`, `annotation`, `association`, `entity_event_handler`,
+`navigation_menu_item`, `jar_dependency`, `jar_file`, `catalog_string`, `layout` and
 `published_rest_operation` are in [catalog-tables.md](catalog-tables.md).
 
 ### Graph-analysis functions (architecture rules)
@@ -268,6 +271,7 @@ def check():
 | `qualified_name` | string | `"Sales.ApiTimeout.Slow"` — the name `refs_from()` and an expression's `getCaption(Sales.ApiTimeout.Slow)` use |
 | `caption` | string | Caption in the project's default language: `"400"` |
 | `ordinal` | int | Position in the enumeration, from 0 |
+| `id` | string | The value's UUID. A caption in another language is the `strings(language = "nl_NL")` row with `context == "Enumerations$EnumerationValue.Caption"` and `element_id == v.id` |
 
 ### constant
 | Property | Type | Example |

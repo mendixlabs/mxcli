@@ -236,6 +236,8 @@ var consumedMCPServiceSchema = propSchema{on: "a consumed MCP service", keys: []
 	{"Version", []propShape{shapeString}},
 	{"ConnectionTimeoutSeconds", []propShape{shapeNumber}},
 	{"Documentation", textShapes},
+	{"Endpoint", []propShape{shapeConstant, shapeQName}},
+	{"AuthenticationMicroflow", []propShape{shapeQName}},
 }}
 
 // ServerName is stored but not in Studio Pro's editor: a new document gets its
@@ -273,6 +275,8 @@ var agentSchema = propSchema{on: "an agent", keys: []propKey{
 	{"UserPrompt", textShapes},
 	{"EnableBackendStreaming", []propShape{shapeBool}},
 	{"EnableUIStreaming", []propShape{shapeBool}},
+	{"SelectedModel", []propShape{shapeString}},
+	{"SelectedModelName", []propShape{shapeString}},
 }}
 
 var agentMCPServiceSchema = propSchema{on: "an agent's mcp service block", keys: []propKey{

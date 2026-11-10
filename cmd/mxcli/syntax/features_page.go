@@ -123,7 +123,7 @@ LIST IMPACT OF htmlelement;
 			"gallery", "listview", "textbox", "textarea", "datepicker",
 			"combobox", "checkbox", "radiobuttons", "filemanager", "file upload", "actionbutton", "linkbutton",
 			"dynamictext", "title", "snippetcall", "navigationlist", "item",
-			"column", "row", "footer", "header", "controlbar",
+			"column", "row", "footer", "header", "controlbar", "emptyplaceholder", "empty placeholder", "no items",
 			"template", "specialization", "list view template",
 			"tabcontainer", "tabpage", "tabs", "groupbox", "collapsible",
 			"image", "filter", "textfilter", "numberfilter", "datefilter",
@@ -151,7 +151,16 @@ LIST IMPACT OF htmlelement;
 			"GALLERY g (...) { FILTER f { TEXTFILTER tf (Attribute: A) } }\n" +
 			"--   A FILTER block written on a DATAGRID is not a column filter and not a\n" +
 			"--   container the grid declares — it used to be dropped on write with no\n" +
-			"--   diagnostic, and is now refused (MDL-WIDGET30).\n\n" +
+			"--   diagnostic, and is now refused (MDL-WIDGET30).\n" +
+			"--   What an EMPTY grid or gallery shows is the EMPTYPLACEHOLDER slot. It is\n" +
+			"--   hidden unless showEmptyPlaceholder is 'custom', and widgets in a hidden\n" +
+			"--   slot are CE0463 at mx check, so name both (MDL-WIDGET10 otherwise):\n" +
+			"DATAGRID dg (DataSource: DATABASE Module.Entity, showEmptyPlaceholder: 'custom') {\n" +
+			"  COLUMN (Attribute: A)\n" +
+			"  EMPTYPLACEHOLDER { DYNAMICTEXT tEmpty (Content: 'No items found.') }\n" +
+			"}\n" +
+			"--   On an existing grid: ALTER PAGE M.P { SET (showEmptyPlaceholder: 'custom') ON dg;\n" +
+			"--     INSERT INTO dg.emptyplaceholder { DYNAMICTEXT tEmpty (Content: '…') }; };\n\n" +
 			"-- Inputs\nTEXTBOX name (Label: 'L', Attribute: Attr)\nTEXTAREA | DATEPICKER | COMBOBOX | CHECKBOX | RADIOBUTTONS\n" +
 			"-- Read-only style of TEXTBOX, TEXTAREA, DATEPICKER, CHECKBOX, RADIOBUTTONS (and DATAVIEW):\n" +
 			"--   Inherit (default) | Control | Text — how the widget renders when it is read-only.\n" +

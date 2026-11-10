@@ -382,14 +382,21 @@ func encodeKnowledgeBaseContents(k *agenteditor.KnowledgeBase) (string, error) {
 	})
 }
 
+// encodeConsumedMCPServiceContents writes endpoint first and the credentials
+// microflow last, as most Studio Pro 11.16 documents hold them (FactoryManagement);
+// a stored document keeps its own order through the carry.
 func encodeConsumedMCPServiceContents(c *agenteditor.ConsumedMCPService) (string, error) {
 	type contentsShape struct {
-		ProtocolVersion          string `json:"protocolVersion"`
-		Documentation            string `json:"documentation"`
-		Version                  string `json:"version"`
-		ConnectionTimeoutSeconds int    `json:"connectionTimeoutSeconds"`
+		Endpoint                 *agenteditor.DocRef `json:"endpoint,omitempty"`
+		ProtocolVersion          string              `json:"protocolVersion"`
+		Documentation            string              `json:"documentation"`
+		Version                  string              `json:"version"`
+		ConnectionTimeoutSeconds int                 `json:"connectionTimeoutSeconds"`
+		AuthenticationMicroflow  *agenteditor.DocRef `json:"authenticationMicroflow,omitempty"`
 	}
 	return marshalJSON(contentsShape{
+		Endpoint:                 c.Endpoint,
+		AuthenticationMicroflow:  c.AuthenticationMicroflow,
 		ProtocolVersion:          c.ProtocolVersion,
 		Documentation:            c.InnerDocumentation,
 		Version:                  c.Version,
@@ -486,13 +493,15 @@ func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 		Tools              []toolEntry            `json:"tools"`
 		KnowledgebaseTools []kbToolEntry          `json:"knowledgebaseTools"`
 		Model              *agenteditor.DocRef    `json:"model,omitempty"`
-		Entity             *agenteditor.DocRef    `json:"entity,omitempty"`
-		MaxTokens          *int                   `json:"maxTokens,omitempty"`
-		ToolChoice         string                 `json:"toolChoice,omitempty"`
-		Temperature        *float64               `json:"temperature,omitempty"`
-		TopP               *float64               `json:"topP,omitempty"`
-		EnableBackend      *bool                  `json:"enableBackendStreaming,omitempty"`
-		EnableUI           *bool                  `json:"enableUIStreaming,omitempty"`
+		// After model, before entity: where Studio Pro puts it.
+		SelectedModel *agenteditor.SelectedModel `json:"selectedModel,omitempty"`
+		Entity        *agenteditor.DocRef        `json:"entity,omitempty"`
+		MaxTokens     *int                       `json:"maxTokens,omitempty"`
+		ToolChoice    string                     `json:"toolChoice,omitempty"`
+		Temperature   *float64                   `json:"temperature,omitempty"`
+		TopP          *float64                   `json:"topP,omitempty"`
+		EnableBackend *bool                      `json:"enableBackendStreaming,omitempty"`
+		EnableUI      *bool                      `json:"enableUIStreaming,omitempty"`
 	}
 
 	tools := make([]toolEntry, 0, len(a.Tools))
@@ -518,6 +527,7 @@ func encodeAgentContents(a *agenteditor.Agent) (string, error) {
 		Tools:              tools,
 		KnowledgebaseTools: kbTools,
 		Model:              a.Model,
+		SelectedModel:      a.SelectedModel,
 		Entity:             a.Entity,
 		MaxTokens:          a.MaxTokens,
 		ToolChoice:         a.ToolChoice,

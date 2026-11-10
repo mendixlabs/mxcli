@@ -69,6 +69,11 @@ type CreateConsumedMCPServiceStmt struct {
 	ConnectionTimeoutSeconds int
 	InnerDocumentation       string // Contents.documentation field
 	CreateOrModify           bool   // true for CREATE OR MODIFY / CREATE OR REPLACE
+	// Endpoint is the String constant holding the server URL (#2060);
+	// AuthenticationMicroflow returns the headers sent with each request. Left
+	// out, a create or modify keeps the stored reference.
+	Endpoint                *QualifiedName
+	AuthenticationMicroflow *QualifiedName
 }
 
 func (s *CreateConsumedMCPServiceStmt) isStatement() {}
@@ -211,14 +216,19 @@ type CreateAgentStmt struct {
 	// stored value.
 	EnableBackendStreaming *bool
 	EnableUIStreaming      *bool
-	Temperature            *float64
-	TopP                   *float64
-	SystemPrompt           string
-	UserPrompt             string
-	Variables              []AgentVarDef
-	Tools                  []AgentToolDef
-	KBTools                []AgentKBToolDef
-	CreateOrModify         bool // true for CREATE OR MODIFY / CREATE OR REPLACE
+	// The model on a multi-model resource (#2031): its id, and the display
+	// name Studio Pro stores. Left out, a create or modify keeps the stored
+	// one; '' clears it.
+	SelectedModel     *string
+	SelectedModelName *string
+	Temperature       *float64
+	TopP              *float64
+	SystemPrompt      string
+	UserPrompt        string
+	Variables         []AgentVarDef
+	Tools             []AgentToolDef
+	KBTools           []AgentKBToolDef
+	CreateOrModify    bool // true for CREATE OR MODIFY / CREATE OR REPLACE
 }
 
 func (s *CreateAgentStmt) isStatement() {}

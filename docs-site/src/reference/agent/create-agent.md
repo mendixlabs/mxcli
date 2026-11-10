@@ -6,6 +6,7 @@
 CREATE [ OR MODIFY ] AGENT module.Name (
     UsageType: { Task | Conversational },
     model: module.ModelName,
+    SelectedModel: 'model id',
     SystemPrompt: 'prompt' | $$ multi-line prompt $$,
     UserPrompt: 'prompt' | $$ multi-line prompt $$
     [, description: 'description' ]
@@ -82,6 +83,12 @@ If `OR MODIFY` is specified and the agent already exists, its properties and bod
 `model: module.ModelName`
 :   Qualified reference to the model document the agent uses.
 
+`SelectedModel`
+:   The id of the model the agent uses, one the Model document's resource offers (e.g. `'eu.anthropic.claude-sonnet-5'`). Required in practice from Agent Editor 2.2: its import refuses an agent without one ("Model with name  is referenced but could not be found for the Agent"), and that refusal stops the import of every agent document at startup. `mxcli check` warns on a `create agent` without it (MDL-AGENT02). Only the id is read at runtime; it is matched against `GenAICommons.DeployedModel.Model`. To list the ids, with the app running: `mxcli oql "select Model from MxGenAIConnector.MxCloudDeployedModel"` (reported to work in ako/mxcli#2031). `''` clears it.
+
+`SelectedModelName`
+:   Optional. The display name Studio Pro stores next to the id (e.g. `'Anthropic Claude Sonnet 5'`); nothing at runtime reads it. Defaults to the id, or keeps the stored name while the id is unchanged.
+
 `SystemPrompt`
 :   Instructions for the AI model's behavior and persona.
 
@@ -132,6 +139,7 @@ On `OR MODIFY`, a setting the statement leaves out keeps its stored value.
 CREATE AGENT MyModule."Summarizer" (
     UsageType: Task,
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     SystemPrompt: 'Summarize the given text in 3 sentences.',
     UserPrompt: 'Enter text to summarize.'
 );
@@ -144,6 +152,7 @@ CREATE AGENT MyModule."Summarizer" (
 CREATE AGENT MyModule."Translator" (
     UsageType: Task,
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     variables: ("Language": EntityAttribute),
     SystemPrompt: 'Translate the text into {{Language}}.',
     UserPrompt: 'Hello world'
@@ -157,6 +166,7 @@ CREATE AGENT MyModule."Translator" (
 CREATE AGENT MyModule."Support" (
     UsageType: Chat,
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     EnableBackendStreaming: true,
     SystemPrompt: 'Help the customer with their orders.'
 )
@@ -177,6 +187,7 @@ CREATE AGENT MyModule."Support" (
 CREATE AGENT MyModule."CodeReviewer" (
     UsageType: Task,
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     SystemPrompt: $$You are a code review assistant.
 
 Review the provided code for:
@@ -199,6 +210,7 @@ CREATE AGENT MyModule."ResearchAssistant" (
     UsageType: Conversational,
     description: 'Research assistant with web search and documentation',
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     MaxTokens: 16384,
     ToolChoice: Auto,
     SystemPrompt: 'You are a research assistant. Use available tools.',

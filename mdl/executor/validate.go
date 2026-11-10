@@ -327,14 +327,14 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 		if s.ObjectType == "module" && s.NewName != "" {
 			sc.renamedModules[s.NewName] = true
 		} else if s.Name.Module != "" && s.NewName != "" && !s.DryRun {
-			sc.indirectDocs[s.ObjectType+":"+s.Name.Module+"."+s.NewName] = true
+			sc.markIndirectDoc(s.ObjectType, s.Name.Module+"."+s.NewName)
 		}
 	case *ast.MoveStmt:
 		if s.DocumentType == ast.DocumentTypeEntity && s.TargetModule != "" {
 			sc.indirectEntities[s.TargetModule+"."+s.Name.Name] = true
 		}
 		if s.TargetModule != "" {
-			sc.indirectDocs[moveTargetKind(s.DocumentType)+":"+s.TargetModule+"."+s.Name.Name] = true
+			sc.markIndirectDoc(moveTargetKind(s.DocumentType), s.TargetModule+"."+s.Name.Name)
 		}
 	case *ast.ExecuteScriptStmt:
 		sc.opaqueScript = true
@@ -1122,6 +1122,23 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 		}
 	case *ast.CreatePublishedRestServiceStmt:
 		return validatePublishedRestAuthMicroflow(ctx, s.Authentication, sc)
+	case *ast.CreateConsumedMCPServiceStmt:
+		return validateConsumedMCPRefs(ctx, sc, s.Name, s.Endpoint, s.AuthenticationMicroflow)
+	case *ast.AlterConsumedMCPServiceStmt:
+		var endpoint, mf *ast.QualifiedName
+		for k, v := range s.Changes {
+			if v == "" {
+				continue
+			}
+			qn := parseQualifiedNameStr(v)
+			switch strings.ToLower(k) {
+			case "endpoint":
+				endpoint = &qn
+			case "authenticationmicroflow":
+				mf = &qn
+			}
+		}
+		return validateConsumedMCPRefs(ctx, sc, s.Name, endpoint, mf)
 	case *ast.CreateMessageDefinitionCollectionStmt:
 		return messageDefinitionMemberErrors(ctx, sc, s.Name.String(), s.Definitions...)
 	case *ast.CreateMessageDefinitionStmt:
@@ -1498,6 +1515,38 @@ func carriedExclusion(ctx *ExecContext, kind string, qn ast.QualifiedName, rewri
 		excluded = true
 	}
 	return excluded
+}
+
+// markIndirectDoc records a document an earlier statement of the script puts
+// under qn without creating it — a RENAME, or a MOVE to another module.
+//
+// It goes into indirectDocs, and into the kind's own script-defined set as
+// well: every reference check (show page, call microflow, a page's snippet
+// call, …) consults that set, so a document known only to indirectDocs was
+// "not found" by the name exec would find it under (mendixlabs/mxcli#1790).
+func (sc *scriptContext) markIndirectDoc(kind, qn string) {
+	if kind == "" {
+		return
+	}
+	sc.indirectDocs[kind+":"+qn] = true
+	switch kind {
+	case "page":
+		sc.pages[qn] = true
+	case "snippet":
+		sc.snippets[qn] = true
+	case "layout":
+		sc.layouts[qn] = true
+	case "microflow":
+		sc.microflows[qn] = true
+	case "nanoflow":
+		sc.nanoflows[qn] = true
+	case "enumeration":
+		sc.enumerations[qn] = true
+	case "constant":
+		sc.constants[qn] = true
+	case "workflow":
+		sc.workflows[qn] = true
+	}
 }
 
 // validateFlowBodyReferences validates references in any flow body (microflow or nanoflow).
@@ -2382,4 +2431,31 @@ func validatePublishedRestAuthMicroflow(ctx *ExecContext, auth *ast.PublishedRes
 		return nil
 	}
 	return mdlerrors.NewValidationf("MDL-REST04: authentication microflow not found: %s", auth.Microflow)
+}
+
+// validateConsumedMCPRefs checks a consumed MCP service's Endpoint and
+// AuthenticationMicroflow (#2060). The endpoint must be a String constant:
+// AgentEditorCommons reads its value as the server URL. MCPClient calls the
+// credentials microflow with no arguments and reads its result as a list of
+// System.HttpHeader (ConsumedMCPService_CreateMCPClient), so a parameter or
+// another return type fails at runtime. A constant or microflow the script
+// itself creates is known by name only, so its type is left to exec.
+func validateConsumedMCPRefs(ctx *ExecContext, sc *scriptContext, name ast.QualifiedName, endpoint, mf *ast.QualifiedName) error {
+	var problems []string
+	if endpoint != nil && !sc.constants[endpoint.String()] {
+		if _, err := consumedMCPEndpointRef(ctx, *endpoint); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
+	if mf != nil && !sc.microflows[mf.String()] {
+		if live, ok := liveMicroflowsByQualifiedName(ctx)[mf.String()]; !ok {
+			problems = append(problems, "AuthenticationMicroflow not found: "+mf.String())
+		} else if p := consumedMCPCredentialsProblem(live); p != "" {
+			problems = append(problems, "AuthenticationMicroflow "+mf.String()+" "+p)
+		}
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	return mdlerrors.NewValidationf("consumed mcp service %s: %s", name, strings.Join(problems, "; "))
 }

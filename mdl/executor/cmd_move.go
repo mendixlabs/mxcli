@@ -5,6 +5,7 @@ package executor
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
@@ -102,7 +103,7 @@ func execMove(ctx *ExecContext, s *ast.MoveStmt) (moveErr error) {
 			return err
 		}
 	case ast.DocumentTypeNanoflow:
-		if err := moveNanoflow(ctx, s.Name, targetContainerID); err != nil {
+		if err := moveNanoflow(ctx, s.Name, targetContainerID, targetModule, isCrossModuleMove); err != nil {
 			return err
 		}
 	case ast.DocumentTypeRule:
@@ -180,7 +181,7 @@ func moveActionSource(ctx *ExecContext, docType ast.DocumentType, fromModule, to
 // the target container. Anything it cannot establish — no such document, a
 // different doctype under that name — is left to the mover, which reports it.
 func alreadyPlaced(ctx *ExecContext, s *ast.MoveStmt, targetContainerID model.ID) bool {
-	doc, err := ctx.Backend.FindDocumentUnit(s.Name.Module, s.Name.Name)
+	doc, err := findDocumentOfKind(ctx, s.DocumentType.CanonicalSpelling(), s.Name)
 	if err != nil || doc == nil || doc.ContainerID != targetContainerID {
 		return false
 	}
@@ -338,7 +339,7 @@ func moveRule(ctx *ExecContext, name ast.QualifiedName, targetContainerID model.
 	return mdlerrors.NewNotFound("rule", name.String())
 }
 
-func moveNanoflow(ctx *ExecContext, name ast.QualifiedName, targetContainerID model.ID) error {
+func moveNanoflow(ctx *ExecContext, name ast.QualifiedName, targetContainerID model.ID, targetModule *model.Module, isCrossModuleMove bool) error {
 	// Find the nanoflow
 	nfs, err := ctx.Backend.ListNanoflows()
 	if err != nil {
@@ -358,6 +359,15 @@ func moveNanoflow(ctx *ExecContext, name ast.QualifiedName, targetContainerID mo
 			nf.ContainerID = targetContainerID
 			if err := ctx.Backend.MoveNanoflow(nf); err != nil {
 				return mdlerrors.NewBackend("move nanoflow", err)
+			}
+			// A nanoflow's grants map to the target's same-named roles, as a
+			// microflow's do; left naming the old module they were CE0148
+			// (ako/mxcli#1836).
+			if isCrossModuleMove {
+				nf.AllowedModuleRoles = remapDocumentAccessRoles(ctx, targetModule, nf.AllowedModuleRoles)
+				if err := ctx.Backend.UpdateAllowedRoles(nf.ID, documentRoleStrings(nf.AllowedModuleRoles)); err != nil {
+					return mdlerrors.NewBackend("remap nanoflow access", err)
+				}
 			}
 			fmt.Fprintf(ctx.Output, "Moved nanoflow %s to new location\n", name.String())
 			return nil
@@ -395,6 +405,12 @@ func moveEntity(ctx *ExecContext, name ast.QualifiedName, sourceModule, targetMo
 	if err != nil {
 		return mdlerrors.NewBackend("get target domain model", err)
 	}
+
+	// An entity's access rules may only name its own module's roles, so each
+	// moves to the target's role of the same name; one the target lacks is kept,
+	// and said, rather than dropped — a rule that silently lost its role would
+	// hide the entity from it (ako/mxcli#1836).
+	remapEntityAccessRoles(ctx, entity, sourceModule, targetModule)
 
 	// Move entity via writer (converts associations to CrossAssociations, updates
 	// validation rule and access rule refs)
@@ -633,4 +649,46 @@ func movePublishedODataService(ctx *ExecContext, name ast.QualifiedName, targetC
 	}
 
 	return mdlerrors.NewNotFound("odata service", name.String())
+}
+
+// remapEntityAccessRoles points each of the entity's access rules at the target
+// module's role of the same name, and warns of a role the target lacks.
+func remapEntityAccessRoles(ctx *ExecContext, entity *domainmodel.Entity, sourceModule, targetModule *model.Module) {
+	if len(entity.AccessRules) == 0 {
+		return
+	}
+	targetRoles := map[string]bool{}
+	if ms, err := ctx.Backend.GetModuleSecurity(targetModule.ID); err == nil && ms != nil {
+		for _, r := range ms.ModuleRoles {
+			targetRoles[r.Name] = true
+		}
+	}
+	oldPrefix := sourceModule.Name + "."
+	var missing []string
+	seen := map[string]bool{}
+	for _, ar := range entity.AccessRules {
+		names := append([]string(nil), ar.ModuleRoleNames...)
+		changed := false
+		for i, qn := range names {
+			if !strings.HasPrefix(qn, oldPrefix) {
+				continue
+			}
+			role := qn[len(oldPrefix):]
+			if targetRoles[role] {
+				names[i] = targetModule.Name + "." + role
+				changed = true
+			} else if !seen[qn] {
+				seen[qn] = true
+				missing = append(missing, qn)
+			}
+		}
+		if changed {
+			ar.ModuleRoleNames = names
+		}
+	}
+	for _, qn := range missing {
+		fmt.Fprintf(ctx.Output, "Warning: entity %s.%s keeps access-rule role %s: module %s has no role named %s. "+
+			"An entity's access rules may only use its own module's roles — create %s.%s and grant again.\n",
+			targetModule.Name, entity.Name, qn, targetModule.Name, qn[len(oldPrefix):], targetModule.Name, qn[len(oldPrefix):])
+	}
 }

@@ -213,7 +213,7 @@ func TestMoveNanoflow_Mock(t *testing.T) {
 	withContainer(h, nf.ContainerID, mod.ID)
 
 	ctx, _ := newMockCtx(t, withBackend(mb), withHierarchy(h))
-	assertNoError(t, moveNanoflow(ctx, ast.QualifiedName{Module: "MyModule", Name: "NF_Move"}, folderID))
+	assertNoError(t, moveNanoflow(ctx, ast.QualifiedName{Module: "MyModule", Name: "NF_Move"}, folderID, nil, false))
 
 	if movedNF == nil {
 		t.Fatal("Expected MoveNanoflow to be called")
@@ -597,7 +597,7 @@ func TestMoveNanoflow_Mock_NotFound(t *testing.T) {
 	}
 
 	ctx, _ := newMockCtx(t, withBackend(mb), withHierarchy(h))
-	err := moveNanoflow(ctx, ast.QualifiedName{Module: "MyModule", Name: "Missing"}, "some-folder-id")
+	err := moveNanoflow(ctx, ast.QualifiedName{Module: "MyModule", Name: "Missing"}, "some-folder-id", nil, false)
 	assertError(t, err)
 }
 

@@ -281,6 +281,40 @@ two tools with one name, is refused too. As a warning: `AuthenticationMicroflow`
 
 **Solution:** Fix the property the message names; `create published mcp service` documents each.
 
+### MDL-AGENT02: An agent created without a selected model
+
+```
+agent Shop.SupportAgent has no SelectedModel: Agent Editor 2.2+ refuses to import it at
+startup ("Model with name  is referenced but could not be found"), and that stops the
+import of every agent [MDL-AGENT02]
+```
+
+**Cause:** Agent Editor 2.2+ (AgentEditorCommons `AgentFromModel_Validate`) requires the
+agent's `selectedModel` id and retrieves the deployed model by it. mxbuild does not read agent
+documents, so the build is green; `ASU_AgentEditor` refuses the agent at startup and stops
+importing the rest.
+
+**Solution:** Add `SelectedModel: '<model id>'` (e.g. `'eu.anthropic.claude-sonnet-5'`), the id
+of a model the Model document's resource offers. `create or modify agent` is not flagged: left
+out, it keeps the stored value.
+
+### MDL-AGENT03: A consumed MCP service without an endpoint
+
+```
+consumed mcp service Shop.CarrierTracking has no Endpoint: Agent Editor skips it at startup
+("No value could be found for the local configuration for the constant"), so it connects
+nowhere [MDL-AGENT03]
+```
+
+**Cause:** Agent Editor imports a consumed MCP service only when its `endpoint` constant has a
+value: `ConsumedMCPService_CreateUpdateFromModel` reads it with `GetConstantValue` and skips the
+service otherwise. mxbuild does not read agent documents, so the build is green; the agents that
+use the service get none of its tools.
+
+**Solution:** Add `Endpoint: @Module.UrlConstant`, a String constant holding the server URL, and
+set its value per environment. `create or modify` is not flagged: left out, it keeps the stored
+endpoint.
+
 ### MDL-LISTOP02: A list operation nested inside another one
 
 ```

@@ -95,3 +95,33 @@ func sameAgentTool(t, stored agenteditor.AgentTool) bool {
 	}
 	return t.Name == stored.Name
 }
+
+// selectedModelFrom is the agent's selectedModel after a statement (#2031).
+// id is the SelectedModel key and name SelectedModelName, nil when the
+// statement leaves them out. Left out, the stored value stays; an empty id
+// clears it. A name left out is the stored one while the id is the same, and
+// otherwise the id: the stored display name belongs to the stored model, and
+// the runtime reads only the id.
+func selectedModelFrom(id, name *string, stored *agenteditor.SelectedModel) *agenteditor.SelectedModel {
+	if id == nil {
+		if stored == nil {
+			return nil
+		}
+		sm := *stored
+		if name != nil {
+			sm.Name = *name
+		}
+		return &sm
+	}
+	if *id == "" {
+		return nil
+	}
+	sm := agenteditor.SelectedModel{ID: *id, Name: *id}
+	switch {
+	case name != nil:
+		sm.Name = *name
+	case stored != nil && stored.ID == *id:
+		sm.Name = stored.Name
+	}
+	return &sm
+}
