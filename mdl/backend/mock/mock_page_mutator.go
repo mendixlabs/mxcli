@@ -33,6 +33,7 @@ type MockPageMutator struct {
 	InsertColumnsFunc              func(gridRef, afterColumnRef string, position backend.InsertPosition, columns []*backend.DataGridColumnSpec) error
 	InsertListViewTemplatesFunc    func(listViewRef string, templates []*pages.ListViewTemplate) error
 	InsertTabPagesFunc             func(targetRef string, position backend.InsertPosition, tabPages []*pages.TabPage) error
+	InsertLayoutGridRowsFunc       func(gridRef string, rows []*pages.LayoutGridRow) error
 	InsertNavigationListItemsFunc  func(targetRef string, position backend.InsertPosition, items []*pages.NavigationListItem) error
 	ReplaceNavigationListItemFunc  func(targetRef string, items []*pages.NavigationListItem) error
 	DropListViewTemplateFunc       func(listViewRef, specialization string) error
@@ -149,6 +150,13 @@ func (m *MockPageMutator) InsertListViewTemplates(listViewRef string, templates 
 		return m.InsertListViewTemplatesFunc(listViewRef, templates)
 	}
 	return fmt.Errorf("MockBackend.InsertListViewTemplates not configured")
+}
+
+func (m *MockPageMutator) InsertLayoutGridRows(gridRef string, rows []*pages.LayoutGridRow) error {
+	if m.InsertLayoutGridRowsFunc != nil {
+		return m.InsertLayoutGridRowsFunc(gridRef, rows)
+	}
+	return fmt.Errorf("MockBackend.InsertLayoutGridRows not configured")
 }
 
 func (m *MockPageMutator) InsertTabPages(targetRef string, position backend.InsertPosition, tabPages []*pages.TabPage) error {
