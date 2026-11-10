@@ -295,8 +295,11 @@ documents, so the build is green; `ASU_AgentEditor` refuses the agent at startup
 importing the rest.
 
 **Solution:** Add `SelectedModel: '<model id>'` (e.g. `'eu.anthropic.claude-sonnet-5'`), the id
-of a model the Model document's resource offers. `create or modify agent` is not flagged: left
-out, it keeps the stored value.
+of a model the Model document's resource offers. `create or modify agent` keeps a stored value
+when the key is left out, so `check --references` and `exec` warn on it only when there is
+none to keep: a new agent, one the script dropped, or a stored agent that has none. They do not
+warn when the project's AgentEditorCommons predates 2.2, which does not read the value. `mxcli
+lint` reports stored agents without one as MPR014.
 
 ### MDL-AGENT03: A consumed MCP service without an endpoint
 
@@ -312,8 +315,9 @@ service otherwise. mxbuild does not read agent documents, so the build is green;
 use the service get none of its tools.
 
 **Solution:** Add `Endpoint: @Module.UrlConstant`, a String constant holding the server URL, and
-set its value per environment. `create or modify` is not flagged: left out, it keeps the stored
-endpoint.
+set its value per environment. `create or modify` keeps a stored endpoint when the key is left
+out, so `check --references` and `exec` warn on it only when there is none to keep. `mxcli lint`
+reports stored services without one as MPR015.
 
 ### MDL-LISTOP02: A list operation nested inside another one
 
