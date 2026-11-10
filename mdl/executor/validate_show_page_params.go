@@ -97,6 +97,13 @@ func (sc *scriptContext) recordPageParamNames(qualifiedName string, params []ast
 		names = append(names, p.Name)
 	}
 	sc.pageParamNames[strings.ToLower(qualifiedName)] = names
+	optional := map[string]bool{}
+	for _, p := range params {
+		if p.Optional {
+			optional[strings.ToLower(p.Name)] = true
+		}
+	}
+	sc.pageOptionalParams[strings.ToLower(qualifiedName)] = optional
 }
 
 // recordPageParamEdits keeps an alter page's add/drop parameter operations, so

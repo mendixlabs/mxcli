@@ -113,6 +113,9 @@ type scriptContext struct {
 	// ordinarily one script.
 	pageParams     map[string][]string // Module.Page (lower-cased) -> parameter entities
 	pageParamNames map[string][]string // Module.Page (lower-cased) -> parameter names, for show page arguments
+	// pageOptionalParams is each script page's optional parameters (lower-cased
+	// names), which a menu item may leave unfilled (validateMenuItemArguments).
+	pageOptionalParams map[string]map[string]bool
 	// pageParamEdits is each page's add/drop parameter operations from alter
 	// page statements, in script order, applied over pageParamNames or the
 	// stored list (ako/mxcli#1940).
@@ -189,6 +192,7 @@ func newScriptContext() *scriptContext {
 
 		pageParams:            make(map[string][]string),
 		pageParamNames:        make(map[string][]string),
+		pageOptionalParams:    make(map[string]map[string]bool),
 		pageParamEdits:        make(map[string][]ast.AlterPageOperation),
 		indirectDocs:          make(map[string]bool),
 		renamedModules:        make(map[string]bool),
@@ -547,6 +551,9 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// unchecked, so a typo was CE1613 at build time, after the whole menu had
 	// been rewritten.
 	errors = append(errors, validateNavigationTargets(ctx, prog, sc)...)
+	// A menu item has no context object, so a flow or page it calls with a
+	// parameter no argument fills is CE1571 at build time.
+	errors = append(errors, validateMenuItemArguments(ctx, prog, sc)...)
 	// Resolve what a GRANT / REVOKE, a user role and a demo user name: the
 	// entity, document or member, and the module and user roles. exec refuses
 	// the grants after the statements before them are written, and writes the
