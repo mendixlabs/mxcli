@@ -172,6 +172,14 @@ func (b *Builder) ExitCreateConsumedMCPServiceStatement(ctx *parser.CreateConsum
 	if v, ok := props["connectiontimeoutseconds"]; ok {
 		fmt.Sscanf(v, "%d", &stmt.ConnectionTimeoutSeconds)
 	}
+	if v, ok := props["endpoint"]; ok {
+		qn := parseQualifiedNameString(v)
+		stmt.Endpoint = &qn
+	}
+	if v, ok := props["authenticationmicroflow"]; ok {
+		qn := parseQualifiedNameString(v)
+		stmt.AuthenticationMicroflow = &qn
+	}
 
 	if createStmt := findParentCreateStatement(ctx); createStmt != nil {
 		if createStmt.OR() != nil && (createStmt.MODIFY() != nil || createStmt.REPLACE() != nil) {

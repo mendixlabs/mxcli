@@ -78,7 +78,9 @@ var knowledgeBaseContentsSpec = &contentsSpec{
 }
 
 var consumedMCPServiceContentsSpec = &contentsSpec{
-	modelled: contentKeys("protocolVersion", "documentation", "version", "connectionTimeoutSeconds"),
+	modelled: contentKeys("protocolVersion", "documentation", "version", "connectionTimeoutSeconds",
+		"endpoint", "authenticationMicroflow"),
+	objects: map[string]*contentsSpec{"endpoint": docRefSpec, "authenticationMicroflow": docRefSpec},
 }
 
 var publishedMCPServiceContentsSpec = &contentsSpec{

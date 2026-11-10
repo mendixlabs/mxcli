@@ -140,7 +140,7 @@ func execAlterConsumedMCPService(ctx *ExecContext, s *ast.AlterConsumedMCPServic
 		return mdlerrors.NewNotFound("consumed mcp service", s.Name.String())
 	}
 	for key, val := range s.Changes {
-		if err := applyConsumedMCPServiceChange(c, key, val); err != nil {
+		if err := applyConsumedMCPServiceChange(ctx, c, key, val); err != nil {
 			return err
 		}
 	}
@@ -152,8 +152,28 @@ func execAlterConsumedMCPService(ctx *ExecContext, s *ast.AlterConsumedMCPServic
 	return nil
 }
 
-func applyConsumedMCPServiceChange(c *agenteditor.ConsumedMCPService, key, val string) error {
+func applyConsumedMCPServiceChange(ctx *ExecContext, c *agenteditor.ConsumedMCPService, key, val string) error {
 	switch strings.ToLower(key) {
+	case "endpoint":
+		if val == "" {
+			c.Endpoint = nil
+			return nil
+		}
+		ref, err := consumedMCPEndpointRef(ctx, parseQualifiedNameStr(val))
+		if err != nil {
+			return fmt.Errorf("alter consumed mcp service %s: %w", c.Name, err)
+		}
+		c.Endpoint = ref
+	case "authenticationmicroflow":
+		if val == "" {
+			c.AuthenticationMicroflow = nil
+			return nil
+		}
+		ref, err := publishedMCPMicroflowRef(ctx, parseQualifiedNameStr(val))
+		if err != nil {
+			return fmt.Errorf("alter consumed mcp service %s: AuthenticationMicroflow: %w", c.Name, err)
+		}
+		c.AuthenticationMicroflow = ref
 	case "protocolversion":
 		c.ProtocolVersion = val
 	case "version":

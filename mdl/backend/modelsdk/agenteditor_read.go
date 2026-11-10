@@ -179,14 +179,18 @@ func (b *Backend) ListAgentEditorConsumedMCPServices() ([]*agenteditor.ConsumedM
 		c.ExportLevel = u.wrap.ExportLevel
 		if u.wrap.Contents != "" {
 			var p struct {
-				ProtocolVersion          string `json:"protocolVersion"`
-				Documentation            string `json:"documentation"`
-				Version                  string `json:"version"`
-				ConnectionTimeoutSeconds int    `json:"connectionTimeoutSeconds"`
+				ProtocolVersion          string              `json:"protocolVersion"`
+				Documentation            string              `json:"documentation"`
+				Version                  string              `json:"version"`
+				ConnectionTimeoutSeconds int                 `json:"connectionTimeoutSeconds"`
+				Endpoint                 *agenteditor.DocRef `json:"endpoint"`
+				AuthenticationMicroflow  *agenteditor.DocRef `json:"authenticationMicroflow"`
 			}
 			if err := json.Unmarshal([]byte(u.wrap.Contents), &p); err != nil {
 				return nil, fmt.Errorf("unmarshal ConsumedMCPService Contents: %w", err)
 			}
+			c.Endpoint = p.Endpoint
+			c.AuthenticationMicroflow = p.AuthenticationMicroflow
 			c.ProtocolVersion = p.ProtocolVersion
 			c.InnerDocumentation = p.Documentation
 			c.Version = p.Version

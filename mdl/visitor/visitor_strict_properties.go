@@ -236,6 +236,8 @@ var consumedMCPServiceSchema = propSchema{on: "a consumed MCP service", keys: []
 	{"Version", []propShape{shapeString}},
 	{"ConnectionTimeoutSeconds", []propShape{shapeNumber}},
 	{"Documentation", textShapes},
+	{"Endpoint", []propShape{shapeConstant, shapeQName}},
+	{"AuthenticationMicroflow", []propShape{shapeQName}},
 }}
 
 // ServerName is stored but not in Studio Pro's editor: a new document gets its

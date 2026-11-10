@@ -550,14 +550,18 @@ func decodeAgentEditorConsumedMCPService(unitID, containerID string, wrap *custo
 		return c, nil
 	}
 	var payload struct {
-		ProtocolVersion          string `json:"protocolVersion"`
-		Documentation            string `json:"documentation"`
-		Version                  string `json:"version"`
-		ConnectionTimeoutSeconds int    `json:"connectionTimeoutSeconds"`
+		ProtocolVersion          string        `json:"protocolVersion"`
+		Documentation            string        `json:"documentation"`
+		Version                  string        `json:"version"`
+		ConnectionTimeoutSeconds int           `json:"connectionTimeoutSeconds"`
+		Endpoint                 *types.DocRef `json:"endpoint"`
+		AuthenticationMicroflow  *types.DocRef `json:"authenticationMicroflow"`
 	}
 	if err := json.Unmarshal([]byte(wrap.Contents), &payload); err != nil {
 		return nil, fmt.Errorf("unmarshal ConsumedMCPService Contents JSON: %w", err)
 	}
+	c.Endpoint = payload.Endpoint
+	c.AuthenticationMicroflow = payload.AuthenticationMicroflow
 	c.ProtocolVersion = payload.ProtocolVersion
 	c.InnerDocumentation = payload.Documentation
 	c.Version = payload.Version

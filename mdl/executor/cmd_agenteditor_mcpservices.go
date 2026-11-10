@@ -14,6 +14,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/sdk/agenteditor"
+	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
 // listAgentEditorConsumedMCPServices handles SHOW CONSUMED MCP SERVICES [IN module].
@@ -85,6 +86,12 @@ func describeAgentEditorConsumedMCPService(ctx *ExecContext, name ast.QualifiedN
 	if c.ProtocolVersion != "" {
 		lines = append(lines, fmt.Sprintf("  ProtocolVersion: '%s'", escapeSQLString(c.ProtocolVersion)))
 	}
+	if c.Endpoint != nil && c.Endpoint.QualifiedName != "" {
+		lines = append(lines, "  Endpoint: @"+c.Endpoint.QualifiedName)
+	}
+	if c.AuthenticationMicroflow != nil && c.AuthenticationMicroflow.QualifiedName != "" {
+		lines = append(lines, "  AuthenticationMicroflow: "+c.AuthenticationMicroflow.QualifiedName)
+	}
 	if c.Version != "" {
 		lines = append(lines, fmt.Sprintf("  Version: '%s'", escapeSQLString(c.Version)))
 	}
@@ -128,3 +135,40 @@ func findAgentEditorConsumedMCPService(ctx *ExecContext, moduleName, svcName str
 }
 
 // --- Executor method wrappers for backward compatibility ---
+
+// consumedMCPEndpointRef resolves a consumed MCP service's Endpoint (#2060).
+// AgentEditorCommons reads the constant's value with GetConstantValue and
+// imports the service only when it is not empty, so the reference must be a
+// String constant: the document has no other way to hold the URL.
+func consumedMCPEndpointRef(ctx *ExecContext, qn ast.QualifiedName) (*agenteditor.DocRef, error) {
+	consts, err := ctx.Backend.ListConstants()
+	if err != nil {
+		return nil, mdlerrors.NewBackend("list constants", err)
+	}
+	h, err := getHierarchy(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range consts {
+		if c.Name != qn.Name || h.GetModuleName(h.FindModuleID(c.ContainerID)) != qn.Module {
+			continue
+		}
+		if c.Type.Kind != "String" {
+			return nil, fmt.Errorf("endpoint must be a String constant holding the server URL; %s is %s", qn, c.Type.Kind)
+		}
+		return &agenteditor.DocRef{DocumentID: string(c.ID), QualifiedName: qn.String()}, nil
+	}
+	return nil, fmt.Errorf("endpoint: constant not found: %s", qn)
+}
+
+// consumedMCPCredentialsProblem is why MCPClient cannot use mf as a consumed
+// MCP service's credentials microflow, or "".
+func consumedMCPCredentialsProblem(mf *microflows.Microflow) string {
+	if len(mf.Parameters) > 0 {
+		return fmt.Sprintf("must take no parameters: MCPClient calls it without arguments (it has $%s)", mf.Parameters[0].Name)
+	}
+	if lt, ok := mf.ReturnType.(*microflows.ListType); !ok || lt.EntityQualifiedName != "System.HttpHeader" {
+		return "must return List of System.HttpHeader: MCPClient sends that list as the request headers"
+	}
+	return ""
+}
