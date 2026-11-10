@@ -73,6 +73,30 @@ func extractConditionalSettings(ctx *ExecContext, widget *rawWidget, w map[strin
 		if expr, ok := ces["Expression"].(string); ok && expr != "" {
 			widget.EditableIf = expr
 		}
+		// Attribute-based, stored as the visibility form is: one
+		// Enumerations$Condition per value, EditableVisible marking the values
+		// that make the widget editable. Never read, so describe printed a bare
+		// `Editable: Conditional` that check refuses (ako/mxcli#2111).
+		if attr, ok := ces["Attribute"].(string); ok && attr != "" {
+			widget.EditableAttr = describeAttr(ctx, attr)
+			if param := parameterSourceName(ces["SourceVariable"]); param != "" {
+				widget.EditableAttr = parameterAttributeMDL(param, attr)
+			}
+			for _, c := range getBsonArrayElements(ces["Conditions"]) {
+				cm, ok := c.(map[string]any)
+				if !ok {
+					continue
+				}
+				if editable, _ := cm["EditableVisible"].(bool); !editable {
+					continue
+				}
+				v, _ := cm["AttributeValue"].(string)
+				if v == emptyConditionValue {
+					v = "empty"
+				}
+				widget.EditableValues = append(widget.EditableValues, v)
+			}
+		}
 	}
 }
 
