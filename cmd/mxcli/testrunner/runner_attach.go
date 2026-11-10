@@ -141,9 +141,15 @@ func runAttached(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 
 	// Only the generated test microflows are ours to remove.
 	injected := suite
+	// snapshot is the project file before the injection, put back after it so
+	// the dev loop sees the model it had (see holdDevLoop).
+	var snapshot projectSnapshot
 	finish := func(result *SuiteResult, runErr error) (*SuiteResult, error) {
 		fmt.Fprintln(w, "Cleaning up...")
 		cleanupErr := runMDLCommands(opts.ProjectPath, dropTestFlows(opts.ProjectPath, injected))
+		if err := snapshot.restore(cleanupErr == nil); err != nil {
+			fmt.Fprintf(w, "  note: %v\n", err)
+		}
 		if cleanupErr == nil {
 			// Leave the app serving a model that matches the project on disk;
 			// otherwise the developer's next page load still runs the test flows.
@@ -202,6 +208,18 @@ func runAttached(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 		}
 		toInject = suiteWith(suite, func(tc TestCase) bool { return programs[tc.ID] == nil })
 		injected = toInject
+	}
+
+	// The dev loop watches the project this run is about to write to. Held, it
+	// does not rebuild (and restart the app) for the injection, and on release
+	// it finds the model as it was. Released when this function returns, after
+	// finish has taken the injection out and put the project file back.
+	snapshot = takeProjectSnapshot(opts.ProjectPath)
+	if err := docker.HoldWatch(opts.ProjectPath, os.Getpid()); err != nil {
+		fmt.Fprintf(w, "  note: could not hold the dev loop's watcher (%v); it may rebuild for the test microflows\n", err)
+	} else {
+		defer docker.ReleaseWatch(opts.ProjectPath)
+		fmt.Fprintln(w, "  the dev loop's watcher is held for this run; the app is not rebuilt for the test microflows")
 	}
 
 	fmt.Fprintln(w, "Injecting test microflows...")
