@@ -14,6 +14,12 @@
 # (CE1843) — so there is no view entity or microflow to use instead
 # (ako/mxcli#2034).
 #
+# Exempt too: an entity the page hands to a snippet or page of the entity's own
+# module that takes it as a parameter. Conversational UI's chat snippet needs a
+# data view on ConversationalUI.ChatContext, exactly as the module's own
+# full-screen chat page has it; a view entity or microflow cannot stand in for
+# the persistent object the snippet expects (ako/mxcli#2069).
+#
 # Widget properties:
 #   .id                       - Widget ID
 #   .name                     - Widget name
@@ -41,6 +47,32 @@ def is_platform_required(entity_ref):
     """The System workflow entities a task page or task inbox must use."""
     return entity_ref.startswith("System.Workflow")
 
+def takes_parameter(document, entity_ref):
+    """Whether a snippet or page has a parameter of type entity_ref."""
+    for ref in refs_from(document):
+        if ref.ref_kind == "parameter" and ref.target_name == entity_ref:
+            return True
+    return False
+
+def fed_to_owning_module(container, entity_ref, entity_module, cache):
+    """Whether container calls a snippet, or links to a page, of entity_module
+    that takes entity_ref as a parameter — the module's own UI asking for its
+    own entity, which only a data view on that entity can supply."""
+    key = container + "|" + entity_ref
+    if key in cache:
+        return cache[key]
+    found = False
+    for ref in refs_from(container):
+        if ref.target_type not in ("SNIPPET", "PAGE"):
+            continue
+        if get_module_from_qualified_name(ref.target_name) != entity_module:
+            continue
+        if takes_parameter(ref.target_name, entity_ref):
+            found = True
+            break
+    cache[key] = found
+    return found
+
 def check():
     """
     Check that widgets don't reference entities from other modules.
@@ -50,6 +82,7 @@ def check():
 
     # Track violations per container to avoid duplicate messages
     seen = {}
+    fed = {}
 
     for widget in widgets():
         # Skip widgets without entity references
@@ -65,6 +98,8 @@ def check():
 
         # Check if entity is from a different module
         if entity_module != widget.module_name:
+            if fed_to_owning_module(widget.container_qualified_name, widget.entity_ref, entity_module, fed):
+                continue
             # Create a unique key for this violation
             key = "{}:{}".format(widget.container_qualified_name, widget.entity_ref)
             if key in seen:
