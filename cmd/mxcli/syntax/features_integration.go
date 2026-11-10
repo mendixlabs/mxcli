@@ -983,9 +983,9 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 		Path:     "agents.mcp-service",
 		Features: []string{"agent_documents/agent_consumed_mcp_service"},
 		Summary:  "CREATE/DROP CONSUMED MCP SERVICE documents for AI agents",
-		Keywords: []string{"consumed mcp service", "mcp", "mcp service", "protocol version"},
-		Syntax:   "CREATE [OR MODIFY] CONSUMED MCP SERVICE Module.Name [FOLDER 'path'] (\n  ProtocolVersion: v2025_03_26,\n  Version: '1.0',\n  ConnectionTimeoutSeconds: 30,\n  Documentation: 'description'\n);\nDESCRIBE CONSUMED MCP SERVICE Module.Name;\nLIST CONSUMED MCP SERVICES [IN Module];\nDROP CONSUMED MCP SERVICE Module.Name;",
-		Example:  "create consumed mcp service MyModule.WebSearch (\n  ProtocolVersion: v2025_03_26,\n  Version: '1.0',\n  ConnectionTimeoutSeconds: 30\n);",
+		Keywords: []string{"consumed mcp service", "mcp", "mcp service", "protocol version", "endpoint", "authenticationmicroflow"},
+		Syntax:   "CREATE [OR MODIFY] CONSUMED MCP SERVICE Module.Name [FOLDER 'path'] (\n  ProtocolVersion: v2025_03_26,\n  Endpoint: @Module.UrlConstant,           -- String constant; without it the service is skipped (MDL-AGENT03)\n  [AuthenticationMicroflow: Module.GetHeaders,]  -- no parameters, returns List of System.HttpHeader\n  Version: '1.0',\n  ConnectionTimeoutSeconds: 30,\n  Documentation: 'description'\n);\nDESCRIBE CONSUMED MCP SERVICE Module.Name;\nLIST CONSUMED MCP SERVICES [IN Module];\nDROP CONSUMED MCP SERVICE Module.Name;",
+		Example:  "create consumed mcp service MyModule.WebSearch (\n  ProtocolVersion: v2025_03_26,\n  Endpoint: @MyModule.WebSearchUrl,\n  Version: '1.0',\n  ConnectionTimeoutSeconds: 30\n);",
 		SeeAlso:  []string{"agents"},
 	})
 

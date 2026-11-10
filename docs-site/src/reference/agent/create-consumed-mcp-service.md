@@ -5,6 +5,8 @@
 ```sql
 CREATE [ OR MODIFY ] CONSUMED MCP SERVICE module.Name (
     ProtocolVersion: v2025_03_26,
+    Endpoint: @module.UrlConstant,
+    [ AuthenticationMicroflow: module.GetHeaders, ]
     version: '1.0'
     [, ConnectionTimeoutSeconds: 30 ]
     [, documentation: 'description' ]
@@ -31,6 +33,12 @@ If `OR MODIFY` is specified and the service already exists, its properties are u
 `ProtocolVersion: v2025_03_26`
 :   The MCP protocol version. Use the token form (e.g. `v2025_03_26`), not a quoted string.
 
+`Endpoint: @module.UrlConstant`
+:   The String constant holding the MCP server's URL (e.g. `https://example.com/mcp`). Required in practice: at startup Agent Editor reads the constant's value and skips a service whose constant has none ("No value could be found for the local configuration for the constant"), so the agents that use it get no tools. `mxcli check` warns on a `CREATE` without it (MDL-AGENT03); `check --references` and `exec` refuse a constant that does not exist or is not a String. Set the value per environment. On `OR MODIFY`, left out, the stored endpoint stays.
+
+`AuthenticationMicroflow: module.GetHeaders`
+:   Optional. The microflow that supplies credentials. MCP Client calls it with no arguments and sends the `List of System.HttpHeader` it returns with each request (build the list with `MCPClient.HttpHeader_CreateAndAddToList`). `check --references` refuses one with parameters or another return type. On `OR MODIFY`, left out, the stored microflow stays; `ALTER … SET AuthenticationMicroflow = ''` removes it.
+
 `version: '1.0'`
 :   The service version as a quoted string.
 
@@ -45,8 +53,12 @@ If `OR MODIFY` is specified and the service already exists, its properties are u
 ### Register an MCP service
 
 ```sql
+mdl 1;
+CREATE CONSTANT MyModule.WebSearchUrl (Type: String, DefaultValue: 'https://example.com/mcp');
+
 CREATE CONSUMED MCP SERVICE MyModule."WebSearch" (
     ProtocolVersion: v2025_03_26,
+    Endpoint: @MyModule.WebSearchUrl,
     version: '1.0',
     ConnectionTimeoutSeconds: 30,
     documentation: 'Web search MCP server for research tasks'

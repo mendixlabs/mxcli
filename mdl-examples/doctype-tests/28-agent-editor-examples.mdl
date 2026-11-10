@@ -38,6 +38,10 @@ create constant AgentTest."ModelKey"
 create constant AgentTest."KBKey"
   ( Type: string, DefaultValue: '' );
 
+-- The consumed MCP service's server URL (#2060); set it per environment.
+create constant AgentTest."WebSearchUrl"
+  ( Type: string, DefaultValue: 'https://example.com/mcp' );
+
 -- ============================================================================
 -- LEVEL 1: Model (prerequisite for Agents)
 -- ============================================================================
@@ -62,6 +66,7 @@ create knowledge base AgentTest."ProductDocs" (
 
 create consumed mcp service AgentTest."WebSearch" (
   ProtocolVersion: v2025_03_26,
+  Endpoint: @AgentTest.WebSearchUrl,
   version: '1.0',
   ConnectionTimeoutSeconds: 30,
   documentation: 'Web search MCP server for research tasks'

@@ -382,14 +382,21 @@ func encodeKnowledgeBaseContents(k *agenteditor.KnowledgeBase) (string, error) {
 	})
 }
 
+// encodeConsumedMCPServiceContents writes endpoint first and the credentials
+// microflow last, as most Studio Pro 11.16 documents hold them (FactoryManagement);
+// a stored document keeps its own order through the carry.
 func encodeConsumedMCPServiceContents(c *agenteditor.ConsumedMCPService) (string, error) {
 	type contentsShape struct {
-		ProtocolVersion          string `json:"protocolVersion"`
-		Documentation            string `json:"documentation"`
-		Version                  string `json:"version"`
-		ConnectionTimeoutSeconds int    `json:"connectionTimeoutSeconds"`
+		Endpoint                 *agenteditor.DocRef `json:"endpoint,omitempty"`
+		ProtocolVersion          string              `json:"protocolVersion"`
+		Documentation            string              `json:"documentation"`
+		Version                  string              `json:"version"`
+		ConnectionTimeoutSeconds int                 `json:"connectionTimeoutSeconds"`
+		AuthenticationMicroflow  *agenteditor.DocRef `json:"authenticationMicroflow,omitempty"`
 	}
 	return marshalJSON(contentsShape{
+		Endpoint:                 c.Endpoint,
+		AuthenticationMicroflow:  c.AuthenticationMicroflow,
 		ProtocolVersion:          c.ProtocolVersion,
 		Documentation:            c.InnerDocumentation,
 		Version:                  c.Version,

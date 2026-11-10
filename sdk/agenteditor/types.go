@@ -150,6 +150,12 @@ type ConsumedMCPService struct {
 	Version                  string `json:"version,omitempty"`
 	InnerDocumentation       string `json:"innerDocumentation,omitempty"` // Contents.documentation
 	ConnectionTimeoutSeconds int    `json:"connectionTimeoutSeconds,omitempty"`
+	// Endpoint is the String constant holding the server URL; without one
+	// AgentEditorCommons does not import the service (#2060).
+	Endpoint *DocRef `json:"endpoint,omitempty"`
+	// AuthenticationMicroflow returns the HTTP headers sent to the server
+	// (no parameters, List of System.HttpHeader).
+	AuthenticationMicroflow *DocRef `json:"authenticationMicroflow,omitempty"`
 }
 
 // GetName returns the MCP service's name.

@@ -69,6 +69,11 @@ type CreateConsumedMCPServiceStmt struct {
 	ConnectionTimeoutSeconds int
 	InnerDocumentation       string // Contents.documentation field
 	CreateOrModify           bool   // true for CREATE OR MODIFY / CREATE OR REPLACE
+	// Endpoint is the String constant holding the server URL (#2060);
+	// AuthenticationMicroflow returns the headers sent with each request. Left
+	// out, a create or modify keeps the stored reference.
+	Endpoint                *QualifiedName
+	AuthenticationMicroflow *QualifiedName
 }
 
 func (s *CreateConsumedMCPServiceStmt) isStatement() {}
