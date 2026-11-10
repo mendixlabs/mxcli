@@ -7,6 +7,8 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"fmt"
+	"os"
+	"strings"
 
 	"go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore"
 )
@@ -21,15 +23,24 @@ import (
 // microflow`. MPR v2 never paid this, because buildUnitCache indexes the types
 // once and listUnitsByTypeV2 then reads only the matching files.
 //
-// This is the v1 counterpart of that index, with one difference: v1's
-// updateUnit writes the Unit table without calling InvalidateCache, and
-// another process can change the file under a long-lived reader, so the index
-// cannot rely on being invalidated. Instead every listing re-reads the cheap
-// columns (ID, container, containment name and length(Contents) — the length
-// comes from the record header, no overflow page is touched) and re-types any
-// unit that is new or whose length moved. A unit's $Type is fixed for its
-// lifetime in Mendix, so the length is a belt-and-braces change detector, not
-// the thing correctness rests on.
+// This is the v1 counterpart of that index. A listing reads the cheap columns
+// of every row (ID, container, containment name, length(Contents) — the length
+// comes from the record header, no overflow page is touched — and
+// ContentsHash) and re-types any unit that is new or whose length moved. A
+// unit's $Type is fixed for its lifetime in Mendix, so the length is a
+// belt-and-braces change detector, not the thing correctness rests on.
+//
+// That scan is kept until the table may have changed (unitMetasV1): a write
+// through this reader invalidates it, and a commit by any other connection —
+// another process, Studio Pro — moves SQLite's data_version. Scanning on every
+// listing instead cost 0.3–0.9 s per `exec` statement on a 3,400-unit project,
+// because one statement makes dozens of listings (ako/mxcli#2094).
+//
+// Name and Excluded are kept per unit too (listUnitHeadersV1), keyed by the
+// row's length and ContentsHash, which every Studio Pro and mxcli write
+// updates. A unit without a hash is read every time, and a commit from another
+// connection drops every kept name, since nothing obliges another writer to
+// update the hash.
 //
 // The type itself is peeked from the blob's first v1TypePeekBytes bytes:
 // Studio Pro writes `$ID` then `$Type` at the head of every unit. A document
@@ -55,7 +66,8 @@ type v1UnitMeta struct {
 	key             string // string(blob): the type index key
 	containerBlob   []byte
 	containmentName string
-	size            int64 // -1 for NULL contents
+	size            int64  // -1 for NULL contents
+	hash            string // ContentsHash; "" when NULL or the column is absent
 	held            []byte
 	overlaid        bool
 }
@@ -75,13 +87,12 @@ func (r *Reader) listUnitsByTypeV1In(typeName, containerID string) ([]rawUnit, e
 		return nil, fmt.Errorf("listUnitsByTypeV1In: empty type name")
 	}
 
-	metas, err := r.scanUnitMetaV1()
+	r.v1TypesMu.Lock()
+	defer r.v1TypesMu.Unlock()
+	metas, err := r.unitMetasV1()
 	if err != nil {
 		return nil, err
 	}
-
-	r.v1TypesMu.Lock()
-	defer r.v1TypesMu.Unlock()
 	if err := r.refreshTypeIndexV1(metas); err != nil {
 		return nil, err
 	}
@@ -148,12 +159,12 @@ func (r *Reader) listUnitsByTypeV1In(typeName, containerID string) ([]rawUnit, e
 // listUnitTypesV1 returns every unit's metadata and type without its
 // contents (Contents is nil), in table order.
 func (r *Reader) listUnitTypesV1() ([]rawUnit, error) {
-	metas, err := r.scanUnitMetaV1()
+	r.v1TypesMu.Lock()
+	defer r.v1TypesMu.Unlock()
+	metas, err := r.unitMetasV1()
 	if err != nil {
 		return nil, err
 	}
-	r.v1TypesMu.Lock()
-	defer r.v1TypesMu.Unlock()
 	if err := r.refreshTypeIndexV1(metas); err != nil {
 		return nil, err
 	}
@@ -205,13 +216,85 @@ func (r *Reader) listAllUnitsV1() ([]rawUnit, error) {
 	return units, rows.Err()
 }
 
-// scanUnitMetaV1 reads every unit's metadata, without its contents, in table
-// order (the order the full scan returned units in).
+// v1Stamp is what says the Unit table may have changed since a scan.
+// dataVersion is SQLite's PRAGMA data_version, which moves when another
+// connection commits to the file; the reader holds one connection
+// (SetMaxOpenConns(1)), so its own writes do not move it and invalidate
+// explicitly instead. The file's size and modification time are a second
+// signal, for a write made on this connection without that invalidation.
+type v1Stamp struct {
+	dataVersion int64
+	size        int64
+	modNanos    int64
+}
+
+// v1StampNow reads the current stamp; ok is false when it cannot be read, and
+// the caller then scans as if the table had changed.
+func (r *Reader) v1StampNow() (v1Stamp, bool) {
+	var s v1Stamp
+	if err := r.db.QueryRow(`PRAGMA data_version`).Scan(&s.dataVersion); err != nil {
+		return v1Stamp{}, false
+	}
+	s.size, s.modNanos = -1, -1
+	if r.path != "" {
+		if fi, err := os.Stat(r.path); err == nil {
+			s.size, s.modNanos = fi.Size(), fi.ModTime().UnixNano()
+		}
+	}
+	return s, true
+}
+
+// invalidateV1Listing marks the kept Unit table scan stale after a write
+// through this reader. The kept names survive: they are checked against each
+// row's length and hash, which every write path updates.
+func (r *Reader) invalidateV1Listing() {
+	r.v1TypesMu.Lock()
+	r.v1MetasValid = false
+	r.v1TypesMu.Unlock()
+}
+
+// unitMetasV1 is every unit's metadata in table order: the kept scan while the
+// table cannot have changed, else a fresh one. Overlaid units carry their held
+// bytes. The returned slice is the caller's. Caller holds v1TypesMu.
+func (r *Reader) unitMetasV1() ([]v1UnitMeta, error) {
+	stamp, stampOK := r.v1StampNow()
+	if !r.v1MetasValid || !stampOK || stamp != r.v1MetasStamp {
+		if r.v1MetasValid && stamp.dataVersion != r.v1MetasStamp.dataVersion {
+			// Another connection committed: its writes need not have moved
+			// ContentsHash, so no kept name can be trusted.
+			clear(r.v1Headers)
+		}
+		metas, err := r.scanUnitMetaV1()
+		if err != nil {
+			r.v1MetasValid = false
+			return nil, err
+		}
+		r.v1Metas, r.v1MetasStamp, r.v1MetasValid = metas, stamp, stampOK
+	}
+	out := make([]v1UnitMeta, len(r.v1Metas))
+	copy(out, r.v1Metas)
+	if len(r.overlay) > 0 {
+		for i := range out {
+			out[i].held, out[i].overlaid = r.overlaid(blobToUUID(out[i].blob))
+		}
+	}
+	return out, nil
+}
+
+// scanUnitMetaV1 reads every unit's metadata, without its contents or any
+// overlay, in table order (the order the full scan returned units in).
 func (r *Reader) scanUnitMetaV1() ([]v1UnitMeta, error) {
-	rows, err := r.db.Query(`
-		SELECT UnitID, ContainerID, ContainmentName, length(Contents)
-		FROM Unit
-	`)
+	r.metaScans.Add(1)
+	hashCol := "ContentsHash"
+	if r.v1NoHashColumn {
+		hashCol = "NULL"
+	}
+	rows, err := r.db.Query(`SELECT UnitID, ContainerID, ContainmentName, length(Contents), ` + hashCol + ` FROM Unit`)
+	if err != nil && !r.v1NoHashColumn && strings.Contains(err.Error(), "no such column") {
+		// A project from before Studio Pro stored ContentsHash.
+		r.v1NoHashColumn = true
+		return r.scanUnitMetaV1()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to query units: %w", err)
 	}
@@ -220,9 +303,9 @@ func (r *Reader) scanUnitMetaV1() ([]v1UnitMeta, error) {
 	var metas []v1UnitMeta
 	for rows.Next() {
 		var unitID, containerID []byte
-		var containmentName sql.NullString
+		var containmentName, hash sql.NullString
 		var size sql.NullInt64
-		if err := rows.Scan(&unitID, &containerID, &containmentName, &size); err != nil {
+		if err := rows.Scan(&unitID, &containerID, &containmentName, &size, &hash); err != nil {
 			return nil, fmt.Errorf("failed to scan unit row: %w", err)
 		}
 		m := v1UnitMeta{
@@ -231,16 +314,94 @@ func (r *Reader) scanUnitMetaV1() ([]v1UnitMeta, error) {
 			containerBlob:   containerID,
 			containmentName: containmentName.String,
 			size:            -1,
+			hash:            hash.String,
 		}
 		if size.Valid {
 			m.size = size.Int64
 		}
-		if len(r.overlay) > 0 {
-			m.held, m.overlaid = r.overlaid(blobToUUID(unitID))
-		}
 		metas = append(metas, m)
 	}
 	return metas, rows.Err()
+}
+
+// v1HeaderEntry is a unit's Name and Excluded, as read at a length and hash.
+type v1HeaderEntry struct {
+	size     int64
+	hash     string
+	name     string
+	excluded bool
+}
+
+// listUnitHeadersV1 is ListUnitHeaders on MPR v1: a unit's blob is read only
+// when its name is not kept for its current length and hash. Naming every
+// microflow used to read every microflow's contents, on each lookup by name
+// (ako/mxcli#2094).
+func (r *Reader) listUnitHeadersV1(typeName string) ([]UnitHeaderRef, error) {
+	r.v1TypesMu.Lock()
+	defer r.v1TypesMu.Unlock()
+	metas, err := r.unitMetasV1()
+	if err != nil {
+		return nil, err
+	}
+	if err := r.refreshTypeIndexV1(metas); err != nil {
+		return nil, err
+	}
+	if r.v1Headers == nil {
+		r.v1Headers = make(map[string]v1HeaderEntry)
+	}
+	var stmt *sql.Stmt
+	defer func() {
+		if stmt != nil {
+			_ = stmt.Close()
+		}
+	}()
+	var out []UnitHeaderRef
+	for _, m := range metas {
+		ref := func(name string, excluded bool) UnitHeaderRef {
+			return UnitHeaderRef{ID: blobToUUID(m.blob), ContainerID: blobToUUID(m.containerBlob), Name: name, Excluded: excluded}
+		}
+		if m.overlaid {
+			e := unitIndexEntryOf(m.held)
+			if e.Type == typeName {
+				out = append(out, ref(e.Name, e.Excluded))
+			}
+			continue
+		}
+		if r.v1Types[m.key].typ != typeName {
+			continue
+		}
+		if h, ok := r.v1Headers[m.key]; ok && m.hash != "" && h.hash == m.hash && h.size == m.size {
+			out = append(out, ref(h.name, h.excluded))
+			continue
+		}
+		if stmt == nil {
+			if stmt, err = r.db.Prepare(`SELECT Contents FROM Unit WHERE UnitID = ?`); err != nil {
+				return nil, fmt.Errorf("failed to prepare unit read: %w", err)
+			}
+		}
+		var contents []byte
+		if err := stmt.QueryRow(m.blob).Scan(&contents); err != nil {
+			if err == sql.ErrNoRows {
+				continue // deleted since the metadata scan
+			}
+			return nil, fmt.Errorf("failed to read unit %s: %w", blobToUUID(m.blob), err)
+		}
+		r.blobReads.Add(1)
+		e := unitIndexEntryOf(contents)
+		if int64(len(contents)) != m.size {
+			// Rewritten since the metadata scan: type what was read, and keep
+			// no name for a row whose hash was not read with it.
+			r.v1Types[m.key] = v1TypeEntry{typ: e.Type, size: int64(len(contents))}
+			delete(r.v1Headers, m.key)
+			if e.Type != typeName {
+				continue
+			}
+		} else if m.hash != "" {
+			r.v1Headers[m.key] = v1HeaderEntry{size: m.size, hash: m.hash, name: e.Name, excluded: e.Excluded}
+		}
+		out = append(out, ref(e.Name, e.Excluded))
+	}
+	return out, nil
 }
 
 // refreshTypeIndexV1 types every unit in metas that the index does not hold at

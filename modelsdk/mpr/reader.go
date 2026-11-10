@@ -84,15 +84,29 @@ type Reader struct {
 
 	// v1Types is MPR v1's unit-type index (reader_units_v1.go): UnitID blob →
 	// $Type, with the blob length it was read at. It lets a typed listing
-	// skip the contents of every other unit. Revalidated on every listing, so
-	// it needs no invalidation from the writer.
+	// skip the contents of every other unit. Revalidated against each fresh
+	// scan of the Unit table.
 	v1TypesMu sync.Mutex
 	v1Types   map[string]v1TypeEntry
+	// v1Metas is the last scan of the Unit table's metadata, kept while
+	// v1MetasValid and v1MetasStamp say the table cannot have changed
+	// (unitMetasV1). v1Headers is each unit's Name / Excluded by length and
+	// ContentsHash (listUnitHeadersV1). v1NoHashColumn marks a project whose
+	// Unit table has no ContentsHash. All guarded by v1TypesMu.
+	v1Metas        []v1UnitMeta
+	v1MetasValid   bool
+	v1MetasStamp   v1Stamp
+	v1Headers      map[string]v1HeaderEntry
+	v1NoHashColumn bool
 
 	// blobReads counts full unit-content blobs read from the v1 Unit table by
 	// listings — the cost a typed listing must keep proportional to its
 	// result, not to the project. Read by tests.
 	blobReads atomic.Int64
+
+	// metaScans counts scans of the v1 Unit table's metadata — what the
+	// listing cache saves (ako/mxcli#2094). Read by tests.
+	metaScans atomic.Int64
 
 	// packaged is what the project's module packages (modules/*.mxmodule)
 	// hold, read on first use (packaged_modules.go).
