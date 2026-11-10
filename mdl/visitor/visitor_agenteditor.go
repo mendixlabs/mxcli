@@ -240,6 +240,12 @@ func (b *Builder) ExitCreateAgentStatement(ctx *parser.CreateAgentStatementConte
 	stmt.ToolChoice = props["toolchoice"]
 	stmt.EnableBackendStreaming = boolProp(props, "enablebackendstreaming")
 	stmt.EnableUIStreaming = boolProp(props, "enableuistreaming")
+	if v, ok := props["selectedmodel"]; ok {
+		stmt.SelectedModel = &v
+	}
+	if v, ok := props["selectedmodelname"]; ok {
+		stmt.SelectedModelName = &v
+	}
 
 	if v, ok := props["maxtokens"]; ok {
 		var n int

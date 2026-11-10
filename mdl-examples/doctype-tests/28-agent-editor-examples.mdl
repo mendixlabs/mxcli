@@ -74,6 +74,7 @@ create consumed mcp service AgentTest."WebSearch" (
 create agent AgentTest."Summarizer" (
   UsageType: task,
   model: AgentTest.TestModel,
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   SystemPrompt: 'Summarize the given text in 3 sentences.',
   UserPrompt: 'Enter text to summarize.'
 );
@@ -85,6 +86,7 @@ create agent AgentTest."Summarizer" (
 create agent AgentTest."Translator" (
   UsageType: task,
   model: AgentTest.TestModel,
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   variables: ("Language": EntityAttribute),
   SystemPrompt: 'Translate the text into {{Language}}.',
   UserPrompt: 'Hello world'
@@ -97,6 +99,7 @@ create agent AgentTest."Translator" (
 create agent AgentTest."CodeReviewer" (
   UsageType: task,
   model: AgentTest.TestModel,
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   SystemPrompt: $$You are a code review assistant.
 
 Review the provided code for:
@@ -118,6 +121,7 @@ create agent AgentTest."ResearchAssistant" (
   UsageType: Conversational,
   description: 'Research assistant with web search and documentation',
   model: AgentTest.TestModel,
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   MaxTokens: 16384,
   ToolChoice: Auto,
   SystemPrompt: 'You are a research assistant. Use available tools.',

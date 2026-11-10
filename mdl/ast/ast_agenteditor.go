@@ -211,14 +211,19 @@ type CreateAgentStmt struct {
 	// stored value.
 	EnableBackendStreaming *bool
 	EnableUIStreaming      *bool
-	Temperature            *float64
-	TopP                   *float64
-	SystemPrompt           string
-	UserPrompt             string
-	Variables              []AgentVarDef
-	Tools                  []AgentToolDef
-	KBTools                []AgentKBToolDef
-	CreateOrModify         bool // true for CREATE OR MODIFY / CREATE OR REPLACE
+	// The model on a multi-model resource (#2031): its id, and the display
+	// name Studio Pro stores. Left out, a create or modify keeps the stored
+	// one; '' clears it.
+	SelectedModel     *string
+	SelectedModelName *string
+	Temperature       *float64
+	TopP              *float64
+	SystemPrompt      string
+	UserPrompt        string
+	Variables         []AgentVarDef
+	Tools             []AgentToolDef
+	KBTools           []AgentKBToolDef
+	CreateOrModify    bool // true for CREATE OR MODIFY / CREATE OR REPLACE
 }
 
 func (s *CreateAgentStmt) isStatement() {}

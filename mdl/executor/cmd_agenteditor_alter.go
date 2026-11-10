@@ -7,6 +7,7 @@ package executor
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -188,8 +189,14 @@ func execAlterAgent(ctx *ExecContext, s *ast.AlterAgentStmt) error {
 		return mdlerrors.NewNotFound("agent", s.Name.String())
 	}
 
-	for key, val := range s.Sets {
-		if err := applyAgentChange(ctx, a, key, val); err != nil {
+	// In key order, so SelectedModel is applied before SelectedModelName.
+	keys := make([]string, 0, len(s.Sets))
+	for key := range s.Sets {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return strings.ToLower(keys[i]) < strings.ToLower(keys[j]) })
+	for _, key := range keys {
+		if err := applyAgentChange(ctx, a, key, s.Sets[key]); err != nil {
 			return err
 		}
 	}
@@ -284,6 +291,13 @@ func applyAgentChange(ctx *ExecContext, a *agenteditor.Agent, key, val string) e
 		} else {
 			a.EnableUIStreaming = &b
 		}
+	case "selectedmodel":
+		a.SelectedModel = selectedModelFrom(&val, nil, a.SelectedModel)
+	case "selectedmodelname":
+		if a.SelectedModel == nil {
+			return fmt.Errorf("alter agent %s: SelectedModelName needs a SelectedModel; set both", a.Name)
+		}
+		a.SelectedModel.Name = val
 	case "entity":
 		qn := parseQualifiedNameStr(val)
 		a.Entity = carryEntityRef(&agenteditor.DocRef{QualifiedName: qn.String()}, a.Entity)

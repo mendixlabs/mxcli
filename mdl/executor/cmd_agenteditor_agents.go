@@ -99,6 +99,12 @@ func describeAgentEditorAgent(ctx *ExecContext, name ast.QualifiedName) error {
 	if a.Model != nil && a.Model.QualifiedName != "" {
 		lines = append(lines, fmt.Sprintf("  Model: %s", a.Model.QualifiedName))
 	}
+	if a.SelectedModel != nil {
+		lines = append(lines, "  SelectedModel: "+mdlQuoted(a.SelectedModel.ID))
+		if a.SelectedModel.Name != "" && a.SelectedModel.Name != a.SelectedModel.ID {
+			lines = append(lines, "  SelectedModelName: "+mdlQuoted(a.SelectedModel.Name))
+		}
+	}
 	if a.Entity != nil && a.Entity.QualifiedName != "" {
 		lines = append(lines, fmt.Sprintf("  Entity: %s", a.Entity.QualifiedName))
 	}

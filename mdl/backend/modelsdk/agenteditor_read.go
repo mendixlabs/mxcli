@@ -268,21 +268,22 @@ func (b *Backend) ListAgentEditorAgents() ([]*agenteditor.Agent, error) {
 		a.ExportLevel = u.wrap.ExportLevel
 		if u.wrap.Contents != "" {
 			var p struct {
-				Description        string                    `json:"description"`
-				SystemPrompt       string                    `json:"systemPrompt"`
-				UserPrompt         string                    `json:"userPrompt"`
-				UsageType          string                    `json:"usageType"`
-				Variables          []agenteditor.AgentVar    `json:"variables"`
-				Tools              []agenteditor.AgentTool   `json:"tools"`
-				KnowledgebaseTools []agenteditor.AgentKBTool `json:"knowledgebaseTools"`
-				Model              *agenteditor.DocRef       `json:"model"`
-				Entity             *agenteditor.DocRef       `json:"entity"`
-				MaxTokens          *int                      `json:"maxTokens"`
-				ToolChoice         string                    `json:"toolChoice"`
-				Temperature        *float64                  `json:"temperature"`
-				TopP               *float64                  `json:"topP"`
-				EnableBackend      *bool                     `json:"enableBackendStreaming"`
-				EnableUI           *bool                     `json:"enableUIStreaming"`
+				Description        string                     `json:"description"`
+				SystemPrompt       string                     `json:"systemPrompt"`
+				UserPrompt         string                     `json:"userPrompt"`
+				UsageType          string                     `json:"usageType"`
+				Variables          []agenteditor.AgentVar     `json:"variables"`
+				Tools              []agenteditor.AgentTool    `json:"tools"`
+				KnowledgebaseTools []agenteditor.AgentKBTool  `json:"knowledgebaseTools"`
+				Model              *agenteditor.DocRef        `json:"model"`
+				Entity             *agenteditor.DocRef        `json:"entity"`
+				MaxTokens          *int                       `json:"maxTokens"`
+				ToolChoice         string                     `json:"toolChoice"`
+				Temperature        *float64                   `json:"temperature"`
+				TopP               *float64                   `json:"topP"`
+				EnableBackend      *bool                      `json:"enableBackendStreaming"`
+				EnableUI           *bool                      `json:"enableUIStreaming"`
+				SelectedModel      *agenteditor.SelectedModel `json:"selectedModel"`
 			}
 			if err := json.Unmarshal([]byte(u.wrap.Contents), &p); err != nil {
 				return nil, fmt.Errorf("unmarshal Agent Contents: %w", err)
@@ -302,6 +303,7 @@ func (b *Backend) ListAgentEditorAgents() ([]*agenteditor.Agent, error) {
 			a.TopP = p.TopP
 			a.EnableBackendStreaming = p.EnableBackend
 			a.EnableUIStreaming = p.EnableUI
+			a.SelectedModel = p.SelectedModel
 		}
 		out = append(out, a)
 	}
