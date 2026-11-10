@@ -28,10 +28,11 @@ type captureJSON struct {
 }
 
 type promoteJSON struct {
-	ID    string `json:"id"`
-	Kind  string `json:"kind"`
-	Shard string `json:"shard"`
-	Path  string `json:"path"`
+	ID     string `json:"id"`
+	Kind   string `json:"kind"`
+	Shard  string `json:"shard"`
+	Path   string `json:"path"`
+	Status string `json:"status"`
 }
 
 func brainJSONProject(t *testing.T) string {
