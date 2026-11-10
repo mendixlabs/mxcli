@@ -116,6 +116,12 @@ type RunState struct {
 	Gen            int       `json:"gen"`
 	Building       bool      `json:"building"`
 	BuildingSource time.Time `json:"buildingSource,omitempty"`
+	// Scaffold is the theme source the run's builds wrote themselves, by
+	// themesource/ module folder (see buildScaffold): files there no newer than
+	// the time are build output, not an edit. Recorded so a reader of this file
+	// (`run status`, `run wait`) judges "change pending" by the signal the
+	// watcher uses — SourceMTimeOf.
+	Scaffold map[string]time.Time `json:"scaffold,omitempty"`
 	// Last is the newest finished generation.
 	Last    *BuildOutcome `json:"last,omitempty"`
 	Updated time.Time     `json:"updated"`
@@ -254,6 +260,15 @@ func (r *RunStateRecorder) Ports(app, admin, serve int, runtimeLog string) {
 	r.update(func(s *RunState) {
 		s.AppPort, s.AdminPort, s.ServePort, s.RuntimeLog = app, admin, serve, runtimeLog
 	})
+}
+
+// Scaffold records the theme scaffold the run's builds have written.
+func (r *RunStateRecorder) Scaffold(s buildScaffold) {
+	cp := make(map[string]time.Time, len(s))
+	for k, v := range s {
+		cp[k] = v
+	}
+	r.update(func(st *RunState) { st.Scaffold = cp })
 }
 
 // BuildStarted records that generation gen is being built from source.
@@ -419,6 +434,18 @@ func FormatOutcome(o *BuildOutcome, maxLines int) string {
 // SourceMTime is the --watch change signal (model + theme source), exported so
 // `run wait` measures a change with the same clock the watch loop builds from.
 func SourceMTime(projectPath string) time.Time { return sourceMTime(projectPath) }
+
+// SourceMTimeOf is the change signal of the run st describes: SourceMTime
+// without the theme scaffold its builds wrote, which is what its watcher
+// compares. A hosted dev loop (`--test-endpoint`) scaffolds themesource/mxtest/
+// at boot, and judged by the unfiltered signal `run status` reported "change
+// pending" for as long as it ran, a change the watcher rightly never built.
+func SourceMTimeOf(projectPath string, st *RunState) time.Time {
+	if st == nil || len(st.Scaffold) == 0 {
+		return sourceMTime(projectPath)
+	}
+	return sourceMTimeExcept(projectPath, buildScaffold(st.Scaffold))
+}
 
 // buildErrorLines turns a failed build into the lines a waiter is shown.
 func buildErrorLines(b *BuildResult, hint string) []string {

@@ -848,6 +848,7 @@ func RunLocal(opts LocalRunOptions) error {
 		return fmt.Errorf("initial build: %w", err)
 	}
 	scaffold.record(opts.ProjectPath, themeBefore, time.Now())
+	opts.State.Scaffold(scaffold)
 	if !build.OK() {
 		return fmt.Errorf("initial build failed: %s\n%s", build.Message, buildFailureDetail(build))
 	}
@@ -1580,6 +1581,7 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 			})
 			// A module created since the last build gets its theme scaffold now.
 			scaffold.record(opts.ProjectPath, themeBefore, time.Now())
+			opts.State.Scaffold(scaffold)
 			if err != nil {
 				fmt.Fprintf(opts.Stderr, "  build error: %v\n", err)
 				fail("build", err.Error(), nil)

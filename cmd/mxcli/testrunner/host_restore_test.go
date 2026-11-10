@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -98,5 +99,52 @@ func TestRestoreAbandonedEndpoint_NoRecordIsNoOp(t *testing.T) {
 	})
 	if restored, err := RestoreAbandonedEndpoint(mpr, io.Discard); restored || err != nil {
 		t.Fatalf("restored=%v err=%v, want false, nil", restored, err)
+	}
+}
+
+func withAfterStartup(t *testing.T, af string) {
+	t.Helper()
+	old := afterStartupOf
+	afterStartupOf = func(string) (string, error) { return af, nil }
+	t.Cleanup(func() { afterStartupOf = old })
+}
+
+// A run killed with its container leaves the after-startup microflow pointing
+// at the endpoint, and nothing said so until a `run stop` — so the swap could be
+// committed. With the restore record still there, the fix is `run stop`.
+func TestLeftoverEndpointWarning_DeadRunWithRecord(t *testing.T) {
+	mpr := recordedProject(t)
+	withRestoreSeams(t, false, nil)
+	withAfterStartup(t, endpointStartupFlow)
+	got := LeftoverEndpointWarning(mpr)
+	if !strings.Contains(got, endpointStartupFlow) || !strings.Contains(got, "mxcli run stop -p "+mpr) || !strings.Contains(got, "4242") {
+		t.Errorf("warning = %q", got)
+	}
+}
+
+// Without a record (the .mxcli/ folder went too) only the user knows what the
+// setting was, so the warning says how to set it rather than promising a restore.
+func TestLeftoverEndpointWarning_NoRecord(t *testing.T) {
+	mpr := filepath.Join(t.TempDir(), "App.mpr")
+	withAfterStartup(t, endpointStartupFlow)
+	got := LeftoverEndpointWarning(mpr)
+	if !strings.Contains(got, "nothing records") || !strings.Contains(got, "alter settings runtime") || strings.Contains(got, "run stop") {
+		t.Errorf("warning = %q", got)
+	}
+}
+
+// Controls: a live run's endpoint is in use, and a project whose after-startup
+// is its own needs nothing said.
+func TestLeftoverEndpointWarning_Controls(t *testing.T) {
+	mpr := recordedProject(t)
+	withRestoreSeams(t, true, nil)
+	withAfterStartup(t, endpointStartupFlow)
+	if got := LeftoverEndpointWarning(mpr); got != "" {
+		t.Errorf("a live run's endpoint was reported: %q", got)
+	}
+	withRestoreSeams(t, false, nil)
+	withAfterStartup(t, "MyFirstModule.ASU")
+	if got := LeftoverEndpointWarning(mpr); got != "" {
+		t.Errorf("a project's own after-startup was reported: %q", got)
 	}
 }
