@@ -244,6 +244,16 @@ type Agent struct {
 	// not the model. nil when the document holds none.
 	EnableBackendStreaming *bool `json:"enableBackendStreaming,omitempty"`
 	EnableUIStreaming      *bool `json:"enableUIStreaming,omitempty"`
+	// The model picked from the provider's list in the Agent Editor (its id
+	// and display name), next to the Model document. nil when the document
+	// holds none. Read-only: the writer carries it as a stored key.
+	SelectedModel *AgentSelectedModel `json:"selectedModel,omitempty"`
+}
+
+// AgentSelectedModel is the agent's `selectedModel` JSON object.
+type AgentSelectedModel struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // GetName returns the agent's name.
