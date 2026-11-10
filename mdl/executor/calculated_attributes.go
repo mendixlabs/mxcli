@@ -4,6 +4,7 @@ package executor
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
@@ -122,7 +123,12 @@ func calculatedReturnTypeName(t ast.DataType) string {
 // findMicroflowByQualifiedName returns the live microflow with this qualified
 // name, or nil. Excluded twins are skipped (#914).
 func findMicroflowByQualifiedName(ctx *ExecContext, qualifiedName string) *microflows.Microflow {
-	all, err := ctx.Backend.ListMicroflows()
+	// Only the microflows of that local name are decoded: listing all of them
+	// to pick one cost a decode of every microflow in the project per call,
+	// and `create or modify microflow` makes one per statement
+	// (ako/mxcli#2094).
+	localName := qualifiedName[strings.LastIndex(qualifiedName, ".")+1:]
+	all, err := microflowsNamed(ctx, localName)
 	if err != nil {
 		return nil
 	}
