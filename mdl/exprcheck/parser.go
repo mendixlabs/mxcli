@@ -63,6 +63,7 @@ func (p *parserImpl) Parse(src string, ctx Context) (RobustExpr, []Hint) {
 	}
 	hs = append(hs, checkValueLiterals(expr, ctx)...)
 	hs = append(hs, checkSlotKind(expr, ctx)...)
+	hs = append(hs, checkCallArgument(expr, ctx)...)
 	hs = append(hs, checkBareIdentifierValue(expr, ctx)...)
 	hs = append(hs, checkStringFuncsComparedWithEmpty(expr, nil, ctx)...)
 	return expr, hs
@@ -135,9 +136,16 @@ func checkSlotKind(expr RobustExpr, ctx Context) []Hint {
 // bare identifier would reject working scripts. A member's value is the one
 // position where the bare word is the entire expression and can only be a
 // mistake.
+//
+// A call argument is the same position: the whole value handed to one
+// parameter. Measured on 11.14.0, a bare word passed to a String, an Integer,
+// an enumeration or an object parameter of a called microflow or nanoflow is
+// CE0117 at the call activity. (A blank argument, `Param = nothing`, renders
+// as no text at all and never reaches this rule.)
 func checkBareIdentifierValue(expr RobustExpr, ctx Context) []Hint {
 	if !strings.HasPrefix(ctx.SlotPath, "ChangeItem.Value") &&
-		!strings.HasPrefix(ctx.SlotPath, "CreateItem.Value") {
+		!strings.HasPrefix(ctx.SlotPath, "CreateItem.Value") &&
+		!strings.HasPrefix(ctx.SlotPath, callArgumentSlot) {
 		return nil
 	}
 	v, ok := expr.(*VariableExpr)

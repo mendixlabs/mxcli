@@ -99,8 +99,47 @@ func declareScriptTypes(reader *exprcatalog.Reader, prog *ast.Program) {
 			case s.Operation == ast.AlterEntityModifyAttribute:
 				declareScriptAttribute(reader, s.Name.String(), s.AttributeName, s.DataType)
 			}
+		case *ast.CreateMicroflowStmt:
+			declareScriptFlowParams(reader, s.Name.String(), s.Parameters)
+		case *ast.CreateNanoflowStmt:
+			declareScriptFlowParams(reader, s.Name.String(), s.Parameters)
 		}
 	}
+}
+
+// declareScriptFlowParams records the parameters of a flow the script creates, so a
+// call to it is checked against the signature the script gives it rather than
+// against nothing (a new flow) or a stale stored one (CREATE OR REPLACE).
+func declareScriptFlowParams(reader *exprcatalog.Reader, qn string, params []ast.MicroflowParam) {
+	declared := make([]exprcatalog.FlowParam, 0, len(params))
+	for _, p := range params {
+		kind, enumQN := scriptParamKind(reader, p.Type)
+		declared = append(declared, exprcatalog.FlowParam{Name: p.Name, Kind: kind, EnumQN: enumQN})
+	}
+	reader.DeclareFlow(qn, declared)
+}
+
+// scriptParamKind maps a flow parameter's declared type. A bare `Mod.Name`
+// parses as an enumeration whether it names one or an entity, so it counts as
+// an enumeration only when the catalog knows that enumeration, and is otherwise
+// left unknown rather than guessed.
+func scriptParamKind(reader *exprcatalog.Reader, dt ast.DataType) (exprcheck.TypeKind, string) {
+	switch dt.Kind {
+	case ast.TypeEntity:
+		return exprcheck.KindObject, ""
+	case ast.TypeListOf:
+		return exprcheck.KindList, ""
+	case ast.TypeEnumeration:
+		if dt.EnumRef == nil {
+			return exprcheck.KindUnknown, ""
+		}
+		enumQN := dt.EnumRef.String()
+		if _, known := reader.EnumCases(enumQN); dt.ExplicitEnum || known {
+			return exprcheck.KindEnumeration, enumQN
+		}
+		return exprcheck.KindUnknown, ""
+	}
+	return scriptAttributeKind(dt.Kind), ""
 }
 
 func declareScriptAttribute(reader *exprcatalog.Reader, entityQN, attr string, dt ast.DataType) {

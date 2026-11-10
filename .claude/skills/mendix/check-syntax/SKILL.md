@@ -244,7 +244,7 @@ which mxbuild also rejects.
 
 ### Expression KINDS are checked in the positions that declare one
 
-Two more things reach mxbuild as `CE0117 "Error(s) in expression"` and are now
+Three more things reach mxbuild as `CE0117 "Error(s) in expression"` and are now
 reported by `check`:
 
 - **A bare word as a member's value.** Mendix expressions have no bare
@@ -252,7 +252,15 @@ reported by `check`:
   (a literal), `$Closed` (a variable), or `Module.Enum.Value` (an enumeration).
   Scoped to the *whole* value of a create/change member: a bare name **nested**
   in a list-operation predicate is legal — `FILTER($L, Status = 'Open')`
-  resolves `Status` against the item under test — and is not reported.
+  resolves `Status` against the item under test — and is not reported. A bare
+  word as a `call microflow` / `call nanoflow` argument is E013 too.
+- **A call argument must fit the called flow's parameter** (E009, `check -p`).
+  Measured on 11.14.0: Integer and Long are one type and both widen to
+  Decimal, but a Decimal (also `a div b`) for an Integer/Long parameter fails;
+  String, Boolean and DateTime take only themselves; an enumeration parameter
+  takes only its own values (`'Open'`, an Integer or another enumeration's
+  value fail); an object or list parameter takes no primitive. `empty` fits
+  everything. Which *entity* an object argument holds is not checked.
 - **A log message's template parameter must be a String.** `LOG … WITH ({1} =
   $Order/Qty)` is E009. Measured on 11.13.0: Integer, Decimal, Boolean,
   DateTime and an object each fail; a String attribute is clean; and

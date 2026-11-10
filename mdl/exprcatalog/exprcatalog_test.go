@@ -49,7 +49,8 @@ func seeded(t *testing.T) *Reader {
 
 	exec(`INSERT INTO microflow_parameters_data (Id, MicroflowQualifiedName, Name, ParameterType, Ordinal)
 	      VALUES ('p1', 'Shop.ACT_Total', 'Order', 'Object:Shop.Order', 0),
-	             ('p2', 'Shop.ACT_Total', 'Discount', 'Decimal', 1)`)
+	             ('p2', 'Shop.ACT_Total', 'Discount', 'Decimal', 1),
+	             ('p3', 'Shop.ACT_Total', 'Status', 'Enumeration:Shop.OrderStatus', 2)`)
 
 	exec(`INSERT INTO associations_data (Id, QualifiedName, FromEntity, ToEntity)
 	      VALUES ('as1', 'Shop.Order_Customer', 'Shop.Order', 'Shop.Customer'),
@@ -236,5 +237,54 @@ func TestAssociationTarget(t *testing.T) {
 			t.Errorf("AssociationTarget(%q, %q) = (%q, %v), want (%q, %v)",
 				tc.assoc, tc.from, got, ok, tc.want, tc.ok)
 		}
+	}
+}
+
+// TestMicroflowParamEnumQN pins which enumeration an enumeration parameter
+// takes: the kind alone cannot tell a value of Shop.OrderStatus from one of
+// another enumeration, and passing the wrong one is CE0117 at the call.
+func TestMicroflowParamEnumQN(t *testing.T) {
+	r := seeded(t)
+	if got, ok := r.MicroflowParamEnumQN("Shop.ACT_Total", "$Status"); !ok || got != "Shop.OrderStatus" {
+		t.Errorf("got (%q, %v), want Shop.OrderStatus", got, ok)
+	}
+	if k, ok := r.MicroflowParam("Shop.ACT_Total", "Status"); !ok || k != exprcheck.KindEnumeration {
+		t.Errorf("got (%v, %v), want an Enumeration parameter", k, ok)
+	}
+	// An object parameter carries an entity after the colon, not an enumeration.
+	if got, ok := r.MicroflowParamEnumQN("Shop.ACT_Total", "Order"); ok {
+		t.Errorf("an object parameter named enumeration %q", got)
+	}
+}
+
+// TestDeclareFlowReplacesTheSignature: a flow the script creates or replaces
+// is checked against the parameters the script gives it. A parameter the new
+// signature drops must stop resolving, and one of unknown kind is left out
+// rather than kept at its stored type.
+func TestDeclareFlowReplacesTheSignature(t *testing.T) {
+	r := seeded(t)
+	r.DeclareFlow("Shop.ACT_Total", []FlowParam{
+		{Name: "Discount", Kind: exprcheck.KindInteger},
+		{Name: "Code", Kind: exprcheck.KindEnumeration, EnumQN: "Shop.OrderStatus"},
+		{Name: "Order", Kind: exprcheck.KindUnknown},
+	})
+	if k, ok := r.MicroflowParam("Shop.ACT_Total", "Discount"); !ok || k != exprcheck.KindInteger {
+		t.Errorf("Discount = (%v, %v), want the redeclared Integer", k, ok)
+	}
+	if q, ok := r.MicroflowParamEnumQN("Shop.ACT_Total", "Code"); !ok || q != "Shop.OrderStatus" {
+		t.Errorf("Code enumeration = (%q, %v)", q, ok)
+	}
+	for _, gone := range []string{"Status", "Order"} {
+		if _, ok := r.MicroflowParam("Shop.ACT_Total", gone); ok {
+			t.Errorf("%s still resolves after the signature was replaced", gone)
+		}
+	}
+	if _, ok := r.MicroflowParamEnumQN("Shop.ACT_Total", "Status"); ok {
+		t.Error("the dropped enumeration parameter kept its enumeration")
+	}
+	// A brand-new flow gets its parameters too.
+	r.DeclareFlow("Shop.ACT_New", []FlowParam{{Name: "$Qty", Kind: exprcheck.KindInteger}})
+	if k, ok := r.MicroflowParam("Shop.ACT_New", "Qty"); !ok || k != exprcheck.KindInteger {
+		t.Errorf("new flow's Qty = (%v, %v)", k, ok)
 	}
 }

@@ -57,6 +57,10 @@ type Reader struct {
 	enumCase map[string][]string
 	mfReturn map[string]exprcheck.TypeKind
 	mfParam  map[string]exprcheck.TypeKind
+	// mfParamEnum holds the enumeration of an enumeration parameter, keyed like
+	// mfParam: the kind alone cannot tell Mod.Color from Mod.Size, and passing
+	// one for the other is CE0117 at the call.
+	mfParamEnum map[string]string
 	// assoc maps an association's qualified name to its two ends, FROM first.
 	assoc map[string][2]string
 }
@@ -74,12 +78,13 @@ func Load(db Querier) (*Reader, error) {
 		return nil, fmt.Errorf("exprcatalog: nil catalog")
 	}
 	r := &Reader{
-		attrKind: map[string]exprcheck.TypeKind{},
-		attrEnum: map[string]string{},
-		enumCase: map[string][]string{},
-		mfReturn: map[string]exprcheck.TypeKind{},
-		mfParam:  map[string]exprcheck.TypeKind{},
-		assoc:    map[string][2]string{},
+		attrKind:    map[string]exprcheck.TypeKind{},
+		attrEnum:    map[string]string{},
+		enumCase:    map[string][]string{},
+		mfReturn:    map[string]exprcheck.TypeKind{},
+		mfParam:     map[string]exprcheck.TypeKind{},
+		mfParamEnum: map[string]string{},
+		assoc:       map[string][2]string{},
 	}
 	for _, load := range []func(Querier) error{
 		r.loadAttributes, r.loadEnumValues, r.loadMicroflows, r.loadParameters,
@@ -176,6 +181,9 @@ func (r *Reader) loadParameters(db Querier) error {
 		}
 		if k, ok := flowKind(paramType.String); ok {
 			r.mfParam[qn.String+"("+name.String] = k
+		}
+		if base, enumQN, _ := strings.Cut(paramType.String, ":"); base == "Enumeration" && enumQN != "" {
+			r.mfParamEnum[qn.String+"("+name.String] = enumQN
 		}
 	}
 	return rows.Err()
@@ -290,6 +298,52 @@ func (r *Reader) MicroflowReturn(qn string) (exprcheck.TypeKind, bool) {
 func (r *Reader) MicroflowParam(qn, paramName string) (exprcheck.TypeKind, bool) {
 	k, ok := r.mfParam[qn+"("+strings.TrimPrefix(paramName, "$")]
 	return k, ok
+}
+
+// MicroflowParamEnumQN returns the enumeration an enumeration parameter takes.
+func (r *Reader) MicroflowParamEnumQN(qn, paramName string) (string, bool) {
+	e, ok := r.mfParamEnum[qn+"("+strings.TrimPrefix(paramName, "$")]
+	return e, ok
+}
+
+// FlowParam is one parameter of a flow a script declares. EnumQN is set only
+// for an enumeration parameter.
+type FlowParam struct {
+	Name   string
+	Kind   exprcheck.TypeKind
+	EnumQN string
+}
+
+// DeclareFlow records the parameters of a microflow or nanoflow a script
+// creates, replacing every parameter the catalog held for that name: a CREATE
+// OR REPLACE redefines the whole signature, so a parameter the new one drops
+// must stop resolving. A parameter of unknown kind is left out, which makes
+// arguments for it uncheckable rather than checked against a guess.
+func (r *Reader) DeclareFlow(qn string, params []FlowParam) {
+	if qn == "" {
+		return
+	}
+	prefix := qn + "("
+	for k := range r.mfParam {
+		if strings.HasPrefix(k, prefix) {
+			delete(r.mfParam, k)
+		}
+	}
+	for k := range r.mfParamEnum {
+		if strings.HasPrefix(k, prefix) {
+			delete(r.mfParamEnum, k)
+		}
+	}
+	for _, p := range params {
+		name := strings.TrimPrefix(p.Name, "$")
+		if name == "" || p.Kind == exprcheck.KindUnknown {
+			continue
+		}
+		r.mfParam[prefix+name] = p.Kind
+		if p.Kind == exprcheck.KindEnumeration && p.EnumQN != "" {
+			r.mfParamEnum[prefix+name] = p.EnumQN
+		}
+	}
 }
 
 // attributeKind maps a domain-model attribute's stored type name.

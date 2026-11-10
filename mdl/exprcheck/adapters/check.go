@@ -151,13 +151,9 @@ func (c *CheckAdapter) walkBodyWithScope(body []ast.MicroflowStatement, mf strin
 				c.checkExpr(ci.Value, slot, mf, r)
 			}
 		case *ast.CallMicroflowStmt:
-			for _, a := range n.Arguments {
-				c.checkExpr(a.Value, "CallArgument.Value", mf, r)
-			}
+			c.checkCallArguments(n.MicroflowName.String(), n.Arguments, mf, r)
 		case *ast.CallNanoflowStmt:
-			for _, a := range n.Arguments {
-				c.checkExpr(a.Value, "CallArgument.Value", mf, r)
-			}
+			c.checkCallArguments(n.NanoflowName.String(), n.Arguments, mf, r)
 		case *ast.SendEmailStmt:
 			c.checkSendEmail(n, mf, r)
 		}
@@ -214,6 +210,21 @@ func (c *CheckAdapter) checkListOperationCondition(n *ast.ListOperationStmt, mf 
 	c.entities = entityScope{vars: vars, assoc: c.assoc}
 	c.checkExpr(n.Condition, "ListOperation.Condition", mf, r)
 	c.entities = saved
+}
+
+// checkCallArguments checks each argument of a call with the called flow and
+// the parameter appended to the slot ("CallArgument.Value:Mod.Flow.Param"),
+// the way a create member carries its attribute, so the parser can look up the
+// parameter's type. Without a flow name the slot stays bare and only the
+// type-independent rules run.
+func (c *CheckAdapter) checkCallArguments(flowQN string, args []ast.CallArgument, mf string, r *Result) {
+	for _, a := range args {
+		slot := "CallArgument.Value"
+		if param := strings.TrimPrefix(a.Name, "$"); flowQN != "" && param != "" {
+			slot += ":" + flowQN + "." + param
+		}
+		c.checkExpr(a.Value, slot, mf, r)
+	}
 }
 
 func (c *CheckAdapter) checkExpr(expr ast.Expression, slot, mf string, r *Result) {

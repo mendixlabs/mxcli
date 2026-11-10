@@ -214,7 +214,7 @@ var Registry = &registry{byCode: map[string]Entry{
 		Code:     "E013",
 		Slug:     "bare-identifier-value",
 		Severity: SeverityError,
-		Trigger:  "A bare word stands alone as the value of a create/change member.",
+		Trigger:  "A bare word stands alone as the value of a create/change member or of a call microflow/nanoflow argument.",
 		WhyWrong: "Mendix expressions have no bare identifiers: a value is a literal, a $variable, a qualified name or a function call. The bare word reaches the build as CE0117 \"Error(s) in expression\".",
 		HowToFix: "Quote it if it is text, add the $ if it is a variable, or qualify it if it is an enumeration value.",
 		Examples: []ExampleFix{
