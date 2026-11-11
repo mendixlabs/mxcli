@@ -3348,16 +3348,6 @@ func cloneWidget(w *ast.WidgetV3) *ast.WidgetV3 {
 	return clone
 }
 
-// prefixWidgetNames recursively prepends a prefix to all widget names.
-func prefixWidgetNames(widgets []*ast.WidgetV3, prefix string) {
-	for _, w := range widgets {
-		if w.Name != "" {
-			w.Name = prefix + w.Name
-		}
-		prefixWidgetNames(w.Children, prefix)
-	}
-}
-
 // flowArgsToParameterMappings converts parsed datasource/action arguments into
 // model parameter mappings. A microflow or nanoflow used as a widget datasource
 // needs an argument for every parameter exactly as a call action does — Mendix
