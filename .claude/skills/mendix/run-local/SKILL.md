@@ -19,20 +19,20 @@ description: "The warm Docker-free dev loop, `mxcli run --local` — model chang
 | 250-277 | Editing themes (SCSS) — rebuild, never clear caches |
 | 278-304 | `--watch` waits for a write to finish before it builds |
 | 305-333 | "My edit didn't show up" — stale process, not stale cache |
-| 334-366 | Flags |
-| 367-420 | Metrics and OpenTelemetry |
-| 421-478 | Pages render in the browser |
-| 479-496 | Pixel-perfect page loop |
-| 497-517 | Debugging a server-side error |
-| 518-552 | "Sign in failed" that is not about the password |
-| 553-585 | The same licence also stops the app after a few hours |
-| 586-665 | External browser preview (`--hub`) |
-| 666-674 | Validation checklist |
-| 675-731 | Constant values come from a configuration |
-| 732-735 | Warm local dev loop (`mxcli run --local [--watch] [--screenshot]`) |
-| 736-739 | External browser preview (`mxcli run --hub <url>` + `mxcli tunnel-hub`) |
-| 740-743 | Tunnel-hub GitHub authentication (opt-in, gated on `--github-oauth-client-id`; absent = today's open hub) |
-| 744-746 | Runtime metrics + settings passthrough (`mxcli run --local --metrics` / `--runtime-setting Key=Value`) |
+| 334-364 | Flags |
+| 365-418 | Metrics and OpenTelemetry |
+| 419-476 | Pages render in the browser |
+| 477-494 | Pixel-perfect page loop |
+| 495-515 | Debugging a server-side error |
+| 516-539 | "Sign in failed" that is not about the password |
+| 540-572 | The same licence also stops the app after a few hours |
+| 573-652 | External browser preview (`--hub`) |
+| 653-661 | Validation checklist |
+| 662-718 | Constant values come from a configuration |
+| 719-722 | Warm local dev loop (`mxcli run --local [--watch] [--screenshot]`) |
+| 723-726 | External browser preview (`mxcli run --hub <url>` + `mxcli tunnel-hub`) |
+| 727-730 | Tunnel-hub GitHub authentication (opt-in, gated on `--github-oauth-client-id`; absent = today's open hub) |
+| 731-733 | Runtime metrics + settings passthrough (`mxcli run --local --metrics` / `--runtime-setting Key=Value`) |
 
 <!-- /skill-index -->
 # Warm Local Dev Loop — `mxcli run --local`
@@ -341,8 +341,6 @@ run's process session), and `run status` reports them. Do **not**
 | *(hub API key)* | — | For an **authenticated** hub: get one from `https://<hub>/cli`, set `MXCLI_HUB_KEY` (see below) |
 | `--watch` | off | Rebuild + hot-apply on each change |
 | `--web-client-timeout` | `$MXCLI_WEB_CLIENT_TIMEOUT`, else `5m` | Limit for one web client bundle build; on timeout the tail of `deployment/log/web-client-build.log` is printed |
-| `--build-timeout` | `$MXCLI_BUILD_TIMEOUT`, else `30m` | Limit for one `mxbuild --serve` build. The cold first build of a large app (thousands of documents) can take ten minutes or more |
-| `--start-timeout` | `$MXCLI_START_TIMEOUT`, else `15m` | Limit for the runtime start, after-startup microflow and schema update included. Running out says "did not answer", not "is the app running?" |
 | `--ensure-db` | off | Provision local Postgres + app database if missing |
 | `--db-admin-user` / `--db-admin-password` | postgres / — | Superuser login for `--ensure-db` when it has a password (Windows); only with `--ensure-db` |
 | `--app-port` / `--admin-port` / `--serve-port` | 8080 / 8090 / 6543 | Ports |
@@ -532,18 +530,7 @@ password in the model. `--screenshot-user` and `mxcli playwright check` do this
 for you — a rejected sign-in reads the log and says so instead of quietly
 screenshotting or checking the login page.
 
-The cap is **6**, and the licence counts the `System.Session` rows in the
-database. Free every slot without a restart (the app keeps running; signed-in
-browsers sign in again):
-
-```bash
-mxcli run clear-sessions -p app.mpr
-```
-
-Measured on 11.12.1: six sign-ins, the seventh HTTP 560, `clear-sessions`, six
-more succeed on the same running app. Restarting `run --local` clears them too
-(the runtime deletes old sessions as it starts), at the cost of a boot.
-Otherwise sessions are held until they expire.
+The cap is 6; `mxcli run clear-sessions -p app.mpr` frees them all at once, no restart.
 A script that drives the app through a browser should **sign out at the end**,
 otherwise each run leaks a slot and the fifth or sixth run is the one that fails —
 which makes it look like a change you just made broke authentication.
