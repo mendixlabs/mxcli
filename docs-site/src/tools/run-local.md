@@ -589,6 +589,24 @@ loop going. The hint mxcli prints offers the upgrade only for the half it fixes.
 meets the same second-build failure on the same versions (read off the code, not
 measured).
 
+### A CE0108 only the incremental build reports
+
+An incremental build in a serve process that has already built has been seen to
+fail with CE0108 *"Variable 'X' is defined but not in scope at this location"* on a
+model that `docker check` passes and a full build applies (ako/mxcli#2064, 11.16.0,
+not deterministic). Under `--watch` mxcli does not report that as the model's error
+straight away: it restarts `mxbuild --serve` and builds once more, and says which
+answer stood:
+
+```
+the incremental build reports CE0108, which mxbuild --serve has reported for a model a full build accepts; restarting mxbuild --serve for a full build to check...
+the full build passed: the incremental build's errors were mxbuild --serve's own state, not the model's
+```
+
+When the full build fails too, the error is the model's, and the same errors on
+later saves are reported without another check until a build passes. Other error
+codes are never rechecked: each check is a cold build.
+
 ## Pixel-perfect page loop
 
 Pass `--screenshot` and each applied change is captured to a PNG (default
