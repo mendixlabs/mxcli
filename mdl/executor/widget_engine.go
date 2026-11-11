@@ -278,6 +278,10 @@ type BuildContext struct {
 	// SourceVariable names the parameter an attribute or association binding
 	// reads (`$Param.Attr`); nil for one read from the enclosing object.
 	SourceVariable *pages.WidgetVariable
+	// AttributeSteps are the association hops of a rooted attribute path,
+	// `$Name/Assoc/Attr`, stored as the AttributeRef's EntityRef beside
+	// SourceVariable (ako/mxcli#2107).
+	AttributeSteps []pages.AttributeRefStep
 	// ImageEntity is the entity an image-typed property binds to when it was
 	// written `$currentObject` rather than as a collection entry (#1476).
 	ImageEntity string
@@ -747,6 +751,17 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 			// re-applies a property authored by its schema key AFTER every
 			// datasource has run, so the shared context here is always the LAST
 			// datasource's entity, which is what #647 wrote for every name.
+			if _, _, rooted := rootedAssociationPath(strVal); rooted {
+				// `$Name/Assoc/Attr`: an association path read from a named
+				// object (ako/mxcli#833, #2107).
+				wv, finalQN, steps, err := e.rootedAttributeBinding(w, propName, strVal)
+				if err != nil {
+					return nil, err
+				}
+				builder.SetAttributeWithSteps(propName, finalQN, steps)
+				builder.SetSourceVariable(propName, &wv)
+				break
+			}
 			if name, rest, named := namedObjectBinding(strVal); named {
 				// `$Param.Attr`: the attribute of a page or snippet parameter,
 				// whatever encloses the widget — the AttributeRef plus a
@@ -1059,7 +1074,11 @@ var templateAttrPlaceholderRe = regexp.MustCompile(`\{[A-Za-z][A-Za-z0-9_]*\}`)
 func (e *PluggableWidgetEngine) applyOperation(builder backend.WidgetObjectBuilder, opName string, propKey string, ctx *BuildContext) error {
 	switch opName {
 	case "attribute":
-		builder.SetAttribute(propKey, ctx.AttributePath)
+		if len(ctx.AttributeSteps) > 0 {
+			builder.SetAttributeWithSteps(propKey, ctx.AttributePath, ctx.AttributeSteps)
+		} else {
+			builder.SetAttribute(propKey, ctx.AttributePath)
+		}
 		if ctx.SourceVariable != nil && ctx.AttributePath != "" {
 			builder.SetSourceVariable(propKey, ctx.SourceVariable)
 		}
@@ -1497,13 +1516,15 @@ func refuseAmbiguousGenericDataSource(def *WidgetDefinition, w *ast.WidgetV3, ds
 }
 
 // parameterBinding resolves the `$name` of a `$name.Attr` binding on a pluggable
-// widget property to the page or snippet parameter it names: the SourceVariable
-// to store beside the reference, and the parameter's entity. A name that is no
-// parameter is refused — the data-view pair (#826) is measured on the built-in
-// inputs only, and anything else would be written as a binding that reads
+// widget property to the object it names: a page or snippet parameter, or an
+// enclosing data view — the data-view pair Studio Pro stores on a markdown
+// viewer in an inner data view (FactoryManagement ConversationalUI
+// Span_*_SlideIn, ako/mxcli#2107) as on the built-in inputs (#826). It returns
+// the SourceVariable to store beside the reference and the object's entity.
+// Any other name is refused: it would be written as a binding that reads
 // nothing.
 func (e *PluggableWidgetEngine) parameterBinding(w *ast.WidgetV3, propertyKey, attr, name string) (pages.WidgetVariable, string, error) {
-	wv, entity, ok := e.pageBuilder.parameterVariable(name)
+	wv, entity, ok := e.pageBuilder.namedObjectVariable(name)
 	if !ok {
 		return pages.WidgetVariable{}, "", notAParameterError(
 			fmt.Sprintf("%s `%s` property `%s`", strings.ToLower(w.Type), w.Name, propertyKey),
@@ -1512,12 +1533,30 @@ func (e *PluggableWidgetEngine) parameterBinding(w *ast.WidgetV3, propertyKey, a
 	return wv, entity, nil
 }
 
+// rootedAttributeBinding resolves `$Name/Assoc/Attr` on a pluggable widget's
+// attribute property — an association path read from a parameter or an
+// enclosing data view, the shape Studio Pro stores as the AttributeRef's
+// steps beside a SourceVariable naming the object (FactoryManagement
+// ConversationalUI.Span_TextGeneration_SlideIn, ako/mxcli#2107).
+func (e *PluggableWidgetEngine) rootedAttributeBinding(w *ast.WidgetV3, propertyKey, attr string) (pages.WidgetVariable, string, []pages.AttributeRefStep, error) {
+	wv, finalQN, steps, ok := e.pageBuilder.resolveRootedAssociationPath(attr)
+	if !ok {
+		root, _, _ := rootedAssociationPath(attr)
+		return pages.WidgetVariable{}, "", nil, mdlerrors.NewValidationf(
+			"%s `%s` property `%s`: `%s` — `$%s/…` reads an association path from a parameter of this %s or an "+
+				"enclosing data view, and `$%s` is neither, or the path does not resolve from it",
+			strings.ToLower(w.Type), w.Name, propertyKey, attr, root, e.pageBuilder.documentKind(), root)
+	}
+	return wv, finalQN, steps, nil
+}
+
 // notAParameterError refuses a `$name.Attr` binding whose name is no page or
 // snippet parameter. where names the widget property, for the message.
 func notAParameterError(where, attr, name, documentKind string) error {
 	return mdlerrors.NewValidationf(
-		"%s: `%s` — `$%s` is not a parameter of this %s; `$Param.Attr` reads an attribute "+
-			"of a page or snippet parameter. Inside a data container, name the attribute bare",
+		"%s: `%s` — `$%s` is not a parameter of this %s or an enclosing data view; `$Param.Attr` reads an "+
+			"attribute of a page or snippet parameter, `$dataView1.Attr` one of a data view the widget is inside. "+
+			"For the nearest data container's object, name the attribute bare",
 		where, attr, name, documentKind)
 }
 
@@ -1688,7 +1727,14 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 				}
 			}
 		}
-		if name, rest, named := namedObjectBinding(attr); named {
+		if _, _, rooted := rootedAssociationPath(attr); rooted {
+			// `$Name/Assoc/Attr` (ako/mxcli#833, #2107).
+			wv, finalQN, steps, err := e.rootedAttributeBinding(w, mapping.PropertyKey, attr)
+			if err != nil {
+				return nil, err
+			}
+			ctx.AttributePath, ctx.AttributeSteps, ctx.SourceVariable = finalQN, steps, &wv
+		} else if name, rest, named := namedObjectBinding(attr); named {
 			// `$Param.Attr`: read from a page or snippet parameter, whatever
 			// encloses the widget (see cmd_pages_parameter_binding.go).
 			wv, entity, err := e.parameterBinding(w, mapping.PropertyKey, attr, name)
