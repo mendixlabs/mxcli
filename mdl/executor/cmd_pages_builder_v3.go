@@ -3259,8 +3259,12 @@ func (pb *pageBuilder) expandBuildingBlockRef(w *ast.WidgetV3) ([]*ast.WidgetV3,
 	if act, ok := w.Properties["ActionOverride"].(*ast.ActionV3); ok && act != nil {
 		// Action target: the first button-type widget. Atlas blocks ship
 		// placeholder buttons with no action, so match by widget type (not by an
-		// existing Action property) and set the handler.
-		hit := rebindFirst(widgets, isButtonWidget,
+		// existing Action property) and set the handler. A pluggable button (the
+		// PlatformDesignSystem blocks are built from `pdsbutton`) counts too: its
+		// on-click slot is sourced from the same Action property, so setting it
+		// is enough for the engine to write the widget's own action key.
+		registry := ctx.GetWidgetRegistry()
+		hit := rebindFirst(widgets, func(t *ast.WidgetV3) bool { return isActionTargetWidget(registry, t) },
 			func(t *ast.WidgetV3) { t.Properties["Action"] = act })
 		if !hit {
 			return nil, mdlerrors.NewValidation(fmt.Sprintf(
@@ -3268,6 +3272,45 @@ func (pb *pageBuilder) expandBuildingBlockRef(w *ast.WidgetV3) ([]*ast.WidgetV3,
 		}
 	}
 	return widgets, nil
+}
+
+// isActionTargetWidget reports whether the `action:` override of `use building
+// block` may land on a widget: a built-in button, or a pluggable one.
+func isActionTargetWidget(registry *WidgetRegistry, w *ast.WidgetV3) bool {
+	return isButtonWidget(w) || isPluggableButtonWidget(registry, w)
+}
+
+// isPluggableButtonWidget reports whether a widget is a pluggable button: its
+// definition names it a button and maps an on-click action slot to `OnClick:`.
+// Both conditions, because a click slot alone is not a button — a Gallery and a
+// Data grid 2 take `OnClick:` for a row click, and a PDS Link for a link click,
+// and none of those is the block's primary action. registry may be nil (no
+// project); then only the built-in button types match.
+func isPluggableButtonWidget(registry *WidgetRegistry, w *ast.WidgetV3) bool {
+	if registry == nil {
+		return false
+	}
+	def, ok := registry.Get(w.Type)
+	if !ok || !strings.HasSuffix(strings.ToLower(def.MDLName), "button") {
+		return false
+	}
+	takesOnClick := func(mappings []PropertyMapping) bool {
+		for _, m := range mappings {
+			if m.Source == "OnClick" {
+				return true
+			}
+		}
+		return false
+	}
+	if takesOnClick(def.PropertyMappings) {
+		return true
+	}
+	for i := range def.Modes {
+		if takesOnClick(def.Modes[i].PropertyMappings) {
+			return true
+		}
+	}
+	return false
 }
 
 // isButtonWidget reports whether a widget is an action-capable button.
