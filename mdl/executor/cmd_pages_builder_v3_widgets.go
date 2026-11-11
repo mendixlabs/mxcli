@@ -901,6 +901,15 @@ func (pb *pageBuilder) buildCheckBoxV3(w *ast.WidgetV3) (*pages.CheckBox, error)
 	// omitted property stays empty and the writer keeps the stored default —
 	// what decides whether a read-only check box renders as "Yes"/"No" text or
 	// as the checkbox glyph (ako/mxcli#490).
+	// LabelPosition (ako/mxcli#2106): Default, BeforeControl or AfterControl.
+	if raw := w.GetStringProp("LabelPosition"); raw != "" {
+		pos, ok := map[string]string{"default": "Default", "beforecontrol": "BeforeControl", "aftercontrol": "AfterControl"}[strings.ToLower(raw)]
+		if !ok {
+			return nil, mdlerrors.NewValidationf("checkbox %q: LabelPosition %q is not a Mendix label position — use Default, BeforeControl or AfterControl", w.Name, raw)
+		}
+		cb.LabelPosition = pos
+	}
+
 	style, err := readOnlyStyleValue(w.GetStringProp("ReadOnlyStyle"), "checkbox", w.Name)
 	if err != nil {
 		return nil, err
@@ -972,6 +981,19 @@ func (pb *pageBuilder) buildRadioButtonsV3(w *ast.WidgetV3) (*pages.RadioButtons
 	}
 
 	// ReadOnlyStyle, as on a checkbox; unset keeps Inherit (ako/mxcli#977).
+	// RenderHorizontal (ako/mxcli#2106): Studio Pro's "Orientation". Unset
+	// keeps the writer's default, horizontal.
+	if v, ok := w.Properties["RenderHorizontal"]; ok {
+		switch strings.ToLower(fmt.Sprint(v)) {
+		case "true":
+			rb.RenderDirection = pages.RenderDirectionHorizontal
+		case "false":
+			rb.RenderDirection = pages.RenderDirectionVertical
+		default:
+			return nil, mdlerrors.NewValidationf("radiobuttons %q: RenderHorizontal takes true or false, not %v", w.Name, v)
+		}
+	}
+
 	rbStyle, err := readOnlyStyleValue(w.GetStringProp("ReadOnlyStyle"), "radiobuttons", w.Name)
 	if err != nil {
 		return nil, err

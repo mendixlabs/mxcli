@@ -786,7 +786,7 @@ actionReturnV3
 // workflow with (DefaultPage: Module.Page)`); a single segment is the
 // identifierOrKeyword every other setting takes.
 actionSettingV3
-    : identifierOrKeyword COLON (STRING_LITERAL | NONE | qualifiedName)
+    : identifierOrKeyword COLON (STRING_LITERAL | NUMBER_LITERAL | NONE | qualifiedName)
     ;
 
 // The page actions are the words a microflow uses (R8, ako/mxcli#752):
