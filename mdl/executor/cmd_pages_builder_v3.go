@@ -1969,6 +1969,7 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 			if strVal, ok := arg.Value.(string); ok {
 				if v, kind := pb.classifyFlowArgValue(strVal); kind != "" {
 					mapping.Variable, mapping.VariableKind = v, kind
+					mapping.WidgetParameter, mapping.WidgetParameterKind = pb.flowArgWidgetParameter(v, kind)
 				} else if strings.HasPrefix(strVal, "$") {
 					mapping.Variable = strVal
 				} else {
@@ -2013,6 +2014,7 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 			if strVal, ok := arg.Value.(string); ok {
 				if v, kind := pb.classifyFlowArgValue(strVal); kind != "" {
 					mapping.Variable, mapping.VariableKind = v, kind
+					mapping.WidgetParameter, mapping.WidgetParameterKind = pb.flowArgWidgetParameter(v, kind)
 				} else if strings.HasPrefix(strVal, "$") {
 					mapping.Variable = strVal
 				} else {
@@ -3363,6 +3365,7 @@ func (pb *pageBuilder) flowArgsToParameterMappings(args []ast.FlowArgV3) []*page
 		if strVal, ok := arg.Value.(string); ok {
 			if v, kind := pb.classifyFlowArgValue(strVal); kind != "" {
 				mapping.Variable, mapping.VariableKind = v, kind
+				mapping.WidgetParameter, mapping.WidgetParameterKind = pb.flowArgWidgetParameter(v, kind)
 			} else if strings.HasPrefix(strVal, "$") {
 				mapping.Variable = strVal
 			} else {

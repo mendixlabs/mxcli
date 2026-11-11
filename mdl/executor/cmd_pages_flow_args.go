@@ -68,6 +68,26 @@ func (pb *pageBuilder) classifyFlowArgValue(value string) (variable, kind string
 	return "", ""
 }
 
+// flowArgWidgetParameter is the parameter a "widget" flow argument names beside
+// the widget, when that widget is an enclosing data view showing a page or
+// snippet parameter: the pair registerDataViewVariable records for the data
+// view's `$dv.Attr` bindings (ako/mxcli#826). Studio Pro wants the same pair on
+// a flow argument — Widget alone there is mx check CE0115 "The arguments that
+// are passed to microflow '…' do not match the expected parameters"
+// (ako/mxcli#2095), while hand-patching PageParameter beside it measured 0
+// errors. A grid's or combo box's selection, and a data view whose object comes
+// from a microflow, have no parameter behind them and keep Widget alone (#1560).
+func (pb *pageBuilder) flowArgWidgetParameter(variable, kind string) (param, paramKind string) {
+	if kind != "widget" {
+		return "", ""
+	}
+	wv, ok := pb.dataViewVariables[strings.TrimPrefix(variable, "$")]
+	if !ok || wv.Variable == "" {
+		return "", ""
+	}
+	return wv.Variable, wv.Kind
+}
+
 // pageVariableArgValue renders a mapping's Variable — a Forms$PageVariable — as
 // the MDL `$name` that produced it, or "" when there is no variable binding.
 //
@@ -107,16 +127,18 @@ func pageVariableArgValue(raw any) string {
 // comboBox1). describe printed the call with the argument gone, so check
 // reported CE1571 on a page that builds and exec wrote the call unbound
 // (ako/mxcli#1560); the builder binds `$widget` back to the same slot.
+//
+// The Widget slot is read first: a data view showing a page or snippet
+// parameter is stored as the pair, Widget plus that parameter, and naming the
+// parameter instead would make describe -> exec drop the widget
+// (ako/mxcli#2095). The builder writes `$widget` back as the same pair.
 func flowArgVariableValue(raw any) string {
-	if value := pageVariableArgValue(raw); value != "" {
-		return value
-	}
 	if v, ok := raw.(map[string]any); ok {
 		if w := extractString(v["Widget"]); w != "" {
 			return "$" + w
 		}
 	}
-	return ""
+	return pageVariableArgValue(raw)
 }
 
 // widgetNameSet is isDocumentWidget for a statement that declares the whole
