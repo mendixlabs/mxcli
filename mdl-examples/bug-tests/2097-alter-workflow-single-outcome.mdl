@@ -1,0 +1,83 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#2097 (mendixlabs/mxcli#1798) — "`create workflow` refuses a user
+-- task whose only outcome holds activities (MDL-WF02, CE1876), but `alter
+-- workflow` does not."
+-- ============================================================================
+--
+-- Dropping a stored task's other outcomes so one outcome with activities
+-- remains, or inserting a task whose single outcome holds an activity, passed
+-- `check -p` and `exec`; mx check (11.14.0) then reported
+--   [error] [CE1876] "Single outcome must not contain any activities in its
+--   flow." at User task 'Review'
+--
+-- MDL-WF02 now judges the state the SCRIPT leaves, over every ALTER WORKFLOW
+-- in it. This file is the legal side: each shape below passes through a
+-- single outcome holding an activity, and a later op — in the same statement
+-- or a later statement — adds the second outcome, so nothing is reported.
+-- The refused side is 2097-alter-workflow-single-outcome.fail.mdl.
+--
+-- Measured on 11.14.0 (blank app, Review with 'Approve' { call microflow } and
+-- 'Reject' { }): `drop Review outcome 'Reject'` -> CE1876 at User task
+-- 'Review'; the same drop followed by `insert into Review { outcomes
+-- 'Escalate' { } }` -> 0 errors. Inserting a task whose one outcome holds a
+-- call microflow -> CE1876 at that task.
+--
+-- EXPECTED: `mxcli check` passes this file (no MDL-WF02).
+-- Guard: mdl/executor/workflow_alter_single_outcome_2097_test.go
+-- ============================================================================
+
+create module BugSingleOutcome2097;
+
+create persistent entity BugSingleOutcome2097.Request (
+  Title: String(200)
+);
+
+create page BugSingleOutcome2097.WF_Review
+(
+  params: ( $WorkflowUserTask: System.WorkflowUserTask ),
+  title: 'Review',
+  layout: Atlas_Core.Atlas_Default
+)
+{
+  dataview dvTask (DataSource: $WorkflowUserTask) {
+    actionbutton btnApprove (Caption: 'Approve', Action: complete task 'Approve')
+    actionbutton btnEscalate (Caption: 'Escalate', Action: complete task 'Escalate')
+  }
+};
+
+create microflow BugSingleOutcome2097.ACT_Notify ($WorkflowContext: BugSingleOutcome2097.Request)
+begin
+  log info node 'WF' 'notified';
+end;
+
+create workflow BugSingleOutcome2097.WF
+  parameter $WorkflowContext: BugSingleOutcome2097.Request
+begin
+  user task Review 'Review'
+    page BugSingleOutcome2097.WF_Review
+    outcomes
+      'Approve' { call microflow BugSingleOutcome2097.ACT_Notify; }
+      'Reject' { };
+end workflow;
+
+-- Drop 'Reject': for now 'Approve' is alone and holds ACT_Notify ...
+alter workflow BugSingleOutcome2097.WF {
+  drop Review outcome 'Reject'
+};
+
+-- ... and a later statement adds the second outcome back.
+alter workflow BugSingleOutcome2097.WF {
+  insert into Review { outcomes 'Escalate' { } }
+};
+
+-- An inserted task with one outcome holding an activity, given its second
+-- outcome by a later op of the same statement.
+alter workflow BugSingleOutcome2097.WF {
+  insert after Review {
+    user task Verify 'Verify'
+      page BugSingleOutcome2097.WF_Review
+      outcomes 'Approve' { call microflow BugSingleOutcome2097.ACT_Notify; };
+  };
+  insert into Verify { outcomes 'Escalate' { } }
+};
