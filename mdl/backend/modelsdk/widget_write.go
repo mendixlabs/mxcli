@@ -122,6 +122,11 @@ func init() {
 	codec.RegisterTypeDefaults("Forms$ListViewXPathSource", codec.TypeDefaults{
 		NullFields: []string{"SourceVariable"},
 	})
+	// An association source likewise: 40 of 40 in FactoryManagement carry the
+	// key, null (30) when the source starts from $currentObject (ako/mxcli#2106).
+	codec.RegisterTypeDefaults("Forms$AssociationSource", codec.TypeDefaults{
+		NullFields: []string{"SourceVariable"},
+	})
 	// LayoutGrid and its rows carry a null ConditionalVisibilitySettings; the grid,
 	// rows, and columns all use the typed-array marker 2 in their parent lists.
 	for _, t := range []string{"Forms$LayoutGrid", "Forms$LayoutGridRow"} {
@@ -678,6 +683,9 @@ func widgetToGen(w pages.Widget) (element.Element, error) {
 		g.SetEditable(pages.WidgetEditability(&x.BaseWidget))
 		if x.Label != "" {
 			g.SetLabelTemplate(textAsClientTemplate(textFromString(x.Label)))
+		}
+		if x.LabelPosition != "" {
+			g.SetLabelPosition(x.LabelPosition)
 		}
 		onChangeCB, err := clientActionToGen(x.OnChangeAction)
 		if err != nil {
@@ -2356,7 +2364,7 @@ func clientActionToGen(a pages.ClientAction) (element.Element, error) {
 		}
 		assignID(g)
 		g.SetDisabledDuringExecution(actionDisabledDuringExecution(x.ActionExecution))
-		g.SetNumberOfPagesToClose2("")
+		g.SetNumberOfPagesToClose2(x.NumberOfPagesToClose)
 		g.SetPageSettings(pageSettingsWithMappings(x.PageName, x.ParameterMappings))
 		return g, nil
 	case *pages.LinkClientAction:

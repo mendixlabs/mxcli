@@ -102,8 +102,8 @@ var nativeWidgetKinds = map[string]nativeWidgetKind{
 	"datepicker": {stored: "Forms$DatePicker", tail: true, visible: true,
 		reads: withReads(inputReads, "ReadOnlyStyle")},
 	"dropdown":     {stored: "Forms$DropDown", tail: true, visible: true, reads: withReads(inputReads)},
-	"checkbox":     {stored: "Forms$CheckBox", tail: true, visible: true, reads: withReads(inputReads, "ReadOnlyStyle")},
-	"radiobuttons": {stored: "Forms$RadioButtonGroup", tail: true, visible: true, reads: withReads(inputReads, "ReadOnlyStyle")},
+	"checkbox":     {stored: "Forms$CheckBox", tail: true, visible: true, reads: withReads(inputReads, "ReadOnlyStyle", "LabelPosition")},
+	"radiobuttons": {stored: "Forms$RadioButtonGroup", tail: true, visible: true, reads: withReads(inputReads, "ReadOnlyStyle", "RenderHorizontal")},
 	"filemanager": {stored: "Forms$FileManager", tail: true, visible: true,
 		reads: []string{"Label", "ShowLabel", "Type", "MaxFileSize", "AllowedExtensions", "ShowFileInBrowser"}},
 

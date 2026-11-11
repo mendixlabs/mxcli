@@ -44,6 +44,13 @@ type RunOptions struct {
 	// an attach to an app started with --allow-call.
 	execPrograms map[string]*execProgram
 
+	// ReuseBuild (--reuse-build, local runs) skips the injection and the build when
+	// the deployment left by the previous run is the build this run would make:
+	// same project files, same test microflows, same mxcli (see reusebuild.go).
+	// Any difference builds as usual.
+	ReuseBuild bool
+	recordKey  string // set by runEndpoint on a reuse miss: the key to record once the build booted
+
 	// Local runs the app with mxcli's own local runtime (`run --local`) instead
 	// of a Docker container, and drives the tests over the test endpoint.
 	Local bool
@@ -290,16 +297,16 @@ func runEndpoint(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 		return nil, err
 	}
 
-	// Capture what cleanup will need to restore, before touching anything. This
-	// must succeed: without it cleanup cannot tell an existing MxTest module from
-	// the one it is about to create, nor restore the original after-startup — and
-	// the generated startup flow needs to know what to chain.
 	// An endpoint a dead run left behind would be captured as the project's own
 	// after-startup and chained to (ako/mxcli#2119); take it out first, as `run`
 	// does.
 	if _, err := RestoreAbandonedEndpoint(opts.ProjectPath, w); err != nil {
 		return nil, err
 	}
+	// Capture what cleanup will need to restore, before touching anything. This
+	// must succeed: without it cleanup cannot tell an existing MxTest module from
+	// the one it is about to create, nor restore the original after-startup — and
+	// the generated startup flow needs to know what to chain.
 	state, err := captureProjectState(opts.ProjectPath)
 	if err != nil {
 		return nil, fmt.Errorf("capturing project state: %w", err)
@@ -327,6 +334,32 @@ func runEndpoint(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 		fmt.Fprintln(w, endpointMDL)
 		fmt.Fprintln(w, flowsMDL)
 		fmt.Fprintln(w, "--- End MDL ---")
+	}
+
+	// Build reuse: nothing to inject and nothing to build when the deployment on
+	// disk is already this run's build. Not for --watch (it exists to rebuild).
+	if opts.ReuseBuild && !opts.Watch && !opts.SkipBuild {
+		if k, kerr := testBuildKey(opts, endpointMDL, flowsMDL); kerr != nil {
+			fmt.Fprintf(w, "  build reuse off (%v)\n", kerr)
+		} else if reusableBuild(opts.ProjectPath, k) {
+			fmt.Fprintln(w, "Reusing the previous build: project, tests and mxcli unchanged; no injection, no mxbuild.")
+			ropts := opts
+			ropts.SkipBuild = true
+			forgetBuild(opts.ProjectPath) // re-recorded only after a clean run
+			result, rerr := runViaEndpoint(ropts, suite, token, timeout, w)
+			if rerr != nil {
+				return nil, rerr
+			}
+			recordBuild(opts.ProjectPath, k)
+			PrintResults(w, result, opts.Color)
+			if jerr := writeJUnit(opts, result, w); jerr != nil {
+				return result, jerr
+			}
+			return result, nil
+		} else {
+			forgetBuild(opts.ProjectPath) // a build that fails half way must not leave a record behind
+			opts.recordKey = k
+		}
 	}
 
 	fmt.Fprintln(w, "Injecting test endpoint into project...")

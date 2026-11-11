@@ -105,7 +105,11 @@ func legacyClientBuildHint(deployDir, message, raw string) string {
 // missingClientDirs returns the per-document client directories the failure
 // names and the deployment genuinely lacks.
 func missingClientDirs(deployDir, message string) []string {
-	if !strings.Contains(message, "Could not find a part of the path") {
+	// macOS and Linux builds of mxbuild report the same failure with the resource
+	// key instead of the English text: "AggregateException_ctor_DefaultMessage
+	// (IO_PathNotFound_Path, <path>)" (measured on 11.15.0, macOS).
+	byKey := strings.Contains(message, "IO_PathNotFound_Path")
+	if !strings.Contains(message, "Could not find a part of the path") && !byKey {
 		return nil
 	}
 	var named []string
@@ -115,6 +119,11 @@ func missingClientDirs(deployDir, message string) []string {
 		}
 		if _, err := os.Stat(filepath.Join(deployDir, "web", dir)); os.IsNotExist(err) {
 			named = append(named, "web/"+dir+"/")
+		} else if byKey {
+			// The key form names a file, not a directory, and the directory can exist
+			// (an earlier mxbuild left some pages) while the file the build wants is
+			// not there: the same first-build-only state.
+			named = append(named, "web/"+dir+"/ files")
 		}
 	}
 	return named

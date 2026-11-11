@@ -3,6 +3,7 @@
 package canon
 
 import (
+	"fmt"
 	"strings"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -20,6 +21,15 @@ import (
 //     Forms$ClientTemplate — no text in any language and no parameters. Studio
 //     Pro stores a widget's unset screen-reader label that way; the writer
 //     writes null. Both mean "no label".
+//
+// and, measured on FactoryManagement's pages (ako/mxcli#2106):
+//
+//   - A DynamicClasses expression or an XPathConstraint that differs only in
+//     whitespace outside its string literals. Studio Pro keeps the author's
+//     line breaks and spacing; MDL prints and rebuilds them normalised.
+//   - An enumeration condition's values in another order, each with the same
+//     flag. The writer lists them in enumeration order, Studio Pro in the
+//     order they were added.
 //
 // Only elements whose $ID the stored document already has take anything, which
 // after TransplantIDs means the elements that correspond; a real change — other
@@ -55,8 +65,17 @@ func CarryUnexpressed(contents, stored []byte) []byte {
 			switch v := e.Value.(type) {
 			case string:
 				s, isStr := ov.(string)
-				if e.Key == "Expression" && isStr && s != v && strings.TrimSpace(s) == strings.TrimSpace(v) {
+				if isStr && s != v && whitespaceInsensitive[e.Key] && withoutWhitespace(s) == withoutWhitespace(v) {
 					d[i].Value = s
+					changed = true
+				}
+			case bson.A:
+				stored, isList := ov.(bson.A)
+				if !isList {
+					continue
+				}
+				if e.Key == "Conditions" && sameConditionsReordered(v, stored) && !anyIDUsedOutside(stored, used, v) {
+					d[i].Value = stored
 					changed = true
 				}
 			case nil:
@@ -123,6 +142,82 @@ func anyIDUsed(d bson.D, used map[string]bool) bool {
 	clash := false
 	walkElements(d, func(e bson.D) {
 		if id, ok := docLookup(e, "$ID").(bson.Binary); ok && used[string(id.Data)] {
+			clash = true
+		}
+	})
+	return clash
+}
+
+// whitespaceInsensitive names the expression-valued properties whose stored
+// whitespace MDL does not reproduce.
+var whitespaceInsensitive = map[string]bool{"Expression": true, "DynamicClasses": true, "XPathConstraint": true}
+
+// withoutWhitespace drops whitespace outside single-quoted string literals, so
+// two spellings of one expression compare equal while a changed literal does
+// not. A doubled quote inside a literal closes and reopens it, which leaves
+// the literal's text intact.
+func withoutWhitespace(expr string) string {
+	var b strings.Builder
+	inLiteral := false
+	for _, r := range expr {
+		if r == '\'' {
+			inLiteral = !inLiteral
+		}
+		if !inLiteral && (r == ' ' || r == '\t' || r == '\n' || r == '\r') {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// sameConditionsReordered reports whether two Enumerations$Condition lists hold
+// the same values with the same flags in a different order.
+func sameConditionsReordered(written, stored bson.A) bool {
+	key := func(a bson.A) ([]string, bool) {
+		var out []string
+		for _, item := range a[min(1, len(a)):] {
+			c, ok := item.(bson.D)
+			if !ok || docLookup(c, "$Type") != "Enumerations$Condition" {
+				return nil, false
+			}
+			out = append(out, fmt.Sprint(docLookup(c, "AttributeValue"), "|", docLookup(c, "EditableVisible")))
+		}
+		return out, true
+	}
+	w, okW := key(written)
+	s, okS := key(stored)
+	if !okW || !okS || len(w) != len(s) || len(w) == 0 || strings.Join(w, ",") == strings.Join(s, ",") {
+		return false
+	}
+	count := map[string]int{}
+	for _, k := range w {
+		count[k]++
+	}
+	for _, k := range s {
+		count[k]--
+	}
+	for _, n := range count {
+		if n != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// anyIDUsedOutside reports whether an element id inside items is in the
+// document anywhere other than inside replaced, the list items take the place
+// of: carrying it in would make two elements share an identity.
+func anyIDUsedOutside(items bson.A, used map[string]bool, replaced bson.A) bool {
+	own := map[string]bool{}
+	walkElements(replaced, func(e bson.D) {
+		if id, ok := docLookup(e, "$ID").(bson.Binary); ok {
+			own[string(id.Data)] = true
+		}
+	})
+	clash := false
+	walkElements(items, func(e bson.D) {
+		if id, ok := docLookup(e, "$ID").(bson.Binary); ok && used[string(id.Data)] && !own[string(id.Data)] {
 			clash = true
 		}
 	})

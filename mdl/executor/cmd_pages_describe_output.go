@@ -772,6 +772,9 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 			props = append(props, fmt.Sprintf("Attribute: %s", w.Content))
 		}
 		props = appendReadOnlyStyle(props, w)
+		if w.RenderVertical {
+			props = append(props, "RenderHorizontal: false")
+		}
 		if w.OnChange != "" {
 			props = append(props, actionProp("OnChange", w.OnChange))
 		}
@@ -792,6 +795,9 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 		// Show ShowLabel if false (not showing label)
 		if !w.ShowLabel {
 			props = append(props, "ShowLabel: No")
+		}
+		if w.LabelPosition != "" && w.LabelPosition != "Default" {
+			props = append(props, "LabelPosition: "+w.LabelPosition)
 		}
 		if w.OnChange != "" {
 			props = append(props, actionProp("OnChange", w.OnChange))

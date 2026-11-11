@@ -914,8 +914,11 @@ type rawWidget struct {
 	Editable      string // "Always", "Never", "Conditional"
 	ReadOnlyStyle string // "Inherit", "Control", "Text"
 	ShowLabel     bool   // Whether label is shown (from LabelTemplate visibility)
-	LabelPosition string // "Left", "Top", etc.
-	Placeholder   string // Placeholder hint text (from PlaceholderTemplate)
+	LabelPosition string // a check box's: "Default", "BeforeControl", "AfterControl"
+	// RenderVertical is a radio button group stored RenderHorizontal false
+	// (ako/mxcli#2106).
+	RenderVertical bool
+	Placeholder    string // Placeholder hint text (from PlaceholderTemplate)
 	// IsPassword is Forms$TextBox.IsPasswordBox. Security-relevant: a text box
 	// that round-trips without it renders the value in plaintext (ako/mxcli#550).
 	IsPassword bool
