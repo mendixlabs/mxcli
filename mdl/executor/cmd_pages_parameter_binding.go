@@ -48,7 +48,7 @@ func namedObjectBinding(s string) (name, rest string, ok bool) {
 // one shape is still an expression.
 func parameterAttributeValue(raw any) (string, bool) {
 	e, ok := raw.(*ast.WidgetExpressionV3)
-	if !ok || !isParameterAttributeText(e.Text) {
+	if !ok || !isNamedObjectAttributeText(e.Text) {
 		return "", false
 	}
 	return e.Text, true
@@ -89,6 +89,21 @@ func parameterSourceName(sv any) string {
 	return extractString(m["PageParameter"])
 }
 
+// namedObjectSourceName is the `$name` of the object a stored SourceVariable
+// names: the data view of a data-view pair {Widget, PageParameter}, or else a
+// page or snippet parameter — "" for none, or for a page variable. MDL spells
+// the pair `$dataView1.Attr` (ako/mxcli#826, #2107).
+func namedObjectSourceName(sv any) string {
+	m, ok := sv.(map[string]any)
+	if !ok || m == nil || extractString(m["LocalVariable"]) != "" {
+		return ""
+	}
+	if widget := extractString(m["Widget"]); widget != "" {
+		return widget
+	}
+	return parameterSourceName(sv)
+}
+
 // customWidgetPropertyParameter is the parameter a CustomWidget property's
 // WidgetValue reads (its SourceVariable), or "".
 func customWidgetPropertyParameter(w map[string]any, propertyKey string) string {
@@ -112,6 +127,19 @@ func customWidgetPropertyParameter(w map[string]any, propertyKey string) string 
 // `$Param.Attr`, the attribute's own name quoted when it is a keyword.
 func parameterAttributeMDL(name, attrQN string) string {
 	return "$" + name + "." + mdlIdent(shortAttributeName(attrQN))
+}
+
+// isNamedObjectAttributeText reports whether text binds an attribute of a named
+// object: `$Name.Attr`, or the rooted association path `$Name/Assoc/Attr`
+// (ako/mxcli#833), which a pluggable attribute property takes as well
+// (FactoryManagement ConversationalUI.Span_TextGeneration_SlideIn,
+// ako/mxcli#2107). Neither is a Mendix expression to an attribute property.
+func isNamedObjectAttributeText(text string) bool {
+	if isParameterAttributeText(text) {
+		return true
+	}
+	_, _, rooted := rootedAssociationPath(text)
+	return rooted
 }
 
 // isParameterAttributeText reports whether text is the `$Param.Attr` shape.

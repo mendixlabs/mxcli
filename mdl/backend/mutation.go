@@ -392,6 +392,10 @@ type WidgetObjectBuilder interface {
 	// and deferred to Finalize, which returns the aggregate result.
 
 	SetAttribute(propertyKey string, attributePath string)
+	// SetAttributeWithSteps is SetAttribute for an attribute reached over
+	// associations: the AttributeRef's EntityRef holds one step per hop, as
+	// a rooted path `$Name/Assoc/Attr` stores it beside its SourceVariable.
+	SetAttributeWithSteps(propertyKey string, attributePath string, steps []pages.AttributeRefStep)
 	SetAssociation(propertyKey string, assocPath string, entityName string)
 	// SetSourceVariable names the object an attribute or association property
 	// reads, when that is not the enclosing data context: a page or snippet

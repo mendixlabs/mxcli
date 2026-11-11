@@ -1,0 +1,51 @@
+mdl 1;
+-- ============================================================================
+-- Bug ako/mxcli#2107: a binding to an outer data view resolved against the nearest
+-- ============================================================================
+--
+-- Symptom (before fix): describe page -> exec of six FactoryManagement pages
+-- (Mendix 11.16) failed. Studio Pro stores the binding with the data-view pair
+-- SourceVariable {Widget: <outer data view>, PageParameter: …}; describe printed
+-- the bare qualified name and the rewrite read it against the NEAREST data view:
+--   "`GenAICommons.Span.Output` is an attribute of GenAICommons.Span, not of
+--   ConversationalUI.CopyHelper … CE7247" (markdown viewer)
+--   "ConversationalUI.TraceView has no attribute HasError" (Visible by attribute)
+--
+-- After fix: `$dvOuter.Attr`, and the rooted `$dvOuter/Assoc/Attr`, on a
+-- pluggable widget's attribute property and in `Visible: … in (…)`, store the
+-- data-view pair (with the association steps); describe prints them so, and
+-- the six pages report `Unchanged page`. mx check 0 errors on Mendix 11.16.0
+-- for this script (needs the Markdown widget, as Conversational UI ships it).
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/2107-binding-through-outer-data-view.mdl -p app.mpr
+--   mxcli docker check -p app.mpr        -- expect 0 errors
+-- ============================================================================
+
+create module BugTest2107;
+create module role BugTest2107.User;
+
+create persistent entity BugTest2107.Span (Output: String(unlimited), Flag: Boolean default false);
+create persistent entity BugTest2107.Trace (SystemPrompt: String(unlimited));
+create association BugTest2107.Span_Trace from BugTest2107.Span to BugTest2107.Trace;
+create non-persistent entity BugTest2107.Helper (Note: String(100));
+
+create microflow BugTest2107.DS_Helper () returns BugTest2107.Helper
+begin
+  $Helper = create BugTest2107.Helper (Note = 'x');
+  return $Helper;
+end;
+grant execute on microflow BugTest2107.DS_Helper to BugTest2107.User;
+
+create page BugTest2107.Span_Details (Params: ($Span: BugTest2107.Span), Title: 'Span', Layout: Atlas_Core.PopupLayout) {
+  dataview dvOuter (DataSource: $Span) {
+    dataview dvInner (DataSource: microflow BugTest2107.DS_Helper()) {
+      markdown mdOutput (stringAttribute: $dvOuter.Output)
+      markdown mdPrompt (stringAttribute: $dvOuter/Span_Trace/SystemPrompt)
+      container cFlag (Visible: $dvOuter.Flag in (true)) {
+        dynamictext txtFlag (Content: 'flagged')
+      }
+    }
+  }
+};
+grant view on page BugTest2107.Span_Details to BugTest2107.User;
