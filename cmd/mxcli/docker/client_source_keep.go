@@ -3,6 +3,7 @@
 package docker
 
 import (
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -255,7 +256,7 @@ func (k *clientSourceKeep) sweep(existing map[string]bool) {
 			return
 		}
 		part := kept + keepTempSuffix
-		if err := copyFile(src, part); err != nil {
+		if err := copyClientSource(src, part); err != nil {
 			_ = os.Remove(part)
 			return
 		}
@@ -271,6 +272,39 @@ func (k *clientSourceKeep) sweep(existing map[string]bool) {
 	})
 	k.sweeps.Add(1)
 }
+
+// copyClientSource copies a file out of web/ while mxbuild may be writing or
+// deleting it; openClientSource is what keeps the copy out of mxbuild's way.
+func copyClientSource(src, dst string) error {
+	in, err := openClientSource(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+// disable switches the keep off for good and drops what it holds. It is the
+// answer to a build that failed because web/ was in use: sweeping a directory
+// mxbuild is recreating is the one thing here that can get in a build's way.
+func (k *clientSourceKeep) disable() {
+	if k == nil {
+		return
+	}
+	k.reset()
+	k.off = true
+}
+
+// active reports whether the keep sweeps and restores.
+func (k *clientSourceKeep) active() bool { return k != nil && !k.off }
 
 // missingPageSource names the page modules in dist/pages that the keep holds
 // no source for. The build that just ran bundled them from a file the sweeps

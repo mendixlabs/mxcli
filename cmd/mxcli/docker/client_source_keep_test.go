@@ -316,3 +316,60 @@ func TestClientSourceKeep_NilIsANoOp(t *testing.T) {
 		t.Fatal("nil keep must do nothing")
 	}
 }
+
+// On Windows a sweep can hold web/ open while mxbuild recreates it, and the
+// build fails with a sharing violation. The keep gives way: the build is run
+// again without it, and it stays off.
+func TestClientSourceKeep_WebDirInUseDisablesTheKeepAndRebuilds(t *testing.T) {
+	m, f, r, out := newKeptLoop(t, true)
+	inner := f.build
+	failed := false
+	f.build = func(proc, nth int) (*BuildResult, error) {
+		if !failed {
+			failed = true
+			return &BuildResult{Status: "Failure", Message: webDirLockedMessage}, nil
+		}
+		return inner(proc, nth)
+	}
+
+	res, err := r.Build(BuildRequest{ProjectFilePath: "/p/App.mpr"})
+	if err != nil || !res.OK() {
+		t.Fatalf("Build = %+v, %v\n%s", res, err, out)
+	}
+	if r.keep.active() {
+		t.Fatal("the keep must stay off once it has collided with a build")
+	}
+	if len(r.keep.files()) != 0 {
+		t.Fatalf("a disabled keep must hold nothing, got %v", r.keep.files())
+	}
+	if got := distPages(t, m.deploy); len(got) != 2 {
+		t.Fatalf("dist/pages = %v, want both pages (from the full build the loop falls back to)", got)
+	}
+	if !strings.Contains(out.String(), "deployment/web was in use") {
+		t.Fatalf("the fallback must be reported, got:\n%s", out)
+	}
+	// Control for the report: a build that fails some other way is not retried.
+	calls := len(f.reqs)
+	f.build = func(int, int) (*BuildResult, error) {
+		return &BuildResult{Status: "Failure", Message: "CE0001 something else"}, nil
+	}
+	if res, _ := r.Build(BuildRequest{ProjectFilePath: "/p/App.mpr"}); res.OK() || len(f.reqs) != calls+1 {
+		t.Fatalf("an unrelated failure must be returned as it is, after one build; builds = %d", len(f.reqs)-calls)
+	}
+}
+
+// The copy the sweeps make reads the same bytes on every platform.
+func TestCopyClientSource(t *testing.T) {
+	dir := t.TempDir()
+	src, dst := filepath.Join(dir, "a.js"), filepath.Join(dir, "b.js")
+	keepWrite(t, src, "export default 1")
+	if err := copyClientSource(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(dst); string(b) != "export default 1" {
+		t.Fatalf("copy = %q", b)
+	}
+	if err := copyClientSource(filepath.Join(dir, "gone.js"), dst); err == nil {
+		t.Fatal("a source mxbuild already deleted must be an error, not an empty copy")
+	}
+}

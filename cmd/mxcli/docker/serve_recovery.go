@@ -267,9 +267,20 @@ func (r *serveRecovery) rebuildFresh(req BuildRequest) (*BuildResult, error) {
 // buildKeeping runs one build while the keep copies aside the client source
 // that build writes and then deletes.
 func (r *serveRecovery) buildKeeping(req BuildRequest) (*BuildResult, error) {
+	watching := r.keep.active()
 	stop := r.keep.watch()
 	res, err := r.serve.Build(req)
 	stop(err == nil && res != nil && res.OK())
+	if watching && err == nil && webDirInUse(res) {
+		// Windows refuses to delete a file or directory another process has
+		// open, and the keep was reading web/ while mxbuild rebuilt it. The
+		// keep is given up rather than raced again: builds go back to the full
+		// rebuild per change, which is slow and always worked.
+		fmt.Fprintln(r.out, "  deployment/web was in use while mxbuild rebuilt it; mxcli no longer keeps the client source "+
+			"between builds in this run (changes take a full build again), and builds once more...")
+		r.keep.disable()
+		return r.serve.Build(req)
+	}
 	return res, err
 }
 
