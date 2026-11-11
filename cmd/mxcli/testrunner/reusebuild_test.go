@@ -255,3 +255,36 @@ func TestRecordBuild_NoopWithEmptyKeyOrMissingModel(t *testing.T) {
 	}
 	_ = dir
 }
+
+// A node_modules or .git below the top is tooling state, not a build input: it
+// neither changes the key nor costs a hash.
+func TestHashProjectTree_IgnoresNestedToolingDirs(t *testing.T) {
+	mpr := newTestProject(t)
+	dir := filepath.Dir(mpr)
+	before, err := hashProjectTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sub := range []string{"themesource/mymodule/node_modules/pkg", "widgets/src/.git"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, sub, "f"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after, err := hashProjectTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Error("a nested node_modules or .git changed the reuse key")
+	}
+	// Control: an ordinary nested file still does.
+	if err := os.WriteFile(filepath.Join(dir, "themesource", "mymodule", "main.scss"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := hashProjectTree(dir); again == after {
+		t.Error("an ordinary nested file did not change the reuse key")
+	}
+}

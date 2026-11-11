@@ -297,16 +297,16 @@ func runEndpoint(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 		return nil, err
 	}
 
-	// Capture what cleanup will need to restore, before touching anything. This
-	// must succeed: without it cleanup cannot tell an existing MxTest module from
-	// the one it is about to create, nor restore the original after-startup — and
-	// the generated startup flow needs to know what to chain.
 	// An endpoint a dead run left behind would be captured as the project's own
 	// after-startup and chained to (ako/mxcli#2119); take it out first, as `run`
 	// does.
 	if _, err := RestoreAbandonedEndpoint(opts.ProjectPath, w); err != nil {
 		return nil, err
 	}
+	// Capture what cleanup will need to restore, before touching anything. This
+	// must succeed: without it cleanup cannot tell an existing MxTest module from
+	// the one it is about to create, nor restore the original after-startup — and
+	// the generated startup flow needs to know what to chain.
 	state, err := captureProjectState(opts.ProjectPath)
 	if err != nil {
 		return nil, fmt.Errorf("capturing project state: %w", err)
@@ -338,8 +338,6 @@ func runEndpoint(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 
 	// Build reuse: nothing to inject and nothing to build when the deployment on
 	// disk is already this run's build. Not for --watch (it exists to rebuild).
-	reuseKey := ""
-	_ = reuseKey
 	if opts.ReuseBuild && !opts.Watch && !opts.SkipBuild {
 		if k, kerr := testBuildKey(opts, endpointMDL, flowsMDL); kerr != nil {
 			fmt.Fprintf(w, "  build reuse off (%v)\n", kerr)
@@ -359,7 +357,6 @@ func runEndpoint(opts RunOptions, suite *TestSuite, timeout time.Duration, w io.
 			}
 			return result, nil
 		} else {
-			reuseKey = k
 			forgetBuild(opts.ProjectPath) // a build that fails half way must not leave a record behind
 			opts.recordKey = k
 		}

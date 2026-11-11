@@ -51,6 +51,11 @@ var reuseSkipDirs = map[string]bool{
 	".mendix-cache": true, "node_modules": true, "theme-cache": true,
 }
 
+// reuseSkipAnywhere are skipped at any depth, not only at the top: a
+// node_modules under themesource/ or a nested .git is tooling state, never a
+// build input, and hashing it on every run costs time for nothing.
+var reuseSkipAnywhere = map[string]bool{".git": true, "node_modules": true}
+
 type reuseRecord struct {
 	Key   string `json:"key"`
 	Model string `json:"model"` // identity of deployment/model/model.mdp when recorded
@@ -79,7 +84,7 @@ func hashProjectTree(dir string) (string, error) {
 		}
 		rel, _ := filepath.Rel(dir, p)
 		if d.IsDir() {
-			if rel != "." && reuseSkipDirs[rel] {
+			if rel != "." && (reuseSkipDirs[rel] || reuseSkipAnywhere[d.Name()]) {
 				return filepath.SkipDir
 			}
 			return nil
