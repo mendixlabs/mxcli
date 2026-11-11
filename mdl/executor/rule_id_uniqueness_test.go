@@ -48,6 +48,10 @@ var ruleIDsSharedDeliberately = map[string]string{
 		"validate_design_properties.go covers DesignProperties on a slot of its parent (a " +
 		"layoutgrid row, a row's column, a dataview footer), which the builder assembles " +
 		"without applying appearance. Someone suppressing MDL-WIDGET07 means both",
+	"MDL047": "one rule, one matcher (xpathAssociationEmptyMatches), one site per XPath slot: " +
+		"`empty` compared with an association. validate_microflow.go asks it of a retrieve, " +
+		"validate_widgets.go of a database data source, validate_access_rule_xpath.go of an " +
+		"access rule (ako/mxcli#2099). Someone suppressing MDL047 means every slot",
 	"MDL059": "one rule, two sites: an annotation that parses and does nothing. " +
 		"validate_flow_parameters.go covers one written on a PARAMETER, " +
 		"validate_document_annotations.go one written before a CREATE. Someone " +
