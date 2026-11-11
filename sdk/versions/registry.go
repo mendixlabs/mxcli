@@ -191,7 +191,11 @@ func toEntry(area, name string, f Feature) (FeatureEntry, error) {
 }
 
 // dedup removes duplicate entries (same area+name+min_version), keeping the
-// entry with the most information (longest MDL or notes).
+// entry with the most information: a stated max_version first — the file that
+// records a removal knows more than one written before it (mendix-10.yaml and
+// mendix-11.yaml both list message_definition_collection from 10.0.0, and only
+// the 11 file closes it at 11.14.99, ako/mxcli#2140) — then the longest MDL or
+// notes.
 func dedup(entries []FeatureEntry) []FeatureEntry {
 	seen := make(map[string]int) // min_version string -> index in result
 	var result []FeatureEntry
@@ -200,6 +204,12 @@ func dedup(entries []FeatureEntry) []FeatureEntry {
 		if idx, ok := seen[key]; ok {
 			// Keep the entry with more detail.
 			existing := result[idx]
+			if (e.MaxVersion != nil) != (existing.MaxVersion != nil) {
+				if e.MaxVersion != nil {
+					result[idx] = e
+				}
+				continue
+			}
 			if len(e.MDL) > len(existing.MDL) || len(e.Notes) > len(existing.Notes) {
 				result[idx] = e
 			}
