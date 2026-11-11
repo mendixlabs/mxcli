@@ -1531,7 +1531,14 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 	holds := &watchHoldGate{projectPath: opts.ProjectPath}
 	holdAnnounced := false
 	resync := false
-	ticker := time.NewTicker(opts.PollInterval)
+	// The loop wakes at the writer-signal interval and looks at the source only
+	// every PollInterval, unless a writer has just said it is done
+	// (watchwriter.go).
+	writers := newWatchWriterGate(opts.ProjectPath)
+	writerDone := false
+	wake := min(opts.PollInterval, watchWriterPoll)
+	nextScan := time.Now().Add(opts.PollInterval)
+	ticker := time.NewTicker(wake)
 	defer ticker.Stop()
 
 	for {
@@ -1546,6 +1553,18 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 			// re-arms this channel, so only an unasked-for exit lands here.
 			return runtimeStoppedError(rt)
 		case <-ticker.C:
+			// An mxcli command that is writing the model says so: nothing is
+			// built while it is at work, and its change is built as soon as it
+			// is done instead of after the settle.
+			writing, finished := writers.poll()
+			if writing {
+				continue
+			}
+			writerDone = writerDone || finished
+			if !writerDone && time.Now().Before(nextScan) {
+				continue
+			}
+			nextScan = time.Now().Add(opts.PollInterval)
 			source := func() time.Time { return sourceMTimeExcept(opts.ProjectPath, scaffold) }
 			now := source()
 			// Another mxcli process (a `test --attach`) may be changing the
@@ -1579,6 +1598,8 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 				holdAnnounced = false
 				resync = true
 			}
+			settled := writerDone
+			writerDone = false
 			if !now.After(last) && !resync {
 				continue
 			}
@@ -1594,7 +1615,12 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 			// the stale build is what you are left with, with no way out the tool
 			// offers. Settling first means the watcher can only ever observe a
 			// model that has stopped changing.
-			now = settleSource(source, now, opts.PollInterval, sigCh)
+			//
+			// A writer that announced itself and has finished is the exception:
+			// the model has stopped changing because the writer says so.
+			if !settled {
+				now = settleSource(source, now, opts.PollInterval, sigCh)
+			}
 			if now.IsZero() {
 				// Interrupted while settling.
 				fmt.Fprintln(w, "\nShutting down...")

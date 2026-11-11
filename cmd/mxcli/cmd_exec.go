@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
 	"os"
 	"path/filepath"
 
@@ -92,6 +93,12 @@ Example:
 			fmt.Fprintf(os.Stderr, "Error reading file: %v\n", err)
 			os.Exit(1)
 		}
+
+		// A watching dev loop is told when this script starts writing and when
+		// the last write has landed, so it builds at once instead of waiting
+		// for the model to go quiet (ako/mxcli#2151). Deferred first, so it
+		// runs after exec.Close below.
+		defer docker.BeginModelWrite(projectPath)()
 
 		exec, logger := newLoggedExecutor("exec")
 		defer logger.Close()
