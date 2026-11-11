@@ -24,15 +24,15 @@ description: "The warm Docker-free dev loop, `mxcli run --local` — model chang
 | 421-478 | Pages render in the browser |
 | 479-496 | Pixel-perfect page loop |
 | 497-517 | Debugging a server-side error |
-| 518-541 | "Sign in failed" that is not about the password |
-| 542-574 | The same licence also stops the app after a few hours |
-| 575-654 | External browser preview (`--hub`) |
-| 655-663 | Validation checklist |
-| 664-720 | Constant values come from a configuration |
-| 721-724 | Warm local dev loop (`mxcli run --local [--watch] [--screenshot]`) |
-| 725-728 | External browser preview (`mxcli run --hub <url>` + `mxcli tunnel-hub`) |
-| 729-732 | Tunnel-hub GitHub authentication (opt-in, gated on `--github-oauth-client-id`; absent = today's open hub) |
-| 733-735 | Runtime metrics + settings passthrough (`mxcli run --local --metrics` / `--runtime-setting Key=Value`) |
+| 518-552 | "Sign in failed" that is not about the password |
+| 553-585 | The same licence also stops the app after a few hours |
+| 586-665 | External browser preview (`--hub`) |
+| 666-674 | Validation checklist |
+| 675-731 | Constant values come from a configuration |
+| 732-735 | Warm local dev loop (`mxcli run --local [--watch] [--screenshot]`) |
+| 736-739 | External browser preview (`mxcli run --hub <url>` + `mxcli tunnel-hub`) |
+| 740-743 | Tunnel-hub GitHub authentication (opt-in, gated on `--github-oauth-client-id`; absent = today's open hub) |
+| 744-746 | Runtime metrics + settings passthrough (`mxcli run --local --metrics` / `--runtime-setting Key=Value`) |
 
 <!-- /skill-index -->
 # Warm Local Dev Loop — `mxcli run --local`
@@ -532,7 +532,18 @@ password in the model. `--screenshot-user` and `mxcli playwright check` do this
 for you — a rejected sign-in reads the log and says so instead of quietly
 screenshotting or checking the login page.
 
-Sessions are held until they expire; restarting `run --local` clears them all.
+The cap is **6**, and the licence counts the `System.Session` rows in the
+database. Free every slot without a restart (the app keeps running; signed-in
+browsers sign in again):
+
+```bash
+mxcli run clear-sessions -p app.mpr
+```
+
+Measured on 11.12.1: six sign-ins, the seventh HTTP 560, `clear-sessions`, six
+more succeed on the same running app. Restarting `run --local` clears them too
+(the runtime deletes old sessions as it starts), at the cost of a boot.
+Otherwise sessions are held until they expire.
 A script that drives the app through a browser should **sign out at the end**,
 otherwise each run leaks a slot and the fifth or sixth run is the one that fails —
 which makes it look like a change you just made broke authentication.

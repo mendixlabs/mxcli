@@ -228,6 +228,16 @@ func (o *LocalRunOptions) applyDefaults() {
 	}
 }
 
+// RunDatabase is the database a `run --local` of projectPath connects to, given
+// the --db-* flags it was started with: the same defaults the run applies.
+func RunDatabase(projectPath string, db DBConfig) (DBConfig, error) {
+	o := LocalRunOptions{ProjectPath: projectPath, DB: db}
+	if err := o.applyDatabaseDefaults(); err != nil {
+		return DBConfig{}, err
+	}
+	return o.DB, nil
+}
+
 // applyDatabaseDefaults validates --db-type and fills the connection settings the
 // chosen database needs. It is separate from applyDefaults because it can fail:
 // a flag combination that cannot work (--db-type hsqldb with --db-host) is a user

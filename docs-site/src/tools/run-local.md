@@ -38,6 +38,7 @@ stopped: pid 30133 in 300ms
 | `run wait [--timeout 5m]` | blocks until the watch loop has applied the model as it is now, or failed to; prints `applied: build #N via reload\|restart in …` or `failed:` with the CE codes / SCSS error lines. `--ready` waits for the boot instead; `--since N` for any build newer than N. | 0 applied, 1 failed, 2 timeout, 3 not running |
 | `run stop` | asks the run to shut down, waits until it is gone, then stops anything left in its process session — so no orphaned `runtimelauncher` or mxbuild JVM, even from a run killed with `-9`. Nothing running is a no-op. | 0 |
 | `run restart` | `run stop`, then `--detach` again with the arguments recorded in the state file. | as `--detach` |
+| `run clear-sessions` | Deletes every session in the run's database, so the unlicensed runtime's 6 sign-in slots are free again without a restart (a 7th sign-in otherwise fails with HTTP 560, shown as "Sign in failed"). Signed-in browsers sign in again. Uses the run's recorded `--db-*` flags; pass `--db-password` when the run was given one literally. Not for `--db-type hsqldb`: restart instead. | 0 cleared, 1 failed, 3 no run recorded |
 
 **`run wait` is race-free.** It reads the model's source time when it starts and
 returns the first build made from that source or newer — so a change the loop
