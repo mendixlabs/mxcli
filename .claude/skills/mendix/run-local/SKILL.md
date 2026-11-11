@@ -19,20 +19,20 @@ description: "The warm Docker-free dev loop, `mxcli run --local` — model chang
 | 250-277 | Editing themes (SCSS) — rebuild, never clear caches |
 | 278-304 | `--watch` waits for a write to finish before it builds |
 | 305-333 | "My edit didn't show up" — stale process, not stale cache |
-| 334-364 | Flags |
-| 365-418 | Metrics and OpenTelemetry |
-| 419-476 | Pages render in the browser |
-| 477-494 | Pixel-perfect page loop |
-| 495-515 | Debugging a server-side error |
-| 516-539 | "Sign in failed" that is not about the password |
-| 540-572 | The same licence also stops the app after a few hours |
-| 573-652 | External browser preview (`--hub`) |
-| 653-661 | Validation checklist |
-| 662-718 | Constant values come from a configuration |
-| 719-722 | Warm local dev loop (`mxcli run --local [--watch] [--screenshot]`) |
-| 723-726 | External browser preview (`mxcli run --hub <url>` + `mxcli tunnel-hub`) |
-| 727-730 | Tunnel-hub GitHub authentication (opt-in, gated on `--github-oauth-client-id`; absent = today's open hub) |
-| 731-733 | Runtime metrics + settings passthrough (`mxcli run --local --metrics` / `--runtime-setting Key=Value`) |
+| 334-366 | Flags |
+| 367-420 | Metrics and OpenTelemetry |
+| 421-478 | Pages render in the browser |
+| 479-496 | Pixel-perfect page loop |
+| 497-517 | Debugging a server-side error |
+| 518-541 | "Sign in failed" that is not about the password |
+| 542-574 | The same licence also stops the app after a few hours |
+| 575-654 | External browser preview (`--hub`) |
+| 655-663 | Validation checklist |
+| 664-720 | Constant values come from a configuration |
+| 721-724 | Warm local dev loop (`mxcli run --local [--watch] [--screenshot]`) |
+| 725-728 | External browser preview (`mxcli run --hub <url>` + `mxcli tunnel-hub`) |
+| 729-732 | Tunnel-hub GitHub authentication (opt-in, gated on `--github-oauth-client-id`; absent = today's open hub) |
+| 733-735 | Runtime metrics + settings passthrough (`mxcli run --local --metrics` / `--runtime-setting Key=Value`) |
 
 <!-- /skill-index -->
 # Warm Local Dev Loop — `mxcli run --local`
@@ -341,6 +341,8 @@ run's process session), and `run status` reports them. Do **not**
 | *(hub API key)* | — | For an **authenticated** hub: get one from `https://<hub>/cli`, set `MXCLI_HUB_KEY` (see below) |
 | `--watch` | off | Rebuild + hot-apply on each change |
 | `--web-client-timeout` | `$MXCLI_WEB_CLIENT_TIMEOUT`, else `5m` | Limit for one web client bundle build; on timeout the tail of `deployment/log/web-client-build.log` is printed |
+| `--build-timeout` | `$MXCLI_BUILD_TIMEOUT`, else `30m` | Limit for one `mxbuild --serve` build. The cold first build of a large app (thousands of documents) can take ten minutes or more |
+| `--start-timeout` | `$MXCLI_START_TIMEOUT`, else `15m` | Limit for the runtime start, after-startup microflow and schema update included. Running out says "did not answer", not "is the app running?" |
 | `--ensure-db` | off | Provision local Postgres + app database if missing |
 | `--db-admin-user` / `--db-admin-password` | postgres / — | Superuser login for `--ensure-db` when it has a password (Windows); only with `--ensure-db` |
 | `--app-port` / `--admin-port` / `--serve-port` | 8080 / 8090 / 6543 | Ports |

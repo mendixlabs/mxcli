@@ -161,6 +161,8 @@ would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
 | *(hub API key)* | — | For a **GitHub-authenticated** hub: get one from `https://<hub>/cli`, set `MXCLI_HUB_KEY` (see below) |
 | `--watch` | off | Rebuild + hot-apply on every project change |
 | `--web-client-timeout` | `$MXCLI_WEB_CLIENT_TIMEOUT`, else `5m` | Limit for one web client bundle build (e.g. `10m`); on timeout the tail of `deployment/log/web-client-build.log` is printed |
+| `--build-timeout` | `$MXCLI_BUILD_TIMEOUT`, else `30m` | Limit for one `mxbuild --serve` build. The cold first build of a large app (thousands of documents) can take ten minutes or more |
+| `--start-timeout` | `$MXCLI_START_TIMEOUT`, else `15m` | Limit for the runtime start, after-startup microflow and schema update included. Running out says "did not answer", not "is the app running?" |
 | `--ensure-db` | off | Provision local Postgres + the app database if missing (fresh-session bootstrap) |
 | `--db-admin-user` / `--db-admin-password` | postgres / — | Superuser login `--ensure-db` creates the role and database with when it has a password (Windows). Only with `--ensure-db`; never passed to the runtime |
 | `--setup` | off | Prepare prerequisites (cache MxBuild+runtime, ensure DB) and exit without booting — for a SessionStart hook |
