@@ -1509,6 +1509,9 @@ MDL uses explicit property declarations for pages:
 | Text area lines / autocomplete | `NumberOfLines: n, Autocomplete: true\|false` | `textarea t (Attribute: Notes, NumberOfLines: 2, Autocomplete: false)` — defaults 5 and true; `0` lines is a value Studio Pro stores. Also settable with `alter page … set` |
 | Input read-only style | `ReadOnlyStyle: Inherit\|Control\|Text` | `textbox t (Attribute: Name, ReadOnlyStyle: Text)` — on a text box, text area, date picker, check box and radio buttons. **Inherit** is the default; also `alter page … set (ReadOnlyStyle: Text) on t` |
 | DataView read-only style | `ReadOnlyStyle: Inherit\|Control\|Text` | `dataview dv (datasource: $O, ReadOnlyStyle: Text)` — a DataView's own, distinct from a checkbox's. **Control** is Studio Pro's default here, not Inherit |
+| Check box label position | `LabelPosition: Default\|BeforeControl\|AfterControl` | `checkbox c (Attribute: Done, LabelPosition: AfterControl)` |
+| Radio buttons orientation | `RenderHorizontal: true\|false` | `radiobuttons r (Attribute: Kind, RenderHorizontal: false)` — vertical; default horizontal |
+| Show page closes pages | `with (NumberOfPagesToClose: n)` | `Action: show page M.Next(Item = $currentObject) with (NumberOfPagesToClose: 1)` |
 | Page CSS class / style | `Class: 'css-class', Style: 'css: rule'` | `(Title: 'Home', Class: 'container-fluid bg-light', Style: 'min-height: 100vh')` — the page's Appearance |
 | Page variables | `variables: ( $name: type = <expr> )` | `variables: ( $show: boolean = true )` |
 | Page parameters | `params: ( $name: type, … )` | `params: ( $Order: Shop.Order )` — a map, in `( )`; `params: { … }` is the deprecated spelling (MDL-DEPR123) |

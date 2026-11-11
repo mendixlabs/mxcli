@@ -382,6 +382,9 @@ type ActionSettingsV3 struct {
 	ClosePage        *bool  // complete task, call workflow
 	Commit           *bool  // complete task
 	DefaultPage      string // open workflow: a page qualified name
+	// NumberOfPagesToClose is show page's "number of pages to close", a whole
+	// number of at least one; "" leaves Studio Pro's default (ako/mxcli#2106).
+	NumberOfPagesToClose string
 }
 
 // ColumnV3 represents a V3 datagrid column.

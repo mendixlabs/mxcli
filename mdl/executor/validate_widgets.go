@@ -1233,7 +1233,7 @@ var staticWidgetKnownProps = func() map[string]bool {
 		// vocabulary describe page emits (native widgets + datagrid columns)
 		"Alignment", "AlternativeText", "ColumnClass", "ColumnWidth", "DesktopColumns",
 		"DisplayAs", "Draggable", "DynamicCellClass", "HeightUnit", "Hidable", "ImageType",
-		"ImageUrl", "LabelPosition", "PageSize", "Pagination", "PagingPosition",
+		"ImageUrl", "LabelPosition", "RenderHorizontal", "PageSize", "Pagination", "PagingPosition",
 		"PhoneColumns", "ReadOnlyStyle", "Resizable", "Responsive", "ShowPagingButtons",
 		"Size", "Sortable", "TabletColumns", "WidthUnit", "WrapText", "Name",
 		// input-widget properties describe page emits (ako/mxcli#550): a text

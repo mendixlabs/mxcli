@@ -679,6 +679,9 @@ func widgetToGen(w pages.Widget) (element.Element, error) {
 		if x.Label != "" {
 			g.SetLabelTemplate(textAsClientTemplate(textFromString(x.Label)))
 		}
+		if x.LabelPosition != "" {
+			g.SetLabelPosition(x.LabelPosition)
+		}
 		onChangeCB, err := clientActionToGen(x.OnChangeAction)
 		if err != nil {
 			return nil, err
@@ -2356,7 +2359,7 @@ func clientActionToGen(a pages.ClientAction) (element.Element, error) {
 		}
 		assignID(g)
 		g.SetDisabledDuringExecution(actionDisabledDuringExecution(x.ActionExecution))
-		g.SetNumberOfPagesToClose2("")
+		g.SetNumberOfPagesToClose2(x.NumberOfPagesToClose)
 		g.SetPageSettings(pageSettingsWithMappings(x.PageName, x.ParameterMappings))
 		return g, nil
 	case *pages.LinkClientAction:
