@@ -115,8 +115,6 @@ var testAppKnownFailures = map[string]knownFailure{
 	"enumeration WorkflowCommons.Enum_NotificationArea_RenderAs":          {laws: []law{lawGetPut}, issue: "#721", why: "enumeration: breaks getput on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
 	"export mapping Services.OrdersExportMapping":                         {laws: []law{lawGetPut}, issue: "#721", why: "export mapping: breaks getput on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
 	"page WorkflowCommons.WorkflowAttachment_View":                        {laws: []law{lawExec}, issue: "#721", why: "page: breaks exec on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
-	"page WorkflowCommons.WorkflowDefinition_View":                        {laws: []law{lawExec}, issue: "#721", why: "page: breaks exec on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
-	"page WorkflowCommons.WorkflowSubProcess_View":                        {laws: []law{lawExec}, issue: "#721", why: "page: breaks exec on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
 	"rest client Clients.OrdersRestClient":                                {laws: []law{lawParse}, issue: "#721", why: "rest client: breaks parse on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
 	"rule Rules.Rule1":                                                    {laws: []law{lawGetPut}, issue: "#721", why: "rule: breaks getput on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
 	"rule Rules.Rule2":                                                    {laws: []law{lawGetPut}, issue: "#721", why: "rule: breaks getput on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
@@ -129,12 +127,8 @@ var testAppKnownFailures = map[string]knownFailure{
 	"snippet WorkflowCommons.Snip_WorkflowActivityRecord_ActivityIcon":    {laws: []law{lawExec}, issue: "#721", why: "snippet: breaks exec on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
 	"snippet WorkflowCommons.Snip_WorkflowActivityRecord_Details":         {laws: []law{lawGetPut}, issue: "#721", why: "snippet: breaks exec on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes; executes since a widget bound to a snippet parameter is described as $Param.Attr — getput not yet triaged"},
 	"snippet WorkflowCommons.Snip_WorkflowActivity_Details_ActivityType":  {laws: []law{lawExec}, issue: "#721", why: "snippet: breaks exec on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
-	"snippet WorkflowCommons.Snip_WorkflowSubProcess_Details":             {laws: []law{lawExec}, issue: "#721", why: "snippet: breaks exec on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
-	"snippet WorkflowCommons.Snip_WorkflowSubProcess_IncompatibleWarning": {laws: []law{lawExec}, issue: "#721", why: "snippet: breaks exec on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
-	"snippet WorkflowCommons.Snip_WorkflowSubProcess_State":               {laws: []law{lawExec}, issue: "#721", why: "snippet: breaks exec on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
 	"snippet WorkflowCommons.Snip_Workflow_CommentsAndAttachments":        {laws: []law{lawExec}, issue: "#721", why: "snippet: breaks exec on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
 	"snippet WorkflowCommons.Snip_Workflow_CommentsAndAttachments_Admin":  {laws: []law{lawExec}, issue: "#721", why: "snippet: breaks exec on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
-	"snippet WorkflowCommons.Snip_Workflow_SubProcessDetails":             {laws: []law{lawExec}, issue: "#721", why: "snippet: breaks exec on TestApp, measured when it joined the harness (#743); not yet triaged into #721's classes"},
 }
 
 // createOrModifyProbeKnownFailures is the allowlist of
