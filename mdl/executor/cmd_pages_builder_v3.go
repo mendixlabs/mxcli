@@ -2546,6 +2546,7 @@ func (pb *pageBuilder) resolveAssociationAttributePath(attrRef string) (finalQN 
 	}
 
 	steps = make([]pages.AttributeRefStep, 0, len(segs)-1)
+	afterAssociation := false
 	for _, seg := range segs[:len(segs)-1] {
 		// Against the entity THIS hop starts from — qualifying every hop with
 		// the path's start named a later hop into the wrong module. (#662)
@@ -2554,12 +2555,27 @@ func (pb *pageBuilder) resolveAssociationAttributePath(attrRef string) (finalQN 
 		if !ok {
 			// Not a modelled association — it may be System.changedBy /
 			// System.owner, which no domain model lists. (#1338)
-			if assocQN, dest, ok = pb.systemMemberAssociation(seg, current); !ok {
+			assocQN, dest, ok = pb.systemMemberAssociation(seg, current)
+		}
+		if !ok {
+			// `Assoc/Module.Entity/Attr`: an entity right after a hop names the
+			// entity the hop arrives at, or a specialization of it — Studio
+			// Pro's downcast, stored as that step's DestinationEntity, exactly
+			// as a data source path stores it (resolveAssociationHops). Read as
+			// an association it failed the lookup and the caller wrote the
+			// whole path as one flat attribute: CE1613 (ako/mxcli#2127). An
+			// entity the hop cannot arrive at stays unresolved.
+			if !afterAssociation || !strings.Contains(seg, ".") || !pb.isSpecializationOf(seg, current) {
 				return "", nil, false
 			}
+			steps[len(steps)-1].DestinationEntity = seg
+			current = seg
+			afterAssociation = false
+			continue
 		}
 		steps = append(steps, pages.AttributeRefStep{Association: assocQN, DestinationEntity: dest})
 		current = dest
+		afterAssociation = true
 	}
 
 	// The final attribute is qualified with the entity that DECLARES it, which

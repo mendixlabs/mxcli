@@ -1,0 +1,51 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#2127 (mendixlabs/mxcli#1808): a widget attribute path that steps
+-- down to a specialization was written as one flat attribute name
+-- ============================================================================
+--
+-- Symptom: `check` and `exec` passed, then mxbuild failed
+--   CE1613 The selected attribute 'System.Session_User/Administration.Account/FullName' no longer exists.
+--
+-- Cause: the attribute-path resolver read every segment before the attribute
+-- as an association. `MyFirstModule.Account` is an entity, the lookup failed,
+-- and the column fell back to the whole path as a flat attribute name. Naming
+-- the association's own end (`System.Session_User/System.User/Name`) failed the
+-- same way.
+--
+-- Fix: an entity right after an association hop is that hop's destination —
+-- its own end, or a specialization of it — and is stored as the step's
+-- DestinationEntity, as data source paths already store it. mxbuild 11.14.0
+-- accepts the resulting AttributeRef at 0 errors. The same resolver serves
+-- DataGrid 2 columns, input widgets and pluggable widget attributes.
+--
+-- Verify (A/B, Mendix 11.14.0):
+--   mxcli new Lab --version 11.14.0 --theme none --layout none --skip-init
+--   mxcli exec 2127-attribute-path-through-specialization.mdl -p Lab/Lab.mpr
+--   mxcli docker check -p Lab/Lab.mpr     # fixed: 0 errors; before: 3 x CE1613
+--
+-- Not covered here: DESCRIBE still prints the column as `Session_User/FullName`
+-- (the specialization step is dropped), which does not round-trip.
+-- ============================================================================
+
+create persistent entity MyFirstModule.Account extends System.User (
+  FullName: string(200)
+);
+
+create or modify snippet MyFirstModule.SNIPPET_Sessions {
+  datagrid gridSessions (DataSource: database from System.Session) {
+    -- The report: an attribute of a specialization of System.User.
+    column (Attribute: System.Session_User/MyFirstModule.Account/FullName, Caption: 'User')
+    -- The step may also name the association's own end.
+    column (Attribute: System.Session_User/System.User/Name, Caption: 'Name')
+    -- Control: no entity step.
+    column (Attribute: System.Session_User/Name, Caption: 'Login')
+  }
+};
+
+-- Input widgets share the resolver.
+create or modify snippet MyFirstModule.SNIPPET_SessionEdit (Params: ( $Session: System.Session )) {
+  dataview dvSession (DataSource: $Session) {
+    textbox txtName (Label: 'User', Attribute: System.Session_User/MyFirstModule.Account/FullName)
+  }
+};
