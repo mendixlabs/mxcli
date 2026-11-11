@@ -11,11 +11,11 @@ description: "Provision a Mendix project in a repo that has none — interview, 
 | lines | section |
 |---|---|
 | 23-43 | When to Use This Skill |
-| 44-130 | Step 0 — interview, and WAIT for the answers |
-| 131-263 | Provision |
-| 264-333 | If this is a solution (several apps in one repo) |
-| 334-393 | Then propose the model — do not build it yet |
-| 394-457 | After bootstrap — the inner loop |
+| 44-134 | Step 0 — interview, and WAIT for the answers |
+| 135-267 | Provision |
+| 268-337 | If this is a solution (several apps in one repo) |
+| 338-397 | Then propose the model — do not build it yet |
+| 398-461 | After bootstrap — the inner loop |
 
 <!-- /skill-index -->
 # Bootstrap a Mendix App in an Empty Repo
@@ -104,7 +104,11 @@ ls ~/.mxcli/mxbuild/ 2>/dev/null | sort -V | tail -1   # e.g. 11.13.0, or empty
 ```
 
 If that names a version, use it and say so in one line ("using 11.13.0, already cached
-in this environment"). If the user asked for a specific version, they win — check it on
+in this environment"). **Except an 11.14.x:** its `mxbuild --serve` fails every build
+after the first (its own bundler config is gone), so `run --local --watch` rebuilds
+through a serve restart per change (~30 s instead of ~3 s); 11.15.0 is measured to
+fix that failure (ako/mxcli#606). Take the
+newest version on the CDN instead and say why in one line. If the user asked for a specific version, they win — check it on
 the CDN as below and accept the download.
 
 **Otherwise take the newest version on the CDN.** Everything mxcli does starts with
