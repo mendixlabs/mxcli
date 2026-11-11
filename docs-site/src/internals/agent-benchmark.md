@@ -71,12 +71,14 @@ because the project around it is bigger.
 
 ## The running-app session
 
-`BENCH_RUNTIME=<Mendix version>` adds a third session: what an agent waits for
-once the app is up. Measured sessions spend more wall time here than in every
+`BENCH_RUNTIME=<Mendix version>` adds a third session: validating and building
+the project with mx, and what an agent waits for once the app is up. Measured sessions spend more wall time here than in every
 mxcli-only command together.
 
 | Step | Commands | What it shows |
 |---|---|---|
+| `mx-check` | `docker check` | validation by mx itself, on a temporary copy of the project |
+| `build` | `docker build --skip-check` | the full build to a deployable package |
 | `boot` | `run --local --watch --detach --db-type hsqldb --test-endpoint --allow-call` | until the app serves: build, runtime start, schema |
 | `page-check` | `playwright check` | a text verdict for the home page |
 | `hot-apply` | `exec` of a one-microflow change, then `run wait` | a behavioural change, live without a restart |
@@ -105,6 +107,8 @@ It differs from the other two sessions in four ways:
   alone and says little here. A real mxcli regression is a smaller share of a
   noisier figure than in the other sessions — with the same code in both arms
   the ratios ran from 0.92 to 1.04 over three repetitions.
+- **Neither `mx-check` nor `build` needs a Docker daemon**, despite the
+  command names: both run mx and MxBuild directly.
 
 `boot` and `stop` each report 7 files changed: the test endpoint's documents,
 added when the app starts and removed when it stops.
@@ -199,8 +203,8 @@ record is still written and committed.
 
 ## What it does not measure
 
-- **Validation and the full build** — `docker check` and `docker build`, the
-  next phase of the proposal.
+- **A check or build after a change** — `mx-check` and `build` run once, on
+  the project as authored, before the app boots.
 - **A PostgreSQL-backed app** — the running-app session uses HSQLDB.
 - **`mxcli new` as an A/B** — it is timed once, by the candidate, as a trend
   figure.

@@ -10,7 +10,7 @@ related:
 
 # Proposal: Nightly Agent Dev-Loop Performance Benchmark
 
-**Status:** Partial — Phases 1 and 2 are implemented (see "Phase 1 as built", "Phase 2 as built")
+**Status:** Partial — Phases 1 to 3 are implemented (see the "as built" sections); the trend chart and the alert are not
 **Date:** 2026-11-11
 
 ## Problem Statement
@@ -343,6 +343,20 @@ job. Steps: `boot`, `page-check`, `hot-apply`, `test-attach`, `apply-entity`,
 ### Phase 3 — validate and build
 
 Adds `mx-check` and `build`.
+
+#### Phase 3 as built
+
+Two steps at the head of the running-app session, since they need the same
+buildable project: `mx-check` (`mxcli docker check`) and `build`
+(`mxcli docker build --skip-check`, so the check is not timed twice). Neither
+needs a Docker daemon. First figures on the development machine (Mendix
+11.13.0, 476 units): check 8 s, build 73 s — which makes `build` the longest
+step of the session by a factor of two, and adds about 75 s to every
+repetition of each arm.
+
+Both run once per repetition, on the project as authored. A check after each
+change — how an agent actually uses it — is not measured separately; the
+session-weighted total stands in for it through the step's weight.
 
 ### Later, separately — a scheduled agent-level run
 

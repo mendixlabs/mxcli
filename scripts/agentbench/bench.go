@@ -33,8 +33,8 @@ const statsFileEnv = "MXCLI_STATS_FILE"
 type step struct {
 	name string
 	// cmds are the command lines after the binary, run one after the other
-	// and measured as one: {P} is the project's .mpr and {S} the directory
-	// holding the session's scripts. Most steps are one command. A change to a
+	// and measured as one: {P} is the project's .mpr, {D} its directory and
+	// {S} the directory holding the session's scripts. Most steps are one command. A change to a
 	// running app is two, the edit and the wait for it to be live, because
 	// that pair is what the agent sits through.
 	cmds [][]string
@@ -146,6 +146,7 @@ func runStep(bin string, cmds [][]string, project, scripts, scratch string) (sam
 		resolved := make([]string, len(args))
 		for i, a := range args {
 			a = strings.ReplaceAll(a, "{P}", project)
+			a = strings.ReplaceAll(a, "{D}", filepath.Dir(project))
 			resolved[i] = strings.ReplaceAll(a, "{S}", scripts)
 		}
 		statsSeq++
@@ -651,9 +652,16 @@ func seedLarge(cfg config, scripts string) (string, []seedResult, error) {
 
 // runtimeSteps is the running-app session: what an agent waits for once the
 // app is up. Weights are rounded from the same measured builds as the others
-// (`run wait` 95 calls in the largest, restarts 150, microflow test runs 35).
+// (`run wait` 95 calls in the largest, restarts 150, `docker check` 84,
+// microflow test runs 35).
 func runtimeSteps(pageCheck bool) []step {
 	steps := []step{
+		// Validation by mx itself, on a temporary copy of the project: what an
+		// agent runs after a batch of changes, before it trusts them.
+		{name: "mx-check", cmds: one("docker", "check", "-p", "{P}"), weight: 80},
+		// The full build to a deployable package. --skip-check, or it would
+		// time the check a second time.
+		{name: "build", cmds: one("docker", "build", "-p", "{P}", "--skip-check", "-o", "{D}/bench-package"), weight: 2},
 		// Until the app serves: the build, the runtime start, the schema.
 		{name: "boot", cmds: one("run", "--local", "--watch", "--detach", "--db-type", "hsqldb",
 			"--test-endpoint", "--allow-call", "-p", "{P}"), weight: 10},

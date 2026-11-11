@@ -332,6 +332,25 @@ func TestRun_RuntimeSessionRunsArmsInTurnAndAlwaysStops(t *testing.T) {
 	}
 }
 
+// The session validates and builds before it boots, and the build does not
+// repeat the check it follows.
+func TestRuntimeSteps_ValidateAndBuildComeBeforeBoot(t *testing.T) {
+	var names []string
+	for _, st := range runtimeSteps(true) {
+		names = append(names, st.name)
+	}
+	if want := []string{"mx-check", "build", "boot"}; len(names) < 3 || !slices.Equal(names[:3], want) {
+		t.Fatalf("the session starts %v, want %v", names, want)
+	}
+	build := runtimeSteps(true)[1].cmds[0]
+	if !slices.Contains(build, "--skip-check") {
+		t.Errorf("the build step %v runs the check again, which mx-check already timed", build)
+	}
+	if !slices.Contains(build, "{D}/bench-package") {
+		t.Errorf("the build step %v does not write its package inside the arm's own project copy", build)
+	}
+}
+
 // Without the page check — a machine with no browser — the session is the
 // same minus that step.
 func TestRuntimeSteps_PageCheckIsOptional(t *testing.T) {
