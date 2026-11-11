@@ -671,6 +671,12 @@ func extractTextTemplateParameters(ctx *ExecContext, textTemplate map[string]any
 			// bare attribute re-executes against the widget's own entity (CE1365,
 			// mendixlabs/mxcli#1494).
 			if assocPath := associationTemplateParamPath(attrRef); assocPath != "" {
+				// Read from a named object (a parameter, a data view): the root
+				// is part of the binding. Without it the path re-executed against
+				// the context with no source, CE0402 (ako/mxcli#833).
+				if sourceVarName != "" {
+					assocPath = "$" + sourceVarName + "/" + assocPath
+				}
 				result = append(result, assocPath)
 				continue
 			}

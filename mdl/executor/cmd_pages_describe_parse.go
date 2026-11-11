@@ -1459,6 +1459,15 @@ func extractInputAttribute(ctx *ExecContext, w map[string]any) string {
 			return parameterAttributeMDL(param, attr)
 		}
 	}
+	// An association path read from a named object — a parameter, or a data
+	// view through its Widget slot — is `$Root/Assoc/Attr`. Printed without
+	// the root it was refused at the snippet root (MDL-WIDGET34), or bound
+	// against the wrong context (ako/mxcli#833).
+	if root := firstNonEmpty(widget, parameterSourceName(w["SourceVariable"])); root != "" && attrRef != nil && attrRef["EntityRef"] != nil {
+		if path := columnAttributeFromRef(attrRef); strings.Contains(path, "/") {
+			return "$" + root + "/" + path
+		}
+	}
 	if widget == "" || attrRef == nil {
 		return extractAttributeRef(ctx, w)
 	}

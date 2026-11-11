@@ -4,6 +4,7 @@ package executor
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
@@ -61,6 +62,12 @@ func inputBindingProblem(w *ast.WidgetV3, c pageArgContext, noEntity bool, isPag
 		if isPageVariable == nil || isPageVariable(name) {
 			return ""
 		}
+	}
+	if _, _, ok := rootedAttributeValue(raw); ok {
+		// `$name/Assoc/Attr` names its object outright, like `$name.Attr`;
+		// whether the name is one is judged where the names are known
+		// (ako/mxcli#833).
+		return ""
 	}
 	attr, isString := raw.(string)
 	if !isString {
@@ -264,6 +271,21 @@ func validatePageVariableBindings(widgets []*ast.WidgetV3, variables []ast.PageV
 			if w == nil {
 				continue
 			}
+			// A page variable passed to a snippet parameter: page variables are
+			// primitive and a snippet parameter is an object, so the call can
+			// never match — mx check CE0115 "The arguments that are passed to
+			// snippet '…' do not match the expected parameters" (ako/mxcli#833).
+			for _, sp := range w.GetSnippetParams() {
+				if name := strings.TrimPrefix(sp.Variable, "$"); declared[name] {
+					out = append(out, linter.Violation{
+						RuleID:   "MDL-WIDGET34",
+						Severity: linter.SeverityError,
+						Message: locationPrefix + ": " + snippetCallPageVariableMessage(w.Name,
+							strings.TrimPrefix(sp.ParamName, "$"), name),
+						Suggestion: "Pass an object: a parameter of this document, an enclosing data view (`$dvName`), or leave the parameter to the enclosing data context.",
+					})
+				}
+			}
 			raw, _ := lookupPropCI(w, "Attribute")
 			if _, ok := bareVariableReference(raw); ok {
 				if msg := inputBindingProblem(w, pageArgContext{}, false, isDeclared); msg != "" {
@@ -300,6 +322,24 @@ func validateNamedObjectBindings(widgets []*ast.WidgetV3, params []string, locat
 			Suggestion: "`$Name.Attr` reads an attribute of the page or snippet parameter $Name; declare it in Params, or bind the attribute by name inside a data container.",
 		})
 	}
+	// Every data view of the document, enclosing or not: a template parameter
+	// `$dv1.Attr` naming one that does not enclose the widget was written as
+	// SourceVariable { Widget: dv1 }, mx check CE7001 "Widget should be placed
+	// inside Data view 'dv1' to use it as a source widget." (ako/mxcli#833).
+	allDataViews := map[string]bool{}
+	var collect func(ws []*ast.WidgetV3)
+	collect = func(ws []*ast.WidgetV3) {
+		for _, w := range ws {
+			if w == nil {
+				continue
+			}
+			if strings.EqualFold(w.Type, "dataview") && w.Name != "" {
+				allDataViews[w.Name] = true
+			}
+			collect(w.Children)
+		}
+	}
+	collect(widgets)
 	var walk func(ws []*ast.WidgetV3, dataViews map[string]bool)
 	walk = func(ws []*ast.WidgetV3, dataViews map[string]bool) {
 		for _, w := range ws {
@@ -307,6 +347,33 @@ func validateNamedObjectBindings(widgets []*ast.WidgetV3, params []string, locat
 				continue
 			}
 			kind := strings.ToLower(w.Type)
+			for _, key := range propertyKeys(w.Properties) {
+				params, ok := w.Properties[key].([]ast.ParamAssignmentV3)
+				if !ok {
+					continue
+				}
+				for _, p := range params {
+					v, _ := p.Value.(string)
+					name, _, ok := namedObjectBinding(v)
+					if !ok || declared[name] || !allDataViews[name] || dataViews[name] {
+						continue
+					}
+					out = append(out, linter.Violation{
+						RuleID:   "MDL-WIDGET34",
+						Severity: linter.SeverityError,
+						Message: fmt.Sprintf("%s: %s `%s`: `{%d} = %s` in %s reads data view `%s`, which does not enclose the "+
+							"widget — a data view's name is a source only for the widgets inside it (mx check CE7001 "+
+							"\"Widget should be placed inside Data view '%s' to use it as a source widget.\")",
+							locationPrefix, kind, w.Name, p.Index, v, key, name, name),
+						Suggestion: fmt.Sprintf("Move `%s` inside data view `%s`, or read the object it shows another way (its parameter, `$Param.Attr`).", w.Name, name),
+					})
+				}
+			}
+			if root, _, ok := rootedAttributeValue(w.Properties["Attribute"]); ok && !declared[root] &&
+				!(namedObjectBindingKinds[kind] && dataViews[root]) {
+				report(fmt.Sprintf("%s `%s`: `Attribute: $%s/…` — `$%s` is not a parameter of this document%s, "+
+					"so the binding would read nothing", kind, w.Name, root, root, dataViewClause(kind)))
+			}
 			if attr, ok := w.Properties["Attribute"].(string); ok {
 				if name, _, ok := namedObjectBinding(attr); ok && !declared[name] &&
 					!(namedObjectBindingKinds[kind] && dataViews[name]) {
@@ -333,4 +400,23 @@ func validateNamedObjectBindings(widgets []*ast.WidgetV3, params []string, locat
 	}
 	walk(widgets, map[string]bool{})
 	return out
+}
+
+// propertyKeys is a widget's property keys in a stable order, so violations
+// are reported deterministically.
+func propertyKeys(props map[string]any) []string {
+	keys := make([]string, 0, len(props))
+	for k := range props {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// snippetCallPageVariableMessage is the refusal for a snippet call passing a
+// page variable, shared by check and the builder.
+func snippetCallPageVariableMessage(call, param, variable string) string {
+	return fmt.Sprintf("snippetcall `%s`: `%s = $%s` passes a page variable, but a snippet parameter is an object "+
+		"and a page variable is not — mx check CE0115 \"The arguments that are passed to snippet … do not match the "+
+		"expected parameters\"", call, param, variable)
 }

@@ -1,0 +1,35 @@
+mdl 1;
+-- ============================================================================
+-- Bug ako/mxcli#833: an association path read from a snippet parameter lost its root
+-- ============================================================================
+--
+-- Symptom (before fix): describe of TestApp's WorkflowCommons.Snip_Workflow_Header
+-- printed `CaptionParams: ({1} = System.Workflow_ParentWorkflow/Name)`, without
+-- the $Workflow root; exec wrote it with no source, and mx check reported
+--   [CE0402] "No value specified." at Action button 'actionButton1'
+-- Snip_WorkflowUserTaskView_Details' textBox9 (Caption over
+-- WorkflowUserTaskView_WorkflowSubProcess) described the same way and check
+-- refused it (MDL-WIDGET34).
+--
+-- After fix: `$Param/Assoc/Attr`, Mendix's expression form, binds as the
+-- association steps beside a SourceVariable naming the parameter, in a template
+-- parameter and in an input's Attribute. describe prints it that way, and
+-- describe -> exec of Snip_Workflow_Header reports it unchanged; mx check 0 errors
+-- for this script on Mendix 11.14.0.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/833-association-path-from-snippet-parameter.mdl -p app.mpr
+--   mxcli docker check -p app.mpr        -- expect 0 errors
+-- ============================================================================
+
+create module BugTest833;
+
+create persistent entity BugTest833.Customer (Name: String(100));
+create persistent entity BugTest833.Order (Number: String(20));
+create association BugTest833.Order_Customer from BugTest833.Order to BugTest833.Customer;
+
+create snippet BugTest833.SN_OrderHeader (Params: ($Order: BugTest833.Order)) {
+  dynamictext txtCustomer (Content: 'Customer: {1}', ContentParams: ({1} = $Order/BugTest833.Order_Customer/Name))
+  actionbutton btnCustomer (Caption: '{1}', CaptionParams: ({1} = $Order/BugTest833.Order_Customer/Name), Action: close_page)
+  textbox tbCustomer (Label: 'Customer', Attribute: $Order/BugTest833.Order_Customer/Name, Editable: Never)
+};

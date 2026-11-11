@@ -2499,6 +2499,16 @@ func (pb *pageBuilder) resolveTemplateAttributePathFull(attrRef string, param *p
 // value is not an association path or cannot be resolved, so the caller falls
 // back to the previous behavior.
 func (pb *pageBuilder) resolveTemplateAssociationPath(attrRef string, param *pages.ClientTemplateParameter) bool {
+	// `$Param/Assoc/Attr`: the path read from a named object, which Studio Pro
+	// stores as the steps beside a SourceVariable naming it (ako/mxcli#833).
+	if wv, finalQN, steps, ok := pb.resolveRootedAssociationPath(attrRef); ok {
+		param.AttributeRef = finalQN
+		param.AttributeRefSteps = steps
+		param.SourceWidget = wv.Widget
+		param.SourceVariable = wv.Variable
+		param.SourceVariableKind = wv.Kind
+		return true
+	}
 	finalQN, steps, ok := pb.resolveAssociationAttributePath(attrRef)
 	if !ok {
 		return false
@@ -2546,16 +2556,48 @@ func (pb *pageBuilder) resolveInputAttribute(attr string) (string, []pages.Attri
 func (pb *pageBuilder) resolveAssociationAttributePath(attrRef string) (finalQN string, steps []pages.AttributeRefStep, ok bool) {
 	path := strings.TrimPrefix(attrRef, "$currentObject/")
 	// Only context-relative association paths are handled here; a $param- or
-	// $widget-rooted navigation is a different (unsupported) shape.
+	// $widget-rooted navigation is resolveRootedAssociationPath's.
 	if strings.HasPrefix(path, "$") || !strings.Contains(path, "/") {
 		return "", nil, false
 	}
+	return pb.resolveAssociationPathFrom(path, pb.entityContext)
+}
+
+// resolveRootedAssociationPath resolves `$Root/Assoc/…/Attr`, an association
+// path read from a page or snippet parameter or an enclosing data view rather
+// than from the context object, starting at the root's entity. wv is the
+// SourceVariable the binding stores beside the steps: the parameter in its
+// slot, or the data view's recorded pair (ako/mxcli#833).
+func (pb *pageBuilder) resolveRootedAssociationPath(attrRef string) (wv pages.WidgetVariable, finalQN string, steps []pages.AttributeRefStep, ok bool) {
+	root, path, ok := rootedAssociationPath(attrRef)
+	if !ok {
+		return pages.WidgetVariable{}, "", nil, false
+	}
+	var start string
+	if v, entity, isParam := pb.parameterVariable(root); isParam {
+		wv, start = v, entity
+	} else if v, isDV := pb.dataViewVariables[root]; isDV {
+		wv, start = v, pb.paramEntityNames[root]
+	}
+	if start == "" {
+		return pages.WidgetVariable{}, "", nil, false
+	}
+	finalQN, steps, ok = pb.resolveAssociationPathFrom(path, start)
+	if !ok {
+		return pages.WidgetVariable{}, "", nil, false
+	}
+	return wv, finalQN, steps, true
+}
+
+// resolveAssociationPathFrom resolves a context-relative association path
+// starting at the entity start.
+func (pb *pageBuilder) resolveAssociationPathFrom(path, start string) (finalQN string, steps []pages.AttributeRefStep, ok bool) {
 	segs := strings.Split(path, "/")
 	if len(segs) < 2 {
 		return "", nil, false
 	}
 	attrName := segs[len(segs)-1]
-	current := pb.entityContext
+	current := start
 	if current == "" {
 		return "", nil, false
 	}
@@ -2887,6 +2929,18 @@ func (pb *pageBuilder) widgetVariableFor(name string) (pages.WidgetVariable, boo
 // (CE7001) — is refused: the writer would otherwise store a binding that reads
 // nothing.
 func (pb *pageBuilder) resolveInputBinding(w *ast.WidgetV3, attr string) (string, []pages.AttributeRefStep, *pages.WidgetVariable, error) {
+	// `$Param/Assoc/Attr`: an association path read from a named object
+	// (ako/mxcli#833).
+	if root, _, isRooted := rootedAssociationPath(attr); isRooted {
+		wv, path, steps, ok := pb.resolveRootedAssociationPath(attr)
+		if !ok {
+			return "", nil, nil, mdlerrors.NewValidationf(
+				"%s `%s`: `Attribute: %s` — `$%s/…` reads an association path from a parameter of this %s or an "+
+					"enclosing data view, and `$%s` is neither, or the path does not resolve from it",
+				strings.ToLower(w.Type), w.Name, attr, root, pb.documentKind(), root)
+		}
+		return path, steps, &wv, nil
+	}
 	name, attrName, ok := strings.Cut(strings.TrimPrefix(attr, "$"), ".")
 	if !strings.HasPrefix(attr, "$") {
 		path, steps := pb.resolveInputAttribute(attr)
