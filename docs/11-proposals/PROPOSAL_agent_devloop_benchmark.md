@@ -29,9 +29,22 @@ Those figures were taken by hand, from individual sessions, after the fact.
 Nothing tracks them continuously, so a regression in any of them ships
 unnoticed:
 
+- The recent performance fixes each left a **budget test** behind: a unit test
+  that counts unit-file reads or document decodes for one command on the PedApp
+  fixture and fails above a bound (`unit_reads_per_command_pedapp_test.go`,
+  `describe_decode_budget_pedapp_test.go`,
+  `catalog_incremental_budget_pedapp_test.go`,
+  `flow_build_decodes_2094_test.go`, the `reader_*` tests in `modelsdk/mpr`).
+  They run on every PR and are noise-free, and this proposal keeps them as the
+  first line of defence. They have four gaps by construction: they count reads
+  and decodes, not time, so CPU, parsing, SQLite and process start-up are
+  outside them; they run on a 375-unit fixture, while the defects they pin were
+  measured on 3,400- to 4,753-unit projects; they exist only for the paths
+  someone already found slow; and their bounds are deliberately loose, so a
+  partial regression passes.
 - The nightly workflow (`.github/workflows/nightly.yml`) runs correctness
-  suites only. A change that doubles `refresh catalog full`, or adds ten
-  seconds to a hot apply, passes every job.
+  suites only. A change that adds ten seconds to a hot apply, or makes project
+  open slower without one extra file read, passes every job.
 - The Go benchmarks that exist (`modelsdk/codec/codec_bench_test.go`,
   `modelsdk/property/property_bench_test.go`, `BenchmarkRoundtripEntity`) are
   micro-benchmarks of one function. They are not run in CI, and they exclude
@@ -176,8 +189,9 @@ absolute time to last night's produces false alarms. Three mechanisms:
    project; the median is reported and the spread recorded, so a noisy step is
    visible as noisy.
 3. **Deterministic counters.** Alongside time, record values that do not depend
-   on the machine: units offered and written (`backend.WriteStats`), bytes
-   written to the project, and output size. These can be compared exactly
+   on the machine: unit files read (the backend's `UnitFileReads`, the counter
+   the existing budget tests assert on), units offered and written
+   (`backend.WriteStats`), bytes written to the project, and output size. These can be compared exactly
    between nights. A step that suddenly writes 400 units instead of 40 is a
    regression whether or not the runner was slow.
 
@@ -273,7 +287,7 @@ decision and not part of this proposal.
 | `scripts/agentbench/session/*.mdl` (new) | The scripted session's MDL |
 | `Makefile` | `bench` target |
 | `.github/workflows/nightly.yml` | `bench` job; commit of the record to the `benchmarks` branch |
-| `cmd/mxcli/` | Machine-readable write counters for a command (see Open Questions) |
+| `cmd/mxcli/` | Machine-readable read and write counters for a command (see Open Questions) |
 | `docs-site/src/internals/` | Page describing the benchmark and showing the trend chart |
 
 ## Version Compatibility
@@ -301,11 +315,12 @@ second version is a matrix entry, not a code change.
 
 ## Open Questions
 
-1. **Write counters on the CLI.** `backend.WriteStats` (`Offered`, `Written`)
-   exists and drives the "Unchanged …" reporting, but this proposal has not
-   found a machine-readable form of it on `exec`. The driver needs one — a
-   flag or an environment variable that emits a final stats line. Bytes written
-   can be measured from outside by diffing the project directory.
+1. **Counters on the CLI.** `backend.WriteStats` (`Offered`, `Written`) and
+   the backend's `UnitFileReads` exist — the first drives the "Unchanged …"
+   reporting, the second the budget tests — but this proposal has not found a
+   machine-readable form of either on a command. The driver needs one — a flag
+   or an environment variable that emits a final stats line. Bytes written can
+   be measured from outside by diffing the project directory.
 2. **Large-fixture size.** A few thousand documents is a guess at "typical
    customer project". The preset should be set from real numbers if they are
    available.
