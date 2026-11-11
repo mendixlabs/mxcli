@@ -117,8 +117,8 @@ CREATE PAGE CRM.Customer_Overview (
 Validate after each script to catch errors early:
 
 ```bash
-# Syntax check (fast, no project needed)
-mxcli check domain-model.mdl
+# Syntax check (fast, no project used)
+mxcli check domain-model.mdl --no-project
 
 # Reference validation (checks entity/microflow names exist)
 mxcli check pages.mdl -p app.mpr --references
