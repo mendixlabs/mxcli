@@ -174,6 +174,11 @@ wins when both are set.
 mxcli test tests/ -p app.mpr --local --mxbuild-path "C:\Program Files\Mendix\11.11.0\modeler\mxbuild.exe"
 ```
 
+`--reuse-build` (with `--local`, not `--watch`) skips the injection and the build
+when the project, the test files and mxcli are unchanged since the last run: the
+deployment that run left is booted as it is. Any difference — a changed file, a
+deployment something else rebuilt — builds as usual.
+
 `--watch` is the everyday loop: edit a test *or* the microflow under test, and
 the verdict lands in about two seconds.
 
