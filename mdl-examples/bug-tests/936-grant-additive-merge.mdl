@@ -46,7 +46,7 @@ mdl 1;
 -- Expected after running (order of members follows the entity):
 --   grant BugTest936.Viewer on BugTest936.Customer (read (Name, Email, Phone));
 --   grant BugTest936.Reader on BugTest936.Customer (read (Name, Email, Phone))
---     where '[Name != $currentUser/Name]';
+--     where '[Name != '''']';
 --   grant BugTest936.Admin  on BugTest936.Customer (create, delete, read *, write *);
 --   grant BugTest936.Scoped on BugTest936.Customer (read (Name))  where '[Name = 'a']';
 --   grant BugTest936.Scoped on BugTest936.Customer (read (Email)) where '[Name = 'b']';
@@ -72,10 +72,13 @@ grant read (Phone) on entity BugTest936.Customer to BugTest936.Viewer;
 
 -- 2. The same thing with the WHERE clause the issue was filed against. It fails
 --    and passes together with section 1; the constraint never mattered.
+--    (The issue's `[Name != $currentUser/Name]` is CE0161 at security level
+--    Production — an access rule has no variables, ako/mxcli#2099 — so the
+--    constraint here is one that builds.)
 grant read (Name, Email) on entity BugTest936.Customer to BugTest936.Reader
-  where [Name != $currentUser/Name];
+  where [Name != ''];
 grant read (Phone) on entity BugTest936.Customer to BugTest936.Reader
-  where [Name != $currentUser/Name];
+  where [Name != ''];
 
 -- 3. Structural permissions. The narrow re-grant must not revoke create, delete
 --    or the rule's ReadWrite default -- it used to drop all three.

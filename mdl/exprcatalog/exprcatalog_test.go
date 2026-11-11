@@ -238,3 +238,42 @@ func TestAssociationTarget(t *testing.T) {
 		}
 	}
 }
+
+// TestMicroflowParamRef pins the element half of a parameter's type, which is
+// what tells one enumeration from another for a call argument (ako/mxcli#2096).
+func TestMicroflowParamRef(t *testing.T) {
+	r := seeded(t)
+	var _ exprcheck.FlowParamRefReader = r
+	if got, ok := r.MicroflowParamRef("Shop.ACT_Total", "$Order"); !ok || got != "Shop.Order" {
+		t.Errorf("got (%q, %v), want Shop.Order", got, ok)
+	}
+	if got, ok := r.MicroflowParamRef("Shop.ACT_Total", "Discount"); ok {
+		t.Errorf("a primitive parameter named an element: %q", got)
+	}
+}
+
+// TestDeclareFlowReplacesStoredParameters: a script's CREATE OR REPLACE can
+// change a flow's parameters, so a declared flow must not keep a stored
+// parameter it no longer has, and must not leak into another flow.
+func TestDeclareFlowReplacesStoredParameters(t *testing.T) {
+	r := seeded(t)
+	r.DeclareFlow("Shop.ACT_Total", []FlowParam{
+		{Name: "$Status", Kind: exprcheck.KindEnumeration, Ref: "Shop.OrderStatus"},
+		{Name: "Unknown", Kind: exprcheck.KindUnknown},
+	})
+	if _, ok := r.MicroflowParam("Shop.ACT_Total", "Discount"); ok {
+		t.Error("a stored parameter survived the script's redefinition")
+	}
+	if got, ok := r.MicroflowParam("Shop.ACT_Total", "Status"); !ok || got != exprcheck.KindEnumeration {
+		t.Errorf("got (%v, %v), want the declared Enumeration", got, ok)
+	}
+	if got, _ := r.MicroflowParamRef("Shop.ACT_Total", "Status"); got != "Shop.OrderStatus" {
+		t.Errorf("ref is %q, want Shop.OrderStatus", got)
+	}
+	if _, ok := r.MicroflowParam("Shop.ACT_Total", "Unknown"); ok {
+		t.Error("a parameter of unknown kind was recorded; it must stay unchecked")
+	}
+	if !r.KnowsEntity("Shop.Order") || r.KnowsEntity("Shop") || r.KnowsEntity("Shop.Nope") {
+		t.Error("KnowsEntity must answer only for an entity with an indexed attribute")
+	}
+}

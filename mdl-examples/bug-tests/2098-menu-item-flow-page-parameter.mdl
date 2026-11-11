@@ -1,0 +1,57 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#2098 (mendixlabs/mxcli#1799) — a menu item that calls a flow with
+-- a parameter, or shows a page with a required one, passed `check -p` and
+-- exec, and mx check 11.14.0 then reported:
+--
+--   [error] [CE1571] "No argument has been selected for parameter 'Thing' and
+--   no default is available. Please select an argument manually." at Menu item
+--
+-- A menu has no context object, so nothing fills the parameter in.
+-- `check -p` now reports such an item in a navigation profile, a menu document
+-- and an alter of either, e.g.
+--
+--   menu item 'Open' ( OnClick: call microflow Issue2098.ACT_Thing )
+--   menu item 'View' ( OnClick: show page Issue2098.Thing_View )
+--
+-- This script holds the controls, measured at 0 errors on mxbuild 11.14.0:
+-- a parameterless flow and page, an optional page parameter (11.5+), and a
+-- literal argument for a primitive flow parameter. Without a project the rule
+-- has no signatures to judge, so the corpus run is syntax only.
+--
+-- Verify:
+--   mxcli exec 2098-menu-item-flow-page-parameter.mdl -p app.mpr
+--   mxcli docker check -p app.mpr      -- 0 errors
+--   (add `call microflow Issue2098.ACT_Text` without an argument to the menu:
+--    check -p refuses it; forced through with --no-check, mx check is CE1571)
+-- ============================================================================
+
+create module Issue2098;
+
+create persistent entity Issue2098.Thing ( Name: String(100) );
+
+create microflow Issue2098.ACT_Plain ()
+begin
+end;
+
+create microflow Issue2098.ACT_Text ($Text: String)
+begin
+end;
+
+create page Issue2098.Plain_View (Title: 'Plain', Layout: Atlas_Core.Atlas_Default) {
+  dynamictext txtPlain (Content: 'Plain')
+};
+
+create page Issue2098.Maybe_View (
+  Params: ( $Thing: Issue2098.Thing optional ),
+  Title: 'Maybe', Layout: Atlas_Core.Atlas_Default
+) {
+  dynamictext txtMaybe (Content: 'Maybe')
+};
+
+create menu Issue2098.Side_Menu {
+  menu item 'Plain' ( OnClick: call microflow Issue2098.ACT_Plain )
+  menu item 'PlainPage' ( OnClick: show page Issue2098.Plain_View )
+  menu item 'Maybe' ( OnClick: show page Issue2098.Maybe_View )
+  menu item 'Literal' ( OnClick: call microflow Issue2098.ACT_Text(Text = 'hello') )
+};

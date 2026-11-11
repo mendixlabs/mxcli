@@ -197,6 +197,12 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 		}
 	}
 
+	// MDL-WF02 for ALTER WORKFLOW: a user task the script leaves with one outcome
+	// holding activities (CE1876). Judged over the whole script, since a later
+	// statement may add the second outcome; a stored task's outcomes need the
+	// project (ako/mxcli#2097, mendixlabs/mxcli#1798).
+	violations = append(violations, validateAlterWorkflowSingleOutcomes(prog, project)...)
+
 	// Check for intra-script duplicate definitions (CREATE X … CREATE X without DROP)
 	violations = append(violations, CheckScriptDuplicates(prog)...)
 
@@ -217,8 +223,10 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// The same question for ALTER STYLING, which that pass never looked at — the
 	// one statement whose entire job is writing design properties, and the one
 	// where an unsupported key was silent until mxbuild said CE6083
-	// (ako/mxcli#509). It resolves less, because the statement names a STORED
-	// widget whose $Type this pass cannot read; see the file comment.
+	// (ako/mxcli#509). Here it asks whether ANY widget type declares the key;
+	// the reference pass, which can open the document, then judges a key some
+	// OTHER type declares against the stored widget's own type
+	// (validateAlterStylingStoredTypes, ako/mxcli#613). See the file comment.
 	violations = append(violations, validateAlterStylingDesignProps(
 		prog, LoadThemeRegistryForProject(projectPath))...)
 

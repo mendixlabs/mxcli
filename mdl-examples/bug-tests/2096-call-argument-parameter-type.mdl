@@ -1,0 +1,78 @@
+mdl 1;
+-- ============================================================================
+-- Regression: ako/mxcli#2096 (mendixlabs/mxcli#1797) - a call microflow /
+-- call nanoflow argument whose type cannot match the called parameter
+-- ============================================================================
+--
+-- Symptom: `mxcli check -p` passed `call microflow Lab.Target (Qty = '5')`
+-- against an Integer parameter, exec wrote it, and mx check failed CE0117
+-- "Error(s) in expression" at the call activity.
+--
+-- The rule needs the project (it reads the parameter types from the catalog
+-- and from the flows this script creates), so without -p this whole file
+-- passes. With a project, exactly ONE error is expected: E009 on
+-- Tmp2096.Caller_Bad. Every call in Tmp2096.Caller_Ok builds at 0 errors on
+-- mx check 11.14.0 and must stay silent.
+--
+-- Usage:
+--   mxcli check mdl-examples/bug-tests/2096-call-argument-parameter-type.mdl
+--   Expect: Check passed.
+--   mxcli check mdl-examples/bug-tests/2096-call-argument-parameter-type.mdl -p app.mpr
+--   Expect: 1 error, E009 at Tmp2096.Caller_Bad (plus access warnings).
+-- ============================================================================
+
+create module Tmp2096;
+
+create enumeration Tmp2096.Color (Red 'Red', Blue 'Blue');
+
+create persistent entity Tmp2096.Order (
+  Qty: Integer,
+  Color: enumeration(Tmp2096.Color)
+);
+
+create microflow Tmp2096.Target ($Qty: Integer)
+begin
+end;
+
+create microflow Tmp2096.T_Dec ($P: Decimal)
+begin
+end;
+
+create microflow Tmp2096.T_Color ($P: enum Tmp2096.Color)
+begin
+end;
+
+create microflow Tmp2096.T_Order ($P: Tmp2096.Order)
+begin
+end;
+
+create nanoflow Tmp2096.N_Int ($P: Integer)
+begin
+end;
+
+-- The reported case: a String for an Integer parameter (CE0117).
+create microflow Tmp2096.Caller_Bad ()
+begin
+  call microflow Tmp2096.Target (Qty = '5');
+end;
+
+-- Controls: the coercions Mendix makes, empty, the same enumeration, and an
+-- object of the parameter's entity.
+create microflow Tmp2096.Caller_Ok ($L: Long, $O: Tmp2096.Order, $C: enum Tmp2096.Color)
+begin
+  call microflow Tmp2096.Target (Qty = 5);
+  call microflow Tmp2096.Target (Qty = $L);
+  call microflow Tmp2096.Target (Qty = empty);
+  call microflow Tmp2096.T_Dec (P = 5);
+  call microflow Tmp2096.T_Dec (P = $O/Qty);
+  call microflow Tmp2096.T_Color (P = Tmp2096.Color.Red);
+  call microflow Tmp2096.T_Color (P = $C);
+  call microflow Tmp2096.T_Color (P = $O/Color);
+  call microflow Tmp2096.T_Order (P = $O);
+  call microflow Tmp2096.T_Order (P = empty);
+end;
+
+create nanoflow Tmp2096.NCaller_Ok ($O: Tmp2096.Order)
+begin
+  call nanoflow Tmp2096.N_Int (P = $O/Qty);
+end;

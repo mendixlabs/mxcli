@@ -63,6 +63,7 @@ func (p *parserImpl) Parse(src string, ctx Context) (RobustExpr, []Hint) {
 	}
 	hs = append(hs, checkValueLiterals(expr, ctx)...)
 	hs = append(hs, checkSlotKind(expr, ctx)...)
+	hs = append(hs, checkCallArgumentKind(expr, ctx)...)
 	hs = append(hs, checkBareIdentifierValue(expr, ctx)...)
 	hs = append(hs, checkStringFuncsComparedWithEmpty(expr, nil, ctx)...)
 	return expr, hs
@@ -128,6 +129,10 @@ func checkSlotKind(expr RobustExpr, ctx Context) []Hint {
 // Unknown. Unknown is tolerated everywhere by design, which is exactly why this
 // slipped through check and exec to arrive as CE0117 (mendixlabs/mxcli#1044).
 //
+// A call microflow / call nanoflow argument is the same position: the whole
+// expression is the value handed to a parameter, and a bare word there was
+// measured CE0117 for every parameter type on 11.14.0 (ako/mxcli#2096).
+//
 // Scoped to the WHOLE expression of a create/change member, and that scoping is
 // the load-bearing part rather than caution for its own sake: a bare name NESTED
 // inside a list-operation predicate is legal MDL — `FILTER($L, Status = 'Open')`
@@ -137,7 +142,8 @@ func checkSlotKind(expr RobustExpr, ctx Context) []Hint {
 // mistake.
 func checkBareIdentifierValue(expr RobustExpr, ctx Context) []Hint {
 	if !strings.HasPrefix(ctx.SlotPath, "ChangeItem.Value") &&
-		!strings.HasPrefix(ctx.SlotPath, "CreateItem.Value") {
+		!strings.HasPrefix(ctx.SlotPath, "CreateItem.Value") &&
+		!strings.HasPrefix(ctx.SlotPath, "CallArgument.Value") {
 		return nil
 	}
 	v, ok := expr.(*VariableExpr)
