@@ -1,3 +1,4 @@
+mdl 1;
 -- Bug ako/mxcli#2099 (mendixlabs/mxcli#1803): an access rule's WHERE whose
 -- members all exist still failed the build, while `check -p` and exec passed it:
 --
