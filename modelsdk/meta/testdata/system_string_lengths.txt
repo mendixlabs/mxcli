@@ -127,6 +127,10 @@ WorkflowRecord	Description	0
 WorkflowRecord	Name	200
 WorkflowRecord	Reason	0
 WorkflowRecord	WorkflowKey	200
+WorkflowSubProcess	Caption	200
+WorkflowSubProcess	Reason	0
+WorkflowSubProcessDefinition	Caption	200
+WorkflowSubProcessDefinition	ModelGUID	36
 WorkflowUserTask	Description	0
 WorkflowUserTask	Name	0
 WorkflowUserTask	Outcome	200
