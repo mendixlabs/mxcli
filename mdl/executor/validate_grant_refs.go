@@ -38,7 +38,7 @@ func validateGrantReferences(ctx *ExecContext, prog *ast.Program) []error {
 	if prog == nil || !ctx.Connected() {
 		return nil
 	}
-	g := &grantResolver{ctx: ctx, sc: newScriptContext(), whole: newScriptContext()}
+	g := &grantResolver{ctx: ctx, sc: newScriptContext(), whole: newScriptContext(), prog: prog}
 	g.whole.collectDefinitions(prog)
 	g.scriptModuleRoles, g.scriptUserRoles = map[string]bool{}, map[string]bool{}
 	g.laterModuleRoles, g.laterUserRoles = map[string]bool{}, map[string]bool{}
@@ -94,6 +94,12 @@ type grantResolver struct {
 	entities      map[string]bool
 	docs          map[string]map[string]bool
 	xpath         *grantXPathResolver // built on the first WHERE
+
+	// prog, and the enumerations it creates or changes, for the access
+	// rule's literal check (validate_access_rule_xpath.go).
+	prog          *ast.Program
+	scriptEnums   map[string][]string
+	unjudgedEnums map[string]bool
 }
 
 func (g *grantResolver) recordLater(stmt ast.Statement) {
@@ -182,7 +188,13 @@ func (g *grantResolver) check(stmt ast.Statement) []string {
 		roles(s.Roles, true)
 		if entityOK {
 			add(g.memberProblem(s.Entity, s.Rights))
-			add(g.xpathProblem(s.Entity, s.XPathConstraint))
+			if p := g.xpathProblem(s.Entity, s.XPathConstraint); p != "" {
+				add(p)
+			} else {
+				// The form rules (ako/mxcli#2099), once the members resolve:
+				// a CE1613 standing hides every CE0161.
+				out = append(out, g.xpathFormProblems(s.Entity, s.XPathConstraint)...)
+			}
 		}
 	case *ast.RevokeEntityAccessStmt:
 		g.entityTargetProblem(s.Entity, &out)

@@ -214,6 +214,8 @@ Examples:
 		printGitStateWarnings(projectPath, os.Stderr)
 
 		webClientTimeout, _ := cmd.Flags().GetDuration("web-client-timeout")
+		buildTimeout, _ := cmd.Flags().GetDuration("build-timeout")
+		startTimeout, _ := cmd.Flags().GetDuration("start-timeout")
 		testEndpoint, _ := cmd.Flags().GetBool("test-endpoint")
 		allowCall, _ := cmd.Flags().GetBool("allow-call")
 		if allowCall && !testEndpoint {
@@ -296,6 +298,8 @@ Examples:
 			MxBuildPath:        mxbuildPath,
 			Watch:              watch,
 			WebClientTimeout:   webClientTimeout,
+			BuildTimeout:       buildTimeout,
+			StartTimeout:       startTimeout,
 			EnsureDB:           ensureDB,
 			SetupOnly:          setupOnly,
 			Screenshot:         screenshot,
@@ -442,6 +446,8 @@ func init() {
 	runCmd.Flags().Bool("watch", false, "Rebuild and hot-apply on every project change")
 	runCmd.Flags().Bool("detach", false, "Run in the background and return once the app is serving (or failed to boot); manage it with 'mxcli run status|wait|stop|restart'. Output goes to <projectDir>/.mxcli/run.log")
 	runCmd.Flags().Duration("web-client-timeout", 0, "Limit for one web client bundle build, e.g. 10m (default $MXCLI_WEB_CLIENT_TIMEOUT, else 5m); on timeout the tail of deployment/log/web-client-build.log is printed")
+	runCmd.Flags().Duration("build-timeout", 0, "Limit for one mxbuild --serve build, e.g. 45m (default $MXCLI_BUILD_TIMEOUT, else 30m). The cold first build of a large app can take many minutes")
+	runCmd.Flags().Duration("start-timeout", 0, "Limit for the runtime start, after-startup microflow and schema update included, e.g. 30m (default $MXCLI_START_TIMEOUT, else 15m)")
 	runCmd.Flags().Bool("test-endpoint", false, "Host mxcli's token-guarded test endpoint so 'mxcli test --attach' can run tests against this app without booting its own runtime (removed on exit)")
 	runCmd.Flags().Bool("allow-call", false, "With --test-endpoint: let 'mxcli test --attach' run a test straight against this app, without injecting or building it, when every statement of the test is one the endpoint can execute. The endpoint then calls the microflows a test names and reads and writes data in a system context, so it is off unless asked for")
 	runCmd.Flags().Bool("ensure-db", false, "Provision the local Postgres + app database if missing (fresh-session bootstrap)")

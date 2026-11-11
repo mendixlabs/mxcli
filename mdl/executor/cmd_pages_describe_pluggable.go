@@ -341,29 +341,11 @@ func buildColumnPropertyKeyMap(ctx *ExecContext, w map[string]any) map[string]st
 // `Assoc/.../Attr` using SHORT association names — the column-attribute grammar
 // (attributePathV3) accepts bare segments only, so a module-qualified association
 // would not re-parse.
-func columnAttributeFromRef(attrRef map[string]any) string {
-	attr := shortAttributeName(extractString(attrRef["Attribute"]))
-	entityRef, ok := attrRef["EntityRef"].(map[string]any)
-	if !ok || entityRef == nil || extractString(entityRef["$Type"]) != "DomainModels$IndirectEntityRef" {
-		return attr
+func columnAttributeFromRef(ctx *ExecContext, attrRef map[string]any) string {
+	if path := associationPathMDL(attrRef, true, describeAssociationEnds(ctx)); path != "" {
+		return path
 	}
-	steps := getBsonArrayElements(entityRef["Steps"])
-	assocs := make([]string, 0, len(steps))
-	for _, s := range steps {
-		sm, ok := s.(map[string]any)
-		if !ok {
-			return attr
-		}
-		a := extractString(sm["Association"])
-		if a == "" {
-			return attr
-		}
-		assocs = append(assocs, shortAttributeName(a)) // drop module prefix
-	}
-	if len(assocs) == 0 || attr == "" {
-		return attr
-	}
-	return strings.Join(assocs, "/") + "/" + attr
+	return shortAttributeName(extractString(attrRef["Attribute"]))
 }
 
 func extractDataGrid2Column(ctx *ExecContext, colObj map[string]any, colPropKeyMap map[string]string, entityContext string) rawDataGridColumn {
@@ -492,7 +474,7 @@ func extractDataGrid2Column(ctx *ExecContext, colObj map[string]any, colPropKeyM
 		// Check for AttributeRef (attribute property)
 		if col.Attribute == "" {
 			if attrRef, ok := value["AttributeRef"].(map[string]any); ok && attrRef != nil {
-				col.Attribute = columnAttributeFromRef(attrRef)
+				col.Attribute = columnAttributeFromRef(ctx, attrRef)
 			}
 		}
 
@@ -670,7 +652,13 @@ func extractTextTemplateParameters(ctx *ExecContext, textTemplate map[string]any
 			// reconstruct the "Assoc/.../Attr" path so DESCRIBE round-trips. The
 			// bare attribute re-executes against the widget's own entity (CE1365,
 			// mendixlabs/mxcli#1494).
-			if assocPath := associationTemplateParamPath(attrRef); assocPath != "" {
+			if assocPath := associationTemplateParamPath(ctx, attrRef); assocPath != "" {
+				// Read from a named object (a parameter, a data view): the root
+				// is part of the binding. Without it the path re-executed against
+				// the context with no source, CE0402 (ako/mxcli#833).
+				if sourceVarName != "" {
+					assocPath = "$" + sourceVarName + "/" + assocPath
+				}
 				result = append(result, assocPath)
 				continue
 			}
@@ -684,6 +672,15 @@ func extractTextTemplateParameters(ctx *ExecContext, textTemplate map[string]any
 					// No SourceVariable - use short attribute name
 					result = append(result, describeAttr(ctx, attr))
 				}
+				continue
+			}
+		}
+		// A page parameter or page variable with no attribute: a primitive
+		// page parameter bound as itself (ako/mxcli#2132), which the builder
+		// writes back to the same slot from the bare `$Name`.
+		if sourceVarName != "" {
+			if srcVar, _ := pMap["SourceVariable"].(map[string]any); extractString(srcVar["Widget"]) == "" {
+				result = append(result, "$"+sourceVarName)
 				continue
 			}
 		}

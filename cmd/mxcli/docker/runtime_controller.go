@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 )
 
 // RuntimeController drives the Mendix runtime admin (M2EE) API for the local dev
@@ -29,6 +30,39 @@ type RuntimeController struct {
 	// Stdout receives a non-fatal warning if the log subscriber cannot be
 	// attached (the app is already up at that point). nil is silent.
 	Stdout io.Writer
+	// StartTimeout bounds the start and execute_ddl_commands actions, which run
+	// the after-startup microflow and the schema update. Zero falls back to
+	// $MXCLI_START_TIMEOUT, then 15m (see runtimeStartTimeout). Every other
+	// admin action keeps the connection's own Timeout.
+	StartTimeout time.Duration
+}
+
+// defaultStartTimeout bounds one start (or schema update) when nothing
+// overrides it. It was the admin connection's 150 s, which an app's
+// after-startup microflow outran on every start — and mxcli then shut the
+// runtime down mid-startup (mendixlabs/mxcli#1818). A start that fails reports
+// its failure in the response; this only has to outlast a slow successful one.
+const defaultStartTimeout = 15 * time.Minute
+
+// startTimeoutEnv overrides defaultStartTimeout. The --start-timeout flag of
+// `run --local` wins over it.
+const startTimeoutEnv = "MXCLI_START_TIMEOUT"
+
+func runtimeStartTimeout(explicit time.Duration) time.Duration {
+	return durationSetting(explicit, startTimeoutEnv, defaultStartTimeout)
+}
+
+// callStartPhase runs a start-phase admin action under the start timeout, and
+// says how to raise it when it runs out.
+func (c *RuntimeController) callStartPhase(action string) (*M2EEResponse, error) {
+	opts := c.opts
+	opts.Timeout = runtimeStartTimeout(c.StartTimeout)
+	resp, err := CallM2EE(opts, action, nil)
+	if err != nil && isAdminTimeout(err) {
+		return nil, fmt.Errorf("%w (the runtime was still starting -- an after-startup microflow or a schema "+
+			"update can take longer; raise the limit with --start-timeout or $%s)", err, startTimeoutEnv)
+	}
+	return resp, err
 }
 
 // logSubscriberName identifies the file log subscriber run --local attaches. A
@@ -90,13 +124,13 @@ func (c *RuntimeController) ReloadModel() error {
 // database: start -> if the runtime reports the schema must change ->
 // execute_ddl_commands -> start. Returns the final start response.
 func (c *RuntimeController) Start() (*M2EEResponse, error) {
-	resp, err := CallM2EE(c.opts, "start", nil)
+	resp, err := c.callStartPhase("start")
 	if err != nil {
 		return nil, err
 	}
 	schemaAttempted := false
 	if needsDBUpdate(resp) {
-		ddl, err := CallM2EE(c.opts, "execute_ddl_commands", nil)
+		ddl, err := c.callStartPhase("execute_ddl_commands")
 		if err != nil {
 			return nil, err
 		}
@@ -104,7 +138,7 @@ func (c *RuntimeController) Start() (*M2EEResponse, error) {
 			return nil, fmt.Errorf("execute_ddl_commands failed: %s", msg)
 		}
 		schemaAttempted = true
-		resp, err = CallM2EE(c.opts, "start", nil)
+		resp, err = c.callStartPhase("start")
 		if err != nil {
 			return nil, err
 		}

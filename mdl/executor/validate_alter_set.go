@@ -45,8 +45,10 @@ import (
 // original, which is the one thing that is cheap to guarantee.
 
 // pageProbe is the optional capability the shared BSON page mutator offers: a
-// discardable copy to dry-run an operation against, and the property names the
-// stored widget declares.
+// discardable copy to dry-run an operation against, the property names the
+// stored widget declares, and what the stored widget IS — its $Type and, for a
+// pluggable widget, its widget id. The last is what lets ALTER STYLING's check
+// judge a design property against the widget's own type (ako/mxcli#613).
 //
 // It is an assertion rather than an addition to backend.PageMutator on purpose.
 // The MCP mutator has neither — and no pluggable path at all — so asserting is
@@ -56,6 +58,7 @@ type pageProbe interface {
 	Probe() (backend.PageMutator, error)
 	ResolvesTarget(widgetRef, columnRef string) bool
 	WidgetPropertyKeys(widgetRef, columnRef string) []string
+	widgetStorageTyper
 }
 
 // validateAlterSetProperties dry-runs every ALTER … SET against the stored
@@ -252,11 +255,10 @@ func checkGalleryClickSet(ctx *ExecContext, p pageProbe, label string, op *ast.S
 // a build later. Only for the stored widget types whose key that is
 // (pages.ImageReferenceProperty), so a pluggable widget's `image` is untouched.
 func setImageRefErrors(ctx *ExecContext, p pageProbe, target ast.WidgetRef, name string, value any, sc *scriptContext) []string {
-	typer, ok := p.(widgetStorageTyper)
-	if !ok || target.Widget == "" || columnRefOf(target) != "" {
+	if p == nil || target.Widget == "" || columnRefOf(target) != "" {
 		return nil
 	}
-	bsonType, _ := typer.WidgetStorageType(target.Widget)
+	bsonType, _ := p.WidgetStorageType(target.Widget)
 	key := pages.ImageReferenceProperty(bsonType)
 	img, isString := value.(string)
 	if key == "" || !strings.EqualFold(key, name) || !isString || strings.TrimSpace(img) == "" {

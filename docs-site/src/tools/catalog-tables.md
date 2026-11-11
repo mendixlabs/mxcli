@@ -280,6 +280,29 @@ ORDER BY Name;
 Page **templates** are not pages and are not in this table — see
 `CATALOG.PAGE_TEMPLATES`.
 
+### CATALOG.SNIPPETS
+
+Snippets (`Forms$Snippet`).
+
+| Column | Description |
+|--------|-------------|
+| `Id` | Unique identifier |
+| `Name` | Snippet name |
+| `QualifiedName` | Full qualified name |
+| `ModuleName` | Module containing the snippet |
+| `Folder` | Folder path within the module |
+| `Description` | Documentation text |
+| `ParameterCount` | Number of snippet parameters |
+| `WidgetCount` | Number of widgets (full build only; 0 otherwise) |
+| `Excluded` | 1 when the snippet is excluded from the project |
+
+```sql
+-- UI documents excluded from the project, for cleanup
+SELECT 'PAGE' AS Kind, QualifiedName FROM CATALOG.PAGES WHERE Excluded
+UNION ALL SELECT 'SNIPPET', QualifiedName FROM CATALOG.SNIPPETS WHERE Excluded
+UNION ALL SELECT 'LAYOUT', QualifiedName FROM CATALOG.LAYOUTS WHERE Excluded;
+```
+
 ### CATALOG.WIDGETS
 
 One row per widget **instance** on a page or snippet. Full build only
@@ -348,6 +371,7 @@ Atlas_Core.
 | `LayoutType` | `Responsive`, `Phone`, `Tablet`, `ModalPopup` (web); `Default`, `Popup` (native) |
 | `Platform` | `Web` or `Native` — the platform every page on this layout renders on. React-client errors such as CE0582 apply to `Web` pages only |
 | `Description` | Documentation text |
+| `Excluded` | 1 when the layout is excluded from the project |
 | `Class`, `Style`, `DynamicClasses` | The layout's own Appearance (full build only). Its widgets are in `CATALOG.WIDGETS` with `ContainerType = 'LAYOUT'` |
 
 ```sql
@@ -514,16 +538,23 @@ The Agent Editor's documents, with the settings their JSON contents hold
 document does not store, as an older Agent Editor does not, is `NULL` rather
 than `0`, so a query can tell "off" from "never set".
 
+**Absent is `NULL`.** Every reference column (`Model`, `Entity`, `Document`,
+`KnowledgeBase`, `KeyConstant`, `Endpoint`, `AuthenticationMicroflow`) and
+every optional number or switch is `NULL` when there is none, so "no endpoint"
+and "no selected model" are both `IS NULL`. A plain text setting (`ToolChoice`,
+`ToolType`, `UserAccessApproval`) is the stored text, `''` when the document
+stores none ([ako/mxcli#2093](https://github.com/ako/mxcli/issues/2093)).
+
 ### CATALOG.AGENTS
 
 | Column | Description |
 |--------|-------------|
 | `UsageType` | `Chat` or `Task` |
-| `Model` | The AI model document, qualified name |
+| `Model` | The AI model document, qualified name (`NULL` if none) |
 | `SelectedModel`, `SelectedModelName` | The model picked from the provider's list, by id and display name (`NULL` if none) |
-| `ToolChoice`, `MaxTokens`, `Temperature`, `TopP` | Generation settings, `NULL` or empty when not set |
+| `ToolChoice`, `MaxTokens`, `Temperature`, `TopP` | Generation settings: `MaxTokens`, `Temperature` and `TopP` are `NULL` when not set, `ToolChoice` is `''` |
 | `EnableBackendStreaming`, `EnableUIStreaming` | `1`, `0`, or `NULL` when the document does not store the switch |
-| `Entity` | The context entity, qualified name |
+| `Entity` | The context entity, qualified name (`NULL` if none) |
 | `Variables` | The prompt variable keys, comma-separated |
 | `ToolCount`, `KnowledgeBaseCount`, `MCPServiceCount` | Entries in the agent's tool lists. `ToolCount` excludes MCP services |
 
@@ -564,7 +595,7 @@ One row per entry of an agent's knowledge base tools list: `Agent`, `Name`,
 |-------|-------------------------------|
 | `CATALOG.AI_MODELS` | `Provider`, `ModelType`, `DisplayName`, `KeyConstant` |
 | `CATALOG.KNOWLEDGE_BASES` | `Provider`, `KeyConstant` |
-| `CATALOG.CONSUMED_MCP_SERVICES` | `ProtocolVersion`, `Version`, `ConnectionTimeoutSeconds`, `Endpoint` (the String constant holding the server URL, empty when none: the service connects nowhere), `AuthenticationMicroflow` |
+| `CATALOG.CONSUMED_MCP_SERVICES` | `ProtocolVersion`, `Version`, `ConnectionTimeoutSeconds`, `Endpoint` (the String constant holding the server URL, `NULL` when none: the service connects nowhere), `AuthenticationMicroflow` |
 | `CATALOG.PUBLISHED_MCP_SERVICES` | `ServerName`, `EndpointPath`, `Version`, `ProtocolVersion`, `AuthenticationEnabled`, `AuthenticationMicroflow`, `ToolCount` |
 
 What an agent references (its tools, model, knowledge bases and context entity),

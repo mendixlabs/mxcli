@@ -119,3 +119,51 @@ func parameterAttributeMDL(name, attrQN string) string {
 func isParameterAttributeText(text string) bool {
 	return ast.IsParameterAttributeText(text)
 }
+
+// rootedAssociationPath splits `$Root/Assoc/…/Attr` — an association path read
+// from a named object, Mendix's own expression spelling — into the root name
+// and the context-relative path. At least one association hop is required:
+// a direct attribute of a named object is spelled `$Root.Attr`. $currentObject
+// is not a root; its path is the context-relative one.
+//
+// Studio Pro stores this as an AttributeRef with an IndirectEntityRef of steps
+// beside a SourceVariable naming the object, e.g. a snippet parameter read
+// outside every data container (TestApp WorkflowCommons.Snip_Workflow_Header,
+// ako/mxcli#833).
+func rootedAssociationPath(s string) (root, path string, ok bool) {
+	after, isVar := strings.CutPrefix(strings.TrimSpace(s), "$")
+	if !isVar {
+		return "", "", false
+	}
+	root, path, ok = strings.Cut(after, "/")
+	if !ok || root == "" || !strings.Contains(path, "/") || strings.EqualFold(root, "currentObject") ||
+		strings.ContainsAny(root, ". ") || strings.ContainsAny(path, " ()=") {
+		return "", "", false
+	}
+	return root, path, true
+}
+
+// rootedAttributeValue reads `Attribute: $Root/Assoc/Attr`, which the grammar
+// parses as a data-source expression rather than an attribute path, back into
+// its root and path.
+func rootedAttributeValue(raw any) (root, path string, ok bool) {
+	ds, isDS := raw.(*ast.DataSourceV3)
+	if !isDS || ds.ContextVariable == "" || len(ds.Args) > 0 || ds.Where != "" || len(ds.OrderBy) > 0 {
+		return "", "", false
+	}
+	return rootedAssociationPath("$" + ds.ContextVariable + "/" + ds.Reference)
+}
+
+// inputAttributeText is an input widget's `Attribute:` as the text the input
+// builders resolve: the attribute path as written, or `$Root/Assoc/Attr` for a
+// path read from a named object (ako/mxcli#833).
+func inputAttributeText(w *ast.WidgetV3) string {
+	if attr := w.GetAttribute(); attr != "" {
+		return attr
+	}
+	raw, _ := lookupPropCI(w, "Attribute")
+	if root, path, ok := rootedAttributeValue(raw); ok {
+		return "$" + root + "/" + path
+	}
+	return ""
+}

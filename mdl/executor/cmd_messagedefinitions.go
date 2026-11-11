@@ -33,8 +33,8 @@ func execCreateMessageDefinitionCollection(ctx *ExecContext, s *ast.CreateMessag
 	if !ctx.ConnectedForWrite() {
 		return mdlerrors.NewNotConnectedWrite()
 	}
-	if projectStoresMessageDocuments(ctx) {
-		return messageCollectionsRemovedError(ctx, "create message definition collection")
+	if err := checkVersionGates(ctx, s); err != nil {
+		return err
 	}
 	existing := findMessageCollection(ctx, s.Name.Module, s.Name.Name)
 	if existing != nil && !s.CreateOrModify {
@@ -448,8 +448,8 @@ func execDropMessageDefinitionCollection(ctx *ExecContext, s *ast.DropMessageDef
 	if !ctx.ConnectedForWrite() {
 		return mdlerrors.NewNotConnectedWrite()
 	}
-	if projectStoresMessageDocuments(ctx) {
-		return messageCollectionsRemovedError(ctx, "drop message definition collection")
+	if err := checkVersionGates(ctx, s); err != nil {
+		return err
 	}
 	c := findMessageCollection(ctx, s.Name.Module, s.Name.Name)
 	if c == nil {
@@ -695,8 +695,8 @@ func execAlterMessageDefinitionCollection(ctx *ExecContext, s *ast.AlterMessageD
 	if !ctx.ConnectedForWrite() {
 		return mdlerrors.NewNotConnectedWrite()
 	}
-	if projectStoresMessageDocuments(ctx) {
-		return messageCollectionsRemovedError(ctx, "alter message definition collection")
+	if err := checkVersionGates(ctx, s); err != nil {
+		return err
 	}
 	c := findMessageCollection(ctx, s.Name.Module, s.Name.Name)
 	if c == nil {

@@ -530,7 +530,7 @@ password in the model. `--screenshot-user` and `mxcli playwright check` do this
 for you — a rejected sign-in reads the log and says so instead of quietly
 screenshotting or checking the login page.
 
-Sessions are held until they expire; restarting `run --local` clears them all.
+The cap is 6; `mxcli run clear-sessions -p app.mpr` frees them all at once, no restart.
 A script that drives the app through a browser should **sign out at the end**,
 otherwise each run leaks a slot and the fifth or sixth run is the one that fails —
 which makes it look like a change you just made broke authentication.

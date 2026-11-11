@@ -170,3 +170,48 @@ func TestCheckVersionGates_ViewQueryWithoutCommentPasses(t *testing.T) {
 		t.Errorf("a view query without a comment was gated on 10.24.25: %+v", vs)
 	}
 }
+
+// ako/mxcli#2139: Mendix 11.15 removed message definition collections, and exec
+// refused every collection statement on an 11.15+ project — but only inside the
+// handler, so `check -p` passed the script ("Check passed!") that exec then
+// failed with "Mendix 11.15 removed message definition collections". The
+// refusal is a CEILING rather than a floor, and it is reported by the same pass
+// as the floors, with exec's own text and hint.
+func TestCheckVersionGates_MessageCollectionsRemovedFrom1115(t *testing.T) {
+	name := ast.QualifiedName{Module: "Shop", Name: "ApiMessages"}
+	cases := []struct {
+		stmt ast.Statement
+		want string
+	}{
+		{&ast.CreateMessageDefinitionCollectionStmt{Name: name}, "create message definition collection"},
+		{&ast.CreateMessageDefinitionCollectionStmt{Name: name, CreateOrModify: true}, "create message definition collection"},
+		{&ast.AlterMessageDefinitionCollectionStmt{Name: name, Op: "DROP", Target: "TicketIn"}, "alter message definition collection"},
+		{&ast.DropMessageDefinitionCollectionStmt{Name: name}, "drop message definition collection"},
+		{&ast.DescribeStmt{ObjectType: ast.DescribeMessageDefinitionCollection, Name: name}, "describe message definition collection"},
+	}
+	for _, c := range cases {
+		t.Run(c.want, func(t *testing.T) {
+			prog := &ast.Program{Statements: []ast.Statement{&ast.CreateModuleStmt{Name: "Shop"}, c.stmt}}
+			vs := versionGateViolations(versionCtx(t, 11, 16, 0), prog)
+			if len(vs) != 1 {
+				t.Fatalf("want one MDL-VERSION01 on 11.16.0, got %d: %+v", len(vs), vs)
+			}
+			v := vs[0]
+			if v.RuleID != "MDL-VERSION01" || !strings.HasPrefix(v.Message, "statement 2: ") ||
+				!strings.Contains(v.Message, c.want) ||
+				!strings.Contains(v.Message, "Mendix 11.15 removed message definition collections") ||
+				!strings.Contains(v.Suggestion, "create message definition Module.Name for Module.Entity") {
+				t.Errorf("violation = %+v, want statement 2 refusing %q with the document-form hint", v, c.want)
+			}
+			// exec's refusal is the same text.
+			if err := checkVersionGates(versionCtx(t, 11, 16, 0), c.stmt); err == nil ||
+				!strings.Contains(v.Message, strings.SplitN(err.Error(), "\n", 2)[0]) {
+				t.Errorf("exec's refusal %v differs from check's %q", err, v.Message)
+			}
+			// Control: 11.14 still stores collections.
+			if vs := versionGateViolations(versionCtx(t, 11, 14, 0), prog); len(vs) != 0 {
+				t.Errorf("control: a collection statement was refused on 11.14: %+v", vs)
+			}
+		})
+	}
+}

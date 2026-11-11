@@ -2099,13 +2099,17 @@ type parameterMappingTarget interface {
 //
 // Kind "widget" is a widget's selection: the PageVariable names the widget and
 // nothing else, as on all 13 such mappings in TestApp's WorkflowCommons
-// (ako/mxcli#1560). It used to fall to the page-parameter slot.
-func bindParameterMappingValue(m parameterMappingTarget, variable, kind, expression string) {
+// (ako/mxcli#1560). It used to fall to the page-parameter slot. A data view
+// showing a page or snippet parameter names that parameter beside the widget
+// (widgetParam, widgetParamKind "" or "snippet"): Widget alone is CE0115 there
+// (ako/mxcli#2095), while a data view with no parameter behind it keeps Widget
+// alone, which passes.
+func bindParameterMappingValue(m parameterMappingTarget, variable, kind, expression, widgetParam, widgetParamKind string) {
 	if variable != "" && kind != "" {
 		name := strings.TrimPrefix(variable, "$")
 		switch kind {
 		case "widget":
-			m.SetVariable(pageVariableToGen(name, "", ""))
+			m.SetVariable(pageVariableToGen(name, widgetParam, widgetParamKind))
 		case "parameter":
 			// sourceVariableToGen spells the page-parameter slot as the empty kind.
 			m.SetVariable(sourceVariableToGen(name, ""))
@@ -2154,7 +2158,7 @@ func microflowSettingsToGen(microflowName string, mappings []*pages.MicroflowPar
 		assignID(gm)
 		// Parameter is a BY_NAME reference: <MicroflowQName>.<ParameterName>.
 		gm.SetParameterQualifiedName(microflowName + "." + pm.ParameterName)
-		bindParameterMappingValue(gm, pm.Variable, pm.VariableKind, pm.Expression)
+		bindParameterMappingValue(gm, pm.Variable, pm.VariableKind, pm.Expression, pm.WidgetParameter, pm.WidgetParameterKind)
 		s.AddParameterMappings(gm)
 	}
 	for _, om := range outputs {
@@ -2505,7 +2509,7 @@ func clientActionToGen(a pages.ClientAction) (element.Element, error) {
 			assignID(m)
 			// Parameter is a BY_NAME reference: Nanoflow.ParamName.
 			m.SetParameterQualifiedName(x.NanoflowName + "." + pm.ParameterName)
-			bindParameterMappingValue(m, pm.Variable, pm.VariableKind, pm.Expression)
+			bindParameterMappingValue(m, pm.Variable, pm.VariableKind, pm.Expression, pm.WidgetParameter, pm.WidgetParameterKind)
 			g.AddParameterMappings(m)
 		}
 		for _, om := range x.OutputMappings {

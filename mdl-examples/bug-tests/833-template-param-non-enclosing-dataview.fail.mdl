@@ -1,0 +1,15 @@
+mdl 1;
+-- ako/mxcli#833: `{1} = $dv1.Name` naming a data view that does not enclose the
+-- widget passed check and exec, was written as SourceVariable { Widget: dv1 },
+-- and mx check reported
+--   [CE7001] "Widget should be placed inside Data view 'dv1' to use it as a
+--   source widget." at Text 't2'
+-- check now refuses it (MDL-WIDGET34).
+create module BugTest833d;
+create persistent entity BugTest833d.Item (Name: String(50));
+create page BugTest833d.P (Title: 'P', Layout: Atlas_Core.Atlas_Default, Params: ($Item: BugTest833d.Item)) {
+  dataview dv1 (DataSource: $Item) { dynamictext t1 (Content: 'a') }
+  dataview dv2 (DataSource: $Item) {
+    dynamictext t2 (Content: '{1}', ContentParams: ({1} = $dv1.Name))
+  }
+};
