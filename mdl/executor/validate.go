@@ -113,6 +113,10 @@ type scriptContext struct {
 	// ordinarily one script.
 	pageParams     map[string][]string // Module.Page (lower-cased) -> parameter entities
 	pageParamNames map[string][]string // Module.Page (lower-cased) -> parameter names, for show page arguments
+	// pageParamDecls keeps a script-declared page's parameters whole, for the
+	// menu item CE1571 check, which needs to know which are optional
+	// (ako/mxcli#2098).
+	pageParamDecls map[string][]ast.PageParameter
 	// pageParamEdits is each page's add/drop parameter operations from alter
 	// page statements, in script order, applied over pageParamNames or the
 	// stored list (ako/mxcli#1940).
@@ -189,6 +193,7 @@ func newScriptContext() *scriptContext {
 
 		pageParams:            make(map[string][]string),
 		pageParamNames:        make(map[string][]string),
+		pageParamDecls:        make(map[string][]ast.PageParameter),
 		pageParamEdits:        make(map[string][]ast.AlterPageOperation),
 		indirectDocs:          make(map[string]bool),
 		renamedModules:        make(map[string]bool),
@@ -365,6 +370,7 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 			sc.pages[s.Name.String()] = true
 			sc.recordPageParams(s.Name.String(), s.Parameters)
 			sc.recordPageParamNames(s.Name.String(), s.Parameters)
+			sc.pageParamDecls[strings.ToLower(s.Name.String())] = s.Parameters
 		}
 	case *ast.CreateSnippetStmtV3:
 		if s.Name.Module != "" {
@@ -547,6 +553,9 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// unchecked, so a typo was CE1613 at build time, after the whole menu had
 	// been rewritten.
 	errors = append(errors, validateNavigationTargets(ctx, prog, sc)...)
+	// CE1571 on a menu item: a menu has no context object, so a flow or page
+	// parameter nothing fills is a build error (ako/mxcli#2098).
+	errors = append(errors, validateMenuItemArguments(ctx, prog, sc)...)
 	// Resolve what a GRANT / REVOKE, a user role and a demo user name: the
 	// entity, document or member, and the module and user roles. exec refuses
 	// the grants after the statements before them are written, and writes the
