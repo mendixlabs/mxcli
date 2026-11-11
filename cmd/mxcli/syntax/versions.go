@@ -31,7 +31,11 @@ func resolveVersions() {
 				if !found {
 					continue
 				}
-				f.Requires = append(f.Requires, Requirement{Feature: key, Since: e.MinVersion.String(), MDL: e.MDL})
+				r := Requirement{Feature: key, Since: e.MinVersion.String(), MDL: e.MDL}
+				if e.MaxVersion != nil {
+					r.Until = e.MaxVersion.String()
+				}
+				f.Requires = append(f.Requires, r)
 				if primary == nil {
 					v := e.MinVersion
 					primary = &v

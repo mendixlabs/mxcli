@@ -726,20 +726,45 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 	Register(SyntaxFeature{
 		Path:     "message-definition",
 		Features: []string{"integration/message_definition_collection", "integration/message_definition_document"},
-		Summary:  "Message definition collections — a mapping source built from the domain model",
+		Summary:  "Message definitions — a mapping source built from the domain model",
 		Keywords: []string{
 			"message definition", "message definition collection", "create message definition",
 			"exposed entity", "exposed attribute", "exposed association",
 		},
-		Syntax: "LIST MESSAGE DEFINITION COLLECTIONS [IN Module];\nDESCRIBE MESSAGE DEFINITION COLLECTION Module.Name;\nCREATE [OR MODIFY] MESSAGE DEFINITION COLLECTION Module.Name [FOLDER 'path']\n{\n  DEFINITION Name FOR Module.Entity [AS 'Exposed'] {\n    AttributeName [AS 'Exposed'] [EXAMPLE 'text'],\n    Module.Assoc/Module.TargetEntity [AS 'Exposed'] { ... }\n  }\n};\nDROP MESSAGE DEFINITION COLLECTION Module.Name;\n\n" +
-			"ALTER MESSAGE DEFINITION COLLECTION Module.Name\n" +
-			"  ADD DEFINITION [IF NOT EXISTS] Name FOR Module.Entity [AS 'X'] { ... }\n" +
-			"  | DROP DEFINITION [IF EXISTS] Name\n" +
-			"  | RENAME DEFINITION Old TO New;\n\n" +
-			"ALTER MESSAGE DEFINITION Module.Collection.Definition\n" +
+		Syntax: "-- Mendix 11.15+: each message definition is its own document.\n" +
+			"LIST MESSAGE DEFINITIONS [IN Module];\n" +
+			"DESCRIBE MESSAGE DEFINITION Module.Name;\n" +
+			"CREATE [OR MODIFY] MESSAGE DEFINITION Module.Name [FOLDER 'path']\n" +
+			"  FOR Module.Entity [AS 'Exposed'] {\n" +
+			"    AttributeName [AS 'Exposed'] [EXAMPLE 'text'],\n" +
+			"    Module.Assoc/Module.TargetEntity [AS 'Exposed'] { ... }\n" +
+			"  };\n" +
+			"DROP MESSAGE DEFINITION [IF EXISTS] Module.Name;\n\n" +
+			"ALTER MESSAGE DEFINITION Module.Name\n" +
 			"  ADD MEMBER [IF NOT EXISTS] <member> [IN path]\n" +
 			"  | DROP MEMBER [IF EXISTS] Name [IN path]\n" +
 			"  | SET MEMBER Name [IN path] AS 'Exposed';\n\n" +
+			"FOLDER goes after the name, before FOR, as in every document statement.\n" +
+			"A mapping names the definition in two parts: WITH MESSAGE DEFINITION\n" +
+			"Module.Name. EXAMPLE sets an element's sample text; a published REST\n" +
+			"operation whose import mapping uses the definition shows it in its OpenAPI\n" +
+			"request schema.\n\n" +
+			"-- Mendix 11.14 and earlier: definitions are entries of a collection.\n" +
+			"-- Refused on 11.15+ (Studio Pro's converter turns a collection into a\n" +
+			"-- folder of that name holding one document per definition).\n" +
+			"LIST MESSAGE DEFINITION COLLECTIONS [IN Module];\n" +
+			"DESCRIBE MESSAGE DEFINITION COLLECTION Module.Name;\n" +
+			"CREATE [OR MODIFY] MESSAGE DEFINITION COLLECTION Module.Name [FOLDER 'path']\n" +
+			"{\n  DEFINITION Name FOR Module.Entity [AS 'Exposed'] { ...members as above... }\n};\n" +
+			"DROP MESSAGE DEFINITION COLLECTION Module.Name;\n" +
+			"ALTER MESSAGE DEFINITION COLLECTION Module.Name\n" +
+			"  ADD DEFINITION [IF NOT EXISTS] Name FOR Module.Entity [AS 'X'] { ... }\n" +
+			"  | DROP DEFINITION [IF EXISTS] Name\n" +
+			"  | RENAME DEFINITION Old TO New;\n" +
+			"ALTER MESSAGE DEFINITION Module.Collection.Definition <member op as above>;\n" +
+			"A mapping names a collection's definition in three parts\n" +
+			"(Module.Collection.Definition); on a converted 11.15+ project that\n" +
+			"reference resolves to the document in the folder named after the collection.\n\n" +
 			"A message definition is a SELECTION OVER THE DOMAIN MODEL — every element\n" +
 			"names an entity, an attribute or an association — which is why it is\n" +
 			"authorable where an XML schema or a WSDL is not. It is the source for 74 of\n" +
@@ -758,7 +783,8 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 			"exposed name — it is not a model rename. Authoring is modelsdk-only.\n\n" +
 			"Definitions and member trees are children, so they are in { } (R2); the\n" +
 			"parenthesised form is the deprecated spelling MDL-DEPR073.",
-		Example: "mdl 1;\nCREATE MESSAGE DEFINITION COLLECTION Sales.MD_Order\n{\n  DEFINITION OrderMessage FOR Sales.Order AS 'Orders' {\n    OrderId,\n    Sales.OrderLine_Order/Sales.OrderLine AS 'Lines' { Sku, Quantity },\n    Sales.Order_Customer/Sales.Customer { FirstName }\n  }\n};\n\nALTER MESSAGE DEFINITION Sales.MD_Order.OrderMessage ADD MEMBER LastName IN Customer;\n\nCREATE IMPORT MAPPING Sales.IMM_Order\n  WITH MESSAGE DEFINITION Sales.MD_Order.OrderMessage\n{ create Sales.Order { OrderId = OrderId } };",
+		Example: "mdl 1;\n-- Mendix 11.15+\nCREATE OR MODIFY MESSAGE DEFINITION Sales.OrderMessage\n  FOLDER 'Messages'\n  FOR Sales.Order AS 'Orders' {\n    OrderId EXAMPLE 'ORD-1001',\n    Sales.OrderLine_Order/Sales.OrderLine AS 'Lines' { Sku, Quantity },\n    Sales.Order_Customer/Sales.Customer { FirstName }\n  };\n\nALTER MESSAGE DEFINITION Sales.OrderMessage ADD MEMBER LastName IN Customer;\n\nCREATE IMPORT MAPPING Sales.IMM_Order\n  WITH MESSAGE DEFINITION Sales.OrderMessage\n{ create Sales.Order { OrderId = OrderId } };\n\n" +
+			"mdl 1;\n-- Mendix 11.14 and earlier\nCREATE MESSAGE DEFINITION COLLECTION Sales.MD_Order\n{\n  DEFINITION OrderMessage FOR Sales.Order AS 'Orders' {\n    OrderId,\n    Sales.OrderLine_Order/Sales.OrderLine AS 'Lines' { Sku, Quantity }\n  }\n};\n\nCREATE IMPORT MAPPING Sales.IMM_Order\n  WITH MESSAGE DEFINITION Sales.MD_Order.OrderMessage\n{ create Sales.Order { OrderId = OrderId } };",
 	})
 
 	Register(SyntaxFeature{
