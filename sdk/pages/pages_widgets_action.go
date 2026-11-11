@@ -229,6 +229,9 @@ type PageClientAction struct {
 	PageName          string                        `json:"pageName,omitempty"` // Qualified name for by-name reference
 	PageSettings      *PageSettings                 `json:"pageSettings,omitempty"`
 	ParameterMappings []*PageClientParameterMapping `json:"parameterMappings,omitempty"`
+	// NumberOfPagesToClose is Forms$FormAction.NumberOfPagesToClose2: how many
+	// pages to close as the page opens, "" for none (ako/mxcli#2106).
+	NumberOfPagesToClose string `json:"numberOfPagesToClose,omitempty"`
 }
 
 func (PageClientAction) isClientAction() {}

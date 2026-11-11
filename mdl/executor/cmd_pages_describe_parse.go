@@ -470,6 +470,9 @@ func parseRawWidget(ctx *ExecContext, w map[string]any, parentEntityContext ...s
 
 	case "Forms$RadioButtons", "Pages$RadioButtons", "Forms$RadioButtonGroup", "Pages$RadioButtonGroup":
 		widget.Type = "Forms$RadioButtons" // Normalize type
+		if h, ok := w["RenderHorizontal"].(bool); ok && !h {
+			widget.RenderVertical = true // ako/mxcli#2106
+		}
 		widget.Caption = extractLabelText(ctx, w)
 		widget.Content = extractInputAttribute(ctx, w)
 		widget.Editable = extractEditable(ctx, w)
@@ -484,6 +487,7 @@ func parseRawWidget(ctx *ExecContext, w map[string]any, parentEntityContext ...s
 		widget.Editable = extractEditable(ctx, w)
 		widget.ReadOnlyStyle = extractReadOnlyStyle(ctx, w)
 		widget.ShowLabel = extractShowLabel(ctx, w)
+		widget.LabelPosition, _ = w["LabelPosition"].(string) // ako/mxcli#2106
 		widget.OnChange = extractOnChangeAction(ctx, w)
 		widget.OnEnter, widget.OnLeave = extractFocusEventActions(ctx, w)
 		return []rawWidget{widget}
