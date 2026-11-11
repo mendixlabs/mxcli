@@ -1345,10 +1345,20 @@ func extractExplicitProperties(ctx *ExecContext, w map[string]any, enclosingEnti
 		if attrRef, ok := value["AttributeRef"].(map[string]any); ok && attrRef != nil {
 			if attr := extractString(attrRef["Attribute"]); attr != "" {
 				described := describeAttr(ctx, attr)
-				if param := parameterSourceName(value["SourceVariable"]); param != "" && attrRef["EntityRef"] == nil {
-					// Read from a page or snippet parameter: `$Param.Attr`. The
-					// qualified name re-executes without the SourceVariable —
-					// CE7247 (mendixlabs/mxcli#1591).
+				if root := namedObjectSourceName(value["SourceVariable"]); root != "" && attrRef["EntityRef"] != nil {
+					// The same object, with association steps: `$Root/Assoc/Attr`
+					// (ako/mxcli#833), as FactoryManagement's
+					// ConversationalUI.Span_TextGeneration_SlideIn stores it
+					// (ako/mxcli#2107).
+					if path := columnAttributeFromRef(ctx, attrRef); strings.Contains(path, "/") {
+						described = "$" + root + "/" + path
+					}
+				} else if param := namedObjectSourceName(value["SourceVariable"]); param != "" && attrRef["EntityRef"] == nil {
+					// Read from a page or snippet parameter, `$Param.Attr`, or an
+					// enclosing data view, `$dataView1.Attr`. The qualified name
+					// re-executes without the SourceVariable and binds against
+					// the nearest container — CE7247 (mendixlabs/mxcli#1591,
+					// ako/mxcli#2107).
 					described = parameterAttributeMDL(param, attr)
 				} else if schemas[typePointerID].DataSourceProperty == "" && strings.Contains(enclosing, ".") &&
 					!strings.EqualFold(attributeEntity(attr), enclosing) {

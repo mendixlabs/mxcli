@@ -306,8 +306,10 @@ func validatePageVariableBindings(widgets []*ast.WidgetV3, variables []ast.PageV
 
 // validateNamedObjectBindings is MDL-WIDGET34 for `$name.Attr` on a whole page
 // or snippet, where the parameters are known: a name that is neither one of
-// them nor — on a built-in input — an enclosing data view names nothing, and
-// exec refuses it. `Visible: $name.Attr in (…)` reads a parameter only.
+// them nor — on a built-in input, or in `Visible: $name.Attr in (…)` — an
+// enclosing data view names nothing, and exec refuses it. The visibility
+// setting stores the data-view pair as an input does (FactoryManagement
+// ConversationalUI.Trace_Details, ako/mxcli#2107).
 func validateNamedObjectBindings(widgets []*ast.WidgetV3, params []string, locationPrefix string) []linter.Violation {
 	declared := make(map[string]bool, len(params))
 	for _, p := range params {
@@ -382,9 +384,9 @@ func validateNamedObjectBindings(widgets []*ast.WidgetV3, params []string, locat
 				}
 			}
 			if vw, ok := w.Properties["VisibleWhen"].(*ast.VisibleWhenV3); ok && vw != nil {
-				if name, rest, ok := namedObjectBinding(vw.Attribute); ok && (!declared[name] || strings.Contains(rest, ".")) {
-					report(fmt.Sprintf("%s `%s`: `Visible: %s in (…)` — `$%s` is not a parameter of this document, "+
-						"so the condition would read nothing", kind, w.Name, vw.Attribute, name))
+				if name, rest, ok := namedObjectBinding(vw.Attribute); ok && (!(declared[name] || dataViews[name]) || strings.Contains(rest, ".")) {
+					report(fmt.Sprintf("%s `%s`: `Visible: %s in (…)` — `$%s` is not a parameter of this document "+
+						"or a data view the widget is inside, so the condition would read nothing", kind, w.Name, vw.Attribute, name))
 				}
 			}
 			inner := dataViews

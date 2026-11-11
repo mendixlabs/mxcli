@@ -75,8 +75,12 @@ func TestValidateShowPageArguments_ControlBarPassesGridSelection(t *testing.T) {
 	}
 }
 
-// The selection is the control bar's, not the row's: a column button passing
-// its own grid's name is not the measured shape and stays refused.
+// A column button passing its own selectable grid's name passes the grid's
+// selection too: Studio Pro stores Variable {Widget: grid1} there
+// (FactoryManagement MxModelReflection.MxObjectType_Select, which builds), and
+// so does the builder now, at 0 errors on 11.16 (ako/mxcli#2109). This used to
+// be refused as an unmeasured shape. A grid without a selection still has no
+// `$grid` to pass (TestCheck_GridSelectionFromColumnContent).
 func TestValidateShowPageArguments_GridSelectionOnlyInItsControlBar(t *testing.T) {
 	src := `create page Mod.Overview (title: 'O', layout: Atlas_Core.Atlas_Default) {
   datagrid dgOrders (datasource: database from Mod.Order, selection: single) {
@@ -90,8 +94,8 @@ func TestValidateShowPageArguments_GridSelectionOnlyInItsControlBar(t *testing.T
 		t.Fatalf("parse: %v", errs)
 	}
 	s := prog.Statements[0].(*ast.CreatePageStmtV3)
-	if got := pageArgViolations(t, s.Widgets); len(got) != 1 {
-		t.Errorf("row-scoped button passing $dgOrders: %d MDL-PAGEARG01, want 1", len(got))
+	if got := pageArgViolations(t, s.Widgets); len(got) != 0 {
+		t.Errorf("row-scoped button passing its selectable grid's selection $dgOrders: %d MDL-PAGEARG01, want 0", len(got))
 	}
 }
 

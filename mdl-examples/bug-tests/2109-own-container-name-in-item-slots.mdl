@@ -1,0 +1,64 @@
+mdl 1;
+-- ============================================================================
+-- Bug ako/mxcli#2109: check refused Studio Pro's own data-container names
+-- ============================================================================
+--
+-- Symptom (before fix): describe page -> exec of four FactoryManagement pages
+-- (Mendix 11.16) was refused by check on its own output:
+--   "`actionButton1` reads `$grid1` …, but `grid1` is the data container the
+--   widget sits in directly — its name is a variable only inside a data
+--   container nested below it (CE0117)" [MDL-BUTTON02]
+--   "$grid1 cannot be stored — … an explicit one is rejected as CE0115" [MDL-PAGEARG01]
+-- The stored pages build. Measured shapes:
+--   - a button in a SELECTABLE data grid's column passing `$grid1`: Studio Pro
+--     stores Variable {Widget: grid1}, the grid's selection, as from its
+--     control bar (MxModelReflection.MxObjectType_Select);
+--   - `$dataView3` from the filter bar (control bar) of a grid inside dataView3
+--     (OIDC.OIDC_Client_NewEdit): the bar sits inside the grid, so dataView3 is
+--     an outer container there;
+--   - `$dataView2` in a combo box's option content inside dataView2
+--     (AgentCommons.Version_NewEdit): the option is the combo box's own context.
+--
+-- After fix: check accepts all three; exec writes the variable forms Studio
+-- Pro stores; mx check 0 errors on Mendix 11.16.0 for this script.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/2109-own-container-name-in-item-slots.mdl -p app.mpr
+--   mxcli docker check -p app.mpr        -- expect 0 errors
+-- ============================================================================
+
+create module BugTest2109;
+create module role BugTest2109.User;
+
+create persistent entity BugTest2109.Gate (Name: String(100));
+create persistent entity BugTest2109.Item (Name: String(100));
+
+create microflow BugTest2109.ACT_Open ($Gate: BugTest2109.Gate) returns Boolean
+begin
+  return true;
+end;
+grant execute on microflow BugTest2109.ACT_Open to BugTest2109.User;
+
+create page BugTest2109.Item_Details (Params: ($Item: BugTest2109.Item), Title: 'Item', Layout: Atlas_Core.PopupLayout) {
+  dataview dvItem (DataSource: $Item) {
+    dynamictext txtName (Content: '{1}', ContentParams: ({1} = Name))
+  }
+};
+grant view on page BugTest2109.Item_Details to BugTest2109.User;
+
+create page BugTest2109.Overview (Params: ($Gate: BugTest2109.Gate), Title: 'Overview', Layout: Atlas_Core.PopupLayout) {
+  dataview dvGate (DataSource: $Gate) {
+    datagrid dgGates (DataSource: database from BugTest2109.Gate) {
+      controlbar {
+        actionbutton btnOpen (Caption: 'Open', Action: call microflow BugTest2109.ACT_Open(Gate = $dvGate))
+      }
+      column (Attribute: Name)
+    }
+  }
+  datagrid dgItems (DataSource: database from BugTest2109.Item, Selection: Single) {
+    column (Attribute: Name, ShowContentAs: customContent) {
+      actionbutton btnView (Caption: 'View', Action: show page BugTest2109.Item_Details(Item = $dgItems))
+    }
+  }
+};
+grant view on page BugTest2109.Overview to BugTest2109.User;

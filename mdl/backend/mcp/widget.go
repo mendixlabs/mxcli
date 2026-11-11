@@ -165,6 +165,17 @@ func (w *mcpWidgetBuilder) SetAttribute(propertyKey, attributePath string) {
 	}
 }
 
+// SetAttributeWithSteps: the MCP payload's attribute has no association
+// steps, so a path over associations is reported unsupported rather than sent
+// as a direct attribute.
+func (w *mcpWidgetBuilder) SetAttributeWithSteps(propertyKey, attributePath string, steps []pages.AttributeRefStep) {
+	if len(steps) > 0 {
+		w.note("SetAttributeWithSteps(" + propertyKey + ")")
+		return
+	}
+	w.SetAttribute(propertyKey, attributePath)
+}
+
 // SetSourceVariable: the MCP widget payload has no slot for a property's
 // parameter source, so a `$Param.Attr` binding is reported unsupported rather
 // than sent as one read from the enclosing object.
