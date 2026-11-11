@@ -102,3 +102,33 @@ func TestSystemDomainModel_SystemMemberFlagsReachTheModel(t *testing.T) {
 		t.Errorf("System.UserRole stores no system members, got %+v", ur)
 	}
 }
+
+// The workflow sub-process members exist from Mendix 11.8 (measured from each
+// version's modeler assembly). TestApp (11.14.0) reads
+// System.WorkflowActivityRecord_WorkflowSubProcess/Caption, which could not
+// resolve while the System module lacked them: the binding was written as an
+// expression, mx check CE0117. Before 11.8 the names must stay absent, or a
+// check accepts what the build then refuses as CE1613.
+func TestSystemDomainModel_WorkflowSubProcessByVersion(t *testing.T) {
+	atLeast := func(major, minor int) func(int, int) bool {
+		return func(ma, mi int) bool { return major > ma || major == ma && minor >= mi }
+	}
+	has := func(dm *domainmodel.DomainModel) (entity, assoc bool) {
+		for _, e := range dm.Entities {
+			entity = entity || e.Name == "WorkflowSubProcess"
+		}
+		for _, a := range dm.Associations {
+			assoc = assoc || a.Name == "WorkflowActivityRecord_WorkflowSubProcess"
+		}
+		return
+	}
+	if e, a := has(buildSystemDomainModel(atLeast(11, 14))); !e || !a {
+		t.Errorf("11.14: entity %v, association %v; want both", e, a)
+	}
+	if e, a := has(buildSystemDomainModel(atLeast(11, 8))); !e || !a {
+		t.Errorf("11.8: entity %v, association %v; want both", e, a)
+	}
+	if e, a := has(buildSystemDomainModel(atLeast(11, 7))); e || a {
+		t.Errorf("11.7: entity %v, association %v; want neither", e, a)
+	}
+}

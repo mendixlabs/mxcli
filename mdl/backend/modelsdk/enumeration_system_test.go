@@ -68,8 +68,16 @@ func TestListEnumerations_IncludesSystemModule(t *testing.T) {
 		t.Errorf("stored enumerations = %d, want 7 (the fixture's own)", stored)
 	}
 
-	if got, want := len(enums)-stored, len(meta.SystemEnumerations); got != want {
+	// The fixture is Mendix 11.6.6, so only the enumerations its System module
+	// has: System.WorkflowSubProcessState arrived in 11.8 and must not be listed.
+	if got, want := len(enums)-stored, len(meta.SystemEnumerationsIn(b.systemVersionAtLeast())); got != want {
 		t.Errorf("synthesized System enumerations = %d, want %d", got, want)
+	}
+	if findSystemEnum(enums, "WorkflowSubProcessState") != nil {
+		t.Error("System.WorkflowSubProcessState listed for an 11.6.6 project; it was introduced in 11.8")
+	}
+	if len(meta.SystemEnumerationsIn(b.systemVersionAtLeast())) >= len(meta.SystemEnumerations) {
+		t.Error("control: the version filter dropped nothing for 11.6.6")
 	}
 
 	activityType := findSystemEnum(enums, "WorkflowActivityType")
