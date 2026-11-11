@@ -28,29 +28,44 @@ import (
 // Measured on a blank 11.12.2 project; the same statement with 'Row size' =
 // 'Small' is 0 errors (ako/mxcli#509).
 //
-// # Why this resolves less than the authoring paths do
+// # Two passes: any type without the document, the widget's own type with it
 //
 // The other three statements CARRY the widget, so the validator reads its type
 // off the AST and checks the key against that type's properties.
 // AlterStylingStmt carries only a widget NAME (mdl/ast/ast_styling.go) — it
-// names a widget already stored, whose $Type lives only in the document, which
-// this pass has no backend to open.
+// names a widget already stored, whose $Type lives only in the document.
 //
-// So the question asked here is the one that IS answerable without the document:
-// does ANY widget type in the project's theme declare this key? A key no theme
-// declares anywhere cannot be right for this widget either, and the reported
-// case is exactly that. A key declared for some OTHER widget type is accepted —
-// under-reporting, never over-reporting, which is the only safe direction for a
-// check that cannot see what it is judging.
+// This pass (validateAlterStylingDesignProps) runs with no project at all —
+// `mxcli check script.mdl`, the corpus default — so it asks the question that
+// IS answerable without the document: does ANY widget type in the theme declare
+// this key? A key no type declares cannot be right for this widget either
+// (#509's reported case).
 //
-// Deliberately NOT done: mapping the stored $Type to a registry key to make this
-// precise. That would be a third resolver for one concept — mdlKeywordStorageType
-// maps MDL keyword → $Type, and an unused bsonTypeToDesignPropsKey maps $Type →
-// key — and duplicate resolvers drifting apart is the failure this area keeps
-// producing (mendixlabs/mxcli#1069's buildPropKeyMap was two copies of one
-// derivation, and one copy was the bug). The precise variant needs a widget-type
-// accessor on the pageProbe capability; it is tracked in ako/mxcli#509 and is
-// strictly additive to this.
+// The reference pass then opens the document (validateAlterStylingStoredTypes,
+// the pageProbe capability, opened as validateAlterSetProperties opens it) and
+// judges every key the first pass let through against the widget's OWN type:
+// the stored $Type → theme group mapping is the one ALTER PAGE SET's routing
+// already uses (designPropsKeyOfStored), and the group's keys come from
+// GetPropertiesForWidget, so the `Widget` group's inherited keys are included
+// rather than re-derived. No third resolver (ako/mxcli#613). That is what
+// catches a key declared for some OTHER type — `Row size`, a ListView key, on a
+// DynamicText is CE6083, and the any-type question passed it.
+//
+// It has to be the reference pass, not a project opened from this one: the
+// validators' own read-only connection (openProjectForValidation) refuses
+// OpenPageForMutation — "not connected for writing" — which a mock backend
+// does not, so only a run against a real project shows it. Splitting by key
+// (the second pass reports only keys the first accepted) is what keeps one key
+// from being reported twice.
+//
+// Where the stored type cannot be established — the widget is not stored, its
+// type has no theme group, or the script itself creates or grows the document
+// — the second pass is silent and the first pass's answer stands.
+// Under-reporting, never over-reporting, is the only safe direction for a check
+// that cannot see what it is judging.
+//
+// mdlKeywordToDesignPropsKey and bsonTypeToDesignPropsKey remain two tables;
+// this consumes the second and unifies neither (out of scope for #613).
 
 // validateAlterStylingDesignProps reports (MDL-WIDGET11) an ALTER STYLING design
 // property key that no widget type in the project's theme declares.
@@ -77,8 +92,7 @@ func validateAlterStylingDesignProps(prog *ast.Program, reg *ThemeRegistry) []li
 		if !ok {
 			continue
 		}
-		label := fmt.Sprintf("alter styling on %s %s",
-			strings.ToLower(s.ContainerType), s.ContainerName.String())
+		label := alterStylingLabel(s)
 		for _, a := range s.Assignments {
 			// CLASS / STYLE / DYNAMICCLASSES are appearance fields, not design
 			// properties — the visitor marks them, so this does not have to

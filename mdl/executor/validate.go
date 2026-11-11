@@ -594,6 +594,11 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// useless — a snippet call renders no element (mendixlabs/mxcli#1511).
 	// What the target IS lives only in the document. Warns, never blocks.
 	validateStoredSnippetCallAppearance(ctx, prog, sc)
+	// An ALTER STYLING design-property key some widget type declares, judged
+	// against the STORED widget's own type: a ListView's `Row size` on a
+	// DynamicText passed the no-project any-type check and was CE6083 at build
+	// (ako/mxcli#613). Warns, never blocks.
+	validateAlterStylingStoredTypes(ctx, prog, sc)
 	// The entity an ALTER's INSERT / REPLACE binds against is in the stored
 	// document, not the statement. Where it has none (a missing flow source, or
 	// no data container at all) a bare binding is written bare and the project
