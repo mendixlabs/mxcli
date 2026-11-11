@@ -140,6 +140,10 @@ func (pb *pageBuilder) buildPageV3(s *ast.CreatePageStmtV3) (*pages.Page, error)
 		if bsonType := pageParamBSONType(param.Type); bsonType != "" {
 			// Primitive type parameter
 			pageParam.TypeName = bsonType
+			if pb.primitiveParams == nil {
+				pb.primitiveParams = map[string]bool{}
+			}
+			pb.primitiveParams[param.Name] = true
 		} else if param.EntityType.Name != "" {
 			// Entity type parameter
 			entityID, err := pb.resolveEntity(param.EntityType)
@@ -2414,6 +2418,15 @@ func (pb *pageBuilder) resolveTemplateAttributePathFull(attrRef string, param *p
 		if pb.localVariables[after] {
 			param.SourceVariable = after
 			param.SourceVariableKind = "local"
+			return
+		}
+		// A primitive page parameter binds the same way, in the PageParameter
+		// slot. It used to fall through to the attribute path "$IpAddress",
+		// which binds nothing: mxbuild CE0402 "No value specified."
+		// (ako/mxcli#2132).
+		if pb.primitiveParams[after] {
+			param.SourceVariable = after
+			param.SourceVariableKind = ""
 			return
 		}
 	}

@@ -1,0 +1,28 @@
+mdl 1;
+-- ============================================================================
+-- Bug ako/mxcli#2132 (mendixlabs/mxcli#1813): a String page parameter in a
+-- dynamic text template is stored without a value
+-- ============================================================================
+--
+-- Symptom (before fix): check and exec pass, then mxbuild reports
+--   CE0402 "No value specified." at Text 'txtIp'
+-- The parameter was stored as AttributePath "$IpAddress", with no AttributeRef
+-- and no SourceVariable; describe printed `{1} = <unbound>`.
+--
+-- After fix: a primitive page parameter binds as a Forms$PageVariable naming it
+-- (PageParameter slot, no attribute), the way a page variable binds its
+-- LocalVariable slot. mx check 0 errors on Mendix 11.14.0; describe prints
+-- `{1} = $IpAddress` and describe -> exec reports the page unchanged.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/2132-template-param-primitive-page-parameter.mdl -p app.mpr
+--   mxcli docker check -p app.mpr        -- expect 0 errors
+-- ============================================================================
+
+create module BugTest2132;
+
+create or modify page BugTest2132.PageParam (Params: ($IpAddress: String, $Port: Integer), Layout: Atlas_Core.Atlas_Default, Title: 'Param') {
+  dynamictext txtIp (Content: 'Address {1}', ContentParams: ({1} = $IpAddress))
+  dynamictext txtPort (Content: 'Port {1}', ContentParams: ({1} = $Port))
+  actionbutton btnIp (Caption: 'Go to {1}', CaptionParams: ({1} = $IpAddress), Action: close_page)
+};

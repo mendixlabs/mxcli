@@ -106,6 +106,13 @@ type pageBuilder struct {
 	// Forms$PageVariable.LocalVariable in BSON, not as a literal Expression.
 	localVariables map[string]bool
 
+	// primitiveParams are the page's primitive-typed parameters (String,
+	// Integer, …). paramScope holds only the entity-typed ones, so without this
+	// a bare `{1} = $IpAddress` template parameter was stored as the attribute
+	// path "$IpAddress", bound nothing, and mxbuild reported CE0402 "No value
+	// specified." (ako/mxcli#2132). Snippets cannot declare one (CE0046).
+	primitiveParams map[string]bool
+
 	// isDocumentWidget reports whether a name is a widget of the document being
 	// built. A flow argument `$name` naming one passes that widget's selection,
 	// which Studio Pro binds through the PageVariable's Widget slot

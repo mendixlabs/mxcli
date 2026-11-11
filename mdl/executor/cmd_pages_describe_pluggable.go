@@ -687,6 +687,15 @@ func extractTextTemplateParameters(ctx *ExecContext, textTemplate map[string]any
 				continue
 			}
 		}
+		// A page parameter or page variable with no attribute: a primitive
+		// page parameter bound as itself (ako/mxcli#2132), which the builder
+		// writes back to the same slot from the bare `$Name`.
+		if sourceVarName != "" {
+			if srcVar, _ := pMap["SourceVariable"].(map[string]any); extractString(srcVar["Widget"]) == "" {
+				result = append(result, "$"+sourceVarName)
+				continue
+			}
+		}
 		// Parameter exists but has no binding
 		result = append(result, "<unbound>")
 	}
