@@ -166,7 +166,7 @@ func TestAgentDetails_Issue2075(t *testing.T) {
 		// The row survives undecodable Contents, with no details.
 		"Broken|∅|∅|∅|∅|∅|∅|∅|∅|∅|∅|0|0|0",
 		"GraphExplorer|Chat|GraphPilot_Explorer.LLM_GenAIResource|eu.anthropic.claude-sonnet-5||∅|∅|1|0|GraphPilot_Explorer.OnboardingHelper|EnvironmentUrl,GraphmartUri,GeneralInfo,OntologyOverview,Questions|1|0|0",
-		"RefundAgent|Task||∅|Auto|2048|0.2|∅|∅|||1|0|1",
+		"RefundAgent|Task|∅|∅|Auto|2048|0.2|∅|∅|∅||1|0|1",
 		// Control: an agent that stores no streaming switch reads NULL, not "off".
 		"WorkInstructionAgent|Task|AgenticAssistants.ClaudeSonnet46|∅||∅|∅|∅|∅|AgenticAssistants.GenericAgentInterface|Question|0|1|0",
 	)
@@ -197,10 +197,16 @@ func TestAgentDetails_Issue2075(t *testing.T) {
 			Endpoint, AuthenticationMicroflow
 		FROM consumed_mcp_services ORDER BY Name`,
 		"JiraMCP|v2025_03_26|1.0|30|Agents.JiraUrl|Agents.Jira_GetHeaders",
-		"NoEndpointMCP|v2025_03_26|1.0|30||")
+		"NoEndpointMCP|v2025_03_26|1.0|30|∅|∅")
 	assertAgentRows(t, cat, `SELECT Name, ServerName, EndpointPath, Version, ProtocolVersion, AuthenticationEnabled, AuthenticationMicroflow, ToolCount
 		FROM published_mcp_services`,
-		"Published_MCP_service|Published_MCP_service|published_mcp_service|1.0.0|v2025_03_26|0||1")
+		"Published_MCP_service|Published_MCP_service|published_mcp_service|1.0.0|v2025_03_26|0|∅|1")
+	// ako/mxcli#2093: an absent reference is NULL in every agent table, as an
+	// absent optional value already was, so "which services have no endpoint"
+	// is `IS NULL` like "which agents have no selected model".
+	assertAgentRows(t, cat, `SELECT Name FROM consumed_mcp_services WHERE Endpoint IS NULL`, "NoEndpointMCP")
+	assertAgentRows(t, cat, `SELECT Name FROM agents WHERE Model IS NULL AND SelectedModel IS NULL ORDER BY Name`,
+		"Broken", "RefundAgent")
 	assertAgentRows(t, cat, `SELECT ObjectType, QualifiedName FROM objects WHERE ObjectType = 'PUBLISHED_MCP_SERVICE'`,
 		"PUBLISHED_MCP_SERVICE|Agents.Published_MCP_service")
 }

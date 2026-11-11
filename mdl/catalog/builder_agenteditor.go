@@ -45,16 +45,22 @@ func nullBool(b *bool) any {
 	return boolToInt(*b)
 }
 
-func docRefName(r *types.DocRef) string {
-	if r == nil {
-		return ""
+// docRefName is a reference column: the referenced document's qualified name,
+// or NULL when there is none. It used to be "", beside optional values that
+// were already NULL in the same row, so "which consumed MCP services have no
+// endpoint" compared Endpoint to the empty string while "which agents have no selected model" was
+// `SelectedModel IS NULL` (ako/mxcli#2093). One rule: absent is NULL.
+func docRefName(r *types.DocRef) any {
+	if r == nil || r.QualifiedName == "" {
+		return nil
 	}
 	return r.QualifiedName
 }
 
-func constantRefName(r *types.ConstantRef) string {
-	if r == nil {
-		return ""
+// constantRefName is docRefName for a reference to a constant.
+func constantRefName(r *types.ConstantRef) any {
+	if r == nil || r.QualifiedName == "" {
+		return nil
 	}
 	return r.QualifiedName
 }
