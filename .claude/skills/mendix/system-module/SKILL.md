@@ -19,10 +19,10 @@ description: "Reference for the built-in System module — User, FileDocument, I
 | 275-332 | 3. HTTP / Web Services |
 | 333-359 | 4. Error Handling |
 | 360-383 | 7. Utility Entities |
-| 384-448 | 8. Enumerations |
-| 449-480 | 9. Inheritance Hierarchies |
-| 481-536 | 10. Common Patterns |
-| 537-539 | Source |
+| 384-451 | 8. Enumerations |
+| 452-483 | 9. Inheritance Hierarchies |
+| 484-539 | 10. Common Patterns |
+| 540-542 | Source |
 
 <!-- /skill-index -->
 # Mendix System Module Reference
@@ -439,6 +439,9 @@ refused. `describe` prints them as `--` comment lines for that reason.
 
 ### WorkflowState
 `InProgress`, `Paused`, `Completed`, `Aborted`, `Incompatible`, `Failed`
+
+### WorkflowSubProcessState
+`InProgress`, `Aborted`, `Failed`, `Completed`, `Paused`
 
 ### WorkflowUserTaskCompletionType
 `Single`, `Veto`, `Consensus`, `Majority`, `Threshold`, `Microflow`

@@ -40,8 +40,15 @@ import (
 // developer actually wrote. The cost is that `search` — which indexes captions —
 // still does not match these; that needs real caption data, not a guess.
 func BuildSystemEnumerations() []*model.Enumeration {
-	out := make([]*model.Enumeration, 0, len(SystemEnumerations))
-	for _, def := range SystemEnumerations {
+	return BuildSystemEnumerationsIn(nil)
+}
+
+// BuildSystemEnumerationsIn is BuildSystemEnumerations for one project
+// version, given as its IsAtLeast; nil means the current platform.
+func BuildSystemEnumerationsIn(atLeast func(major, minor int) bool) []*model.Enumeration {
+	defs := SystemEnumerationsIn(atLeast)
+	out := make([]*model.Enumeration, 0, len(defs))
+	for _, def := range defs {
 		e := &model.Enumeration{
 			ContainerID: model.ID(SystemModuleID),
 			// The model carries the LOCAL name; the module comes from
