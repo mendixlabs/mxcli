@@ -50,6 +50,12 @@ func (w *Writer) DeferUnitWrites() {
 	}
 }
 
+// HoldsWrites reports whether a deferred run or a simulation is open, holding
+// unit bytes that are not on disk.
+func (w *Writer) HoldsWrites() bool {
+	return w.deferred != nil || w.simulating
+}
+
 // FlushDeferredWrites ends the run: every held unit is written once, through the
 // ordinary path (reconciliation, elision, the storage-GUID guard), in the order
 // it was first written. The first error is returned; the remaining units are
