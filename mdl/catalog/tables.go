@@ -7,6 +7,10 @@ package catalog
 //
 // History:
 //
+//	46 (excluded UI documents): snippets and layouts gain Excluded, as pages
+//	    already had, and snippets.ParameterCount is the snippet's parameter
+//	    count instead of a literal 0 (mendixlabs/mxcli#1819). Without the bump
+//	    a cached catalog lacks the column and every query naming it fails.
 //	45 (agent tools and MCP endpoints): agent_tools no longer holds an
 //	    agent's MCP services, which agent_mcp_services already lists, so it
 //	    matches ToolCount; consumed_mcp_services gains Endpoint and
@@ -247,7 +251,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "45"
+const CatalogSchemaVersion = "46"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -541,6 +545,7 @@ func (c *Catalog) createTables() error {
 			Description TEXT,
 			ParameterCount INTEGER DEFAULT 0,
 			WidgetCount INTEGER DEFAULT 0,
+			Excluded BOOLEAN DEFAULT 0,
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,
@@ -573,6 +578,7 @@ func (c *Catalog) createTables() error {
 			LayoutType TEXT,
 			Platform TEXT,
 			Description TEXT,
+			Excluded BOOLEAN DEFAULT 0,
 			-- The layout's own Forms$Appearance (full build only).
 			Class TEXT,
 			Style TEXT,

@@ -280,6 +280,29 @@ ORDER BY Name;
 Page **templates** are not pages and are not in this table — see
 `CATALOG.PAGE_TEMPLATES`.
 
+### CATALOG.SNIPPETS
+
+Snippets (`Forms$Snippet`).
+
+| Column | Description |
+|--------|-------------|
+| `Id` | Unique identifier |
+| `Name` | Snippet name |
+| `QualifiedName` | Full qualified name |
+| `ModuleName` | Module containing the snippet |
+| `Folder` | Folder path within the module |
+| `Description` | Documentation text |
+| `ParameterCount` | Number of snippet parameters |
+| `WidgetCount` | Number of widgets (full build only; 0 otherwise) |
+| `Excluded` | 1 when the snippet is excluded from the project |
+
+```sql
+-- UI documents excluded from the project, for cleanup
+SELECT 'PAGE' AS Kind, QualifiedName FROM CATALOG.PAGES WHERE Excluded
+UNION ALL SELECT 'SNIPPET', QualifiedName FROM CATALOG.SNIPPETS WHERE Excluded
+UNION ALL SELECT 'LAYOUT', QualifiedName FROM CATALOG.LAYOUTS WHERE Excluded;
+```
+
 ### CATALOG.WIDGETS
 
 One row per widget **instance** on a page or snippet. Full build only
@@ -348,6 +371,7 @@ Atlas_Core.
 | `LayoutType` | `Responsive`, `Phone`, `Tablet`, `ModalPopup` (web); `Default`, `Popup` (native) |
 | `Platform` | `Web` or `Native` — the platform every page on this layout renders on. React-client errors such as CE0582 apply to `Web` pages only |
 | `Description` | Documentation text |
+| `Excluded` | 1 when the layout is excluded from the project |
 | `Class`, `Style`, `DynamicClasses` | The layout's own Appearance (full build only). Its widgets are in `CATALOG.WIDGETS` with `ContainerType = 'LAYOUT'` |
 
 ```sql
