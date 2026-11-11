@@ -527,7 +527,7 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 				e.recordDataSourceEntity(propKey, entityName)
 				if entityName != "" {
 					e.pageBuilder.entityContext = entityName
-					e.pageBuilder.argCtx = enteringDataWidget(ds, entityName).inDataWidget(w.Name)
+					e.pageBuilder.argCtx = enteringDataWidgetOf(w, ds, entityName)
 				}
 			}
 		}
@@ -1776,7 +1776,7 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 			e.recordDataSourceEntity(mapping.PropertyKey, entityName)
 			if entityName != "" {
 				e.pageBuilder.entityContext = entityName
-				e.pageBuilder.argCtx = enteringDataWidget(ds, entityName).inDataWidget(w.Name)
+				e.pageBuilder.argCtx = enteringDataWidgetOf(w, ds, entityName)
 				if w.Name != "" {
 					e.pageBuilder.paramEntityNames[w.Name] = entityName
 				}
