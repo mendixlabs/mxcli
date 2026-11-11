@@ -941,7 +941,7 @@ func cleanupCommands(st projectState, mxTestPresent bool) []string {
 	if st.createdMxTest {
 		cmds = append(cmds, "DROP MODULE "+mxTestModule)
 	} else {
-		cmds = append(cmds, "DROP MICROFLOW "+mxTestRunner)
+		cmds = append(cmds, "DROP MICROFLOW "+mxTestRunner, "DROP MICROFLOW "+errorMessageFlow)
 	}
 	return cmds
 }

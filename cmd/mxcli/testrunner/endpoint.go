@@ -31,6 +31,12 @@ const (
 	endpointStartupFlow = mxTestModule + ".RegisterEndpoint"
 	// testFlowPrefix prefixes every generated per-test microflow.
 	testFlowPrefix = mxTestModule + ".Test_"
+	// errorMessageFlow returns a raised error's message to a generated test
+	// caller, which applies entity access and so may not read it itself
+	// (CE0150, ako/mxcli#2100). It carries the generated prefix so every path
+	// that finds and removes the generated flows removes it too, and no test ID
+	// (test_N) can produce its name.
+	errorMessageFlow = testFlowPrefix + "ErrorMessage"
 )
 
 // newEndpointToken returns a fresh 256-bit token as hex.

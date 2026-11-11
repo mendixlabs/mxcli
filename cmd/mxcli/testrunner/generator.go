@@ -112,6 +112,15 @@ func GenerateTestRunner(suite *TestSuite) string {
 	// Module creation (idempotent — only if MxTest module doesn't exist)
 	b.WriteString("CREATE MODULE MxTest;\n\n")
 
+	if suiteHasFlows(suite) {
+		writeErrorMessageFlow(&b)
+		b.WriteString("\n")
+	}
+	// One microflow runs every test, so it applies entity access only if all of
+	// them allow it; see callerAppliesEntityAccess.
+	if callerAppliesEntityAccess(suite.Tests...) {
+		b.WriteString(applyEntityAccessAnnotation + "\n")
+	}
 	b.WriteString(createFlow + " MxTest.TestRunner ()\n")
 	b.WriteString("RETURNS Boolean AS $AllPassed\n")
 	b.WriteString("BEGIN\n")
@@ -224,7 +233,7 @@ func writeThrowsTestBlock(b *strings.Builder, tc TestCase, suffix string) {
 	renamedMDL := renameVariables(tc.MDL, varNames, suffix)
 
 	lines := strings.Split(renamedMDL, "\n")
-	rewritten := rewriteForThrowsTest(lines, didThrowVar, tc.Throws, tc.Version)
+	rewritten := rewriteForThrowsTest(lines, didThrowVar, suffix, tc.Throws, tc.Version)
 	writeBodyLines(b, rewritten, tc.Version)
 
 	// Check that it did throw
@@ -373,12 +382,14 @@ func renameExpect(exp Expect, names map[string]bool, suffix string) Expect {
 // with a return value (required when the microflow returns a type). Which calls
 // get one is attachOnError's decision, shared with the endpoint runner.
 func rewriteWithErrorHandling(lines []string, testID string, v langver.Version) []string {
-	return attachOnError(lines, v, []string{
-		fmt.Sprintf("  LOG ERROR NODE 'MXTEST' 'MXTEST:FAIL:%s:Exception during execution';",
-			escapeMDLString(testID)),
-		"  SET $TestFailed = true;",
-		"  SET $AllPassed = false;",
-		"  RETURN $AllPassed;",
+	return attachOnError(lines, v, func(int) []string {
+		return []string{
+			fmt.Sprintf("  LOG ERROR NODE 'MXTEST' 'MXTEST:FAIL:%s:Exception during execution';",
+				escapeMDLString(testID)),
+			"  SET $TestFailed = true;",
+			"  SET $AllPassed = false;",
+			"  RETURN $AllPassed;",
+		}
 	})
 }
 
@@ -388,19 +399,22 @@ func rewriteWithErrorHandling(lines []string, testID string, v langver.Version) 
 // runner reports a wrong expectation the same way the endpoint runner does — as
 // "expected an exception but none was thrown", which is the only outcome its log
 // protocol has for a throws test that did not get what it asked for.
-func rewriteForThrowsTest(lines []string, didThrowVar string, want string, v langver.Version) []string {
-	return attachOnError(lines, v, throwsFlagHandler(didThrowVar, want))
+func rewriteForThrowsTest(lines []string, didThrowVar, suffix, want string, v langver.Version) []string {
+	return attachOnError(lines, v, func(n int) []string {
+		return throwsFlagHandler(didThrowVar, want, errorMessageVar(suffix, n))
+	})
 }
 
 // throwsFlagHandler sets the did-throw flag, gated on the expected message when
 // the annotation carried one. See throwsHandler for why the match is a substring
-// and where $latestError comes from.
-func throwsFlagHandler(didThrowVar, want string) []string {
+// and where the message in msgVar comes from.
+func throwsFlagHandler(didThrowVar, want, msgVar string) []string {
 	if want == "" {
 		return []string{fmt.Sprintf("  SET %s = true;", didThrowVar)}
 	}
 	return []string{
-		fmt.Sprintf("  IF contains(%s, '%s') THEN", latestErrorMessage, escapeMDLString(want)),
+		readErrorMessage(msgVar),
+		fmt.Sprintf("  IF contains(%s, '%s') THEN", msgVar, escapeMDLString(want)),
 		fmt.Sprintf("    SET %s = true;", didThrowVar),
 		"  END IF;",
 	}
