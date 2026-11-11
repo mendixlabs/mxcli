@@ -1,0 +1,37 @@
+mdl 1;
+-- ============================================================================
+-- Bug: describe dropped the specialization step of an association path
+-- ============================================================================
+--
+-- Symptom (before fix): Studio Pro stores a step whose DestinationEntity is a
+-- specialization of the association's end (TestApp WorkflowCommons
+-- Snip_WorkflowUserTaskView_Details, text11: System.WorkflowUserTaskOutcome_User
+-- to Administration.Account, attribute FullName). describe printed
+-- `System.WorkflowUserTaskOutcome_User/FullName`, exec bound System.User.FullName,
+-- and mx check reported
+--   [CE1613] "The selected attribute 'System.User.FullName' no longer exists." at Text 'text11'
+--
+-- After fix: the cast is spelled `Assoc/Module.Entity/Attr` (Mendix's expression
+-- form), describe prints it when the destination is not an end of the
+-- association, and the builder stores it as that step's DestinationEntity.
+-- describe -> exec of that snippet reports it unchanged; this script is
+-- mx check 0 errors on Mendix 11.14.0.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/association-path-specialization-step.mdl -p app.mpr
+--   mxcli docker check -p app.mpr        -- expect 0 errors
+-- ============================================================================
+
+create module BugTestSpec;
+
+create persistent entity BugTestSpec.Party (Name: String(100));
+create persistent entity BugTestSpec.Company extends BugTestSpec.Party (VatNumber: String(20));
+create persistent entity BugTestSpec.Invoice (Number: String(20));
+create association BugTestSpec.Invoice_Party from BugTestSpec.Invoice to BugTestSpec.Party;
+
+create page BugTestSpec.Invoice_View (Title: 'Invoice', Layout: Atlas_Core.Atlas_Default, Params: ($Invoice: BugTestSpec.Invoice)) {
+  dataview dvInvoice (DataSource: $Invoice) {
+    dynamictext txtVat (Content: 'VAT: {1}', ContentParams: ({1} = BugTestSpec.Invoice_Party/BugTestSpec.Company/VatNumber))
+    textbox tbVat (Label: 'VAT', Attribute: Invoice_Party/BugTestSpec.Company/VatNumber, Editable: Never)
+  }
+};

@@ -1307,7 +1307,7 @@ func extractAttributeRef(ctx *ExecContext, w map[string]any) string {
 	if _, ok := attrRef["Attribute"].(string); !ok {
 		return ""
 	}
-	path := columnAttributeFromRef(attrRef)
+	path := columnAttributeFromRef(ctx, attrRef)
 	if !strings.Contains(path, "/") {
 		// A plain binding: qualified where no entity is in scope (describeAttr).
 		return describeAttr(ctx, extractString(attrRef["Attribute"]))
@@ -1464,14 +1464,14 @@ func extractInputAttribute(ctx *ExecContext, w map[string]any) string {
 	// the root it was refused at the snippet root (MDL-WIDGET34), or bound
 	// against the wrong context (ako/mxcli#833).
 	if root := firstNonEmpty(widget, parameterSourceName(w["SourceVariable"])); root != "" && attrRef != nil && attrRef["EntityRef"] != nil {
-		if path := columnAttributeFromRef(attrRef); strings.Contains(path, "/") {
+		if path := columnAttributeFromRef(ctx, attrRef); strings.Contains(path, "/") {
 			return "$" + root + "/" + path
 		}
 	}
 	if widget == "" || attrRef == nil {
 		return extractAttributeRef(ctx, w)
 	}
-	path := columnAttributeFromRef(attrRef)
+	path := columnAttributeFromRef(ctx, attrRef)
 	if path == "" || strings.Contains(path, "/") {
 		return extractAttributeRef(ctx, w)
 	}

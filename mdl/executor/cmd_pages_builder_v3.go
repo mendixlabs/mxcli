@@ -2608,6 +2608,16 @@ func (pb *pageBuilder) resolveAssociationPathFrom(path, start string) (finalQN s
 		// the path's start named a later hop into the wrong module. (#662)
 		assocQN := pb.resolveAssociationPathIn(seg, current)
 		dest, ok := pb.associationDestination(assocQN, current)
+		if !ok && len(steps) > 0 && seg != current && strings.Count(seg, ".") == 1 && pb.entityIsOrDescendsFrom(seg, current) {
+			// `Assoc/Module.Special/…`: a cast of the previous hop's
+			// destination to a specialization, which Studio Pro stores as that
+			// step's DestinationEntity (TestApp WorkflowCommons
+			// Snip_WorkflowUserTaskView_Details). Dropped, the attribute was
+			// qualified with the association's end: CE1613.
+			steps[len(steps)-1].DestinationEntity = seg
+			current = seg
+			continue
+		}
 		if !ok {
 			// Not a modelled association — it may be System.changedBy /
 			// System.owner, which no domain model lists. (#1338)
@@ -2791,6 +2801,16 @@ func (pb *pageBuilder) entityGeneralizations() (map[string]string, error) {
 		}
 	}
 	return m, nil
+}
+
+// associationHasEnd reports whether entity is one of the association's two
+// ends; known is false when the association cannot be resolved.
+func (pb *pageBuilder) associationHasEnd(assocQN, entityQN string) (isEnd, known bool) {
+	from, to, ok := pb.associationEndpoints(assocQN)
+	if !ok {
+		return false, false
+	}
+	return entityQN == from || entityQN == to, true
 }
 
 // associationEndpoints resolves a qualified association name to its FROM

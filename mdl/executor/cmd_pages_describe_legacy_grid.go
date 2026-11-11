@@ -62,7 +62,7 @@ func parseLegacyGridItems(ctx *ExecContext, v any) []rawLegacyGridItem {
 			Type:    extractString(m["Type"]),
 		}
 		if ref, ok := m["AttributeRef"].(map[string]any); ok && ref != nil {
-			item.Attribute = columnAttributeFromRef(ref)
+			item.Attribute = columnAttributeFromRef(ctx, ref)
 		}
 		if item.Attribute == "" {
 			// Older models store the binding as a path string instead.
