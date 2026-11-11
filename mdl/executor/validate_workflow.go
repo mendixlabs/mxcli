@@ -370,7 +370,9 @@ func workflowActivityBoundaryEvents(a ast.WorkflowActivityNode) []ast.WorkflowBo
 // does, so guarding only CREATE would leave each one a keyword away.
 //
 // The other rules are not simply un-ported. MDL-WF01/WF02 describe a state a
-// later op in the same script can still repair (`SET ACTIVITY … PAGE`), and
+// later op in the same script can still repair (`SET ACTIVITY … PAGE`, a second
+// `outcomes`) — so WF02 is judged over the whole script instead, by
+// validateAlterWorkflowSingleOutcomes (ako/mxcli#2097) — and
 // MDL-WF05 resolves jump targets against activities the statement cannot see.
 // An inserted activity's outcome SET, by contrast, is complete where it is
 // written — `INSERT OUTCOME` cannot extend it, since on a decision it writes a

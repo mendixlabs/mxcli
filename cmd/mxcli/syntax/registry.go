@@ -38,7 +38,10 @@ type SyntaxFeature struct {
 type Requirement struct {
 	Feature string `json:"feature"` // "area/name"
 	Since   string `json:"since"`
-	MDL     string `json:"mdl,omitempty"`
+	// Until is the last version that has the feature, for one Mendix removed
+	// (a message definition collection: 10.0.0 to 11.14, ako/mxcli#2140).
+	Until string `json:"until,omitempty"`
+	MDL   string `json:"mdl,omitempty"`
 }
 
 var registry []SyntaxFeature

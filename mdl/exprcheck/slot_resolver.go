@@ -17,8 +17,11 @@ var staticExpectations = map[string]SlotConstraint{
 	"ChangeItem.Value":        {Kind: KindUnknown, ResolveBy: "AttributeOf:Parent"},
 	"CreateItem.Value":        {Kind: KindUnknown, ResolveBy: "AttributeOf:Parent"},
 	"ReturnStmt.Value":        {Kind: KindUnknown, ResolveBy: "MicroflowReturn"},
-	"CallArgument.Value":      {Kind: KindUnknown, ResolveBy: "TargetParameter"},
-	"LogStmt.Message":         {Kind: KindString},
+	// Resolved per call site: the adapter qualifies the slot with the called
+	// flow and parameter (CallArgumentSlot) and checkCallArgumentKind looks up
+	// the parameter's type (ako/mxcli#2096). Nothing resolved it before.
+	"CallArgument.Value": {Kind: KindUnknown, ResolveBy: "TargetParameter"},
+	"LogStmt.Message":    {Kind: KindString},
 	// A log message's template parameter must be a String — Mendix does not
 	// coerce here, and a non-String one is CE0117 "Error(s) in expression" on
 	// the activity. Measured on 11.13.0: an Integer attribute, an integer

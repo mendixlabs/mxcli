@@ -1,0 +1,32 @@
+mdl 1;
+-- ako/mxcli#2140: `mxcli syntax message-definition` showed only the pre-11.15
+-- collection form, so the 11.15+ document form — and where its FOLDER clause
+-- goes — was found only in an exec error's hint. FOLDER follows the name and
+-- precedes FOR, as in every document statement; after FOR it is a parse error
+-- ("mismatched input 'folder' expecting {AS, '(', '{'}").
+--
+-- On an 11.15+ project:
+--   mxcli exec mdl-examples/bug-tests/2140-message-definition-document-folder.mdl -p App.mpr
+--   mxcli -p App.mpr -c "describe message definition Bug2140.TicketIn"
+-- Expected: the definition is created in the folder 'Api' (`list message
+-- definitions in Bug2140` shows it), describe prints `folder 'Api'` before
+-- `for Bug2140.ApiTicket` with both examples, and `mxcli docker check` reports
+-- 0 errors (measured on 11.16.0). Below 11.15 the statement is refused in
+-- favour of the collection form.
+
+create module Bug2140;
+create or modify non-persistent entity Bug2140.ApiTicket ( Subject: String(200), Priority: Integer );
+create or modify message definition Bug2140.TicketIn folder 'Api'
+  for Bug2140.ApiTicket
+{
+  Subject example 'Parcel arrived damaged',
+  Priority example '2'
+};
+create or modify import mapping Bug2140.IMM_TicketIn
+  with message definition Bug2140.TicketIn
+{
+  create Bug2140.ApiTicket {
+    Subject = Subject,
+    Priority = Priority
+  }
+};

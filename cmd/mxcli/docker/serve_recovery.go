@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -78,6 +79,50 @@ type serveRecovery struct {
 	// headless: nothing serves the client (the test runner), so a build that
 	// succeeds with an incomplete web/dist is a good build and is not repeated.
 	headless bool
+
+	// confirmedErrors is the error signature a fresh process last confirmed
+	// for a suspect incremental failure (see suspectIncrementalErrors). The same
+	// errors again are the model's, not the process's, and are not rechecked
+	// until a build passes.
+	confirmedErrors string
+}
+
+// incrementalScopeErrors are the error codes an INCREMENTAL serve build has
+// been seen to report for a model that a full build of the same bytes accepts
+// (ako/mxcli#2064, Mendix 11.16.0, three times in one session): CE0108
+// "Variable 'X' is defined but not in scope at this location", on a variable a
+// call creates and a decision after it uses. `docker check` reported 0 errors
+// on the same model, and the next build on a fresh serve process applied it.
+// Only codes seen doing this are listed: rechecking every failure would add a
+// cold build (~25 s) to every genuine error.
+var incrementalScopeErrors = map[string]bool{"CE0108": true}
+
+// suspectIncrementalErrors reports whether a failed build carries an error the
+// incremental build is known to report falsely.
+func suspectIncrementalErrors(res *BuildResult) bool {
+	for _, p := range res.Errors() {
+		if incrementalScopeErrors[p.ErrorCode] {
+			return true
+		}
+	}
+	return false
+}
+
+// errorSignature identifies a build's errors: code, message and document each.
+func errorSignature(res *BuildResult) string {
+	if res == nil {
+		return ""
+	}
+	var parts []string
+	for _, p := range res.Errors() {
+		doc := ""
+		if len(p.Locations) > 0 {
+			doc = p.Locations[0].Document
+		}
+		parts = append(parts, p.ErrorCode+"|"+p.Message+"|"+doc)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "\n")
 }
 
 func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
@@ -109,6 +154,7 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 	}
 
 	if res.OK() {
+		r.confirmedErrors = ""
 		if !prebuilt || r.headless {
 			return res, nil
 		}
@@ -134,6 +180,10 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 		return fresh, nil
 	}
 
+	if !freshProcess && suspectIncrementalErrors(res) && errorSignature(res) != r.confirmedErrors {
+		return r.recheckIncrementalErrors(req, res)
+	}
+
 	if legacyClientBuildHint(r.deployDir, res.Message, string(res.Raw)) != "" {
 		fmt.Fprintln(r.out, "  mxbuild --serve cannot build this change incrementally (it wants client source its "+
 			"first build does not leave behind); restarting mxbuild --serve for a full build...")
@@ -144,6 +194,35 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 		return r.rebuildFresh(req)
 	}
 	return res, nil
+}
+
+// recheckIncrementalErrors builds the model once more on a fresh serve
+// process, after an incremental build failed with an error it is known to
+// report falsely. The fresh build's answer stands: a pass is applied, and a
+// failure is the model's own and is remembered so the same errors are not
+// rechecked on every save.
+func (r *serveRecovery) recheckIncrementalErrors(req BuildRequest, incremental *BuildResult) (*BuildResult, error) {
+	var codes []string
+	seen := map[string]bool{}
+	for _, p := range incremental.Errors() {
+		if incrementalScopeErrors[p.ErrorCode] && !seen[p.ErrorCode] {
+			seen[p.ErrorCode] = true
+			codes = append(codes, p.ErrorCode)
+		}
+	}
+	fmt.Fprintf(r.out, "  the incremental build reports %s, which mxbuild --serve has reported for a model a full build accepts; "+
+		"restarting mxbuild --serve for a full build to check...\n", strings.Join(codes, ", "))
+	fresh, err := r.rebuildFresh(req)
+	if err != nil || fresh == nil {
+		return fresh, err
+	}
+	if fresh.OK() {
+		fmt.Fprintln(r.out, "  the full build passed: the incremental build's errors were mxbuild --serve's own state, not the model's")
+		return fresh, nil
+	}
+	r.confirmedErrors = errorSignature(fresh)
+	fmt.Fprintln(r.out, "  the full build fails too: these errors are the model's")
+	return fresh, nil
 }
 
 // rebuildFresh replaces the serve process and builds once on the new one. Its

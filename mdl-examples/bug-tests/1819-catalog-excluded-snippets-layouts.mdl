@@ -1,0 +1,34 @@
+mdl 1;
+-- ============================================================================
+-- Bug mendixlabs/mxcli#1819: catalog Excluded column missing for snippets and layouts
+-- ============================================================================
+--
+-- Symptom (before fix):
+--   select Name, Excluded from CATALOG.snippets   -- fails: no such column: Excluded
+--   select Name, Excluded from CATALOG.layouts    -- fails: no such column: Excluded
+--   (CATALOG.pages had the column.) snippets.ParameterCount was also always 0.
+--
+-- After fix: both tables have Excluded (1 when the document is excluded from
+-- the project), and snippets.ParameterCount counts the snippet's parameters.
+--
+-- MDL cannot author an excluded snippet or layout, so an excluded row comes
+-- from a document set to "Exclude from project" in Studio Pro.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/1819-catalog-excluded-snippets-layouts.mdl -p app.mpr
+--   mxcli -p app.mpr -c "refresh catalog full force"
+--   mxcli -p app.mpr -c "select Name, ParameterCount, Excluded from CATALOG.snippets where ModuleName = 'BugTest1819'"
+--   Expected: SN_Header | 1 | 0
+--   mxcli -p app.mpr -c "select Name, Excluded from CATALOG.layouts where ModuleName = 'Atlas_Core'"
+--   Expected: one row per Atlas layout, Excluded 0 — no "no such column" error
+-- ============================================================================
+
+create module BugTest1819;
+
+create persistent entity BugTest1819.Item (Name: String(50));
+
+create snippet BugTest1819.SN_Header (Params: ($Item: BugTest1819.Item)) {
+  dataview dvItem (DataSource: $Item) {
+    dynamictext txtName (Content: '{1}', ContentParams: ({1} = Name))
+  }
+};

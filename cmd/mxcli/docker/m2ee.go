@@ -58,6 +58,15 @@ var ErrAdminAuth = errors.New("admin API refused the credentials")
 type adminError struct {
 	msg  string
 	kind error
+	// timedOut marks a request the admin API accepted and did not answer in
+	// time, as opposed to one it never received.
+	timedOut bool
+}
+
+// isAdminTimeout reports whether err is an admin call that ran out of time.
+func isAdminTimeout(err error) bool {
+	var ae *adminError
+	return errors.As(err, &ae) && ae.timedOut
 }
 
 func (e *adminError) Error() string        { return e.msg }
@@ -142,6 +151,13 @@ func callM2EEDirect(opts M2EEOptions, action string, params map[string]any) (*M2
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
+		if isTimeout(err) {
+			// It accepted the request and is still working on it: "cannot
+			// connect ... is the app running?" sent a user hunting for a dead
+			// process while a slow after-startup microflow ran (#1818).
+			return nil, &adminError{kind: ErrAdminUnreachable, timedOut: true,
+				msg: fmt.Sprintf("Mendix admin API at %s:%d did not answer %q within %s", opts.Host, opts.Port, action, timeout)}
+		}
 		return nil, adminUnreachable(fmt.Sprintf("cannot connect to Mendix admin API at %s:%d -- is the app running? Start with 'mxcli docker up'", opts.Host, opts.Port))
 	}
 	defer resp.Body.Close()

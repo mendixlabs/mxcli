@@ -369,3 +369,32 @@ func TestStringAggIsOnTwoReleaseLines(t *testing.T) {
 		t.Errorf("added since 10.24.0 = %q, want 10.24.22", got)
 	}
 }
+
+// ako/mxcli#2140: mendix-10.yaml and mendix-11.yaml both list
+// message_definition_collection from 10.0.0, and only the 11 file closes it at
+// 11.14.99 (Mendix 11.15 removed the collection). dedup kept the first of the
+// two — the one without the ceiling — so the registry said a collection is
+// available on 11.16, and `mxcli syntax message-definition` printed "10.0.0+".
+func TestMessageDefinitionCollectionEndsAt1114(t *testing.T) {
+	reg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, c := range []struct {
+		v         SemVer
+		available bool
+	}{
+		{SemVer{10, 24, 0}, true},
+		{SemVer{11, 14, 0}, true},
+		{SemVer{11, 15, 0}, false},
+		{SemVer{11, 16, 0}, false},
+	} {
+		if got := reg.IsAvailable("integration", "message_definition_collection", c.v); got != c.available {
+			t.Errorf("IsAvailable(%s) = %v, want %v", c.v, got, c.available)
+		}
+	}
+	e, ok := reg.Lookup("integration", "message_definition_collection")
+	if !ok || e.MaxVersion == nil || e.MaxVersion.String() != "11.14.99" {
+		t.Errorf("Lookup = %+v, want the 11.14.99 ceiling", e)
+	}
+}

@@ -38,6 +38,7 @@ stopped: pid 30133 in 300ms
 | `run wait [--timeout 5m]` | blocks until the watch loop has applied the model as it is now, or failed to; prints `applied: build #N via reload\|restart in …` or `failed:` with the CE codes / SCSS error lines. `--ready` waits for the boot instead; `--since N` for any build newer than N. | 0 applied, 1 failed, 2 timeout, 3 not running |
 | `run stop` | asks the run to shut down, waits until it is gone, then stops anything left in its process session — so no orphaned `runtimelauncher` or mxbuild JVM, even from a run killed with `-9`. Nothing running is a no-op. | 0 |
 | `run restart` | `run stop`, then `--detach` again with the arguments recorded in the state file. | as `--detach` |
+| `run clear-sessions` | Deletes every session in the run's database, so the unlicensed runtime's 6 sign-in slots are free again without a restart (a 7th sign-in otherwise fails with HTTP 560, shown as "Sign in failed"). Signed-in browsers sign in again. Uses the run's recorded `--db-*` flags; pass `--db-password` when the run was given one literally. Not for `--db-type hsqldb`: restart instead. | 0 cleared, 1 failed, 3 no run recorded |
 
 **`run wait` is race-free.** It reads the model's source time when it starts and
 returns the first build made from that source or newer — so a change the loop
@@ -161,6 +162,8 @@ would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
 | *(hub API key)* | — | For a **GitHub-authenticated** hub: get one from `https://<hub>/cli`, set `MXCLI_HUB_KEY` (see below) |
 | `--watch` | off | Rebuild + hot-apply on every project change |
 | `--web-client-timeout` | `$MXCLI_WEB_CLIENT_TIMEOUT`, else `5m` | Limit for one web client bundle build (e.g. `10m`); on timeout the tail of `deployment/log/web-client-build.log` is printed |
+| `--build-timeout` | `$MXCLI_BUILD_TIMEOUT`, else `30m` | Limit for one `mxbuild --serve` build. The cold first build of a large app (thousands of documents) can take ten minutes or more |
+| `--start-timeout` | `$MXCLI_START_TIMEOUT`, else `15m` | Limit for the runtime start, after-startup microflow and schema update included. Running out says "did not answer", not "is the app running?" |
 | `--ensure-db` | off | Provision local Postgres + the app database if missing (fresh-session bootstrap) |
 | `--db-admin-user` / `--db-admin-password` | postgres / — | Superuser login `--ensure-db` creates the role and database with when it has a password (Windows). Only with `--ensure-db`; never passed to the runtime |
 | `--setup` | off | Prepare prerequisites (cache MxBuild+runtime, ensure DB) and exit without booting — for a SessionStart hook |
@@ -574,6 +577,35 @@ incremental build's `restartRequired` is kept, because a fresh process's first
 build reports `true` even for an unchanged model, and taking it would restart the
 runtime — dropping every browser session — on every change. Measured end to end
 on 11.12.5; on 11.14 the same restart applies to the same failure shape.
+
+**Which versions.** The two halves have different fates (ako/mxcli#606). The
+bundler-config failure (`Cannot find module '…/rollup.config.mjs'`) is **fixed in
+Mendix 11.15.0**: a project converted from 11.14.0 to 11.15.0 rebuilt warm in
+2.8–3.9 s per change, where 11.14.0 failed every build after the first — so on
+11.14 the remedy is to upgrade. The per-document client failure (`web/pages/…`)
+was still seen on macOS 11.15.0, where mxcli's serve restart is what keeps the
+loop going. The hint mxcli prints offers the upgrade only for the half it fixes.
+`mxcli test --attach` rebuilds through the hosting app's own serve process, so it
+meets the same second-build failure on the same versions (read off the code, not
+measured).
+
+### A CE0108 only the incremental build reports
+
+An incremental build in a serve process that has already built has been seen to
+fail with CE0108 *"Variable 'X' is defined but not in scope at this location"* on a
+model that `docker check` passes and a full build applies (ako/mxcli#2064, 11.16.0,
+not deterministic). Under `--watch` mxcli does not report that as the model's error
+straight away: it restarts `mxbuild --serve` and builds once more, and says which
+answer stood:
+
+```
+the incremental build reports CE0108, which mxbuild --serve has reported for a model a full build accepts; restarting mxbuild --serve for a full build to check...
+the full build passed: the incremental build's errors were mxbuild --serve's own state, not the model's
+```
+
+When the full build fails too, the error is the model's, and the same errors on
+later saves are reported without another check until a build passes. Other error
+codes are never rechecked: each check is a cold build.
 
 ## Pixel-perfect page loop
 

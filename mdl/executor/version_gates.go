@@ -629,6 +629,38 @@ func messageDefinitionDocumentGate(statement string) versionGate {
 			"create message definition collection Module.Name { definition Name for Module.Entity { … } };"}
 }
 
+// removedStatementError refuses a statement whose document type the project's
+// Mendix version no longer has — a ceiling, where statementVersionGates are
+// floors. Mendix 11.15 removed the message definition collection (each
+// definition is its own document), so every collection statement is refused on
+// an 11.15+ project with a hint naming the document form. It lives here, not in
+// the handlers, so `check -p` and exec's pre-flight report it too: as a handler
+// check it let check pass a script exec then refused (ako/mxcli#2139).
+//
+// describe is refused as well. Its handler still describes a collection it
+// finds before refusing, but an 11.15+ project cannot hold one — `mx convert`
+// turns each into a folder of documents — so the two agree on every project
+// Studio Pro has opened.
+func removedStatementError(ctx *ExecContext, stmt ast.Statement) error {
+	var statement string
+	switch s := stmt.(type) {
+	case *ast.CreateMessageDefinitionCollectionStmt:
+		statement = "create message definition collection"
+	case *ast.AlterMessageDefinitionCollectionStmt:
+		statement = "alter message definition collection"
+	case *ast.DropMessageDefinitionCollectionStmt:
+		statement = "drop message definition collection"
+	case *ast.DescribeStmt:
+		if s.ObjectType == ast.DescribeMessageDefinitionCollection {
+			statement = "describe message definition collection"
+		}
+	}
+	if statement == "" || !projectStoresMessageDocuments(ctx) {
+		return nil
+	}
+	return messageCollectionsRemovedError(ctx, statement)
+}
+
 // requireMessageDefinitionDocuments refuses the per-document form below 11.15.
 func requireMessageDefinitionDocuments(ctx *ExecContext, statement string) error {
 	return checkGate(ctx, messageDefinitionDocumentGate(statement))
@@ -642,6 +674,9 @@ func checkGate(ctx *ExecContext, g versionGate) error {
 // feature it needs: the first of statementVersionGates that fails. Nil when not
 // connected, as checkFeature is.
 func checkVersionGates(ctx *ExecContext, stmt ast.Statement) error {
+	if err := removedStatementError(ctx, stmt); err != nil {
+		return err
+	}
 	for _, g := range statementVersionGates(stmt) {
 		if err := checkGate(ctx, g); err != nil {
 			return err

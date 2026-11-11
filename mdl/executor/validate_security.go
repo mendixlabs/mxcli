@@ -92,5 +92,7 @@ func ValidateGrantEntityAccess(stmt *ast.GrantEntityAccessStmt) []linter.Violati
 			}
 		}
 	}
+	// The constraint's no-project form rules (ako/mxcli#2099).
+	out = append(out, accessRuleXPathFormViolations(stmt, loc)...)
 	return out
 }
