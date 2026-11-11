@@ -30,6 +30,6 @@ create association BugTest833.Order_Customer from BugTest833.Order to BugTest833
 
 create snippet BugTest833.SN_OrderHeader (Params: ($Order: BugTest833.Order)) {
   dynamictext txtCustomer (Content: 'Customer: {1}', ContentParams: ({1} = $Order/BugTest833.Order_Customer/Name))
-  actionbutton btnCustomer (Caption: '{1}', CaptionParams: ({1} = $Order/BugTest833.Order_Customer/Name), Action: close_page)
+  actionbutton btnCustomer (Caption: '{1}', CaptionParams: ({1} = $Order/BugTest833.Order_Customer/Name), Action: close page)
   textbox tbCustomer (Label: 'Customer', Attribute: $Order/BugTest833.Order_Customer/Name, Editable: Never)
 };

@@ -24,5 +24,5 @@ create module BugTest2132;
 create or modify page BugTest2132.PageParam (Params: ($IpAddress: String, $Port: Integer), Layout: Atlas_Core.Atlas_Default, Title: 'Param') {
   dynamictext txtIp (Content: 'Address {1}', ContentParams: ({1} = $IpAddress))
   dynamictext txtPort (Content: 'Port {1}', ContentParams: ({1} = $Port))
-  actionbutton btnIp (Caption: 'Go to {1}', CaptionParams: ({1} = $IpAddress), Action: close_page)
+  actionbutton btnIp (Caption: 'Go to {1}', CaptionParams: ({1} = $IpAddress), Action: close page)
 };
