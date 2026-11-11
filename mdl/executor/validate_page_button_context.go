@@ -25,7 +25,7 @@ func ValidatePageButtonContext(prog *ast.Program) []linter.Violation {
 	var out []linter.Violation
 	for _, stmt := range prog.Statements {
 		if label, widgets, ok := documentWidgets(stmt); ok {
-			out = append(out, checkButtonContextTree(widgets, "", false, "", label)...)
+			out = append(out, checkButtonContextTree(widgets, "", false, "", false, label)...)
 		}
 	}
 	return out
@@ -48,9 +48,14 @@ func ValidatePageButtonContext(prog *ast.Program) []linter.Violation {
 // control bar inherits the context from above the grid, not from the grid.
 //
 // nearest is the name of the data container whose object the widget sits in
-// ("" at the top), for MDL-BUTTON02 (mendixlabs/mxcli#1324). It moves with the
-// same rule as inContext: a control bar keeps the context from above its grid.
-func checkButtonContextTree(widgets []*ast.WidgetV3, controlBarOf string, inContext bool, nearest, locationPrefix string) []linter.Violation {
+// ("" at the top), for MDL-BUTTON02 (mendixlabs/mxcli#1324). Inside a control
+// bar it is "": the bar takes its object from above its grid but sits inside
+// the grid, so no container's name is its own there (ako/mxcli#2109).
+//
+// nearestSelectable says the nearest container is a data grid with a
+// selection: its name then is a variable in its rows too, the selection, which
+// a show page argument may pass (ako/mxcli#2109).
+func checkButtonContextTree(widgets []*ast.WidgetV3, controlBarOf string, inContext bool, nearest string, nearestSelectable bool, locationPrefix string) []linter.Violation {
 	var out []linter.Violation
 	for _, w := range widgets {
 		if w == nil {
@@ -60,19 +65,24 @@ func checkButtonContextTree(widgets []*ast.WidgetV3, controlBarOf string, inCont
 			out = append(out, checkControlBarAction(a, w.Name, controlBarOf, locationPrefix)...)
 		}
 		if nearest != "" {
-			out = append(out, checkOwnContainerName(w, nearest, locationPrefix)...)
+			out = append(out, checkOwnContainerName(w, nearest, nearestSelectable, locationPrefix)...)
 		}
 		childContext := inContext || isObjectContextContainer(w)
-		childNearest := nearest
+		childNearest, childSelectable := nearest, nearestSelectable
 		if isObjectContextContainer(w) && w.Name != "" {
-			childNearest = w.Name
+			childNearest, childSelectable = w.Name, selectableDataGrid(w)
 		}
 		for _, c := range w.Children {
-			childOf, ctx, near := controlBarOf, childContext, childNearest
+			childOf, ctx, near, sel := controlBarOf, childContext, childNearest, childSelectable
 			if c != nil && strings.EqualFold(c.Type, "controlbar") {
-				childOf, ctx, near = w.Name, inContext, nearest
+				// The control bar's object comes from above the grid, but the
+				// control bar sits INSIDE the grid, so the container above is
+				// an outer one there: `$dataView3` from the filter bar of a
+				// grid in dataView3 is Studio Pro's own spelling and builds
+				// (FactoryManagement OIDC.OIDC_Client_NewEdit, ako/mxcli#2109).
+				childOf, ctx, near, sel = w.Name, inContext, "", false
 			}
-			out = append(out, checkButtonContextTree([]*ast.WidgetV3{c}, childOf, ctx, near, locationPrefix)...)
+			out = append(out, checkButtonContextTree([]*ast.WidgetV3{c}, childOf, ctx, near, sel, locationPrefix)...)
 		}
 	}
 	return out
@@ -95,7 +105,12 @@ var ownNameExprProps = []struct{ key, written string }{
 // arguments (and a chained THEN action's), a data source's flow arguments,
 // Visible, Editable and DynamicClasses are CE0117 "Error(s) in expression.",
 // and a data source's XPath `where` is CE0161 "Error(s) in XPath constraint.".
-func checkOwnContainerName(w *ast.WidgetV3, nearest, locationPrefix string) []linter.Violation {
+//
+// A selectable data grid's name in its rows is the grid's selection, which a
+// show page argument stores as Variable {Widget: <grid>}: Studio Pro writes it
+// there and it builds (ako/mxcli#2109), so that one slot is not judged. Other
+// slots are, as no stored example shows them reading the selection.
+func checkOwnContainerName(w *ast.WidgetV3, nearest string, nearestSelectable bool, locationPrefix string) []linter.Violation {
 	var out []linter.Violation
 	flag := func(slot, expr, code string) {
 		if !exprReadsVariable(expr, nearest) {
@@ -113,6 +128,9 @@ func checkOwnContainerName(w *ast.WidgetV3, nearest, locationPrefix string) []li
 		})
 	}
 	for a := w.GetAction(); a != nil; a = a.ThenAction {
+		if nearestSelectable && a.Type == "showPage" {
+			continue
+		}
 		for _, arg := range a.Args {
 			if v, ok := arg.Value.(string); ok {
 				flag(a.Type+" action argument", v, "CE0117")
@@ -174,10 +192,12 @@ func isExprIdentByte(c byte) bool {
 
 // isObjectContextContainer reports whether w gives its (non-control-bar)
 // children a current object: a data view's object, a list view or gallery
-// item, a grid row (column content).
+// item, a grid row (column content), a combo box option (its custom content:
+// AgentCommons.Version_NewEdit reads `$dataView2` there, the data view
+// around the combo box, and builds; ako/mxcli#2109).
 func isObjectContextContainer(w *ast.WidgetV3) bool {
 	switch strings.ToLower(w.Type) {
-	case "dataview", "listview", "gallery", "templategrid", "datagrid", "datagrid2":
+	case "dataview", "listview", "gallery", "templategrid", "datagrid", "datagrid2", "combobox":
 		return true
 	}
 	return false

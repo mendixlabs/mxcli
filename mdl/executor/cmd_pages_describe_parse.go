@@ -39,8 +39,10 @@ func extractConditionalSettings(ctx *ExecContext, widget *rawWidget, w map[strin
 		if attr, ok := cvs["Attribute"].(string); ok && attr != "" {
 			widget.VisibleAttr = describeAttr(ctx, attr)
 			// Read from a page or snippet parameter (TestApp
-			// Snip_UserTask_NameColumnWithIcon): `$Param.Attr in (…)`.
-			if param := parameterSourceName(cvs["SourceVariable"]); param != "" {
+			// Snip_UserTask_NameColumnWithIcon): `$Param.Attr in (…)`, or from
+			// an enclosing data view (FactoryManagement
+			// ConversationalUI.Trace_Details): `$dataView6.Attr in (…)`.
+			if param := namedObjectSourceName(cvs["SourceVariable"]); param != "" {
 				widget.VisibleAttr = parameterAttributeMDL(param, attr)
 			}
 			for _, c := range getBsonArrayElements(cvs["Conditions"]) {

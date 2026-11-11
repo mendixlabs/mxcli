@@ -69,6 +69,11 @@ func scalarPropertyText(w *ast.WidgetV3, key string, raw any, op string) (string
 		}
 		return "", expressionInScalarPropertyError(w, key, op, v.Text)
 	case *ast.DataSourceV3:
+		// `$Name/Assoc/Attr` parses as a data source; on an attribute property
+		// it is a rooted attribute path, resolved by the engine (ako/mxcli#2107).
+		if root, path, rooted := rootedAttributeValue(v); rooted && op == "attribute" {
+			return "$" + root + "/" + path, nil
+		}
 		src, hasSrc := w.ExpressionSource(key)
 		if op == "expression" && hasSrc {
 			return src, nil
