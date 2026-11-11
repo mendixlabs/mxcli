@@ -191,14 +191,25 @@ jobs:
   # interleaved on THIS runner, and reports the ratio. The record goes to the
   # `benchmarks` branch, one file per run.
   #
-  # Needs no mxbuild (it starts from the committed PedApp fixture) and does
-  # not gate the release, like upgrade-full-corpus: a slow night must not hold
-  # a nightly back. The driver exits non-zero only when a command fails or
-  # re-running a settled script changes a file.
+  # Three sessions. Two time mxcli alone and start from the committed PedApp
+  # fixture. The third times the running app -- boot, a hot change, an entity
+  # change, a page check, tests -- on a project `mxcli new` creates, and so
+  # needs mxbuild and the runtime (mxcli downloads both), JDK 21 for the
+  # runtime, and a browser for the page check. It runs last: if it fails, the
+  # record of the first two is still written and committed.
+  #
+  # Does not gate the release, like upgrade-full-corpus: a slow night must not
+  # hold a nightly back. The driver exits non-zero only when a command fails
+  # or re-running a settled script changes a file.
   bench:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     name: agent dev-loop benchmark
+    env:
+      # One version, the one the running-app session was developed against.
+      # Moving it is a deliberate change: boot and apply times differ between
+      # Mendix versions, so the trend restarts where it moves.
+      BENCH_MENDIX_VERSION: '11.13.0'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -215,6 +226,20 @@ jobs:
         run: make grammar
         env:
           ANTLR4_TOOLS_ANTLR_VERSION: '4.13.2'
+
+      # The Mendix 11 runtime launches under JDK 21; the runner's default
+      # `java` is older.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # `mxcli playwright check` requires the `playwright` package from the
+      # global node_modules and launches its Chromium.
+      - name: Install Playwright and Chromium
+        run: |
+          npm install -g playwright@1.63.0
+          npx --yes playwright@1.63.0 install --with-deps chromium
 
       # First, before the `nightly` job can replace the release. That job
       # waits for the whole `test` matrix, but nothing here relies on it: the
@@ -237,6 +262,7 @@ jobs:
       - name: Run the benchmark
         run: |
           make bench BASELINE="${{ steps.baseline.outputs.path }}" \
+            BENCH_RUNTIME="$BENCH_MENDIX_VERSION" \
             BENCH_FLAGS="-out agentbench-record.json -summary $GITHUB_STEP_SUMMARY"
 
       - name: Upload the record

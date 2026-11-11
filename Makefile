@@ -433,12 +433,19 @@ test-integration-other:
 
 # Agent dev-loop benchmark: a fixed, scripted session of mxcli commands -- the
 # ones an agent runs while building an app -- one process per command, at two
-# project sizes, no model in the loop. Needs no mxbuild: it starts from the
-# committed PedApp fixture.
+# project sizes, no model in the loop. Those sessions need no mxbuild: they
+# start from the committed PedApp fixture.
 #
 #   make bench                                  # time this checkout's binary
 #   make bench BASELINE=/path/to/other/mxcli    # A/B against another build
 #   make bench BENCH_FLAGS='-sizes small -reps 3 -out record.json'
+#   make bench BENCH_RUNTIME=11.13.0            # also the running-app session
+#
+# BENCH_RUNTIME adds the session on a running app -- boot, a hot change, an
+# entity change, a page check, tests -- on a project `mxcli new` creates for
+# that Mendix version. mxcli downloads mxbuild and the runtime when they are
+# not cached (about 800 MB); it needs JDK 21, and node with playwright and a
+# Chromium for the page check (BENCH_FLAGS=-page-check=false to leave it out).
 #
 # With BASELINE the two binaries run interleaved on this machine and the table
 # shows the ratio, which is the only figure comparable between two machines or
@@ -446,9 +453,11 @@ test-integration-other:
 # nightly release and commits the record to the `benchmarks` branch.
 # docs-site/src/internals/agent-benchmark.md explains how to read it.
 BASELINE ?=
+BENCH_RUNTIME ?=
 BENCH_FLAGS ?=
 bench: build
-	go run ./scripts/agentbench -mxcli $(BUILD_DIR)/$(BINARY_NAME) $(if $(BASELINE),-baseline $(BASELINE)) $(BENCH_FLAGS)
+	go run ./scripts/agentbench -mxcli $(BUILD_DIR)/$(BINARY_NAME) $(if $(BASELINE),-baseline $(BASELINE)) \
+		$(if $(BENCH_RUNTIME),-runtime-version $(BENCH_RUNTIME)) $(BENCH_FLAGS)
 
 # Run MDL integration tests (requires Docker and a Mendix project)
 # Usage: make test-mdl MPR=path/to/app.mpr

@@ -45,6 +45,7 @@ type params struct {
 	LargeModules    int     `json:"large_modules"`
 	LargeEntities   int     `json:"large_entities"`
 	LargeDocuments  int     `json:"large_documents"`
+	RuntimeVersion  string  `json:"runtime_version,omitempty"`
 	Threshold       float64 `json:"threshold"`
 }
 
@@ -59,6 +60,7 @@ func newRecord(cfg config, sessions []sessionResult) record {
 			Base: filepath.Base(cfg.base), Reps: cfg.reps, SessionEntities: cfg.sessionEntities,
 			LargeModules: cfg.large.Modules, LargeEntities: cfg.large.Entities,
 			LargeDocuments: cfg.large.Documents(), Threshold: cfg.threshold,
+			RuntimeVersion: cfg.runtimeVersion,
 		},
 		WeightsVersion: weightsVersion,
 		Sessions:       sessions,
@@ -131,7 +133,7 @@ func (r record) markdown() string {
 	if r.Baseline != "" {
 		fmt.Fprintf(&sb, "- baseline: `%s`\n", r.Baseline)
 	}
-	fmt.Fprintf(&sb, "- median of %d, %d CPUs", r.Params.Reps, r.Runner.CPUs)
+	fmt.Fprintf(&sb, "- %d CPUs", r.Runner.CPUs)
 	if r.Runner.CPU != "" {
 		fmt.Fprintf(&sb, " (%s)", r.Runner.CPU)
 	}
@@ -139,7 +141,11 @@ func (r record) markdown() string {
 	ab := r.Baseline != ""
 
 	for _, s := range r.Sessions {
-		fmt.Fprintf(&sb, "\n### %s project — %d units\n\n", s.Size, s.Units)
+		if s.Size == "runtime" {
+			fmt.Fprintf(&sb, "\n### running app, Mendix %s — %d units, median of %d\n\n", r.Params.RuntimeVersion, s.Units, s.Reps)
+		} else {
+			fmt.Fprintf(&sb, "\n### %s project — %d units, median of %d\n\n", s.Size, s.Units, s.Reps)
+		}
 		for _, seed := range s.Seed {
 			fmt.Fprintf(&sb, "- %s: %s (once, candidate only)\n", seed.Name, ms(seed.WallMS))
 		}

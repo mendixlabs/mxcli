@@ -10,7 +10,7 @@ related:
 
 # Proposal: Nightly Agent Dev-Loop Performance Benchmark
 
-**Status:** Partial — Phase 1 is implemented (see "Phase 1 as built")
+**Status:** Partial — Phases 1 and 2 are implemented (see "Phase 1 as built", "Phase 2 as built")
 **Date:** 2026-11-11
 
 ## Problem Statement
@@ -307,6 +307,38 @@ Adds `boot`, `hot-apply-flow`, `apply-entity`, `page-check`, `test-cold`,
 `test-attach`, using `--db-type hsqldb` so the job needs no PostgreSQL service.
 This is ordered second, ahead of validate/build, because restarts, waits and
 tests are the largest measured share of command wall time.
+
+#### Phase 2 as built
+
+The running-app session of `scripts/agentbench`, switched on with
+`-runtime-version` (`make bench BENCH_RUNTIME=11.13.0`) and run by the nightly
+job. Steps: `boot`, `page-check`, `hot-apply`, `test-attach`, `apply-entity`,
+`stop`, `test-cold`. Where it differs from the design, and what it showed:
+
+- **The project comes from `mxcli new`.** The PedApp fixture cannot be built
+  (it has no theme), so the `new` step deferred from Phase 1 arrives here, as
+  preparation: timed once, by the candidate. The session's app is authored
+  into it before the snapshot.
+- **mxcli installs mxbuild and the runtime**, before anything is timed. The
+  job adds JDK 21 and a Playwright Chromium.
+- **The arms take turns** instead of alternating step by step, because a boot
+  leaves a runtime up. A teardown stops each arm's app whatever happened.
+- **A change to the running app is one step of two commands**, the `exec` and
+  the `run wait`: that pair is what the agent waits through.
+- **Runtime steps do get an A/B**, as the revised design said, and it is
+  usable: with the same code in both arms, ratios ran from 0.92 to 1.04 over
+  three repetitions on the development machine.
+- **`test-attach` uses `--allow-call`**, the path that runs a test in the
+  running app without building it. The inject-and-build path of `--attach` is
+  not measured separately.
+- **First figures** (Mendix 11.13.0, 4 CPUs, 25 authored entities): boot 27 s,
+  hot apply 7.7 s, entity change 19 s, cold test run 25 s, attached test run
+  0.13 s, page check 3.1 s, `mxcli new` 37 s. They also settle a Phase 1
+  caveat: the generated app builds and boots, so it is valid for mxbuild, not
+  only for `mxcli check`.
+- **One version.** The nightly pins the Mendix version the session was
+  developed against. Open Question 8 (the licence session cap) did not show in
+  these short sessions.
 
 ### Phase 3 — validate and build
 

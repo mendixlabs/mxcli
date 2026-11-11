@@ -256,3 +256,33 @@ func BulkAlter(p Params) string {
 	q.Revision = p.Revision + 1
 	return Microflows(q)
 }
+
+// EntityEdit is the smallest structural change: one attribute added to one
+// entity. A running app applies it by restarting and updating its schema,
+// where a microflow change is reloaded in place.
+func EntityEdit(p Params) string {
+	return fmt.Sprintf("%salter entity %s.%s add attribute if not exists Remark: string(200);\n",
+		header, p.ModuleName(0), EntityName(0))
+}
+
+// Tests is a two-test suite over the first entity's validation microflow, in
+// the statements a test endpoint runs without building anything.
+func Tests(p Params) string {
+	mod, ent := p.ModuleName(0), EntityName(0)
+	return fmt.Sprintf(`/**
+ * @test A complete item passes validation
+ * @expect $result = true
+ */
+$item = create %[1]s.%[2]s (Name = 'Widget', Amount = 5, Price = 1);
+$result = call microflow %[1]s.VAL_%[2]s_Save(Item = $item);
+/
+
+/**
+ * @test An item without a name is rejected
+ * @expect $result = false
+ */
+$item = create %[1]s.%[2]s (Amount = 5, Price = 1);
+$result = call microflow %[1]s.VAL_%[2]s_Save(Item = $item);
+/
+`, mod, ent)
+}

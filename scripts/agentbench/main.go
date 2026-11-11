@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -36,16 +37,21 @@ func main() {
 	flag.IntVar(&cfg.large.Modules, "large-modules", 12, "modules seeded into the large project")
 	flag.IntVar(&cfg.large.Entities, "large-entities", 10, "entities per seeded module (each brings 2 microflows and 2 pages)")
 	flag.StringVar(&sizes, "sizes", "small,large", "project sizes to run the session at")
+	flag.StringVar(&cfg.runtimeVersion, "runtime-version", "", "also run the running-app session (boot, hot apply, tests) on a project created by `mxcli new` for this Mendix version, e.g. 11.13.0; installs mxbuild and the runtime if they are not cached")
+	flag.IntVar(&cfg.runtimeReps, "runtime-reps", 3, "repetitions of the running-app session per arm")
+	flag.BoolVar(&cfg.pageCheck, "page-check", true, "include the page-check step in the running-app session (needs node with playwright and a Chromium)")
 	flag.Float64Var(&cfg.threshold, "threshold", 1.20, "wall-time ratio above which a step is flagged slower (and below its inverse, faster)")
 	flag.StringVar(&out, "out", "", "write the JSON record here")
 	flag.StringVar(&summary, "summary", "", "append the Markdown summary here (e.g. $GITHUB_STEP_SUMMARY); it is always printed")
 	flag.Parse()
 
 	cfg.large.Prefix = "Seed"
-	cfg.sizes = strings.Split(sizes, ",")
+	if sizes != "" {
+		cfg.sizes = strings.Split(sizes, ",")
+	}
 	cfg.log = os.Stderr
-	if cfg.reps < 1 {
-		fatal(errors.New("-reps must be at least 1"))
+	if cfg.reps < 1 || cfg.runtimeReps < 1 {
+		fatal(errors.New("-reps and -runtime-reps must be at least 1"))
 	}
 	if cfg.work == "" {
 		dir, err := os.MkdirTemp("", "agentbench-")
@@ -54,8 +60,15 @@ func main() {
 		}
 		defer os.RemoveAll(dir)
 		cfg.work = dir
-	} else if err := os.MkdirAll(cfg.work, 0o755); err != nil {
-		fatal(err)
+	} else {
+		abs, err := filepath.Abs(cfg.work)
+		if err != nil {
+			fatal(err)
+		}
+		cfg.work = abs
+		if err := os.MkdirAll(cfg.work, 0o755); err != nil {
+			fatal(err)
+		}
 	}
 	// A relative binary path would be resolved against each child's directory.
 	var err error
@@ -68,8 +81,10 @@ func main() {
 		}
 	}
 
+	// A session that fails does not take the completed ones with it: their
+	// record is written, and the run still ends in error.
 	sessions, runErr := run(cfg)
-	if runErr != nil && !errors.Is(runErr, errInvariant) {
+	if runErr != nil && len(sessions) == 0 {
 		fatal(runErr)
 	}
 	rec := newRecord(cfg, sessions)
@@ -91,7 +106,7 @@ func main() {
 	if runErr != nil {
 		// The record is written first: the night an invariant breaks is the
 		// night its numbers are wanted.
-		fatal(fmt.Errorf("%w: see the flagged steps above", runErr))
+		fatal(runErr)
 	}
 }
 

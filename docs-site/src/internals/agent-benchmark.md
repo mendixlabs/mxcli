@@ -23,10 +23,11 @@ Design and rationale: `docs/11-proposals/PROPOSAL_agent_devloop_benchmark.md`.
 make bench                                  # time this checkout's binary
 make bench BASELINE=/path/to/other/mxcli    # A/B against another build
 make bench BENCH_FLAGS='-sizes small -reps 3 -out record.json'
+make bench BENCH_RUNTIME=11.13.0            # also the running-app session
 ```
 
-It needs no mxbuild and no Docker: every session starts from a copy of the
-committed `testdata/pedapp` project. A default run with a baseline took 14
+Without `BENCH_RUNTIME` it needs no mxbuild and no Docker: every session
+starts from a copy of the committed `testdata/pedapp` project. A default run with a baseline took 14
 minutes on a 4-CPU machine; `-sizes small -reps 1` takes under a minute and is enough to see
 whether a change moved anything.
 
@@ -67,6 +68,49 @@ PedApp with a generated app executed into it first (the `seed-*` lines, run
 once). The session's own scripts are the same at both sizes, so the *Scaling*
 table at the end of the output shows what each command costs more purely
 because the project around it is bigger.
+
+## The running-app session
+
+`BENCH_RUNTIME=<Mendix version>` adds a third session: what an agent waits for
+once the app is up. Measured sessions spend more wall time here than in every
+mxcli-only command together.
+
+| Step | Commands | What it shows |
+|---|---|---|
+| `boot` | `run --local --watch --detach --db-type hsqldb --test-endpoint --allow-call` | until the app serves: build, runtime start, schema |
+| `page-check` | `playwright check` | a text verdict for the home page |
+| `hot-apply` | `exec` of a one-microflow change, then `run wait` | a behavioural change, live without a restart |
+| `test-attach` | `test --attach` | a test run in the running app, nothing built |
+| `apply-entity` | `exec` adding an attribute, then `run wait` | a structural change: runtime restart and schema update |
+| `stop` | `run stop` | |
+| `test-cold` | `test --local --db-type hsqldb` | a test run that boots its own runtime |
+
+It differs from the other two sessions in four ways:
+
+- **The project is created by `mxcli new`**, with the session's entities,
+  microflows and pages authored into it. PedApp cannot be built — the fixture
+  carries no theme. `new` and the authoring are timed once, by the candidate
+  (the `new` and `author` lines).
+- **mxcli installs what it needs.** mxbuild and the runtime for the version
+  are downloaded when they are not cached, before anything is timed. The
+  machine has to bring JDK 21, and node with the `playwright` package and a
+  Chromium for `page-check`; `BENCH_FLAGS=-page-check=false` leaves that step
+  out.
+- **The arms take turns.** A boot leaves a runtime up, and two at once would
+  share the ports and the processor they are timed on. So one binary runs its
+  whole session and is stopped, then the other. The pairing is by repetition,
+  minutes apart instead of seconds.
+- **Read the wall ratio only.** The time is spent in mxbuild and the runtime,
+  which are the same in both arms; the CPU column covers the mxcli process
+  alone and says little here. A real mxcli regression is a smaller share of a
+  noisier figure than in the other sessions — with the same code in both arms
+  the ratios ran from 0.92 to 1.04 over three repetitions.
+
+`boot` and `stop` each report 7 files changed: the test endpoint's documents,
+added when the app starts and removed when it stops.
+
+The database is the runtime's built-in HSQLDB, so no PostgreSQL is needed.
+Figures are for one Mendix version and do not carry over to another.
 
 ## Reading the output
 
@@ -143,19 +187,21 @@ outside.
 ## The nightly job
 
 The `bench` job in `.github/workflows/nightly.yml` downloads the previous
-nightly release's binary, runs `make bench` against it, writes the table to
+nightly release's binary, runs all three sessions against it, writes the table to
 the job summary, and commits the JSON record to the `benchmarks` branch as
 `results/YYYY/MM/<timestamp>-<sha>.json`. That branch holds records only and
 is never merged.
 
 The job does not gate the nightly release. It fails only when a command of
-the session fails or a `wrote-on-re-exec` is found.
+a session fails or a `wrote-on-re-exec` is found. The running-app session runs
+last, and a session that fails does not take the completed ones with it: their
+record is still written and committed.
 
 ## What it does not measure
 
-- **mxbuild and the running app** — `docker check`, the build, `run --local`
-  boot and hot apply, `mxcli test`. These are where measured sessions spend
-  the most wall time and are the next phases of the proposal.
-- **Creating the project** — sessions start from a committed fixture, not from
-  `mxcli new`, which needs mxbuild.
+- **Validation and the full build** — `docker check` and `docker build`, the
+  next phase of the proposal.
+- **A PostgreSQL-backed app** — the running-app session uses HSQLDB.
+- **`mxcli new` as an A/B** — it is timed once, by the candidate, as a trend
+  figure.
 - **Tokens and model calls** — see `mxcli eval run`.

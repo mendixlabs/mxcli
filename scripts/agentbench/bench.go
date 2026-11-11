@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -30,9 +32,12 @@ const statsFileEnv = "MXCLI_STATS_FILE"
 // ones left.
 type step struct {
 	name string
-	// args is the command line after the binary; {P} is the project's .mpr and
-	// {S} the directory holding the session's scripts.
-	args []string
+	// cmds are the command lines after the binary, run one after the other
+	// and measured as one: {P} is the project's .mpr and {S} the directory
+	// holding the session's scripts. Most steps are one command. A change to a
+	// running app is two, the edit and the wait for it to be live, because
+	// that pair is what the agent sits through.
+	cmds [][]string
 	// weight is how many times a real session runs this kind of command for
 	// each time the benchmark does; see weights below.
 	weight int
@@ -40,6 +45,9 @@ type step struct {
 	// canary. A candidate that writes there has a defect, not a slowdown.
 	noWrites bool
 }
+
+// one is a step of a single command.
+func one(args ...string) [][]string { return [][]string{args} }
 
 // weightsVersion identifies the weight column. A record carries it so a change
 // of weights is never read as a change of speed.
@@ -54,21 +62,21 @@ func sessionSteps() []step {
 	return []step{
 		// The first command on a project builds its unit index; the second is
 		// what every later command pays to start and open.
-		{name: "open-cold", args: []string{"-p", "{P}", "-c", "show modules"}, weight: 1},
-		{name: "open", args: []string{"-p", "{P}", "-c", "show modules"}, weight: 60},
-		{name: "domain", args: []string{"exec", "{S}/domain.mdl", "-p", "{P}"}, weight: 1},
-		{name: "microflows", args: []string{"exec", "{S}/microflows.mdl", "-p", "{P}"}, weight: 1},
-		{name: "pages", args: []string{"exec", "{S}/pages.mdl", "-p", "{P}"}, weight: 1},
-		{name: "describe", args: []string{"-p", "{P}", "-c", read}, weight: 60},
-		{name: "catalog", args: []string{"-p", "{P}", "-c", "refresh catalog"}, weight: 5},
-		{name: "catalog-full", args: []string{"-p", "{P}", "-c", "refresh catalog full"}, weight: 1},
-		{name: "query", args: []string{"-p", "{P}", "-c", "select count(*) from CATALOG.ENTITIES"}, weight: 20},
-		{name: "check", args: []string{"check", "{S}/single-edit.mdl", "-p", "{P}", "--references"}, weight: 90},
-		{name: "single-edit", args: []string{"exec", "{S}/single-edit.mdl", "-p", "{P}"}, weight: 150},
-		{name: "catalog-after-edit", args: []string{"-p", "{P}", "-c", "refresh catalog full"}, weight: 10},
-		{name: "bulk-alter", args: []string{"exec", "{S}/bulk-alter.mdl", "-p", "{P}"}, weight: 1},
-		{name: "re-exec", args: []string{"exec", "{S}/bulk-alter.mdl", "-p", "{P}"}, weight: 1, noWrites: true},
-		{name: "rename", args: []string{"-p", "{P}", "-c", "rename entity Bench.Item01 to Item01Renamed"}, weight: 1},
+		{name: "open-cold", cmds: one("-p", "{P}", "-c", "show modules"), weight: 1},
+		{name: "open", cmds: one("-p", "{P}", "-c", "show modules"), weight: 60},
+		{name: "domain", cmds: one("exec", "{S}/domain.mdl", "-p", "{P}"), weight: 1},
+		{name: "microflows", cmds: one("exec", "{S}/microflows.mdl", "-p", "{P}"), weight: 1},
+		{name: "pages", cmds: one("exec", "{S}/pages.mdl", "-p", "{P}"), weight: 1},
+		{name: "describe", cmds: one("-p", "{P}", "-c", read), weight: 60},
+		{name: "catalog", cmds: one("-p", "{P}", "-c", "refresh catalog"), weight: 5},
+		{name: "catalog-full", cmds: one("-p", "{P}", "-c", "refresh catalog full"), weight: 1},
+		{name: "query", cmds: one("-p", "{P}", "-c", "select count(*) from CATALOG.ENTITIES"), weight: 20},
+		{name: "check", cmds: one("check", "{S}/single-edit.mdl", "-p", "{P}", "--references"), weight: 90},
+		{name: "single-edit", cmds: one("exec", "{S}/single-edit.mdl", "-p", "{P}"), weight: 150},
+		{name: "catalog-after-edit", cmds: one("-p", "{P}", "-c", "refresh catalog full"), weight: 10},
+		{name: "bulk-alter", cmds: one("exec", "{S}/bulk-alter.mdl", "-p", "{P}"), weight: 1},
+		{name: "re-exec", cmds: one("exec", "{S}/bulk-alter.mdl", "-p", "{P}"), weight: 1, noWrites: true},
+		{name: "rename", cmds: one("-p", "{P}", "-c", "rename entity Bench.Item01 to Item01Renamed"), weight: 1},
 	}
 }
 
@@ -81,6 +89,8 @@ func writeSession(dir string, entities int) error {
 		"pages.mdl":       gen.Pages(p),
 		"single-edit.mdl": gen.SingleEdit(p),
 		"bulk-alter.mdl":  gen.BulkAlter(p),
+		"entity-edit.mdl": gen.EntityEdit(p),
+		"bench.test.mdl":  gen.Tests(p),
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
 			return err
@@ -117,37 +127,59 @@ type counts struct {
 	WritesWritten int   `json:"writes_written"`
 }
 
-// runStep runs one process and measures it. A non-zero exit is an error
-// carrying the tail of the output: a failed command's time is not a
-// measurement.
-func runStep(bin string, args []string, project, scripts, scratch string) (sample, error) {
-	resolved := make([]string, len(args))
-	for i, a := range args {
-		a = strings.ReplaceAll(a, "{P}", project)
-		resolved[i] = strings.ReplaceAll(a, "{S}", scripts)
-	}
-	statsPath := filepath.Join(scratch, "stats.jsonl")
-	_ = os.Remove(statsPath)
+// commandTimeout bounds one command. A hung boot must fail the run with its
+// output, not sit until the CI job is cancelled with none.
+const commandTimeout = 20 * time.Minute
 
+// statsSeq numbers the stats files, one per command: a detached `run` appends
+// its line when it stops, minutes later, and must not land in the file of
+// whichever step is running by then.
+var statsSeq int
+
+// runStep runs a step's commands in order and measures them as one. A non-zero
+// exit is an error carrying the tail of the output: a failed command's time is
+// not a measurement.
+func runStep(bin string, cmds [][]string, project, scripts, scratch string) (sample, error) {
 	before := unitDigests(filepath.Dir(project))
-	cmd := exec.Command(bin, resolved...)
-	cmd.Env = append(os.Environ(), statsFileEnv+"="+statsPath, "NO_COLOR=1")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	start := time.Now()
-	err := cmd.Run()
-	wall := time.Since(start)
-	if err != nil {
-		return sample{}, fmt.Errorf("%s %s: %w\n%s", filepath.Base(bin), strings.Join(resolved, " "), err, tail(stdout.String()+stderr.String(), 20))
+	var s sample
+	for _, args := range cmds {
+		resolved := make([]string, len(args))
+		for i, a := range args {
+			a = strings.ReplaceAll(a, "{P}", project)
+			resolved[i] = strings.ReplaceAll(a, "{S}", scripts)
+		}
+		statsSeq++
+		statsPath := filepath.Join(scratch, fmt.Sprintf("stats-%d.jsonl", statsSeq))
+
+		ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
+		cmd := exec.CommandContext(ctx, bin, resolved...)
+		cmd.Env = append(os.Environ(), statsFileEnv+"="+statsPath, "NO_COLOR=1")
+		// A detached child may keep the output pipes open; do not wait for it.
+		cmd.WaitDelay = 5 * time.Second
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		start := time.Now()
+		err := cmd.Run()
+		wall := time.Since(start)
+		cancel()
+		if err != nil && !errors.Is(err, exec.ErrWaitDelay) {
+			return sample{}, fmt.Errorf("%s %s: %w\n%s", filepath.Base(bin), strings.Join(resolved, " "), err, tail(stdout.String()+stderr.String(), 20))
+		}
+		s.WallMS += float64(wall.Microseconds()) / 1000
+		s.CPUMS += float64((cmd.ProcessState.UserTime() + cmd.ProcessState.SystemTime()).Microseconds()) / 1000
+		s.RSSMB = max(s.RSSMB, maxRSSMB(cmd.ProcessState))
+		s.StdoutBytes += stdout.Len()
+		if c := readCounts(statsPath); c != nil {
+			if s.Counts == nil {
+				s.Counts = &counts{}
+			}
+			s.Counts.UnitFileReads += c.UnitFileReads
+			s.Counts.WritesOffered += c.WritesOffered
+			s.Counts.WritesWritten += c.WritesWritten
+		}
+		_ = os.Remove(statsPath)
 	}
-	s := sample{
-		WallMS:       float64(wall.Microseconds()) / 1000,
-		CPUMS:        float64((cmd.ProcessState.UserTime() + cmd.ProcessState.SystemTime()).Microseconds()) / 1000,
-		StdoutBytes:  stdout.Len(),
-		Counts:       readCounts(statsPath),
-		FilesChanged: changedFiles(before, unitDigests(filepath.Dir(project))),
-	}
-	s.RSSMB = maxRSSMB(cmd.ProcessState)
+	s.FilesChanged = changedFiles(before, unitDigests(filepath.Dir(project)))
 	return s, nil
 }
 
@@ -197,7 +229,9 @@ func copyProject(src, dst string) error {
 			}
 			return os.MkdirAll(filepath.Join(dst, rel), 0o755)
 		}
-		if !d.Type().IsRegular() {
+		// `mxcli new` links its own binary into the project root: 100 MB a
+		// copy, and not part of the project.
+		if !d.Type().IsRegular() || rel == "mxcli" {
 			return nil
 		}
 		in, err := os.Open(path)
@@ -372,6 +406,8 @@ type stepResult struct {
 // sessionResult is the scripted session at one project size.
 type sessionResult struct {
 	Size string `json:"size"`
+	// Reps is how many repetitions each arm ran.
+	Reps int `json:"reps"`
 	// Units is how many unit files the project held when the session started.
 	Units int `json:"units"`
 	// Seed is the one-off build of the large fixture, candidate only: it is
@@ -407,29 +443,48 @@ type config struct {
 	sessionEntities     int
 	large               gen.Params
 	sizes               []string
-	threshold           float64
-	log                 io.Writer
+	// runtimeVersion, when set, adds the running-app session on a project
+	// created by `mxcli new` for that Mendix version.
+	runtimeVersion string
+	runtimeReps    int
+	pageCheck      bool
+	threshold      float64
+	log            io.Writer
 }
 
 // errInvariant is returned, after the record is complete, when the candidate
 // broke something a benchmark run can state exactly rather than estimate.
 var errInvariant = errors.New("the candidate broke an invariant")
 
-// runSession measures the session at one size. snapshot is the project every
-// repetition of both arms starts from.
-func runSession(cfg config, size, snapshot, scripts string) (sessionResult, error) {
+// A session is a list of steps run in order against one project.
+type session struct {
+	name  string
+	steps []step
+	reps  int
+	// armsInTurn runs one arm's whole session before the other's, instead of
+	// alternating the arms step by step. The running-app session needs it: its
+	// steps leave a runtime up, and two of them at once would share the ports
+	// and the processor they are being timed on.
+	armsInTurn bool
+	// teardown is run, unmeasured, after each arm's repetition, whatever
+	// happened in it: a runtime left behind would fail the next boot.
+	teardown []string
+}
+
+// runSession measures one session. snapshot is the project every repetition of
+// both arms starts from.
+func runSession(cfg config, def session, snapshot, scripts string) (sessionResult, error) {
 	mpr, err := findMPR(snapshot)
 	if err != nil {
 		return sessionResult{}, err
 	}
-	steps := sessionSteps()
-	res := sessionResult{Size: size, Units: countUnits(snapshot)}
+	size, steps := def.name, def.steps
+	res := sessionResult{Size: size, Reps: def.reps, Units: countUnits(snapshot)}
 	candidate := make([][]sample, len(steps))
 	baseline := make([][]sample, len(steps))
 	baselineLive := cfg.baseline != ""
 
-	for rep := 0; rep < cfg.reps; rep++ {
-		dirs := map[string]string{}
+	for rep := 0; rep < def.reps; rep++ {
 		arms := []string{"candidate"}
 		if baselineLive {
 			arms = append(arms, "baseline")
@@ -439,44 +494,86 @@ func runSession(cfg config, size, snapshot, scripts string) (sessionResult, erro
 				arms[0], arms[1] = arms[1], arms[0]
 			}
 		}
-		for _, arm := range arms {
-			dir := filepath.Join(cfg.work, fmt.Sprintf("%s-%s-%d", size, arm, rep))
-			if err := copyProject(snapshot, dir); err != nil {
-				return res, err
+		binOf := func(arm string) string {
+			if arm == "baseline" {
+				return cfg.baseline
 			}
-			dirs[arm] = dir
+			return cfg.candidate
 		}
-		for i, st := range steps {
+		dirs := map[string]string{}
+		prepare := func(arm string) error {
+			dirs[arm] = filepath.Join(cfg.work, fmt.Sprintf("%s-%s-%d", size, arm, rep))
+			return copyProject(snapshot, dirs[arm])
+		}
+		// finish stops what the arm started and removes its project.
+		finish := func(arm string) {
+			if def.teardown != nil {
+				_, _ = runStep(binOf(arm), [][]string{def.teardown}, filepath.Join(dirs[arm], mpr), scripts, cfg.work)
+			}
+			_ = os.RemoveAll(dirs[arm])
+		}
+		// runOne runs step i in one arm. Its error is the candidate's: a
+		// baseline that fails only retires the baseline.
+		runOne := func(i int, arm string) error {
+			if arm == "baseline" && !baselineLive {
+				return nil
+			}
+			st := steps[i]
+			s, err := runStep(binOf(arm), st.cmds, filepath.Join(dirs[arm], mpr), scripts, cfg.work)
+			switch {
+			case err != nil && arm == "candidate":
+				return fmt.Errorf("%s, step %s: %w", size, st.name, err)
+			case err != nil:
+				// The baseline may not know a statement the session uses.
+				// That is not this run's failure, but its project has now
+				// diverged, so no later step of it is comparable.
+				baselineLive = false
+				res.BaselineError = fmt.Sprintf("step %s: %v", st.name, err)
+				fmt.Fprintf(cfg.log, "  baseline stopped at %s; later steps have no A/B\n", st.name)
+			case arm == "candidate":
+				candidate[i] = append(candidate[i], s)
+			default:
+				baseline[i] = append(baseline[i], s)
+			}
+			return nil
+		}
+
+		var stepErr error
+		if def.armsInTurn {
 			for _, arm := range arms {
-				if arm == "baseline" && !baselineLive {
-					continue
+				if stepErr = prepare(arm); stepErr == nil {
+					for i := range steps {
+						if stepErr = runOne(i, arm); stepErr != nil {
+							break
+						}
+					}
 				}
-				bin := cfg.candidate
-				if arm == "baseline" {
-					bin = cfg.baseline
-				}
-				s, err := runStep(bin, st.args, filepath.Join(dirs[arm], mpr), scripts, cfg.work)
-				switch {
-				case err != nil && arm == "candidate":
-					return res, fmt.Errorf("%s, step %s: %w", size, st.name, err)
-				case err != nil:
-					// The baseline may not know a statement the session uses.
-					// That is not this run's failure, but its project has now
-					// diverged, so no later step of it is comparable.
-					baselineLive = false
-					res.BaselineError = fmt.Sprintf("step %s: %v", st.name, err)
-					fmt.Fprintf(cfg.log, "  baseline stopped at %s; later steps have no A/B\n", st.name)
-				case arm == "candidate":
-					candidate[i] = append(candidate[i], s)
-				default:
-					baseline[i] = append(baseline[i], s)
+				finish(arm)
+				if stepErr != nil {
+					break
 				}
 			}
+		} else {
+			for _, arm := range arms {
+				if stepErr = prepare(arm); stepErr != nil {
+					break
+				}
+			}
+			for i := 0; i < len(steps) && stepErr == nil; i++ {
+				for _, arm := range arms {
+					if stepErr = runOne(i, arm); stepErr != nil {
+						break
+					}
+				}
+			}
+			for arm := range dirs {
+				finish(arm)
+			}
 		}
-		for _, dir := range dirs {
-			_ = os.RemoveAll(dir)
+		if stepErr != nil {
+			return res, stepErr
 		}
-		fmt.Fprintf(cfg.log, "  %s: repetition %d of %d done\n", size, rep+1, cfg.reps)
+		fmt.Fprintf(cfg.log, "  %s: repetition %d of %d done\n", size, rep+1, def.reps)
 	}
 
 	var invariant bool
@@ -542,7 +639,7 @@ func seedLarge(cfg config, scripts string) (string, []seedResult, error) {
 		if err := os.WriteFile(script, []byte(part.src), 0o644); err != nil {
 			return "", nil, err
 		}
-		s, err := runStep(cfg.candidate, []string{"exec", script, "-p", "{P}"}, filepath.Join(dir, mpr), scripts, cfg.work)
+		s, err := runStep(cfg.candidate, one("exec", script, "-p", "{P}"), filepath.Join(dir, mpr), scripts, cfg.work)
 		if err != nil {
 			return "", nil, fmt.Errorf("%s: %w", part.name, err)
 		}
@@ -552,7 +649,83 @@ func seedLarge(cfg config, scripts string) (string, []seedResult, error) {
 	return dir, out, nil
 }
 
-// run is the whole benchmark: every requested size, in order.
+// runtimeSteps is the running-app session: what an agent waits for once the
+// app is up. Weights are rounded from the same measured builds as the others
+// (`run wait` 95 calls in the largest, restarts 150, microflow test runs 35).
+func runtimeSteps(pageCheck bool) []step {
+	steps := []step{
+		// Until the app serves: the build, the runtime start, the schema.
+		{name: "boot", cmds: one("run", "--local", "--watch", "--detach", "--db-type", "hsqldb",
+			"--test-endpoint", "--allow-call", "-p", "{P}"), weight: 10},
+		{name: "page-check", cmds: one("playwright", "check", "-p", "{P}"), weight: 30},
+		// A microflow change, live: the model is reloaded, the runtime stays.
+		{name: "hot-apply", cmds: [][]string{
+			{"exec", "{S}/single-edit.mdl", "-p", "{P}"},
+			{"run", "wait", "-p", "{P}"},
+		}, weight: 60},
+		{name: "test-attach", cmds: one("test", "{S}/bench.test.mdl", "-p", "{P}", "--attach"), weight: 30},
+		// An entity change, live: the runtime restarts and updates the schema.
+		{name: "apply-entity", cmds: [][]string{
+			{"exec", "{S}/entity-edit.mdl", "-p", "{P}"},
+			{"run", "wait", "-p", "{P}"},
+		}, weight: 20},
+		{name: "stop", cmds: one("run", "stop", "-p", "{P}"), weight: 10},
+		// A test run that boots its own runtime, as one does with no app up.
+		{name: "test-cold", cmds: one("test", "{S}/bench.test.mdl", "-p", "{P}", "--local", "--db-type", "hsqldb"), weight: 5},
+	}
+	if !pageCheck {
+		steps = slices.DeleteFunc(steps, func(s step) bool { return s.name == "page-check" })
+	}
+	return steps
+}
+
+// prepareRuntime creates the project the running-app session starts from:
+// `mxcli new` for the requested Mendix version, with the session's app
+// authored into it. The fixture the other sessions use cannot be built — it
+// carries no theme — so this one has to be made. `mxcli new` installs mxbuild
+// when it is not cached; that is done first and separately, so the download
+// is in neither the `new` figure nor the first boot.
+func prepareRuntime(cfg config, scripts string) (string, []seedResult, error) {
+	untimed := func(what string, args ...string) error {
+		fmt.Fprintf(cfg.log, "  %s\n", what)
+		out, err := exec.Command(cfg.candidate, args...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("%s: %w\n%s", what, err, tail(string(out), 20))
+		}
+		return nil
+	}
+	if err := untimed("installing mxbuild "+cfg.runtimeVersion+" if it is not cached", "setup", "mxbuild", "--version", cfg.runtimeVersion); err != nil {
+		return "", nil, err
+	}
+	dir := filepath.Join(cfg.work, "runtime-snapshot")
+	var seed []seedResult
+	start := time.Now()
+	if err := untimed("creating the project", "new", "BenchApp", "--version", cfg.runtimeVersion, "--output-dir", dir); err != nil {
+		return "", nil, err
+	}
+	seed = append(seed, seedResult{Name: "new", sample: sample{WallMS: float64(time.Since(start).Microseconds()) / 1000}})
+	mpr, err := findMPR(dir)
+	if err != nil {
+		return "", nil, err
+	}
+	project := filepath.Join(dir, mpr)
+	s, err := runStep(cfg.candidate, [][]string{
+		{"exec", "{S}/domain.mdl", "-p", "{P}"},
+		{"exec", "{S}/microflows.mdl", "-p", "{P}"},
+		{"exec", "{S}/pages.mdl", "-p", "{P}"},
+	}, project, scripts, cfg.work)
+	if err != nil {
+		return "", nil, fmt.Errorf("authoring the app: %w", err)
+	}
+	seed = append(seed, seedResult{Name: "author", sample: s})
+	if err := untimed("caching the runtime", "run", "--local", "--setup", "--db-type", "hsqldb", "-p", project); err != nil {
+		return "", nil, err
+	}
+	return dir, seed, nil
+}
+
+// run is the whole benchmark: every requested session, in order. When a
+// session fails, the ones that completed are still returned.
 func run(cfg config) ([]sessionResult, error) {
 	scripts := filepath.Join(cfg.work, "scripts")
 	if err := os.MkdirAll(scripts, 0o755); err != nil {
@@ -561,27 +734,37 @@ func run(cfg config) ([]sessionResult, error) {
 	if err := writeSession(scripts, cfg.sessionEntities); err != nil {
 		return nil, err
 	}
+	names := cfg.sizes
+	if cfg.runtimeVersion != "" {
+		names = append(slices.Clone(names), "runtime")
+	}
 	var results []sessionResult
 	var invariant bool
-	for _, size := range cfg.sizes {
-		fmt.Fprintf(cfg.log, "%s session\n", size)
+	for _, name := range names {
+		fmt.Fprintf(cfg.log, "%s session\n", name)
+		def := session{name: name, steps: sessionSteps(), reps: cfg.reps}
 		var snapshot string
 		var seed []seedResult
-		switch size {
+		var err error
+		switch name {
 		case "small":
 			snapshot = filepath.Join(cfg.work, "small-snapshot")
-			if err := copyProject(cfg.base, snapshot); err != nil {
-				return results, err
-			}
+			err = copyProject(cfg.base, snapshot)
 		case "large":
-			var err error
-			if snapshot, seed, err = seedLarge(cfg, scripts); err != nil {
-				return results, err
+			snapshot, seed, err = seedLarge(cfg, scripts)
+		case "runtime":
+			def = session{
+				name: name, steps: runtimeSteps(cfg.pageCheck), reps: cfg.runtimeReps,
+				armsInTurn: true, teardown: []string{"run", "stop", "-p", "{P}"},
 			}
+			snapshot, seed, err = prepareRuntime(cfg, scripts)
 		default:
-			return results, fmt.Errorf("unknown size %q (want small or large)", size)
+			err = fmt.Errorf("unknown size %q (want small or large)", name)
 		}
-		res, err := runSession(cfg, size, snapshot, scripts)
+		if err != nil {
+			return results, err
+		}
+		res, err := runSession(cfg, def, snapshot, scripts)
 		res.Seed = seed
 		if errors.Is(err, errInvariant) {
 			invariant = true

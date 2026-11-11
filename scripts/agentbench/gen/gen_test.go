@@ -119,8 +119,39 @@ func TestGeneratedScriptsExecuteAndSettleOnPedApp(t *testing.T) {
 		t.Errorf("re-running the settled bulk change landed %d writes, want 0\n%s", got, out.String())
 	}
 
+	// The structural edit of the running-app session, and its re-run: the
+	// attribute is there the second time, and the statement says so itself.
+	before = written()
+	run("entity-edit", EntityEdit(session))
+	if written() == before {
+		t.Error("adding an attribute landed no write")
+	}
+	before = written()
+	run("entity-edit again", EntityEdit(session))
+	if got := written() - before; got != 0 {
+		t.Errorf("adding the same attribute again landed %d writes", got)
+	}
+
 	seed := Params{Prefix: "Seed", Modules: 2, Entities: 2}
 	run("seed-domain", Domain(seed))
 	run("seed-microflows", Microflows(seed))
 	run("seed-pages", Pages(seed))
+}
+
+// The test suite must name what the session authored, or every test in it
+// fails for a reason that has nothing to do with speed.
+func TestTestsNameTheFirstEntitysValidation(t *testing.T) {
+	p := Params{Prefix: "Bench", Modules: 1, Entities: 2}
+	suite := Tests(p)
+	if got := strings.Count(suite, "@test "); got != 2 {
+		t.Errorf("%d tests in the suite, want 2", got)
+	}
+	for _, want := range []string{"create Bench.Item01 (", "call microflow Bench.VAL_Item01_Save("} {
+		if !strings.Contains(suite, want) {
+			t.Errorf("the suite does not contain %q", want)
+		}
+	}
+	if !strings.Contains(Microflows(p), "create or modify microflow Bench.VAL_Item01_Save (") {
+		t.Error("the microflow the suite calls is not one the session creates")
+	}
 }
