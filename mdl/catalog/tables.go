@@ -7,6 +7,12 @@ package catalog
 //
 // History:
 //
+//	47 (absent references are NULL): the agent-editor tables (agents,
+//	    agent_tools, agent_knowledge_bases, ai_models, knowledge_bases,
+//	    consumed_mcp_services, published_mcp_services) store an absent
+//	    reference as NULL instead of '', as their optional values already were
+//	    (ako/mxcli#2093). Without the bump a cached catalog keeps the '' and an
+//	    `IS NULL` query finds nothing.
 //	46 (excluded UI documents): snippets and layouts gain Excluded, as pages
 //	    already had, and snippets.ParameterCount is the snippet's parameter
 //	    count instead of a literal 0 (mendixlabs/mxcli#1819). Without the bump
@@ -251,7 +257,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "46"
+const CatalogSchemaVersion = "47"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
