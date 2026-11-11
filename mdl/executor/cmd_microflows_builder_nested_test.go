@@ -45,7 +45,7 @@ var nestedBuilderInherits = map[string]bool{
 
 	// What the body builds, merged into the parent by the site.
 	"objects": false, "flows": false, "annotationFlows": false, "errors": false,
-	"statedNotes": false, "curveByOrigin": false, "rejoinMergeAt": false,
+	"statedNotes": false, "curveByOrigin": false, "rejoinMergeAt": false, "rejoinPastRowX": false,
 	"returnEndIDs": false, "fallThroughEndID": false, "endsWithReturn": false,
 	"lastReturnEndID": false, "returnValue": false,
 

@@ -185,6 +185,10 @@ type flowBuilder struct {
 	// rejoins the normal path, keyed by the activity. describe folds that merge
 	// away into the fall-through form and carries its position here (#750).
 	rejoinMergeAt map[model.ID]*ast.Position
+	// rejoinPastRowX is the x of the merge an activity's falling-through
+	// handler row rejoins at when the row is too long to rejoin before the next
+	// statement (rejoinAfterRow). An @merge in rejoinMergeAt still wins.
+	rejoinPastRowX map[model.ID]int
 	// labelReg holds the `merge <label>` table and the pending `join` edges.
 	// Shared with the error-handler sub-builder (same object collection) and
 	// deliberately NOT with a loop's sub-builder, whose LoopedActivity owns a

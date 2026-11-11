@@ -70,6 +70,13 @@ type layoutMeasurer struct {
 // zero-width statements (e.g. ReturnStmt, which produces no visual box)
 // don't artificially inflate the measured width.
 func (m *layoutMeasurer) measureStatements(stmts []ast.MicroflowStatement) Bounds {
+	return m.measureRun(stmts, false)
+}
+
+// measureRun measures a statement run. atTail says the run is a loop body, whose
+// last statement the builder builds with atBodyTail set: an IF/ELSE there joins
+// nothing and draws no merge.
+func (m *layoutMeasurer) measureRun(stmts []ast.MicroflowStatement, atTail bool) Bounds {
 	if len(stmts) == 0 {
 		return Bounds{Width: 0, Height: 0}
 	}
@@ -82,7 +89,11 @@ func (m *layoutMeasurer) measureStatements(stmts []ast.MicroflowStatement) Bound
 
 	var prev ast.MicroflowStatement
 	for i, stmt := range stmts {
+		tail := atTail && i == len(stmts)-1
 		bounds := m.measureStatement(stmt)
+		if ifStmt, ok := stmt.(*ast.IfStmt); ok && tail {
+			bounds = m.measureIf(ifStmt, true)
+		}
 		maxHeight = max(maxHeight, bounds.Height)
 		if bounds.Width == 0 {
 			continue
@@ -90,6 +101,12 @@ func (m *layoutMeasurer) measureStatements(stmts []ast.MicroflowStatement) Bound
 		left := cursor
 		if prev != nil {
 			left += gapBetween(prev, stmt)
+		} else {
+			// The builder centres the first element where an activity's centre
+			// would be, so the run is measured from that activity's left edge. A
+			// split is narrower than an activity and starts inside it
+			// (ako/mxcli#1773).
+			left = max(ActivityWidth/2-leftHalfOf(stmt), 0)
 		}
 		if left < laneBusy && reachesBelowMainLine(stmt, bounds) {
 			left = laneBusy
@@ -97,14 +114,22 @@ func (m *layoutMeasurer) measureStatements(stmts []ast.MicroflowStatement) Bound
 		if guard, ok := stmt.(*ast.IfStmt); ok && isGuard(guard) && m.layoutStyle().Guard == GuardTrueRight {
 			return m.measureGuardTrueRight(guard, stmts[i+1:], left, extent, maxHeight)
 		}
-		if guard, ok := stmt.(*ast.IfStmt); ok && isGuard(guard) {
-			branchRight := left + guardBranchInset + m.measureBranch(guard.ThenBody).Width
-			cursor = left + guardMainWidth
-			laneBusy = branchRight + laneGap
-			extent = max(extent, branchRight)
-		} else {
-			cursor = left + bounds.Width
+		if ifStmt, ok := stmt.(*ast.IfStmt); ok && !ifHasMerge(ifStmt, tail) {
+			// No merge: the main line resumes where addIfStatement's no-merge
+			// exit puts it, not past the far end of the branches, and the lane
+			// under it is taken up to the branches' end.
+			//
+			// The cursor is where the next element is placed from, not something
+			// drawn, so it is not part of the extent: an IF that ends the run
+			// reaches only as far as its split and its branches.
+			branchRight := left + bounds.Width
+			cursor = left + m.ifMainWidth(ifStmt)
+			laneBusy = max(laneBusy, branchRight+laneGap)
+			extent = max(extent, branchRight, left+SplitWidth)
+			prev = stmt
+			continue
 		}
+		cursor = left + bounds.Width
 		if row := m.handlerRowWidth(stmt); row > 0 {
 			// The handler's row hangs in the same lane, from the activity's left
 			// edge, and the main line goes on above it — as reserveHandlerRow
@@ -112,6 +137,11 @@ func (m *layoutMeasurer) measureStatements(stmts []ast.MicroflowStatement) Bound
 			rowRight := left + row
 			laneBusy = max(laneBusy, rowRight+laneGap)
 			extent = max(extent, rowRight)
+			if rejoinsPastRow(stmtErrorHandling(stmt), row) {
+				// A row that falls through rejoins at a merge one gap past it,
+				// and the main line goes on from that merge (rejoinAfterRow).
+				cursor = max(cursor, rowRight+laneGap+MergeSize)
+			}
 		}
 		extent = max(extent, cursor)
 		prev = stmt
@@ -126,7 +156,7 @@ func (m *layoutMeasurer) measureStatements(stmts []ast.MicroflowStatement) Bound
 // activity, and a merge placed by the activities alone lands on top of it.
 func (m *layoutMeasurer) measureBranch(stmts []ast.MicroflowStatement) Bounds {
 	b := m.measureStatements(stmts)
-	if !lastStmtIsReturn(stmts) {
+	if !lastStmtDrawsEndEvent(stmts) {
 		return b
 	}
 	if b.Width == 0 {
@@ -136,6 +166,24 @@ func (m *layoutMeasurer) measureBranch(stmts []ast.MicroflowStatement) Bounds {
 		b.Width += HorizontalSpacing - ActivityWidth/2 + EventSize/2
 	}
 	return b
+}
+
+// lastStmtDrawsEndEvent reports whether a branch ends in a statement that draws
+// its own event one pitch past the last activity: RETURN, RAISE ERROR, BREAK or
+// CONTINUE. A `join` ends the path too but draws nothing — its edge goes to a
+// merge placed elsewhere — and a decision whose every branch ends draws its events
+// inside its own branches, which its own measurement already holds. Counting
+// either as an end event measured a handler row ending in a join at about twice
+// its drawn width (ako/mxcli#1773).
+func lastStmtDrawsEndEvent(stmts []ast.MicroflowStatement) bool {
+	if len(stmts) == 0 {
+		return false
+	}
+	switch stmts[len(stmts)-1].(type) {
+	case *ast.ReturnStmt, *ast.RaiseErrorStmt, *ast.BreakStmt, *ast.ContinueStmt:
+		return true
+	}
+	return false
 }
 
 // gapBetween is the empty space the builder actually leaves between two consecutive
@@ -155,28 +203,23 @@ func gapBetween(prev, next ast.MicroflowStatement) int {
 	// Distance from prev's measured right edge to the centre the builder gives next.
 	var toNextCentre int
 	switch prev.(type) {
-	case *ast.IfStmt:
-		// After an IF, posX = (measured right edge) + HorizontalSpacing/2.
-		toNextCentre = HorizontalSpacing / 2
 	case *ast.EnumSplitStmt, *ast.InheritanceSplitStmt:
 		return HorizontalSpacing
+	case *ast.MergeStmt:
+		// addMergeStatement advances half a pitch from the merge's centre, which
+		// leaves an activity after it touching it: no gap, and no floor either,
+		// or the run is measured wider than it is drawn.
+		return max(HorizontalSpacing/2-MergeSize/2-leftHalfOf(next), 0)
 	default:
-		// A simple activity, or a loop box: after either, the builder centres the
-		// next element one activity-gap plus half an activity past the right edge.
-		// A simple activity: centre-to-centre pitch, less its own right half.
+		// A simple activity, a loop box or an IF: after each, the builder centres
+		// the next element one activity-gap plus half an activity past the right
+		// edge. An IF's right edge is its merge's (posX = mergeX + MergeSize +
+		// HorizontalSpacing/2); one without a merge is given a main-line width
+		// that ends where this puts the next element (ifMainWidth).
 		toNextCentre = HorizontalSpacing - ActivityWidth/2
 	}
 	// How far next reaches left of the centre it is given.
-	var leftHalf int
-	switch next.(type) {
-	case *ast.IfStmt, *ast.EnumSplitStmt:
-		leftHalf = SplitWidth / 2
-	default:
-		// An activity — and a loop box, whose left edge the builder now puts where
-		// an activity's would be.
-		leftHalf = ActivityWidth / 2
-	}
-	return max(toNextCentre-leftHalf, 20)
+	return max(toNextCentre-leftHalfOf(next), 20)
 }
 
 // measureStatementsSpan returns the horizontal extent a statement run actually
@@ -232,6 +275,11 @@ func (m *layoutMeasurer) measureStatement(stmt ast.MicroflowStatement) Bounds {
 	case *ast.ReturnStmt:
 		// Return doesn't add visual element (handled by EndEvent)
 		return Bounds{Width: 0, Height: 0}
+	case *ast.JoinStmt:
+		// A join draws nothing: its edge goes to a merge declared elsewhere.
+		return Bounds{Width: 0, Height: 0}
+	case *ast.MergeStmt:
+		return Bounds{Width: MergeSize, Height: MergeSize}
 	default:
 		// Simple activities have fixed size, but a custom error handler's row
 		// hangs under the activity. Heights are read as symmetric about the
@@ -331,6 +379,15 @@ func (m *layoutMeasurer) measureInheritanceSplitStatement(s *ast.InheritanceSpli
 // - IF with ELSE: TRUE path horizontal, FALSE path below
 // - IF without ELSE: FALSE path horizontal, TRUE path below
 func (m *layoutMeasurer) measureIfStatement(s *ast.IfStmt) Bounds {
+	return m.measureIf(s, false)
+}
+
+// measureIf measures an IF from the split's LEFT edge to the right edge of what
+// it draws furthest right: its merge, or without one the end of its branches.
+// atTail is the builder's atBodyTail. It used to be measured from the split's
+// centre, as if that were its left edge, and came out 45px short: the merge of an
+// enclosing IF stood inside the activity after it (ako/mxcli#1773).
+func (m *layoutMeasurer) measureIf(s *ast.IfStmt, atTail bool) Bounds {
 	// Measure THEN branch
 	thenBounds := m.measureBranch(s.ThenBody)
 
@@ -354,14 +411,17 @@ func (m *layoutMeasurer) measureIfStatement(s *ast.IfStmt) Bounds {
 		}
 	}
 
-	totalWidth := SplitWidth + HorizontalSpacing/2 + branchWidth + MergeSize
-	// A guard — `if X then ...; return; end if` with no ELSE — has no merge: its
-	// branch ends in an end event and the main line resumes straight after the
-	// branch (addIfStatement's no-merge exit). Measuring a merge and its spacing
-	// that are never drawn left 120px of empty main line after every guard nested
-	// in a branch.
-	if isGuard(s) {
-		totalWidth = SplitWidth + HorizontalSpacing/2 + thenBounds.Width
+	// addIfStatement centres the merge at splitX + SplitWidth +
+	// HorizontalSpacing/2 + branchWidth; the split reaches SplitWidth/2 left of
+	// splitX.
+	totalWidth := SplitWidth/2 + SplitWidth + HorizontalSpacing/2 + branchWidth + MergeSize/2
+	// Without a merge — a guard, `if X then ...; return; end if`, or an IF/ELSE
+	// one of whose branches ends the flow — the IF reaches to the end of its
+	// branches, which start guardBranchInset right of the split's centre.
+	// Measuring a merge and its spacing that are never drawn left 120px of empty
+	// main line after every guard nested in a branch.
+	if !ifHasMerge(s, atTail) {
+		totalWidth = SplitWidth/2 + guardBranchInset + branchWidth
 	}
 
 	// Height depends on layout strategy
@@ -390,7 +450,7 @@ func (m *layoutMeasurer) measureIfStatement(s *ast.IfStmt) Bounds {
 // measureLoopStatement calculates bounds for LOOP
 func (m *layoutMeasurer) measureLoopStatement(s *ast.LoopStmt) Bounds {
 	// Measure loop body
-	bodyBounds := m.measureStatements(s.Body)
+	bodyBounds := m.measureRun(s.Body, true)
 
 	// Loop box size: body + padding on all sides, plus the iterator column the
 	// builder reserves on the left. Leaving the column out measured every foreach
@@ -404,7 +464,7 @@ func (m *layoutMeasurer) measureLoopStatement(s *ast.LoopStmt) Bounds {
 
 // measureWhileStatement calculates bounds for WHILE
 func (m *layoutMeasurer) measureWhileStatement(s *ast.WhileStmt) Bounds {
-	bodyBounds := m.measureStatements(s.Body)
+	bodyBounds := m.measureRun(s.Body, true)
 	width := max(bodyBounds.Width+2*LoopPadding, MinLoopWidth)
 	height := max(bodyBounds.Height+2*LoopPadding, MinLoopHeight)
 	return Bounds{Width: width, Height: height}

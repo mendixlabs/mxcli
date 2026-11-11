@@ -18,18 +18,16 @@
 // under its activity and the main line carries on over it the same way.
 package executor
 
-import "github.com/mendixlabs/mxcli/mdl/ast"
+import (
+	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/model"
+)
 
 const (
 	// guardBranchInset is where a guard's branch starts, measured the way the
 	// measurer measures: from the split's x to the left edge of the branch's first
 	// activity (thenStartX - ActivityWidth/2).
 	guardBranchInset = SplitWidth + HorizontalSpacing/2 - ActivityWidth/2
-
-	// guardMainWidth is what a guard takes of the main line, in the measurer's terms:
-	// gapBetween adds HorizontalSpacing/2 after an IF, and the builder puts the next
-	// element at thenStartX = split x + SplitWidth + HorizontalSpacing/2.
-	guardMainWidth = SplitWidth
 
 	// laneGap is the clear space kept after a branch before the lane is used again:
 	// the same edge-to-edge gap two activities have on the main line.
@@ -40,6 +38,80 @@ const (
 // the flow, so there is no merge and the branch never rejoins the main line.
 func isGuard(s *ast.IfStmt) bool {
 	return len(s.ElseBody) == 0 && !s.HasElse && lastStmtIsReturn(s.ThenBody)
+}
+
+// ifJoinsNothingAtTail reports whether addIfStatement, building s as the last
+// statement of a loop body, leaves out its merge: an IF/ELSE whose two branches
+// both carry on there ends the iteration either way (mendixlabs/mxcli#884).
+func ifJoinsNothingAtTail(s *ast.IfStmt) bool {
+	hasElse := s.HasElse || len(s.ElseBody) > 0
+	return hasElse && len(s.ThenBody) > 0 && len(s.ElseBody) > 0 &&
+		!lastStmtIsReturn(s.ThenBody) && !lastStmtIsReturn(s.ElseBody) &&
+		!bodyHasContinuingCustomErrorHandler(s.ThenBody) && !bodyHasContinuingCustomErrorHandler(s.ElseBody) &&
+		(s.Annotations == nil || s.Annotations.Merge == nil)
+}
+
+// ifHasMerge reports whether addIfStatement draws a merge for s, as it decides
+// before building the branches. atTail is the builder's atBodyTail.
+func ifHasMerge(s *ast.IfStmt, atTail bool) bool {
+	thenReturns := lastStmtIsReturn(s.ThenBody)
+	if !(s.HasElse || len(s.ElseBody) > 0) {
+		return !thenReturns
+	}
+	if atTail && ifJoinsNothingAtTail(s) {
+		return false
+	}
+	return !thenReturns && !lastStmtIsReturn(s.ElseBody)
+}
+
+// ifMainWidth is how much of the main line an IF without a merge takes, in the
+// measurer's terms: from the split's left edge to a point gapBetween's default
+// (HorizontalSpacing - ActivityWidth/2) short of where addIfStatement's no-merge
+// exit centres the next element. A guard resumes at thenStartX, in the column its
+// branch starts in; an IF/ELSE one of whose branches ends the flow resumes past
+// the THEN branch, or a pitch after the split.
+func (m *layoutMeasurer) ifMainWidth(s *ast.IfStmt) int {
+	thenStart := SplitWidth + HorizontalSpacing/2 // from the split's centre
+	next := thenStart
+	if s.HasElse || len(s.ElseBody) > 0 {
+		next = max(HorizontalSpacing, thenStart+m.measureBranch(s.ThenBody).Width+HorizontalSpacing/2)
+	}
+	return SplitWidth/2 + next - (HorizontalSpacing - ActivityWidth/2)
+}
+
+// rejoinsPastRow reports whether stmt's error handler falls through to the main
+// line from a row of width row too long to rejoin between the activity and the
+// next one: two activities or more. Such a row rejoins at a merge one gap past its
+// end, and the main line waits for that merge (rejoinAfterRow).
+func rejoinsPastRow(eh *ast.ErrorHandlingClause, row int) bool {
+	if !isCustomErrorHandling(eh) || len(eh.Body) == 0 || row <= ActivityWidth {
+		return false
+	}
+	return !lastStmtIsReturn(eh.Body) && !isRetryLoopErrorHandler(eh.Body)
+}
+
+// rejoinAfterRow makes the main line wait for the merge a falling-through handler
+// row rejoins at, and records where that merge goes (ako/mxcli#1773).
+//
+// The merge used to stand midway between the guarded activity and the next one.
+// The row starts under the activity and runs right, so from two activities on its
+// last one was right of that point and the edge up into the merge ran backwards.
+// The merge goes one gap past the row instead, as an IF's merge goes one gap past
+// its branch, and the next statement one gap past the merge.
+func (fb *flowBuilder) rejoinAfterRow(eh *ast.ErrorHandlingClause, activityID model.ID, activityX int) {
+	if fb.measurer == nil || eh == nil {
+		return
+	}
+	row := fb.measurer.measureBranch(eh.Body).Width
+	if !rejoinsPastRow(eh, row) {
+		return
+	}
+	mergeX := activityX - ActivityWidth/2 + row + laneGap + MergeSize/2
+	if fb.rejoinPastRowX == nil {
+		fb.rejoinPastRowX = map[model.ID]int{}
+	}
+	fb.rejoinPastRowX[activityID] = mergeX
+	fb.posX = max(fb.posX, mergeX+MergeSize+HorizontalSpacing/2)
 }
 
 // reachesBelowMainLine reports whether a statement draws anything under the main
@@ -90,6 +162,8 @@ func leftHalfOf(stmt ast.MicroflowStatement) int {
 	switch stmt.(type) {
 	case *ast.IfStmt, *ast.EnumSplitStmt:
 		return SplitWidth / 2
+	case *ast.MergeStmt:
+		return MergeSize / 2
 	}
 	return ActivityWidth / 2
 }
