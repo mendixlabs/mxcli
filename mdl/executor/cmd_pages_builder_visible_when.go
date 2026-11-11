@@ -70,11 +70,16 @@ func (pb *pageBuilder) visibleWhenSettings(w *ast.WidgetV3, vw *ast.VisibleWhenV
 	// the snippet with no data container around it.
 	entity, attrName := pb.entityContext, vw.Attribute
 	var source *pages.WidgetVariable
+	//
+	// `$dataView1.Attr` reads an enclosing data view's object: the data-view pair
+	// {Widget, PageParameter}, as on FactoryManagement's
+	// ConversationalUI.Trace_Details (ako/mxcli#2107).
 	if name, rest, ok := namedObjectBinding(vw.Attribute); ok {
-		wv, paramEntity, isParam := pb.parameterVariable(name)
+		wv, paramEntity, isParam := pb.namedObjectVariable(name)
 		if !isParam || strings.Contains(rest, ".") {
-			return nil, mdlerrors.NewValidationf("%s: `$%s` is not a parameter of this %s — `Visible: $Param.Attr in (…)` "+
-				"reads an attribute of a page or snippet parameter; inside a data container name the attribute bare",
+			return nil, mdlerrors.NewValidationf("%s: `$%s` is not a parameter of this %s or an enclosing data view — "+
+				"`Visible: $Param.Attr in (…)` reads an attribute of a page or snippet parameter, `$dataView1.Attr` one of "+
+				"a data view the widget is inside; for the nearest data container's object name the attribute bare",
 				where, name, pb.documentKind())
 		}
 		entity, attrName, source = paramEntity, rest, &wv

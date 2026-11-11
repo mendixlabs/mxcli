@@ -2573,13 +2573,8 @@ func (pb *pageBuilder) resolveRootedAssociationPath(attrRef string) (wv pages.Wi
 	if !ok {
 		return pages.WidgetVariable{}, "", nil, false
 	}
-	var start string
-	if v, entity, isParam := pb.parameterVariable(root); isParam {
-		wv, start = v, entity
-	} else if v, isDV := pb.dataViewVariables[root]; isDV {
-		wv, start = v, pb.paramEntityNames[root]
-	}
-	if start == "" {
+	wv, start, named := pb.namedObjectVariable(root)
+	if !named {
 		return pages.WidgetVariable{}, "", nil, false
 	}
 	finalQN, steps, ok = pb.resolveAssociationPathFrom(path, start)
@@ -3015,6 +3010,27 @@ func (pb *pageBuilder) parameterVariable(name string) (pages.WidgetVariable, str
 		return pages.WidgetVariable{}, "", false
 	}
 	return pages.WidgetVariable{Variable: name, Kind: pb.parameterSlotKind(name)}, entity, true
+}
+
+// namedObjectVariable is parameterVariable widened to an enclosing data view:
+// the `$name` of a `$name.Attr` binding read from a page or snippet parameter,
+// or else from a data view the widget sits inside, whose SourceVariable is the
+// data-view pair {Widget: name, PageParameter: …} (ako/mxcli#826, #2107). It
+// returns the SourceVariable to store and the object's entity.
+func (pb *pageBuilder) namedObjectVariable(name string) (pages.WidgetVariable, string, bool) {
+	if wv, entity, ok := pb.parameterVariable(name); ok {
+		return wv, entity, true
+	}
+	name = strings.TrimPrefix(name, "$")
+	wv, known := pb.dataViewVariables[name]
+	if !known || pb.isDeclaredParameter(name) {
+		return pages.WidgetVariable{}, "", false
+	}
+	entity := pb.paramEntityNames[name]
+	if entity == "" {
+		return pages.WidgetVariable{}, "", false
+	}
+	return wv, entity, true
 }
 
 // documentKind names what is being built, for messages.
