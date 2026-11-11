@@ -827,7 +827,7 @@ func (e *Executor) Close() error {
 		closeErr = fmt.Errorf("a statement that timed out was still running after %v; closing the project under it", abandonedStatementWait)
 	}
 	if e.backend != nil && e.backend.IsConnected() {
-		if err := e.backend.Disconnect(); err != nil && closeErr == nil {
+		if err := disconnectBackend(e.backend); err != nil && closeErr == nil {
 			closeErr = err
 		}
 		e.backend = nil
