@@ -30,7 +30,7 @@ for display in this README):
 ## Active Proposals (123)
 
 
-### In Progress (partial) (17)
+### In Progress (partial) (18)
 
 | Proposal | Status | Summary |
 |----------|--------|---------|
@@ -46,6 +46,7 @@ for display in this README):
 | [mxcli Linter - Implementation Proposal (Revised)](PROPOSAL_mxcli_linter.md) | Partial | Add an extensible linting framework to mxcli that leverages the existing SQLite-based catalog system. |
 | [mxcli marketplace — Download & Manage Marketplace Modules](PROPOSAL_marketplace_modules.md) | Partial | Unblocking path #1 below has happened: the content API now returns a |
 | [Navigation Support in MDL](navigation-support.md) | Partial | Every Mendix project has exactly one navigation$NavigationDocument — a project-level singleton containing navigation profiles (Responsive, P |
+| [Nightly Agent Dev-Loop Performance Benchmark](PROPOSAL_agent_devloop_benchmark.md) | Partial | An agent building a Mendix app runs mxcli hundreds of times per session — the |
 | [Podman Support as Docker Alternative](PROPOSAL_podman_support.md) | Partial | Docker Desktop requires a paid subscription for larger organizations. |
 | [SHOW/DESCRIBE/USE Building Blocks](show-describe-building-blocks.md) | Partial | Document type: Pages$BuildingBlock (NOT Forms$BuildingBlock — the reader now |
 | [Skill packs — shipping a skill that carries more than prose](PROPOSAL_skill_packs.md) | Partial | mxcli ships 65 skills today and every one of them is a single Markdown file. |
@@ -105,7 +106,7 @@ for display in this README):
 | [VS Code Search — Quick Pick + Workspace Symbol](PROPOSAL_vscode_search.md) | Proposed | Full-text search exists in mxcli (mxcli search) but is only accessible via the terminal. |
 | [Workflow Improvements: ALTER WORKFLOW + Cross-References](PROPOSAL_workflow_improvements.md) | Proposed | Workflow support in mxcli has full CREATE/DESCRIBE/DROP/SHOW coverage with 13 activity types and BSON round-trip fidelity. |
 
-### Draft (52)
+### Draft (51)
 
 | Proposal | Status | Summary |
 |----------|--------|---------|
@@ -147,7 +148,6 @@ for display in this README):
 | [mxcli companion, slice 2 — a long-lived mxcli the mod talks to over a Unix socket](proposal-mxcli-companion-serve.md) | Draft | Slice 2 of the companion umbrella. |
 | [mxcli marketplace diff — detect local modification and plan a GUID-preserving module upgrade](PROPOSAL_marketplace_module_upgrade.md) | Draft | 2026-08-11 (DESCRIBE coverage measured — §7; GUID = database identity measured — §8) |
 | [mxcli Playground](mxcli-playground.md) | Draft | A public GitHub repository (mendixlabs/mxcli-playground) containing a ready-to-use Mendix project pre-configured with mxcli, Claude Code ski |
-| [Nightly Agent Dev-Loop Performance Benchmark](PROPOSAL_agent_devloop_benchmark.md) | Draft | An agent building a Mendix app runs mxcli hundreds of times per session — the |
 | [Offline synchronization configuration — the one thing an offline profile needs that MDL cannot say](PROPOSAL_offline_sync_configuration.md) | Draft | mxcli can author an offline navigation profile — PhoneOffline, |
 | [OpenAPI import — generate response entities and wire operations to them](PROPOSAL_openapi_response_entities.md) | Draft | Issue: ako/mxcli#1234 (mendixlabs/mxcli#280) |
 | [Owning the modelsdk/gen codegen — why the vendored generator cannot be adopted as-is](PROPOSAL_codegen_ownership.md) | Draft | Constraint set by the maintainer (2026-08-13): the reflection data is an |

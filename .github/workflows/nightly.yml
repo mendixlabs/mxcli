@@ -183,6 +183,104 @@ jobs:
           MXCLI_UPGRADE_SHARD: ${{ matrix.shard }}
         timeout-minutes: 45
 
+  # The agent dev-loop benchmark (docs/11-proposals/PROPOSAL_agent_devloop_benchmark.md):
+  # a scripted session of the mxcli commands an agent runs, timed one process
+  # per command. A hosted runner's speed varies from night to night by more
+  # than most regressions, so the job does not compare tonight with last
+  # night: it downloads the previous nightly's binary and runs both
+  # interleaved on THIS runner, and reports the ratio. The record goes to the
+  # `benchmarks` branch, one file per run.
+  #
+  # Needs no mxbuild (it starts from the committed PedApp fixture) and does
+  # not gate the release, like upgrade-full-corpus: a slow night must not hold
+  # a nightly back. The driver exits non-zero only when a command fails or
+  # re-running a settled script changes a file.
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    name: agent dev-loop benchmark
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.4'
+      - name: Cache ANTLR4 JAR
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository/org/antlr/antlr4
+          key: antlr4-4.13.2
+      - name: Install ANTLR4
+        run: pip install 'antlr4-tools==0.2.2'
+      - name: Generate parser
+        run: make grammar
+        env:
+          ANTLR4_TOOLS_ANTLR_VERSION: '4.13.2'
+
+      # First, before the `nightly` job can replace the release. That job
+      # waits for the whole `test` matrix, but nothing here relies on it: the
+      # record names the baseline's version, and with no baseline the run
+      # still measures, without ratios.
+      - name: Download the previous nightly binary
+        id: baseline
+        run: |
+          mkdir -p "$RUNNER_TEMP/baseline"
+          if gh release download nightly --repo "$GITHUB_REPOSITORY" \
+               --pattern mxcli-linux-amd64 --dir "$RUNNER_TEMP/baseline"; then
+            chmod +x "$RUNNER_TEMP/baseline/mxcli-linux-amd64"
+            echo "path=$RUNNER_TEMP/baseline/mxcli-linux-amd64" >> "$GITHUB_OUTPUT"
+          else
+            echo "No previous nightly binary: measuring without an A/B."
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Run the benchmark
+        run: |
+          make bench BASELINE="${{ steps.baseline.outputs.path }}" \
+            BENCH_FLAGS="-out agentbench-record.json -summary $GITHUB_STEP_SUMMARY"
+
+      - name: Upload the record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-benchmark-record
+          path: agentbench-record.json
+          if-no-files-found: ignore
+
+      # One file per run, so two runs never edit the same file; the retry is
+      # for two runs pushing at once. An orphan branch: results only, never
+      # merged. Runs from another branch (workflow_dispatch) are not history.
+      - name: Commit the record to the benchmarks branch
+        # hashFiles sees the workspace only, which is why the record is written there.
+        if: always() && github.ref == 'refs/heads/main' && hashFiles('agentbench-record.json') != ''
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse --short HEAD)
+          file="results/$(date -u +%Y/%m)/$(date -u +%Y-%m-%dT%H%M)-$sha.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch origin benchmarks:benchmarks 2>/dev/null; then
+            git worktree add "$RUNNER_TEMP/benchmarks" benchmarks
+          else
+            git worktree add --detach "$RUNNER_TEMP/benchmarks"
+            git -C "$RUNNER_TEMP/benchmarks" checkout --orphan benchmarks
+            git -C "$RUNNER_TEMP/benchmarks" rm -rf -q .
+            printf '%s\n' '# Agent dev-loop benchmark records' '' \
+              'One JSON file per nightly run, written by the `bench` job of `.github/workflows/nightly.yml`.' \
+              'Never merged into `main`. How to read a record: `docs-site/src/internals/agent-benchmark.md` on `main`.' \
+              > "$RUNNER_TEMP/benchmarks/README.md"
+          fi
+          cd "$RUNNER_TEMP/benchmarks"
+          mkdir -p "$(dirname "$file")"
+          cp "$GITHUB_WORKSPACE/agentbench-record.json" "$file"
+          git add -A
+          git commit -q -m "bench: $sha"
+          for attempt in 1 2 3; do
+            if git push origin benchmarks; then exit 0; fi
+            git pull --rebase origin benchmarks
+          done
+          exit 1
+
   nightly:
     needs: test
     runs-on: ubuntu-latest

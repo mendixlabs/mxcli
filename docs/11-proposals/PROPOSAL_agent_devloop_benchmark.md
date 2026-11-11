@@ -1,6 +1,6 @@
 ---
 title: Nightly Agent Dev-Loop Performance Benchmark
-status: draft
+status: partial
 date: 2026-11-11
 author: AI-assisted design
 related:
@@ -10,7 +10,7 @@ related:
 
 # Proposal: Nightly Agent Dev-Loop Performance Benchmark
 
-**Status:** Draft
+**Status:** Partial — Phase 1 is implemented (see "Phase 1 as built")
 **Date:** 2026-11-11
 
 ## Problem Statement
@@ -259,6 +259,48 @@ the table marked "—". No runtime needed, so the job is short and the A/B signa
 is clean. This phase exists to get the machinery and its noise floor right on
 the easy case; it is **not** where most of the measured wall time is.
 
+#### Phase 1 as built
+
+Implemented as `scripts/agentbench` (`make bench`), the `bench` job in
+`nightly.yml`, and `MXCLI_STATS_FILE`. User-facing description:
+`docs-site/src/internals/agent-benchmark.md`. Where it differs from the design
+above, and what building it showed:
+
+- **The base project is the committed PedApp fixture, not `mxcli new`.**
+  Creating a blank project needs `mx create-project`, i.e. mxbuild. Starting
+  from `testdata/pedapp` keeps Phase 1 free of mxbuild, as intended, and the
+  job short. The `new` step moves to the phase that brings mxbuild into the
+  job. PedApp is 370 units, so "small" is a small real app, not an empty one.
+- **Both arms start from identical bytes with no caches.** The project copy
+  leaves `.mxcli/` out, so each arm builds its own unit index and catalog. That
+  added a step the design did not have, `open-cold`, the first command on a
+  project.
+- **The large fixture is seeded once, by the candidate only.** The seed is
+  timed and recorded but has no A/B; the session that then runs on it does.
+- **The large preset is about 900 units, not a few thousand.** Seeding is the
+  reason: on the development machine 492 generated documents take about 90 s,
+  while a 3,240-document seed took 4 min 46 s for its entities, 3 min 48 s for
+  its microflows, and had not finished its pages after 15 minutes. The cost
+  per statement grows with the size of the project, which is itself the kind
+  of finding this benchmark exists for — and is visible at 900 units already:
+  the same 50-page script takes 2.6 times as long there as on 370. The preset
+  is two flags (`-large-modules`, `-large-entities`) and should grow as that
+  cost comes down.
+- **Counters (Open Question 1) are an environment variable.**
+  `MXCLI_STATS_FILE` makes every project connection append one JSON line with
+  its unit-file reads and its writes offered and landed. It turned out that
+  the write count covers reconciled rewrites of stored units but not newly
+  created documents, so the driver also counts changed unit files from outside,
+  by digest. That count needs nothing from the binary and so exists for the
+  baseline as well; the idempotence step asserts on it.
+- **CPU time and peak memory are recorded alongside wall time.** CPU time is
+  the steadier of the two ratios on a shared machine.
+- **The ratio is the median of per-repetition pair ratios**, not the ratio of
+  two medians, and the arm that goes first alternates.
+- **Not built yet:** the trend chart, and the issue-opening alert. Both need
+  records to exist first; the alert thresholds are to be set from the first
+  weeks of data, as planned.
+
 ### Phase 2 — running app and tests
 
 Adds `boot`, `hot-apply-flow`, `apply-entity`, `page-check`, `test-cold`,
@@ -283,11 +325,10 @@ decision and not part of this proposal.
 | File | Change |
 |------|--------|
 | `scripts/agentbench/` (new, Go) | Driver: runs steps, interleaves A/B, takes medians, collects counters, writes the JSON record and the summary table |
-| `scripts/agentbench/gen/` (new) | Fixture generator: parameters → MDL scripts |
-| `scripts/agentbench/session/*.mdl` (new) | The scripted session's MDL |
+| `scripts/agentbench/gen/` (new) | Generator: parameters → the session's MDL scripts and the large fixture's seed |
 | `Makefile` | `bench` target |
 | `.github/workflows/nightly.yml` | `bench` job; commit of the record to the `benchmarks` branch |
-| `cmd/mxcli/` | Machine-readable read and write counters for a command (see Open Questions) |
+| `mdl/executor/process_stats.go` (new) | `MXCLI_STATS_FILE`: read and write counters per closed connection |
 | `docs-site/src/internals/` | Page describing the benchmark and showing the trend chart |
 
 ## Version Compatibility
