@@ -861,7 +861,16 @@ func RunLocal(opts LocalRunOptions) error {
 	fmt.Fprintf(w, "Building (first build is cold: ~10-15s for a small app, minutes for a large one; limit %s)...\n", serveBuildTimeout(opts.BuildTimeout))
 	scaffold := buildScaffold{}
 	themeBefore := themeModuleFolders(opts.ProjectPath)
+	// Under --watch the client source this build writes and then deletes is
+	// kept, so the first change can already build incrementally (ako/mxcli#2150).
+	var keep *clientSourceKeep
+	if opts.Watch {
+		keep = newClientSourceKeep(opts.DeployDir)
+		defer keep.Close()
+	}
+	stopKeeping := keep.watch()
 	build, err := serve.Build(BuildRequest{Target: TargetDeploy, ProjectFilePath: opts.ProjectPath})
+	stopKeeping(err == nil && build != nil && build.OK())
 	if err != nil {
 		return fmt.Errorf("initial build: %w", err)
 	}
@@ -1142,7 +1151,7 @@ func RunLocal(opts LocalRunOptions) error {
 	// 7. Stay up until interrupted. With --watch, rebuild + hot-apply on every
 	// project change; otherwise just keep the runtime serving.
 	if opts.Watch {
-		return watchAndApply(opts, serve, rt, bundler, mxbuildPath, bootSource, scaffold)
+		return watchAndApply(opts, serve, rt, bundler, mxbuildPath, bootSource, scaffold, keep)
 	}
 	fmt.Fprintln(w, "(run with --watch to rebuild and hot-apply on changes; Ctrl-C to stop)")
 	if waitForInterruptOrExit(rt.Exited()) {
@@ -1499,7 +1508,7 @@ func settleSourceWith(source func() time.Time, seen time.Time, sigCh <-chan os.S
 //
 // scaffold is the theme source builds wrote themselves, which is not a change
 // (see buildScaffold); each rebuild adds to it.
-func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, bundler *bundlerSupervisor, mxbuildPath string, bootSource time.Time, scaffold buildScaffold) error {
+func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, bundler *bundlerSupervisor, mxbuildPath string, bootSource time.Time, scaffold buildScaffold, keep *clientSourceKeep) error {
 	w := opts.Stdout
 	// Every recovery re-bundle goes through the supervisor under --watch, so a
 	// one-shot never runs alongside the incremental bundler (#971).
@@ -1507,7 +1516,7 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 		DeployDir: opts.DeployDir, MxBuildPath: mxbuildPath, Timeout: opts.WebClientTimeout, Stdout: opts.Stdout,
 	})
 
-	builds := &serveRecovery{serve: serve, deployDir: opts.DeployDir, out: w}
+	builds := &serveRecovery{serve: serve, deployDir: opts.DeployDir, out: w, keep: keep}
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
