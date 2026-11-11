@@ -577,6 +577,17 @@ build reports `true` even for an unchanged model, and taking it would restart th
 runtime — dropping every browser session — on every change. Measured end to end
 on 11.12.5; on 11.14 the same restart applies to the same failure shape.
 
+**Which versions.** The two halves have different fates (ako/mxcli#606). The
+bundler-config failure (`Cannot find module '…/rollup.config.mjs'`) is **fixed in
+Mendix 11.15.0**: a project converted from 11.14.0 to 11.15.0 rebuilt warm in
+2.8–3.9 s per change, where 11.14.0 failed every build after the first — so on
+11.14 the remedy is to upgrade. The per-document client failure (`web/pages/…`)
+was still seen on macOS 11.15.0, where mxcli's serve restart is what keeps the
+loop going. The hint mxcli prints offers the upgrade only for the half it fixes.
+`mxcli test --attach` rebuilds through the hosting app's own serve process, so it
+meets the same second-build failure on the same versions (read off the code, not
+measured).
+
 ## Pixel-perfect page loop
 
 Pass `--screenshot` and each applied change is captured to a PNG (default
