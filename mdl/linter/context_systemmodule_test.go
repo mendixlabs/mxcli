@@ -66,6 +66,10 @@ func systemLeakFixture(t *testing.T) *catalog.Catalog {
 		      VALUES (?,?,?,?,?,?)`, "ja-"+mod, "JA"+mod, mod+".JA"+mod, mod, "default", "s1")
 		exec(`INSERT INTO widgets_data (Id, Name, WidgetType, ModuleName, ProjectId, SnapshotId)
 		      VALUES (?,?,?,?,?,?)`, "w-"+mod, "Widget"+mod, "TextBox", mod, "default", "s1")
+		exec(`INSERT INTO workflows_data (Id, Name, QualifiedName, ModuleName, ProjectId, SnapshotId)
+		      VALUES (?,?,?,?,?,?)`, "wf-"+mod, "WF"+mod, mod+".WF"+mod, mod, "default", "s1")
+		exec(`INSERT INTO workflow_activities_data (Id, WorkflowId, WorkflowQualifiedName, ModuleName, Name, ActivityType, ProjectId, SnapshotId)
+		      VALUES (?,?,?,?,?,?,?,?)`, "wa-"+mod, "wf-"+mod, mod+".WF"+mod, mod, "Task", "SystemTask", "default", "s1")
 	}
 
 	return cat
@@ -106,6 +110,12 @@ func TestIterators_ExcludePlatformModules(t *testing.T) {
 	}
 	for w := range ctx.Widgets() {
 		collect("Widgets", w.ModuleName+".w")
+	}
+	for w := range ctx.Workflows() {
+		collect("Workflows", w.QualifiedName)
+	}
+	for a := range ctx.WorkflowActivities() {
+		collect("WorkflowActivities", a.WorkflowQualifiedName)
 	}
 	for d := range ctx.DocumentableElements() {
 		collect("DocumentableElements", d.QualifiedName)

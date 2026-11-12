@@ -99,6 +99,7 @@ func (e *Executor) newExecContext(ctx context.Context) *ExecContext {
 		Output:             e.output,
 		Format:             e.format,
 		Quiet:              e.quiet,
+		terminal:           e.terminal,
 		tally:              e.tally,
 		accessRun:          e.accessRun,
 		Logger:             e.logger,

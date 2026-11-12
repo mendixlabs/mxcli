@@ -25,9 +25,9 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
 	genPr "github.com/mendixlabs/mxcli/modelsdk/gen/projects"
 	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
+	"github.com/mendixlabs/mxcli/modelsdk/mprread"
 )
 
 // Compile-time guarantee that the backend satisfies the whole interface (via the
@@ -247,6 +247,24 @@ func (b *Backend) DeferUnitWrites() {
 	}
 }
 
+// DeferUnitWritesJudged is DeferUnitWrites for a run whose statements report
+// for themselves: each held write is counted in WriteStats as it is held
+// (mmpr.Writer.DeferUnitWritesJudged, ako/mxcli#2160).
+func (b *Backend) DeferUnitWritesJudged() {
+	if b.writer != nil {
+		b.writer.DeferUnitWritesJudged()
+	}
+}
+
+// UnitReconciles is how many times this backend's writer has compared a write
+// with the stored unit. For tests.
+func (b *Backend) UnitReconciles() int {
+	if b.writer == nil {
+		return 0
+	}
+	return b.writer.Reconciles()
+}
+
 // FlushDeferredWrites writes what a deferred run holds, each unit once and
 // reconciled against what was stored before the run.
 func (b *Backend) FlushDeferredWrites() error {
@@ -310,6 +328,15 @@ func (b *Backend) UnitFileReads() int64 {
 		return 0
 	}
 	return b.reader.UnitFileReads()
+}
+
+// UnitIndexBuilds is how many times this backend's reader has scanned the Unit
+// table to rebuild its list of units. For tests.
+func (b *Backend) UnitIndexBuilds() int64 {
+	if b.reader == nil {
+		return 0
+	}
+	return b.reader.UnitIndexBuilds()
 }
 
 // UnitStoreHits is how many unit reads this backend's reader served from the
@@ -396,18 +423,14 @@ func (b *Backend) enrichModule(m *model.Module) {
 	if pm, ok := b.reader.PackagedModuleOf(string(m.ID)); ok {
 		m.PackageFile = pm.File
 	}
-	raw, err := b.reader.GetRawUnitBytes(string(m.ID))
-	if err != nil || len(raw) == 0 {
+	// Through the decode cache: a module is looked up for every statement of a
+	// script, and decoding its unit afresh each time was a full decode per
+	// module per listing (ako/mxcli#2160).
+	u, ok, err := mprread.UnitByIDAs[*genPr.Module](b.reader, m.ID)
+	if err != nil || !ok {
 		return
 	}
-	el, err := codec.NewDecoder(codec.DefaultRegistry).Decode(raw)
-	if err != nil {
-		return
-	}
-	gm, ok := el.(*genPr.Module)
-	if !ok {
-		return
-	}
+	gm := u.Element
 	m.FromAppStore = gm.FromAppStore()
 	m.AppStoreVersion = gm.AppStoreVersion()
 	m.AppStoreGuid = gm.AppStoreGuid()

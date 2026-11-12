@@ -83,6 +83,9 @@ type Reader struct {
 	// fileReads counts unit files read from mprcontents/ — what the content
 	// cache saves. Read by tests (mendixlabs/mxcli#1272).
 	fileReads atomic.Int64
+	// unitIndexBuilds counts the scans of the Unit table that rebuild the
+	// unit cache (buildUnitCache). For tests.
+	unitIndexBuilds atomic.Int64
 	// contentCopies counts the copies of cached unit bytes handed to callers
 	// (readMprContentsUnder). For tests.
 	contentCopies atomic.Int64

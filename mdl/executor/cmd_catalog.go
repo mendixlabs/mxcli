@@ -571,14 +571,21 @@ func buildCatalog(ctx *ExecContext, full, isSource, communities bool, resolution
 	if hook := catalogBuilderHook; hook != nil {
 		hook(builder)
 	}
-	// Per-table lines are the only sign of life during a build that takes
-	// minutes on a large app (18 on a 140MB one), so quiet mode moves them off
-	// stdout rather than dropping them: `search -q --format names` promises one
-	// name per line, and forty "✓ Table: N" lines ahead of the names on a cold
-	// cache broke that promise.
+	// Quiet mode moves progress off stdout: `search -q --format names`
+	// promises one name per line, and forty "✓ Table: N" lines ahead of the
+	// names on a cold cache broke that promise.
 	buildProgress := ctx.progress()
 	if ctx.Quiet {
 		buildProgress = ctx.diagnostics()
+	}
+	// A line per table is for someone watching a terminal. Anywhere else —
+	// a pipe, a log, an agent's context — the build prints only a heartbeat,
+	// so the ~50 lines are not paid for after every model change, and a build
+	// that takes minutes (18 on a 140MB app) still shows it is alive
+	// (ako/mxcli#1860). Lines that carry information still print in full.
+	perTable := ctx.terminal && !ctx.Quiet
+	if !perTable {
+		builder.SetRoutineProgress(newCatalogHeartbeat(buildProgress).line)
 	}
 	err = builder.Build(func(table string, count int) {
 		fmt.Fprintf(buildProgress, "✓ %s: %d\n", table, count)
@@ -638,7 +645,7 @@ func buildCatalog(ctx *ExecContext, full, isSource, communities bool, resolution
 			// and the in-place write that followed raced it (ako/mxcli#951).
 			if err := cat.SaveToFile(cachePath); err != nil {
 				fmt.Fprintf(ctx.progress(), "Warning: failed to save catalog cache: %v\n", err)
-			} else {
+			} else if perTable {
 				fmt.Fprintf(buildProgress, "✓ Catalog cached to %s\n", cachePath)
 			}
 		}

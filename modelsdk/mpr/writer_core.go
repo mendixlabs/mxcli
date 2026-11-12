@@ -59,6 +59,12 @@ type Writer struct {
 	// net result (writer_deferred.go); nil when no run is open.
 	deferred      map[string]deferredWrite
 	deferredOrder []string
+	// deferredJudged says the open run judges each held write as it is held
+	// (DeferUnitWritesJudged), so its statements can report for themselves.
+	deferredJudged bool
+	// reconciles counts the comparisons of a write with the stored unit
+	// (canon.Reconcile). For tests.
+	reconciles int
 	// simulating says the deferred run is a simulation (writer_simulated.go):
 	// it is discarded, never flushed, and any write it cannot hold is refused.
 	simulating bool
@@ -81,6 +87,10 @@ type removedUnit struct {
 // nothing further is recorded and the carry degrades to the behaviour that
 // existed before it — a churned re-insert, not a wrong one.
 const maxRemovedUnitsRemembered = 1024
+
+// Reconciles is how many times this writer has compared a write with the
+// stored unit. For tests.
+func (w *Writer) Reconciles() int { return w.reconciles }
 
 // WriteStats reports how many unit writes this session offered to storage and
 // how many were not elided as no-ops.
@@ -611,16 +621,17 @@ func (w *Writer) insertUnit(unitID, containerID, containmentName, unitType strin
 		}
 
 		// Insert reference to database
+		hash := contentsHashOf(contents)
 		_, err := w.reader.db.Exec(`
 			INSERT INTO Unit (UnitID, ContainerID, ContainmentName, TreeConflict, ContentsHash, ContentsConflicts)
 			VALUES (?, ?, ?, 0, ?, '')
-		`, unitIDBlob, containerIDBlob, containmentName, contentsHashOf(contents))
+		`, unitIDBlob, containerIDBlob, containmentName, hash)
 		if err != nil {
 			// Clean up the file we just wrote — otherwise it becomes an orphan
 			os.Remove(filePath)
 			return err
 		}
-		w.reader.InvalidateCache()
+		w.reader.noteUnitWritten(unitIDBlob, containerIDBlob, containmentName, contents, hash, true)
 		w.updateTransactionID()
 		w.restoreTransactionID(restoreTransactionID)
 		return nil
@@ -724,11 +735,12 @@ func (w *Writer) updateUnit(unitID string, contents []byte, opts ...canon.Option
 		}
 
 		// Update ContentsHash in database
+		hash := contentsHashOf(contents)
 		_, err := w.reader.db.Exec(`
 			UPDATE Unit SET ContentsHash = ? WHERE UnitID = ?
-		`, contentsHashOf(contents), unitIDBlob)
+		`, hash, unitIDBlob)
 		if err == nil {
-			w.reader.InvalidateCache()
+			w.reader.noteUnitWritten(unitIDBlob, nil, "", contents, hash, false)
 			w.updateTransactionID()
 		}
 		return err
@@ -767,6 +779,7 @@ func (w *Writer) reconcileAgainst(unitID string, contents []byte, readStored fun
 		w.writesLanded++
 		return contents, false, nil // new unit, or unreadable — write it
 	}
+	w.reconciles++
 	out, unchanged = canon.Reconcile(contents, stored, opts...)
 
 	// The storage-GUID guard runs here, on the reconciled bytes, because it is
