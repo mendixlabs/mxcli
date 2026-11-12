@@ -36,7 +36,7 @@ GO_BUILD_FLAGS = -trimpath
 # Clean version for VS Code extension (must be valid semver: major.minor.patch)
 VSCE_VERSION = $(shell echo "$(VERSION)" | sed 's/^v//; s/-.*//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$$' || echo "0.0.0")
 
-.PHONY: build build-debug size release clean test ci-local test-mdl check-mdl check-skill-mdl check-conformance conformance-shrink gen-migration-reference check-migration-reference check-skill-pack-js check-findings check-wiki-pages digest-status check-tunnel-deps check-test-timeouts check-widget-versions test-integration test-integration-executor test-integration-roundtrip test-integration-parity test-integration-upgrade test-integration-other grammar completions sync-skills sync-skill-packs sync-commands sync-mods sync-lint-rules sync-changelog sync-all docs documentation docs-site docs-serve vscode-ext vscode-install source-tree sbom sbom-report lint lint-go lint-ts fmt fmt-check vet skill-index check-skill-index
+.PHONY: build build-debug size release clean test ci-local test-mdl check-mdl check-skill-mdl check-conformance conformance-shrink gen-migration-reference check-migration-reference check-skill-pack-js check-findings check-wiki-pages digest-status check-tunnel-deps check-test-timeouts check-widget-versions test-integration test-integration-executor test-integration-roundtrip test-integration-parity test-integration-upgrade test-integration-other grammar completions sync-skills sync-skill-packs sync-commands sync-mods sync-lint-rules sync-changelog sync-all docs documentation docs-site docs-serve vscode-ext vscode-install source-tree sbom sbom-report lint lint-go lint-ts fmt fmt-check vet skill-index check-skill-index bench
 
 # Helper: copy file only if content differs (avoids mtime updates that invalidate go build cache)
 # Usage: $(call copy-if-changed,src,dst)
@@ -430,6 +430,34 @@ test-integration-other:
 	if [ -z "$$pkgs" ]; then echo "no integration packages outside the split suites"; exit 1; fi; \
 	echo "integration packages: $$pkgs"; \
 	$(INTEGRATION_GO_TEST) -timeout 40m $$pkgs
+
+# Agent dev-loop benchmark: a fixed, scripted session of mxcli commands -- the
+# ones an agent runs while building an app -- one process per command, at two
+# project sizes, no model in the loop. Those sessions need no mxbuild: they
+# start from the committed PedApp fixture.
+#
+#   make bench                                  # time this checkout's binary
+#   make bench BASELINE=/path/to/other/mxcli    # A/B against another build
+#   make bench BENCH_FLAGS='-sizes small -reps 3 -out record.json'
+#   make bench BENCH_RUNTIME=11.13.0            # also the running-app session
+#
+# BENCH_RUNTIME adds the session on a running app -- boot, a hot change, an
+# entity change, a page check, tests -- on a project `mxcli new` creates for
+# that Mendix version. mxcli downloads mxbuild and the runtime when they are
+# not cached (about 800 MB); it needs JDK 21, and node with playwright and a
+# Chromium for the page check (BENCH_FLAGS=-page-check=false to leave it out).
+#
+# With BASELINE the two binaries run interleaved on this machine and the table
+# shows the ratio, which is the only figure comparable between two machines or
+# two nights. The nightly `bench` job does exactly this against the previous
+# nightly release and commits the record to the `benchmarks` branch.
+# docs-site/src/internals/agent-benchmark.md explains how to read it.
+BASELINE ?=
+BENCH_RUNTIME ?=
+BENCH_FLAGS ?=
+bench: build
+	go run ./scripts/agentbench -mxcli $(BUILD_DIR)/$(BINARY_NAME) $(if $(BASELINE),-baseline $(BASELINE)) \
+		$(if $(BENCH_RUNTIME),-runtime-version $(BENCH_RUNTIME)) $(BENCH_FLAGS)
 
 # Run MDL integration tests (requires Docker and a Mendix project)
 # Usage: make test-mdl MPR=path/to/app.mpr

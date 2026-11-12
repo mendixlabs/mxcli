@@ -190,7 +190,7 @@ func (pb *pageBuilder) buildClientTemplateParams(astParams []ast.ParamAssignment
 			out = append(out, param)
 			continue
 		}
-		if isTemplateExpression(strVal) {
+		if pb.isTemplateExpression(strVal) {
 			// A quoted string literal or any other expression
 			// (`toString($Order/Total)`) — stored as written.
 			param.Expression = strVal
@@ -505,7 +505,7 @@ func (pb *pageBuilder) buildTextBoxV3(w *ast.WidgetV3) (*pages.TextBox, error) {
 	}
 
 	// Handle Attribute (attribute path)
-	if attr := w.GetAttribute(); attr != "" {
+	if attr := inputAttributeText(w); attr != "" {
 		path, steps, sv, err := pb.resolveInputBinding(w, attr)
 		if err != nil {
 			return nil, err
@@ -607,7 +607,7 @@ func (pb *pageBuilder) buildTextAreaV3(w *ast.WidgetV3) (*pages.TextArea, error)
 	}
 
 	// Handle Attribute
-	if attr := w.GetAttribute(); attr != "" {
+	if attr := inputAttributeText(w); attr != "" {
 		path, steps, sv, err := pb.resolveInputBinding(w, attr)
 		if err != nil {
 			return nil, err
@@ -694,7 +694,7 @@ func (pb *pageBuilder) buildDatePickerV3(w *ast.WidgetV3) (*pages.DatePicker, er
 	}
 
 	// Handle Attribute
-	if attr := w.GetAttribute(); attr != "" {
+	if attr := inputAttributeText(w); attr != "" {
 		path, steps, sv, err := pb.resolveInputBinding(w, attr)
 		if err != nil {
 			return nil, err
@@ -832,7 +832,7 @@ func (pb *pageBuilder) buildDropdownV3(w *ast.WidgetV3) (*pages.DropDown, error)
 	}
 
 	// Handle Attribute
-	if attr := w.GetAttribute(); attr != "" {
+	if attr := inputAttributeText(w); attr != "" {
 		path, steps, sv, err := pb.resolveInputBinding(w, attr)
 		if err != nil {
 			return nil, err
@@ -878,7 +878,7 @@ func (pb *pageBuilder) buildCheckBoxV3(w *ast.WidgetV3) (*pages.CheckBox, error)
 	}
 
 	// Handle Attribute
-	if attr := w.GetAttribute(); attr != "" {
+	if attr := inputAttributeText(w); attr != "" {
 		path, steps, sv, err := pb.resolveInputBinding(w, attr)
 		if err != nil {
 			return nil, err
@@ -966,7 +966,7 @@ func (pb *pageBuilder) buildRadioButtonsV3(w *ast.WidgetV3) (*pages.RadioButtons
 	}
 
 	// Get attribute path from Attribute property
-	if attr := w.GetAttribute(); attr != "" {
+	if attr := inputAttributeText(w); attr != "" {
 		path, steps, sv, err := pb.resolveInputBinding(w, attr)
 		if err != nil {
 			return nil, err
@@ -1174,7 +1174,7 @@ func (pb *pageBuilder) buildDynamicTextV3(w *ast.WidgetV3) (*pages.DynamicText, 
 			}
 			// Check if it's an attribute reference or literal
 			if strVal, ok := p.Value.(string); ok {
-				if isTemplateExpression(strVal) {
+				if pb.isTemplateExpression(strVal) {
 					// A quoted string literal or any other expression
 					// (`toString($Order/Total)`) - stored as written
 					param.Expression = strVal
@@ -1658,6 +1658,11 @@ func (pb *pageBuilder) buildSnippetCallParams(sc *pages.SnippetCallWidget, snipp
 		// the snippet does not have — CE0115 (ako/mxcli#721 L3).
 		// A page `Variables:` entry is named in LocalVariable (ako/mxcli#826).
 		_, kind := pb.classifyFlowArgValue(argument)
+		if kind == "local" {
+			// A page variable is primitive and a snippet parameter an object:
+			// CE0115 whichever slot it is written to (ako/mxcli#833).
+			return mdlerrors.NewValidation(snippetCallPageVariableMessage(sc.Name, declared.Name, strings.TrimPrefix(argument, "$")))
+		}
 		sc.ParameterMappings = append(sc.ParameterMappings, pages.SnippetParamMapping{
 			ParamName:          declared.Name,
 			Argument:           argument,

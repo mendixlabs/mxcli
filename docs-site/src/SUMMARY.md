@@ -348,6 +348,7 @@
   - [FTS5 Full-Text Search](internals/fts5.md)
   - [Reference Tracking](internals/reference-tracking.md)
 - [MCP Backend: Script-to-Tool-Call Cost](internals/mcp-backend-cost.md)
+- [Agent Dev-Loop Benchmark](internals/agent-benchmark.md)
 
 ---
 

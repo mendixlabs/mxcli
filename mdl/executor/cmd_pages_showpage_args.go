@@ -62,6 +62,12 @@ type pageArgContext struct {
 	// selection `$<grid>` passes to a page as an explicit mapping naming the
 	// grid (mendixlabs/mxcli#122). The row object is not the control bar's.
 	selectionOf string
+	// rowSelectionOf is set inside a selectable data grid's rows: the grid's
+	// name, whose selection `$<grid>` a show page in a column passes as the
+	// same explicit mapping. Studio Pro stores exactly that (Variable {Widget:
+	// grid1}) on FactoryManagement's MxModelReflection.MxObjectType_Select,
+	// and it builds (ako/mxcli#2109). The row object stays $currentObject.
+	rowSelectionOf string
 }
 
 // inDataWidget names the data widget whose context c is.
@@ -77,10 +83,40 @@ func (c pageArgContext) namesSelection(value string) bool {
 	return ok && c.selectionOf != "" && strings.EqualFold(name, c.selectionOf)
 }
 
+// namesRowSelection reports whether value is `$<grid>` written in that grid's
+// rows, where the grid has a selection: a show page argument only.
+func (c pageArgContext) namesRowSelection(value string) bool {
+	name, ok := strings.CutPrefix(value, "$")
+	return ok && c.rowSelectionOf != "" && strings.EqualFold(name, c.rowSelectionOf)
+}
+
+// selectableDataGrid reports whether w is a data grid with a selection, whose
+// name is then a variable in its rows as well as in its control bar.
+func selectableDataGrid(w *ast.WidgetV3) bool {
+	switch strings.ToLower(w.Type) {
+	case "datagrid", "datagrid2":
+	default:
+		return false
+	}
+	sel := w.GetSelection()
+	return sel != "" && !strings.EqualFold(sel, "None")
+}
+
 // enteringDataWidget is the context below a data-bound widget bound to ds and
 // yielding entity.
 func enteringDataWidget(ds *ast.DataSourceV3, entity string) pageArgContext {
 	return pageArgContext{known: true, present: true, varName: contextVarFor(ds), entity: entity}
+}
+
+// enteringDataWidgetOf is enteringDataWidget for the rows of data widget w, by
+// name: a selectable data grid's name is its selection there too. The one
+// constructor the check walk and both builders use, so the three agree.
+func enteringDataWidgetOf(w *ast.WidgetV3, ds *ast.DataSourceV3, entity string) pageArgContext {
+	c := enteringDataWidget(ds, entity).inDataWidget(w.Name)
+	if selectableDataGrid(w) {
+		c.rowSelectionOf = w.Name
+	}
+	return c
 }
 
 // atDocumentRoot is the context at the top of a page, snippet or layout the pass
@@ -126,7 +162,7 @@ func argContextForChildren(w *ast.WidgetV3, parent pageArgContext) pageArgContex
 	if ds := w.GetDataSource(); ds != nil {
 		// The entity is only used to word the refusal; the executor's builder
 		// overwrites this with one that carries it.
-		c := enteringDataWidget(ds, "").inDataWidget(w.Name)
+		c := enteringDataWidgetOf(w, ds, "")
 		c.docParams = parent.docParams
 		return c
 	}
@@ -303,7 +339,7 @@ func refuseShowPageArgument(widgetName, target, argName, argValue string, c page
 func (pb *pageBuilder) namedParameterArgument(value string) (variable, kind string) {
 	variable, kind = pb.classifyFlowArgValue(value)
 	if kind != "parameter" && kind != "snippet" {
-		if pb.argCtx.namesSelection(value) {
+		if pb.argCtx.namesSelection(value) || pb.argCtx.namesRowSelection(value) {
 			variable, kind = value, "widget"
 		} else {
 			return "", ""
@@ -361,7 +397,7 @@ func validateShowPageArguments(w *ast.WidgetV3, c pageArgContext, locationPrefix
 	var out []linter.Violation
 	for _, arg := range action.Args {
 		strVal, ok := arg.Value.(string)
-		if !ok || c.binds(strVal) || c.namesDocumentParameter(strVal) || c.namesSelection(strVal) {
+		if !ok || c.binds(strVal) || c.namesDocumentParameter(strVal) || c.namesSelection(strVal) || c.namesRowSelection(strVal) {
 			continue
 		}
 		out = append(out, linter.Violation{
