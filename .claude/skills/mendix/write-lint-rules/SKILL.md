@@ -11,11 +11,11 @@ description: "Write custom Starlark lint rules in .claude/lint-rules/ that run b
 | lines | section |
 |---|---|
 | 25-67 | Rule File Structure |
-| 68-167 | Available Query Functions |
-| 168-574 | Object Properties |
-| 575-588 | Helper Functions |
-| 589-675 | Common Patterns |
-| 676-684 | Validation |
+| 68-170 | Available Query Functions |
+| 171-577 | Object Properties |
+| 578-591 | Helper Functions |
+| 592-678 | Common Patterns |
+| 679-687 | Validation |
 
 <!-- /skill-index -->
 # Writing Custom Starlark Lint Rules
@@ -111,10 +111,13 @@ Without this, a rule that reads a full-only table under a fast build gets
 | `strings(language = None)` | list of catalog_string | User-facing and documentary text, one row per text and language; pass `language` (`"nl_NL"`) to narrow. An untranslated language has **no row**. Needs a FULL catalog, which `mxcli lint` builds automatically for a rule that calls it |
 | `layouts()` | list of layout | All non-system layouts |
 | `published_rest_operations()` | list of published_rest_operation | Operations of published REST services, with the microflow behind each |
+| `workflows()` | list of workflow | The user's workflows, with their parameter entity and activity counts |
+| `workflow_activities()` | list of workflow_activity | Every activity of the user's workflows — boundary-event paths and event sub-processes included — with its kind and the microflow, page or workflow each slot names. Use it for "a system task's microflow is prefixed `WF_`": `refs_to()` says only that the workflow calls a microflow, not from which kind of activity |
 
 The fields of `module`, `folder`, `annotation`, `association`, `entity_event_handler`,
-`navigation_menu_item`, `jar_dependency`, `jar_file`, `catalog_string`, `layout` and
-`published_rest_operation` are in [catalog-tables.md](catalog-tables.md).
+`navigation_menu_item`, `jar_dependency`, `jar_file`, `catalog_string`, `layout`,
+`published_rest_operation`, `workflow` and `workflow_activity` are in
+[catalog-tables.md](catalog-tables.md).
 
 ### Graph-analysis functions (architecture rules)
 

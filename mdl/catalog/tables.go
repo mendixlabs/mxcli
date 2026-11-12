@@ -7,6 +7,11 @@ package catalog
 //
 // History:
 //
+//	48 (workflow activities): new workflow_activities table, one row per
+//	    activity of a workflow — boundary-event paths and event sub-processes
+//	    included — with its kind and the microflow, page or workflow each of
+//	    its slots names (ako/mxcli#1295). Without the bump a cached catalog
+//	    lacks the table and workflow_activities() fails with "no such table".
 //	47 (absent references are NULL): the agent-editor tables (agents,
 //	    agent_tools, agent_knowledge_bases, ai_models, knowledge_bases,
 //	    consumed_mcp_services, published_mcp_services) store an absent
@@ -257,7 +262,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "47"
+const CatalogSchemaVersion = "48"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -1135,6 +1140,41 @@ func (c *Catalog) createTables() error {
 		)`,
 		viewWithFullSnapshot("workflows"),
 
+		// workflow_activities — one row per activity of a workflow, in the
+		// order wfnames.WalkActivities visits them: the main flow, the paths
+		// of its boundary events, then its event sub-processes
+		// (ako/mxcli#1295). ActivityType is the activity's kind as
+		// workflows_data counts it, with the two kinds that share a Go type
+		// told apart: MultiUserTask from UserTask, AIAgentTask from
+		// CallMicroflow. Each slot that names another document is a column of
+		// its own, so a rule can ask which microflow runs where:
+		//   Microflow            a system task's, call-microflow or AI agent task's
+		//   UserSourceMicroflow  a user task's targeting microflow (users or groups)
+		//   OnCreatedMicroflow   a user task's on-created microflow
+		//   CompletionMicroflow  a multi-user task's completion microflow
+		//   Page                 a user task's page
+		//   CalledWorkflow       a call-workflow activity's workflow
+		`CREATE TABLE IF NOT EXISTS workflow_activities_data (
+			Id TEXT PRIMARY KEY,
+			Sequence INTEGER DEFAULT 0,
+			WorkflowId TEXT,
+			WorkflowQualifiedName TEXT,
+			ModuleName TEXT,
+			Name TEXT,
+			Caption TEXT,
+			ActivityType TEXT,
+			Microflow TEXT,
+			UserSourceMicroflow TEXT,
+			OnCreatedMicroflow TEXT,
+			CompletionMicroflow TEXT,
+			Page TEXT,
+			UserTaskEntity TEXT,
+			CalledWorkflow TEXT,
+			ProjectId TEXT,
+			SnapshotId TEXT
+		)`,
+		viewWithFullSnapshot("workflow_activities"),
+
 		// business_event_services
 		`CREATE TABLE IF NOT EXISTS business_event_services_data (
 			Id TEXT PRIMARY KEY,
@@ -1868,6 +1908,7 @@ func (c *Catalog) createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_odata_services_module ON odata_services_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows_data(QualifiedName)`,
 		`CREATE INDEX IF NOT EXISTS idx_workflows_module ON workflows_data(ModuleName)`,
+		`CREATE INDEX IF NOT EXISTS idx_workflow_activities_workflow ON workflow_activities_data(WorkflowQualifiedName)`,
 		`CREATE INDEX IF NOT EXISTS idx_be_services_name ON business_event_services_data(QualifiedName)`,
 		`CREATE INDEX IF NOT EXISTS idx_be_services_module ON business_event_services_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_role_mappings_user_role ON role_mappings(UserRoleName)`,

@@ -263,3 +263,58 @@ func moduleToStarlark(m Module) starlark.Value {
 		"domain_model_documentation": starlark.String(m.DomainModelDocumentation),
 	})
 }
+
+func (r *StarlarkRule) builtinWorkflows(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if r.ctx == nil {
+		return starlark.NewList(nil), nil
+	}
+	var out []starlark.Value
+	for w := range r.ctx.Workflows() {
+		out = append(out, workflowToStarlark(w))
+	}
+	return starlark.NewList(out), nil
+}
+
+func (r *StarlarkRule) builtinWorkflowActivities(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if r.ctx == nil {
+		return starlark.NewList(nil), nil
+	}
+	var out []starlark.Value
+	for a := range r.ctx.WorkflowActivities() {
+		out = append(out, workflowActivityToStarlark(a))
+	}
+	return starlark.NewList(out), nil
+}
+
+func workflowToStarlark(w Workflow) starlark.Value {
+	return starlarkstruct.FromStringDict(starlark.String("workflow"), starlark.StringDict{
+		"id":                   starlark.String(w.ID),
+		"qualified_name":       starlark.String(w.QualifiedName),
+		"name":                 starlark.String(w.Name),
+		"module_name":          starlark.String(w.ModuleName),
+		"description":          starlark.String(w.Description),
+		"parameter_entity":     starlark.String(w.ParameterEntity),
+		"activity_count":       starlark.MakeInt(w.ActivityCount),
+		"user_task_count":      starlark.MakeInt(w.UserTaskCount),
+		"microflow_call_count": starlark.MakeInt(w.MicroflowCallCount),
+		"decision_count":       starlark.MakeInt(w.DecisionCount),
+	})
+}
+
+func workflowActivityToStarlark(a WorkflowActivity) starlark.Value {
+	return starlarkstruct.FromStringDict(starlark.String("workflow_activity"), starlark.StringDict{
+		"id":                      starlark.String(a.ID),
+		"workflow_qualified_name": starlark.String(a.WorkflowQualifiedName),
+		"module_name":             starlark.String(a.ModuleName),
+		"name":                    starlark.String(a.Name),
+		"caption":                 starlark.String(a.Caption),
+		"activity_type":           starlark.String(a.ActivityType),
+		"microflow":               starlark.String(a.Microflow),
+		"user_source_microflow":   starlark.String(a.UserSourceMicroflow),
+		"on_created_microflow":    starlark.String(a.OnCreatedMicroflow),
+		"completion_microflow":    starlark.String(a.CompletionMicroflow),
+		"page":                    starlark.String(a.Page),
+		"user_task_entity":        starlark.String(a.UserTaskEntity),
+		"called_workflow":         starlark.String(a.CalledWorkflow),
+	})
+}

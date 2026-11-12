@@ -72,6 +72,12 @@ func (b *Builder) buildWorkflows() error {
 	b.disown()
 
 	b.report("Workflows", count)
+
+	activities, err := b.buildWorkflowActivities(wfs)
+	if err != nil {
+		return err
+	}
+	b.report("Workflow activities", activities)
 	return nil
 }
 
