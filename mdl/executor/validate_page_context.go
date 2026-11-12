@@ -55,6 +55,14 @@ func validatePageContextTree(ctx *ExecContext, params []ast.PageParameter, widge
 // fragment's content-slot payload is kept, since those are page widgets
 // whatever the fragment holds. Expansion errors are exec's to report.
 func expandUseRefsForCheck(ctx *ExecContext, widgets []*ast.WidgetV3) []*ast.WidgetV3 {
+	return expandUseRefsForCheckReporting(ctx, widgets, nil)
+}
+
+// expandUseRefsForCheckReporting is expandUseRefsForCheck, calling unexpanded
+// (when non-nil) with the prefix of each reference it could NOT expand — ""
+// for none. A caller asking whether a widget name can exist needs to know that
+// the names under that prefix are unknown, not absent (ako/mxcli#2182).
+func expandUseRefsForCheckReporting(ctx *ExecContext, widgets []*ast.WidgetV3, unexpanded func(prefix string)) []*ast.WidgetV3 {
 	var pb *pageBuilder
 	if ctx != nil && ctx.Connected() {
 		pb = &pageBuilder{ctx: ctx, backend: ctx.Backend, fragments: ctx.Fragments}
@@ -73,6 +81,10 @@ func expandUseRefsForCheck(ctx *ExecContext, widgets []*ast.WidgetV3) []*ast.Wid
 						out = append(out, walk(expanded)...)
 						continue
 					}
+				}
+				if unexpanded != nil {
+					prefix, _ := w.Properties["Prefix"].(string)
+					unexpanded(prefix)
 				}
 				out = append(out, walk(w.Children)...)
 			case "SLOT":
