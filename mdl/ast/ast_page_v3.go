@@ -408,10 +408,17 @@ type ColumnV3 struct {
 }
 
 // ParamAssignmentV3 represents a template parameter: {1} = value
+//
+// `{1} = <unbound>` is a parameter with no binding yet — Value is nil and
+// Unbound is set. It is what `describe` prints for a stored parameter whose
+// AttributeRef, Expression and SourceVariable are all empty (normal in a
+// building block), and it writes back to that same empty parameter, keeping
+// its position so `{2}` does not shift onto `{1}`'s slot (ako/mxcli#2181).
 type ParamAssignmentV3 struct {
-	Index  int            // Parameter index (1, 2, 3, ...)
-	Value  any            // Expression value
-	Format *ParamFormatV3 // Optional per-parameter formatting (dynamic text), else nil
+	Index   int            // Parameter index (1, 2, 3, ...)
+	Value   any            // Expression value; nil when Unbound
+	Unbound bool           // `{n} = <unbound>`: the parameter is kept, with no binding
+	Format  *ParamFormatV3 // Optional per-parameter formatting (dynamic text), else nil
 }
 
 // ParamFormatV3 holds the optional per-parameter formatting of a dynamic-text

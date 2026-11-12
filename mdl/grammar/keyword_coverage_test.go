@@ -39,6 +39,8 @@ func TestKeywordRuleCoverage(t *testing.T) {
 		"PLUS": true, "MINUS": true, "STAR": true, "SLASH": true, "PERCENT": true,
 		// Version marker (not an identifier)
 		"V3": true,
+		// `<unbound>` template-parameter placeholder (not an identifier)
+		"UNBOUND_PARAM": true,
 	}
 
 	// Tokens missing from keyword rule (in lexer but not in keyword).

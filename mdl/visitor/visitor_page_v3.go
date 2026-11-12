@@ -1497,6 +1497,11 @@ func buildParamAssignmentV3(ctx parser.IParamAssignmentV3Context) ast.ParamAssig
 	if expr := paCtx.Expression(); expr != nil {
 		param.Value = stripExpressionIdentifierQuotes(expressionSourceText(expr))
 	}
+	// `{1} = <unbound>`: no value; the builder writes the parameter with every
+	// binding slot empty, as Studio Pro stores it (ako/mxcli#2181).
+	if paCtx.UNBOUND_PARAM() != nil {
+		param.Unbound = true
+	}
 	if fmtCtx := paCtx.ParamFormatV3(); fmtCtx != nil {
 		param.Format = buildParamFormatV3(fmtCtx)
 	}
