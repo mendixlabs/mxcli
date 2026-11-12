@@ -878,8 +878,11 @@ paramListV3
     | LBRACKET /* @alias MDL-DEPR124 */ paramAssignmentV3 (COMMA paramAssignmentV3)* RBRACKET
     ;
 
+// `{1} = <unbound>` keeps a parameter with no binding — what `describe` prints
+// for one Studio Pro stored unbound, typically in a building block, and what
+// writes it back that way (ako/mxcli#2181). mxbuild reports it until bound.
 paramAssignmentV3
-    : LBRACE NUMBER_LITERAL RBRACE EQUALS expression (FORMAT paramFormatV3)?
+    : LBRACE NUMBER_LITERAL RBRACE EQUALS (expression | UNBOUND_PARAM) (FORMAT paramFormatV3)?
     ;
 
 // Optional per-parameter formatting for a dynamic-text parameter, mapping to the
