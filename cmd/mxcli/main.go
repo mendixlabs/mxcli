@@ -45,7 +45,10 @@ func main() {
 	// (ako/mxcli#633).
 	startSession(os.Args[1:])
 
-	if code := runCLI(); code != 0 {
+	stopProfile := startCPUProfile()
+	code := runCLI()
+	stopProfile()
+	if code != 0 {
 		os.Exit(code)
 	}
 }
