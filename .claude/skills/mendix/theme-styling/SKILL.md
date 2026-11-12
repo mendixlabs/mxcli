@@ -13,10 +13,10 @@ description: "The SCSS workflow and its traps — where styling actually compile
 | 24-43 | When to Use This Skill |
 | 44-297 | SCSS Compilation Chain |
 | 298-316 | CSS Hot-Reload Workflow |
-| 317-416 | Caveats |
-| 417-431 | Validation with `mxcli check -p` |
-| 432-440 | Checklist |
-| 441-443 | Default styling + runtime theme switching (`mxcli theme list/show/create/apply/remove/switcher`, `mxcli new --theme`) |
+| 317-420 | Caveats |
+| 421-435 | Validation with `mxcli check -p` |
+| 436-444 | Checklist |
+| 445-447 | Default styling + runtime theme switching (`mxcli theme list/show/create/apply/remove/switcher`, `mxcli new --theme`) |
 
 <!-- /skill-index -->
 # Theme & Styling — SCSS Workflow and Caveats
@@ -329,6 +329,10 @@ container ctn (style: 'color: red;') {
   dynamictext txt (content: 'Hello')
 }
 ```
+
+The rule is for hand-written MDL (`mxcli check` refuses it as MDL-WIDGET03). A
+dynamic text that `use building block` copies in keeps the inline style the block
+stores — Studio Pro wrote it, and it is placed as stored (ako/mxcli#2183).
 
 This also applies to `alter styling` and `alter page set style` — never target a DYNAMICTEXT widget with Style.
 
