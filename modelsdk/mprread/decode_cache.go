@@ -74,6 +74,14 @@ var decodeCacheHits atomic.Int64
 // DecodeCacheHits returns how many units have been served from the cache.
 func DecodeCacheHits() int64 { return decodeCacheHits.Load() }
 
+// decodeCacheBytesCompared counts the bytes the cache has compared to tell
+// whether a unit is the one it decoded. For tests.
+var decodeCacheBytesCompared atomic.Int64
+
+// DecodeCacheBytesCompared is how many bytes of unit contents the decode
+// caches of this process have compared. For tests.
+func DecodeCacheBytesCompared() int64 { return decodeCacheBytesCompared.Load() }
+
 func decodeCacheFor(r *mmpr.Reader) *decodeCache {
 	if r == nil || decodeCacheOff.Load() {
 		return nil
@@ -94,6 +102,11 @@ func (c *decodeCache) lookup(id string, contents []byte) (elem element.Element, 
 		c.entries[id] = &decodedUnit{contents: contents}
 		return nil, false
 	}
+	// The same bytes, perhaps in another buffer: each pass over the project
+	// reads into buffers of its own. Keep this one, so that the pass's later
+	// listings match it by identity and not by comparing the unit again
+	// (ako/mxcli#2160: every page, twice per page statement).
+	e.contents = contents
 	if e.elem != nil && !e.elem.IsDirty() {
 		return e.elem, false
 	}
@@ -111,6 +124,7 @@ func sameBytes(a, b []byte) bool {
 	if len(a) == 0 || &a[0] == &b[0] {
 		return true
 	}
+	decodeCacheBytesCompared.Add(int64(len(a)))
 	return bytes.Equal(a, b)
 }
 
