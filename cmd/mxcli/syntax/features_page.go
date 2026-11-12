@@ -216,7 +216,10 @@ LIST IMPACT OF htmlelement;
 			"IMAGE name (ImageType: imageUrl, ImageUrl: '{1}', ImageUrlParams: ({1} = PictureUrl),\n" +
 			"            AlternativeText: '{1}', AlternativeTextParams: ({1} = Name))\n" +
 			"--   The widget-wide `contentparams:` is one list shared by every template on the\n" +
-			"--   widget; `'{AttrName}'` is the shortest form for a single attribute.\n\n" +
+			"--   widget; `'{AttrName}'` is the shortest form for a single attribute.\n" +
+			"--   `{1} = <unbound>` keeps a parameter with no binding yet — what describe prints\n" +
+			"--   for one (building blocks have them). It writes back unbound; mxbuild reports\n" +
+			"--   CE0402 \"No value specified.\" until it is bound.\n\n" +
 			"-- Any pluggable widget by its id (id FIRST, then the name)\nPLUGGABLEWIDGET 'com.mendix.widget.web.badge.Badge' name (value: 'x')\nCUSTOMWIDGET 'com.mendix.widget.custom.x.X' name (prop: 'x')      -- legacy spelling\n\n" +
 			"-- DYNAMICIMAGE shows the image held by an OBJECT, so it needs the entity that\n" +
 			"-- object belongs to — reachable from the widget's context. Without it mxbuild\n" +
