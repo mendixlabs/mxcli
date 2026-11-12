@@ -11,7 +11,9 @@ import (
 	modelsdk "github.com/mendixlabs/mxcli"
 	"github.com/mendixlabs/mxcli/mdl/catalog"
 	"github.com/mendixlabs/mxcli/mdl/executor"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/mendixlabs/mxcli/sdk/security"
 	"github.com/spf13/cobra"
 )
 
@@ -26,9 +28,11 @@ repeat the header, which is allowed. --mdl 0 writes the alpha language
 instead, with no header (ako/mxcli#840).
 
 The <type> is optional for a qualified document name: 'describe MyModule.Customer'
-auto-detects the document type. Pass the type explicitly to disambiguate (a name
-can match both an entity and a document, for example) or for forms that have no
-single qualified name (module, settings, navigation, module role).
+auto-detects the document type. So it is for a module role ('describe
+Administration.Administrator'), a user role and a navigation profile
+('describe Responsive'). Pass the type explicitly to disambiguate (a name can
+match both an entity and a document, for example) or for forms that have no
+single name (module, settings).
 
 Types:
   module           Describe a module and its module roles (--all: everything in it)
@@ -587,5 +591,52 @@ func resolveViaReader(projectPath, name string) ([]string, error) {
 			}
 		}
 	}
+	out = append(out, describableMembers(reader, moduleName, name)...)
 	return out, nil
+}
+
+// describableMembers is the `describe` type of each member named name that
+// is not a document of its own: a module role (Module.Role), a user role and
+// a navigation profile (both bare names). Each has a describe type, but the
+// auto-detect saw only documents, so `describe Administration.Administrator`
+// answered "no describable document named …" for a role `describe module
+// role` describes (ako/mxcli#1262).
+//
+// The catalog's objects view does not list them, and has no complete table to
+// list module roles from (role_mappings holds only the mapped ones), so these
+// are resolved here, by the live scan a catalog miss falls back to.
+func describableMembers(reader memberReader, moduleName map[string]string, name string) []string {
+	var out []string
+	if mss, err := reader.ListModuleSecurity(); err == nil {
+		for _, ms := range mss {
+			mn := moduleName[string(ms.ContainerID)]
+			for _, r := range ms.ModuleRoles {
+				if mn+"."+r.Name == name {
+					out = append(out, "modulerole")
+				}
+			}
+		}
+	}
+	if ps, err := reader.GetProjectSecurity(); err == nil && ps != nil {
+		for _, r := range ps.UserRoles {
+			if r.Name == name {
+				out = append(out, "userrole")
+			}
+		}
+	}
+	if nav, err := reader.GetNavigation(); err == nil && nav != nil {
+		for _, p := range nav.Profiles {
+			if p.Name == name {
+				out = append(out, "navigation")
+			}
+		}
+	}
+	return out
+}
+
+// memberReader is the part of the backend describableMembers reads.
+type memberReader interface {
+	ListModuleSecurity() ([]*security.ModuleSecurity, error)
+	GetProjectSecurity() (*security.ProjectSecurity, error)
+	GetNavigation() (*types.NavigationDocument, error)
 }
