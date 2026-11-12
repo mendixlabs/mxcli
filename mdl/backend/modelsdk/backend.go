@@ -48,6 +48,9 @@ type Backend struct {
 	writer *mmpr.Writer
 	path   string
 
+	// domainModelListings counts ListDomainModels calls (DomainModelListings).
+	domainModelListings int64
+
 	// fileWrites counts writes that do not go through unit storage — the
 	// generated .java/.js source of a code action, whose body lives in
 	// javasource/ or javascriptsource/ rather than in its unit. They are folded

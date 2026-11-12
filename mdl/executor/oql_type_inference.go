@@ -1159,7 +1159,23 @@ func inferAttributeType(ctx *ExecContext, attrPath string, col *OQLColumnInfo) a
 }
 
 // findEntity looks up an entity by module and name.
+//
+// It reads the named module's domain model alone. It used to list and convert
+// every domain model of the project to find the one, and CREATE ASSOCIATION
+// calls it four times (ako/mxcli#2160). The listing remains for what the
+// direct read does not answer: a module the module list does not carry (the
+// virtual System module, #610) and a backend that serves no single domain
+// model.
 func findEntity(ctx *ExecContext, moduleName, entityName string) (*domainmodel.Entity, error) {
+	if dm := moduleDomainModel(ctx, moduleName); dm != nil {
+		for _, entity := range dm.Entities {
+			if entity != nil && entity.Name == entityName {
+				return entity, nil
+			}
+		}
+		return nil, mdlerrors.NewNotFound("entity", moduleName+"."+entityName)
+	}
+
 	// Get all entities
 	dms, err := ctx.Backend.ListDomainModels()
 	if err != nil {
@@ -1190,6 +1206,30 @@ func findEntity(ctx *ExecContext, moduleName, entityName string) (*domainmodel.E
 	}
 
 	return nil, mdlerrors.NewNotFound("entity", moduleName+"."+entityName)
+}
+
+// moduleDomainModel reads the domain model of the module with exactly this
+// name, or returns nil when it cannot be read that way — the caller then lists
+// the project, which is what every caller did before.
+func moduleDomainModel(ctx *ExecContext, moduleName string) *domainmodel.DomainModel {
+	if ctx == nil || ctx.Backend == nil || moduleName == "" {
+		return nil
+	}
+	modules, err := getModulesFromCache(ctx)
+	if err != nil {
+		return nil
+	}
+	for _, m := range modules {
+		if m == nil || m.Name != moduleName {
+			continue
+		}
+		dm, err := ctx.Backend.GetDomainModel(m.ID)
+		if err != nil || dm == nil {
+			return nil
+		}
+		return dm
+	}
+	return nil
 }
 
 // convertDomainModelTypeToAST converts a domainmodel.AttributeType to ast.DataType.
