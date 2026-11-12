@@ -133,12 +133,20 @@ func nanoflowsNamed(be backend.FullBackend, name string) ([]*microflows.Nanoflow
 
 // pagesWhere is the project's pages whose local name keep accepts.
 func pagesWhere(be backend.FullBackend, keep func(name string) bool) ([]*pages.Page, error) {
+	return pagesWhereHeader(be, func(h types.DocumentHeader) bool { return keep(h.Name) })
+}
+
+// pagesWhereHeader is the project's pages whose ID, container and name keep
+// accepts. Only those are loaded: a caller that knows the module as well as
+// the name says so here, and is not handed the page's namesakes from every
+// other module to pick from (ako/mxcli#2160).
+func pagesWhereHeader(be backend.FullBackend, keep func(types.DocumentHeader) bool) ([]*pages.Page, error) {
 	if l, ok := be.(pageHeaderLister); ok {
 		hs, err := l.ListPageHeaders()
 		if err != nil {
 			return nil, err
 		}
-		return decodeWhere(hs, func(h types.DocumentHeader) bool { return keep(h.Name) }, be.GetPage)
+		return decodeWhere(hs, keep, be.GetPage)
 	}
 	all, err := be.ListPages()
 	if err != nil {
@@ -146,7 +154,7 @@ func pagesWhere(be backend.FullBackend, keep func(name string) bool) ([]*pages.P
 	}
 	var out []*pages.Page
 	for _, p := range all {
-		if keep(p.Name) {
+		if keep(types.DocumentHeader{ID: p.ID, ContainerID: p.ContainerID, Name: p.Name}) {
 			out = append(out, p)
 		}
 	}
