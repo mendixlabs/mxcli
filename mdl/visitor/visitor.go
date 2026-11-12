@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/mendixlabs/mxcli/mdl/ast"
@@ -812,8 +813,62 @@ type buildOptions struct {
 // build is Build with the tree walked by listen(builder) instead of the
 // builder itself, so a test can observe the walk through a wrapper.
 func build(input string, opts buildOptions, listen func(*Builder) antlr.ParseTreeListener) (*ast.Program, []error) {
+	// Two stages (see parseProgram): the fast prediction first, and the full
+	// one only for input the fast one reports an error in.
+	tree, stream, errListener, ok := parseProgram(input, opts, sllFirst)
+	if !ok {
+		tree, stream, errListener, _ = parseProgram(input, opts, false)
+	}
+
+	// Create builder and walk the tree
+	builder := NewBuilder()
+	builder.session = opts.session
+	builder.syntaxErrorLines = errListener.lines
+	antlr.ParseTreeWalkerDefault.Walk(listen(builder), tree)
+	builder.noteBackslashEscapes(stream.GetAllTokens())
+
+	// Combine syntax errors and builder errors
+	allErrors := append(errListener.errors, builder.errors...)
+	return &ast.Program{
+		Statements:          builder.statements,
+		DocumentAnnotations: builder.documentAnnotations,
+		Deprecations:        builder.deprecations,
+		LanguageVersion:     builder.langVersion,
+		LanguageHeaderLine:  builder.langHeaderLine,
+		LanguageNotes:       builder.langNotes,
+		FlowCommits:         builder.flowCommits,
+		DetachedDocComments: builder.detachedDocComments(),
+	}, allErrors
+}
+
+// sllFirst makes build predict in SLL mode first. A variable so a test can
+// parse the old way and compare.
+var sllFirst = true
+
+// fullContextParses counts the parses made with full LL prediction. For tests.
+var fullContextParses atomic.Int64
+
+// parseProgram lexes and parses input, with a lexer, token stream and error
+// listener of its own.
+//
+// With sll it predicts in SLL mode, and ok reports whether the input parsed
+// without a syntax error. ANTLR's default mode predicts in SLL too, but where
+// SLL sees a conflict it decides again with the full context, and that
+// decision is neither cheap nor cached: on this grammar it was taken for
+// nearly every statement and was four fifths of the time of a parse. Seen from
+// a script, that is the settled re-run of 600 `create or modify microflow`
+// statements, each of which describes the stored microflow and parses the
+// description to compare it: 23 s, 13 s of them here (ako/mxcli#2160).
+//
+// SLL is the weaker of the two. On input it accepts it builds the tree full
+// LL builds; on input full LL accepts it may still report an error. So an
+// error under SLL decides nothing: the caller parses again with sll false,
+// and that second parse is the one whose tree and messages are used. Input
+// with a syntax error is therefore parsed twice, and reports what it always
+// reported.
+func parseProgram(input string, opts buildOptions, sll bool) (tree parser.IProgramContext, stream *antlr.CommonTokenStream, errListener *errorListener, ok bool) {
 	// Create custom error listener to capture syntax errors
-	errListener := newErrorListener()
+	errListener = newErrorListener()
 	errListener.source = strings.Split(input, "\n")
 
 	// Create lexer with custom error listener
@@ -830,31 +885,17 @@ func build(input string, opts buildOptions, listen func(*Builder) antlr.ParseTre
 	if opts.implicit > langver.V0 {
 		source = newImplicitHeaderSource(lexer, opts.implicit)
 	}
-	stream := antlr.NewCommonTokenStream(source, antlr.TokenDefaultChannel)
+	stream = antlr.NewCommonTokenStream(source, antlr.TokenDefaultChannel)
 	p := parser.NewMDLParser(stream)
 	p.RemoveErrorListeners()
 	p.AddErrorListener(errListener)
-
-	// Create builder and walk the tree
-	builder := NewBuilder()
-	builder.session = opts.session
-	builder.syntaxErrorLines = errListener.lines
-	tree := p.Program()
-	antlr.ParseTreeWalkerDefault.Walk(listen(builder), tree)
-	builder.noteBackslashEscapes(stream.GetAllTokens())
-
-	// Combine syntax errors and builder errors
-	allErrors := append(errListener.errors, builder.errors...)
-	return &ast.Program{
-		Statements:          builder.statements,
-		DocumentAnnotations: builder.documentAnnotations,
-		Deprecations:        builder.deprecations,
-		LanguageVersion:     builder.langVersion,
-		LanguageHeaderLine:  builder.langHeaderLine,
-		LanguageNotes:       builder.langNotes,
-		FlowCommits:         builder.flowCommits,
-		DetachedDocComments: builder.detachedDocComments(),
-	}, allErrors
+	if !sll {
+		fullContextParses.Add(1)
+		return p.Program(), stream, errListener, true
+	}
+	p.Interpreter.SetPredictionMode(antlr.PredictionModeSLL)
+	tree = p.Program()
+	return tree, stream, errListener, len(errListener.errors) == 0
 }
 
 // Errors returns any errors encountered during building.
