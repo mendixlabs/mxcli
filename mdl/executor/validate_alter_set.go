@@ -72,6 +72,7 @@ func validateAlterSetProperties(ctx *ExecContext, prog *ast.Program, sc *scriptC
 		return nil
 	}
 	grows := documentsTheScriptAddsWidgetsTo(prog)
+	added := widgetsTheScriptAddsTo(ctx, prog)
 	opened := map[model.ID]pageProbe{}
 
 	var errs []error
@@ -111,7 +112,15 @@ func validateAlterSetProperties(ctx *ExecContext, prog *ast.Program, sc *scriptC
 			// so `column colTitle` is inserted under one name and set under
 			// another. Its properties are checked where it is written, by
 			// ValidateWidgetProperties.
-			if grows[s.PageName.String()] && !probe.ResolvesTarget(set.Target.Widget, columnRefOf(set.Target)) {
+			//
+			// Waived only for a name the script's additions could hold, though —
+			// their names after building block expansion, or anything at all when
+			// they carry derived addresses. Waiving every unresolved name passed
+			// `set … on s_text99` after `insert … { use building block B as s_ }`,
+			// which exec refused (ako/mxcli#2182).
+			doc := s.PageName.String()
+			if grows[doc] && !probe.ResolvesTarget(set.Target.Widget, columnRefOf(set.Target)) &&
+				added[doc].allows(set.Target.Widget) {
 				continue
 			}
 			errs = append(errs, checkSetOp(ctx, probe, label, set, modName, containerID, sc)...)

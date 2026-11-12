@@ -683,7 +683,14 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	sort.Strings(authoredNames)
 	for _, authored := range authoredNames {
 		propVal := w.Properties[authored]
-		if mappedKeys[authored] || selectionKeys[strings.ToLower(authored)] || isBuiltinPropName(authored) {
+		if mappedKeys[authored] || selectionKeys[strings.ToLower(authored)] {
+			continue
+		}
+		// A core name is skipped — unless the widget declares it as a key of its
+		// own, which is then all it can mean (ako/mxcli#2180): a PDS Button's
+		// string `caption` has no mapping to write it, so this pass is its only
+		// route.
+		if isBuiltinPropName(authored) && !templateOwnsCoreName(propertyTypeIDs, authored) {
 			continue
 		}
 		// The template's own spelling of the key the author named, in any case
@@ -856,7 +863,14 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 
 	// 5. Build CustomWidget
 	widgetID := model.ID(types.GenerateID())
-	cw := builder.Finalize(widgetID, w.Name, w.GetLabel(), def.DefaultEditable)
+	// `label:` on a widget that declares a `label` of its own (a PDS Form
+	// label, the Badge button) is that key, written above by its mapping — not
+	// also a widget-level LabelTemplate beside it (ako/mxcli#2180).
+	label := w.GetLabel()
+	if templateOwnsCoreName(propertyTypeIDs, "label") {
+		label = ""
+	}
+	cw := builder.Finalize(widgetID, w.Name, label, def.DefaultEditable)
 
 	if err := e.pageBuilder.registerWidgetName(w.Name, cw.ID); err != nil {
 		return nil, err
@@ -2677,6 +2691,18 @@ func stringifyAny(v any) string {
 		return fmt.Sprintf("%d", x)
 	case float64:
 		return fmt.Sprintf("%g", x)
+	case *ast.WidgetIcon:
+		// `icon: 'bookmark'` — the visitor types every `icon:` as a core icon,
+		// but on a pluggable widget it reaches here only for the widget's own
+		// key (a PDS Button's string `icon`), whose value is the quoted text.
+		// Returning "" dropped it from create page and from a building block
+		// copied through describe (ako/mxcli#2180). A glyph or an image icon
+		// has no text form a plain property could hold.
+		if x != nil && x.Kind == types.MenuIconCollection {
+			return x.Name
+		}
+	case ast.WidgetIcon:
+		return stringifyAny(&x)
 	}
 	return ""
 }
