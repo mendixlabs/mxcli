@@ -145,3 +145,54 @@ func TestDecodeCache_AWriteIsReadBack(t *testing.T) {
 		t.Errorf("after the rewrite the listing still reads %q, want %q", got, "second")
 	}
 }
+
+// ako/mxcli#2160, the layer under decoding: a statement that writes emptied
+// the reader's whole byte cache, and a script run did not hold that cache at
+// all, so every listing after every write read every unit file of its type
+// again — `create page` lists the project's pages, and the next one read them
+// all from disk. A write now drops the one unit it rewrote.
+//
+// Measured on this fixture: 120 file reads per added page statement before
+// the change, 1 after. The bound is the number of pages in the project: at or above it,
+// a statement is reading the listing again.
+func TestScript_AddedStatementsDoNotReadTheProjectsFilesAgain(t *testing.T) {
+	readsFor := func(statements int) (reads int64, pages int) {
+		exec, out, _ := openPedAppCopy(t)
+		ps, err := exec.Backend().ListPages()
+		if err != nil || len(ps) < 10 {
+			t.Fatalf("control: the fixture has %d pages (%v); the bound below would prove nothing", len(ps), err)
+		}
+		mfs, err := exec.Backend().ListMicroflows()
+		if err != nil {
+			t.Fatal(err)
+		}
+		h, err := getHierarchy(exec.newExecContext(t.Context()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var flow string
+		for _, mf := range mfs {
+			if len(mf.Parameters) == 0 {
+				flow = h.GetQualifiedName(mf.ContainerID, mf.Name)
+				break
+			}
+		}
+		prog, errs := visitor.Build(pagesScript(statements, flow))
+		if len(errs) > 0 {
+			t.Fatalf("parse: %v", errs[0])
+		}
+		before := unitFileReads(t, exec)
+		if err := exec.ExecuteProgram(prog); err != nil {
+			t.Fatalf("exec: %v\n%s", err, out.String())
+		}
+		return unitFileReads(t, exec) - before, len(ps)
+	}
+
+	two, pages := readsFor(2)
+	six, _ := readsFor(6)
+	perStatement := (six - two) / 4
+	t.Logf("%d file reads for 2 statements, %d for 6 — %d per added statement (%d pages in the project)", two, six, perStatement, pages)
+	if perStatement >= int64(pages) {
+		t.Errorf("each added statement read %d unit files; the project has %d pages, so a statement is reading the listing from disk again", perStatement, pages)
+	}
+}

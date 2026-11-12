@@ -390,7 +390,7 @@ func (r *Reader) buildUnitCache() error {
 		} else if known, ok := r.knownUnit(hash); ok {
 			entry = known
 		} else {
-			contents, err := r.readMprContents(unitUUID)
+			contents, err := r.readMprContentsUnder(unitUUID, hash, true)
 			if err != nil {
 				continue
 			}
@@ -417,6 +417,9 @@ func (r *Reader) buildUnitCache() error {
 	if store != nil {
 		store.setRowHashes(rowHashes)
 	}
+	r.contentMu.Lock()
+	r.rowHashes = rowHashes
+	r.contentMu.Unlock()
 	first := r.v2Hashes == nil
 	r.v2Hashes = hashes
 	if first || opened >= unitTypeIndexPersistAfter {
@@ -426,18 +429,21 @@ func (r *Reader) buildUnitCache() error {
 	return nil
 }
 
-// InvalidateCache marks the unit cache as invalid and clears content cache entries.
-// Should be called after any write operation.
+// InvalidateCache marks the unit cache as invalid. Should be called after any
+// write operation.
+//
+// The content cache is not emptied. Each entry is valid for the ContentsHash
+// it was read under, and a write changes the row hash of the unit it rewrote
+// and of no other; emptying the cache made every listing after every write
+// read every unit file of its type again (ako/mxcli#2160). What is dropped is
+// the hashes: until the next buildUnitCache reads them back, no entry is known
+// to be current, so none is served.
 func (r *Reader) InvalidateCache() {
 	r.unitCacheValid = false
 	r.invalidateV1Listing()
 	r.clearNameIndex()
-	// Clear content cache entries but keep the map non-nil so caching stays active.
-	// If contentCache is nil (per-request mode), remain disabled.
 	r.contentMu.Lock()
-	if r.contentCache != nil {
-		clear(r.contentCache)
-	}
+	r.rowHashes = nil
 	r.contentMu.Unlock()
 }
 
@@ -448,7 +454,7 @@ func (r *Reader) EnableContentCache() {
 	r.contentMu.Lock()
 	defer r.contentMu.Unlock()
 	if r.contentCache == nil {
-		r.contentCache = make(map[string][]byte)
+		r.contentCache = make(map[string]cachedContent)
 	}
 	r.cacheScopes = -1
 }
@@ -459,7 +465,9 @@ func (r *Reader) EnableContentCache() {
 // the project several times per `create or modify` it predicted). Scopes
 // nest; the cache is dropped when the outermost one is released, so it never
 // outlives the pass — a long session must not keep serving bytes Studio Pro
-// has since rewritten. A write through this reader empties it as before.
+// has since rewritten. A write through this reader retires the unit it
+// rewrote: an entry is served only while its unit's row hash is the one it
+// was read under.
 //
 // MPR v1 reads its contents from SQLite, which caches its own pages; there
 // the scope changes nothing.
@@ -470,7 +478,7 @@ func (r *Reader) CacheUnitReads() (release func()) {
 		return func() {} // cached for the reader's lifetime
 	}
 	if r.contentCache == nil {
-		r.contentCache = make(map[string][]byte)
+		r.contentCache = make(map[string]cachedContent)
 	}
 	r.cacheScopes++
 	var once sync.Once
@@ -541,11 +549,24 @@ func (r *Reader) readMprContents(unitUUID string) ([]byte, error) {
 	}
 
 	r.contentMu.Lock()
-	cached, ok := r.contentCache[unitUUID]
-	caching := r.contentCache != nil
+	rowHash, known := r.rowHashes[unitUUID]
 	r.contentMu.Unlock()
-	if ok {
-		return bytes.Clone(cached), nil
+	return r.readMprContentsUnder(unitUUID, rowHash, known)
+}
+
+// readMprContentsUnder is readMprContents for a caller that has the unit's
+// row hash in hand (buildUnitCache, which is reading the Unit table and has
+// not published its hashes yet). rowHash is the only key the read may be
+// cached or served under; known is false when the unit's current hash is not
+// known, and the read then goes to the file and is not kept. An empty hash is
+// a key like any other: a row without one gets one from the first write.
+func (r *Reader) readMprContentsUnder(unitUUID, rowHash string, known bool) ([]byte, error) {
+	r.contentMu.Lock()
+	caching := r.contentCache != nil && known
+	cached, ok := r.contentCache[unitUUID]
+	r.contentMu.Unlock()
+	if ok && caching && cached.hash == rowHash {
+		return bytes.Clone(cached.data), nil
 	}
 
 	// Build path: mprcontents/XX/YY/UUID.mxunit
@@ -565,7 +586,7 @@ func (r *Reader) readMprContents(unitUUID string) ([]byte, error) {
 			if caching {
 				r.contentMu.Lock()
 				if r.contentCache != nil {
-					r.contentCache[unitUUID] = bytes.Clone(stored)
+					r.contentCache[unitUUID] = cachedContent{hash: rowHash, data: bytes.Clone(stored)}
 				}
 				r.contentMu.Unlock()
 			}
@@ -586,7 +607,7 @@ func (r *Reader) readMprContents(unitUUID string) ([]byte, error) {
 	if caching {
 		r.contentMu.Lock()
 		if r.contentCache != nil {
-			r.contentCache[unitUUID] = held
+			r.contentCache[unitUUID] = cachedContent{hash: rowHash, data: held}
 		}
 		r.contentMu.Unlock()
 	}

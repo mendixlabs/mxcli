@@ -56,12 +56,20 @@ type Reader struct {
 	// units and wants dropped with the connection (see Memo).
 	memo sync.Map
 
-	// contentCache stores raw BSON bytes per unit ID (MPR v2 only).
-	// Populated on first read while caching is on (EnableContentCache, or a
-	// CacheUnitReads scope); cleared by InvalidateCache, which every write
-	// calls. nil means caching is off. contentMu guards it and cacheScopes.
+	// contentCache stores raw BSON bytes per unit ID (MPR v2 only), each
+	// under the ContentsHash its Unit row had when it was read. Populated on
+	// first read while caching is on (EnableContentCache, or a CacheUnitReads
+	// scope); nil means caching is off. An entry is served only while the
+	// unit's row still has that hash (rowHashes), so a write retires the one
+	// unit it rewrote and no other (ako/mxcli#2160). contentMu guards the
+	// cache, rowHashes and cacheScopes.
 	contentMu    sync.Mutex
-	contentCache map[string][]byte
+	contentCache map[string]cachedContent
+	// rowHashes is every unit's ContentsHash as the Unit table had it at the
+	// last buildUnitCache. nil between a write and the next one: nothing is
+	// known to be current then, so nothing is served from contentCache or
+	// added to it.
+	rowHashes map[string]string
 	// nameIndex is where GetRawUnitByName last found each qualified name, by
 	// type: a hint it verifies before use, cleared by InvalidateCache
 	// (ako/mxcli#2043). nameIndexMu guards it.
@@ -119,6 +127,12 @@ type Reader struct {
 }
 
 // cachedUnit stores metadata about a unit for fast filtering.
+// cachedContent is a unit's bytes and the row hash they were read under.
+type cachedContent struct {
+	hash string
+	data []byte
+}
+
 type cachedUnit struct {
 	ID              string
 	ContainerID     string
