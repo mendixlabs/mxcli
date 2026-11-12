@@ -260,7 +260,7 @@ func (b *Builder) buildSource() error {
 			case <-stop:
 				return
 			case <-ticker.C:
-				b.say(fmt.Sprintf("source %d/%d documents", done.Load(), total), int(done.Load()))
+				b.count(fmt.Sprintf("source %d/%d documents", done.Load(), total), int(done.Load()))
 			}
 		}
 	}()

@@ -327,8 +327,9 @@ func TestSearchQuietNamesIsOnlyNamesOnAColdCatalog(t *testing.T) {
 			t.Errorf("not a type<TAB>name line: %q", l)
 		}
 	}
-	// The progress is moved, not dropped: a cold build can take minutes.
-	if !strings.Contains(r.stderr, "✓ Entities:") {
-		t.Errorf("build progress vanished instead of moving to stderr:\n%s", r.stderr)
+	// Nor does stderr carry a line per table (#1860): a slow build reports
+	// a heartbeat there instead (catalogHeartbeat).
+	if lines := perTableLines(r.stderr); len(lines) > 0 {
+		t.Errorf("a quiet build printed %d per-table lines on stderr, e.g. %q", len(lines), lines[0])
 	}
 }

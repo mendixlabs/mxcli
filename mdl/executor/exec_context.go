@@ -81,6 +81,10 @@ type ExecContext struct {
 	// Quiet suppresses connection and status messages.
 	Quiet bool
 
+	// terminal is set when Output is a terminal. A catalog build then prints
+	// a line per table; anywhere else it prints a heartbeat (#1860).
+	terminal bool
+
 	// Logger is the session diagnostics logger (nil = no logging).
 	Logger *diaglog.Logger
 
