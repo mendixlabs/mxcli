@@ -2223,6 +2223,27 @@ func buildPropKeyMap(widgetDoc bson.D) map[string]string {
 	return m
 }
 
+// pluggableDeclaresOwnKey reports whether widget is a pluggable widget whose
+// definition declares name, in any case, as a property of its own — not a
+// system property (a PropertyType of ValueType System, such as a combo box's
+// Label), which is the widget-level setting of that name.
+func pluggableDeclaresOwnKey(widget bson.D, name string) bool {
+	if bsonnav.DGetString(widget, "$Type") != "CustomWidgets$CustomWidget" {
+		return false
+	}
+	objType := bsonnav.DGetDoc(bsonnav.DGetDoc(widget, "Type"), "ObjectType")
+	for _, pt := range bsonnav.DGetArrayElements(bsonnav.DGet(objType, "PropertyTypes")) {
+		ptDoc, ok := pt.(bson.D)
+		if !ok || !strings.EqualFold(bsonnav.DGetString(ptDoc, "PropertyKey"), name) {
+			continue
+		}
+		if bsonnav.DGetString(bsonnav.DGetDoc(ptDoc, "ValueType"), "Type") != "System" {
+			return true
+		}
+	}
+	return false
+}
+
 // buildPropKindMap builds a TypePointer ID -> declared value kind map
 // (PropertyTypes[].ValueType.Type) for a widget's top-level properties. Kept
 // apart from buildPropKeyMap, which has many callers that want only the key.
@@ -3176,6 +3197,14 @@ func setRawWidgetPropertyMut(widget bson.D, propName string, value any) error {
 	// so the ALTER path behaves the same. The pluggable fallback (default) passes
 	// the author's spelling through and resolves it case-insensitively against the
 	// widget's own template keys — see setPluggableWidgetPropertyMut.
+	//
+	// A core name the pluggable widget declares as a key of its own — PDS
+	// Button's `caption`/`buttonStyle`/`icon`, PDS Form label's `label` — can
+	// only mean that key: the CustomWidget stores no core property of the name
+	// (ako/mxcli#2180, mendixlabs/mxcli#1833).
+	if pages.PluggableKeyShadowsCoreName(propName) && pluggableDeclaresOwnKey(widget, propName) {
+		return setPluggableWidgetPropertyMut(widget, propName, value)
+	}
 	switch strings.ToLower(propName) {
 	case "caption":
 		return setWidgetCaptionMut(widget, value)
