@@ -1,0 +1,61 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#1841 (part 1 of mendixlabs/mxcli#1692) — the domain model SVG
+-- draws associations from their stored anchors
+-- ============================================================================
+--
+-- Symptom, verbatim: "`mxcli describe --format svg domainmodel <Module>` draws
+-- every association centre to centre. The stored association anchors are
+-- ignored (tested with extreme anchor values), so the SVG cannot be used to
+-- verify "corner to corner" lines."
+--
+-- An association's anchors are DomainModels$Association.ParentConnection (FROM
+-- entity) and ChildConnection (TO entity), each the string "x;y" — a percentage
+-- of the entity box (a blank 11.14.0 app's Studio Pro-authored
+-- Administration.AccountPasswordData_Account stores "0;54" / "100;54"). The SVG
+-- now attaches each end at that percentage of the drawn box; values outside
+-- 0..100 are clamped onto the box. A self-association is routed round the
+-- outside of its box from one anchor to the other.
+--
+-- Run, then render:
+--   mxcli exec 1841-domain-model-svg-stored-anchors.mdl -p app.mpr
+--   mxcli describe --format svg -p app.mpr domainmodel Bug1841
+--
+-- Expected, with the entities drawn as below (Customer 90x44 at (100,100),
+-- Order at (500,300), Category 90x44 at (100,450)):
+--   Order_Customer  <line x1="500" y1="300" x2="190" y2="144">   corner to corner
+--   Order_Category  <line x1="500" y1="322" x2="190" y2="472">   mxcli's default 0;50 / 100;50
+--   Category_Parent <path d="M190 463L210 463L210 514L145 514L145 494">
+-- Before the fix all three were centre-line lines, and Category_Parent was a
+-- zero-length line at the box centre.
+
+create module Bug1841;
+
+@position(100, 100)
+create persistent entity Bug1841.Customer (
+  "Name": string(200)
+);
+
+@position(500, 300)
+create persistent entity Bug1841.Order (
+  "Number": integer
+);
+
+@position(100, 450)
+create persistent entity Bug1841.Category (
+  "Title": string(100)
+);
+
+-- Corner to corner: Order's top-left to Customer's bottom-right.
+@anchor(from: (0, 0), to: (100, 100))
+create association Bug1841.Order_Customer
+from Bug1841.Order to Bug1841.Customer;
+
+-- No anchor given: mxcli stores its default 0;50 / 100;50, and the SVG draws that.
+create association Bug1841.Order_Category
+from Bug1841.Order to Bug1841.Category;
+
+-- Self-association: out of the right edge at 30%, back into the bottom at 50%.
+@anchor(from: (100, 30), to: (50, 100))
+create association Bug1841.Category_Parent
+from Bug1841.Category to Bug1841.Category;

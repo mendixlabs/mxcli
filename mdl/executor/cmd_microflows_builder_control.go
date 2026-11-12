@@ -48,10 +48,8 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 	// how DESCRIBE carries a stored one through a rebuild.
 	atTail := fb.atBodyTail
 	fb.atBodyTail = false
-	tailWithoutMerge := atTail && hasElseBody && len(s.ThenBody) > 0 && len(s.ElseBody) > 0 &&
-		!thenReturns && !elseReturns &&
-		!bodyHasContinuingCustomErrorHandler(s.ThenBody) && !bodyHasContinuingCustomErrorHandler(s.ElseBody) &&
-		(s.Annotations == nil || s.Annotations.Merge == nil)
+	// The measurer decides the same with ifHasMerge, so the predicate is shared.
+	tailWithoutMerge := atTail && ifJoinsNothingAtTail(s)
 
 	// Save/restore endsWithReturn around branch processing to avoid
 	// a branch's RETURN affecting the parent flow state prematurely

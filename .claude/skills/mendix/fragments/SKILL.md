@@ -12,11 +12,11 @@ description: "Define reusable widget groups with CREATE FRAGMENT and place them 
 |---|---|
 | 24-32 | When to Use This Skill |
 | 33-40 | What Are Fragments? |
-| 41-189 | Syntax Reference |
-| 190-259 | Common Patterns |
-| 260-306 | Common Mistakes |
-| 307-316 | Validation Checklist |
-| 317-322 | Related Documentation |
+| 41-192 | Syntax Reference |
+| 193-262 | Common Patterns |
+| 263-309 | Common Mistakes |
+| 310-319 | Validation Checklist |
+| 320-325 | Related Documentation |
 
 <!-- /skill-index -->
 # Mendix Fragments Skill
@@ -170,7 +170,10 @@ use building block Atlas_Web_Content.List_Cards
 ```
 
 Binding-point rule (prototype): datasource → the first widget carrying a
-datasource; action → the first button widget. For anything more specific, copy
+datasource; action → the first button widget (`actionbutton`, `linkbutton`),
+or, in a block with none, the first pluggable widget with a click action — a
+PDS Button, Badge Button or Image, never a gallery or data grid row click.
+For anything more specific, copy
 the block in with `as prefix_` and use `alter page … set … on prefix_widget`.
 
 ### LIST FRAGMENTS

@@ -45,7 +45,10 @@ func main() {
 	// (ako/mxcli#633).
 	startSession(os.Args[1:])
 
-	if code := runCLI(); code != 0 {
+	stopProfile := startCPUProfile()
+	code := runCLI()
+	stopProfile()
+	if code != 0 {
 		os.Exit(code)
 	}
 }
@@ -125,6 +128,30 @@ func discoverProject(dir string) (path, note string) {
 	}
 }
 
+// noProjectFlag is the opt-out from project auto-detection, registered on the
+// commands that are meaningful without a project (check). The root
+// PersistentPreRun honours it on any command that registers it.
+const noProjectFlag = "no-project"
+
+// noProjectOptOut reports whether cmd registers --no-project and, if so, the
+// line that tells a user who got an auto-detected project how to avoid it —
+// the notice is where they meet the guess, so it is where the way out goes.
+func noProjectOptOut(cmd *cobra.Command) (bool, string) {
+	if cmd.Flags().Lookup(noProjectFlag) == nil {
+		return false, ""
+	}
+	return true, fmt.Sprintf("(pass --%s to %s without a project)", noProjectFlag, cmd.Name())
+}
+
+// skipsProjectDiscovery reports whether cmd was given --no-project.
+func skipsProjectDiscovery(cmd *cobra.Command) bool {
+	if ok, _ := noProjectOptOut(cmd); !ok {
+		return false
+	}
+	v, _ := cmd.Flags().GetBool(noProjectFlag)
+	return v
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "mxcli",
 	Short: "Mendix CLI - Work with Mendix projects using MDL syntax",
@@ -157,10 +184,19 @@ beta language; --mdl 0 starts them in the alpha language, and in the REPL an
 	Version: version,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		projectPath, _ := cmd.Flags().GetString("project")
-		if projectPath == "" {
+		// A command with a --no-project opt-out (check) skips auto-detection
+		// when it is given: run from a project directory, `check script.mdl`
+		// otherwise resolves every reference against the .mpr it finds, and
+		// the syntax-only check its help offered could not be had there at
+		// all (mendixlabs/mxcli#1817). Without the flag nothing changes.
+		_, optOut := noProjectOptOut(cmd)
+		if projectPath == "" && !skipsProjectDiscovery(cmd) {
 			discovered, note := discoverProject(".")
 			if discovered != "" {
 				_ = cmd.Flags().Set("project", discovered)
+				if optOut != "" {
+					note += "\n" + optOut
+				}
 				fmt.Fprintln(os.Stderr, note)
 			} else if note != "" && !shouldSuppressWarning() {
 				fmt.Fprintln(os.Stderr, note)
@@ -364,6 +400,8 @@ func init() {
 	checkCmd.Flags().BoolP("references", "r", false, "Validate references against the project (implied by -p; kept for compatibility)")
 	checkCmd.Flags().String("format", "text", "Output format: text, json, sarif")
 	checkCmd.Flags().Bool("post-migration", false, "Scan the project for legacy native widgets that survived a Mendix upgrade (requires -p)")
+	checkCmd.Flags().Bool(noProjectFlag, false,
+		"Check syntax and the no-model rules only: do not auto-detect the .mpr in the current directory (conflicts with -p, --references, --post-migration)")
 
 	// Diff command flags
 	diffCmd.Flags().StringP("format", "f", "unified", "Output format: unified, side, struct")

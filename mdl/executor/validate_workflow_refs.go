@@ -27,7 +27,7 @@ func validateWorkflowParameterMappings(ctx *ExecContext, s *ast.CreateWorkflowSt
 	if err != nil {
 		return nil
 	}
-	mfs, err := ctx.Backend.ListMicroflows()
+	mfs, err := projectMicroflows(ctx)
 	if err != nil {
 		return nil
 	}

@@ -65,7 +65,7 @@ func buildPageParamNames(ctx *ExecContext) map[string][]string {
 	if err != nil || h == nil {
 		return out
 	}
-	all, err := ctx.Backend.ListPages()
+	all, err := projectPages(ctx)
 	if err != nil {
 		return out
 	}

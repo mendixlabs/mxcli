@@ -184,7 +184,7 @@ func menuPageSignatures(ctx *ExecContext, sc *scriptContext) map[string]*flowSig
 	}
 	decls := map[string][]param{}
 	if h, err := getHierarchy(ctx); err == nil && h != nil {
-		if all, err := ctx.Backend.ListPages(); err == nil {
+		if all, err := projectPages(ctx); err == nil {
 			for _, p := range liveFirst(all, pageExcluded) {
 				if p == nil {
 					continue

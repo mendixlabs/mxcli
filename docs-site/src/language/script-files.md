@@ -98,8 +98,8 @@ EXECUTE SCRIPT './scripts/setup_domain_model.mdl';
 You can validate a script without connecting to a project:
 
 ```bash
-# Syntax only
-mxcli check script.mdl
+# Syntax only (--no-project: do not auto-detect an .mpr in this directory)
+mxcli check script.mdl --no-project
 
 # Syntax + reference validation (requires project)
 mxcli check script.mdl -p app.mpr --references
