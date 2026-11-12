@@ -2,8 +2,6 @@ package mpr
 
 import (
 	"fmt"
-
-	"github.com/mendixlabs/mxcli/modelsdk/bsoncompat"
 )
 
 // UnitInfo contains basic information about a unit.
@@ -29,22 +27,17 @@ type ModuleInfo struct {
 
 // ListModules returns all modules in the project.
 func (r *Reader) ListModules() ([]*ModuleInfo, error) {
-	units, err := r.listUnitsByType("Projects$ModuleImpl")
+	// A module's ID and name, which is all a ModuleInfo holds, are in the unit
+	// index. This used to read every module's contents and unmarshal the whole
+	// document for the one field, and it is called to rebuild the container
+	// hierarchy after every document a script creates (ako/mxcli#2160).
+	headers, err := r.ListUnitHeaders("Projects$ModuleImpl")
 	if err != nil {
 		return nil, err
 	}
-	var modules []*ModuleInfo
-	for _, u := range units {
-		contents, err := r.resolveContents(u.ID, u.Contents)
-		if err != nil {
-			continue
-		}
-		var raw map[string]any
-		if err := bsoncompat.UnmarshalDocMap(contents, &raw); err != nil {
-			continue
-		}
-		name, _ := raw["Name"].(string)
-		modules = append(modules, &ModuleInfo{ID: u.ID, Name: name})
+	modules := make([]*ModuleInfo, 0, len(headers)+1)
+	for _, h := range headers {
+		modules = append(modules, &ModuleInfo{ID: h.ID, Name: h.Name})
 	}
 	modules = append(modules, buildSystemModuleInfo())
 	return modules, nil
