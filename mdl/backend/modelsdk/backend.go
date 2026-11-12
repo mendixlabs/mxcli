@@ -247,6 +247,24 @@ func (b *Backend) DeferUnitWrites() {
 	}
 }
 
+// DeferUnitWritesJudged is DeferUnitWrites for a run whose statements report
+// for themselves: each held write is counted in WriteStats as it is held
+// (mmpr.Writer.DeferUnitWritesJudged, ako/mxcli#2160).
+func (b *Backend) DeferUnitWritesJudged() {
+	if b.writer != nil {
+		b.writer.DeferUnitWritesJudged()
+	}
+}
+
+// UnitReconciles is how many times this backend's writer has compared a write
+// with the stored unit. For tests.
+func (b *Backend) UnitReconciles() int {
+	if b.writer == nil {
+		return 0
+	}
+	return b.writer.Reconciles()
+}
+
 // FlushDeferredWrites writes what a deferred run holds, each unit once and
 // reconciled against what was stored before the run.
 func (b *Backend) FlushDeferredWrites() error {

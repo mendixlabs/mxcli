@@ -59,6 +59,12 @@ type Writer struct {
 	// net result (writer_deferred.go); nil when no run is open.
 	deferred      map[string]deferredWrite
 	deferredOrder []string
+	// deferredJudged says the open run judges each held write as it is held
+	// (DeferUnitWritesJudged), so its statements can report for themselves.
+	deferredJudged bool
+	// reconciles counts the comparisons of a write with the stored unit
+	// (canon.Reconcile). For tests.
+	reconciles int
 	// simulating says the deferred run is a simulation (writer_simulated.go):
 	// it is discarded, never flushed, and any write it cannot hold is refused.
 	simulating bool
@@ -81,6 +87,10 @@ type removedUnit struct {
 // nothing further is recorded and the carry degrades to the behaviour that
 // existed before it — a churned re-insert, not a wrong one.
 const maxRemovedUnitsRemembered = 1024
+
+// Reconciles is how many times this writer has compared a write with the
+// stored unit. For tests.
+func (w *Writer) Reconciles() int { return w.reconciles }
 
 // WriteStats reports how many unit writes this session offered to storage and
 // how many were not elided as no-ops.
@@ -769,6 +779,7 @@ func (w *Writer) reconcileAgainst(unitID string, contents []byte, readStored fun
 		w.writesLanded++
 		return contents, false, nil // new unit, or unreadable — write it
 	}
+	w.reconciles++
 	out, unchanged = canon.Reconcile(contents, stored, opts...)
 
 	// The storage-GUID guard runs here, on the reconciled bytes, because it is
