@@ -3,6 +3,7 @@
 package modelsdkbackend
 
 import (
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"strconv"
 	"strings"
 
@@ -134,6 +135,50 @@ func (b *Backend) GetNanoflow(id model.ID) (*microflows.Nanoflow, error) {
 		return nil, err
 	}
 	return nanoflowFromGen(u.Element, u.ContainerID), nil
+}
+
+// ListFlowAccess lists, for every microflow and then every nanoflow, what
+// deciding its access takes (types.FlowAccess), in the order ListMicroflows
+// and ListNanoflows list them, and without decoding any flow: the name, the
+// Excluded flag and the allowed module roles are top-level values of the
+// stored document, read where they lie.
+//
+// `check` simulates flow access once per script and needs these three values
+// of every flow in the project. Listing the flows for them decoded and
+// converted every flow's whole body, which is what a check cost per project
+// unit before it had looked at a statement (ako/mxcli#2160,
+// mendixlabs/mxcli#1842).
+func (b *Backend) ListFlowAccess() ([]types.FlowAccess, error) {
+	var out []types.FlowAccess
+	for _, kind := range []struct{ name, typ string }{
+		{"microflow", "Microflows$Microflow"},
+		{"nanoflow", "Microflows$Nanoflow"},
+	} {
+		refs, err := b.reader.ListUnitsByTypeShared(kind.typ, b.unitScope)
+		if err != nil {
+			return nil, err
+		}
+		for _, ref := range refs {
+			if ref.Type != kind.typ {
+				continue
+			}
+			raw := bson.Raw(ref.Contents)
+			fa := types.FlowAccess{Kind: kind.name, ContainerID: model.ID(ref.ContainerID)}
+			fa.Name, _ = raw.Lookup("Name").StringValueOK()
+			fa.Excluded, _ = raw.Lookup("Excluded").BooleanOK()
+			if roles, ok := raw.Lookup("AllowedModuleRoles").ArrayOK(); ok {
+				values, _ := roles.Values()
+				for _, v := range values {
+					// The list's first value is its marker, a number.
+					if qn, ok := v.StringValueOK(); ok {
+						fa.AllowedModuleRoles = append(fa.AllowedModuleRoles, model.ID(qn))
+					}
+				}
+			}
+			out = append(out, fa)
+		}
+	}
+	return out, nil
 }
 
 // ListNanoflowHeaders lists every nanoflow's ID, container, name and Excluded
