@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"log"
 	"sync"
@@ -1042,8 +1043,33 @@ func isHexString(s string) bool {
 	return true
 }
 
-// augmentFromMPK deep-clones a template and augments it from the project's .mpk file.
-// Returns the original template if augmentation is not applicable or fails.
+// augmentedKey is what an augmented template is made from, and nothing else:
+// the embedded template and the parsed package, both by identity. Both come
+// from caches that live as long as the process, so the same pair is the same
+// input; a package parsed afresh is another pointer and is augmented again.
+type augmentedKey struct {
+	tmpl *WidgetTemplate
+	def  *mpk.WidgetDefinition
+}
+
+// augmentedCache holds the augmented template for each (template, package).
+var augmentedCache sync.Map // augmentedKey -> *WidgetTemplate
+
+// augmentCacheOn is off in a test that wants every call to augment.
+var augmentCacheOn = true
+
+// augmentations counts the templates cloned and augmented. For tests.
+var augmentations atomic.Int64
+
+// augmentFromMPK returns the template augmented from the project's .mpk file:
+// a deep clone of tmpl with the package's properties merged in, made once for
+// each template and parsed package and shared after that. The caller must
+// only read it, as it must only read tmpl. Returns the original template if
+// augmentation is not applicable or fails.
+//
+// Every pluggable widget instance of a script loads its template through
+// here. Cloning and augmenting per load was the same work for every data grid
+// and every filter (ako/mxcli#2160).
 func augmentFromMPK(tmpl *WidgetTemplate, widgetID string, projectPath string) *WidgetTemplate {
 	if projectPath == "" {
 		return tmpl
@@ -1063,7 +1089,15 @@ func augmentFromMPK(tmpl *WidgetTemplate, widgetID string, projectPath string) *
 		return tmpl
 	}
 
+	key := augmentedKey{tmpl: tmpl, def: def}
+	if augmentCacheOn {
+		if kept, ok := augmentedCache.Load(key); ok {
+			return kept.(*WidgetTemplate)
+		}
+	}
+
 	// Deep-clone so we don't mutate the cached template
+	augmentations.Add(1)
 	clone, err := deepCloneTemplate(tmpl)
 	if err != nil {
 		log.Printf("warning: failed to clone template for %s: %v", widgetID, err)
@@ -1074,6 +1108,10 @@ func augmentFromMPK(tmpl *WidgetTemplate, widgetID string, projectPath string) *
 		return tmpl
 	}
 
+	if augmentCacheOn {
+		kept, _ := augmentedCache.LoadOrStore(key, clone)
+		return kept.(*WidgetTemplate)
+	}
 	return clone
 }
 

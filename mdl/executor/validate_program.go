@@ -206,6 +206,13 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// Check for intra-script duplicate definitions (CREATE X … CREATE X without DROP)
 	violations = append(violations, CheckScriptDuplicates(prog)...)
 
+	// An ALTER PAGE / SNIPPET target on a document the script itself creates,
+	// against the names that document holds by then — building blocks and
+	// fragments expanded as exec expands them, which needs the project
+	// (MDL-ALTER02, ako/mxcli#2182). The stored-document passes skip such a
+	// document, so a misspelt target passed check and stopped exec.
+	violations = append(violations, ValidateScriptWidgetTargets(prog, project)...)
+
 	// A member named like one already on its entity's generalization chain
 	// (CE0069, ako/mxcli#1645), among what the script declares and the System
 	// module. With a project, the reference pass judges it against the whole
