@@ -86,6 +86,38 @@ func TestEntityRun_AddedStatementsDoNotReconcileTheDomainModelAgain(t *testing.T
 	}
 }
 
+// Judging a held write compared it with the write the run already held, and
+// digested both sides to do it: the whole domain model twice per statement, a
+// fifth of the time of a script that builds one. The held write's digest is
+// now kept, so a statement digests only what it wrote.
+//
+// The first later write of a unit digests the held one once; that is the same
+// for both sizes and cancels.
+func TestEntityRun_AStatementDigestsOnlyItsOwnWrite(t *testing.T) {
+	digestsFor := func(entities int) int {
+		exec, out, _ := openPedAppCopy(t)
+		b, ok := exec.Backend().(interface{ UnitJudgedDigests() int })
+		if !ok {
+			t.Fatalf("backend %T does not count its judged digests", exec.Backend())
+		}
+		before := b.UnitJudgedDigests()
+		if err := runScript(t, exec, entitiesScript(entities, 0, "")); err != nil {
+			t.Fatalf("exec: %v\n%s", err, out.String())
+		}
+		return b.UnitJudgedDigests() - before
+	}
+	two, six := digestsFor(2), digestsFor(6)
+	// Four more entities and four more associations: eight more held writes.
+	perWrite := float64(six-two) / 8
+	t.Logf("digests: %d for 2 entities, %d for 6 — %.1f per added statement", two, six, perWrite)
+	if six == two {
+		t.Fatal("control: the added statements digested nothing, so the count is not measuring them")
+	}
+	if perWrite > 1 {
+		t.Errorf("%.1f digests per added statement, want 1: the held write is digested again for each", perWrite)
+	}
+}
+
 // The statements of a run still report for themselves. Re-running a settled
 // script reports every statement unchanged and changes no file; and when one
 // statement of the script does change something, it alone is reported as a
