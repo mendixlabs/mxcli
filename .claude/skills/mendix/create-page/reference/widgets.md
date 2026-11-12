@@ -176,6 +176,7 @@ describe icon collection Atlas_Core.Atlas_Filled;   -- every icon + its referenc
 **Button Styles:** `default`, `primary`, `success`, `info`, `warning`, `danger`, `inverse`
 - Case-insensitive (`primary` and `Primary` both work).
 - These are the only values Mendix recognizes — anything else (a typo, or `secondary`/`link`, which Mendix has no button style for) is rejected by `mxcli check` (MDL-WIDGET02). Previously an unknown value was silently rendered as `btn-default`.
+- A **pluggable** widget that declares a property of its own named `buttonStyle` (PlatformDesignSystem's `pdsbutton`: `fill`, `fillBlue`, `outline`, …) takes its own values instead; the same holds for its own `caption`, `label`, `icon` and `tooltip` — in `create page`, `alter page … set` and `check` alike. `mxcli describe page` prints them as the widget stores them.
 
 **Examples:**
 ```sql

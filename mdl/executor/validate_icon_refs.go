@@ -119,12 +119,16 @@ func validateIconRefs(ctx *ExecContext, prog *ast.Program) []error {
 		return nil
 	}
 
+	registry := ctx.GetWidgetRegistry()
 	var errs []error
 	for i, stmt := range prog.Statements {
-		for _, ref := range iconRefsInStatement(stmt) {
+		for _, ref := range iconRefsToResolve(stmt, registry) {
 			// A glyph names no document. MDL078 checks its code against the
 			// font's own table; there is nothing for this pass to resolve.
 			if ref.kind == types.MenuIconGlyph {
+				continue
+			}
+			if ref.setOn != nil && storedWidgetOwnsIcon(ctx, ref.setOn, ref.setTarget) {
 				continue
 			}
 			if err := idx.check(ref); err != nil {
@@ -141,6 +145,64 @@ type iconRef struct {
 	kind  types.MenuIconKind // which document the name lives in
 	code  int                // the character code, for MenuIconGlyph (which has no name)
 	where string             // e.g. `button "btnSave"` or `menu item 'Home'`
+
+	// widget is the widget the icon was written on, for a widget tree the
+	// statement carries; setOn and setTarget name the stored widget an ALTER
+	// PAGE `SET` writes it to. Either lets the check stand down where `icon`
+	// is a pluggable widget's own key rather than an icon reference
+	// (ako/mxcli#2180).
+	widget    *ast.WidgetV3
+	setOn     *ast.AlterPageStmt
+	setTarget string
+}
+
+// iconRefsToResolve is iconRefsInStatement less the `icon:` values that are a
+// pluggable widget's own property — a PDS Button's `icon: 'bookmark'` is the
+// name of one of the design system's icons, a plain string, and refusing it as
+// "not a qualified reference" refused a widget mx check accepts
+// (ako/mxcli#2180). registry may be nil; then nothing is excepted.
+func iconRefsToResolve(stmt ast.Statement, registry *WidgetRegistry) []iconRef {
+	refs := iconRefsInStatement(stmt)
+	if registry == nil {
+		return refs
+	}
+	out := refs[:0:0]
+	for _, ref := range refs {
+		if ref.widget != nil && defOwnsCoreName(lookupWidgetDef(ref.widget, registry), "icon") {
+			continue
+		}
+		out = append(out, ref)
+	}
+	return out
+}
+
+// storedWidgetOwnsIcon reports whether the stored widget an ALTER PAGE `SET`
+// names is a pluggable widget that declares an `icon` key of its own — which
+// is where exec writes the value (the pluggable setter), so it is that key's
+// value, not an icon reference. Unknown — no project, no document, no such
+// widget — reports false and the reference is checked as before.
+func storedWidgetOwnsIcon(ctx *ExecContext, s *ast.AlterPageStmt, widgetRef string) bool {
+	if widgetRef == "" {
+		return false
+	}
+	h, err := getHierarchy(ctx)
+	if err != nil || h == nil {
+		return false
+	}
+	unitID, _, _, err := resolveAlterPageUnit(ctx, s, h)
+	if err != nil {
+		return false
+	}
+	probe := openPageProbe(ctx, unitID)
+	if probe == nil {
+		return false
+	}
+	for _, key := range probe.WidgetPropertyKeys(widgetRef, "") {
+		if strings.EqualFold(key, "icon") {
+			return true
+		}
+	}
+	return false
 }
 
 // iconRefsInStatement collects EVERY icon in a statement — page/snippet/layout
@@ -201,6 +263,9 @@ func iconRefsInStatement(stmt ast.Statement) []iconRef {
 			case *ast.SetPropertyOp:
 				if ref, ok := iconPropRef(o.Properties); ok {
 					ref.where = "widget " + quoteName(o.Target.Name())
+					if !o.Target.IsColumn() && o.Target.Item == nil {
+						ref.setOn, ref.setTarget = s, o.Target.Widget
+					}
 					out = append(out, ref)
 				}
 			case *ast.InsertWidgetOp:
@@ -228,6 +293,7 @@ func iconRefsInWidget(w *ast.WidgetV3) []iconRef {
 	var out []iconRef
 	if ref, ok := iconPropRef(w.Properties); ok {
 		ref.where = strings.ToLower(w.Type) + " " + quoteName(w.Name)
+		ref.widget = w
 		out = append(out, ref)
 	}
 	for _, c := range w.Children {
