@@ -54,7 +54,7 @@ func StripUndeclaredProperties(contents []byte, pv *version.Version) ([]byte, er
 		return contents, nil
 	}
 	var doc bson.D
-	if err := bson.Unmarshal(contents, &doc); err != nil {
+	if err := parseForStorageForm(contents, &doc); err != nil {
 		return contents, nil
 	}
 	s := &stripper{pv: *pv}
