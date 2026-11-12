@@ -427,6 +427,8 @@ func (r *StarlarkRule) buildPredeclared() starlark.StringDict {
 		"strings":                   starlark.NewBuiltin("strings", r.builtinStrings),
 		"layouts":                   starlark.NewBuiltin("layouts", r.builtinLayouts),
 		"published_rest_operations": starlark.NewBuiltin("published_rest_operations", r.builtinPublishedRestOperations),
+		"workflows":                 starlark.NewBuiltin("workflows", r.builtinWorkflows),
+		"workflow_activities":       starlark.NewBuiltin("workflow_activities", r.builtinWorkflowActivities),
 		"modules":                   starlark.NewBuiltin("modules", r.builtinModules),
 		"folders":                   starlark.NewBuiltin("folders", r.builtinFolders),
 		"annotations":               starlark.NewBuiltin("annotations", r.builtinAnnotations),

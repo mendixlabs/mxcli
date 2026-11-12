@@ -662,3 +662,114 @@ func (ctx *LintContext) MarketplaceModuleVersion(name string) string {
 	}
 	return v.String
 }
+
+// Workflow is one workflow the user owns (ako/mxcli#1295).
+type Workflow struct {
+	ID                 string
+	QualifiedName      string
+	Name               string
+	ModuleName         string
+	Description        string
+	ParameterEntity    string
+	ActivityCount      int
+	UserTaskCount      int
+	MicroflowCallCount int
+	DecisionCount      int
+}
+
+// Workflows iterates the workflows outside System and Marketplace modules.
+// --document names the workflow.
+func (ctx *LintContext) Workflows() iter.Seq[Workflow] {
+	return func(yield func(Workflow) bool) {
+		rows, err := ctx.db.Query(fmt.Sprintf(`
+			SELECT w.Id, COALESCE(w.QualifiedName, ''), COALESCE(w.Name, ''), COALESCE(w.ModuleName, ''),
+			       COALESCE(w.Description, ''), COALESCE(w.ParameterEntity, ''),
+			       COALESCE(w.ActivityCount, 0), COALESCE(w.UserTaskCount, 0),
+			       COALESCE(w.MicroflowCallCount, 0), COALESCE(w.DecisionCount, 0)
+			FROM workflows w
+			LEFT JOIN modules m ON w.ModuleName = m.Name
+			WHERE %s AND %s
+			ORDER BY w.QualifiedName
+		`, notPlatformModule("m"), ctx.documentFilterSQL("w.QualifiedName")))
+		if err != nil {
+			ctx.recordQueryError("Workflows", err)
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var w Workflow
+			if err := rows.Scan(&w.ID, &w.QualifiedName, &w.Name, &w.ModuleName, &w.Description,
+				&w.ParameterEntity, &w.ActivityCount, &w.UserTaskCount, &w.MicroflowCallCount,
+				&w.DecisionCount); err != nil {
+				ctx.recordQueryError("Workflows (row scan)", err)
+				continue
+			}
+			if ctx.IsExcluded(w.ModuleName) {
+				continue
+			}
+			if !yield(w) {
+				return
+			}
+		}
+	}
+}
+
+// WorkflowActivity is one activity of a workflow, boundary-event paths and
+// event sub-processes included (ako/mxcli#1295). ActivityType is its kind —
+// UserTask, MultiUserTask, SystemTask, CallMicroflow, AIAgentTask,
+// CallWorkflow, Decision, … — and each slot naming another document is a field
+// of its own, "" when empty.
+type WorkflowActivity struct {
+	ID                    string
+	WorkflowQualifiedName string
+	ModuleName            string
+	Name                  string
+	Caption               string
+	ActivityType          string
+	Microflow             string // a system task's, call-microflow or AI agent task's
+	UserSourceMicroflow   string // a user task's targeting microflow
+	OnCreatedMicroflow    string // a user task's on-created microflow
+	CompletionMicroflow   string // a multi-user task's completion microflow
+	Page                  string // a user task's page
+	UserTaskEntity        string // a user task's task entity
+	CalledWorkflow        string // a call-workflow activity's workflow
+}
+
+// WorkflowActivities iterates the activities of every workflow outside System
+// and Marketplace modules, each workflow's in walk order. --document names
+// the workflow.
+func (ctx *LintContext) WorkflowActivities() iter.Seq[WorkflowActivity] {
+	return func(yield func(WorkflowActivity) bool) {
+		rows, err := ctx.db.Query(fmt.Sprintf(`
+			SELECT a.Id, COALESCE(a.WorkflowQualifiedName, ''), COALESCE(a.ModuleName, ''),
+			       COALESCE(a.Name, ''), COALESCE(a.Caption, ''), COALESCE(a.ActivityType, ''),
+			       COALESCE(a.Microflow, ''), COALESCE(a.UserSourceMicroflow, ''),
+			       COALESCE(a.OnCreatedMicroflow, ''), COALESCE(a.CompletionMicroflow, ''),
+			       COALESCE(a.Page, ''), COALESCE(a.UserTaskEntity, ''), COALESCE(a.CalledWorkflow, '')
+			FROM workflow_activities a
+			LEFT JOIN modules m ON a.ModuleName = m.Name
+			WHERE %s AND %s
+			ORDER BY a.WorkflowQualifiedName, a.Sequence
+		`, notPlatformModule("m"), ctx.documentFilterSQL("a.WorkflowQualifiedName")))
+		if err != nil {
+			ctx.recordQueryError("WorkflowActivities", err)
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var a WorkflowActivity
+			if err := rows.Scan(&a.ID, &a.WorkflowQualifiedName, &a.ModuleName, &a.Name, &a.Caption,
+				&a.ActivityType, &a.Microflow, &a.UserSourceMicroflow, &a.OnCreatedMicroflow,
+				&a.CompletionMicroflow, &a.Page, &a.UserTaskEntity, &a.CalledWorkflow); err != nil {
+				ctx.recordQueryError("WorkflowActivities (row scan)", err)
+				continue
+			}
+			if ctx.IsExcluded(a.ModuleName) {
+				continue
+			}
+			if !yield(a) {
+				return
+			}
+		}
+	}
+}
