@@ -995,6 +995,14 @@ OPEN: O P E N;
 COMPLETE_TASK: C O M P L E T E WS+ T A S K
              | C O M P L E T E '_' T A S K /* @alias MDL-DEPR020 */;
 
+// `<unbound>`: a text-template parameter with no binding yet, `{1} = <unbound>`.
+// One token rather than `<` IDENTIFIER `>` so the word stays an ordinary
+// identifier everywhere else (an attribute may be called Unbound), and so no
+// other word in angle brackets parses as it. Longest match beats LESS_THAN.
+// `describe` prints it for a stored parameter with no binding — normal in a
+// building block (ako/mxcli#2181).
+UNBOUND_PARAM: '<' U N B O U N D '>';
+
 // =============================================================================
 // COMPARISON OPERATORS (multi-char before single-char)
 // =============================================================================

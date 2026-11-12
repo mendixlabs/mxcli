@@ -65,6 +65,11 @@ dynamictext day  (content: '{1}', contentparams: ({1} = DueOn format (dateFormat
 > (MDL-WIDGET04), MxBuild fails with CE0720, and Studio Pro throws a
 > NullReferenceException when the widget is opened. Bind every placeholder, or use
 > a plain static `content: 'text'`.
+>
+> `{1} = <unbound>` is what `describe` prints for a parameter that exists but has
+> no binding (building blocks are full of them). It parses back and writes the
+> parameter unbound, so describe -> exec round-trips — but mxbuild still reports
+> CE0402 "No value specified." until it is bound. Do not author it in new MDL.
 
 ### LABEL Widget
 
