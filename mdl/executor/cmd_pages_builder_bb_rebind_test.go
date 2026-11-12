@@ -53,3 +53,98 @@ func TestBuildingBlockRebindPrefersTheOutermost(t *testing.T) {
 		t.Errorf("rebound %q, want the outermost datasource widget", got)
 	}
 }
+
+// pluggableClickRegistry holds definitions shaped like the PlatformDesignSystem
+// widgets a PDS block is built from: a button and a link that both source their
+// `onClickAction` slot from OnClick, a gallery whose row click does the same, and
+// a "button" whose definition maps no click slot at all.
+func pluggableClickRegistry() *WidgetRegistry {
+	onClick := []PropertyMapping{{PropertyKey: "onClickAction", Source: "OnClick", Operation: "action"}}
+	return &WidgetRegistry{byMDLName: map[string]*WidgetDefinition{
+		"PDSBUTTON":       {WidgetID: "mendix.pdsbutton.PDSButton", MDLName: "pdsbutton", PropertyMappings: onClick},
+		"PDSLINK":         {WidgetID: "mendix.pdslink.PDSLink", MDLName: "pdslink", PropertyMappings: onClick},
+		"GALLERY":         {WidgetID: "com.mendix.widget.web.gallery.Gallery", MDLName: "gallery", PropertyMappings: onClick},
+		"NOCLICKBUTTON":   {WidgetID: "x.noclickbutton.NoClickButton", MDLName: "noclickbutton"},
+		"MODECLICKBUTTON": {WidgetID: "x.modeclickbutton.ModeClickButton", MDLName: "modeclickbutton", Modes: []WidgetMode{{Name: "default", PropertyMappings: onClick}}},
+	}}
+}
+
+// TestBuildingBlockActionRebindFindsPluggableButtons: `use building block
+// PlatformDesignSystem.Button (action: …)` failed with "the block has no button
+// to rebind", because the PDS blocks are built from the pluggable `pdsbutton`
+// and the action target matched only the built-in button types. Measured on
+// mxcli v0.31.0, Mendix 11.12.6, PlatformDesignSystem 44.4.0.
+func TestBuildingBlockActionRebindFindsPluggableButtons(t *testing.T) {
+	reg := pluggableClickRegistry()
+	for _, widgetType := range []string{"pdsbutton", "PDSBUTTON", "modeclickbutton"} {
+		t.Run(widgetType, func(t *testing.T) {
+			if !isPluggableButtonWidget(reg, &ast.WidgetV3{Type: widgetType}) {
+				t.Errorf("%s is not a pluggable button", widgetType)
+			}
+		})
+	}
+	// The built-in buttons stay targets, with or without a registry.
+	for _, widgetType := range []string{"actionbutton", "linkbutton"} {
+		if !isButtonWidget(&ast.WidgetV3{Type: widgetType}) {
+			t.Errorf("%s is no longer a button", widgetType)
+		}
+	}
+	// A click slot alone is not a button: a link click or a gallery row click is
+	// not the block's primary action. Nor is a button that takes no action.
+	for _, widgetType := range []string{"pdslink", "gallery", "noclickbutton", "container", "unknownbutton"} {
+		t.Run("not/"+widgetType, func(t *testing.T) {
+			if isPluggableButtonWidget(reg, &ast.WidgetV3{Type: widgetType}) {
+				t.Errorf("%s must not be a pluggable button", widgetType)
+			}
+		})
+	}
+	// No project, no definitions: only the built-in button types match, as before.
+	if isPluggableButtonWidget(nil, &ast.WidgetV3{Type: "pdsbutton"}) {
+		t.Error("with no registry, a pdsbutton must not match")
+	}
+}
+
+// TestBuildingBlockActionRebindSkipsLinksBeforeTheButton pins the binding point
+// on a PDS page header: its first clickable widget is a "Back to …" PDS Link, and
+// the action belongs on the first button after it.
+func TestBuildingBlockActionRebindSkipsLinksBeforeTheButton(t *testing.T) {
+	reg := pluggableClickRegistry()
+	back := &ast.WidgetV3{Type: "pdslink", Name: "pDSLink1", Properties: map[string]any{}}
+	primary := &ast.WidgetV3{Type: "pdsbutton", Name: "pDSButton3", Properties: map[string]any{}}
+	secondary := &ast.WidgetV3{Type: "pdsbutton", Name: "pDSButton4", Properties: map[string]any{}}
+	header := &ast.WidgetV3{Type: "container", Name: "container2",
+		Children: []*ast.WidgetV3{back, {Type: "container", Name: "container6", Children: []*ast.WidgetV3{primary, secondary}}}}
+
+	act := &ast.ActionV3{}
+	if !rebindBuildingBlockAction([]*ast.WidgetV3{header}, reg, act) {
+		t.Fatal("no target found")
+	}
+	if primary.Properties["Action"] != act {
+		t.Errorf("the action did not land on the first PDS button")
+	}
+	if back.Properties["Action"] != nil || secondary.Properties["Action"] != nil {
+		t.Errorf("the action landed on a widget other than the first PDS button")
+	}
+}
+
+// TestBuildingBlockActionRebindFallsBackToAClickableWidget: a block whose only
+// clickable widget is not a button still takes the override there, in the last
+// tier (ako/mxcli#2145: Atlas's Card_WithImage, whose only clickable widget is
+// the pluggable Image). The control is the header above: with a button in the
+// block, the link before it is skipped.
+func TestBuildingBlockActionRebindFallsBackToAClickableWidget(t *testing.T) {
+	reg := pluggableClickRegistry()
+	link := &ast.WidgetV3{Type: "pdslink", Name: "pDSLink1", Properties: map[string]any{}}
+	act := &ast.ActionV3{}
+	if !rebindBuildingBlockAction([]*ast.WidgetV3{{Type: "container", Name: "c", Children: []*ast.WidgetV3{link}}}, reg, act) {
+		t.Fatal("no target found in a block whose only clickable widget is a link")
+	}
+	if link.Properties["Action"] != act {
+		t.Errorf("the action did not land on the link")
+	}
+	// A data container's click is an item action, never the block's.
+	gallery := &ast.WidgetV3{Type: "gallery", Name: "gallery1", Properties: map[string]any{}}
+	if rebindBuildingBlockAction([]*ast.WidgetV3{gallery}, reg, &ast.ActionV3{}) {
+		t.Errorf("a gallery's row click took the override")
+	}
+}
