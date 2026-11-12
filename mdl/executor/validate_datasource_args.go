@@ -630,7 +630,7 @@ func buildFlowSignatures(ctx *ExecContext) map[string]*flowSignature {
 	if err != nil || h == nil {
 		return result
 	}
-	if mfs, err := ctx.Backend.ListMicroflows(); err == nil {
+	if mfs, err := projectMicroflows(ctx); err == nil {
 		for _, mf := range liveFirst(mfs, microflowExcluded) {
 			if mf == nil {
 				continue
@@ -641,7 +641,7 @@ func buildFlowSignatures(ctx *ExecContext) map[string]*flowSignature {
 			}
 		}
 	}
-	if nfs, err := ctx.Backend.ListNanoflows(); err == nil {
+	if nfs, err := projectNanoflows(ctx); err == nil {
 		for _, nf := range liveFirst(nfs, nanoflowExcluded) {
 			if nf == nil {
 				continue

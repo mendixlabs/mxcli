@@ -75,7 +75,7 @@ func storedFlowUnsupportedActions(ctx *ExecContext, kind, qn string) []string {
 			return unsupportedActionTypes(mf.ObjectCollection)
 		}
 	case "nanoflow":
-		nfs, err := ctx.Backend.ListNanoflows()
+		nfs, err := projectNanoflows(ctx)
 		if err != nil {
 			return nil
 		}

@@ -312,9 +312,41 @@ func (r *Reader) listUnitsByTypeV2In(typeName, containerID string) ([]rawUnit, e
 	return r.listUnitsByTypeV2Where(typeName, containerID, nil)
 }
 
+// ListUnitsByTypeShared is ListUnitsByTypeWhere for a caller that only reads
+// what it is given: on MPR v2, while the content cache is held, a unit's
+// Contents is the cache's own slice rather than a copy of it. The caller must
+// not modify it.
+//
+// It is for mprread's decoder, which is on the path of every listing. A copy
+// per unit per listing was a tenth of a script's time once the listings
+// themselves were cached, and most of what the garbage collector then had to
+// clear (ako/mxcli#2160). Handing out the same slice each time also lets the
+// decode cache see that a unit is unchanged without comparing its bytes.
+func (r *Reader) ListUnitsByTypeShared(typeName string, keep func(id string) bool) ([]UnitRef, error) {
+	if r.version != MPRVersionV2 {
+		return r.ListUnitsByTypeWhere(typeName, keep)
+	}
+	units, err := r.listUnitsByTypeV2Shared(typeName, "", keep, true)
+	if err != nil {
+		return nil, err
+	}
+	units = append(units, r.packagedUnitsOf(typeName, "", keep)...)
+	result := make([]UnitRef, len(units))
+	for i, u := range units {
+		result[i] = UnitRef{ID: u.ID, ContainerID: u.ContainerID, Type: u.Type, Contents: u.Contents}
+	}
+	return result, nil
+}
+
 // listUnitsByTypeV2Where is listUnitsByTypeV2In for the units keep accepts
 // (nil keeps all).
 func (r *Reader) listUnitsByTypeV2Where(typeName, containerID string, keep func(id string) bool) ([]rawUnit, error) {
+	return r.listUnitsByTypeV2Shared(typeName, containerID, keep, false)
+}
+
+// listUnitsByTypeV2Shared is listUnitsByTypeV2Where; with shared, contents
+// served from the content cache are not copied (see ListUnitsByTypeShared).
+func (r *Reader) listUnitsByTypeV2Shared(typeName, containerID string, keep func(id string) bool, shared bool) ([]rawUnit, error) {
 	if !r.unitCacheValid {
 		if err := r.buildUnitCache(); err != nil {
 			return nil, err
@@ -331,7 +363,7 @@ func (r *Reader) listUnitsByTypeV2Where(typeName, containerID string, keep func(
 			continue
 		}
 		if typeName == "" || cu.Type == typeName {
-			contents, err := r.readMprContents(cu.ID)
+			contents, err := r.readMprContentsShared(cu.ID, shared)
 			if err != nil {
 				continue
 			}
@@ -390,7 +422,7 @@ func (r *Reader) buildUnitCache() error {
 		} else if known, ok := r.knownUnit(hash); ok {
 			entry = known
 		} else {
-			contents, err := r.readMprContentsUnder(unitUUID, hash, true)
+			contents, err := r.readMprContentsUnder(unitUUID, hash, true, false)
 			if err != nil {
 				continue
 			}
@@ -506,6 +538,10 @@ func (r *Reader) CacheUnitReads() (release func()) {
 // mprcontents/. For tests.
 func (r *Reader) UnitFileReads() int64 { return r.fileReads.Load() }
 
+// UnitContentCopies is how many times this reader copied a unit's bytes out
+// of its content cache for a caller. For tests.
+func (r *Reader) UnitContentCopies() int64 { return r.contentCopies.Load() }
+
 // UnitStoreHits is how many unit reads this reader served from the persisted
 // store instead of a file. For tests.
 func (r *Reader) UnitStoreHits() int64 {
@@ -537,6 +573,13 @@ func (r *Reader) unitStore() *unitStore {
 // caller gets bytes of its own, as os.ReadFile gave it, so one that edits them
 // cannot change what the next caller reads.
 func (r *Reader) readMprContents(unitUUID string) ([]byte, error) {
+	return r.readMprContentsShared(unitUUID, false)
+}
+
+// readMprContentsShared is readMprContents; with shared, bytes served from
+// the content cache are the cache's own slice, which the caller must not
+// modify (see ListUnitsByTypeShared).
+func (r *Reader) readMprContentsShared(unitUUID string, shared bool) ([]byte, error) {
 	if len(unitUUID) < 4 {
 		return nil, fmt.Errorf("invalid unit UUID: %s", unitUUID)
 	}
@@ -551,7 +594,7 @@ func (r *Reader) readMprContents(unitUUID string) ([]byte, error) {
 	r.contentMu.Lock()
 	rowHash, known := r.rowHashes[unitUUID]
 	r.contentMu.Unlock()
-	return r.readMprContentsUnder(unitUUID, rowHash, known)
+	return r.readMprContentsUnder(unitUUID, rowHash, known, shared)
 }
 
 // readMprContentsUnder is readMprContents for a caller that has the unit's
@@ -560,12 +603,17 @@ func (r *Reader) readMprContents(unitUUID string) ([]byte, error) {
 // cached or served under; known is false when the unit's current hash is not
 // known, and the read then goes to the file and is not kept. An empty hash is
 // a key like any other: a row without one gets one from the first write.
-func (r *Reader) readMprContentsUnder(unitUUID, rowHash string, known bool) ([]byte, error) {
+// With shared, what is returned while caching is the slice the cache holds.
+func (r *Reader) readMprContentsUnder(unitUUID, rowHash string, known, shared bool) ([]byte, error) {
 	r.contentMu.Lock()
 	caching := r.contentCache != nil && known
 	cached, ok := r.contentCache[unitUUID]
 	r.contentMu.Unlock()
 	if ok && caching && cached.hash == rowHash {
+		if shared {
+			return cached.data, nil
+		}
+		r.contentCopies.Add(1)
 		return bytes.Clone(cached.data), nil
 	}
 
@@ -584,9 +632,13 @@ func (r *Reader) readMprContentsUnder(unitUUID, rowHash string, known bool) ([]b
 		stored, info, ok := store.lookup(unitUUID, path)
 		if ok {
 			if caching {
+				held := stored
+				if !shared {
+					held = bytes.Clone(stored)
+				}
 				r.contentMu.Lock()
 				if r.contentCache != nil {
-					r.contentCache[unitUUID] = cachedContent{hash: rowHash, data: bytes.Clone(stored)}
+					r.contentCache[unitUUID] = cachedContent{hash: rowHash, data: held}
 				}
 				r.contentMu.Unlock()
 			}
@@ -613,6 +665,9 @@ func (r *Reader) readMprContentsUnder(unitUUID, rowHash string, known bool) ([]b
 	}
 	if store != nil {
 		store.record(unitUUID, fi, held)
+	}
+	if shared && caching {
+		return held, nil
 	}
 	return data, nil
 }

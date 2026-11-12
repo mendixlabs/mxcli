@@ -164,3 +164,54 @@ func TestCacheUnitReads_AnotherProcessesWriteIsSeen(t *testing.T) {
 		t.Errorf("after another process rewrote the unit, the listing still returned the cached bytes")
 	}
 }
+
+// The decoder is on the path of every listing and only reads the bytes it is
+// given, so while the cache is held it is handed the cache's own slice: no
+// copy per unit per listing, and the same slice each time, which is how the
+// decode cache sees that a unit is unchanged without comparing its bytes
+// (ako/mxcli#2160). Every other caller still gets bytes of its own.
+func TestCacheUnitReads_SharedListingCopiesNothing(t *testing.T) {
+	w := newListableV2Writer(t, unitDoc(t, "Stored"))
+	r := w.reader
+	defer r.CacheUnitReads()()
+
+	shared := func() []byte {
+		t.Helper()
+		units, err := r.ListUnitsByTypeShared("Projects$Folder", nil)
+		if err != nil || len(units) != 1 {
+			t.Fatalf("shared list: %d units, %v", len(units), err)
+		}
+		return units[0].Contents
+	}
+	first := shared()
+	copies := r.UnitContentCopies()
+	second := shared()
+	if n := r.UnitContentCopies() - copies; n != 0 {
+		t.Errorf("a shared listing copied %d unit(s) out of the cache", n)
+	}
+	if &first[0] != &second[0] {
+		t.Error("two shared listings of an unchanged unit returned different slices")
+	}
+
+	// Control: the ordinary listing copies, and its bytes are its own.
+	copies = r.UnitContentCopies()
+	units, err := r.ListUnitsByType("Projects$Folder")
+	if err != nil || len(units) != 1 {
+		t.Fatalf("list: %v", err)
+	}
+	if n := r.UnitContentCopies() - copies; n != 1 {
+		t.Errorf("control: the ordinary listing made %d copies, want 1", n)
+	}
+	if &units[0].Contents[0] == &first[0] {
+		t.Error("the ordinary listing handed out the cache's own slice")
+	}
+
+	// A rewrite is still seen: the unit's row hash moved, so its slice is new.
+	written := unitDoc(t, "Written")
+	if err := w.UpdateRawUnit(cacheTestUnit, written); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if got := shared(); !bytes.Equal(got, written) {
+		t.Error("a shared listing after a write returned the bytes from before it")
+	}
+}

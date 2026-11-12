@@ -69,7 +69,8 @@ func ListUnitsWithContainer[T element.Element](r *mmpr.Reader) ([]Unit[T], error
 // check makes several per statement (mendixlabs/mxcli#1272).
 func ListUnitsWithContainerWhere[T element.Element](r *mmpr.Reader, keep func(bson.Raw) bool) ([]Unit[T], error) {
 	typeName := bsonTypeName[T]()
-	refs, err := r.ListUnitsByType(typeName)
+	// Shared: the decoder only reads the bytes, and keeps a reference to them.
+	refs, err := r.ListUnitsByTypeShared(typeName, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +81,7 @@ func ListUnitsWithContainerWhere[T element.Element](r *mmpr.Reader, keep func(bs
 // keepID accepts, and reads no other unit's contents on v2 (ako/mxcli#1804).
 func ListUnitsWithContainerIn[T element.Element](r *mmpr.Reader, keepID func(id string) bool) ([]Unit[T], error) {
 	typeName := bsonTypeName[T]()
-	refs, err := r.ListUnitsByTypeWhere(typeName, keepID)
+	refs, err := r.ListUnitsByTypeShared(typeName, keepID)
 	if err != nil {
 		return nil, err
 	}

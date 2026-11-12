@@ -83,6 +83,9 @@ type Reader struct {
 	// fileReads counts unit files read from mprcontents/ — what the content
 	// cache saves. Read by tests (mendixlabs/mxcli#1272).
 	fileReads atomic.Int64
+	// contentCopies counts the copies of cached unit bytes handed to callers
+	// (readMprContentsUnder). For tests.
+	contentCopies atomic.Int64
 
 	// store is MPR v2's persisted copy of the units (reader_unit_store.go),
 	// made on first use; nil for v1 and for a reader with no project path.

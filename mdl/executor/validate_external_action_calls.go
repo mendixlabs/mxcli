@@ -299,7 +299,7 @@ func checkExternalActionReturn(ctx *ExecContext, h *ContainerHierarchy, c extern
 // type remoteName, returning its qualified name. Mirrors the resolution the flow
 // builder does at write time.
 func externalEntityFor(ctx *ExecContext, h *ContainerHierarchy, svcQN, remoteName string) string {
-	dms, err := ctx.Backend.ListDomainModels()
+	dms, err := projectDomainModels(ctx)
 	if err != nil {
 		return ""
 	}
