@@ -27,7 +27,7 @@ import (
 func buildSystemDomainModel(atLeast func(major, minor int) bool) *domainmodel.DomainModel {
 	dm := &domainmodel.DomainModel{ContainerID: model.ID(meta.SystemModuleID)}
 	dm.ID = model.ID(meta.SystemDomainModelID)
-	for _, e := range meta.ModelerSystemEntities() {
+	for _, e := range meta.ModelerSystemEntitiesIn(atLeast) {
 		ent := &domainmodel.Entity{
 			Name:              e.Name,
 			Persistable:       e.Persistable,

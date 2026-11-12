@@ -101,6 +101,18 @@ func (a SystemAssocDef) InVersion(atLeast func(major, minor int) bool) bool {
 	return true
 }
 
+// introducedIn reports whether a member introduced in version introduced ("" =
+// always) exists for atLeast; nil atLeast answers for the current platform.
+func introducedIn(introduced string, atLeast func(major, minor int) bool) bool {
+	return introduced == "" || atLeast == nil || atLeast(parseMajorMinor(introduced))
+}
+
+// InVersion reports whether the entity exists in a project whose Mendix version
+// satisfies atLeast; nil (version unknown) answers for the current platform.
+func (e SystemEntityDef) InVersion(atLeast func(major, minor int) bool) bool {
+	return introducedIn(e.Introduced, atLeast)
+}
+
 func parseMajorMinor(v string) (int, int) {
 	var major, minor int
 	fmt.Sscanf(v, "%d.%d", &major, &minor)
@@ -130,6 +142,13 @@ type SystemEntityDef struct {
 	// resolves against the model. The full lists stay complete for a storage
 	// backend that speaks to the runtime metamodel instead.
 	RuntimeOnly bool
+
+	// Introduced is the first Mendix version, as "major.minor", whose System
+	// module has this entity; empty means every supported version. Measured,
+	// like SystemAssocDef.Introduced. An association is in a version only when
+	// both its ends are, so the associations of a newer entity need no flag of
+	// their own (see ModelerSystemAssociationsIn).
+	Introduced string
 
 	// The four system members an entity may store — System.owner,
 	// System.changedBy, createdDate, changedDate. On a user entity these are the
@@ -232,9 +251,15 @@ func systemEntityByName(name string) (SystemEntityDef, bool) {
 // full list minus the runtime-only rows. Every path that resolves a name against
 // the model wants this one; see SystemEntityDef.RuntimeOnly.
 func ModelerSystemEntities() []SystemEntityDef {
+	return ModelerSystemEntitiesIn(nil)
+}
+
+// ModelerSystemEntitiesIn is ModelerSystemEntities for one project version,
+// given as its IsAtLeast; nil means the current platform.
+func ModelerSystemEntitiesIn(atLeast func(major, minor int) bool) []SystemEntityDef {
 	out := make([]SystemEntityDef, 0, len(SystemEntities))
 	for _, e := range SystemEntities {
-		if !e.RuntimeOnly {
+		if !e.RuntimeOnly && e.InVersion(atLeast) {
 			out = append(out, e)
 		}
 	}
@@ -254,9 +279,11 @@ func ModelerSystemAssociations() []SystemAssocDef {
 // ModelerSystemAssociationsIn is ModelerSystemAssociations for one project
 // version, given as its IsAtLeast; nil means the current platform.
 func ModelerSystemAssociationsIn(atLeast func(major, minor int) bool) []SystemAssocDef {
+	// An end that is runtime-only, or not yet in this version, takes the
+	// association with it: derived, not flagged per association.
 	runtimeOnly := make(map[string]bool, len(SystemEntities))
 	for _, e := range SystemEntities {
-		if e.RuntimeOnly {
+		if e.RuntimeOnly || !e.InVersion(atLeast) {
 			runtimeOnly[e.Name] = true
 		}
 	}
@@ -269,6 +296,14 @@ func ModelerSystemAssociationsIn(atLeast func(major, minor int) bool) []SystemAs
 	}
 	return out
 }
+
+// workflowSubProcessIntroduced is the first Mendix version whose System module
+// has the workflow sub-process members, measured from the modeler assembly of
+// each version (the ako/mxcli#1810 method): absent from 11.6.0 and 11.7.0, present
+// in 11.8.0, 11.9.0, 11.10.0, 11.12.0 and 11.14.0. 11.8.0 also has
+// WorkflowActivityDetails_WorkflowSubProcess, gone from 11.9.0 on; it is not
+// modelled, as its ends and type were never measured.
+const workflowSubProcessIntroduced = "11.8"
 
 // SystemEntities lists all entities in the System module.
 //
@@ -425,6 +460,23 @@ var SystemEntities = []SystemEntityDef{
 		{Name: "Retried", Type: "Long"},
 		{Name: "Retry", Type: "String", Length: 200},
 		{Name: "ScheduledEventName", Type: "String", Length: 200},
+	}},
+	// Workflow sub-processes (introduced in workflowSubProcessIntroduced).
+	// Attributes, types and lengths measured from the System domain model in
+	// the deployment/model/model.mdp mxbuild 11.14.0 writes. TestApp's
+	// WorkflowCommons reads WorkflowSubProcess.Caption over
+	// WorkflowActivityRecord_WorkflowSubProcess.
+	{Name: "WorkflowSubProcessDefinition", Persistable: true, Introduced: workflowSubProcessIntroduced, Attributes: []SystemAttrDef{
+		{Name: "Caption", Type: "String", Length: 200},
+		{Name: "IsObsolete", Type: "Boolean"},
+		{Name: "ModelGUID", Type: "String", Length: 36},
+	}},
+	{Name: "WorkflowSubProcess", Persistable: true, Introduced: workflowSubProcessIntroduced, Attributes: []SystemAttrDef{
+		{Name: "Caption", Type: "String", Length: 200},
+		{Name: "StartTime", Type: "DateTime"},
+		{Name: "EndTime", Type: "DateTime"},
+		{Name: "State", Type: "Enumeration", EnumQN: "System.WorkflowSubProcessState"},
+		{Name: "Reason", Type: "String"},
 	}},
 	{Name: "WorkflowDefinition", Persistable: true, Attributes: []SystemAttrDef{
 		{Name: "Name", Type: "String", Length: 200},
@@ -665,6 +717,20 @@ var SystemAssociations = []SystemAssocDef{
 	{Name: "WorkflowActivity_SubWorkflow", Parent: "WorkflowActivity", Child: "Workflow", Type: "Reference", Owner: "Default"},
 	{Name: "WorkflowActivityUserTaskOutcome_WorkflowActivity", Parent: "WorkflowActivityUserTaskOutcome", Child: "WorkflowActivity", Type: "Reference", Owner: "Default"},
 	{Name: "WorkflowActivityUserTaskOutcome_User", Parent: "WorkflowActivityUserTaskOutcome", Child: "User", Type: "Reference", Owner: "Default"},
+	// Workflow sub-process associations, measured from the 11.14.0 model.mdp.
+	// They exist exactly where their sub-process end does (no Introduced of
+	// their own); WorkflowActivity_WorkflowSubProcess is runtime-only through
+	// WorkflowActivity.
+	{Name: "WorkflowSubProcessDefinition_WorkflowDefinition", Parent: "WorkflowSubProcessDefinition", Child: "WorkflowDefinition", Type: "Reference", Owner: "Default"},
+	{Name: "WorkflowUserTaskDefinition_WorkflowSubProcessDefinition", Parent: "WorkflowUserTaskDefinition", Child: "WorkflowSubProcessDefinition", Type: "Reference", Owner: "Default"},
+	{Name: "WorkflowActivityRecord_WorkflowSubProcessDefinition", Parent: "WorkflowActivityRecord", Child: "WorkflowSubProcessDefinition", Type: "Reference", Owner: "Default"},
+	{Name: "WorkflowSubProcess_WorkflowSubProcessDefinition", Parent: "WorkflowSubProcess", Child: "WorkflowSubProcessDefinition", Type: "Reference", Owner: "Default"},
+	{Name: "WorkflowSubProcess_Workflow", Parent: "WorkflowSubProcess", Child: "Workflow", Type: "Reference", Owner: "Default"},
+	{Name: "WorkflowActivityRecord_WorkflowSubProcess", Parent: "WorkflowActivityRecord", Child: "WorkflowSubProcess", Type: "Reference", Owner: "Default"},
+	{Name: "WorkflowUserTask_WorkflowSubProcess", Parent: "WorkflowUserTask", Child: "WorkflowSubProcess", Type: "Reference", Owner: "Default"},
+	{Name: "WorkflowEndedUserTask_WorkflowSubProcess", Parent: "WorkflowEndedUserTask", Child: "WorkflowSubProcess", Type: "Reference", Owner: "Default"},
+	{Name: "WorkflowCurrentActivity_WorkflowSubProcess", Parent: "WorkflowCurrentActivity", Child: "WorkflowSubProcess", Type: "Reference", Owner: "Default"},
+	{Name: "WorkflowActivity_WorkflowSubProcess", Parent: "WorkflowActivity", Child: "WorkflowSubProcess", Type: "Reference", Owner: "Default"},
 	{Name: "Thumbnail_Image", Parent: "Thumbnail", Child: "Image", Type: "Reference", Owner: "Both"},
 	{Name: "BackgroundJob_Session", Parent: "BackgroundJob", Child: "Session", Type: "Reference", Owner: "Default"},
 	{Name: "BackgroundJob_XASInstance", Parent: "BackgroundJob", Child: "XASInstance", Type: "Reference", Owner: "Default"},
@@ -676,6 +742,21 @@ var SystemAssociations = []SystemAssocDef{
 type SystemEnumDef struct {
 	Name   string   // qualified name, e.g. "System.EventStatus"
 	Values []string // enumeration value names
+	// Introduced is the first Mendix version ("major.minor") with this
+	// enumeration; empty means every supported version.
+	Introduced string
+}
+
+// SystemEnumerationsIn lists the System enumerations of one project version,
+// given as its IsAtLeast; nil means the current platform.
+func SystemEnumerationsIn(atLeast func(major, minor int) bool) []SystemEnumDef {
+	out := make([]SystemEnumDef, 0, len(SystemEnumerations))
+	for _, e := range SystemEnumerations {
+		if introducedIn(e.Introduced, atLeast) {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // SystemEnumerations lists all enumerations in the System module.
@@ -720,6 +801,10 @@ var SystemEnumerations = []SystemEnumDef{
 		"UserTask", "CallMicroflow", "CallWorkflow", "JumpTo",
 		"MultiInputUserTask", "WaitForNotification", "WaitForTimer",
 		"EndOfBoundaryEventPath", "NonInterruptingTimerEvent", "InterruptingTimerEvent",
+	}},
+	// Measured from the 11.14.0 model.mdp, in its stored order.
+	{Name: "System.WorkflowSubProcessState", Introduced: workflowSubProcessIntroduced, Values: []string{
+		"InProgress", "Aborted", "Failed", "Completed", "Paused",
 	}},
 	{Name: "System.WorkflowCurrentActivityAction", Values: []string{
 		"DoNothing", "JumpTo",

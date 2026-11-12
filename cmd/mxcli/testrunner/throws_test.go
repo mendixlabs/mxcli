@@ -83,13 +83,13 @@ $result = call microflow M.MF_Import(Json = '{}');
 	suite := &TestSuite{Name: "s", Tests: []TestCase{tc}}
 	mdl := GenerateTestFlows(suite)
 
-	want := "IF contains($latestError/Message, 'the object was not found') THEN"
+	want := "IF contains($MxTestErrorMessage_1, 'the object was not found') THEN"
 	if !strings.Contains(mdl, want) {
 		t.Errorf("generated handler does not compare the message.\nwant a line: %s\ngot:\n%s", want, mdl)
 	}
 	// The failing branch must name what was actually raised — a verdict that
 	// says only what was expected tells you nothing about what came back.
-	if !strings.Contains(mdl, "actual: ' + $latestError/Message") {
+	if !strings.Contains(mdl, "actual: ' + $MxTestErrorMessage_1") {
 		t.Errorf("generated handler does not report the raised message:\n%s", mdl)
 	}
 }
@@ -106,7 +106,7 @@ $result = call microflow M.MF_Import(Json = '{}');
 `)
 	mdl := GenerateTestRunner(&TestSuite{Name: "s", Tests: []TestCase{tc}})
 
-	if !strings.Contains(mdl, "contains($latestError/Message, 'not found')") {
+	if !strings.Contains(mdl, "contains($MxTestErrorMessage_1_1, 'not found')") {
 		t.Errorf("legacy runner does not compare the message:\n%s", mdl)
 	}
 }
@@ -122,7 +122,7 @@ $result = call microflow M.MF_Import(Json = '{}');
 /
 `)
 	mdl := GenerateTestFlows(&TestSuite{Name: "s", Tests: []TestCase{tc}})
-	if !strings.Contains(mdl, "contains($latestError/Message, 'it''''s missing')") {
+	if !strings.Contains(mdl, "contains($MxTestErrorMessage_1, 'it''''s missing')") {
 		t.Errorf("apostrophe not doubled for MDL:\n%s", mdl)
 	}
 }

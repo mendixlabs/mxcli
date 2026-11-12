@@ -149,7 +149,7 @@ func TestGenerateEndpointMDLNoChainWhenNone(t *testing.T) {
 
 func TestDropTestFlows(t *testing.T) {
 	got := dropTestFlows("", &TestSuite{Tests: []TestCase{{ID: "test_1"}, {ID: "test_2"}}})
-	want := []string{"DROP MICROFLOW MxTest.Test_test_1", "DROP MICROFLOW MxTest.Test_test_2"}
+	want := []string{"DROP MICROFLOW MxTest.Test_test_1", "DROP MICROFLOW MxTest.Test_test_2", "DROP MICROFLOW " + errorMessageFlow}
 	if len(got) != len(want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
