@@ -3384,6 +3384,21 @@ func (pb *pageBuilder) expandBuildingBlockRef(w *ast.WidgetV3) ([]*ast.WidgetV3,
 		hit := rebindFirst(widgets, isButtonWidget,
 			func(t *ast.WidgetV3) { t.Properties["Action"] = act })
 		if !hit {
+			// No core button: the first pluggable widget whose definition has
+			// a click action — PlatformDesignSystem's blocks are built from the
+			// pluggable PDS Button (ako/mxcli#2145, mendixlabs/mxcli#1821).
+			// Core buttons are tried first, over the whole block, so a block
+			// that has one binds it exactly as before.
+			registry := ctx.GetWidgetRegistry()
+			var slot string
+			hit = rebindFirst(widgets,
+				func(t *ast.WidgetV3) bool {
+					slot = pluggableClickActionSlot(t, registry)
+					return slot != ""
+				},
+				func(t *ast.WidgetV3) { t.Properties[slot] = act })
+		}
+		if !hit {
 			return nil, mdlerrors.NewValidation(fmt.Sprintf(
 				"use building block %s: action override supplied, but the block has no button to rebind", w.Name))
 		}
@@ -3391,7 +3406,6 @@ func (pb *pageBuilder) expandBuildingBlockRef(w *ast.WidgetV3) ([]*ast.WidgetV3,
 	return widgets, nil
 }
 
-// isButtonWidget reports whether a widget is an action-capable button.
 // isDataSourceWidget reports whether a widget is one that takes a datasource,
 // whether or not it currently carries one. The list is the data containers a
 // building block can be built around; anything else in a block is layout or a
@@ -3404,12 +3418,53 @@ func isDataSourceWidget(w *ast.WidgetV3) bool {
 	return false
 }
 
+// isButtonWidget reports whether a widget is a core action-capable button.
 func isButtonWidget(w *ast.WidgetV3) bool {
 	switch strings.ToLower(w.Type) {
 	case "actionbutton", "linkbutton", "button":
 		return true
 	}
 	return false
+}
+
+// pluggableClickActionSlot returns the AST property an `action:` override is
+// written to when w is a pluggable widget that acts as a button — one whose
+// definition has a CLICK action — or "" when it is not one.
+//
+// The definition, not a list of widget names, decides: PDS Button's click
+// action is `onClickAction`, Badge Button's `onClickEvent`, Image's `onClick`,
+// and GenerateDefJSON gives each the Source "OnClick" (actionSourceForKey),
+// which the engine reads from the widget's Action slot — the property
+// `OnClick:` parses to. Two kinds of action are not a button's:
+//   - another event (`onChange`, a Switch's `action`): an input's, not a click;
+//   - a data container's click (a Gallery's or Data Grid 2's `onClick`): an
+//     item action. The block's datasource override targets that widget; the
+//     action override is the block's primary action.
+func pluggableClickActionSlot(w *ast.WidgetV3, registry *WidgetRegistry) string {
+	if registry == nil || isDataSourceWidget(w) {
+		return ""
+	}
+	def := lookupWidgetDef(w, registry)
+	if def == nil {
+		return ""
+	}
+	mappings := append([]PropertyMapping(nil), def.PropertyMappings...)
+	for _, m := range def.Modes {
+		mappings = append(mappings, m.PropertyMappings...)
+	}
+	click := false
+	for _, m := range mappings {
+		switch {
+		case m.Operation == "datasource":
+			return ""
+		case m.Operation == "action" && m.Source == "OnClick":
+			click = true
+		}
+	}
+	if !click {
+		return ""
+	}
+	return "Action"
 }
 
 // rebindFirst applies set to the first widget (pre-order) matching pred,
@@ -3451,16 +3506,6 @@ func cloneWidget(w *ast.WidgetV3) *ast.WidgetV3 {
 		clone.Properties[k] = v // Property values are immutable (strings, ints, etc.)
 	}
 	return clone
-}
-
-// prefixWidgetNames recursively prepends a prefix to all widget names.
-func prefixWidgetNames(widgets []*ast.WidgetV3, prefix string) {
-	for _, w := range widgets {
-		if w.Name != "" {
-			w.Name = prefix + w.Name
-		}
-		prefixWidgetNames(w.Children, prefix)
-	}
 }
 
 // flowArgsToParameterMappings converts parsed datasource/action arguments into

@@ -24,9 +24,15 @@ var checkCmd = &cobra.Command{
 	Long: `Check an MDL script file for syntax errors and optionally validate references.
 
 Without a project it checks syntax and the semantic rules that need no model.
-Pass -p and it also resolves every reference — modules, entities, pages,
-microflows and icons — against that project; --references is implied by -p and
-is kept only for compatibility.
+With a project it also resolves every reference — modules, entities, pages,
+microflows and icons — against that project; --references is implied by a
+project and is kept only for compatibility.
+
+The project is the one passed with -p or, without -p, the single .mpr in the
+current directory, auto-detected as for every mxcli command (the "Using
+project:" line says which). Run from a project directory, a plain
+"mxcli check script.mdl" therefore checks references too. Pass --no-project to
+check syntax and the no-model rules only, wherever it is run.
 
 It also resolves MEMBER names, not just the entity they belong to: an attribute
 named in a create/change activity is looked up on that entity and its
@@ -122,11 +128,14 @@ for legacy native widgets that have pluggable replacements — Studio Pro does
 not auto-migrate these on a Mendix major-version upgrade.
 
 Examples:
-  # Check syntax only (no project needed)
-  mxcli check script.mdl
+  # Check syntax only, even in a directory holding an .mpr
+  mxcli check script.mdl --no-project
 
   # Check syntax, resolve references, and type-check expressions
   mxcli check script.mdl -p app.mpr
+
+  # The same, against the .mpr auto-detected in the current directory
+  mxcli check script.mdl
 
   # Scan the project for legacy native widgets after a Mendix upgrade
   mxcli check script.mdl -p app.mpr --post-migration
@@ -150,10 +159,30 @@ Examples:
 `,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		if err := checkNoProjectConflicts(cmd); err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
 		if code := runCheckFiles(cmd, args); code != 0 {
 			os.Exit(code)
 		}
 	},
+}
+
+// checkNoProjectConflicts refuses --no-project together with a flag that asks
+// for a project, rather than letting one of the two silently win. -p is only
+// "changed" when the user gave it: auto-detection does not run under
+// --no-project, so it cannot set it.
+func checkNoProjectConflicts(cmd *cobra.Command) error {
+	if !skipsProjectDiscovery(cmd) {
+		return nil
+	}
+	for _, name := range []string{"project", "references", "post-migration"} {
+		if cmd.Flags().Changed(name) {
+			return fmt.Errorf("--%s asks for a project and --%s for none; pass one or the other", name, noProjectFlag)
+		}
+	}
+	return nil
 }
 
 // runCheckFile checks one script and returns the exit code: 0 when it passed.

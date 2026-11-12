@@ -118,8 +118,8 @@ A list of errors the AI should avoid. For example, `write-microflows.md` warns a
 Steps the AI should follow after writing MDL to confirm correctness:
 
 ```bash
-# Syntax check (no project needed)
-./mxcli check script.mdl
+# Syntax check only (--no-project: do not auto-detect an .mpr in this directory)
+./mxcli check script.mdl --no-project
 
 # Syntax + reference validation
 ./mxcli check script.mdl -p app.mpr --references

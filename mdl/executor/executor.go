@@ -438,6 +438,12 @@ func (e *Executor) Execute(stmt ast.Statement) error {
 		stmt = s
 	}
 
+	// Another process may have written to the project since the last
+	// statement (ako/mxcli#2121).
+	if err := e.syncWithDisk(); err != nil {
+		return err
+	}
+
 	// Announce the MDL command so the PED calls it triggers (reported by the MCP
 	// client) group under it (--mcp-trace, level 2; no-op otherwise).
 	e.tracer.Statement(stmtSummary(stmt))

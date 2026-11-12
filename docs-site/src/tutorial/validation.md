@@ -7,8 +7,10 @@ You've created entities, microflows, and pages. Before opening your project in S
 The fastest check. It parses your MDL script and reports syntax errors without touching any `.mpr` file:
 
 ```bash
-mxcli check script.mdl
+mxcli check script.mdl --no-project
 ```
+
+Without `--no-project`, a plain `mxcli check script.mdl` run from a directory holding exactly one `.mpr` auto-detects it (it prints `Using project: ...`) and goes on to Level 2 against it. `--no-project` gives the syntax-only check wherever you run it.
 
 This catches:
 
@@ -147,8 +149,8 @@ BEGIN
 END;
 EOF
 
-# 2. Check syntax (fast, no project needed)
-mxcli check changes.mdl
+# 2. Check syntax (fast, no project used)
+mxcli check changes.mdl --no-project
 
 # 3. Check references (needs project, still fast)
 mxcli check changes.mdl -p app.mpr --references

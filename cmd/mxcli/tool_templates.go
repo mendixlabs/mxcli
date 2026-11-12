@@ -149,7 +149,7 @@ The mxcli tool is in the PROJECT ROOT, not in system PATH. Always use:
 
 ### Validate MDL Scripts
 `+"```bash"+`
-./mxcli check script.mdl                    # Syntax only
+./mxcli check script.mdl --no-project       # Syntax only (else the .mpr here is auto-detected)
 ./mxcli check script.mdl -p %s --references  # With refs
 `+"```"+`
 

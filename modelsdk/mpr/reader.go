@@ -124,6 +124,11 @@ type Reader struct {
 	// hold, read on first use (packaged_modules.go).
 	packagedOnce sync.Once
 	packaged     *packagedSet
+
+	// diskSeen is the state of the project on disk this reader last looked
+	// at (reader_disk_change.go, ako/mxcli#2121). diskMu guards it.
+	diskMu   sync.Mutex
+	diskSeen diskStamp
 }
 
 // cachedUnit stores metadata about a unit for fast filtering.
@@ -245,6 +250,7 @@ func OpenWithOptions(path string, opts OpenOptions) (*Reader, error) {
 		return nil, err
 	}
 
+	r.markDiskBaseline()
 	return r, nil
 }
 
@@ -371,6 +377,7 @@ func OpenWithDB(db *sql.DB, path, contentsDir string) (*Reader, error) {
 	if err := r.verify(); err != nil {
 		return nil, err
 	}
+	r.markDiskBaseline()
 	return r, nil
 }
 
