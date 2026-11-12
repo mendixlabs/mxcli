@@ -73,7 +73,7 @@ func ListUnitsWithContainerWhere[T element.Element](r *mmpr.Reader, keep func(bs
 	if err != nil {
 		return nil, err
 	}
-	return decodeUnits[T](refs, typeName, keep)
+	return decodeUnits[T](r, refs, typeName, keep)
 }
 
 // ListUnitsWithContainerIn is ListUnitsWithContainer for the units whose ID
@@ -84,12 +84,16 @@ func ListUnitsWithContainerIn[T element.Element](r *mmpr.Reader, keepID func(id 
 	if err != nil {
 		return nil, err
 	}
-	return decodeUnits[T](refs, typeName, nil)
+	return decodeUnits[T](r, refs, typeName, nil)
 }
 
-// decodeUnits decodes the refs of typeName that keep accepts (nil keeps all).
-func decodeUnits[T element.Element](refs []mmpr.UnitRef, typeName string, keep func(bson.Raw) bool) ([]Unit[T], error) {
+// decodeUnits decodes the refs of typeName that keep accepts (nil keeps all),
+// serving from r's decode cache the units it has decoded from the same bytes
+// before (see decodeCache). An element it returns may be one another caller
+// holds too.
+func decodeUnits[T element.Element](r *mmpr.Reader, refs []mmpr.UnitRef, typeName string, keep func(bson.Raw) bool) ([]Unit[T], error) {
 	dec := codec.NewDecoder(codec.DefaultRegistry)
+	cache := decodeCacheFor(r)
 	out := make([]Unit[T], 0, len(refs))
 	for _, ref := range refs {
 		if ref.Type != typeName {
@@ -97,6 +101,17 @@ func decodeUnits[T element.Element](refs []mmpr.UnitRef, typeName string, keep f
 		}
 		if keep != nil && !keep(bson.Raw(ref.Contents)) {
 			continue
+		}
+		var store bool
+		if cache != nil {
+			var cached element.Element
+			if cached, store = cache.lookup(ref.ID, ref.Contents); cached != nil {
+				if typed, ok := cached.(T); ok {
+					decodeCacheHits.Add(1)
+					out = append(out, Unit[T]{Element: typed, ContainerID: model.ID(ref.ContainerID)})
+					continue
+				}
+			}
 		}
 		unitsDecoded.Add(1)
 		elem, err := dec.Decode(bson.Raw(ref.Contents))
@@ -106,6 +121,9 @@ func decodeUnits[T element.Element](refs []mmpr.UnitRef, typeName string, keep f
 		typed, ok := elem.(T)
 		if !ok {
 			return nil, fmt.Errorf("unit %s decoded as %T, want %T", ref.ID, elem, *new(T))
+		}
+		if store {
+			cache.put(ref.ID, ref.Contents, elem)
 		}
 		out = append(out, Unit[T]{Element: typed, ContainerID: model.ID(ref.ContainerID)})
 	}
@@ -121,7 +139,7 @@ func ListUnitsInContainer[T element.Element](r *mmpr.Reader, containerID model.I
 	if err != nil {
 		return nil, err
 	}
-	return decodeUnits[T](refs, typeName, nil)
+	return decodeUnits[T](r, refs, typeName, nil)
 }
 
 // UnitByID decodes the unit of type T whose ID is id, reading that unit only.
@@ -132,7 +150,7 @@ func UnitByID[T element.Element](r *mmpr.Reader, id model.ID) (unit Unit[T], ok 
 	if err != nil || !found || ref.Type != typeName {
 		return Unit[T]{}, false, err
 	}
-	units, err := decodeUnits[T]([]mmpr.UnitRef{ref}, typeName, nil)
+	units, err := decodeUnits[T](r, []mmpr.UnitRef{ref}, typeName, nil)
 	if err != nil || len(units) == 0 {
 		return Unit[T]{}, false, err
 	}

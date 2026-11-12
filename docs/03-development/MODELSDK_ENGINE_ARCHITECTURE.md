@@ -70,6 +70,33 @@ ALTER read-modify-write path round-trips (else ALTER silently drops data — see
   microflow `ConcurrencyErrorMessage`→`ConcurrenyErrorMessage` (Mendix typo), `StableId` is binary-not-string
   (handled via `FreshGUIDFields`). gen MicroflowParameter was also missing fields (completed by hand).
 
+## A listed element may be shared: read it, or change it and write it
+
+`mprread`'s listings (`ListUnitsWithContainer` and the lookups beside it — what
+the backend's `listUnits` calls) keep the decoded form of every unit they have
+decoded twice, and hand the **same** element to every caller until the unit's
+stored bytes change (`modelsdk/mprread/decode_cache.go`, ako/mxcli#2160). A
+script used to cost statements × project, because each statement listed whole
+document types and each listing decoded every unit again.
+
+What that means for a converter or a write path:
+
+- **Reading is free and safe**, from any goroutine: every lazily decoded value
+  is loaded before an element is shared, so a read writes nothing.
+- **A setter on a listed element is seen by no other caller.** The element
+  becomes dirty, and a dirty entry is decoded afresh for the next caller. Set
+  it, encode it, write it — as `UpdateOqlQueriesForMovedEntity` does.
+- **Do not change a listed element by any route that does not mark it dirty**
+  (a field assignment, a slice edited in place). Nothing detects that, and the
+  next caller would read the change.
+- **Never hold a listed element across your own write and compare it with a
+  fresh listing** expecting two objects: when nothing changed they are the
+  same one.
+
+The cache is keyed by a unit's stored bytes, so no write path invalidates it
+and none can forget to. `MXCLI_DECODE_CACHE=off` turns it off for a process, to
+rule it in or out when a result looks wrong.
+
 ## Harvest rule (engalar/dev)
 
 engalar/dev has a complete, tested gen-native write suite, but built **AST-direct with a gen-typed

@@ -52,6 +52,10 @@ type Reader struct {
 	v2TypesDirty  bool
 	v2Hashes      map[string]struct{}
 
+	// memo is storage for what another package derives from this reader's
+	// units and wants dropped with the connection (see Memo).
+	memo sync.Map
+
 	// contentCache stores raw BSON bytes per unit ID (MPR v2 only).
 	// Populated on first read while caching is on (EnableContentCache, or a
 	// CacheUnitReads scope); cleared by InvalidateCache, which every write
@@ -570,3 +574,10 @@ func blobToUUIDSwapped(blob []byte) string {
 		blob[8], blob[9],
 		blob[10], blob[11], blob[12], blob[13], blob[14], blob[15])
 }
+
+// Memo is a store that lives exactly as long as this reader: for a cache of
+// something derived from the project's units, kept by a package the reader
+// cannot import (mprread's decoded-unit cache). Nothing in the reader reads or
+// invalidates it, so whatever is kept there must be keyed so that it cannot go
+// stale — by the unit's content, not by its identity alone.
+func (r *Reader) Memo() *sync.Map { return &r.memo }
