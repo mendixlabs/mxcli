@@ -47,7 +47,7 @@ func validateAlterPageReferences(ctx *ExecContext, prog *ast.Program, sc *script
 		return nil
 	}
 	h, _ := getHierarchy(ctx)
-	added := widgetsTheScriptAddsTo(prog)
+	added := widgetsTheScriptAddsTo(ctx, prog)
 	grown := map[string]bool{} // documents an operation so far has added widgets to
 	// The widgets an operation so far has dropped, per document: this pass
 	// reads the stored document, where exec has already applied them.
@@ -123,7 +123,7 @@ func validateAlterPageReferences(ctx *ExecContext, prog *ast.Program, sc *script
 			colErrors = datagridColumnAttrErrors(ws, "", judge)
 			for _, op := range s.Operations {
 				target, cols := alterColumnInsertion(op)
-				if mutator == nil || len(cols) == 0 || added[doc][target.Widget] {
+				if mutator == nil || len(cols) == 0 || added[doc].declares(target.Widget) {
 					continue
 				}
 				colErrors = append(colErrors, datagridColumnAttrErrors(cols, alterColumnsEntity(mutator, target.Widget), judge)...)
@@ -148,7 +148,7 @@ func validateAlterPageReferences(ctx *ExecContext, prog *ast.Program, sc *script
 			// A SET's target is validateAlterSetProperties' finding.
 			if _, isSet := op.(*ast.SetPropertyOp); mutator != nil && !isSet {
 				for _, ref := range alterPageOperationTargets(op) {
-					if ref.Widget != "" && added[doc][ref.Widget] {
+					if ref.Widget != "" && added[doc].declares(ref.Widget) {
 						continue
 					}
 					if ref.IsColumn() && grown[doc] {
@@ -242,8 +242,14 @@ func alterOpWidgets(s *ast.AlterPageStmt) []*ast.WidgetV3 {
 // every name a SET renames a widget to. Not ordered, for the reason
 // documentsTheScriptAddsWidgetsTo gives: a false refusal blocks a script that
 // works, a missed one costs one unreported error exec still reports.
-func widgetsTheScriptAddsTo(prog *ast.Program) map[string]map[string]bool {
-	out := map[string]map[string]bool{}
+//
+// The names are those exec writes: a `use building block X as p_` adds the
+// block's widgets under p_, not a widget named X — read the other way, a
+// later `insert after p_container2` on a stored page was refused although exec
+// ran it (ako/mxcli#2182). A reference it cannot expand allows every name
+// under its prefix.
+func widgetsTheScriptAddsTo(ctx *ExecContext, prog *ast.Program) map[string]*knownWidgetNames {
+	out := map[string]*knownWidgetNames{}
 	for _, stmt := range prog.Statements {
 		s, ok := stmt.(*ast.AlterPageStmt)
 		if !ok {
@@ -252,31 +258,13 @@ func widgetsTheScriptAddsTo(prog *ast.Program) map[string]map[string]bool {
 		doc := s.PageName.String()
 		names := out[doc]
 		if names == nil {
-			names = map[string]bool{}
+			names = newKnownWidgetNames()
 			out[doc] = names
 		}
-		var walk func(ws []*ast.WidgetV3)
-		walk = func(ws []*ast.WidgetV3) {
-			for _, w := range ws {
-				if w == nil {
-					continue
-				}
-				if w.Name != "" {
-					names[w.Name] = true
-				}
-				walk(w.Children)
-			}
-		}
-		walk(alterOpWidgets(s))
+		names.add(ctx, alterOpWidgets(s))
 		for _, op := range s.Operations {
-			set, ok := op.(*ast.SetPropertyOp)
-			if !ok {
-				continue
-			}
-			for k, v := range set.Properties {
-				if str, isStr := v.(string); isStr && strings.EqualFold(k, "Name") {
-					names[str] = true
-				}
+			if set, ok := op.(*ast.SetPropertyOp); ok {
+				names.rename(set)
 			}
 		}
 	}
