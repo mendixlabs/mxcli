@@ -38,6 +38,24 @@ func rawStyledDynamicText(name, style string) map[string]any {
 	}
 }
 
+// rawSourcelessListView is the Avatar_Group_SM block's list view: Studio Pro's
+// unconfigured source, an XPath source with no entity.
+func rawSourcelessListView(name string) map[string]any {
+	return map[string]any{
+		"$Type":      "Forms$ListView",
+		"Name":       name,
+		"PageSize":   int32(10),
+		"Appearance": map[string]any{"Class": "pds-avatar-group__listview"},
+		"DataSource": map[string]any{
+			"$Type":           "Forms$ListViewXPathSource",
+			"EntityRef":       nil,
+			"SourceVariable":  nil,
+			"XPathConstraint": "",
+		},
+		"Widgets": []any{rawStyledDynamicText("inner", "")},
+	}
+}
+
 // blockCtx serves one PlatformDesignSystem block whose widgets are raw, and
 // returns the builder and the output the builder warns on.
 func blockCtx(t *testing.T, blockName string, widgets ...any) (*pageBuilder, *bytes.Buffer) {
@@ -127,5 +145,46 @@ func TestHandWrittenDynamicTextStyleStillRefused(t *testing.T) {
 	_, err := pb.buildWidgetV3(w)
 	if err == nil || !strings.Contains(err.Error(), "an inline `style` crashes MxBuild") {
 		t.Errorf("want the inline-style refusal, got %v", err)
+	}
+}
+
+// TestBuildingBlockPlacesSourcelessListView: the list view is placed with no
+// source and the author is told it needs one.
+func TestBuildingBlockPlacesSourcelessListView(t *testing.T) {
+	pb, out := blockCtx(t, "Avatar_Group_SM", rawSourcelessListView("listView2"))
+	_, built, err := expandAndBuild(t, pb, "Avatar_Group_SM")
+	if err != nil {
+		t.Fatalf("use building block Avatar_Group_SM: %v", err)
+	}
+	lv, ok := built[0].(*pages.ListView)
+	if !ok {
+		t.Fatalf("built %T, want *pages.ListView", built[0])
+	}
+	if lv.DataSource != nil {
+		t.Errorf("DataSource = %T, want none (the writer stores Studio Pro's unconfigured source)", lv.DataSource)
+	}
+	if lv.PageSize != 10 {
+		t.Errorf("PageSize = %d, want the block's 10", lv.PageSize)
+	}
+	if !strings.Contains(out.String(), "b_listView2") || !strings.Contains(out.String(), "no data source") {
+		t.Errorf("want a warning naming b_listView2 and its missing data source, got %q", out.String())
+	}
+}
+
+// Control: a list view with a data source warns about nothing.
+func TestListViewWithSourceDoesNotWarn(t *testing.T) {
+	pb, out := blockCtx(t, "Unused")
+	w := &ast.WidgetV3{
+		Type: "LISTVIEW",
+		Name: "lv",
+		Properties: map[string]any{
+			"DataSource": &ast.DataSourceV3{Type: "database", Reference: "PlatformDesignSystem.E"},
+		},
+	}
+	if _, err := pb.buildWidgetV3(w); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if strings.Contains(out.String(), "no data source") {
+		t.Errorf("unexpected warning: %q", out.String())
 	}
 }

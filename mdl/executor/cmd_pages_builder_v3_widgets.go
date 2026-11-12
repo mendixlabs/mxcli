@@ -316,6 +316,26 @@ func (pb *pageBuilder) buildDataGridColumnV3(w *ast.WidgetV3) (*pages.DataGridCo
 	return col, nil
 }
 
+// warnListViewWithoutSource reports a list view written with no data source.
+// It is placed — the writer stores Studio Pro's unconfigured source, an XPath
+// source naming no entity — and `mx check` will ask for the entity until the
+// author sets one. A building block ships list views like that
+// (PlatformDesignSystem's Avatar_Group_SM); refusing them refused the whole
+// block (ako/mxcli#2183).
+func (pb *pageBuilder) warnListViewWithoutSource(w *ast.WidgetV3) {
+	if pb.ctx == nil {
+		return
+	}
+	origin := ""
+	if w.FromBuildingBlock {
+		origin = " (from the building block)"
+	}
+	fmt.Fprintf(pb.ctx.progress(),
+		"Warning: listview %q%s has no data source; it is placed unconfigured, as Studio Pro stores it, "+
+			"and `mx check` reports it until one is set (e.g. `DataSource: database from Module.Entity`).\n",
+		w.Name, origin)
+}
+
 func (pb *pageBuilder) buildListViewV3(w *ast.WidgetV3) (*pages.ListView, error) {
 	lv := &pages.ListView{
 		BaseWidget: pages.BaseWidget{
@@ -386,6 +406,8 @@ func (pb *pageBuilder) buildListViewV3(w *ast.WidgetV3) (*pages.ListView, error)
 		if w.Name != "" && entityName != "" {
 			pb.paramEntityNames[w.Name] = entityName
 		}
+	} else {
+		pb.warnListViewWithoutSource(w)
 	}
 
 	// Register widget scope for SELECTION references
