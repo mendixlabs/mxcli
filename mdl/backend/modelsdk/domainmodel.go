@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/mendixlabs/mxcli/modelsdk/element"
 	genDm "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
@@ -27,8 +28,14 @@ import (
 // faithful member counts); full attribute-type / association-detail fidelity
 // (DESCRIBE level) is a later phase.
 
+// DomainModelListings is how many times this backend has listed and converted
+// every domain model of the project. A statement that makes one per lookup
+// costs the project once per lookup (ako/mxcli#2160). For tests.
+func (b *Backend) DomainModelListings() int64 { return atomic.LoadInt64(&b.domainModelListings) }
+
 // ListDomainModels reads every domain model through the codec engine.
 func (b *Backend) ListDomainModels() ([]*domainmodel.DomainModel, error) {
+	atomic.AddInt64(&b.domainModelListings, 1)
 	units, err := listUnits[*genDm.DomainModel](b)
 	if err != nil {
 		return nil, err
