@@ -611,16 +611,17 @@ func (w *Writer) insertUnit(unitID, containerID, containmentName, unitType strin
 		}
 
 		// Insert reference to database
+		hash := contentsHashOf(contents)
 		_, err := w.reader.db.Exec(`
 			INSERT INTO Unit (UnitID, ContainerID, ContainmentName, TreeConflict, ContentsHash, ContentsConflicts)
 			VALUES (?, ?, ?, 0, ?, '')
-		`, unitIDBlob, containerIDBlob, containmentName, contentsHashOf(contents))
+		`, unitIDBlob, containerIDBlob, containmentName, hash)
 		if err != nil {
 			// Clean up the file we just wrote — otherwise it becomes an orphan
 			os.Remove(filePath)
 			return err
 		}
-		w.reader.InvalidateCache()
+		w.reader.noteUnitWritten(unitIDBlob, containerIDBlob, containmentName, contents, hash, true)
 		w.updateTransactionID()
 		w.restoreTransactionID(restoreTransactionID)
 		return nil
@@ -724,11 +725,12 @@ func (w *Writer) updateUnit(unitID string, contents []byte, opts ...canon.Option
 		}
 
 		// Update ContentsHash in database
+		hash := contentsHashOf(contents)
 		_, err := w.reader.db.Exec(`
 			UPDATE Unit SET ContentsHash = ? WHERE UnitID = ?
-		`, contentsHashOf(contents), unitIDBlob)
+		`, hash, unitIDBlob)
 		if err == nil {
-			w.reader.InvalidateCache()
+			w.reader.noteUnitWritten(unitIDBlob, nil, "", contents, hash, false)
 			w.updateTransactionID()
 		}
 		return err

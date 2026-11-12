@@ -383,6 +383,7 @@ func (r *Reader) listUnitsByTypeV2Shared(typeName, containerID string, keep func
 // comes from the type index when its ContentsHash is known there, so only new
 // and changed units are opened (reader_units_v2.go, mendixlabs/mxcli#1603).
 func (r *Reader) buildUnitCache() error {
+	r.unitIndexBuilds.Add(1)
 	r.announceColdUnitIndex()
 	rows, err := r.db.Query(`
 		SELECT UnitID, ContainerID, ContainmentName, COALESCE(ContentsHash, '')
@@ -479,6 +480,77 @@ func (r *Reader) InvalidateCache() {
 	r.contentMu.Unlock()
 }
 
+// noteUnitWritten brings the reader's list of units up to date with a write
+// the writer has just committed to an MPR v2 project: a unit inserted, or an
+// existing unit's contents replaced. It does for one row what InvalidateCache
+// followed by buildUnitCache does for all of them.
+//
+// Every write used to mark the list stale, and the next read scanned the whole
+// Unit table to rebuild it: once per statement of a script, for a write that
+// added or changed one row (ako/mxcli#2160).
+//
+// Anything it cannot account for falls back to InvalidateCache: a list that is
+// already stale, an insert of a unit the list already has, an update of one it
+// does not. Deletes, moves and transactions are not handled here at all, and
+// invalidate as before.
+func (r *Reader) noteUnitWritten(unitIDBlob, containerIDBlob []byte, containmentName string, contents []byte, hash string, inserted bool) {
+	if r.version != MPRVersionV2 || !r.unitCacheValid {
+		r.InvalidateCache()
+		return
+	}
+	id := blobToUUID(unitIDBlob)
+	entry := unitIndexEntryOf(contents)
+
+	r.v2TypesMu.Lock()
+	at := -1
+	for i := range r.unitCache {
+		if r.unitCache[i].ID == id {
+			at = i
+			break
+		}
+	}
+	if inserted == (at >= 0) || r.v2Hashes == nil {
+		r.v2TypesMu.Unlock()
+		r.InvalidateCache()
+		return
+	}
+	if inserted {
+		r.unitCache = append(r.unitCache, cachedUnit{
+			ID:              id,
+			ContainerID:     blobToUUID(containerIDBlob),
+			ContainmentName: containmentName,
+			Type:            entry.Type,
+			Name:            entry.Name,
+			Excluded:        entry.Excluded,
+		})
+	} else {
+		cu := &r.unitCache[at]
+		cu.Type, cu.Name, cu.Excluded = entry.Type, entry.Name, entry.Excluded
+	}
+	r.learnUnit(hash, entry)
+	if hash != "" {
+		r.v2Hashes[hash] = struct{}{}
+	}
+	r.v2TypesMu.Unlock()
+
+	r.contentMu.Lock()
+	known := r.rowHashes != nil
+	if known {
+		r.rowHashes[id] = hash
+	}
+	r.contentMu.Unlock()
+	if !known {
+		r.InvalidateCache()
+		return
+	}
+	if store := r.unitStore(); store != nil {
+		store.noteRowHash(id, hash)
+	}
+	// What InvalidateCache drops besides the list: a name may now be found
+	// somewhere else.
+	r.clearNameIndex()
+}
+
 // EnableContentCache activates the in-memory content cache for this reader.
 // Call once after Connect in persistent daemon mode. The cache survives across
 // requests; InvalidateCache empties it (but keeps caching active) on writes.
@@ -537,6 +609,10 @@ func (r *Reader) CacheUnitReads() (release func()) {
 // UnitFileReads is how many unit files this reader has read from
 // mprcontents/. For tests.
 func (r *Reader) UnitFileReads() int64 { return r.fileReads.Load() }
+
+// UnitIndexBuilds is how many times this reader has scanned the Unit table to
+// rebuild its list of units. For tests.
+func (r *Reader) UnitIndexBuilds() int64 { return r.unitIndexBuilds.Load() }
 
 // UnitContentCopies is how many times this reader copied a unit's bytes out
 // of its content cache for a caller. For tests.

@@ -131,6 +131,30 @@ func decodeUnits[T element.Element](r *mmpr.Reader, refs []mmpr.UnitRef, typeNam
 	return out, nil
 }
 
+// UnitByIDAs decodes the unit whose ID is id, whatever storage name it has,
+// and returns it if it decodes to a T. It is UnitByID for a Go type registered
+// under more than one storage name — a module is `Projects$ModuleImpl` in a
+// project and `Projects$Module` in the registry's first entry for the type, so
+// UnitByID, which matches the one name the registry gives back, never finds it.
+func UnitByIDAs[T element.Element](r *mmpr.Reader, id model.ID) (unit Unit[T], ok bool, err error) {
+	ref, found, err := r.UnitByID(string(id))
+	if err != nil || !found {
+		return Unit[T]{}, false, err
+	}
+	factory, registered := codec.DefaultRegistry.Lookup(ref.Type)
+	if !registered {
+		return Unit[T]{}, false, nil
+	}
+	if _, isT := factory().(T); !isT {
+		return Unit[T]{}, false, nil
+	}
+	units, err := decodeUnits[T](r, []mmpr.UnitRef{ref}, ref.Type, nil)
+	if err != nil || len(units) == 0 {
+		return Unit[T]{}, false, err
+	}
+	return units[0], true, nil
+}
+
 // ListUnitsInContainer decodes the units of type T whose ContainerID is
 // containerID, and reads no other unit: a lookup of one module's domain model
 // reads one document, not the project's (mendixlabs/mxcli#1616).
