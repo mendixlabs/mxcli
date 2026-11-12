@@ -1106,9 +1106,5 @@ func (w *Writer) UpdateUnitContainer(unitID, newContainerID string) error {
 // edit — kept whatever an older build wrote, on every later rewrite
 // (ako/mxcli#1640).
 func (w *Writer) normalizeForStorage(unitID string, contents []byte) ([]byte, error) {
-	out, err := normalizePropertySetsFor(w.reader.ProjectVersion(), unitID, contents)
-	if err != nil {
-		return nil, err
-	}
-	return canon.NormalizeListMarkers(out), nil
+	return storageFormFor(w.reader.ProjectVersion(), unitID, contents, true)
 }
