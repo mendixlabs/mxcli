@@ -91,6 +91,7 @@ type Builder struct {
 	reader          CatalogReader
 	snapshot        *Snapshot
 	progress        ProgressFunc
+	routine         ProgressFunc // routine counts; nil sends them to progress (SetRoutineProgress)
 	hierarchy       *hierarchy
 	tx              *builderTx // Transaction for batched inserts; records row owners
 	fullMode        bool       // If true, do full parsing (activities/widgets)
@@ -764,8 +765,28 @@ func (b *Builder) resetCollected() {
 // read as the table's size and is left out; say reports regardless.
 func (b *Builder) report(table string, count int) {
 	if b.scope == nil {
-		b.say(table, count)
+		b.count(table, count)
 	}
+}
+
+// SetRoutineProgress sends the routine lines — a table's row count, the
+// source pass's periodic "source n/m documents" — to fn instead of to the
+// Build callback. Those are about fifty lines a build that say nothing but
+// "still going", so a caller writing to a log or an agent's context can
+// throttle them, while the lines that carry information (the incremental
+// summary, documents that could not be described) still reach Build's
+// callback (ako/mxcli#1860).
+func (b *Builder) SetRoutineProgress(fn ProgressFunc) {
+	b.routine = fn
+}
+
+// count reports a routine line in every build.
+func (b *Builder) count(line string, n int) {
+	if b.routine != nil {
+		b.routine(line, n)
+		return
+	}
+	b.say(line, n)
 }
 
 // say reports a progress line in every build.

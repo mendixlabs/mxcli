@@ -298,6 +298,7 @@ type Executor struct {
 	cache            *executorCache
 	catalog          *catalog.Catalog
 	quiet            bool            // suppress connection and status messages
+	terminal         bool            // output is a terminal (catalog progress in full)
 	tally            *mutationTally  // collapses a program run's "Unchanged" reports into one line
 	accessRun        *accessRuleRun  // the open run of access-rule statements, if any (#872, #890)
 	format           OutputFormat    // output format (table, json)
@@ -327,6 +328,7 @@ type Executor struct {
 func New(output io.Writer) *Executor {
 	guard := newOutputGuard(output, maxOutputLines)
 	return &Executor{
+		terminal: isTerminal(output),
 		output:   guard,
 		guard:    guard,
 		settings: make(map[string]any),

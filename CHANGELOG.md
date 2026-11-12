@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **A catalog build prints a line per table only on a terminal, and `-q` / `--quiet` works on every command** (ako/mxcli#1860, mendixlabs/mxcli#1702) — the first command after each model change rebuilt the catalog and printed about fifty `✓ Table: N` lines ahead of its answer, which an agent paid for in context every time. Off a terminal a quick build now prints none of them and a slow one a heartbeat every 15 s; the incremental summary and warnings still print. `-q` was honoured by the banner check and by `search` and rejected as an unknown flag by every other command.
 - **`docker build`, `docker run` and `docker reload` check and build the project as stored** (ako/mxcli#1794) — they ran `mx update-widgets` on their temporary copy first, so a project whose stored widget definitions are stale built, while `docker check`, `run --local` and Studio Pro all reported the CE0463s: the deployment was not built from what is committed. A stale widget now fails the build, each CE0463 labelled as one `mxcli fix widgets` clears or one that persists, as `docker check` labels them. `--update-widgets` builds a widget-normalised copy as before, leaving the project as it is; `--no-update-widgets` skips the labelling re-check.
 
 ### Fixed
