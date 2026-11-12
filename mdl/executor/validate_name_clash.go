@@ -196,6 +196,53 @@ func loadNameSet(ctx *ExecContext, docType string) *nameSet {
 	return newNameSet(names)
 }
 
+// domainModelNameSet is the entity or association names of the modules called
+// module, read from those modules' domain models alone. A name is only ever
+// looked up qualified, and compared with case folded, so the names of every
+// module whose name folds to module's are the whole set a lookup in module can
+// match. loadNameSet lists and converts every domain model of the project for
+// the same answer, once per kind per statement (ako/mxcli#2160).
+//
+// nil when it does not apply — another kind, no module, no module of that name
+// yet, or a domain model that cannot be read alone — and the caller lists.
+func domainModelNameSet(ctx *ExecContext, kind, module string) *nameSet {
+	if module == "" || (kind != "entity" && kind != "association") {
+		return nil
+	}
+	modules, err := getModulesFromCache(ctx)
+	if err != nil {
+		return nil
+	}
+	names := map[string]bool{}
+	found := false
+	for _, m := range modules {
+		if m == nil || !strings.EqualFold(m.Name, module) {
+			continue
+		}
+		dm, err := ctx.Backend.GetDomainModel(m.ID)
+		if err != nil || dm == nil {
+			return nil
+		}
+		found = true
+		if kind == "entity" {
+			for _, ent := range dm.Entities {
+				names[m.Name+"."+ent.Name] = true
+			}
+			continue
+		}
+		for _, assoc := range dm.Associations {
+			names[m.Name+"."+assoc.Name] = true
+		}
+		for _, ca := range dm.CrossAssociations {
+			names[m.Name+"."+ca.Name] = true
+		}
+	}
+	if !found {
+		return nil
+	}
+	return newNameSet(names)
+}
+
 // nameHolder finds the element, among kinds, that already holds target —
 // skipping self, the element a rename or move is about (of kind docType).
 // exactOwnIsHandlers leaves an exact same-kind match to the statement's own
@@ -344,11 +391,17 @@ func refuseNameClash(ctx *ExecContext, stmt ast.Statement) error {
 		return nil
 	}
 	loaded := map[string]*nameSet{}
+	// scope is the module a create names. Its entity and association names are
+	// then read from that module's domain model alone (domainModelNameSet).
+	scope := ""
 	sets := func(kind string) *nameSet {
 		if s, ok := loaded[kind]; ok {
 			return s
 		}
-		s := loadNameSet(ctx, kind)
+		s := domainModelNameSet(ctx, kind, scope)
+		if s == nil {
+			s = loadNameSet(ctx, kind)
+		}
 		loaded[kind] = s
 		return s
 	}
@@ -360,6 +413,9 @@ func refuseNameClash(ctx *ExecContext, stmt ast.Statement) error {
 		return nil
 	}
 	docType, name, _ := stmtCreateKind(stmt)
+	if i := strings.Index(name, "."); i > 0 {
+		scope = name[:i]
+	}
 	if c, ok := createClash(sets, docType, name); ok {
 		return mdlerrors.NewAlreadyExistsMsg(c.kind, c.stored, c.msg+" — "+c.hint)
 	}
