@@ -75,7 +75,9 @@ ALTER read-modify-write path round-trips (else ALTER silently drops data — see
 `mprread`'s listings (`ListUnitsWithContainer` and the lookups beside it — what
 the backend's `listUnits` calls) keep the decoded form of every unit they have
 decoded twice, and hand the **same** element to every caller until the unit's
-stored bytes change (`modelsdk/mprread/decode_cache.go`, ako/mxcli#2160). A
+stored bytes change (`modelsdk/mprread/decode_cache.go`, ako/mxcli#2160;
+the decision and its alternatives are
+[ADR-0015](../13-decisions/0015-content-keyed-unit-caches.md)). A
 script used to cost statements × project, because each statement listed whole
 document types and each listing decoded every unit again.
 
