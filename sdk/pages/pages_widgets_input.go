@@ -237,6 +237,9 @@ type CheckBox struct {
 	OnChangeAction ClientAction `json:"onChangeAction,omitempty"`
 	OnEnterAction  ClientAction `json:"onEnterAction,omitempty"` // as on TextBox
 	OnLeaveAction  ClientAction `json:"onLeaveAction,omitempty"` // as on TextBox
+	// LabelPosition is Forms$CheckBox.LabelPosition: Default, BeforeControl or
+	// AfterControl. Empty keeps the stored default (ako/mxcli#2106).
+	LabelPosition string `json:"labelPosition,omitempty"`
 }
 
 // RadioButtons represents a radio button group widget.

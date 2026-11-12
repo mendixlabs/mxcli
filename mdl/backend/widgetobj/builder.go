@@ -136,6 +136,15 @@ func (ob *Builder) SetAttribute(propertyKey string, attributePath string) {
 	})
 }
 
+func (ob *Builder) SetAttributeWithSteps(propertyKey string, attributePath string, steps []pages.AttributeRefStep) {
+	if attributePath == "" {
+		return
+	}
+	ob.object = updateWidgetPropertyValue(ob.object, ob.propertyTypeIDs, propertyKey, func(val bson.D) bson.D {
+		return setAttributeRefField(val, attributePath, steps)
+	})
+}
+
 func (ob *Builder) SetAssociation(propertyKey string, assocPath string, entityName string) {
 	if assocPath == "" {
 		return

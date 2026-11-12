@@ -255,7 +255,7 @@ func nanoflowSourceToGen(d *pages.NanoflowSource) element.Element {
 		assignID(m)
 		// Parameter is a BY_NAME reference: <NanoflowQName>.<ParameterName>.
 		m.SetParameterQualifiedName(d.Nanoflow + "." + pm.ParameterName)
-		bindParameterMappingValue(m, pm.Variable, pm.VariableKind, pm.Expression)
+		bindParameterMappingValue(m, pm.Variable, pm.VariableKind, pm.Expression, pm.WidgetParameter, pm.WidgetParameterKind)
 		src.AddParameterMappings(m)
 	}
 	return src

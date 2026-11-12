@@ -39,8 +39,10 @@ func extractConditionalSettings(ctx *ExecContext, widget *rawWidget, w map[strin
 		if attr, ok := cvs["Attribute"].(string); ok && attr != "" {
 			widget.VisibleAttr = describeAttr(ctx, attr)
 			// Read from a page or snippet parameter (TestApp
-			// Snip_UserTask_NameColumnWithIcon): `$Param.Attr in (…)`.
-			if param := parameterSourceName(cvs["SourceVariable"]); param != "" {
+			// Snip_UserTask_NameColumnWithIcon): `$Param.Attr in (…)`, or from
+			// an enclosing data view (FactoryManagement
+			// ConversationalUI.Trace_Details): `$dataView6.Attr in (…)`.
+			if param := namedObjectSourceName(cvs["SourceVariable"]); param != "" {
 				widget.VisibleAttr = parameterAttributeMDL(param, attr)
 			}
 			for _, c := range getBsonArrayElements(cvs["Conditions"]) {
@@ -470,6 +472,9 @@ func parseRawWidget(ctx *ExecContext, w map[string]any, parentEntityContext ...s
 
 	case "Forms$RadioButtons", "Pages$RadioButtons", "Forms$RadioButtonGroup", "Pages$RadioButtonGroup":
 		widget.Type = "Forms$RadioButtons" // Normalize type
+		if h, ok := w["RenderHorizontal"].(bool); ok && !h {
+			widget.RenderVertical = true // ako/mxcli#2106
+		}
 		widget.Caption = extractLabelText(ctx, w)
 		widget.Content = extractInputAttribute(ctx, w)
 		widget.Editable = extractEditable(ctx, w)
@@ -484,6 +489,7 @@ func parseRawWidget(ctx *ExecContext, w map[string]any, parentEntityContext ...s
 		widget.Editable = extractEditable(ctx, w)
 		widget.ReadOnlyStyle = extractReadOnlyStyle(ctx, w)
 		widget.ShowLabel = extractShowLabel(ctx, w)
+		widget.LabelPosition, _ = w["LabelPosition"].(string) // ako/mxcli#2106
 		widget.OnChange = extractOnChangeAction(ctx, w)
 		widget.OnEnter, widget.OnLeave = extractFocusEventActions(ctx, w)
 		return []rawWidget{widget}
@@ -1303,7 +1309,7 @@ func extractAttributeRef(ctx *ExecContext, w map[string]any) string {
 	if _, ok := attrRef["Attribute"].(string); !ok {
 		return ""
 	}
-	path := columnAttributeFromRef(attrRef)
+	path := columnAttributeFromRef(ctx, attrRef)
 	if !strings.Contains(path, "/") {
 		// A plain binding: qualified where no entity is in scope (describeAttr).
 		return describeAttr(ctx, extractString(attrRef["Attribute"]))
@@ -1455,10 +1461,19 @@ func extractInputAttribute(ctx *ExecContext, w map[string]any) string {
 			return parameterAttributeMDL(param, attr)
 		}
 	}
+	// An association path read from a named object — a parameter, or a data
+	// view through its Widget slot — is `$Root/Assoc/Attr`. Printed without
+	// the root it was refused at the snippet root (MDL-WIDGET34), or bound
+	// against the wrong context (ako/mxcli#833).
+	if root := firstNonEmpty(widget, parameterSourceName(w["SourceVariable"])); root != "" && attrRef != nil && attrRef["EntityRef"] != nil {
+		if path := columnAttributeFromRef(ctx, attrRef); strings.Contains(path, "/") {
+			return "$" + root + "/" + path
+		}
+	}
 	if widget == "" || attrRef == nil {
 		return extractAttributeRef(ctx, w)
 	}
-	path := columnAttributeFromRef(attrRef)
+	path := columnAttributeFromRef(ctx, attrRef)
 	if path == "" || strings.Contains(path, "/") {
 		return extractAttributeRef(ctx, w)
 	}

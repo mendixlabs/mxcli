@@ -772,6 +772,9 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 			props = append(props, fmt.Sprintf("Attribute: %s", w.Content))
 		}
 		props = appendReadOnlyStyle(props, w)
+		if w.RenderVertical {
+			props = append(props, "RenderHorizontal: false")
+		}
 		if w.OnChange != "" {
 			props = append(props, actionProp("OnChange", w.OnChange))
 		}
@@ -792,6 +795,9 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 		// Show ShowLabel if false (not showing label)
 		if !w.ShowLabel {
 			props = append(props, "ShowLabel: No")
+		}
+		if w.LabelPosition != "" && w.LabelPosition != "Default" {
+			props = append(props, "LabelPosition: "+w.LabelPosition)
 		}
 		if w.OnChange != "" {
 			props = append(props, actionProp("OnChange", w.OnChange))
@@ -2147,21 +2153,38 @@ func formatParamFormatSuffix(ctx *ExecContext, pMap map[string]any) string {
 // template parameter whose AttributeRef binds an attribute over one or more
 // associations (AttributeRef.EntityRef = DomainModels$IndirectEntityRef). Returns
 // "" when the parameter is a plain (direct-attribute) binding.
-func associationTemplateParamPath(attrRef map[string]any) string {
+func associationTemplateParamPath(ctx *ExecContext, attrRef map[string]any) string {
+	return associationPathMDL(attrRef, false, describeAssociationEnds(ctx))
+}
+
+// associationEndFunc answers whether entity is one of the association's two
+// ends; known is false when the association cannot be looked up.
+type associationEndFunc func(assocQN, entityQN string) (isEnd, known bool)
+
+// associationPathMDL renders an IndirectEntityRef attribute binding as
+// "Assoc/…/Attr" (shortAssoc drops each association's module), or "" when the
+// binding is not over associations.
+//
+// A step whose DestinationEntity is not an end of its association is a cast to
+// a specialization: Studio Pro stores Administration.Account after
+// System.WorkflowUserTaskOutcome_User, whose end is System.User (TestApp
+// WorkflowCommons.Snip_WorkflowUserTaskView_Details). It prints as
+// "Assoc/Module.Entity/…", the Mendix expression spelling the builder reads
+// back; dropped, the path re-executed against the association's end and the
+// attribute was CE1613 "The selected attribute 'System.User.FullName' no
+// longer exists". isEnd nil (no project) prints the associations only.
+func associationPathMDL(attrRef map[string]any, shortAssoc bool, isEnd associationEndFunc) string {
 	entityRef, ok := attrRef["EntityRef"].(map[string]any)
-	if !ok || entityRef == nil {
-		return ""
-	}
-	if extractString(entityRef["$Type"]) != "DomainModels$IndirectEntityRef" {
+	if !ok || entityRef == nil || extractString(entityRef["$Type"]) != "DomainModels$IndirectEntityRef" {
 		return ""
 	}
 	steps := getBsonArrayElements(entityRef["Steps"])
 	if len(steps) == 0 {
 		return ""
 	}
-	assocs := make([]string, 0, len(steps))
-	for _, s := range steps {
-		sm, ok := s.(map[string]any)
+	segs := make([]string, 0, len(steps))
+	for _, st := range steps {
+		sm, ok := st.(map[string]any)
 		if !ok {
 			return ""
 		}
@@ -2169,13 +2192,35 @@ func associationTemplateParamPath(attrRef map[string]any) string {
 		if assoc == "" {
 			return ""
 		}
-		assocs = append(assocs, assoc)
+		if shortAssoc {
+			segs = append(segs, shortAttributeName(assoc))
+		} else {
+			segs = append(segs, assoc)
+		}
+		if dest := extractString(sm["DestinationEntity"]); dest != "" && isEnd != nil {
+			if end, known := isEnd(assoc, dest); known && !end {
+				segs = append(segs, dest)
+			}
+		}
 	}
 	attr := shortAttributeName(extractString(attrRef["Attribute"]))
 	if attr == "" {
 		return ""
 	}
-	return strings.Join(assocs, "/") + "/" + attr
+	return strings.Join(segs, "/") + "/" + attr
+}
+
+// describeAssociationEnds is the association-end lookup describe uses: the
+// page builder's own, so describe and exec resolve an association one way.
+func describeAssociationEnds(ctx *ExecContext) associationEndFunc {
+	if ctx == nil || ctx.Backend == nil || !ctx.Connected() {
+		return nil
+	}
+	if ctx.Cache == nil {
+		ctx.Cache = &executorCache{}
+	}
+	pb := &pageBuilder{backend: ctx.Backend, execCache: ctx.Cache}
+	return pb.associationHasEnd
 }
 
 // associationDataSourceExpr renders an association data source as the MDL

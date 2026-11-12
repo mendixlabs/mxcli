@@ -140,6 +140,10 @@ func (pb *pageBuilder) buildPageV3(s *ast.CreatePageStmtV3) (*pages.Page, error)
 		if bsonType := pageParamBSONType(param.Type); bsonType != "" {
 			// Primitive type parameter
 			pageParam.TypeName = bsonType
+			if pb.primitiveParams == nil {
+				pb.primitiveParams = map[string]bool{}
+			}
+			pb.primitiveParams[param.Name] = true
 		} else if param.EntityType.Name != "" {
 			// Entity type parameter
 			entityID, err := pb.resolveEntity(param.EntityType)
@@ -1969,6 +1973,7 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 			if strVal, ok := arg.Value.(string); ok {
 				if v, kind := pb.classifyFlowArgValue(strVal); kind != "" {
 					mapping.Variable, mapping.VariableKind = v, kind
+					mapping.WidgetParameter, mapping.WidgetParameterKind = pb.flowArgWidgetParameter(v, kind)
 				} else if strings.HasPrefix(strVal, "$") {
 					mapping.Variable = strVal
 				} else {
@@ -2013,6 +2018,7 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 			if strVal, ok := arg.Value.(string); ok {
 				if v, kind := pb.classifyFlowArgValue(strVal); kind != "" {
 					mapping.Variable, mapping.VariableKind = v, kind
+					mapping.WidgetParameter, mapping.WidgetParameterKind = pb.flowArgWidgetParameter(v, kind)
 				} else if strings.HasPrefix(strVal, "$") {
 					mapping.Variable = strVal
 				} else {
@@ -2414,6 +2420,15 @@ func (pb *pageBuilder) resolveTemplateAttributePathFull(attrRef string, param *p
 			param.SourceVariableKind = "local"
 			return
 		}
+		// A primitive page parameter binds the same way, in the PageParameter
+		// slot. It used to fall through to the attribute path "$IpAddress",
+		// which binds nothing: mxbuild CE0402 "No value specified."
+		// (ako/mxcli#2132).
+		if pb.primitiveParams[after] {
+			param.SourceVariable = after
+			param.SourceVariableKind = ""
+			return
+		}
 	}
 
 	// Check for $paramName.Attribute pattern where paramName is a page parameter
@@ -2484,6 +2499,16 @@ func (pb *pageBuilder) resolveTemplateAttributePathFull(attrRef string, param *p
 // value is not an association path or cannot be resolved, so the caller falls
 // back to the previous behavior.
 func (pb *pageBuilder) resolveTemplateAssociationPath(attrRef string, param *pages.ClientTemplateParameter) bool {
+	// `$Param/Assoc/Attr`: the path read from a named object, which Studio Pro
+	// stores as the steps beside a SourceVariable naming it (ako/mxcli#833).
+	if wv, finalQN, steps, ok := pb.resolveRootedAssociationPath(attrRef); ok {
+		param.AttributeRef = finalQN
+		param.AttributeRefSteps = steps
+		param.SourceWidget = wv.Widget
+		param.SourceVariable = wv.Variable
+		param.SourceVariableKind = wv.Kind
+		return true
+	}
 	finalQN, steps, ok := pb.resolveAssociationAttributePath(attrRef)
 	if !ok {
 		return false
@@ -2531,35 +2556,88 @@ func (pb *pageBuilder) resolveInputAttribute(attr string) (string, []pages.Attri
 func (pb *pageBuilder) resolveAssociationAttributePath(attrRef string) (finalQN string, steps []pages.AttributeRefStep, ok bool) {
 	path := strings.TrimPrefix(attrRef, "$currentObject/")
 	// Only context-relative association paths are handled here; a $param- or
-	// $widget-rooted navigation is a different (unsupported) shape.
+	// $widget-rooted navigation is resolveRootedAssociationPath's.
 	if strings.HasPrefix(path, "$") || !strings.Contains(path, "/") {
 		return "", nil, false
 	}
+	return pb.resolveAssociationPathFrom(path, pb.entityContext)
+}
+
+// resolveRootedAssociationPath resolves `$Root/Assoc/…/Attr`, an association
+// path read from a page or snippet parameter or an enclosing data view rather
+// than from the context object, starting at the root's entity. wv is the
+// SourceVariable the binding stores beside the steps: the parameter in its
+// slot, or the data view's recorded pair (ako/mxcli#833).
+func (pb *pageBuilder) resolveRootedAssociationPath(attrRef string) (wv pages.WidgetVariable, finalQN string, steps []pages.AttributeRefStep, ok bool) {
+	root, path, ok := rootedAssociationPath(attrRef)
+	if !ok {
+		return pages.WidgetVariable{}, "", nil, false
+	}
+	wv, start, named := pb.namedObjectVariable(root)
+	if !named {
+		return pages.WidgetVariable{}, "", nil, false
+	}
+	finalQN, steps, ok = pb.resolveAssociationPathFrom(path, start)
+	if !ok {
+		return pages.WidgetVariable{}, "", nil, false
+	}
+	return wv, finalQN, steps, true
+}
+
+// resolveAssociationPathFrom resolves a context-relative association path
+// starting at the entity start.
+func (pb *pageBuilder) resolveAssociationPathFrom(path, start string) (finalQN string, steps []pages.AttributeRefStep, ok bool) {
 	segs := strings.Split(path, "/")
 	if len(segs) < 2 {
 		return "", nil, false
 	}
 	attrName := segs[len(segs)-1]
-	current := pb.entityContext
+	current := start
 	if current == "" {
 		return "", nil, false
 	}
 
 	steps = make([]pages.AttributeRefStep, 0, len(segs)-1)
+	afterAssociation := false
 	for _, seg := range segs[:len(segs)-1] {
 		// Against the entity THIS hop starts from — qualifying every hop with
 		// the path's start named a later hop into the wrong module. (#662)
 		assocQN := pb.resolveAssociationPathIn(seg, current)
 		dest, ok := pb.associationDestination(assocQN, current)
+		if !ok && len(steps) > 0 && seg != current && strings.Count(seg, ".") == 1 && pb.entityIsOrDescendsFrom(seg, current) {
+			// `Assoc/Module.Special/…`: a cast of the previous hop's
+			// destination to a specialization, which Studio Pro stores as that
+			// step's DestinationEntity (TestApp WorkflowCommons
+			// Snip_WorkflowUserTaskView_Details). Dropped, the attribute was
+			// qualified with the association's end: CE1613.
+			steps[len(steps)-1].DestinationEntity = seg
+			current = seg
+			continue
+		}
 		if !ok {
 			// Not a modelled association — it may be System.changedBy /
 			// System.owner, which no domain model lists. (#1338)
-			if assocQN, dest, ok = pb.systemMemberAssociation(seg, current); !ok {
+			assocQN, dest, ok = pb.systemMemberAssociation(seg, current)
+		}
+		if !ok {
+			// `Assoc/Module.Entity/Attr`: an entity right after a hop names the
+			// entity the hop arrives at, or a specialization of it — Studio
+			// Pro's downcast, stored as that step's DestinationEntity, exactly
+			// as a data source path stores it (resolveAssociationHops). Read as
+			// an association it failed the lookup and the caller wrote the
+			// whole path as one flat attribute: CE1613 (ako/mxcli#2127). An
+			// entity the hop cannot arrive at stays unresolved.
+			if !afterAssociation || !strings.Contains(seg, ".") || !pb.isSpecializationOf(seg, current) {
 				return "", nil, false
 			}
+			steps[len(steps)-1].DestinationEntity = seg
+			current = seg
+			afterAssociation = false
+			continue
 		}
 		steps = append(steps, pages.AttributeRefStep{Association: assocQN, DestinationEntity: dest})
 		current = dest
+		afterAssociation = true
 	}
 
 	// The final attribute is qualified with the entity that DECLARES it, which
@@ -2736,6 +2814,16 @@ func (pb *pageBuilder) entityGeneralizations() (map[string]string, error) {
 	return m, nil
 }
 
+// associationHasEnd reports whether entity is one of the association's two
+// ends; known is false when the association cannot be resolved.
+func (pb *pageBuilder) associationHasEnd(assocQN, entityQN string) (isEnd, known bool) {
+	from, to, ok := pb.associationEndpoints(assocQN)
+	if !ok {
+		return false, false
+	}
+	return entityQN == from || entityQN == to, true
+}
+
 // associationEndpoints resolves a qualified association name to its FROM
 // (ParentID) and TO (ChildID) entity qualified names.
 //
@@ -2872,6 +2960,18 @@ func (pb *pageBuilder) widgetVariableFor(name string) (pages.WidgetVariable, boo
 // (CE7001) — is refused: the writer would otherwise store a binding that reads
 // nothing.
 func (pb *pageBuilder) resolveInputBinding(w *ast.WidgetV3, attr string) (string, []pages.AttributeRefStep, *pages.WidgetVariable, error) {
+	// `$Param/Assoc/Attr`: an association path read from a named object
+	// (ako/mxcli#833).
+	if root, _, isRooted := rootedAssociationPath(attr); isRooted {
+		wv, path, steps, ok := pb.resolveRootedAssociationPath(attr)
+		if !ok {
+			return "", nil, nil, mdlerrors.NewValidationf(
+				"%s `%s`: `Attribute: %s` — `$%s/…` reads an association path from a parameter of this %s or an "+
+					"enclosing data view, and `$%s` is neither, or the path does not resolve from it",
+				strings.ToLower(w.Type), w.Name, attr, root, pb.documentKind(), root)
+		}
+		return path, steps, &wv, nil
+	}
 	name, attrName, ok := strings.Cut(strings.TrimPrefix(attr, "$"), ".")
 	if !strings.HasPrefix(attr, "$") {
 		path, steps := pb.resolveInputAttribute(attr)
@@ -2910,6 +3010,27 @@ func (pb *pageBuilder) parameterVariable(name string) (pages.WidgetVariable, str
 		return pages.WidgetVariable{}, "", false
 	}
 	return pages.WidgetVariable{Variable: name, Kind: pb.parameterSlotKind(name)}, entity, true
+}
+
+// namedObjectVariable is parameterVariable widened to an enclosing data view:
+// the `$name` of a `$name.Attr` binding read from a page or snippet parameter,
+// or else from a data view the widget sits inside, whose SourceVariable is the
+// data-view pair {Widget: name, PageParameter: …} (ako/mxcli#826, #2107). It
+// returns the SourceVariable to store and the object's entity.
+func (pb *pageBuilder) namedObjectVariable(name string) (pages.WidgetVariable, string, bool) {
+	if wv, entity, ok := pb.parameterVariable(name); ok {
+		return wv, entity, true
+	}
+	name = strings.TrimPrefix(name, "$")
+	wv, known := pb.dataViewVariables[name]
+	if !known || pb.isDeclaredParameter(name) {
+		return pages.WidgetVariable{}, "", false
+	}
+	entity := pb.paramEntityNames[name]
+	if entity == "" {
+		return pages.WidgetVariable{}, "", false
+	}
+	return wv, entity, true
 }
 
 // documentKind names what is being built, for messages.
@@ -3406,6 +3527,7 @@ func (pb *pageBuilder) flowArgsToParameterMappings(args []ast.FlowArgV3) []*page
 		if strVal, ok := arg.Value.(string); ok {
 			if v, kind := pb.classifyFlowArgValue(strVal); kind != "" {
 				mapping.Variable, mapping.VariableKind = v, kind
+				mapping.WidgetParameter, mapping.WidgetParameterKind = pb.flowArgWidgetParameter(v, kind)
 			} else if strings.HasPrefix(strVal, "$") {
 				mapping.Variable = strVal
 			} else {

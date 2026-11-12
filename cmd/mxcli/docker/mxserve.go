@@ -49,6 +49,42 @@ type ServeOptions struct {
 	Port int
 	// ReadyTimeout bounds how long StartServe waits for the API (default 90s).
 	ReadyTimeout time.Duration
+	// BuildTimeout bounds one /build request. Zero falls back to
+	// $MXCLI_BUILD_TIMEOUT, then 30m (see serveBuildTimeout).
+	BuildTimeout time.Duration
+}
+
+// defaultBuildTimeout bounds one serve build when nothing overrides it.
+//
+// It was a fixed 10 minutes, and the cold build of a 188-module, 12,900-
+// document app takes about that long on a laptop, so it passed or failed by
+// the run (mendixlabs/mxcli#1818). A build that hangs is caught by the watchdog
+// on mxbuild's output, not by this; this only has to outlast a slow honest one.
+const defaultBuildTimeout = 30 * time.Minute
+
+// buildTimeoutEnv overrides defaultBuildTimeout (a Go duration, e.g. "45m").
+// The --build-timeout flag of `run --local` wins over it.
+const buildTimeoutEnv = "MXCLI_BUILD_TIMEOUT"
+
+// serveBuildTimeout resolves the build limit: an explicit value first, then
+// $MXCLI_BUILD_TIMEOUT, then the default. An unparsable or non-positive
+// environment value is ignored, as for MXCLI_WEB_CLIENT_TIMEOUT.
+func serveBuildTimeout(explicit time.Duration) time.Duration {
+	return durationSetting(explicit, buildTimeoutEnv, defaultBuildTimeout)
+}
+
+// durationSetting is the flag -> environment -> default chain the local loop's
+// time limits share.
+func durationSetting(explicit time.Duration, env string, def time.Duration) time.Duration {
+	if explicit > 0 {
+		return explicit
+	}
+	if v := strings.TrimSpace(os.Getenv(env)); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return def
 }
 
 // ServeTarget is the build target for a serve request.
@@ -387,10 +423,17 @@ func (s *ServeServer) Build(req BuildRequest) (*BuildResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshaling build request: %w", err)
 	}
-	// Cold builds can take ~60s; keep a generous timeout.
-	client := &http.Client{Timeout: 10 * time.Minute}
+	limit := serveBuildTimeout(s.opts.BuildTimeout)
+	client := &http.Client{Timeout: limit}
 	resp, err := client.Post(s.baseURL()+"/build", "application/json", bytes.NewReader(bodyBytes))
 	if err != nil {
+		if isTimeout(err) {
+			// %w keeps it a net.Error timeout, which buildRetryingServeTimeout
+			// recognises.
+			return nil, fmt.Errorf("serve build request to %s: mxbuild did not finish the build within %s "+
+				"(a large app's cold build can take longer: raise the limit with --build-timeout or $%s): %w",
+				s.baseURL(), limit, buildTimeoutEnv, err)
+		}
 		return nil, fmt.Errorf("serve build request to %s: %w", s.baseURL(), err)
 	}
 	defer resp.Body.Close()

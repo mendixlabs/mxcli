@@ -122,6 +122,11 @@ func init() {
 	codec.RegisterTypeDefaults("Forms$ListViewXPathSource", codec.TypeDefaults{
 		NullFields: []string{"SourceVariable"},
 	})
+	// An association source likewise: 40 of 40 in FactoryManagement carry the
+	// key, null (30) when the source starts from $currentObject (ako/mxcli#2106).
+	codec.RegisterTypeDefaults("Forms$AssociationSource", codec.TypeDefaults{
+		NullFields: []string{"SourceVariable"},
+	})
 	// LayoutGrid and its rows carry a null ConditionalVisibilitySettings; the grid,
 	// rows, and columns all use the typed-array marker 2 in their parent lists.
 	for _, t := range []string{"Forms$LayoutGrid", "Forms$LayoutGridRow"} {
@@ -678,6 +683,9 @@ func widgetToGen(w pages.Widget) (element.Element, error) {
 		g.SetEditable(pages.WidgetEditability(&x.BaseWidget))
 		if x.Label != "" {
 			g.SetLabelTemplate(textAsClientTemplate(textFromString(x.Label)))
+		}
+		if x.LabelPosition != "" {
+			g.SetLabelPosition(x.LabelPosition)
 		}
 		onChangeCB, err := clientActionToGen(x.OnChangeAction)
 		if err != nil {
@@ -2091,13 +2099,17 @@ type parameterMappingTarget interface {
 //
 // Kind "widget" is a widget's selection: the PageVariable names the widget and
 // nothing else, as on all 13 such mappings in TestApp's WorkflowCommons
-// (ako/mxcli#1560). It used to fall to the page-parameter slot.
-func bindParameterMappingValue(m parameterMappingTarget, variable, kind, expression string) {
+// (ako/mxcli#1560). It used to fall to the page-parameter slot. A data view
+// showing a page or snippet parameter names that parameter beside the widget
+// (widgetParam, widgetParamKind "" or "snippet"): Widget alone is CE0115 there
+// (ako/mxcli#2095), while a data view with no parameter behind it keeps Widget
+// alone, which passes.
+func bindParameterMappingValue(m parameterMappingTarget, variable, kind, expression, widgetParam, widgetParamKind string) {
 	if variable != "" && kind != "" {
 		name := strings.TrimPrefix(variable, "$")
 		switch kind {
 		case "widget":
-			m.SetVariable(pageVariableToGen(name, "", ""))
+			m.SetVariable(pageVariableToGen(name, widgetParam, widgetParamKind))
 		case "parameter":
 			// sourceVariableToGen spells the page-parameter slot as the empty kind.
 			m.SetVariable(sourceVariableToGen(name, ""))
@@ -2146,7 +2158,7 @@ func microflowSettingsToGen(microflowName string, mappings []*pages.MicroflowPar
 		assignID(gm)
 		// Parameter is a BY_NAME reference: <MicroflowQName>.<ParameterName>.
 		gm.SetParameterQualifiedName(microflowName + "." + pm.ParameterName)
-		bindParameterMappingValue(gm, pm.Variable, pm.VariableKind, pm.Expression)
+		bindParameterMappingValue(gm, pm.Variable, pm.VariableKind, pm.Expression, pm.WidgetParameter, pm.WidgetParameterKind)
 		s.AddParameterMappings(gm)
 	}
 	for _, om := range outputs {
@@ -2356,7 +2368,7 @@ func clientActionToGen(a pages.ClientAction) (element.Element, error) {
 		}
 		assignID(g)
 		g.SetDisabledDuringExecution(actionDisabledDuringExecution(x.ActionExecution))
-		g.SetNumberOfPagesToClose2("")
+		g.SetNumberOfPagesToClose2(x.NumberOfPagesToClose)
 		g.SetPageSettings(pageSettingsWithMappings(x.PageName, x.ParameterMappings))
 		return g, nil
 	case *pages.LinkClientAction:
@@ -2497,7 +2509,7 @@ func clientActionToGen(a pages.ClientAction) (element.Element, error) {
 			assignID(m)
 			// Parameter is a BY_NAME reference: Nanoflow.ParamName.
 			m.SetParameterQualifiedName(x.NanoflowName + "." + pm.ParameterName)
-			bindParameterMappingValue(m, pm.Variable, pm.VariableKind, pm.Expression)
+			bindParameterMappingValue(m, pm.Variable, pm.VariableKind, pm.Expression, pm.WidgetParameter, pm.WidgetParameterKind)
 			g.AddParameterMappings(m)
 		}
 		for _, om := range x.OutputMappings {

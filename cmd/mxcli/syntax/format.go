@@ -52,11 +52,15 @@ func writeFeatureDetail(w io.Writer, f SyntaxFeature) {
 
 	switch {
 	case len(f.Requires) == 1:
-		fmt.Fprintf(w, "Requires: Mendix %s+\n\n", f.Requires[0].Since)
+		fmt.Fprintf(w, "Requires: Mendix %s\n\n", f.Requires[0].versionRange())
 	case len(f.Requires) > 1:
 		fmt.Fprintln(w, "Requires:")
+		width := 9
 		for _, r := range f.Requires {
-			fmt.Fprintf(w, "  Mendix %-9s %s\n", r.Since+"+", r.Feature)
+			width = max(width, len(r.versionRange()))
+		}
+		for _, r := range f.Requires {
+			fmt.Fprintf(w, "  Mendix %-*s %s\n", width, r.versionRange(), r.Feature)
 		}
 		fmt.Fprintln(w)
 	}
@@ -117,4 +121,13 @@ func groupByDomain(features []SyntaxFeature) []featureGroup {
 		groups[i] = featureGroup{title: capitalize(d), features: m[d]}
 	}
 	return groups
+}
+
+// versionRange is "10.0.0+" for a feature Mendix still has, and
+// "10.0.0 to 11.14.99" for one it removed.
+func (r Requirement) versionRange() string {
+	if r.Until != "" {
+		return r.Since + " to " + r.Until
+	}
+	return r.Since + "+"
 }

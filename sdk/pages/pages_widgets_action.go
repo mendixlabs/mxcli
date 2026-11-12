@@ -229,6 +229,9 @@ type PageClientAction struct {
 	PageName          string                        `json:"pageName,omitempty"` // Qualified name for by-name reference
 	PageSettings      *PageSettings                 `json:"pageSettings,omitempty"`
 	ParameterMappings []*PageClientParameterMapping `json:"parameterMappings,omitempty"`
+	// NumberOfPagesToClose is Forms$FormAction.NumberOfPagesToClose2: how many
+	// pages to close as the page opens, "" for none (ako/mxcli#2106).
+	NumberOfPagesToClose string `json:"numberOfPagesToClose,omitempty"`
 }
 
 func (PageClientAction) isClientAction() {}
@@ -283,8 +286,15 @@ type MicroflowParameterMapping struct {
 	model.BaseElement
 	ParameterName string `json:"parameterName"`          // Parameter name (without $)
 	Variable      string `json:"variable,omitempty"`     // Variable reference (e.g., "$Customer")
-	VariableKind  string `json:"variableKind,omitempty"` // "" | "parameter" | "snippet" | "local"
+	VariableKind  string `json:"variableKind,omitempty"` // "" | "parameter" | "snippet" | "local" | "widget"
 	Expression    string `json:"expression,omitempty"`   // Expression value
+	// WidgetParameter is set with VariableKind "widget" when the named widget is
+	// a data view showing a page or snippet parameter: Studio Pro stores the
+	// pair, Widget plus that parameter, and Widget alone is CE0115
+	// (ako/mxcli#2095). WidgetParameterKind is "" for a page parameter and
+	// "snippet" for a snippet parameter.
+	WidgetParameter     string `json:"widgetParameter,omitempty"`
+	WidgetParameterKind string `json:"widgetParameterKind,omitempty"`
 }
 
 // MicroflowClientAction calls a microflow.
@@ -311,8 +321,15 @@ type NanoflowParameterMapping struct {
 	model.BaseElement
 	ParameterName string `json:"parameterName"`          // Parameter name (without $)
 	Variable      string `json:"variable,omitempty"`     // Variable reference (e.g., "$Customer")
-	VariableKind  string `json:"variableKind,omitempty"` // "" | "parameter" | "snippet" | "local"
+	VariableKind  string `json:"variableKind,omitempty"` // "" | "parameter" | "snippet" | "local" | "widget"
 	Expression    string `json:"expression,omitempty"`   // Expression value
+	// WidgetParameter is set with VariableKind "widget" when the named widget is
+	// a data view showing a page or snippet parameter: Studio Pro stores the
+	// pair, Widget plus that parameter, and Widget alone is CE0115
+	// (ako/mxcli#2095). WidgetParameterKind is "" for a page parameter and
+	// "snippet" for a snippet parameter.
+	WidgetParameter     string `json:"widgetParameter,omitempty"`
+	WidgetParameterKind string `json:"widgetParameterKind,omitempty"`
 }
 
 // NanoflowClientAction calls a nanoflow.

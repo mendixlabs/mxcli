@@ -1,0 +1,28 @@
+mdl 1;
+-- ako/mxcli#2093: the agent-editor catalog tables marked an absent reference
+-- as '' and an absent optional value as NULL, sometimes in one row
+-- (`RefundAgent|Task||∅|…`: an empty Model next to a NULL SelectedModel), so
+-- every query needed to know which convention each column used.
+--
+-- After the fix an absent reference is NULL too. Needs an app with Agent
+-- Editor 2.6+ (the Agent Builder starter app). Run, then:
+--   mxcli -p App.mpr -c "refresh catalog full"
+--   mxcli -p App.mpr -c "select Name from CATALOG.CONSUMED_MCP_SERVICES where Endpoint is null and ModuleName = 'Bug2093'"
+--     expected: NoAuthMCP is not listed (it has an endpoint)
+--   mxcli -p App.mpr -c "select Name from CATALOG.CONSUMED_MCP_SERVICES where AuthenticationMicroflow is null and ModuleName = 'Bug2093'"
+--     expected: NoAuthMCP   (before the fix: no rows; `= ''` matched instead)
+-- An agent without a model and a service without an endpoint are refused or
+-- warned at check time (MDL-AGENT02, MDL-AGENT03), so those cases are covered
+-- by the catalog unit test (TestAgentDetails_Issue2075) instead.
+
+create module Bug2093;
+
+create constant Bug2093.McpUrl (Type: String, DefaultValue: 'https://example.com/mcp');
+
+create consumed mcp service Bug2093.NoAuthMCP (
+  ProtocolVersion: v2025_03_26,
+  Endpoint: @Bug2093.McpUrl,
+  Version: '1.0',
+  ConnectionTimeoutSeconds: 30
+);
+

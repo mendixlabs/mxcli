@@ -151,12 +151,15 @@ func (c *CheckAdapter) walkBodyWithScope(body []ast.MicroflowStatement, mf strin
 				c.checkExpr(ci.Value, slot, mf, r)
 			}
 		case *ast.CallMicroflowStmt:
+			// The slot names the parameter the argument is passed to, so the
+			// checker can resolve its type ("TargetParameter") the way a
+			// CHANGE member names its attribute (ako/mxcli#2096).
 			for _, a := range n.Arguments {
-				c.checkExpr(a.Value, "CallArgument.Value", mf, r)
+				c.checkExpr(a.Value, exprcheck.CallArgumentSlot(n.MicroflowName.String(), a.Name), mf, r)
 			}
 		case *ast.CallNanoflowStmt:
 			for _, a := range n.Arguments {
-				c.checkExpr(a.Value, "CallArgument.Value", mf, r)
+				c.checkExpr(a.Value, exprcheck.CallArgumentSlot(n.NanoflowName.String(), a.Name), mf, r)
 			}
 		case *ast.SendEmailStmt:
 			c.checkSendEmail(n, mf, r)

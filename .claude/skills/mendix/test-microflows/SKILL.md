@@ -16,14 +16,14 @@ description: "Write and run MDL-based microflow tests with `mxcli test` — anno
 | 190-232 | Test File Formats |
 | 233-248 | string Operations |
 | 249-272 | Running Tests |
-| 273-470 | How It Works |
-| 471-509 | Check a test file before you run it |
-| 510-631 | Writing Good Tests |
-| 632-646 | Test File Organization |
-| 647-659 | Interpreting Failures |
-| 660-681 | CI Integration |
-| 682-688 | Related Skills |
-| 689-693 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
+| 273-471 | How It Works |
+| 472-510 | Check a test file before you run it |
+| 511-632 | Writing Good Tests |
+| 633-647 | Test File Organization |
+| 648-660 | Interpreting Failures |
+| 661-682 | CI Integration |
+| 683-689 | Related Skills |
+| 690-694 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
 
 <!-- /skill-index -->
 # Test Microflows Skill
@@ -325,11 +325,12 @@ chained, `--local` ran with the app's startup logic suppressed, and a suite that
 depended on startup state passed under `--attach` and failed under `--local` for
 reasons unrelated to the code.
 
-`MxTest.RegisterEndpoint` applies entity access, so it can call a startup
-microflow that does or does not (CE0114 only forbids a non-applying microflow
-calling an applying one); yours still runs with its own setting. A build error
-located in `MxTest.RegisterEndpoint` or `MxTest.RegisterTestEndpoint` is reported
-as an mxcli defect, not as an error in your project.
+`MxTest.RegisterEndpoint` and the generated test microflows apply entity
+access, so they can call a microflow that does or does not (CE0114 only forbids
+a non-applying microflow calling an applying one); yours still runs with its own
+setting. Exception: a test whose own error handler reads `$latestError/…` gets a
+flow that does not apply it, since an applying one may not (CE0150). A build
+error in an `MxTest` document mxcli generated is reported as an mxcli defect.
 
 One thing rollback does **not** cover: whatever the startup microflow writes
 happens at boot, outside any test's transaction, so `@cleanup rollback` does not

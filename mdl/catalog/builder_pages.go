@@ -156,9 +156,9 @@ func (b *Builder) buildSnippets() error {
 
 	snippetStmt, err := b.tx.Prepare(`
 		INSERT INTO snippets_data (Id, Name, QualifiedName, ModuleName, Folder, Description,
-			ParameterCount, WidgetCount,
+			ParameterCount, WidgetCount, Excluded,
 			ProjectId, SnapshotId)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -211,8 +211,9 @@ func (b *Builder) buildSnippets() error {
 			moduleName,
 			folder,
 			sn.Documentation,
-			0, // ParameterCount
+			len(sn.Parameters),
 			len(rawWidgets),
+			sn.Excluded,
 			projectID, snapshotID,
 		); err != nil {
 			return err
@@ -1044,8 +1045,8 @@ func (b *Builder) buildLayouts() error {
 
 	layoutStmt, err := b.tx.Prepare(`
 		INSERT INTO layouts_data (Id, Name, QualifiedName, ModuleName, Folder, LayoutType, Platform,
-			Description, Class, Style, DynamicClasses, ProjectId, SnapshotId)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			Description, Excluded, Class, Style, DynamicClasses, ProjectId, SnapshotId)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -1103,6 +1104,7 @@ func (b *Builder) buildLayouts() error {
 			string(l.LayoutType),
 			layoutPlatform(l),
 			l.Documentation,
+			l.Excluded,
 			class, style, dynamicClasses,
 			projectID, snapshotID,
 		)

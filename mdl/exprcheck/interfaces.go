@@ -71,6 +71,17 @@ type CatalogReader interface {
 	MicroflowParam(qn, paramName string) (TypeKind, bool)
 }
 
+// FlowParamRefReader is the optional half of a CatalogReader that names what a
+// flow parameter's type refers to — the enumeration of an Enumeration
+// parameter, the entity of an Object or List one. MicroflowParam answers only
+// the kind, which cannot tell one enumeration from another; a call argument of
+// the wrong enumeration needs this (ako/mxcli#2096). It is optional so that
+// CatalogReader's shape stays as it was: a reader without it leaves
+// enumeration identity unchecked.
+type FlowParamRefReader interface {
+	MicroflowParamRef(qn, paramName string) (string, bool)
+}
+
 type Scope interface {
 	Lookup(name string) (TypeKind, bool)
 }

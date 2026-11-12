@@ -1,0 +1,25 @@
+mdl 1;
+-- ako/mxcli#2139: on a Mendix 11.15+ project `mxcli check -p` reported
+-- "Check passed!" for a message definition COLLECTION, which `mxcli exec` then
+-- refused — Mendix 11.15 removed the collection. The refusal was raised only
+-- inside the handler; it is now a version gate, so check -p and exec's
+-- pre-flight report it before anything is written.
+--
+-- On an 11.15+ project:
+--   mxcli check mdl-examples/bug-tests/2139-message-collection-refused-at-check.mdl -p App.mpr
+-- Expected: MDL-VERSION01 on statement 3, "create message definition
+-- collection: Mendix 11.15 removed message definition collections (project is
+-- 11.x) …", with the hint `create message definition Module.Name for
+-- Module.Entity { … }`. `mxcli exec` refuses with the same error and writes
+-- nothing (not even the module and entity before it).
+--
+-- On a project below 11.15 the script checks and executes cleanly.
+
+create module Bug2139;
+create or modify non-persistent entity Bug2139.ApiTicket ( Subject: String(200) );
+create or modify message definition collection Bug2139.ApiMessages folder 'Api'
+{
+  definition TicketIn for Bug2139.ApiTicket {
+    Subject example 'Parcel arrived damaged'
+  }
+};

@@ -112,6 +112,12 @@ type LocalRunOptions struct {
 	// WebClientTimeout bounds one web client bundle build. Zero falls back to
 	// $MXCLI_WEB_CLIENT_TIMEOUT, then 5m (see webClientTimeout).
 	WebClientTimeout time.Duration
+	// BuildTimeout bounds one mxbuild --serve build. Zero falls back to
+	// $MXCLI_BUILD_TIMEOUT, then 30m (see serveBuildTimeout).
+	BuildTimeout time.Duration
+	// StartTimeout bounds the runtime start, after-startup microflow included.
+	// Zero falls back to $MXCLI_START_TIMEOUT, then 15m.
+	StartTimeout time.Duration
 	// Screenshot, when set, captures a PNG of the app after boot and after each
 	// applied change (requires the Playwright CLI + a browser).
 	Screenshot bool
@@ -220,6 +226,16 @@ func (o *LocalRunOptions) applyDefaults() {
 	if o.Stderr == nil {
 		o.Stderr = os.Stderr
 	}
+}
+
+// RunDatabase is the database a `run --local` of projectPath connects to, given
+// the --db-* flags it was started with: the same defaults the run applies.
+func RunDatabase(projectPath string, db DBConfig) (DBConfig, error) {
+	o := LocalRunOptions{ProjectPath: projectPath, DB: db}
+	if err := o.applyDatabaseDefaults(); err != nil {
+		return DBConfig{}, err
+	}
+	return o.DB, nil
 }
 
 // applyDatabaseDefaults validates --db-type and fills the connection settings the
@@ -828,7 +844,9 @@ func RunLocal(opts LocalRunOptions) error {
 	// 5. Start the warm build server.
 	fmt.Fprintln(w, "Starting mxbuild --serve...")
 	javaMajor, _ := ProjectJavaMajor(opts.ProjectPath)
-	serve, err := StartServe(serveOptionsFor(mxbuildPath, version, javaMajor, opts.ServePort))
+	serveOpts := serveOptionsFor(mxbuildPath, version, javaMajor, opts.ServePort)
+	serveOpts.BuildTimeout = opts.BuildTimeout
+	serve, err := StartServe(serveOpts)
 	if err != nil {
 		return fmt.Errorf("starting mxbuild serve: %w", err)
 	}
@@ -840,10 +858,19 @@ func RunLocal(opts LocalRunOptions) error {
 	// instead of being folded silently into a baseline taken after the boot.
 	bootSource := sourceMTime(opts.ProjectPath)
 	opts.State.BuildStarted(1, bootSource)
-	fmt.Fprintln(w, "Building (first build is cold, ~10-15s)...")
+	fmt.Fprintf(w, "Building (first build is cold: ~10-15s for a small app, minutes for a large one; limit %s)...\n", serveBuildTimeout(opts.BuildTimeout))
 	scaffold := buildScaffold{}
 	themeBefore := themeModuleFolders(opts.ProjectPath)
+	// Under --watch the client source this build writes and then deletes is
+	// kept, so the first change can already build incrementally (ako/mxcli#2150).
+	var keep *clientSourceKeep
+	if opts.Watch {
+		keep = newClientSourceKeep(opts.DeployDir)
+		defer keep.Close()
+	}
+	stopKeeping := keep.watch()
 	build, err := serve.Build(BuildRequest{Target: TargetDeploy, ProjectFilePath: opts.ProjectPath})
+	stopKeeping(err == nil && build != nil && build.OK())
 	if err != nil {
 		return fmt.Errorf("initial build: %w", err)
 	}
@@ -966,6 +993,7 @@ func RunLocal(opts LocalRunOptions) error {
 		ConstantOverrides:  opts.ConstantOverrides,
 		JVMArgs:            opts.JVMArgs,
 		Env:                opts.Env,
+		StartTimeout:       opts.StartTimeout,
 		Stdout:             w,
 		Stderr:             stderr,
 	})
@@ -1123,7 +1151,7 @@ func RunLocal(opts LocalRunOptions) error {
 	// 7. Stay up until interrupted. With --watch, rebuild + hot-apply on every
 	// project change; otherwise just keep the runtime serving.
 	if opts.Watch {
-		return watchAndApply(opts, serve, rt, bundler, mxbuildPath, bootSource, scaffold)
+		return watchAndApply(opts, serve, rt, bundler, mxbuildPath, bootSource, scaffold, keep)
 	}
 	fmt.Fprintln(w, "(run with --watch to rebuild and hot-apply on changes; Ctrl-C to stop)")
 	if waitForInterruptOrExit(rt.Exited()) {
@@ -1480,7 +1508,7 @@ func settleSourceWith(source func() time.Time, seen time.Time, sigCh <-chan os.S
 //
 // scaffold is the theme source builds wrote themselves, which is not a change
 // (see buildScaffold); each rebuild adds to it.
-func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, bundler *bundlerSupervisor, mxbuildPath string, bootSource time.Time, scaffold buildScaffold) error {
+func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, bundler *bundlerSupervisor, mxbuildPath string, bootSource time.Time, scaffold buildScaffold, keep *clientSourceKeep) error {
 	w := opts.Stdout
 	// Every recovery re-bundle goes through the supervisor under --watch, so a
 	// one-shot never runs alongside the incremental bundler (#971).
@@ -1488,7 +1516,7 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 		DeployDir: opts.DeployDir, MxBuildPath: mxbuildPath, Timeout: opts.WebClientTimeout, Stdout: opts.Stdout,
 	})
 
-	builds := &serveRecovery{serve: serve, deployDir: opts.DeployDir, out: w}
+	builds := &serveRecovery{serve: serve, deployDir: opts.DeployDir, out: w, keep: keep}
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -1503,7 +1531,14 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 	holds := &watchHoldGate{projectPath: opts.ProjectPath}
 	holdAnnounced := false
 	resync := false
-	ticker := time.NewTicker(opts.PollInterval)
+	// The loop wakes at the writer-signal interval and looks at the source only
+	// every PollInterval, unless a writer has just said it is done
+	// (watchwriter.go).
+	writers := newWatchWriterGate(opts.ProjectPath)
+	writerDone := false
+	wake := min(opts.PollInterval, watchWriterPoll)
+	nextScan := time.Now().Add(opts.PollInterval)
+	ticker := time.NewTicker(wake)
 	defer ticker.Stop()
 
 	for {
@@ -1518,6 +1553,18 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 			// re-arms this channel, so only an unasked-for exit lands here.
 			return runtimeStoppedError(rt)
 		case <-ticker.C:
+			// An mxcli command that is writing the model says so: nothing is
+			// built while it is at work, and its change is built as soon as it
+			// is done instead of after the settle.
+			writing, finished := writers.poll()
+			if writing {
+				continue
+			}
+			writerDone = writerDone || finished
+			if !writerDone && time.Now().Before(nextScan) {
+				continue
+			}
+			nextScan = time.Now().Add(opts.PollInterval)
 			source := func() time.Time { return sourceMTimeExcept(opts.ProjectPath, scaffold) }
 			now := source()
 			// Another mxcli process (a `test --attach`) may be changing the
@@ -1551,6 +1598,8 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 				holdAnnounced = false
 				resync = true
 			}
+			settled := writerDone
+			writerDone = false
 			if !now.After(last) && !resync {
 				continue
 			}
@@ -1566,7 +1615,12 @@ func watchAndApply(opts LocalRunOptions, serve *ServeServer, rt *LocalRuntime, b
 			// the stale build is what you are left with, with no way out the tool
 			// offers. Settling first means the watcher can only ever observe a
 			// model that has stopped changing.
-			now = settleSource(source, now, opts.PollInterval, sigCh)
+			//
+			// A writer that announced itself and has finished is the exception:
+			// the model has stopped changing because the writer says so.
+			if !settled {
+				now = settleSource(source, now, opts.PollInterval, sigCh)
+			}
 			if now.IsZero() {
 				// Interrupted while settling.
 				fmt.Fprintln(w, "\nShutting down...")

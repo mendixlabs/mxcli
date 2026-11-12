@@ -56,6 +56,14 @@ func TestValidatePageButtonContext_OwnDataViewName_Issue1324(t *testing.T) {
 // data container decides — a plain container is transparent, a control bar
 // takes the context from ABOVE its grid (so a grid's own selection stays
 // spellable there), and a row or item of a nested list is a new context.
+//
+// btnCtlBar is no longer flagged (ako/mxcli#2109). Its CE0117 was an error in
+// an EXPRESSION `$dvP`; since #2095 the argument is written as the variable
+// pair {Widget: dvP, PageParameter: Gate}, which builds with 0 errors on
+// 11.16 (probe page, with a CE1365 positive control in the same build), and
+// is what Studio Pro stores for a control-bar button there
+// (FactoryManagement OIDC.OIDC_Client_NewEdit actionButton7, which builds).
+// A control bar sits inside its grid, so the container above is an outer one.
 func TestValidatePageButtonContext_OwnContainerName_MeasuredShapes(t *testing.T) {
 	src := `create page G52.Probe (Title: 'Probe', Layout: Atlas_Core.PopupLayout, Params: ( $Gate: G52.Gate )) {
   dataview dvP (DataSource: $Gate) {
@@ -92,7 +100,7 @@ func TestValidatePageButtonContext_OwnContainerName_MeasuredShapes(t *testing.T)
   }
 };`
 	got := strings.Join(ownContainerFlagged(t, src), ",")
-	want := "btnCtlBar,btnDgOwnCol,btnGaOwn,btnInContainer,btnLvOwn,btnOwnPath"
+	want := "btnDgOwnCol,btnGaOwn,btnInContainer,btnLvOwn,btnOwnPath"
 	if got != want {
 		t.Fatalf("flagged %q, want %q (mx check 11.14.0's CE0117 set)", got, want)
 	}

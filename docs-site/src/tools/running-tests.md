@@ -174,6 +174,11 @@ wins when both are set.
 mxcli test tests/ -p app.mpr --local --mxbuild-path "C:\Program Files\Mendix\11.11.0\modeler\mxbuild.exe"
 ```
 
+`--reuse-build` (with `--local`, not `--watch`) skips the injection and the build
+when the project, the test files and mxcli are unchanged since the last run: the
+deployment that run left is booted as it is. Any difference — a changed file, a
+deployment something else rebuilt — builds as usual.
+
 `--watch` is the everyday loop: edit a test *or* the microflow under test, and
 the verdict lands in about two seconds.
 
@@ -445,9 +450,29 @@ The generated startup flow, `MxTest.RegisterEndpoint`, **applies entity
 access**, so it can call your after-startup microflow whichever way that one is
 set: Mendix refuses a microflow that does not apply entity access calling one
 that does (CE0114), and allows the other direction. Your microflow still runs
-with its own setting. A build error located in `MxTest.RegisterEndpoint` or
-`MxTest.RegisterTestEndpoint` is reported as mxcli's, not your project's — those
-documents exist only for the run.
+with its own setting.
+
+The generated test microflows apply entity access for the same reason, so a
+test, and its `@setup` microflows, can call a production microflow that applies
+it without you changing that microflow's setting. `mxcli check` sees the test
+the same way, so it does not report MDL-SEC22 for such a call. Tests run in a
+system context, which entity access does not restrict, so what a test reads and
+writes is the same either way.
+
+An applying microflow may not read the attributes of `System.Error`
+(CE0150), so the runner's own error handlers pass `$latestError` to a generated
+helper, `MxTest.Test_ErrorMessage`, which does not apply entity access and
+returns the message. A test whose **own** error handler reads `$latestError/…`
+keeps a test microflow that does not apply entity access, so it builds as it
+did; if that test also calls a microflow that applies entity access, no setting
+serves both, and the handler has to pass `$latestError` to a microflow of yours
+that does not apply it, as CE0150's own text says. Under `--legacy-runner` the
+whole suite shares one microflow, so one such test keeps all of them
+non-applying.
+
+A build error located in `MxTest.RegisterEndpoint`,
+`MxTest.RegisterTestEndpoint` or `MxTest.Test_ErrorMessage` is reported as
+mxcli's, not your project's — those documents exist only for the run.
 
 ### `@cleanup`: what happens to a test's data
 

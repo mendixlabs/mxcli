@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -36,8 +37,12 @@ import (
 //	4  same process, rm web/       Failure           -
 //	5  fresh process               true              complete again
 //
-// So nothing done to the deployment from outside helps, and a fresh process
-// always does. The cost of one is a ~5s start plus a cold ~18s build per change,
+// So nothing done to dist/ from outside helps, and a fresh process always does.
+// What does help is done before the build: client_source_keep.go puts back the
+// client source the previous build deleted, and then the incremental build is
+// complete (ako/mxcli#2150, measured on 11.16.0). The restart below is what is
+// left when there is no kept source, or the bundle is incomplete all the same.
+// The cost of one is a ~5s start plus a cold ~18s build per change,
 // against a 4s reload that serves no pages — correct beats fast.
 //
 // The same process also keeps a theme error past its fix, in every shape
@@ -74,6 +79,59 @@ type serveRecovery struct {
 	// failed. A theme failure then is not trustworthy: the process may be
 	// reporting the earlier error rather than the source on disk.
 	themeFailed bool
+
+	// headless: nothing serves the client (the test runner), so a build that
+	// succeeds with an incomplete web/dist is a good build and is not repeated.
+	headless bool
+
+	// keep holds the client source mxbuild deletes after each build and puts
+	// it back before the next, so an incremental build bundles a complete
+	// client (client_source_keep.go). Nil keeps nothing.
+	keep *clientSourceKeep
+
+	// confirmedErrors is the error signature a fresh process last confirmed
+	// for a suspect incremental failure (see suspectIncrementalErrors). The same
+	// errors again are the model's, not the process's, and are not rechecked
+	// until a build passes.
+	confirmedErrors string
+}
+
+// incrementalScopeErrors are the error codes an INCREMENTAL serve build has
+// been seen to report for a model that a full build of the same bytes accepts
+// (ako/mxcli#2064, Mendix 11.16.0, three times in one session): CE0108
+// "Variable 'X' is defined but not in scope at this location", on a variable a
+// call creates and a decision after it uses. `docker check` reported 0 errors
+// on the same model, and the next build on a fresh serve process applied it.
+// Only codes seen doing this are listed: rechecking every failure would add a
+// cold build (~25 s) to every genuine error.
+var incrementalScopeErrors = map[string]bool{"CE0108": true}
+
+// suspectIncrementalErrors reports whether a failed build carries an error the
+// incremental build is known to report falsely.
+func suspectIncrementalErrors(res *BuildResult) bool {
+	for _, p := range res.Errors() {
+		if incrementalScopeErrors[p.ErrorCode] {
+			return true
+		}
+	}
+	return false
+}
+
+// errorSignature identifies a build's errors: code, message and document each.
+func errorSignature(res *BuildResult) string {
+	if res == nil {
+		return ""
+	}
+	var parts []string
+	for _, p := range res.Errors() {
+		doc := ""
+		if len(p.Locations) > 0 {
+			doc = p.Locations[0].Document
+		}
+		parts = append(parts, p.ErrorCode+"|"+p.Message+"|"+doc)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "\n")
 }
 
 func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
@@ -86,7 +144,8 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 	}
 	before, prebuilt := readPrebuiltBundle(r.deployDir)
 
-	res, err := r.serve.Build(req)
+	restored := r.keep.restore()
+	res, err := r.buildKeeping(req)
 	if err != nil {
 		return res, err
 	}
@@ -105,7 +164,8 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 	}
 
 	if res.OK() {
-		if !prebuilt {
+		r.confirmedErrors = ""
+		if !prebuilt || r.headless {
 			return res, nil
 		}
 		after, _ := readPrebuiltBundle(r.deployDir)
@@ -130,6 +190,19 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 		return fresh, nil
 	}
 
+	if !freshProcess && suspectIncrementalErrors(res) && errorSignature(res) != r.confirmedErrors {
+		return r.recheckIncrementalErrors(req, res)
+	}
+
+	if restored > 0 && !freshProcess && len(res.Errors()) == 0 && isBundleFailure(res) {
+		// The bundler failed on source the keep put back, and the model has no
+		// error of its own: the kept source may be stale or a copy may be bad.
+		// A cold build writes all of it again.
+		fmt.Fprintln(r.out, "  the app bundle did not compile from the client source kept from earlier builds; "+
+			"restarting mxbuild --serve for a full build...")
+		return r.rebuildFresh(req)
+	}
+
 	if legacyClientBuildHint(r.deployDir, res.Message, string(res.Raw)) != "" {
 		fmt.Fprintln(r.out, "  mxbuild --serve cannot build this change incrementally (it wants client source its "+
 			"first build does not leave behind); restarting mxbuild --serve for a full build...")
@@ -142,6 +215,35 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 	return res, nil
 }
 
+// recheckIncrementalErrors builds the model once more on a fresh serve
+// process, after an incremental build failed with an error it is known to
+// report falsely. The fresh build's answer stands: a pass is applied, and a
+// failure is the model's own and is remembered so the same errors are not
+// rechecked on every save.
+func (r *serveRecovery) recheckIncrementalErrors(req BuildRequest, incremental *BuildResult) (*BuildResult, error) {
+	var codes []string
+	seen := map[string]bool{}
+	for _, p := range incremental.Errors() {
+		if incrementalScopeErrors[p.ErrorCode] && !seen[p.ErrorCode] {
+			seen[p.ErrorCode] = true
+			codes = append(codes, p.ErrorCode)
+		}
+	}
+	fmt.Fprintf(r.out, "  the incremental build reports %s, which mxbuild --serve has reported for a model a full build accepts; "+
+		"restarting mxbuild --serve for a full build to check...\n", strings.Join(codes, ", "))
+	fresh, err := r.rebuildFresh(req)
+	if err != nil || fresh == nil {
+		return fresh, err
+	}
+	if fresh.OK() {
+		fmt.Fprintln(r.out, "  the full build passed: the incremental build's errors were mxbuild --serve's own state, not the model's")
+		return fresh, nil
+	}
+	r.confirmedErrors = errorSignature(fresh)
+	fmt.Fprintln(r.out, "  the full build fails too: these errors are the model's")
+	return fresh, nil
+}
+
 // rebuildFresh replaces the serve process and builds once on the new one. Its
 // RestartRequired is a first build's, so it is marked ColdRestart; a caller
 // that has an incremental answer replaces both.
@@ -149,7 +251,10 @@ func (r *serveRecovery) rebuildFresh(req BuildRequest) (*BuildResult, error) {
 	if err := r.restart(); err != nil {
 		return nil, err
 	}
-	res, err := r.serve.Build(req)
+	// A cold build writes every client source file, so the keep starts over:
+	// nothing of a document deleted since survives in it.
+	r.keep.reset()
+	res, err := r.buildKeeping(req)
 	if err == nil {
 		r.observe(res)
 		if res != nil && res.OK() {
@@ -157,6 +262,35 @@ func (r *serveRecovery) rebuildFresh(req BuildRequest) (*BuildResult, error) {
 		}
 	}
 	return res, err
+}
+
+// buildKeeping runs one build while the keep copies aside the client source
+// that build writes and then deletes.
+func (r *serveRecovery) buildKeeping(req BuildRequest) (*BuildResult, error) {
+	watching := r.keep.active()
+	stop := r.keep.watch()
+	res, err := r.serve.Build(req)
+	stop(err == nil && res != nil && res.OK())
+	if watching && err == nil && webDirInUse(res) {
+		// Windows refuses to delete a file or directory another process has
+		// open, and the keep was reading web/ while mxbuild rebuilt it. The
+		// keep is given up rather than raced again: builds go back to the full
+		// rebuild per change, which is slow and always worked.
+		fmt.Fprintln(r.out, "  deployment/web was in use while mxbuild rebuilt it; mxcli no longer keeps the client source "+
+			"between builds in this run (changes take a full build again), and builds once more...")
+		r.keep.disable()
+		return r.serve.Build(req)
+	}
+	return res, err
+}
+
+// bundleCompileMessage is mxbuild's message when its bundler fails.
+const bundleCompileMessage = "Compilation of the app bundle failed"
+
+// isBundleFailure reports whether a failed build failed in the bundler.
+func isBundleFailure(res *BuildResult) bool {
+	return res != nil && !res.OK() &&
+		(strings.Contains(res.Message, bundleCompileMessage) || strings.Contains(string(res.Raw), bundleCompileMessage))
 }
 
 func (r *serveRecovery) restart() error {
