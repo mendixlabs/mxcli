@@ -83,7 +83,13 @@ describe page BindTest.P001_Bound_Panel;
 -- Binding-point rule (prototype):
 --   datasource → the first widget carrying a datasource
 --   action     → the first button widget (Atlas placeholder buttons ship with
---                no action, so the target is matched by widget type)
+--                no action, so the target is matched by widget type). In a
+--                block with none: the first pluggable button (its definition
+--                names it a button and takes `OnClick:`, such as the PDS Button
+--                the PlatformDesignSystem blocks are built from), else the first
+--                other pluggable widget with a click action (an Image). A PDS
+--                Link before a PDS Button is skipped; a gallery row click never
+--                counts.
 --
 -- Requires the Atlas_Web_Content.List_Cards building block, which ships with the
 -- Atlas UI in Mendix 11.x (it is absent from the 10.x Atlas), so this section is
