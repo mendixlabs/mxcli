@@ -80,8 +80,8 @@ These diagnostics appear as warnings or errors in the Problems panel, identical 
 The same checks available in the extension can be run from the command line:
 
 ```bash
-# Syntax check only (no project needed)
-mxcli check script.mdl
+# Syntax check only (--no-project: do not auto-detect an .mpr in this directory)
+mxcli check script.mdl --no-project
 
 # Syntax + reference validation
 mxcli check script.mdl -p app.mpr --references

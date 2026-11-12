@@ -5,8 +5,8 @@ mxcli provides a multi-level validation pipeline. The agent uses these tools to 
 ## Validation Steps
 
 ```bash
-# 1. Syntax check (fast, no project needed)
-mxcli check script.mdl
+# 1. Syntax check (fast, no project used)
+mxcli check script.mdl --no-project
 
 # 2. Reference validation (checks entity/microflow names exist)
 mxcli check script.mdl -p app.mpr --references

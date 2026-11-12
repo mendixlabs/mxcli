@@ -35,6 +35,7 @@ import (
 var _ backend.FullBackend = (*Backend)(nil)
 var _ backend.WriteStatsReporter = (*Backend)(nil)
 var _ backend.SourceFileReporter = (*Backend)(nil)
+var _ backend.DiskChangeSyncer = (*Backend)(nil)
 
 // Backend reads and writes a Mendix project through the modelsdk codec engine.
 // It embeds `unimplemented` (generated, see gen_unimplemented.go) so any
@@ -194,6 +195,46 @@ func (b *Backend) Disconnect() error {
 		return err
 	}
 	return flushErr
+}
+
+// SyncWithDisk reports whether another process changed the project since this
+// connection last looked, having first dropped every view of it the
+// connection keeps, so the next read sees the disk (ako/mxcli#2121). A session
+// calls it before each statement: one PRAGMA and one stat, not a re-read.
+//
+// When the .mpr was replaced by a new file (a git checkout renames one into
+// place) the connection still holds the old one open, so the project is
+// reopened. Not while a deferred run or a simulation holds unwritten units:
+// reopening would write them into, or drop them from, a project they were not
+// made against, so that is refused with an error instead.
+func (b *Backend) SyncWithDisk() (changed bool, err error) {
+	if b.reader == nil {
+		return false, nil
+	}
+	switch b.reader.SyncWithDisk() {
+	case mmpr.DiskUnchanged:
+		return false, nil
+	case mmpr.DiskChanged:
+		return true, nil
+	}
+	if b.writer != nil && b.writer.HoldsWrites() {
+		return true, fmt.Errorf("%s was replaced on disk while unwritten changes were held; reconnect to read the new file", b.path)
+	}
+	readOnly := b.writer == nil
+	path := b.path
+	if err := b.reader.Close(); err != nil {
+		return true, fmt.Errorf("close the replaced project: %w", err)
+	}
+	b.reader, b.writer = nil, nil
+	if readOnly {
+		err = b.ConnectReadOnly(path)
+	} else {
+		err = b.Connect(path)
+	}
+	if err != nil {
+		return true, fmt.Errorf("reopen %s after it was replaced on disk: %w", path, err)
+	}
+	return true, nil
 }
 
 // DeferUnitWrites holds unit updates in memory until FlushDeferredWrites, so a

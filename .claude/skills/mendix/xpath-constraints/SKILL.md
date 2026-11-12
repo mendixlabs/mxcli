@@ -460,8 +460,8 @@ grant read * on entity Module.Item to Module.User where [System.owner = '[%Curre
 Always validate XPath syntax before execution:
 
 ```bash
-# Syntax check (no project needed)
-./bin/mxcli check script.mdl
+# Syntax check only (--no-project: do not auto-detect an .mpr in this directory)
+./bin/mxcli check script.mdl --no-project
 
 # with reference validation (needs project)
 ./bin/mxcli check script.mdl -p app.mpr --references
