@@ -43,6 +43,9 @@ type deferredWrite struct {
 	// judged is the write as a judged run compares it: normalised for storage,
 	// as the stored unit it is first compared with was. Nil outside such a run.
 	judged []byte
+	// judgedDigest is the canonical digest of judged, kept so the next write
+	// of the unit digests only itself. Empty until a later write needs it.
+	judgedDigest string
 }
 
 // DeferUnitWrites starts holding unit updates until FlushDeferredWrites. It is
@@ -79,38 +82,67 @@ func (w *Writer) DeferUnitWritesJudged() {
 }
 
 // judgeHeld counts a write a judged run is about to hold, and returns the form
-// the next write of the unit is compared with.
+// the next write of the unit is compared with, and that form's digest when it
+// was computed.
 //
 // Both sides are normalised for storage first. The writer completes what a
 // builder leaves out (a validation rule's empty message, among others), so a
 // unit read back from storage and rebuilt has those and a freshly built
 // element does not: compared raw, a statement that re-declares an entity
 // exactly as it is reads as a change.
-func (w *Writer) judgeHeld(unitID string, contents []byte, opts []canon.Option) []byte {
+//
+// A later write is compared by digest with the held one, after taking the
+// held one's identity fields, and is itself kept in that form with its digest.
+// Keeping the form that carries the earlier identity changes no verdict: the
+// next write takes the same fields before it is compared, so both sides of
+// that comparison hold them either way. It is what lets the digest be kept,
+// where comparing the documents digested the held one again for every
+// statement (ako/mxcli#2160).
+func (w *Writer) judgeHeld(unitID string, contents []byte, opts []canon.Option) (judged []byte, digest string) {
 	w.writesOffered++
 	normalized, err := w.normalizeForStorage(unitID, contents)
 	if err != nil {
 		// Not comparable; the flush will report what is wrong with it.
 		w.writesLanded++
-		return nil
+		return nil, ""
 	}
-	changed := true
-	if prev, seen := w.deferred[unitID]; seen {
-		if prev.judged != nil {
-			carried := canon.CarryIdentity(normalized, prev.judged)
-			if equal, err := canon.Equal(carried, prev.judged); err == nil && equal {
-				changed = false
-			}
+	prev, seen := w.deferred[unitID]
+	if !seen {
+		changed := true
+		if stored, err := w.reader.GetRawUnitBytes(unitID); err == nil {
+			w.reconciles++
+			_, unchanged := canon.Reconcile(normalized, stored, opts...)
+			changed = !unchanged
 		}
-	} else if stored, err := w.reader.GetRawUnitBytes(unitID); err == nil {
-		w.reconciles++
-		_, unchanged := canon.Reconcile(normalized, stored, opts...)
-		changed = !unchanged
+		if changed {
+			w.writesLanded++
+		}
+		return normalized, ""
 	}
-	if changed {
+	if prev.judged == nil {
+		w.writesLanded++
+		return normalized, ""
+	}
+	carried := canon.CarryIdentity(normalized, prev.judged)
+	held := prev.judgedDigest
+	if held == "" {
+		held, _ = w.judgedDigest(prev.judged)
+	}
+	digest, err = w.judgedDigest(carried)
+	if err != nil {
+		w.writesLanded++
+		return normalized, ""
+	}
+	if held == "" || digest != held {
 		w.writesLanded++
 	}
-	return normalized
+	return carried, digest
+}
+
+// judgedDigest is canon.Digest, counted.
+func (w *Writer) judgedDigest(raw []byte) (string, error) {
+	w.judgedDigests++
+	return canon.Digest(raw)
 }
 
 // HoldsWrites reports whether a deferred run or a simulation is open, holding
@@ -158,14 +190,15 @@ func (w *Writer) holdDeferred(unitID string, contents []byte, opts []canon.Optio
 		return false
 	}
 	var judged []byte
+	var digest string
 	if w.deferredJudged {
-		judged = w.judgeHeld(unitID, contents, opts)
+		judged, digest = w.judgeHeld(unitID, contents, opts)
 	}
 	if _, seen := w.deferred[unitID]; !seen {
 		w.deferredOrder = append(w.deferredOrder, unitID)
 	}
 	held := append([]byte(nil), contents...)
-	w.deferred[unitID] = deferredWrite{contents: held, opts: opts, judged: judged}
+	w.deferred[unitID] = deferredWrite{contents: held, opts: opts, judged: judged, judgedDigest: digest}
 	w.reader.SetOverlay(unitID, held)
 	return true
 }

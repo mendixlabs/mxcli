@@ -333,6 +333,15 @@ func (b *Backend) UnitFileReads() int64 {
 	return b.reader.UnitFileReads()
 }
 
+// UnitJudgedDigests is how many canonical digests this backend's writer has
+// computed to judge the held writes of a judged run. For tests.
+func (b *Backend) UnitJudgedDigests() int {
+	if b.writer == nil {
+		return 0
+	}
+	return b.writer.JudgedDigests()
+}
+
 // UnitIndexBuilds is how many times this backend's reader has scanned the Unit
 // table to rebuild its list of units. For tests.
 func (b *Backend) UnitIndexBuilds() int64 {

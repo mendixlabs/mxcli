@@ -65,6 +65,8 @@ type Writer struct {
 	// reconciles counts the comparisons of a write with the stored unit
 	// (canon.Reconcile). For tests.
 	reconciles int
+	// judgedDigests counts the digests judgeHeld computes (JudgedDigests).
+	judgedDigests int
 	// simulating says the deferred run is a simulation (writer_simulated.go):
 	// it is discarded, never flushed, and any write it cannot hold is refused.
 	simulating bool
@@ -91,6 +93,10 @@ const maxRemovedUnitsRemembered = 1024
 // Reconciles is how many times this writer has compared a write with the
 // stored unit. For tests.
 func (w *Writer) Reconciles() int { return w.reconciles }
+
+// JudgedDigests is how many canonical digests this writer has computed to
+// judge the held writes of a judged run (judgeHeld). For tests.
+func (w *Writer) JudgedDigests() int { return w.judgedDigests }
 
 // WriteStats reports how many unit writes this session offered to storage and
 // how many were not elided as no-ops.
