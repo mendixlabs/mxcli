@@ -312,6 +312,16 @@ func (b *Backend) UnitFileReads() int64 {
 	return b.reader.UnitFileReads()
 }
 
+// UnitStoreHits is how many unit reads this backend's reader served from the
+// persisted unit store instead of a file. With UnitFileReads it is every read
+// that was not served from memory. For tests.
+func (b *Backend) UnitStoreHits() int64 {
+	if b.reader == nil {
+		return 0
+	}
+	return b.reader.UnitStoreHits()
+}
+
 func (b *Backend) Version() types.MPRVersion {
 	if b.reader == nil {
 		return 0

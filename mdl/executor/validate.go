@@ -518,6 +518,12 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 		return []error{mdlerrors.NewNotConnected()}, nil
 	}
 
+	// The project does not change while it is checked: list each kind once.
+	if ctx.checkMemo == nil {
+		ctx.checkMemo = &checkPassMemo{}
+		defer func() { ctx.checkMemo = nil }()
+	}
+
 	// Collect all objects defined in the script
 	sc := newScriptContext()
 	sc.collectDefinitions(prog)
@@ -1506,7 +1512,7 @@ func carriedExclusion(ctx *ExecContext, kind string, qn ast.QualifiedName, rewri
 	var docs []doc
 	switch kind {
 	case "page":
-		pgs, err := ctx.Backend.ListPages()
+		pgs, err := projectPages(ctx)
 		if err != nil {
 			return false
 		}
@@ -1922,7 +1928,7 @@ func buildEntityIndex(ctx *ExecContext) map[string]*domainmodel.Entity {
 	for _, m := range modules {
 		moduleNames[m.ID] = m.Name
 	}
-	dms, err := ctx.Backend.ListDomainModels()
+	dms, err := projectDomainModels(ctx)
 	if err != nil {
 		return nil
 	}

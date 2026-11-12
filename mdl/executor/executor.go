@@ -624,6 +624,11 @@ func (e *Executor) ExecuteProgramReportingStop(prog *ast.Program) (stoppedAt int
 	}
 	defer e.enterLanguage(prog.LanguageVersion)()
 	defer e.enterScriptFlows(prog)()
+	// A script's statements list the same document types one after another,
+	// so the run reads each unit file once and again only after rewriting it
+	// (ako/mxcli#2160). The cache ends with the run: a session that stays
+	// open must not keep serving bytes Studio Pro has since rewritten.
+	defer e.CacheUnitReads()()
 
 	// Collect all names defined in the script for forward-reference hints.
 	allDefined := newScriptContext()

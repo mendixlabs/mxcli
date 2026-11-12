@@ -96,6 +96,14 @@ func (r *Reader) SyncWithDisk() DiskChange {
 // bytes and stay.
 func (r *Reader) dropDiskViews() {
 	r.InvalidateCache()
+	// InvalidateCache keeps the cached unit bytes, each valid for the row
+	// hash it was read under — which is sound for this reader's own writes
+	// and not for another writer's, who need not move the hash.
+	r.contentMu.Lock()
+	if r.contentCache != nil {
+		clear(r.contentCache)
+	}
+	r.contentMu.Unlock()
 	r.v1TypesMu.Lock()
 	clear(r.v1Headers)
 	r.v1TypesMu.Unlock()

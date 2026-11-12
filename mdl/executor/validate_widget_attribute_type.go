@@ -267,7 +267,7 @@ func checkMemberTypeIndex(ctx *ExecContext, sc *scriptContext) memberTypeIndex {
 		for _, m := range modules {
 			moduleNames[m.ID] = m.Name
 		}
-		if dms, err := ctx.Backend.ListDomainModels(); err == nil {
+		if dms, err := projectDomainModels(ctx); err == nil {
 			byID := map[model.ID]string{}
 			for _, dm := range dms {
 				mod := moduleNames[dm.ContainerID]

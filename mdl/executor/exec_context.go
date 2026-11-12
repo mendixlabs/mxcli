@@ -65,6 +65,11 @@ type ExecContext struct {
 	// not the stored project, which does not hold it yet. Nil otherwise.
 	scriptFlows map[string]*selfFlow
 
+	// checkMemo is what the check in progress has listed from the project,
+	// set for the length of one validateProgramWithWarnings and nil otherwise
+	// (validate_pass_memo.go).
+	checkMemo *checkPassMemo
+
 	// forwardFlowCalls mirrors Executor.forwardFlowCalls: whether a call to a
 	// flow the script creates further down is accepted (mendixlabs/mxcli#1405).
 	forwardFlowCalls bool

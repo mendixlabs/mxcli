@@ -49,7 +49,7 @@ func validatePluggableAttributeScopes(ctx *ExecContext, layout string, params []
 	registry := pageContextWidgetRegistry(ctx)
 	var templates func(string) map[string]pages.PropertyTypeIDEntry
 	if wb, ok := ctx.Backend.(backend.WidgetBuilderBackend); ok && registry != nil {
-		templates = templatePropertyTypes(wb, ctx.Backend.Path())
+		templates = passTemplatePropertyTypes(ctx, wb)
 	} else {
 		registry = nil
 	}
@@ -271,6 +271,24 @@ func (v *attributeScopeValidator) dataSourceEntity(ds *ast.DataSourceV3) string 
 		return ""
 	}
 	return c.entities[0]
+}
+
+// passTemplatePropertyTypes is templatePropertyTypes shared by the statements
+// of one check. Each call of templatePropertyTypes starts an empty cache, and
+// it was called per statement, so "once per widget for the run" was once per
+// widget per statement: a template load, with its .mpk augmentation, for every
+// widget of every page checked (ako/mxcli#2160).
+func passTemplatePropertyTypes(ctx *ExecContext, wb backend.WidgetBuilderBackend) func(string) map[string]pages.PropertyTypeIDEntry {
+	memo := ctx.checkMemo
+	if memo == nil {
+		return templatePropertyTypes(wb, ctx.Backend.Path())
+	}
+	memo.mu.Lock()
+	defer memo.mu.Unlock()
+	if memo.templates == nil {
+		memo.templates = templatePropertyTypes(wb, ctx.Backend.Path())
+	}
+	return memo.templates
 }
 
 // templatePropertyTypes loads a widget's template property metadata through the
