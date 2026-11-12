@@ -23,15 +23,69 @@ func validatePageContextTree(ctx *ExecContext, params []ast.PageParameter, widge
 		paramNames[p.Name] = true
 	}
 
+	// The names the page will hold are the names AFTER `use building block` /
+	// `use fragment` expansion: a reference is not a widget, and a prefixed
+	// copy is named by its prefix (ako/mxcli#559).
+	built := expandUseRefsForCheck(ctx, widgets)
+
 	// Collect all widget names (first pass) for SELECTION validation
 	widgetNames := make(map[string]bool)
-	collectWidgetNames(widgets, widgetNames)
+	collectWidgetNames(built, widgetNames)
 
 	// Walk the widget tree with context tracking
 	var errors []string
-	errors = append(errors, checkDuplicateWidgetNames(widgets, pageContextWidgetRegistry(ctx))...)
+	errors = append(errors, checkDuplicateWidgetNames(built, pageContextWidgetRegistry(ctx))...)
 	walkWidgetsWithContext(widgets, paramNames, widgetNames, false, pageContextWidgetRegistry(ctx), nil, &errors)
 	return errors
+}
+
+// expandUseRefsForCheck returns the widget tree with each `use building block`
+// and `use fragment` reference replaced by the widgets exec will write for it,
+// prefix applied — the tree whose names Mendix will see. The input is not
+// modified.
+//
+// The reference itself carries the BLOCK's name in Name, and counting that as a
+// widget name refused four prefixed copies of one block as a CE0495 duplicate
+// of 'Atlas_Web_Content.Card' while exec and mx check had none (ako/mxcli#559).
+// Expanding instead of merely skipping keeps the real collision — the same
+// block placed twice with no prefix — which exec refuses as a duplicate name.
+//
+// A reference that cannot be expanded here (no project, an unknown block, a
+// fragment defined in the script being checked) contributes no names; a
+// fragment's content-slot payload is kept, since those are page widgets
+// whatever the fragment holds. Expansion errors are exec's to report.
+func expandUseRefsForCheck(ctx *ExecContext, widgets []*ast.WidgetV3) []*ast.WidgetV3 {
+	var pb *pageBuilder
+	if ctx != nil && ctx.Connected() {
+		pb = &pageBuilder{ctx: ctx, backend: ctx.Backend, fragments: ctx.Fragments}
+	}
+	var walk func(ws []*ast.WidgetV3) []*ast.WidgetV3
+	walk = func(ws []*ast.WidgetV3) []*ast.WidgetV3 {
+		var out []*ast.WidgetV3
+		for _, w := range ws {
+			if w == nil {
+				continue
+			}
+			switch w.Type {
+			case "USE_BUILDING_BLOCK", "USE_FRAGMENT":
+				if pb != nil {
+					if expanded, err := pb.expandIfFragment(w); err == nil {
+						out = append(out, walk(expanded)...)
+						continue
+					}
+				}
+				out = append(out, walk(w.Children)...)
+			case "SLOT":
+				out = append(out, walk(w.Children)...)
+			default:
+				c := *w
+				c.Children = walk(w.Children)
+				out = append(out, &c)
+			}
+		}
+		return out
+	}
+	return walk(widgets)
 }
 
 // pageContextWidgetRegistry returns the widget registry for the run, or nil.

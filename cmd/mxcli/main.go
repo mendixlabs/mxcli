@@ -45,7 +45,10 @@ func main() {
 	// (ako/mxcli#633).
 	startSession(os.Args[1:])
 
-	if code := runCLI(); code != 0 {
+	stopProfile := startCPUProfile()
+	code := runCLI()
+	stopProfile()
+	if code != 0 {
 		os.Exit(code)
 	}
 }
@@ -125,6 +128,30 @@ func discoverProject(dir string) (path, note string) {
 	}
 }
 
+// noProjectFlag is the opt-out from project auto-detection, registered on the
+// commands that are meaningful without a project (check). The root
+// PersistentPreRun honours it on any command that registers it.
+const noProjectFlag = "no-project"
+
+// noProjectOptOut reports whether cmd registers --no-project and, if so, the
+// line that tells a user who got an auto-detected project how to avoid it —
+// the notice is where they meet the guess, so it is where the way out goes.
+func noProjectOptOut(cmd *cobra.Command) (bool, string) {
+	if cmd.Flags().Lookup(noProjectFlag) == nil {
+		return false, ""
+	}
+	return true, fmt.Sprintf("(pass --%s to %s without a project)", noProjectFlag, cmd.Name())
+}
+
+// skipsProjectDiscovery reports whether cmd was given --no-project.
+func skipsProjectDiscovery(cmd *cobra.Command) bool {
+	if ok, _ := noProjectOptOut(cmd); !ok {
+		return false
+	}
+	v, _ := cmd.Flags().GetBool(noProjectFlag)
+	return v
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "mxcli",
 	Short: "Mendix CLI - Work with Mendix projects using MDL syntax",
@@ -157,10 +184,19 @@ beta language; --mdl 0 starts them in the alpha language, and in the REPL an
 	Version: version,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		projectPath, _ := cmd.Flags().GetString("project")
-		if projectPath == "" {
+		// A command with a --no-project opt-out (check) skips auto-detection
+		// when it is given: run from a project directory, `check script.mdl`
+		// otherwise resolves every reference against the .mpr it finds, and
+		// the syntax-only check its help offered could not be had there at
+		// all (mendixlabs/mxcli#1817). Without the flag nothing changes.
+		_, optOut := noProjectOptOut(cmd)
+		if projectPath == "" && !skipsProjectDiscovery(cmd) {
 			discovered, note := discoverProject(".")
 			if discovered != "" {
 				_ = cmd.Flags().Set("project", discovered)
+				if optOut != "" {
+					note += "\n" + optOut
+				}
 				fmt.Fprintln(os.Stderr, note)
 			} else if note != "" && !shouldSuppressWarning() {
 				fmt.Fprintln(os.Stderr, note)
@@ -177,6 +213,7 @@ beta language; --mdl 0 starts them in the alpha language, and in the REPL an
 			warnIfToolingNewer(os.Stderr, projectPath)
 		}
 		globalJSONFlag, _ = cmd.Flags().GetBool("json")
+		globalQuietFlag, _ = cmd.Flags().GetBool("quiet")
 		globalMCPURL, _ = cmd.Flags().GetString("mcp")
 		globalMCPDial, _ = cmd.Flags().GetString("mcp-dial")
 		globalMCPCheck, _ = cmd.Flags().GetBool("mcp-check")
@@ -240,6 +277,13 @@ beta language; --mdl 0 starts them in the alpha language, and in the REPL an
 
 // globalJSONFlag is set by PersistentPreRun when --json is passed.
 var globalJSONFlag bool
+
+// globalQuietFlag is --quiet / -q: no warning banner (shouldSuppressWarning
+// reads argv for that, before cobra runs) and no connection or status
+// messages from the executor. The banner check named -q for a long time while
+// no command but `search` accepted it, so `mxcli -q -c …` failed outright
+// (ako/mxcli#1860).
+var globalQuietFlag bool
 
 // globalMCPURL / globalMCPDial are set by PersistentPreRun from --mcp / --mcp-dial.
 // When globalMCPURL is non-empty, newLoggedExecutor builds an MCP backend that
@@ -306,6 +350,9 @@ func newLoggedExecutorTo(mode string, out io.Writer) (*executor.Executor, *diagl
 	if globalJSONFlag {
 		exec.SetFormat(executor.FormatJSON)
 	}
+	if globalQuietFlag {
+		exec.SetQuiet(true)
+	}
 	return exec, logger
 }
 
@@ -349,6 +396,7 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringP("project", "p", "", "Path to Mendix project (.mpr file)")
 	rootCmd.PersistentFlags().Bool("json", false, "Output in JSON format")
+	rootCmd.PersistentFlags().BoolP("quiet", "q", false, "No warning banner, and no connection or status messages (catalog build progress included)")
 	rootCmd.PersistentFlags().String("mcp", "", "Route model writes to a live Studio Pro MCP server (e.g. http://localhost:7782/mcp); reads come from -p")
 	rootCmd.PersistentFlags().String("mcp-dial", "", "Override the TCP address dialed for --mcp (e.g. host.docker.internal:7782 from a devcontainer)")
 	rootCmd.PersistentFlags().Bool("mcp-check", false, "After the command, run Studio Pro's project-wide error check (ped_check_errors, Studio Pro 11.15+) and print the report")
@@ -364,6 +412,8 @@ func init() {
 	checkCmd.Flags().BoolP("references", "r", false, "Validate references against the project (implied by -p; kept for compatibility)")
 	checkCmd.Flags().String("format", "text", "Output format: text, json, sarif")
 	checkCmd.Flags().Bool("post-migration", false, "Scan the project for legacy native widgets that survived a Mendix upgrade (requires -p)")
+	checkCmd.Flags().Bool(noProjectFlag, false,
+		"Check syntax and the no-model rules only: do not auto-detect the .mpr in the current directory (conflicts with -p, --references, --post-migration)")
 
 	// Diff command flags
 	diffCmd.Flags().StringP("format", "f", "unified", "Output format: unified, side, struct")
@@ -386,7 +436,6 @@ func init() {
 
 	// Search command flags
 	searchCmd.Flags().StringP("format", "f", "table", "Output format: table, names (for JSON use --json; \"json\" is accepted as a deprecated alias)")
-	searchCmd.Flags().BoolP("quiet", "q", false, "Suppress connection and status messages (for piping)")
 	searchCmd.Flags().Bool("fail-on-match", false, "Exit 1 when there is at least one hit, 0 when there is none (an error exits 2)")
 	searchCmd.Flags().Bool("exclude-marketplace", false, "Leave out hits inside modules downloaded from the Marketplace")
 	searchCmd.Flags().Bool("no-build", false, "Never build the source index; without one, exit 3 because flow, page and expression bodies were not searched")

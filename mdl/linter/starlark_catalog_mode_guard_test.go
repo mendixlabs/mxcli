@@ -70,6 +70,8 @@ var builtinModes = map[string]builtinProbe{
 	"jar_dependencies":          {CatalogFast, "jar_dependencies()"},
 	"layouts":                   {CatalogFast, "layouts()"},
 	"published_rest_operations": {CatalogFast, "published_rest_operations()"},
+	"workflows":                 {CatalogFast, "workflows()"},
+	"workflow_activities":       {CatalogFast, "workflow_activities()"},
 
 	"widgets":           {CatalogFull, "widgets()"},
 	"xpath_expressions": {CatalogFull, "xpath_expressions()"},

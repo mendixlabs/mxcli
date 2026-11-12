@@ -210,12 +210,12 @@ func (s *flowAccessSim) loadStoredFlows(h *ContainerHierarchy) {
 		}
 		s.flows[key] = st
 	}
-	if mfs, err := s.ctx.Backend.ListMicroflows(); err == nil {
+	if mfs, err := projectMicroflows(s.ctx); err == nil {
 		for _, mf := range mfs {
 			put("microflow", h.GetQualifiedName(mf.ContainerID, mf.Name), mf.Excluded, mf.AllowedModuleRoles)
 		}
 	}
-	if nfs, err := s.ctx.Backend.ListNanoflows(); err == nil {
+	if nfs, err := projectNanoflows(s.ctx); err == nil {
 		for _, nf := range nfs {
 			put("nanoflow", h.GetQualifiedName(nf.ContainerID, nf.Name), nf.Excluded, nf.AllowedModuleRoles)
 		}

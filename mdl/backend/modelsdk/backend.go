@@ -25,9 +25,9 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
-	"github.com/mendixlabs/mxcli/modelsdk/codec"
 	genPr "github.com/mendixlabs/mxcli/modelsdk/gen/projects"
 	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
+	"github.com/mendixlabs/mxcli/modelsdk/mprread"
 )
 
 // Compile-time guarantee that the backend satisfies the whole interface (via the
@@ -35,6 +35,7 @@ import (
 var _ backend.FullBackend = (*Backend)(nil)
 var _ backend.WriteStatsReporter = (*Backend)(nil)
 var _ backend.SourceFileReporter = (*Backend)(nil)
+var _ backend.DiskChangeSyncer = (*Backend)(nil)
 
 // Backend reads and writes a Mendix project through the modelsdk codec engine.
 // It embeds `unimplemented` (generated, see gen_unimplemented.go) so any
@@ -46,6 +47,9 @@ type Backend struct {
 	reader *mmpr.Reader
 	writer *mmpr.Writer
 	path   string
+
+	// domainModelListings counts ListDomainModels calls (DomainModelListings).
+	domainModelListings int64
 
 	// fileWrites counts writes that do not go through unit storage — the
 	// generated .java/.js source of a code action, whose body lives in
@@ -196,6 +200,46 @@ func (b *Backend) Disconnect() error {
 	return flushErr
 }
 
+// SyncWithDisk reports whether another process changed the project since this
+// connection last looked, having first dropped every view of it the
+// connection keeps, so the next read sees the disk (ako/mxcli#2121). A session
+// calls it before each statement: one PRAGMA and one stat, not a re-read.
+//
+// When the .mpr was replaced by a new file (a git checkout renames one into
+// place) the connection still holds the old one open, so the project is
+// reopened. Not while a deferred run or a simulation holds unwritten units:
+// reopening would write them into, or drop them from, a project they were not
+// made against, so that is refused with an error instead.
+func (b *Backend) SyncWithDisk() (changed bool, err error) {
+	if b.reader == nil {
+		return false, nil
+	}
+	switch b.reader.SyncWithDisk() {
+	case mmpr.DiskUnchanged:
+		return false, nil
+	case mmpr.DiskChanged:
+		return true, nil
+	}
+	if b.writer != nil && b.writer.HoldsWrites() {
+		return true, fmt.Errorf("%s was replaced on disk while unwritten changes were held; reconnect to read the new file", b.path)
+	}
+	readOnly := b.writer == nil
+	path := b.path
+	if err := b.reader.Close(); err != nil {
+		return true, fmt.Errorf("close the replaced project: %w", err)
+	}
+	b.reader, b.writer = nil, nil
+	if readOnly {
+		err = b.ConnectReadOnly(path)
+	} else {
+		err = b.Connect(path)
+	}
+	if err != nil {
+		return true, fmt.Errorf("reopen %s after it was replaced on disk: %w", path, err)
+	}
+	return true, nil
+}
+
 // DeferUnitWrites holds unit updates in memory until FlushDeferredWrites, so a
 // run of statements is written once and judged by its net result
 // (mmpr.Writer.DeferUnitWrites, ako/mxcli#872). Reads during the run see the
@@ -204,6 +248,24 @@ func (b *Backend) DeferUnitWrites() {
 	if b.writer != nil {
 		b.writer.DeferUnitWrites()
 	}
+}
+
+// DeferUnitWritesJudged is DeferUnitWrites for a run whose statements report
+// for themselves: each held write is counted in WriteStats as it is held
+// (mmpr.Writer.DeferUnitWritesJudged, ako/mxcli#2160).
+func (b *Backend) DeferUnitWritesJudged() {
+	if b.writer != nil {
+		b.writer.DeferUnitWritesJudged()
+	}
+}
+
+// UnitReconciles is how many times this backend's writer has compared a write
+// with the stored unit. For tests.
+func (b *Backend) UnitReconciles() int {
+	if b.writer == nil {
+		return 0
+	}
+	return b.writer.Reconciles()
 }
 
 // FlushDeferredWrites writes what a deferred run holds, each unit once and
@@ -269,6 +331,34 @@ func (b *Backend) UnitFileReads() int64 {
 		return 0
 	}
 	return b.reader.UnitFileReads()
+}
+
+// UnitJudgedDigests is how many canonical digests this backend's writer has
+// computed to judge the held writes of a judged run. For tests.
+func (b *Backend) UnitJudgedDigests() int {
+	if b.writer == nil {
+		return 0
+	}
+	return b.writer.JudgedDigests()
+}
+
+// UnitIndexBuilds is how many times this backend's reader has scanned the Unit
+// table to rebuild its list of units. For tests.
+func (b *Backend) UnitIndexBuilds() int64 {
+	if b.reader == nil {
+		return 0
+	}
+	return b.reader.UnitIndexBuilds()
+}
+
+// UnitStoreHits is how many unit reads this backend's reader served from the
+// persisted unit store instead of a file. With UnitFileReads it is every read
+// that was not served from memory. For tests.
+func (b *Backend) UnitStoreHits() int64 {
+	if b.reader == nil {
+		return 0
+	}
+	return b.reader.UnitStoreHits()
 }
 
 func (b *Backend) Version() types.MPRVersion {
@@ -345,18 +435,14 @@ func (b *Backend) enrichModule(m *model.Module) {
 	if pm, ok := b.reader.PackagedModuleOf(string(m.ID)); ok {
 		m.PackageFile = pm.File
 	}
-	raw, err := b.reader.GetRawUnitBytes(string(m.ID))
-	if err != nil || len(raw) == 0 {
+	// Through the decode cache: a module is looked up for every statement of a
+	// script, and decoding its unit afresh each time was a full decode per
+	// module per listing (ako/mxcli#2160).
+	u, ok, err := mprread.UnitByIDAs[*genPr.Module](b.reader, m.ID)
+	if err != nil || !ok {
 		return
 	}
-	el, err := codec.NewDecoder(codec.DefaultRegistry).Decode(raw)
-	if err != nil {
-		return
-	}
-	gm, ok := el.(*genPr.Module)
-	if !ok {
-		return
-	}
+	gm := u.Element
 	m.FromAppStore = gm.FromAppStore()
 	m.AppStoreVersion = gm.AppStoreVersion()
 	m.AppStoreGuid = gm.AppStoreGuid()

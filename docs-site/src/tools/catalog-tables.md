@@ -250,6 +250,37 @@ JOIN CATALOG.ACTIVITIES a ON a.Id = f.DestinationId
 WHERE f.FlowType = 'AnnotationFlow';
 ```
 
+### CATALOG.WORKFLOW_ACTIVITIES
+
+One row per activity of a workflow, in walk order: the main flow, each
+activity followed by the paths of its boundary events, then the event
+sub-processes. Populated by every catalog build. A slot that names nothing is
+NULL.
+
+| Column | Description |
+|--------|-------------|
+| `Id` | The activity's ID |
+| `WorkflowId`, `WorkflowQualifiedName`, `ModuleName` | The workflow it belongs to (`CATALOG.WORKFLOWS.Id`) |
+| `Sequence` | Walk order within the workflow |
+| `Name`, `Caption` | As in Studio Pro |
+| `ActivityType` | `UserTask`, `MultiUserTask`, `SystemTask`, `CallMicroflow`, `AIAgentTask`, `CallWorkflow`, `Decision`, `ParallelSplit`, `JumpTo`, `WaitForTimer`, `WaitForNotification`, `StartWorkflow`, `EndWorkflow`, and the event sub-process and path-end kinds |
+| `Microflow` | The microflow a system task, call-microflow activity or AI agent task runs |
+| `UserSourceMicroflow` | A user task's targeting microflow (users or groups) |
+| `OnCreatedMicroflow` | A user task's on-created microflow |
+| `CompletionMicroflow` | A multi-user task's completion microflow |
+| `Page`, `UserTaskEntity` | A user task's page and task entity |
+| `CalledWorkflow` | The workflow a call-workflow activity calls |
+
+`CATALOG.REFS` records that a workflow calls a microflow; this table says from
+which kind of activity and which slot.
+
+```sql
+-- Microflows that system tasks run, without the WF_SYS_ prefix
+SELECT WorkflowQualifiedName, Name, Microflow
+FROM CATALOG.WORKFLOW_ACTIVITIES
+WHERE ActivityType = 'SystemTask' AND Microflow NOT LIKE '%.WF_SYS_%';
+```
+
 ### CATALOG.PAGES
 
 Information about pages and their properties.

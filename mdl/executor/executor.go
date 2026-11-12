@@ -298,6 +298,7 @@ type Executor struct {
 	cache            *executorCache
 	catalog          *catalog.Catalog
 	quiet            bool            // suppress connection and status messages
+	terminal         bool            // output is a terminal (catalog progress in full)
 	tally            *mutationTally  // collapses a program run's "Unchanged" reports into one line
 	accessRun        *accessRuleRun  // the open run of access-rule statements, if any (#872, #890)
 	format           OutputFormat    // output format (table, json)
@@ -327,6 +328,7 @@ type Executor struct {
 func New(output io.Writer) *Executor {
 	guard := newOutputGuard(output, maxOutputLines)
 	return &Executor{
+		terminal: isTerminal(output),
 		output:   guard,
 		guard:    guard,
 		settings: make(map[string]any),
@@ -436,6 +438,12 @@ func (e *Executor) Execute(stmt ast.Statement) error {
 			return err
 		}
 		stmt = s
+	}
+
+	// Another process may have written to the project since the last
+	// statement (ako/mxcli#2121).
+	if err := e.syncWithDisk(); err != nil {
+		return err
 	}
 
 	// Announce the MDL command so the PED calls it triggers (reported by the MCP
@@ -618,6 +626,11 @@ func (e *Executor) ExecuteProgramReportingStop(prog *ast.Program) (stoppedAt int
 	}
 	defer e.enterLanguage(prog.LanguageVersion)()
 	defer e.enterScriptFlows(prog)()
+	// A script's statements list the same document types one after another,
+	// so the run reads each unit file once and again only after rewriting it
+	// (ako/mxcli#2160). The cache ends with the run: a session that stays
+	// open must not keep serving bytes Studio Pro has since rewritten.
+	defer e.CacheUnitReads()()
 
 	// Collect all names defined in the script for forward-reference hints.
 	allDefined := newScriptContext()
@@ -632,14 +645,16 @@ func (e *Executor) ExecuteProgramReportingStop(prog *ast.Program) (stoppedAt int
 	// it cannot land, that is returned with the statement's error — those
 	// statements already reported success.
 	var rules accessRuleRun
+	// A run of entity and association statements likewise (entity_run.go).
+	var entities entityRun
 	defer func() {
-		if ferr := rules.end(); ferr != nil {
+		if ferr := errors.Join(entities.end(), rules.end()); ferr != nil {
 			err = errors.Join(err, ferr)
 		}
 	}()
 
 	for i, stmt := range prog.Statements {
-		if err := rules.step(e, stmt); err != nil {
+		if err := stepRuns(e, &rules, &entities, stmt); err != nil {
 			return -1, err
 		}
 		if err := e.Execute(stmt); err != nil {
@@ -647,7 +662,7 @@ func (e *Executor) ExecuteProgramReportingStop(prog *ast.Program) (stoppedAt int
 		}
 		created.collectSingle(stmt)
 	}
-	if err := rules.end(); err != nil {
+	if err := errors.Join(entities.end(), rules.end()); err != nil {
 		return -1, err
 	}
 	return -1, e.finalizeProgramExecution()
@@ -736,12 +751,13 @@ func (e *Executor) ExecuteProgramContinueOnError(prog *ast.Program, w io.Writer)
 	created := newScriptContext()
 
 	var rules accessRuleRun // see ExecuteProgram
-	defer func() { _ = rules.end() }()
+	var entities entityRun
+	defer func() { _ = entities.end(); _ = rules.end() }()
 
 	var res ExecuteProgramResult
 	for i, stmt := range prog.Statements {
 		res.Total++
-		if err := rules.step(e, stmt); err != nil {
+		if err := stepRuns(e, &rules, &entities, stmt); err != nil {
 			return res, err
 		}
 		if err := e.Execute(stmt); err != nil {
@@ -755,7 +771,7 @@ func (e *Executor) ExecuteProgramContinueOnError(prog *ast.Program, w io.Writer)
 		res.Succeeded++
 		created.collectSingle(stmt)
 	}
-	if err := rules.end(); err != nil {
+	if err := errors.Join(entities.end(), rules.end()); err != nil {
 		return res, err
 	}
 	if err := e.finalizeProgramExecution(); err != nil {

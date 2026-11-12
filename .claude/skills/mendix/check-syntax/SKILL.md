@@ -409,8 +409,8 @@ Run `mxcli syntax keywords` for the full list of 320+ reserved keywords.
 **Always run these checks:**
 
 ```bash
-# Step 1: Syntax check (no project needed)
-./bin/mxcli check script.mdl
+# Step 1: Syntax check (--no-project: do not auto-detect an .mpr in this directory)
+./bin/mxcli check script.mdl --no-project
 
 # Step 2: reference validation (needs project)
 # Validates microflow bodies, entity/enum references, and widget tree references

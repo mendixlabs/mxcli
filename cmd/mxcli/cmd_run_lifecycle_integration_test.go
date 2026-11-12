@@ -38,12 +38,15 @@ import (
 // nightly runs this against each matrix leg's own version — which is how it
 // found that --watch could not start on 10.24 / 11.6.
 //
-// On Mendix 11.14+ every build after the first in one mxbuild --serve process
-// fails (an mxbuild regression, measured without mxcli: webclient_legacy_paths.go).
-// mxcli recovers by restarting mxbuild --serve and building on the fresh process
-// (serve_recovery.go), so build #2 still applies there; the steps that wait for it
-// also assert that the run log shows that recovery. When an mxbuild fixes the
-// regression, those assertions fail and this branch should go.
+// On the Mendix versions that bundle the client themselves (11.14+ here), a
+// build in an mxbuild --serve process deletes the client source it wrote, so the
+// next build in that process failed (11.14) or bundled no pages (11.15+), and
+// mxcli answered every change with a serve restart and a cold build. Since
+// ako/mxcli#2150 it keeps that source between builds (client_source_keep.go), so
+// a page change is a reload on every version again, and step 4 asserts the run
+// log shows no serve restart. Every fallback that restarts the serve says
+// "restarting mxbuild --serve" (serve_recovery.go): a failure naming it means the
+// keep did not hold what the build needed.
 func TestRunLifecycle_DetachStatusExecWaitStop(t *testing.T) {
 	version := os.Getenv("MXCLI_RUNLIFE_VERSION")
 	if version == "" {
@@ -72,7 +75,6 @@ func TestRunLifecycle_DetachStatusExecWaitStop(t *testing.T) {
 		t.Skipf("mx create-project: %v\n%s", err, out)
 	}
 	mpr := filepath.Join(work, "App.mpr")
-	serveRebuildsBroken := projectAtLeast(t, mpr, 11, 14)
 
 	const appPort, adminPort, servePort = 8287, 8297, 6743
 	for _, p := range []int{appPort, adminPort, servePort} {
@@ -110,21 +112,22 @@ func TestRunLifecycle_DetachStatusExecWaitStop(t *testing.T) {
 		return f
 	}
 
-	// wantBuild2 checks a `run wait` that should report build #2 applied. On
-	// 11.14+ that build only applies because mxcli restarted mxbuild --serve after
-	// the incremental build failed, so the run log must show that recovery.
-	// orDirect drops that requirement, for a step whose claim is only that build
-	// #2 ran.
+	// wantBuild2 checks a `run wait` that should report build #2 applied and,
+	// unless orDirect, that mxcli did not restart mxbuild --serve to get there: on
+	// 11.14+ that restart is the fallback for client source the keep did not hold,
+	// a cold build per change instead of an incremental one. orDirect drops that
+	// requirement, for a step whose claim is only that build #2 ran.
 	wantBuild2 := func(step, out string, code int, orDirect bool) {
 		t.Helper()
 		if code != 0 || !strings.HasPrefix(out, "applied: build #2") {
 			t.Fatalf("%s: exit %d, %q\n%s", step, code, out, tailOf(docker.RunLogPath(mpr)))
 		}
-		if serveRebuildsBroken && !orDirect {
+		if !orDirect {
 			log, _ := os.ReadFile(docker.RunLogPath(mpr))
-			if !strings.Contains(string(log), "cannot build this change incrementally") {
-				t.Fatalf("%s (Mendix 11.14+): build #2 applied without mxcli restarting mxbuild --serve; "+
-					"if this mxbuild builds incrementally again, drop the 11.14+ branch\n%s", step, tailOf(docker.RunLogPath(mpr)))
+			if strings.Contains(string(log), "restarting mxbuild --serve") {
+				t.Fatalf("%s: build #2 applied only after mxcli restarted mxbuild --serve; the client source kept "+
+					"between builds (client_source_keep.go, ako/mxcli#2150) should let it build incrementally\n%s",
+					step, tailOf(docker.RunLogPath(mpr)))
 			}
 		}
 	}
@@ -157,7 +160,7 @@ func TestRunLifecycle_DetachStatusExecWaitStop(t *testing.T) {
 	}
 	out, code = mxcli("run", "wait", "-p", mpr, "--timeout", "3m")
 	wantBuild2("wait", out, code, false)
-	if !serveRebuildsBroken && !strings.HasPrefix(out, "applied: build #2 via reload") {
+	if !strings.HasPrefix(out, "applied: build #2 via reload") {
 		t.Fatalf("wait: applied, but not via reload: %q", out)
 	}
 	// Waiting again with nothing changed reports the same build at once.
@@ -207,11 +210,10 @@ func TestRunLifecycle_DetachStatusExecWaitStop(t *testing.T) {
 	if err := bg.Wait(); err != nil {
 		t.Fatalf("detach (boot race): %v\n%s", err, tailOf(docker.RunLogPath(mpr)))
 	}
-	// What this step claims is that the change is not lost: build #2 applies. On
-	// 11.14+ this build was measured applying without a serve restart where step
-	// 4's needed one; the likely difference is how much of the change the boot
-	// build had already read, which the test does not control. So the recovery is
-	// not required in the log here; "nothing to apply" never passes.
+	// What this step claims is that the change is not lost: build #2 applies;
+	// "nothing to apply" never passes. A serve restart is not ruled out here: the
+	// change lands while the boot build runs, and how much of it that build had
+	// already read, and so what the keep holds, is timing the test does not control.
 	out, code = mxcli("run", "wait", "-p", mpr, "--timeout", "2m")
 	wantBuild2("a change made during the boot", out, code, true)
 	if out, code := mxcli("run", "stop", "-p", mpr); code != 0 {

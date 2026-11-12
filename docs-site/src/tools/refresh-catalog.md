@@ -71,6 +71,12 @@ mxcli -p app.mpr -c "REFRESH CATALOG FULL FORCE"
 
 The catalog is cached in `.mxcli/catalog.db` next to the MPR file. On subsequent refreshes, mxcli checks whether the project has changed and only rebuilds if necessary (unless `FORCE` is specified).
 
+### Progress output
+
+A build prints a line per table (`✓ Entities: 111`) only when its output is a terminal. Piped, logged or run by an agent, it prints nothing per table while it is quick, and the latest progress line every 15 seconds while it is slow (`… building catalog, source 250/300 documents (32s)`), so a build of several minutes still shows it is running. Lines that carry information, such as the incremental summary and documents that could not be described, print either way.
+
+`-q` / `--quiet` works on every command: it drops the warning banner and the connection and status messages, and sends what catalog progress remains to stderr.
+
 ### Incremental rebuilds
 
 A rebuild after a save does not start from scratch. The cache records which document every row came from, and the next rebuild of the same level (fast, `FULL` or `FULL SOURCE`) starts from the cached catalog and produces again only the rows of:

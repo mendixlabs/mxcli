@@ -29,6 +29,16 @@ type ConnectionBackend interface {
 	GetMendixVersion() (string, error)
 }
 
+// DiskChangeSyncer is implemented by a backend that reads a project on disk
+// another process can write to (ako/mxcli#2121). SyncWithDisk reports whether
+// something other than this connection changed the project since it last
+// looked, and when it did, has already dropped what the connection kept, so
+// the next read sees the disk. It must be cheap — a session calls it before
+// every statement — and must not report the connection's own writes.
+type DiskChangeSyncer interface {
+	SyncWithDisk() (changed bool, err error)
+}
+
 // ModuleBackend provides module-level operations.
 type ModuleBackend interface {
 	// ListModules returns all modules in the project.

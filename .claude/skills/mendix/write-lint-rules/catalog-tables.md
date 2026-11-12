@@ -177,6 +177,41 @@ Returned by `published_rest_operations()`.
 | `deprecated` | bool | Marked deprecated |
 | `module_name` | string | `"Sales"` |
 
+### workflow
+Returned by `workflows()`.
+
+| Property | Type | Example |
+|----------|------|---------|
+| `id` | string | Workflow ID |
+| `qualified_name` | string | `"Sales.ApproveOrder"` |
+| `name` | string | `"ApproveOrder"` |
+| `module_name` | string | `"Sales"` |
+| `description` | string | Documentation text |
+| `parameter_entity` | string | Qualified name of the context entity: `"Sales.Order"` |
+| `activity_count` | int | Activities in every flow of the workflow, boundary-event paths and event sub-processes included |
+| `user_task_count` | int | User tasks and multi-user tasks |
+| `microflow_call_count` | int | System tasks and call-microflow activities |
+| `decision_count` | int | Decisions |
+
+### workflow_activity
+Returned by `workflow_activities()`, each workflow's activities in walk order: the main flow, each activity followed by the paths of its boundary events, then the event sub-processes. A slot that names nothing is `""`.
+
+| Property | Type | Example |
+|----------|------|---------|
+| `id` | string | Activity ID |
+| `workflow_qualified_name` | string | `"Sales.ApproveOrder"` |
+| `module_name` | string | `"Sales"` |
+| `name` | string | `"ReviewOrder"` |
+| `caption` | string | `"Review the order"` |
+| `activity_type` | string | `"UserTask"`, `"MultiUserTask"`, `"SystemTask"`, `"CallMicroflow"`, `"AIAgentTask"`, `"CallWorkflow"`, `"Decision"`, `"ParallelSplit"`, `"JumpTo"`, `"WaitForTimer"`, `"WaitForNotification"`, `"StartWorkflow"`, `"EndWorkflow"`, … |
+| `microflow` | string | The microflow a `SystemTask`, `CallMicroflow` or `AIAgentTask` runs |
+| `user_source_microflow` | string | A user task's targeting microflow (users or groups) |
+| `on_created_microflow` | string | A user task's on-created microflow |
+| `completion_microflow` | string | A multi-user task's completion microflow |
+| `page` | string | A user task's page |
+| `user_task_entity` | string | A user task's task entity |
+| `called_workflow` | string | The workflow a `CallWorkflow` activity calls |
+
 ### widget
 Returned by `widgets()` (full catalog — auto-detected).
 

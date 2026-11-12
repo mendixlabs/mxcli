@@ -40,6 +40,12 @@ import "github.com/mendixlabs/mxcli/modelsdk/canon"
 type deferredWrite struct {
 	contents []byte
 	opts     []canon.Option
+	// judged is the write as a judged run compares it: normalised for storage,
+	// as the stored unit it is first compared with was. Nil outside such a run.
+	judged []byte
+	// judgedDigest is the canonical digest of judged, kept so the next write
+	// of the unit digests only itself. Empty until a later write needs it.
+	judgedDigest string
 }
 
 // DeferUnitWrites starts holding unit updates until FlushDeferredWrites. It is
@@ -48,6 +54,101 @@ func (w *Writer) DeferUnitWrites() {
 	if w.deferred == nil {
 		w.deferred = map[string]deferredWrite{}
 	}
+}
+
+// DeferUnitWritesJudged is DeferUnitWrites for a run whose statements each
+// report whether they changed anything, as they do when each writes for itself.
+//
+// A script that creates one entity after another rewrote its module's whole
+// domain model for every statement, and reconciled each rewrite against the
+// stored unit: half of the time such a script took (ako/mxcli#2160). Held, the
+// unit is reconciled against storage once, when the run ends. What the
+// statements still need is the answer the reconcile gave them, "did this
+// change anything", so each held write is judged as it is held and counted in
+// WriteStats exactly as a write that reached storage is: offered, and landed
+// unless it changed nothing.
+//
+// The first write of a unit in the run is judged against the stored unit, with
+// the comparison a real write gets. Every later one is judged against the
+// write the run already holds for it. Both are what the builder produced, so
+// they differ exactly where the statement changed something, and comparing
+// them needs none of what a comparison with stored bytes does first.
+//
+// The flush does not count again: its one write per unit is the sum of
+// statements already counted.
+func (w *Writer) DeferUnitWritesJudged() {
+	w.DeferUnitWrites()
+	w.deferredJudged = true
+}
+
+// judgeHeld counts a write a judged run is about to hold, and returns the form
+// the next write of the unit is compared with, and that form's digest when it
+// was computed.
+//
+// Both sides are normalised for storage first. The writer completes what a
+// builder leaves out (a validation rule's empty message, among others), so a
+// unit read back from storage and rebuilt has those and a freshly built
+// element does not: compared raw, a statement that re-declares an entity
+// exactly as it is reads as a change.
+//
+// A later write is compared by digest with the held one, after taking the
+// held one's identity fields, and is itself kept in that form with its digest.
+// Keeping the form that carries the earlier identity changes no verdict: the
+// next write takes the same fields before it is compared, so both sides of
+// that comparison hold them either way. It is what lets the digest be kept,
+// where comparing the documents digested the held one again for every
+// statement (ako/mxcli#2160).
+func (w *Writer) judgeHeld(unitID string, contents []byte, opts []canon.Option) (judged []byte, digest string) {
+	w.writesOffered++
+	normalized, err := w.normalizeForStorage(unitID, contents)
+	if err != nil {
+		// Not comparable; the flush will report what is wrong with it.
+		w.writesLanded++
+		return nil, ""
+	}
+	prev, seen := w.deferred[unitID]
+	if !seen {
+		changed := true
+		if stored, err := w.reader.GetRawUnitBytes(unitID); err == nil {
+			w.reconciles++
+			_, unchanged := canon.Reconcile(normalized, stored, opts...)
+			changed = !unchanged
+		}
+		if changed {
+			w.writesLanded++
+		}
+		return normalized, ""
+	}
+	if prev.judged == nil {
+		w.writesLanded++
+		return normalized, ""
+	}
+	carried := canon.CarryIdentity(normalized, prev.judged)
+	held := prev.judgedDigest
+	if held == "" {
+		held, _ = w.judgedDigest(prev.judged)
+	}
+	digest, err = w.judgedDigest(carried)
+	if err != nil {
+		w.writesLanded++
+		return normalized, ""
+	}
+	if held == "" || digest != held {
+		w.writesLanded++
+	}
+	return carried, digest
+}
+
+// judgedDigest is canon.Digest, counted.
+func (w *Writer) judgedDigest(raw []byte) (string, error) {
+	w.judgedDigests++
+	return canon.Digest(raw)
+}
+
+// HoldsWrites reports whether a deferred run or a simulation is open, holding
+// unit bytes that are not on disk.
+func (w *Writer) HoldsWrites() bool {
+	return w.deferred != nil || w.simulating
 }
 
 // FlushDeferredWrites ends the run: every held unit is written once, through the
@@ -60,7 +161,13 @@ func (w *Writer) FlushDeferredWrites() error {
 		return ErrSimulatedWrite
 	}
 	held, order := w.deferred, w.deferredOrder
-	w.deferred, w.deferredOrder = nil, nil
+	judged := w.deferredJudged
+	w.deferred, w.deferredOrder, w.deferredJudged = nil, nil, false
+	// A judged run counted each write as it was held.
+	offered, landed := w.writesOffered, w.writesLanded
+	if judged {
+		defer func() { w.writesOffered, w.writesLanded = offered, landed }()
+	}
 	var first error
 	for _, id := range order {
 		d, ok := held[id]
@@ -82,11 +189,16 @@ func (w *Writer) holdDeferred(unitID string, contents []byte, opts []canon.Optio
 	if w.deferred == nil {
 		return false
 	}
+	var judged []byte
+	var digest string
+	if w.deferredJudged {
+		judged, digest = w.judgeHeld(unitID, contents, opts)
+	}
 	if _, seen := w.deferred[unitID]; !seen {
 		w.deferredOrder = append(w.deferredOrder, unitID)
 	}
 	held := append([]byte(nil), contents...)
-	w.deferred[unitID] = deferredWrite{contents: held, opts: opts}
+	w.deferred[unitID] = deferredWrite{contents: held, opts: opts, judged: judged, judgedDigest: digest}
 	w.reader.SetOverlay(unitID, held)
 	return true
 }
