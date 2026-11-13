@@ -310,7 +310,7 @@ where t.Status <> 'VOIDED'
 where t.Status != 'VOIDED'
 ```
 
-**Note:** Both `!=` and `<>` are valid in standard SQL, but Mendix OQL only accepts `!=`.
+**Note:** Both `!=` and `<>` are valid in standard SQL, but Mendix OQL only accepts `!=`. **No `empty` in OQL** (`is null` / `is not null`; MDL030), and **double-quote a name that is an OQL keyword** wherever the query names it: `Shop."Order"`, `x."Key"` — unquoted is CE0174 (MDL032 lists the measured words). An alias cannot be quoted, so a view column cannot carry one.
 
 ### 8. IN Expression Syntax
 ```sql
