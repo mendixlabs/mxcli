@@ -1063,7 +1063,9 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 A TOOL's Document is the microflow it runs. SelectedModel is the id of the
 model the Model document's resource offers (e.g. 'eu.anthropic.claude-sonnet-5');
 Agent Editor 2.2+ refuses to import an agent without one, and that stops the
-import of every agent (check: MDL-AGENT02). SelectedModelName defaults to the
+import of every agent (check: MDL-AGENT02). Agent Commons stores the name in
+50 characters and Description in 200; longer fails the startup import and
+leaves the previous agent in use (check: MDL-AGENT04). SelectedModelName defaults to the
 id. On OR MODIFY, the tools, knowledge bases and entity keep their stored
 identity, and a setting the statement leaves out keeps its stored value.`,
 		Example: "create agent MyModule.Assistant (\n  UsageType: Chat,\n  Model: MyModule.GPT4,\n  SelectedModel: 'eu.anthropic.claude-sonnet-5',\n  SystemPrompt: $$You are a helpful assistant.$$,\n  UserPrompt: 'Ask me anything.'\n)\n{\n  MCP SERVICE MyModule.WebSearch ( Enabled: true )\n};",
