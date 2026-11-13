@@ -1155,7 +1155,8 @@ An `image` widget's default source **is** an image collection entry, so a bare
 image selected."); `mxcli check` reports it as MDL-WIDGET22. A name that does not
 resolve is reported by `mxcli check --references` rather than by the build
 (CE1613). The other two sources are `ImageType: imageUrl, ImageUrl: '…'` and
-`ImageType: icon`; any other `ImageType` is a MDL-WIDGET22 warning, because mx
+`ImageType: icon, Icon: '…'` (the icon in a button's spelling — `Icon: 'M.C.I'`,
+`Icon: image 'M.C.I'`, `Icon: glyph N`; without one, "No icon selected."); any other `ImageType` is a MDL-WIDGET22 warning, because mx
 check accepts it. An uploaded image is not a separate `ImageType` — it is the
 default source bound to the object: `Image: $currentObject`.
 

@@ -285,8 +285,8 @@ type BuildContext struct {
 	// ImageEntity is the entity an image-typed property binds to when it was
 	// written `$currentObject` rather than as a collection entry (#1476).
 	ImageEntity string
-	// Icon is an icon-typed property's value, from the widget's `Icon:`
-	// (ako/mxcli#2174).
+	// Icon is the icon element an icon-typed property holds, read from the
+	// widget's `Icon:` with the kind the author wrote (ako/mxcli#2174).
 	Icon        *pages.Icon
 	pageBuilder *pageBuilder
 }
@@ -1106,11 +1106,6 @@ func (e *PluggableWidgetEngine) applyOperation(builder backend.WidgetObjectBuild
 		}
 	case "primitive":
 		builder.SetPrimitive(propKey, ctx.PrimitiveVal)
-	case "icon":
-		// No icon stated: keep the template's value.
-		if ctx.Icon != nil {
-			builder.SetIcon(propKey, ctx.Icon)
-		}
 	case "selection":
 		builder.SetSelection(propKey, ctx.PrimitiveVal)
 	case "image":
@@ -1121,6 +1116,10 @@ func (e *PluggableWidgetEngine) applyOperation(builder backend.WidgetObjectBuild
 			builder.SetImageEntity(propKey, ctx.ImageEntity)
 		} else {
 			builder.SetImage(propKey, ctx.PrimitiveVal)
+		}
+	case "icon":
+		if ctx.Icon != nil {
+			builder.SetIcon(propKey, ctx.Icon)
 		}
 	case "expression":
 		// No MDL value: keep the template's default expression rather than
@@ -1679,6 +1678,20 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 		return ctx, nil
 	}
 
+	// An icon-typed property takes the widget's `Icon:` in the same three
+	// spellings a button's does — collection, `image`, `glyph` — and is built
+	// into the same element, so the kind the author wrote is the $Type stored
+	// (ako/mxcli#2174). Read before the generic scalar path, which has no shape
+	// for a typed icon value.
+	if mapping.Operation == "icon" {
+		icon, err := buildWidgetIcon(w)
+		if err != nil {
+			return nil, err
+		}
+		ctx.Icon = icon
+		return ctx, nil
+	}
+
 	source := mapping.Source
 	if source == "" {
 		// A named action slot: no Source, addressed by the widget's own property
@@ -1713,16 +1726,6 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 	}
 
 	switch source {
-	case "Icon":
-		// An icon-typed property, spelled as an action button's icon:
-		// `Icon: Mod.Collection."name"`, `Icon: image Mod.Images.x`,
-		// `Icon: glyph 57377` (ako/mxcli#2174).
-		icon, err := buildWidgetIcon(w)
-		if err != nil {
-			return nil, err
-		}
-		ctx.Icon = icon
-		return ctx, nil
 	case "Attribute":
 		// Named widget-level attribute (e.g. PieChart `ValueAttribute` →
 		// `seriesValueAttribute`): look up by the property's own name/aliases so

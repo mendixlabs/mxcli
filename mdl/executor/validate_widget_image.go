@@ -128,7 +128,7 @@ func validateImageSourceValue(w *ast.WidgetV3, source, locationPrefix string) []
 				"To show an uploaded image (an entity that extends System.Image), drop ImageType and "+
 					"bind the object in context: `image %s (Image: $currentObject)` inside a data view "+
 					"over it. Otherwise use `ImageType: image` with a collection entry, "+
-					"`ImageType: imageUrl`, or `ImageType: icon`.",
+					"`ImageType: imageUrl`, or `ImageType: icon` with an `Icon:`.",
 				w.Name),
 		}}
 	case imageSourceNeedsImage[strings.ToLower(source)]:
@@ -149,8 +149,23 @@ func validateImageSourceValue(w *ast.WidgetV3, source, locationPrefix string) []
 					"`show image collections` lists them, and `describe image collection "+
 					"Module.Collection` lists the images inside one. To show an uploaded image, "+
 					"bind the data view's object: `image %s (Image: $currentObject)`. Or switch source: "+
-					"`ImageType: imageUrl, ImageUrl: 'https://…'`, or `ImageType: icon`.",
+					"`ImageType: imageUrl, ImageUrl: 'https://…'`, or `ImageType: icon, Icon: '…'`.",
 				w.Name, w.Name),
+		}}
+	case strings.EqualFold(source, "icon") && widgetIconSpec(w) == nil:
+		// Measured on 11.16: an icon image with no icon is "No icon selected.",
+		// once per image — what re-creating one from describe output wrote
+		// before describe printed the icon (ako/mxcli#2174).
+		return []linter.Violation{{
+			RuleID:   imageSourceRule,
+			Severity: linter.SeverityError,
+			Message: fmt.Sprintf(
+				"%s: widget `%s` (image) has `ImageType: icon` and no `Icon` — "+
+					"mxbuild rejects the build with \"No icon selected.\"",
+				locationPrefix, w.Name),
+			Location: linter.Location{DocumentType: "page"},
+			Suggestion: "Name the icon as a button does: `Icon: 'Atlas_Core.Atlas_Filled.user'` " +
+				"(an icon collection), `Icon: image 'Module.Collection.Image'`, or `Icon: glyph 57377`.",
 		}}
 	case strings.EqualFold(source, "imageUrl") && strings.TrimSpace(w.GetStringProp("ImageUrl")) == "":
 		return []linter.Violation{{

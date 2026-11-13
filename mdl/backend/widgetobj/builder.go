@@ -208,45 +208,18 @@ func (ob *Builder) SetImageEntity(propertyKey string, entityName string) {
 	})
 }
 
-// SetIcon sets an icon-typed property to an icon, stored as the WidgetValue's
-// Icon element — the same three element kinds an action button's icon is
-// (ako/mxcli#2174). A nil or nameless icon leaves the template's value.
+// SetIcon stores an icon element on an icon-typed property — the Image widget's
+// `imageIcon`, the icon an `ImageType: icon` image shows. Without it such an
+// image named no icon and mxbuild refused it with "No icon selected."
+// (ako/mxcli#2174).
 func (ob *Builder) SetIcon(propertyKey string, icon *pages.Icon) {
-	el := iconElement(icon)
-	if el == nil {
+	elem := iconElement(icon)
+	if elem == nil {
 		return
 	}
 	ob.object = updateWidgetPropertyValue(ob.object, ob.propertyTypeIDs, propertyKey, func(val bson.D) bson.D {
-		for i := range val {
-			if val[i].Key == "Icon" {
-				val[i].Value = el
-				return val
-			}
-		}
-		return append(val, bson.E{Key: "Icon", Value: el})
+		return setIconValue(val, elem)
 	})
-}
-
-// iconElement is the stored element of an icon, or nil when it names nothing.
-func iconElement(icon *pages.Icon) bson.D {
-	if icon == nil {
-		return nil
-	}
-	storage := types.MenuIconStorageType(icon.Kind)
-	if storage == "" {
-		return nil
-	}
-	el := bson.D{{Key: "$ID", Value: bsonutil.NewIDBsonBinary()}, {Key: "$Type", Value: storage}}
-	if icon.Kind == types.MenuIconGlyph {
-		if icon.Code == 0 {
-			return nil
-		}
-		return append(el, bson.E{Key: "Code", Value: int32(icon.Code)})
-	}
-	if icon.Image == "" {
-		return nil
-	}
-	return append(el, bson.E{Key: "Image", Value: icon.Image})
 }
 
 func (ob *Builder) SetSelection(propertyKey string, value string) {
@@ -1427,6 +1400,56 @@ func setImageValue(val bson.D, imageQN string) bson.D {
 	for _, elem := range val {
 		if elem.Key == "Image" {
 			result = append(result, bson.E{Key: "Image", Value: imageQN})
+		} else {
+			result = append(result, elem)
+		}
+	}
+	return result
+}
+
+// iconElement is the stored form of an icon, the same three elements a button's
+// Icon holds — measured on ConversationalUI.Snippet_Message_Content (11.16):
+//
+//	Forms$ImageIcon{Image: "ConversationalUI.Image_collection.Traces_icons"}
+//	Forms$IconCollectionIcon{Image: "Atlas_Core.Atlas_Filled.user"}
+//	Forms$GlyphIcon{Code: 57377}
+//
+// The kind decides the $Type; the two named kinds share a payload, so nothing
+// else could. Nil for an icon that identifies nothing — an unknown kind, a glyph
+// with no code, a named kind with no name — rather than an element that shows
+// nothing.
+func iconElement(icon *pages.Icon) bson.D {
+	if icon == nil {
+		return nil
+	}
+	storage := types.MenuIconStorageType(icon.Kind)
+	if storage == "" {
+		return nil
+	}
+	elem := bson.D{
+		{Key: "$ID", Value: types.UUIDToBlob(types.GenerateID())},
+		{Key: "$Type", Value: storage},
+	}
+	if icon.Kind == types.MenuIconGlyph {
+		if icon.Code == 0 {
+			return nil
+		}
+		return append(elem, bson.E{Key: "Code", Value: int32(icon.Code)})
+	}
+	if icon.Image == "" {
+		return nil
+	}
+	return append(elem, bson.E{Key: "Image", Value: icon.Image})
+}
+
+// setIconValue writes an icon element onto a WidgetValue's `Icon` key. Like
+// setImageValue it REPLACES the key and never adds one: a value node without it
+// is not icon-typed, and an invented key is the CE0463 shape.
+func setIconValue(val bson.D, icon bson.D) bson.D {
+	result := make(bson.D, 0, len(val))
+	for _, elem := range val {
+		if elem.Key == "Icon" {
+			result = append(result, bson.E{Key: "Icon", Value: icon})
 		} else {
 			result = append(result, elem)
 		}

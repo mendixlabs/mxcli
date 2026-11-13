@@ -665,9 +665,6 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 		if hasFooter := dataViewHasFooterBlock(w); hasFooter != w.ShowFooter {
 			props = append(props, fmt.Sprintf("ShowFooter: %t", w.ShowFooter))
 		}
-		if w.NoEntityMessage != "" {
-			props = append(props, fmt.Sprintf("NoEntityMessage: %s", mdlQuote(ctx, w.NoEntityMessage)))
-		}
 		// A DataView has its own ReadOnlyStyle, distinct from a CheckBox's and
 		// wired nowhere until ako/mxcli#550. Inherit is Studio Pro's default, so
 		// only the other two are emitted.
@@ -2280,10 +2277,12 @@ func describeImageWidgetProps(ctx *ExecContext, w rawWidget) []string {
 	if w.ImageType != "" && w.ImageType != "image" {
 		props = append(props, fmt.Sprintf("ImageType: %s", w.ImageType))
 	}
-	if w.ImageType == "icon" {
-		if icon := widgetIconMDL(ctx, w); icon != "" {
-			props = append(props, icon)
-		}
+	// The icon an `ImageType: icon` image shows, in a button's spelling. Without
+	// it a re-created image named no icon: "No icon selected." (ako/mxcli#2174).
+	if icon := widgetIconMDL(ctx, w); icon != "" {
+		props = append(props, icon)
+	} else if note := widgetIconNote(ctx, w); note != "" {
+		props = append(props, note)
 	}
 	switch {
 	case w.ImageFromObject:

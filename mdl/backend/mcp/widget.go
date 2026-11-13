@@ -204,20 +204,20 @@ func (w *mcpWidgetBuilder) SetPrimitive(propertyKey, value string) {
 	w.object[propertyKey] = value
 }
 
-func (w *mcpWidgetBuilder) SetIcon(propertyKey string, icon *pages.Icon) {
-	if icon == nil {
-		return
-	}
-	if icon.Image != "" {
-		w.object[propertyKey] = icon.Image
-	}
-}
-
 func (w *mcpWidgetBuilder) SetImage(propertyKey, imageQN string) {
 	if imageQN == "" {
 		return
 	}
 	w.object[propertyKey] = imageQN
+}
+
+// SetIcon has no PED spelling this backend knows of; it is recorded rather than
+// sent in a shape the Studio Pro side may not read.
+func (w *mcpWidgetBuilder) SetIcon(propertyKey string, icon *pages.Icon) {
+	if icon == nil {
+		return
+	}
+	w.note("SetIcon(" + propertyKey + ")")
 }
 
 // SetImageEntity has no PED spelling this backend knows of; it is recorded

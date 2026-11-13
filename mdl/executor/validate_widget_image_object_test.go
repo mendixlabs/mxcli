@@ -8,6 +8,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 // mendixlabs/mxcli#1476, the check-time half: `image i (Image: $currentObject)`
@@ -77,8 +78,8 @@ func TestImageSource_UnknownImageTypeIsReported(t *testing.T) {
 // CONTROL: each real value, in any case, stays silent when complete.
 func TestImageSource_KnownImageTypesAreAccepted(t *testing.T) {
 	for _, props := range []map[string]any{
-		{"ImageType": "icon"},
-		{"ImageType": "ICON"},
+		{"ImageType": "icon", "Icon": "Atlas_Core.Atlas_Filled.user"},
+		{"ImageType": "ICON", "Icon": &ast.WidgetIcon{Kind: types.MenuIconImage, Name: "M.C.I"}},
 		{"ImageType": "imageUrl", "ImageUrl": "https://x"},
 		{"ImageType": "Image", "Image": "M.C.I"},
 	} {

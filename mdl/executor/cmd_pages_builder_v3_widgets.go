@@ -2031,17 +2031,17 @@ func buildWidgetIcon(w *ast.WidgetV3) (*pages.Icon, error) {
 	case types.MenuIconGlyph:
 		if spec.Code == 0 {
 			return nil, mdlerrors.NewValidationf(
-				"button %q: `Icon: glyph` needs a character code, e.g. `Icon: glyph 57377` — "+
+				"widget %q: `Icon: glyph` needs a character code, e.g. `Icon: glyph 57377` — "+
 					"a glyph icon carries no name, so the code is the only thing that identifies it", w.Name)
 		}
 	default:
 		if spec.Name == "" {
 			return nil, mdlerrors.NewValidationf(
-				"button %q: `Icon:` needs a qualified name, e.g. `Icon: 'Atlas_Core.Atlas_Filled.pencil'`", w.Name)
+				"widget %q: `Icon:` needs a qualified name, e.g. `Icon: 'Atlas_Core.Atlas_Filled.pencil'`", w.Name)
 		}
 	}
 	if icon.TypeName == "" {
-		return nil, mdlerrors.NewValidationf("button %q: unsupported icon kind %q", w.Name, spec.Kind)
+		return nil, mdlerrors.NewValidationf("widget %q: unsupported icon kind %q", w.Name, spec.Kind)
 	}
 	return icon, nil
 }
