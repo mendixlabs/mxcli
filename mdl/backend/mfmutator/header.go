@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -302,6 +303,7 @@ func (m *Mutator) setParameters(declared bson.D) ([]string, error) {
 		return -1
 	}
 	insertAt := 0 // parameters go first, as the rebuild writes them
+	var added []bson.D
 	for _, dp := range declParams {
 		name := dString(dp, "Name")
 		if i := index(name); i >= 0 {
@@ -326,12 +328,57 @@ func (m *Mutator) setParameters(declared bson.D) ([]string, error) {
 		}
 		objs = append(objs[:insertAt], append([]any{dp}, objs[insertAt:]...)...)
 		insertAt++
+		added = append(added, dp)
 		changed = append(changed, "parameter $"+name+" added")
 	}
+	placeAddedParameters(objs, added)
 	if len(changed) > 0 && !setArray(oc, "Objects", objs) {
 		return nil, fmt.Errorf("the object collection has no Objects list")
 	}
 	return changed, nil
+}
+
+// placeAddedParameters moves an added parameter that would sit on another
+// parameter to the slot after the rightmost one. The rebuild derives a
+// parameter's position from its index, and the stored parameters after an
+// inserted one keep theirs, so a parameter added between two landed exactly on
+// the next (ako/mxcli#2185). The pitch is the derived row's
+// (microflows.ParameterPitch): 7px a character of the widest name, rounded up
+// to 10px, never under 100px. A parameter whose slot is free keeps it.
+func placeAddedParameters(objs []any, added []bson.D) {
+	if len(added) == 0 {
+		return
+	}
+	var params []bson.D
+	for _, el := range objs {
+		if p, ok := el.(bson.D); ok && dString(p, "$Type") == parameterType {
+			params = append(params, p)
+		}
+	}
+	widest := 0
+	for _, p := range params {
+		widest = max(widest, utf8.RuneCountInString(dString(p, "Name")))
+	}
+	pitch := max(100, (widest*7+9)/10*10)
+	for _, a := range added {
+		pos := parsePoint(dString(a, "RelativeMiddlePoint"))
+		taken, right := false, point{}
+		for i, p := range params {
+			if dString(p, "Name") == dString(a, "Name") {
+				continue
+			}
+			pp := parsePoint(dString(p, "RelativeMiddlePoint"))
+			if pp == pos {
+				taken = true
+			}
+			if i == 0 || pp.X > right.X {
+				right = pp
+			}
+		}
+		if taken {
+			dSet(a, "RelativeMiddlePoint", point{right.X + pitch, right.Y}.String())
+		}
+	}
 }
 
 // usesVariable returns where the flow still names $name in an expression, or

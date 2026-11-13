@@ -79,7 +79,7 @@ Examples:
 				return
 			}
 			fmt.Fprint(out, m.Heading())
-			syntax.WriteText(out, m.Features)
+			m.WriteText(out)
 			return
 		}
 
