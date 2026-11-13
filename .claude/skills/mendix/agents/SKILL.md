@@ -13,10 +13,10 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | 24-50 | Overview |
 | 51-194 | Syntax |
 | 195-221 | Altering existing documents |
-| 222-273 | Gotchas |
-| 274-296 | Common Patterns |
-| 297-364 | Calling Agents from Microflows |
-| 365-367 | AI agent documents |
+| 222-279 | Gotchas |
+| 280-302 | Common Patterns |
+| 303-370 | Calling Agents from Microflows |
+| 371-373 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -243,6 +243,12 @@ Studio Pro stores; it defaults to the id. To list the ids a resource offers,
 with the app running (reported in ako/mxcli#2031, not measured here):
 `mxcli oql "select Model from MxGenAIConnector.MxCloudDeployedModel"`. Or read
 an agent Studio Pro saved: `describe agent` prints its `SelectedModel`.
+
+### Agent Commons lengths: a longer value leaves the old agent running
+At startup the agent is copied into Agent Commons: name (without module) ≤ 50
+characters (`Agent.Title`), `Description` ≤ 200, a tool's name and `DisplayTitle`
+≤ 200, its `Description` ≤ 4096. Over that the import fails and the previous
+version stays in use, build green; `mxcli check` warns (MDL-AGENT04).
 
 ### Dollar-quoting for multi-line prompts
 Single-quoted strings cannot span lines. Use `$$...$$` for any SystemPrompt or UserPrompt that contains newlines. DESCRIBE always emits `$$...$$` when the value contains newlines, so DESCRIBE output re-parses cleanly.
