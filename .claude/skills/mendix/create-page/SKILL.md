@@ -158,7 +158,7 @@ actionbutton btn (caption: 'Save', class: 'btn-lg')
 container c (style: 'background-color: #f8f9fa; padding: 16px;') { ... }
 ```
 
-> **Warning:** Do NOT use `style` directly on DYNAMICTEXT widgets — it crashes MxBuild with a NullReferenceException. Wrap the DYNAMICTEXT in a styled CONTAINER instead. (A building block's own styled dynamic text is placed as stored by `use building block`; the refusal is for hand-written MDL.)
+> **Note:** `style` works on DYNAMICTEXT like on any widget (an old "crashes MxBuild" warning does not reproduce). Prefer `class:` with a theme class for anything reusable.
 
 **Design Properties** — Atlas UI structured properties (spacing, colors, toggles):
 ```sql

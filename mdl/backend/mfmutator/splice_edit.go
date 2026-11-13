@@ -73,10 +73,79 @@ func (m *Mutator) swapKeeping(g *graph, x *node, oc, d bson.D, id model.ID) erro
 		return err
 	}
 	if same {
+		m.carryUnstated(d, x.doc)
 		carryPairs(d, x.doc, m.carried)
 		m.edited[x.id] = true
 	}
 	return nil
+}
+
+// unstated are the properties, by element $Type, that MDL has no spelling for:
+// describe does not print them, so no statement states them, and the writer puts
+// its default where they go. On an edit the stored value is the only one there
+// is, and it is kept (ako/mxcli#2169, mendixlabs/mxcli#1830) — a REST call whose
+// proxy was set to Override went back to the JVM default when only its timeout
+// was edited, and an activity lost its documentation.
+//
+// A property belongs here only while MDL cannot state it. Once it can, the
+// statement is the authority and the entry has to go, or an edit that removes
+// the value would be silently undone.
+var unstated = map[string][]string{
+	"Microflows$ActionActivity": {"Documentation"},
+	"Microflows$RestCallAction": {"RequestProxyType", "ProxyConfiguration"},
+}
+
+// carryUnstated copies onto d, the serialized replacement of stored, the
+// stored value of every unstated property of the activity and of its action.
+// A carried element keeps its $IDs: it is the stored element, still in the
+// unit, so it is no longer among the removed ones.
+func (m *Mutator) carryUnstated(d, stored bson.D) {
+	carry := func(nd, sd bson.D) {
+		for _, key := range unstated[dString(nd, "$Type")] {
+			v := dGet(sd, key)
+			if v == nil && !hasKey(sd, key) {
+				continue
+			}
+			if !dSet(nd, key, v) {
+				continue
+			}
+			m.unmarkRemoved(v)
+		}
+	}
+	carry(d, stored)
+	if na, sa := dDoc(d, "Action"), dDoc(stored, "Action"); na != nil && sa != nil {
+		carry(na, sa)
+	}
+}
+
+// hasKey reports whether d has key, whatever its value (null included).
+func hasKey(d bson.D, key string) bool {
+	for _, e := range d {
+		if e.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// unmarkRemoved is markRemoved undone, for an element that stays in the unit.
+func (m *Mutator) unmarkRemoved(v any) {
+	switch t := v.(type) {
+	case bson.D:
+		for _, e := range t {
+			if e.Key == "$ID" {
+				if b, ok := e.Value.(bson.Binary); ok {
+					delete(m.removed, string(b.Data))
+				}
+				continue
+			}
+			m.unmarkRemoved(e.Value)
+		}
+	case bson.A:
+		for _, el := range t {
+			m.unmarkRemoved(el)
+		}
+	}
 }
 
 // EditedInPlace reports whether a Replace of target edited the stored

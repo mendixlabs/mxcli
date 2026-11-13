@@ -1620,19 +1620,6 @@ func validateStaticWidgetOf(w *ast.WidgetV3, def *WidgetDefinition, locationPref
 		}
 	}
 
-	// An inline Style on a DynamicText crashes MxBuild with a
-	// NullReferenceException — the widget must be wrapped in a container.
-	if strings.EqualFold(w.Type, "dynamictext") && w.GetStyle() != "" {
-		out = append(out, linter.Violation{
-			RuleID:   "MDL-WIDGET03",
-			Severity: linter.SeverityError,
-			Message: fmt.Sprintf(
-				"%s: widget `%s` (dynamictext) cannot have an inline `style` — it crashes MxBuild; wrap it in a container and style the container instead",
-				locationPrefix, w.Name,
-			),
-		})
-	}
-
 	// A dynamic text whose template references a {N} placeholder with no matching
 	// parameter binding is an orphaned ClientTemplate — MxBuild fails with CE0720
 	// and Studio Pro throws a NullReferenceException when the widget is opened

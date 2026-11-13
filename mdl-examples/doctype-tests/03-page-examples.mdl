@@ -1936,8 +1936,8 @@ create page PgTest.StyledPage folder 'Styling'
     dataview dvCustomer (datasource: $Customer) {
       textbox txtName (label: 'Name', attribute: Name, class: 'form-control-lg')
       textbox txtEmail (label: 'Email', attribute: Email, style: 'font-style: italic;')
-      -- NOTE: an inline `style` on a dynamictext crashes MxBuild — style the
-      -- wrapping container instead (the dynamictext keeps its class).
+      -- A dynamictext takes an inline `style` too; styling the wrapping
+      -- container, as here, is the other way.
       container ctnCity (style: 'font-size: 12px;') {
         dynamictext dtCity (content: 'City: {1}', contentparams: ({1} = City), class: 'text-muted')
       }
