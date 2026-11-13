@@ -136,6 +136,48 @@ func TestGeneratedScriptsExecuteAndSettleOnPedApp(t *testing.T) {
 	run("seed-domain", Domain(seed))
 	run("seed-microflows", Microflows(seed))
 	run("seed-pages", Pages(seed))
+
+	// The scale session: its filler seed, an update batch that changes each
+	// flow it names and settles, and a batch of flows the seed does not have.
+	run("seed-filler", Filler("Scale", 6))
+	before = written()
+	run("scale-updates", FillerUpdates("Scale", 3, "batch"))
+	if written() == before {
+		t.Fatal("control: the update batch landed no write, so the settled re-run below would prove nothing")
+	}
+	if got := strings.Count(out.String(), "Modified microflow: Scale.Fill_"); got != 3 {
+		t.Errorf("the update batch reported %d modified filler microflows, want 3\n%s", got, out.String())
+	}
+	before = written()
+	run("scale-updates again", FillerUpdates("Scale", 3, "batch"))
+	if got := written() - before; got != 0 {
+		t.Errorf("re-running the settled update batch landed %d writes, want 0", got)
+	}
+	out.Reset()
+	run("scale-new", FillerNew("Scale", 2))
+	if got := strings.Count(out.String(), "Created microflow: Scale.New_"); got != 2 {
+		t.Errorf("the new batch reported %d created microflows, want 2\n%s", got, out.String())
+	}
+}
+
+// The filler scripts hold exactly the statements their size says: the scale
+// session divides a batch's time by it.
+func TestFillerScriptsHoldTheStatementsTheyAreSizedBy(t *testing.T) {
+	for name, c := range map[string]struct {
+		src  string
+		want int
+	}{
+		"seed":    {Filler("Scale", 7), 7},
+		"updates": {FillerUpdates("Scale", 4, "x"), 4},
+		"new":     {FillerNew("Scale", 5), 5},
+	} {
+		if got := strings.Count(c.src, "create or modify microflow Scale."); got != c.want {
+			t.Errorf("%s holds %d microflow statements, want %d", name, got, c.want)
+		}
+	}
+	if strings.Contains(FillerNew("Scale", 3), FillerName(0)) {
+		t.Error("the new batch names a filler microflow the seed creates")
+	}
 }
 
 // The test suite must name what the session authored, or every test in it

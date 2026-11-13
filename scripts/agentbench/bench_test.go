@@ -364,3 +364,63 @@ func TestRuntimeSteps_PageCheckIsOptional(t *testing.T) {
 		}
 	}
 }
+
+// The scale session runs its own steps on a project seeded with filler
+// microflows, records how many statements each batch holds, and reports them
+// per statement. A batch larger than the seed is refused before anything runs.
+func TestRun_ScaleSessionReportsItsBatchesPerStatement(t *testing.T) {
+	t.Parallel()
+	log := filepath.Join(t.TempDir(), "calls.log")
+	candidate := fakeMxcliLogging(t, "candidate", "", "", "", log)
+	cfg := testConfig(t, candidate, "")
+	cfg.sizes, cfg.reps, cfg.scaleMicroflows, cfg.scaleBatch = []string{"scale"}, 1, 9, 4
+	sessions, err := run(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sessions) != 1 || sessions[0].Size != "scale" {
+		t.Fatalf("got %d sessions, want the scale session", len(sessions))
+	}
+	var names []string
+	for _, st := range sessions[0].Steps {
+		names = append(names, st.Name)
+	}
+	want := []string{"check-cold", "check-one", "check-batch", "exec-batch", "re-exec-batch", "new-batch"}
+	if !slices.Equal(names, want) {
+		t.Errorf("steps %v, want %v", names, want)
+	}
+	if got := stepNamed(t, sessions[0], "exec-batch").Statements; got != 4 {
+		t.Errorf("exec-batch records %d statements, want 4", got)
+	}
+	if got := stepNamed(t, sessions[0], "check-one").Statements; got != 1 {
+		t.Errorf("check-one records %d statements, want 1", got)
+	}
+	if len(sessions[0].Seed) != 1 || sessions[0].Seed[0].Name != "seed-filler" {
+		t.Errorf("seed %+v, want the filler seed timed once", sessions[0].Seed)
+	}
+	calls, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := strings.SplitN(string(calls), "\n", 2)[0]
+	if !strings.Contains(first, "seed-filler.mdl") {
+		t.Errorf("the first command was %q, want the filler seed", first)
+	}
+	seed, err := os.ReadFile(filepath.Join(cfg.work, "scripts", "seed-filler.mdl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(seed), "create or modify microflow"); got != 9 {
+		t.Errorf("the seed holds %d microflows, want 9", got)
+	}
+
+	md := newRecord(cfg, sessions).markdown()
+	if !strings.Contains(md, "### Per statement") || !strings.Contains(md, "| exec-batch | 4 |") {
+		t.Errorf("the summary has no per-statement row for the batch:\n%s", md)
+	}
+
+	cfg.work, cfg.scaleBatch = t.TempDir(), 10
+	if _, err := run(cfg); err == nil || !strings.Contains(err.Error(), "seeded with 9") {
+		t.Errorf("a batch of 10 on a seed of 9 gave %v, want a refusal", err)
+	}
+}

@@ -69,9 +69,45 @@ once). The session's own scripts are the same at both sizes, so the *Scaling*
 table at the end of the output shows what each command costs more purely
 because the project around it is bigger.
 
+## The scale session
+
+The two sizes above top out below a thousand units. What a statement costs in
+a project of thousands is a different question, and the one
+[mendixlabs/mxcli#1842](https://github.com/mendixlabs/mxcli/issues/1842)
+reported: `exec` of an update cost time linear in the project size, about
+0.27 s more per statement for every 1,000 units, and `check` cost seconds per
+run before it had looked at a statement. At a few hundred units both are
+inside the noise.
+
+**scale** is PedApp with 4,000 filler microflows executed into it (the
+`seed-filler` line, run once; `-scale-microflows` changes the number). Each has
+six activities and refers to nothing, so the project grows by exactly that
+many units. The session then runs:
+
+| Step | Command | What it shows |
+|---|---|---|
+| `check-cold` | `check --references` of one update | a check's cost per run, on a project whose files have not been read yet |
+| `check-one` | the same again | a check's cost per run |
+| `check-batch` | `check --references` of 100 updates | |
+| `exec-batch` | `exec --no-check` of those 100 updates | the update path of the report: an existing flow, one text changed |
+| `re-exec-batch` | the same script again | must change nothing |
+| `new-batch` | `exec --no-check` of 100 new microflows | |
+
+`-scale-batch` changes the 100. `exec` runs with `--no-check` so that the
+check is timed in its own steps and not twice.
+
+The **Per statement** table at the end divides each step by the statements in
+its script, and then by the project's size in thousands of units. The last
+column is the one to watch: a cost that follows the project shows there, and
+one that does not stays near zero however large the project is. On v0.31.0 an
+update measured 307 ms per statement at 2,374 units, about 130 ms per
+statement per 1,000 units; on the build that fixed it, 15 ms and 6 ms.
+
+`BENCH_FLAGS='-sizes small,large'` leaves the session out.
+
 ## The running-app session
 
-`BENCH_RUNTIME=<Mendix version>` adds a third session: validating and building
+`BENCH_RUNTIME=<Mendix version>` adds a fourth session: validating and building
 the project with mx, and what an agent waits for once the app is up. Measured sessions spend more wall time here than in every
 mxcli-only command together.
 
@@ -87,7 +123,7 @@ mxcli-only command together.
 | `stop` | `run stop` | |
 | `test-cold` | `test --local --db-type hsqldb` | a test run that boots its own runtime |
 
-It differs from the other two sessions in four ways:
+It differs from the other sessions in four ways:
 
 - **The project is created by `mxcli new`**, with the session's entities,
   microflows and pages authored into it. PedApp cannot be built — the fixture
