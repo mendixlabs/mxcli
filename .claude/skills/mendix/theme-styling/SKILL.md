@@ -13,10 +13,10 @@ description: "The SCSS workflow and its traps — where styling actually compile
 | 24-43 | When to Use This Skill |
 | 44-297 | SCSS Compilation Chain |
 | 298-316 | CSS Hot-Reload Workflow |
-| 317-420 | Caveats |
-| 421-435 | Validation with `mxcli check -p` |
-| 436-444 | Checklist |
-| 445-447 | Default styling + runtime theme switching (`mxcli theme list/show/create/apply/remove/switcher`, `mxcli new --theme`) |
+| 317-412 | Caveats |
+| 413-427 | Validation with `mxcli check -p` |
+| 428-436 | Checklist |
+| 437-439 | Default styling + runtime theme switching (`mxcli theme list/show/create/apply/remove/switcher`, `mxcli new --theme`) |
 
 <!-- /skill-index -->
 # Theme & Styling — SCSS Workflow and Caveats
@@ -316,23 +316,15 @@ mxcli docker reload -p app.mpr
 
 ## Caveats
 
-### DYNAMICTEXT + Style Crash
+### DYNAMICTEXT + Style
 
-**Never** apply `style` directly to a DYNAMICTEXT widget — it crashes MxBuild with a NullReferenceException. Wrap in a CONTAINER:
-
-```sql
--- WRONG: crashes MxBuild
-dynamictext txt (content: 'Hello', style: 'color: red;')
-
--- CORRECT: style the container
-container ctn (style: 'color: red;') {
-  dynamictext txt (content: 'Hello')
-}
-```
-
-The rule is for hand-written MDL (`mxcli check` refuses it as MDL-WIDGET03). A
-dynamic text that `use building block` copies in keeps the inline style the block
-stores — Studio Pro wrote it, and it is placed as stored (ako/mxcli#2183).
+A DYNAMICTEXT takes an inline `style` like any other widget:
+`dynamictext txt (content: 'Hello', style: 'color: red;')` builds, and Studio Pro
+stores the same (Marketplace WorkflowCommons, PlatformDesignSystem). Older
+guidance said it crashed MxBuild; that does not reproduce (measured on 11.12.1,
+ako/mxcli#2183), and `mxcli check` no longer refuses it. As everywhere, prefer
+`class:` with a theme class over an inline style, so the design system stays in
+one place.
 
 This also applies to `alter styling` and `alter page set style` — never target a DYNAMICTEXT widget with Style.
 

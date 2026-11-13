@@ -21,9 +21,9 @@ description: "Reproduce a Claude Design prototype or design handoff (HTML/CSS, .
 | 574-587 | ④ Build & Preview |
 | 588-595 | ⑤ Verify Against the Prototype |
 | 596-632 | Never put a grid on a Mendix widget's own class |
-| 633-653 | Gotchas (learned building this app) |
-| 654-705 | MDL gotchas that block a faithful build |
-| 706-724 | Checklist |
+| 633-651 | Gotchas (learned building this app) |
+| 652-703 | MDL gotchas that block a faithful build |
+| 704-722 | Checklist |
 
 <!-- /skill-index -->
 # Migrate a Claude Design Prototype into a Mendix App (Theme + Pages)
@@ -632,11 +632,9 @@ settles it in one pass — see `.claude/skills/verify-in-runtime.md`.
 
 ## Gotchas (learned building this app)
 
-- **Never put `Style:` (inline style) on a `DYNAMICTEXT`** — it crashes MxBuild with a
-  NullReferenceException. `Class:` on a DYNAMICTEXT is fine; for inline style, wrap it in a
-  styled `container` instead. (Same applies to `alter styling`/`alter page set style`.)
 - **Prefer `Class:` + a real CSS class over inline `Style:`.** It keeps the design system in
-  one place and dodges the DYNAMICTEXT crash.
+  one place. (An inline `Style:` on a DYNAMICTEXT is allowed; the old "crashes MxBuild"
+  warning does not reproduce.)
 - **`DynamicClasses:` for state, not duplicate widgets.** One widget + an expression beats
   cloning a widget per state.
 - **Status chips: `white-space: nowrap`** so labels like "Fully allocated" never wrap.
