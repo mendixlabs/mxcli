@@ -148,8 +148,13 @@ func (b *Backend) RevokeEntityMemberAccess(unitID model.ID, entityName string, r
 	// read as "nothing to revoke" while each rule kept the right
 	// (mendixlabs/mxcli#1501). A rule shared with a role the statement does not
 	// name cannot be narrowed without narrowing that role too, so it is refused
-	// before anything is written.
+	// before anything is written — but only if the revocation would change it.
+	// A shared rule that grants none of the revoked rights narrows nobody and is
+	// skipped (ako/mxcli#2209). The dry run and the narrowing are one function,
+	// so the check and the write cannot disagree.
 	named := toStringSet(roleNames)
+	readSet := toStringSet(rev.RevokeReadMembers)
+	writeSet := toStringSet(rev.RevokeWriteMembers)
 	var targets []*genDm.AccessRule
 	for _, el := range ent.AccessRulesItems() {
 		rule, ok := el.(*genDm.AccessRule)
@@ -168,6 +173,9 @@ func (b *Backend) RevokeEntityMemberAccess(unitID model.ID, entityName string, r
 		case len(in) == 0:
 			continue
 		case len(out) > 0:
+			if !narrowAccessRule(rule, rev, readSet, writeSet, false) {
+				continue
+			}
 			return 0, fmt.Errorf("the access rule on %s for %s also grants %s, which this revoke does not name; "+
 				"revoke from all of the rule's roles, or grant the roles in separate rules first",
 				entityName, strings.Join(rule.ModuleRolesQualifiedNames(), ", "), strings.Join(out, ", "))
@@ -175,53 +183,9 @@ func (b *Backend) RevokeEntityMemberAccess(unitID model.ID, entityName string, r
 		targets = append(targets, rule)
 	}
 
-	readSet := toStringSet(rev.RevokeReadMembers)
-	writeSet := toStringSet(rev.RevokeWriteMembers)
 	modified := 0
 	for _, rule := range targets {
-		ruleMod := false
-		if rev.RevokeCreate && rule.AllowCreate() {
-			rule.SetAllowCreate(false)
-			ruleMod = true
-		}
-		if rev.RevokeDelete && rule.AllowDelete() {
-			rule.SetAllowDelete(false)
-			ruleMod = true
-		}
-		switch cur := rule.DefaultMemberAccessRights(); {
-		case rev.RevokeReadAll && cur != "None":
-			rule.SetDefaultMemberAccessRights("None")
-			ruleMod = true
-		case rev.RevokeWriteAll && cur == "ReadWrite":
-			rule.SetDefaultMemberAccessRights("ReadOnly")
-			ruleMod = true
-		}
-		for _, mel := range rule.MemberAccessesItems() {
-			ma, ok := mel.(*genDm.MemberAccess)
-			if !ok {
-				continue
-			}
-			ref := ma.AttributeQualifiedName()
-			if ref == "" {
-				ref = ma.AssociationQualifiedName()
-			}
-			if ref == "" {
-				continue
-			}
-			rights := ma.AccessRights()
-			newRights := rights
-			switch {
-			case rev.RevokeReadAll || readSet[ref]:
-				newRights = "None"
-			case (rev.RevokeWriteAll || writeSet[ref]) && rights == "ReadWrite":
-				newRights = "ReadOnly"
-			}
-			if newRights != rights {
-				ma.SetAccessRights(newRights)
-				ruleMod = true
-			}
-		}
-		if ruleMod {
+		if narrowAccessRule(rule, rev, readSet, writeSet, true) {
 			modified++
 		}
 	}
@@ -231,6 +195,65 @@ func (b *Backend) RevokeEntityMemberAccess(unitID model.ID, entityName string, r
 		}
 	}
 	return modified, nil
+}
+
+// narrowAccessRule reports whether rev would change rule, and applies the
+// change when apply is set. One function for both, so the shared-rule check in
+// RevokeEntityMemberAccess and the narrowing itself cannot disagree (#2209).
+func narrowAccessRule(rule *genDm.AccessRule, rev types.EntityAccessRevocation, readSet, writeSet map[string]bool, apply bool) bool {
+	changed := false
+	if rev.RevokeCreate && rule.AllowCreate() {
+		if apply {
+			rule.SetAllowCreate(false)
+		}
+		changed = true
+	}
+	if rev.RevokeDelete && rule.AllowDelete() {
+		if apply {
+			rule.SetAllowDelete(false)
+		}
+		changed = true
+	}
+	switch cur := rule.DefaultMemberAccessRights(); {
+	case rev.RevokeReadAll && cur != "None":
+		if apply {
+			rule.SetDefaultMemberAccessRights("None")
+		}
+		changed = true
+	case rev.RevokeWriteAll && cur == "ReadWrite":
+		if apply {
+			rule.SetDefaultMemberAccessRights("ReadOnly")
+		}
+		changed = true
+	}
+	for _, mel := range rule.MemberAccessesItems() {
+		ma, ok := mel.(*genDm.MemberAccess)
+		if !ok {
+			continue
+		}
+		ref := ma.AttributeQualifiedName()
+		if ref == "" {
+			ref = ma.AssociationQualifiedName()
+		}
+		if ref == "" {
+			continue
+		}
+		rights := ma.AccessRights()
+		newRights := rights
+		switch {
+		case rev.RevokeReadAll || readSet[ref]:
+			newRights = "None"
+		case (rev.RevokeWriteAll || writeSet[ref]) && rights == "ReadWrite":
+			newRights = "ReadOnly"
+		}
+		if newRights != rights {
+			if apply {
+				ma.SetAccessRights(newRights)
+			}
+			changed = true
+		}
+	}
+	return changed
 }
 
 // RemoveEntityAccessRule removes the named module roles from an entity's access
