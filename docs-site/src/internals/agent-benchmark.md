@@ -229,13 +229,66 @@ outside.
 The `bench` job in `.github/workflows/nightly.yml` downloads the previous
 nightly release's binary, runs all three sessions against it, writes the table to
 the job summary, and commits the JSON record to the `benchmarks` branch as
-`results/YYYY/MM/<timestamp>-<sha>.json`. That branch holds records only and
-is never merged.
+`results/YYYY/MM/<timestamp>-<sha>.json`. That branch holds the records and
+the trend built from them, and is never merged.
 
 The job does not gate the nightly release. It fails only when a command of
 a session fails or a `wrote-on-re-exec` is found. The running-app session runs
 last, and a session that fails does not take the completed ones with it: their
 record is still written and committed.
+
+## The trend
+
+A night's table compares two binaries on one machine. It says whether last
+night's commits made a step slower, and nothing about a step that got 3%
+slower ten nights running: no single night's ratio shows that. After each
+run the job rebuilds two files on the `benchmarks` branch from every record
+there:
+
+- `TREND.md` — GitHub renders it when the file is opened on the branch. Per
+  session, a chart of the session-weighted total over the last 30 runs
+  and a table with a row per step: the latest time, the run before, the
+  median of the seven runs before the latest, and the shape of the last 14.
+  The scale session also charts `check-one` and `exec-batch` per statement.
+- `trend.json` — the same series, for anything that wants to plot them
+  differently.
+
+The times in it are the candidate's, each on that night's runner. Hosted
+runners differ by a quarter from one night to the next, and that moves every
+step together — so read a level that stays, not one night's step, and read
+the "against its baseline" column for what a night's commits did.
+
+To build it from a checkout of the branch:
+
+```bash
+git worktree add ../benchmarks origin/benchmarks
+make bench-trend RECORDS=../benchmarks/results
+```
+
+### Alerts
+
+The same pass decides whether anything should be looked at. When it should,
+the job opens an issue labelled `benchmark-regression`, or updates the open
+one; it comments on it only when what is reported changed, and never closes
+it.
+
+| Alert | Reported when |
+|---|---|
+| `slower-two-runs` | A step's wall ratio against that night's baseline was above 1.20 in the latest run **and** in the one before. One slow night is noise too often to report. |
+| `drift` | The median of a step's last three runs is more than 1.30 times the median of the seven before them. Needs ten runs, and a step of at least 100 ms. |
+| `counts-increased` | The candidate read more unit files, or landed more writes, than the baseline in the same run. Counts carry no noise, so the first night is reported. |
+| `wrote-on-re-exec` | A settled script changed a unit file. |
+
+`drift` compares different nights, and so different machines. Each run is
+first corrected for its runner: the correction is the median, over every
+step, of that run's time against the step's own median, which is what a
+slower machine moves and a regression in one area does not. What that
+cannot see is a change that slows *every* step alike — in these numbers it
+is a slow machine. The night's own comparison is what catches that one.
+
+The thresholds are flags of `scripts/agentbench/trend` (`-slower`, `-drift`,
+`-drift-min-ms`) and are provisional: they were set before there were enough
+records to measure the spread of a quiet fortnight.
 
 ## What it does not measure
 

@@ -36,7 +36,7 @@ GO_BUILD_FLAGS = -trimpath
 # Clean version for VS Code extension (must be valid semver: major.minor.patch)
 VSCE_VERSION = $(shell echo "$(VERSION)" | sed 's/^v//; s/-.*//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$$' || echo "0.0.0")
 
-.PHONY: build build-debug size release clean test ci-local test-mdl check-mdl check-skill-mdl check-conformance conformance-shrink gen-migration-reference check-migration-reference check-skill-pack-js check-findings check-wiki-pages digest-status check-tunnel-deps check-test-timeouts check-widget-versions test-integration test-integration-executor test-integration-roundtrip test-integration-parity test-integration-upgrade test-integration-other grammar completions sync-skills sync-skill-packs sync-commands sync-mods sync-lint-rules sync-changelog sync-all docs documentation docs-site docs-serve vscode-ext vscode-install source-tree sbom sbom-report lint lint-go lint-ts fmt fmt-check vet skill-index check-skill-index bench
+.PHONY: build build-debug size release clean test ci-local test-mdl check-mdl check-skill-mdl check-conformance conformance-shrink gen-migration-reference check-migration-reference check-skill-pack-js check-findings check-wiki-pages digest-status check-tunnel-deps check-test-timeouts check-widget-versions test-integration test-integration-executor test-integration-roundtrip test-integration-parity test-integration-upgrade test-integration-other grammar completions sync-skills sync-skill-packs sync-commands sync-mods sync-lint-rules sync-changelog sync-all docs documentation docs-site docs-serve vscode-ext vscode-install source-tree sbom sbom-report lint lint-go lint-ts fmt fmt-check vet skill-index check-skill-index bench bench-trend
 
 # Helper: copy file only if content differs (avoids mtime updates that invalidate go build cache)
 # Usage: $(call copy-if-changed,src,dst)
@@ -458,6 +458,12 @@ BENCH_FLAGS ?=
 bench: build
 	go run ./scripts/agentbench -mxcli $(BUILD_DIR)/$(BINARY_NAME) $(if $(BASELINE),-baseline $(BASELINE)) \
 		$(if $(BENCH_RUNTIME),-runtime-version $(BENCH_RUNTIME)) $(BENCH_FLAGS)
+
+# The trend over the benchmark's records, and its alerts, on stdout.
+# Usage: make bench-trend RECORDS=path/to/benchmarks/results
+RECORDS ?=
+bench-trend:
+	go run ./scripts/agentbench/trend -records $(RECORDS)
 
 # Run MDL integration tests (requires Docker and a Mendix project)
 # Usage: make test-mdl MPR=path/to/app.mpr
