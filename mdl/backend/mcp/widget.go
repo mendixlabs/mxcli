@@ -204,6 +204,15 @@ func (w *mcpWidgetBuilder) SetPrimitive(propertyKey, value string) {
 	w.object[propertyKey] = value
 }
 
+func (w *mcpWidgetBuilder) SetIcon(propertyKey string, icon *pages.Icon) {
+	if icon == nil {
+		return
+	}
+	if icon.Image != "" {
+		w.object[propertyKey] = icon.Image
+	}
+}
+
 func (w *mcpWidgetBuilder) SetImage(propertyKey, imageQN string) {
 	if imageQN == "" {
 		return

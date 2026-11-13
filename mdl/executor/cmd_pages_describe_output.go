@@ -2280,6 +2280,11 @@ func describeImageWidgetProps(ctx *ExecContext, w rawWidget) []string {
 	if w.ImageType != "" && w.ImageType != "image" {
 		props = append(props, fmt.Sprintf("ImageType: %s", w.ImageType))
 	}
+	if w.ImageType == "icon" {
+		if icon := widgetIconMDL(ctx, w); icon != "" {
+			props = append(props, icon)
+		}
+	}
 	switch {
 	case w.ImageFromObject:
 		// Bound to the object in context, unquoted: a quoted value is a

@@ -209,7 +209,8 @@ LIST IMPACT OF htmlelement;
 			"--   entry writes a model mxbuild refuses (\"No image selected.\"); MDL-WIDGET22\n" +
 			"--   reports that at check time, and a name that does not resolve is reported by\n" +
 			"--   `check --references` rather than failing the build with CE1613.\n" +
-			"--   The alternatives are the URL form above, or `ImageType: icon`.\n" +
+			"--   The alternatives are the URL form above, or `ImageType: icon` with the icon\n" +
+			"--   spelled as a button's: `Icon: Atlas_Core.Atlas.\"wrench\"`, `Icon: glyph 57377`.\n" +
 			"--   A text-template property (ImageUrl, AlternativeText, a pluggable widget's\n" +
 			"--   headerCaption/title/…) takes TEXT, so a bare value renders the same string\n" +
 			"--   on every row. Bind it with the property's own `<Name>Params` companion:\n" +

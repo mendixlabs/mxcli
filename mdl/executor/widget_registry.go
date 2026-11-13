@@ -25,6 +25,7 @@ type WidgetRegistry struct {
 
 // defaultKnownOperations is the set of operation names supported by the widget engine.
 var defaultKnownOperations = map[string]bool{
+	"icon":             true,
 	"attribute":        true,
 	"association":      true,
 	"primitive":        true,

@@ -285,6 +285,9 @@ type BuildContext struct {
 	// ImageEntity is the entity an image-typed property binds to when it was
 	// written `$currentObject` rather than as a collection entry (#1476).
 	ImageEntity string
+	// Icon is an icon-typed property's value, from the widget's `Icon:`
+	// (ako/mxcli#2174).
+	Icon        *pages.Icon
 	pageBuilder *pageBuilder
 }
 
@@ -1103,6 +1106,11 @@ func (e *PluggableWidgetEngine) applyOperation(builder backend.WidgetObjectBuild
 		}
 	case "primitive":
 		builder.SetPrimitive(propKey, ctx.PrimitiveVal)
+	case "icon":
+		// No icon stated: keep the template's value.
+		if ctx.Icon != nil {
+			builder.SetIcon(propKey, ctx.Icon)
+		}
 	case "selection":
 		builder.SetSelection(propKey, ctx.PrimitiveVal)
 	case "image":
@@ -1705,6 +1713,16 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 	}
 
 	switch source {
+	case "Icon":
+		// An icon-typed property, spelled as an action button's icon:
+		// `Icon: Mod.Collection."name"`, `Icon: image Mod.Images.x`,
+		// `Icon: glyph 57377` (ako/mxcli#2174).
+		icon, err := buildWidgetIcon(w)
+		if err != nil {
+			return nil, err
+		}
+		ctx.Icon = icon
+		return ctx, nil
 	case "Attribute":
 		// Named widget-level attribute (e.g. PieChart `ValueAttribute` →
 		// `seriesValueAttribute`): look up by the property's own name/aliases so

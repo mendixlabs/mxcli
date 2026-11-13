@@ -1481,6 +1481,31 @@ func extractImageProperties(ctx *ExecContext, w map[string]any, widget *rawWidge
 	widget.Responsive = extractCustomWidgetPropertyString(ctx, w, "responsive")
 	widget.OnClickType = extractCustomWidgetPropertyString(ctx, w, "onClickType")
 	widget.Action = extractCustomWidgetPropertyAction(ctx, w, "onClick")
+	// The icon an `ImageType: icon` image shows. Never read, so describe printed
+	// the image without it and re-creating it was "No icon selected."
+	// (ako/mxcli#2174).
+	widget.Icon, widget.IconType, widget.IconCode = extractCustomWidgetPropertyIcon(w, "imageIcon")
+}
+
+// extractCustomWidgetPropertyIcon reads an icon-typed property's icon element:
+// its name (collection or image icon), its $Type, and a glyph's code — the
+// fields extractButtonIcon returns for an action button's icon.
+func extractCustomWidgetPropertyIcon(w map[string]any, propertyKey string) (name, iconType string, code int) {
+	obj, ok := w["Object"].(map[string]any)
+	if !ok {
+		return "", "", 0
+	}
+	propTypeKeyMap := buildPropertyTypeKeyMap(w, false)
+	for _, prop := range getBsonArrayElements(obj["Properties"]) {
+		propMap, ok := prop.(map[string]any)
+		if !ok || propTypeKeyMap[extractBinaryID(propMap["TypePointer"])] != propertyKey {
+			continue
+		}
+		if value, ok := propMap["Value"].(map[string]any); ok {
+			return extractButtonIcon(value)
+		}
+	}
+	return "", "", 0
 }
 
 // extractCustomWidgetPropertyTextTemplate extracts the text of a TextTemplate

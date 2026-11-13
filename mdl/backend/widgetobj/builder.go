@@ -208,6 +208,47 @@ func (ob *Builder) SetImageEntity(propertyKey string, entityName string) {
 	})
 }
 
+// SetIcon sets an icon-typed property to an icon, stored as the WidgetValue's
+// Icon element — the same three element kinds an action button's icon is
+// (ako/mxcli#2174). A nil or nameless icon leaves the template's value.
+func (ob *Builder) SetIcon(propertyKey string, icon *pages.Icon) {
+	el := iconElement(icon)
+	if el == nil {
+		return
+	}
+	ob.object = updateWidgetPropertyValue(ob.object, ob.propertyTypeIDs, propertyKey, func(val bson.D) bson.D {
+		for i := range val {
+			if val[i].Key == "Icon" {
+				val[i].Value = el
+				return val
+			}
+		}
+		return append(val, bson.E{Key: "Icon", Value: el})
+	})
+}
+
+// iconElement is the stored element of an icon, or nil when it names nothing.
+func iconElement(icon *pages.Icon) bson.D {
+	if icon == nil {
+		return nil
+	}
+	storage := types.MenuIconStorageType(icon.Kind)
+	if storage == "" {
+		return nil
+	}
+	el := bson.D{{Key: "$ID", Value: bsonutil.NewIDBsonBinary()}, {Key: "$Type", Value: storage}}
+	if icon.Kind == types.MenuIconGlyph {
+		if icon.Code == 0 {
+			return nil
+		}
+		return append(el, bson.E{Key: "Code", Value: int32(icon.Code)})
+	}
+	if icon.Image == "" {
+		return nil
+	}
+	return append(el, bson.E{Key: "Image", Value: icon.Image})
+}
+
 func (ob *Builder) SetSelection(propertyKey string, value string) {
 	if value == "" {
 		return
