@@ -317,6 +317,7 @@ func reportTransplantInstall(out io.Writer, mprPath, mendixVer, moduleName, labe
 		moduleName, label, filepath.Base(mprPath))
 	fmt.Fprintf(out, "  %d units copied, %d bundled file(s) installed.\n",
 		res.UnitsCopied, len(res.FilesInstalled))
+	reportAddOnModules(out, res.FilesInstalled)
 	reportSkippedFiles(out, res.FilesSkipped)
 	reportSecurityReconcile(out, res)
 	// Before the repairs, whose output ends with the Next step.
