@@ -5,6 +5,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"sort"
 	"strings"
 
@@ -210,6 +211,17 @@ func (s *flowAccessSim) loadStoredFlows(h *ContainerHierarchy) {
 		}
 		s.flows[key] = st
 	}
+	// A backend that can say what a flow's access takes without decoding the
+	// flow is asked that; the listings below decode every flow of the project
+	// for three top-level values of each.
+	if l, ok := s.ctx.Backend.(flowAccessLister); ok {
+		if flows, err := l.ListFlowAccess(); err == nil {
+			for _, f := range flows {
+				put(f.Kind, h.GetQualifiedName(f.ContainerID, f.Name), f.Excluded, f.AllowedModuleRoles)
+			}
+			return
+		}
+	}
 	if mfs, err := projectMicroflows(s.ctx); err == nil {
 		for _, mf := range mfs {
 			put("microflow", h.GetQualifiedName(mf.ContainerID, mf.Name), mf.Excluded, mf.AllowedModuleRoles)
@@ -220,6 +232,12 @@ func (s *flowAccessSim) loadStoredFlows(h *ContainerHierarchy) {
 			put("nanoflow", h.GetQualifiedName(nf.ContainerID, nf.Name), nf.Excluded, nf.AllowedModuleRoles)
 		}
 	}
+}
+
+// flowAccessLister is a backend that lists every flow's access without
+// decoding the flows (modelsdk.Backend.ListFlowAccess).
+type flowAccessLister interface {
+	ListFlowAccess() ([]types.FlowAccess, error)
 }
 
 // loadStoredUses reads every flow reference out of the documents that make a

@@ -587,6 +587,10 @@ widgetPropertyV3
     | VISIBLE COLON propertyValueV3                   // Visible: false
     | VISIBLE COLON expression                        // Visible: $currentObject/Status = 'Open'
     | EDITABLE COLON xpathConstraint /* @alias MDL-DEPR081 */ // Editable: [Status != 'Closed']
+    // Studio Pro's "Editable: based on attribute value", spelled as its
+    // visibility twin (ako/mxcli#2111).
+    | EDITABLE COLON qualifiedName IN LPAREN visibleValueV3 (COMMA visibleValueV3)* RPAREN  // Editable: Status in (Draft, empty)
+    | EDITABLE COLON widgetAttributeRefV3 IN LPAREN visibleValueV3 (COMMA visibleValueV3)* RPAREN  // Editable: $Param.Status in (Draft)
     | EDITABLE COLON propertyValueV3                  // Editable: Never | Always
     | EDITABLE COLON expression                       // Editable: $currentObject/Status != 'Closed'
     | TOOLTIP COLON propertyValueV3                   // Tooltip: 'text'
@@ -878,8 +882,11 @@ paramListV3
     | LBRACKET /* @alias MDL-DEPR124 */ paramAssignmentV3 (COMMA paramAssignmentV3)* RBRACKET
     ;
 
+// `{1} = <unbound>` keeps a parameter with no binding — what `describe` prints
+// for one Studio Pro stored unbound, typically in a building block, and what
+// writes it back that way (ako/mxcli#2181). mxbuild reports it until bound.
 paramAssignmentV3
-    : LBRACE NUMBER_LITERAL RBRACE EQUALS expression (FORMAT paramFormatV3)?
+    : LBRACE NUMBER_LITERAL RBRACE EQUALS (expression | UNBOUND_PARAM) (FORMAT paramFormatV3)?
     ;
 
 // Optional per-parameter formatting for a dynamic-text parameter, mapping to the

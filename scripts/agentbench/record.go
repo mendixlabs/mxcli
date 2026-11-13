@@ -45,6 +45,8 @@ type params struct {
 	LargeModules    int     `json:"large_modules"`
 	LargeEntities   int     `json:"large_entities"`
 	LargeDocuments  int     `json:"large_documents"`
+	ScaleMicroflows int     `json:"scale_microflows,omitempty"`
+	ScaleBatch      int     `json:"scale_batch,omitempty"`
 	RuntimeVersion  string  `json:"runtime_version,omitempty"`
 	Threshold       float64 `json:"threshold"`
 }
@@ -60,7 +62,8 @@ func newRecord(cfg config, sessions []sessionResult) record {
 			Base: filepath.Base(cfg.base), Reps: cfg.reps, SessionEntities: cfg.sessionEntities,
 			LargeModules: cfg.large.Modules, LargeEntities: cfg.large.Entities,
 			LargeDocuments: cfg.large.Documents(), Threshold: cfg.threshold,
-			RuntimeVersion: cfg.runtimeVersion,
+			RuntimeVersion:  cfg.runtimeVersion,
+			ScaleMicroflows: cfg.scaleMicroflows, ScaleBatch: cfg.scaleBatch,
 		},
 		WeightsVersion: weightsVersion,
 		Sessions:       sessions,
@@ -186,6 +189,48 @@ func (r record) markdown() string {
 		}
 	}
 	sb.WriteString(r.scaling())
+	sb.WriteString(r.perStatement())
+	return sb.String()
+}
+
+// perStatement is the scale session's batches as an agent meets them: the time
+// one statement takes, and how much of it there is for every 1,000 units of
+// the project. A cost that follows the project shows in the last column; one
+// that does not stays near zero whatever the project holds.
+func (r record) perStatement() string {
+	var scale *sessionResult
+	for i := range r.Sessions {
+		if r.Sessions[i].Size == "scale" {
+			scale = &r.Sessions[i]
+		}
+	}
+	if scale == nil || scale.Units == 0 {
+		return ""
+	}
+	ab := r.Baseline != ""
+	thousands := float64(scale.Units) / 1000
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "\n### Per statement — %d units\n\n", scale.Units)
+	if ab {
+		sb.WriteString("| step | statements | new, per statement | old, per statement | new, per statement per 1,000 units |\n|---|---:|---:|---:|---:|\n")
+	} else {
+		sb.WriteString("| step | statements | per statement | per statement per 1,000 units |\n|---|---:|---:|---:|\n")
+	}
+	for _, st := range scale.Steps {
+		if st.Statements == 0 || st.Candidate == nil {
+			continue
+		}
+		each := st.Candidate.Wall.Median / float64(st.Statements)
+		switch {
+		case ab && st.Baseline != nil:
+			fmt.Fprintf(&sb, "| %s | %d | %s | %s | %s |\n", st.Name, st.Statements, msFine(each),
+				msFine(st.Baseline.Wall.Median/float64(st.Statements)), msFine(each/thousands))
+		case ab:
+			fmt.Fprintf(&sb, "| %s | %d | %s | — | %s |\n", st.Name, st.Statements, msFine(each), msFine(each/thousands))
+		default:
+			fmt.Fprintf(&sb, "| %s | %d | %s | %s |\n", st.Name, st.Statements, msFine(each), msFine(each/thousands))
+		}
+	}
 	return sb.String()
 }
 
@@ -226,6 +271,15 @@ func ms(v float64) string {
 		return fmt.Sprintf("%.2f s", v/1000)
 	}
 	return fmt.Sprintf("%.0f ms", v)
+}
+
+// msFine is ms for the per-statement figures, which are often a few
+// milliseconds: below ten it keeps one decimal.
+func msFine(v float64) string {
+	if v < 10 {
+		return fmt.Sprintf("%.1f ms", v)
+	}
+	return ms(v)
 }
 
 func reads(c *counts) string {

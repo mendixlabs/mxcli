@@ -119,8 +119,11 @@ func init() {
 	// A List View's XPath source always carries its SourceVariable key, null
 	// when the source is not reached from a parameter: 44 of 44 in the
 	// fixtures, as on the pluggable XPath source above (ako/mxcli#721 L5).
+	// EntityRef likewise: a List View with no entity configured yet stores the
+	// key null — every such List View in the testdata/testapp page templates —
+	// and mxcli omitted it (ako/mxcli#2183).
 	codec.RegisterTypeDefaults("Forms$ListViewXPathSource", codec.TypeDefaults{
-		NullFields: []string{"SourceVariable"},
+		NullFields: []string{"EntityRef", "SourceVariable"},
 	})
 	// An association source likewise: 40 of 40 in FactoryManagement carry the
 	// key, null (30) when the source starts from $currentObject (ako/mxcli#2106).
@@ -1349,6 +1352,21 @@ func conditionalEditabilityToGen(ces *pages.ConditionalEditabilitySettings) elem
 	}
 	assignID(g)
 	g.SetExpression(ces.Expression)
+	// "Editable: based on attribute value" (ako/mxcli#2111): written exactly as
+	// the visibility settings' attribute form above.
+	if ces.Attribute != "" {
+		g.SetAttributeQualifiedName(ces.Attribute)
+		for _, c := range ces.Conditions {
+			cg := genEnum.NewCondition()
+			assignID(cg)
+			cg.SetAttributeValue(c.Value)
+			cg.SetEditableVisible(c.Visible)
+			g.AddConditions(cg)
+		}
+		if sv := inputSourceVariableToGen(ces.SourceVariable); sv != nil {
+			g.SetSourceVariable(sv)
+		}
+	}
 	return g
 }
 
@@ -1839,7 +1857,18 @@ func associationContextVariableToGen(d *pages.AssociationSource) element.Element
 // Forms$ListViewXPathSource (EntityRef + XPathConstraint + a GridSortBar and a
 // ListViewSearch sub-element, matching what Studio Pro/the legacy writer emit);
 // a microflow source uses Forms$MicroflowSource (as DataView does).
+//
+// No source at all is a List View whose data source is not configured yet — a
+// building block's (PlatformDesignSystem's Avatar_Group_SM) or a hand-written
+// `listview` without `DataSource:`. Studio Pro stores that as an XPath source
+// naming no entity: the same element with EntityRef and SourceVariable null and
+// an empty sort bar and search (every such List View in the page templates of
+// testdata/testapp). `mx check` then asks for the entity, which is the author's
+// to choose. Refusing it instead blocked the whole block (ako/mxcli#2183).
 func listViewSourceToGen(ds pages.DataSource) (element.Element, error) {
+	if ds == nil {
+		return listViewSourceToGen(&pages.DatabaseSource{})
+	}
 	switch d := ds.(type) {
 	case *pages.DatabaseSource:
 		src := genPg.NewListViewXPathSource()

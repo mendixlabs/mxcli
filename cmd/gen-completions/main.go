@@ -85,6 +85,8 @@ var excludeTokens = map[string]bool{
 	"STRING_LITERAL": true, "NUMBER_LITERAL": true, "DOLLAR_STRING": true,
 	"MENDIX_TOKEN": true, "IDENTIFIER": true, "VARIABLE": true,
 	"HYPHENATED_ID": true, "QUOTED_IDENTIFIER": true,
+	// `{1} = <unbound>`: a value placeholder describe prints, not a keyword
+	"UNBOUND_PARAM": true,
 }
 
 // sectionHeaderRE matches section headers like "// ============" followed by "// SECTION NAME"

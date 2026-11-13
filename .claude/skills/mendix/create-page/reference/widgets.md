@@ -65,6 +65,11 @@ dynamictext day  (content: '{1}', contentparams: ({1} = DueOn format (dateFormat
 > (MDL-WIDGET04), MxBuild fails with CE0720, and Studio Pro throws a
 > NullReferenceException when the widget is opened. Bind every placeholder, or use
 > a plain static `content: 'text'`.
+>
+> `{1} = <unbound>` is what `describe` prints for a parameter that exists but has
+> no binding (building blocks are full of them). It parses back and writes the
+> parameter unbound, so describe -> exec round-trips — but mxbuild still reports
+> CE0402 "No value specified." until it is bound. Do not author it in new MDL.
 
 ### LABEL Widget
 
@@ -176,6 +181,7 @@ describe icon collection Atlas_Core.Atlas_Filled;   -- every icon + its referenc
 **Button Styles:** `default`, `primary`, `success`, `info`, `warning`, `danger`, `inverse`
 - Case-insensitive (`primary` and `Primary` both work).
 - These are the only values Mendix recognizes — anything else (a typo, or `secondary`/`link`, which Mendix has no button style for) is rejected by `mxcli check` (MDL-WIDGET02). Previously an unknown value was silently rendered as `btn-default`.
+- A **pluggable** widget that declares a property of its own named `buttonStyle` (PlatformDesignSystem's `pdsbutton`: `fill`, `fillBlue`, `outline`, …) takes its own values instead; the same holds for its own `caption`, `label`, `icon` and `tooltip` — in `create page`, `alter page … set` and `check` alike. `mxcli describe page` prints them as the widget stores them.
 
 **Examples:**
 ```sql

@@ -1108,17 +1108,22 @@ func findMergeForSplit(
 	branchStarts := make([]model.ID, 0, len(flows))
 	for _, flow := range flows {
 		branchStarts = append(branchStarts, flow.DestinationID)
-		branchDistances = append(branchDistances, collectReachableDistances(flow.DestinationID, flowsByOrigin))
+		branchDistances = append(branchDistances, collectReachableDistances(flow.DestinationID, splitID, flowsByOrigin))
 	}
 
-	return selectNearestCommonJoin(activityMap, flowsByOrigin, branchStarts, branchDistances)
+	return selectNearestCommonJoin(splitID, activityMap, flowsByOrigin, branchStarts, branchDistances)
 }
 
 // collectReachableDistances collects the shortest normal-flow distance from a
 // branch start to every reachable node. Error handler flows are excluded because
 // they do not participate in split/merge structural pairing.
+//
+// The walk stops at barrierID, the split itself: a branch that comes back to
+// its own split has gone round a loop, and what it reaches past that point is
+// the other branch, not a join with it (mendixlabs/mxcli#1829).
 func collectReachableDistances(
 	startID model.ID,
+	barrierID model.ID,
 	flowsByOrigin map[model.ID][]*microflows.SequenceFlow,
 ) map[model.ID]int {
 	distances := map[model.ID]int{}
@@ -1135,6 +1140,9 @@ func collectReachableDistances(
 		if previous, ok := distances[item.id]; ok && previous <= item.distance {
 			continue
 		}
+		if item.id == barrierID {
+			continue
+		}
 		distances[item.id] = item.distance
 
 		for _, flow := range findNormalFlows(flowsByOrigin[item.id]) {
@@ -1149,6 +1157,7 @@ func collectReachableDistances(
 }
 
 func selectNearestCommonJoin(
+	splitID model.ID,
 	activityMap map[model.ID]microflows.MicroflowObject,
 	flowsByOrigin map[model.ID][]*microflows.SequenceFlow,
 	branchStarts []model.ID,
@@ -1225,7 +1234,7 @@ func selectNearestCommonJoin(
 
 	filtered := candidates[:0]
 	for _, candidate := range candidates {
-		if splitJoinCandidateDoesNotHaveDownstreamBypass(candidate.id, activityMap, flowsByOrigin, branchStarts) {
+		if splitJoinCandidateDoesNotHaveDownstreamBypass(splitID, candidate.id, activityMap, flowsByOrigin, branchStarts) {
 			filtered = append(filtered, candidate)
 		}
 	}
@@ -1250,13 +1259,19 @@ func selectNearestCommonJoin(
 	return candidates[0].id
 }
 
+// splitJoinCandidateDoesNotHaveDownstreamBypass rejects a candidate join when a
+// branch reaches what lies past it without passing through it. "Past it" stops
+// at the split: inside a `while true` the join leads round the loop back to the
+// split and on into its own branches, which then look like a bypass of the very
+// join they meet at, and the split got no join at all (mendixlabs/mxcli#1829).
 func splitJoinCandidateDoesNotHaveDownstreamBypass(
+	splitID model.ID,
 	candidateID model.ID,
 	activityMap map[model.ID]microflows.MicroflowObject,
 	flowsByOrigin map[model.ID][]*microflows.SequenceFlow,
 	branchStarts []model.ID,
 ) bool {
-	downstream := collectReachableNonTerminalObjects(candidateID, activityMap, flowsByOrigin)
+	downstream := collectReachableNonTerminalObjects(candidateID, splitID, activityMap, flowsByOrigin)
 	if len(downstream) == 0 {
 		return true
 	}
@@ -1273,12 +1288,16 @@ func splitJoinCandidateDoesNotHaveDownstreamBypass(
 
 func collectReachableNonTerminalObjects(
 	startID model.ID,
+	barrierID model.ID,
 	activityMap map[model.ID]microflows.MicroflowObject,
 	flowsByOrigin map[model.ID][]*microflows.SequenceFlow,
 ) map[model.ID]bool {
 	result := map[model.ID]bool{}
 	var walk func(model.ID)
 	visited := map[model.ID]bool{startID: true}
+	if barrierID != "" {
+		visited[barrierID] = true
+	}
 	walk = func(currentID model.ID) {
 		if visited[currentID] {
 			return

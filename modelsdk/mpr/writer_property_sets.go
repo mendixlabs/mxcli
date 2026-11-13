@@ -148,29 +148,41 @@ var lowerToProjectShape = canon.LowerToProjectShape
 // normalizePropertySetsFor is normalizePropertySets for a given project
 // version, shared by the write path and the stored-unit repair.
 func normalizePropertySetsFor(pv *version.ProjectVersion, unitID string, contents []byte) ([]byte, error) {
+	return storageFormFor(pv, unitID, contents, false)
+}
+
+// storageFormFor is normalizePropertySetsFor, and with listMarkers the list
+// markers Studio Pro writes as well (canon.NormalizeListMarkers) — everything
+// the write path does to a unit's bytes before they are stored or compared.
+func storageFormFor(pv *version.ProjectVersion, unitID string, contents []byte, listMarkers bool) ([]byte, error) {
 	if pv == nil || pv.MajorVersion == 0 {
+		if listMarkers {
+			return canon.NormalizeListMarkers(contents), nil
+		}
 		return contents, nil
 	}
 	v := mversion.Version{Major: pv.MajorVersion, Minor: pv.MinorVersion, Patch: pv.PatchVersion}
 	// Properties whose shape changed at a version are written in the project's
 	// shape first, so the floor sees the keys this version declares
-	// (ako/mxcli#1209).
+	// (ako/mxcli#1209). A version that has every shape is not parsed for it.
 	lowered, err := lowerToProjectShape(contents, &v)
 	if err != nil {
 		return nil, fmt.Errorf("unit %s: %w", unitID, err)
 	}
-	stripped, err := canon.StripUndeclaredProperties(lowered, &v)
+	// Then, on one parse of the document (canon.CompleteForStorage):
+	//
+	//   - keys this version does not declare are stripped, or refused when
+	//     they hold a real value;
+	//   - keys Studio Pro always writes are completed;
+	//   - a GUID-less user role gets its $ID as GUID — absent only, never
+	//     changed (canon.FillMissingUserRoleGUIDs). Not a table row: the value
+	//     is per role;
+	//   - an element whose $Type this version does not have yet makes the
+	//     project unloadable (TypeCacheUnknownTypeException). What has an older
+	//     shape was lowered above; what is left is refused, on the bytes that
+	//     would land (ako/mxcli#1774).
+	out, err := canon.CompleteForStorage(lowered, &v, listMarkers)
 	if err != nil {
-		return nil, fmt.Errorf("unit %s: %w", unitID, err)
-	}
-	// A GUID-less user role gets its $ID as GUID — absent only, never changed
-	// (canon.FillMissingUserRoleGUIDs). Not a table row: the value is per role.
-	out := canon.FillMissingUserRoleGUIDs(canon.CompletePropertySets(stripped, &v))
-	// An element whose $Type this version does not have yet makes the project
-	// unloadable (TypeCacheUnknownTypeException). What has an older shape was
-	// lowered above; what is left is refused, on the bytes that would land
-	// (ako/mxcli#1774).
-	if err := canon.UndeclaredTypeError(out, &v); err != nil {
 		return nil, fmt.Errorf("unit %s: %w", unitID, err)
 	}
 	return out, nil

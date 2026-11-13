@@ -298,7 +298,7 @@ func validateWidgetTreeIn(widgets []*ast.WidgetV3, registry *WidgetRegistry, loc
 		// An IMAGE with nothing to show — the default source needs an image
 		// reference MDL cannot author. See validate_widget_image.go.
 		out = append(out, validateImageSource(w, locationPrefix)...)
-		out = append(out, validateStaticWidget(w, locationPrefix)...)
+		out = append(out, validateStaticWidgetOf(w, lookupWidgetDef(w, registry), locationPrefix)...)
 		// #1511: a snippet call renders no element, so its Class / Style /
 		// DynamicClasses / design properties never reach the page.
 		out = append(out, validateSnippetCallAppearance(w, locationPrefix)...)
@@ -1229,7 +1229,7 @@ var staticWidgetKnownProps = func() map[string]bool {
 		// keys the builders/visitor consume and the conditional-binding metadata
 		"CaptionAttribute", "Collapsible", "DatabaseHost", "DefaultLanguage", "Footer",
 		"FormOrientation", "HeaderMode", "LabelWidth", "Prefix", "ShowContentAs", "Title",
-		"Widget", "WidgetType", "ShowLabel", "VisibleIf", "VisibleWhen", "VisibleRoles", "EditableIf", "DynamicClasses",
+		"Widget", "WidgetType", "ShowLabel", "VisibleIf", "VisibleWhen", "VisibleRoles", "EditableIf", "EditableWhen", "DynamicClasses",
 		// vocabulary describe page emits (native widgets + datagrid columns)
 		"Alignment", "AlternativeText", "ColumnClass", "ColumnWidth", "DesktopColumns",
 		"DisplayAs", "Draggable", "DynamicCellClass", "HeightUnit", "Hidable", "ImageType",
@@ -1590,12 +1590,24 @@ func validateConsumableConditional(w *ast.WidgetV3, locationPrefix string) []lin
 }
 
 func validateStaticWidget(w *ast.WidgetV3, locationPrefix string) []linter.Violation {
+	return validateStaticWidgetOf(w, nil, locationPrefix)
+}
+
+// validateStaticWidgetOf is validateStaticWidget for a widget whose definition
+// is known (nil for a built-in widget or no registry).
+func validateStaticWidgetOf(w *ast.WidgetV3, def *WidgetDefinition, locationPrefix string) []linter.Violation {
 	var out []linter.Violation
 
 	// An unrecognized (often mis-cased) button style is silently degraded to
 	// btn-default by MxBuild. Reject it at check time. CanonicalButtonStyle is
 	// case-insensitive, so legitimate lowercase values still pass.
-	if bs := w.GetButtonStyle(); bs != "" {
+	//
+	// Not on a pluggable widget that declares a `buttonStyle` of its own (a
+	// PDS Button: fill, fillBlue, outline, …): that is its own enumeration,
+	// judged against the keys its package declares by
+	// validatePluggableEnumValues, and Mendix's button styles mean nothing to
+	// it (ako/mxcli#2180).
+	if bs := w.GetButtonStyle(); bs != "" && !defOwnsCoreName(def, "buttonStyle") {
 		if _, ok := pages.CanonicalButtonStyle(bs); !ok {
 			out = append(out, linter.Violation{
 				RuleID:   "MDL-WIDGET02",

@@ -3,6 +3,7 @@
 package canon
 
 import (
+	"bytes"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore"
 )
@@ -43,6 +44,24 @@ const persistentIDKey = "PersistentId"
 //
 // A document that cannot be read on either side passes through untouched.
 func CarryPersistentIDs(contents, stored []byte) []byte {
+	// Only a workflow's elements have the property. A pair needs it on the new
+	// side as a 16-byte binary, stored as this byte sequence: without it there
+	// is nothing to carry, and the two documents need not be parsed to find
+	// that out — as they were for every page, microflow and domain model
+	// written (ako/mxcli#2160).
+	if !bytes.Contains(contents, persistentIDElement) {
+		return contents
+	}
+	return carryPersistentIDsUnfiltered(contents, stored)
+}
+
+// persistentIDElement is how a binary PersistentId property starts in a stored
+// document: the binary type byte, the key, and the key's terminator.
+var persistentIDElement = []byte("\x05" + persistentIDKey + "\x00")
+
+// carryPersistentIDsUnfiltered is CarryPersistentIDs without the check that
+// the document has the property at all.
+func carryPersistentIDsUnfiltered(contents, stored []byte) []byte {
 	m := persistentIDMapping(contents, stored)
 	if len(m) == 0 {
 		return contents

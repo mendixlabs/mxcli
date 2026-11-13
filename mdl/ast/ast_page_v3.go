@@ -193,6 +193,15 @@ type WidgetV3 struct {
 	// diagnostic. Keyed by the property name as written; read it through
 	// ExpressionSource, which matches case-insensitively.
 	ValueSource map[string]string
+
+	// FromBuildingBlock records that the widget was copied in by `use building
+	// block` rather than written by the author: Studio Pro authored it, and its
+	// values are the block's stored ones. A refusal meant to stop hand-written
+	// MDL from writing something Studio Pro would not (an inline style on a
+	// dynamictext, MDL-WIDGET03) does not apply to a value Studio Pro wrote
+	// itself — refusing it blocked the whole block (ako/mxcli#2183). Set by the
+	// building-block expander only.
+	FromBuildingBlock bool
 }
 
 // ExpressionSource returns the source text the visitor kept for key (see
@@ -399,10 +408,17 @@ type ColumnV3 struct {
 }
 
 // ParamAssignmentV3 represents a template parameter: {1} = value
+//
+// `{1} = <unbound>` is a parameter with no binding yet — Value is nil and
+// Unbound is set. It is what `describe` prints for a stored parameter whose
+// AttributeRef, Expression and SourceVariable are all empty (normal in a
+// building block), and it writes back to that same empty parameter, keeping
+// its position so `{2}` does not shift onto `{1}`'s slot (ako/mxcli#2181).
 type ParamAssignmentV3 struct {
-	Index  int            // Parameter index (1, 2, 3, ...)
-	Value  any            // Expression value
-	Format *ParamFormatV3 // Optional per-parameter formatting (dynamic text), else nil
+	Index   int            // Parameter index (1, 2, 3, ...)
+	Value   any            // Expression value; nil when Unbound
+	Unbound bool           // `{n} = <unbound>`: the parameter is kept, with no binding
+	Format  *ParamFormatV3 // Optional per-parameter formatting (dynamic text), else nil
 }
 
 // ParamFormatV3 holds the optional per-parameter formatting of a dynamic-text

@@ -10,6 +10,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/pages"
@@ -27,8 +28,11 @@ func describePage(ctx *ExecContext, name ast.QualifiedName) error {
 		return mdlerrors.NewBackend("build hierarchy", err)
 	}
 
-	// Find the page: only the pages of this name are decoded (#1850).
-	allPages, err := pagesWhere(ctx.Backend, func(n string) bool { return n == name.Name })
+	// Find the page: only the pages of this name in this module are decoded
+	// (#1850; and not its namesakes in other modules, #2160).
+	allPages, err := pagesWhereHeader(ctx.Backend, func(hd types.DocumentHeader) bool {
+		return hd.Name == name.Name && (name.Module == "" || h.GetModuleName(h.FindModuleID(hd.ContainerID)) == name.Module)
+	})
 	if err != nil {
 		return mdlerrors.NewBackend("list pages", err)
 	}
@@ -169,7 +173,9 @@ func describePage(ctx *ExecContext, name ast.QualifiedName) error {
 	// Main placeholder renders as bare widgets (backward-compatible); a page that
 	// binds widgets to more than one placeholder emits explicit `placeholder
 	// <Name> { … }` blocks so it round-trips (issue #532).
-	groups := getPageWidgetGroupsFromRaw(ctx, foundPage.ID)
+	// From the document read above for the layout: reading it again decoded
+	// the whole page a second time for every describe.
+	groups := pageWidgetGroupsFromRawData(ctx, rawData)
 	var nonEmpty []pageWidgetGroup
 	for _, g := range groups {
 		if len(g.Widgets) > 0 {
@@ -1025,6 +1031,10 @@ type rawWidget struct {
 	// expression/attribute condition (mendixlabs/mxcli#1460).
 	VisibleRoles []string
 	EditableIf   string // Expression from ConditionalEditabilitySettings
+	// "Editable: based on attribute value", as VisibleAttr/VisibleValues are
+	// for visibility: the values that make the widget EDITABLE (ako/mxcli#2111).
+	EditableAttr   string
+	EditableValues []string
 	// Design properties from Appearance
 	DesignProperties []rawDesignProp
 	// Explicit widget properties (for generic PLUGGABLEWIDGET output)

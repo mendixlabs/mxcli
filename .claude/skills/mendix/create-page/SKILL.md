@@ -15,12 +15,12 @@ description: "CREATE PAGE syntax reference — parameters, variables, layouts, a
 | 47-222 | Syntax |
 | 223-293 | Basic Examples |
 | 294-318 | Modifying Existing Pages |
-| 319-422 | Conditional Visibility and Editability |
-| 423-587 | Known Limitations |
-| 588-596 | Tips |
-| 597-623 | Related Commands |
-| 624-648 | PLUGGABLEWIDGET Escape Hatch |
-| 649-652 | See Also |
+| 319-431 | Conditional Visibility and Editability |
+| 432-596 | Known Limitations |
+| 597-605 | Tips |
+| 606-632 | Related Commands |
+| 633-657 | PLUGGABLEWIDGET Escape Hatch |
+| 658-661 | See Also |
 
 <!-- /skill-index -->
 # CREATE PAGE - MDL Syntax Guide
@@ -158,7 +158,7 @@ actionbutton btn (caption: 'Save', class: 'btn-lg')
 container c (style: 'background-color: #f8f9fa; padding: 16px;') { ... }
 ```
 
-> **Warning:** Do NOT use `style` directly on DYNAMICTEXT widgets — it crashes MxBuild with a NullReferenceException. Wrap the DYNAMICTEXT in a styled CONTAINER instead.
+> **Warning:** Do NOT use `style` directly on DYNAMICTEXT widgets — it crashes MxBuild with a NullReferenceException. Wrap the DYNAMICTEXT in a styled CONTAINER instead. (A building block's own styled dynamic text is placed as stored by `use building block`; the refusal is for hand-written MDL.)
 
 **Design Properties** — Atlas UI structured properties (spacing, colors, toggles):
 ```sql
@@ -362,6 +362,15 @@ value") — list the Boolean/enumeration values that SHOW the widget; `empty` is
 ```sql
 container cntRunning (visible: Status in (Running, empty)) { ... }
 textbox txtPassword (label: 'Password', attribute: Password, visible: IsLocalUser in (true))
+```
+
+**Editable based on an attribute value** is spelled the same way — the values
+that make the widget EDITABLE — on any widget that takes `editable:`, combo
+boxes included. A page or snippet parameter is `$Param.Attr`:
+
+```sql
+textbox txtTitle (attribute: Title, editable: Status in (Draft, Open))
+combobox cbStatus (attribute: Status, editable: IsLocked in (false))
 ```
 
 **Visible for module roles** (Studio Pro's role-based visibility) is a separate

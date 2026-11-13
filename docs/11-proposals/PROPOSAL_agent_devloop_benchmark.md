@@ -358,6 +358,28 @@ Both run once per repetition, on the project as authored. A check after each
 change — how an agent actually uses it — is not measured separately; the
 session-weighted total stands in for it through the step's weight.
 
+### Phase 4 — the scale session
+
+Added after the fact, for a gap the first user report showed
+(mendixlabs/mxcli#1842): the benchmark's largest project was under a thousand
+units, and the reported cost — an update slower in step with the project, a
+`check` that takes seconds per run — only shows at several thousand.
+
+#### Phase 4 as built
+
+A third mxcli-only session, `scale`, on PedApp with 4,000 filler microflows
+executed into it: `check` of one update cold and warm, `check` and `exec` of a
+batch of 100 updates, the settled re-run of that batch, and 100 new
+microflows. A step records how many statements its script holds, and the
+summary ends with each batch per statement and per 1,000 units. First figures
+on the development machine against v0.31.0, at 2,374 units: an update 15 ms
+per statement against 307 ms.
+
+The filler microflows refer to nothing, so the session measures what a
+statement costs because the project is large, not because it is entangled. A
+project whose pages and microflows refer to each other heavily is still the
+`large` session's, at a size where it is cheap to seed.
+
 ### Later, separately — a scheduled agent-level run
 
 `mxcli eval run` on `BENCH-001` is the agent-level counterpart and already

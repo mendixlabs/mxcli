@@ -581,6 +581,9 @@ func (pb *pageBuilder) buildWidgetV3(w *ast.WidgetV3) (pages.Widget, error) {
 	if err := pb.applyVisibleWhen(widget, w); err != nil {
 		return nil, err
 	}
+	if err := pb.applyEditableWhen(widget, w); err != nil {
+		return nil, err
+	}
 	if err := applyVisibleRoles(widget, w); err != nil {
 		return nil, err
 	}
@@ -617,6 +620,9 @@ func (pb *pageBuilder) buildPluggable(def *WidgetDefinition, w *ast.WidgetV3) (p
 		return nil, err
 	}
 	if err := pb.applyVisibleWhen(widget, w); err != nil {
+		return nil, err
+	}
+	if err := pb.applyEditableWhen(widget, w); err != nil {
 		return nil, err
 	}
 	if err := applyVisibleRoles(widget, w); err != nil {
@@ -696,7 +702,14 @@ func applyWidgetAppearance(widget pages.Widget, w *ast.WidgetV3, theme *ThemeReg
 	// A DynamicText with an inline Style crashes MxBuild with a
 	// NullReferenceException. Reject it here (the workaround is to wrap the
 	// widget in a container and style the container instead).
-	if style != "" && strings.EqualFold(w.Type, "dynamictext") {
+	//
+	// Not for a widget a building block copied in: that style is the block's
+	// own, written by Studio Pro and carried through verbatim, and mxbuild
+	// builds it — PlatformDesignSystem's Icon_After_Text styles its text
+	// `--icon-size: auto;`, and refusing it refused the whole block
+	// (ako/mxcli#2183). Measured on 11.12.1: a dynamic text with that style,
+	// written by this engine, passes `mx check` and `mxcli docker build`.
+	if style != "" && strings.EqualFold(w.Type, "dynamictext") && !w.FromBuildingBlock {
 		return mdlerrors.NewValidationf(
 			"dynamictext %q: an inline `style` crashes MxBuild — wrap it in a container and style the container instead",
 			w.Name,
@@ -3351,6 +3364,7 @@ func (pb *pageBuilder) expandBuildingBlockRef(w *ast.WidgetV3) ([]*ast.WidgetV3,
 		return nil, fmt.Errorf("use building block %s: could not expand widget tree", w.Name)
 	}
 	widgets := def.Widgets
+	markFromBuildingBlock(widgets)
 
 	// Apply the optional prefix rename.
 	if prefix, ok := w.Properties["Prefix"].(string); ok && prefix != "" {
@@ -3388,6 +3402,15 @@ func (pb *pageBuilder) expandBuildingBlockRef(w *ast.WidgetV3) ([]*ast.WidgetV3,
 		}
 	}
 	return widgets, nil
+}
+
+// markFromBuildingBlock flags every widget of an expanded block, children
+// included, as one the author did not write (see ast.WidgetV3.FromBuildingBlock).
+func markFromBuildingBlock(widgets []*ast.WidgetV3) {
+	for _, w := range widgets {
+		w.FromBuildingBlock = true
+		markFromBuildingBlock(w.Children)
+	}
 }
 
 // isDataSourceWidget reports whether a widget is one that takes a datasource,
