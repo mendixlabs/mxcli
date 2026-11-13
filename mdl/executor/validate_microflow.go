@@ -11,6 +11,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/exprcheck"
 	"github.com/mendixlabs/mxcli/mdl/exprcheck/adapters"
 	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
 // ValidateMicroflow checks a microflow for common issues that don't require a project connection.
@@ -594,6 +595,19 @@ func (v *microflowValidator) checkStmtExprFunctions(s ast.MicroflowStatement) {
 		for _, tp := range stmt.Template {
 			v.checkExprFunctions(fmt.Sprintf("log template {%d}", tp.Index), tp.Value)
 		}
+	case *ast.ShowMessageStmt:
+		// ako/mxcli#2199: never walked, so `show message information (…)` — a
+		// call to information(), the type written before the message — passed
+		// check and exec and failed the build with CE0117.
+		v.checkExprFunctions("show message", stmt.Message)
+		for i, arg := range stmt.TemplateArgs {
+			v.checkExprFunctions(fmt.Sprintf("show message template {%d}", i+1), arg)
+		}
+	case *ast.ValidationFeedbackStmt:
+		v.checkExprFunctions("validation feedback", stmt.Message)
+		for i, arg := range stmt.TemplateArgs {
+			v.checkExprFunctions(fmt.Sprintf("validation feedback template {%d}", i+1), arg)
+		}
 	}
 }
 
@@ -621,6 +635,10 @@ func (v *microflowValidator) checkExprFunctions(label string, expr ast.Expressio
 			suggestion = fmt.Sprintf(
 				"'%s' is an aggregate activity, not an expression function. Assign it to a variable first: $n = %s($List); then use $n in the expression.",
 				u.Name, u.Name)
+		} else if t, ok := microflows.CanonicalMessageType(u.Name); ok && strings.HasPrefix(label, "show message") {
+			// ako/mxcli#2199: the message type written before the message.
+			suggestion = fmt.Sprintf("The message type goes after the message: show message (…) type %s, "+
+				"or show message 'text {1}' type %s with ({1} = …).", t, t)
 		} else if u.Token != "" {
 			suggestion = fmt.Sprintf("Use the %s token instead of '%s()'.", u.Token, u.Name)
 		} else {

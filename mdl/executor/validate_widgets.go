@@ -1255,7 +1255,7 @@ var staticWidgetKnownProps = func() map[string]bool {
 		// mendixlabs/mxcli#1346: a dataview's explicit footer flag (#813), the
 		// menu source and orientation of navigationtree / menubar /
 		// simplemenubar, and a scroll-container region's size mode.
-		"ShowFooter", "Menu", "Profile", "Orientation", "SizeMode",
+		"ShowFooter", "NoEntityMessage", "Menu", "Profile", "Orientation", "SizeMode",
 		// a scroll-container region's toggle mode, which a sidebartoggle opens
 		// (mendixlabs/mxcli#1220).
 		"ToggleMode",
@@ -1618,19 +1618,6 @@ func validateStaticWidgetOf(w *ast.WidgetV3, def *WidgetDefinition, locationPref
 				),
 			})
 		}
-	}
-
-	// An inline Style on a DynamicText crashes MxBuild with a
-	// NullReferenceException — the widget must be wrapped in a container.
-	if strings.EqualFold(w.Type, "dynamictext") && w.GetStyle() != "" {
-		out = append(out, linter.Violation{
-			RuleID:   "MDL-WIDGET03",
-			Severity: linter.SeverityError,
-			Message: fmt.Sprintf(
-				"%s: widget `%s` (dynamictext) cannot have an inline `style` — it crashes MxBuild; wrap it in a container and style the container instead",
-				locationPrefix, w.Name,
-			),
-		})
 	}
 
 	// A dynamic text whose template references a {N} placeholder with no matching

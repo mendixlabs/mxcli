@@ -108,8 +108,11 @@ that did not.
 An activity edited in place keeps the stored value of every property MDL has
 no spelling for — its documentation, and a REST call's proxy setting (`Override`
 with its host, port and credential expressions, or `NoProxy`). The statement
-cannot state them, so it cannot change them either; a `drop` + `create`
-rebuild still writes the defaults.
+cannot state them, so it cannot change them either. A whole-flow rebuild keeps
+them too — `create or modify` that cannot splice, and `drop` + `create` in one
+script — together with the flow's Mark as used, parameter, loop and decision
+documentation, and a loop's error handling. A create in a later run than its
+drop writes the defaults.
 
 ## Examples
 

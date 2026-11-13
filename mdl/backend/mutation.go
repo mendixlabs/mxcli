@@ -410,6 +410,9 @@ type WidgetObjectBuilder interface {
 	// SetImageEntity binds an image-typed property to the object in context,
 	// an entity specializing System.Image, rather than a collection entry.
 	SetImageEntity(propertyKey string, entityName string)
+	// SetIcon stores an icon element (collection, image or glyph) on an
+	// icon-typed property — the Image widget's `imageIcon` (ako/mxcli#2174).
+	SetIcon(propertyKey string, icon *pages.Icon)
 	SetExpression(propertyKey string, value string)
 	SetDataSource(propertyKey string, ds pages.DataSource)
 	SetChildWidgets(propertyKey string, children []pages.Widget)

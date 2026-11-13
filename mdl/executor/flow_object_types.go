@@ -8,10 +8,11 @@ import "github.com/mendixlabs/mxcli/mdl/ast"
 // entity of every variable known to hold one object, and of every variable
 // known to hold a list. It needs no project, so it sees only the producers
 // written in the flow — an entity parameter, a create object, a database
-// retrieve, a create list, a loop over a typed list, a head, filter, sort or
-// tail. An association retrieve is an object or a list by the association's
-// type and direction, which needs the project, so it is left unknown rather
-// than guessed.
+// retrieve, a create list, a loop over a typed list, and any list operation
+// over a typed list (a head or find is one object of it, the rest a list). An
+// association retrieve is an object or a list by the association's type and
+// direction, which needs the project, so it is left unknown rather than
+// guessed.
 //
 // Feed it every statement in order (forEachMicroflowStatement) through
 // observe, AFTER judging the statement: a name a statement produces is
@@ -65,12 +66,16 @@ func (t *flowObjectTypes) observe(s ast.MicroflowStatement) {
 			t.objects[st.LoopVariable] = entity
 		}
 	case *ast.ListOperationStmt:
-		// head is list-only; find is also the String function, so it is left out.
+		// The same classification the build types an output by
+		// (listOperationStmtResult / listOperationResult), so check and exec
+		// agree on which `set` targets are objects (ako/mxcli#2176). Only a
+		// known entity list is an input here, so the String find — whose input
+		// is a String — never reaches it.
 		if entity, ok := t.lists[st.InputVariable]; ok && st.OutputVariable != "" {
-			switch st.Operation {
-			case ast.ListOpHead:
+			switch listOperationStmtResult(st.Operation) {
+			case listResultElement:
 				t.objects[st.OutputVariable] = entity
-			case ast.ListOpFilter, ast.ListOpSort, ast.ListOpTail:
+			case listResultList:
 				t.lists[st.OutputVariable] = entity
 			}
 		}

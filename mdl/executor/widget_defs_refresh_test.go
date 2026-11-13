@@ -168,3 +168,48 @@ func withWidgetStateFingerprint(t *testing.T, fp string) {
 	widgetStateFingerprint = func() string { return fp }
 	t.Cleanup(func() { widgetStateFingerprint = prev })
 }
+
+// ako/mxcli#2155: a package copied into widgets/ AFTER the project's
+// definitions were extracted was never extracted. RefreshStaleWidgetDefinitions
+// — the one refresh exec's page builder and check's registry both go through —
+// only looked at the generatorVersion stamps of the definitions already there,
+// so a new .mpk beside current definitions passed check (its package is
+// installed) and exec refused it with "installed but not extracted yet (run
+// 'mxcli widget init')".
+func TestRefreshStaleWidgetDefinitions_ExtractsPackageAddedLater(t *testing.T) {
+	withWidgetStateFingerprint(t, "build-1")
+	dir := t.TempDir()
+	project := filepath.Join(dir, "App.mpr")
+	const first = "com.example.badge.Badge"
+	const added = "com.example.chatrichtext.ChatRichText"
+
+	writeWidgetMPK(t, dir, "Badge.mpk", first, true)
+	if _, err := RefreshWidgetDefinitions(project, false, nil); err != nil { // `widget init`
+		t.Fatal(err)
+	}
+	// Nothing changed since: no refresh, and the existing widget resolves.
+	if refreshed, err := RefreshStaleWidgetDefinitions(project); err != nil || refreshed {
+		t.Fatalf("unchanged widgets/ refreshed=%v err=%v, want no work", refreshed, err)
+	}
+
+	writeWidgetMPK(t, dir, "ChatRichText.mpk", added, true)
+
+	registry, err := NewWidgetRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := LoadProjectWidgetDefinitions(registry, project); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := registry.GetByWidgetID(first); !ok {
+		t.Errorf("control: %s (extracted by widget init) does not resolve", first)
+	}
+	if _, ok := registry.GetByWidgetID(added); !ok {
+		t.Errorf("%s was installed after widget init and still has no definition; defs: %v",
+			added, defsByWidgetID(t, dir))
+	}
+	// And once extracted, the next load does no work again.
+	if refreshed, err := RefreshStaleWidgetDefinitions(project); err != nil || refreshed {
+		t.Errorf("second load after the extraction refreshed=%v err=%v, want no work", refreshed, err)
+	}
+}

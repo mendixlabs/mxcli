@@ -914,6 +914,9 @@ func printBrainReportCI(rep brain.Report) {
 	for _, m := range rep.MissingSources {
 		fmt.Printf("brain: %s: %s: source %s not found\n", shardLabel(m.Shard), m.EntryID, brain.SourcePath(m.Source))
 	}
+	for _, v := range rep.UnknownRequirementRefs {
+		fmt.Printf("brain: %s: %s: %s requirement %s, which the plan does not have\n", shardLabel(v.Shard), v.EntryID, v.Verdict, v.RequirementID)
+	}
 }
 
 // printNoModel says, once, that nothing could be checked. Without it a plan of
@@ -954,6 +957,10 @@ func printBrainReport(rep brain.Report, loc brainLocation) {
 	for _, m := range rep.MissingSources {
 		fmt.Printf("NO SOURCE     %s: %q cites %s, which is not in the project\n",
 			m.EntryID, m.Title, brain.SourcePath(m.Source))
+	}
+	for _, v := range rep.UnknownRequirementRefs {
+		fmt.Printf("NO REQUIREMENT %s: %q says it %s requirement %s, which no plan slice has\n",
+			v.EntryID, v.Title, v.Verdict, v.RequirementID)
 	}
 	if len(rep.Slices) > 0 {
 		fmt.Println()
@@ -1409,9 +1416,10 @@ func planReport(rep brain.Report) map[string]any {
 		total += sl.Total()
 	}
 	out := map[string]any{
-		"slices": rep.Slices,
-		"built":  built,
-		"total":  total,
+		"slices":       rep.Slices,
+		"built":        built,
+		"total":        total,
+		"requirements": rep.Requirements,
 	}
 	if rep.ModelAbsent {
 		out["model_absent"] = true

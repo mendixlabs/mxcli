@@ -3214,7 +3214,7 @@ func setRawWidgetPropertyMut(widget bson.D, propName string, value any) error {
 		return setWidgetLabelMut(widget, value)
 	case "tooltip":
 		return setWidgetTooltipMut(widget, value)
-	case "placeholder", "password", "validation", "validationmessage":
+	case "placeholder", "password", "validation", "validationmessage", "noentitymessage":
 		// A built-in input widget's own properties, which CREATE writes and
 		// DESCRIBE prints (mendixlabs/mxcli#414). A widget that does not store
 		// the key — a pluggable one above all — keeps its old route.
@@ -3941,6 +3941,26 @@ func setWidgetTooltipMut(widget bson.D, value any) error {
 func setInputWidgetPropertyMut(widget bson.D, propName string, value any) (bool, error) {
 	typ := widgetTypeLabel(bsonnav.DGetString(widget, "$Type"))
 	switch strings.ToLower(propName) {
+	case "noentitymessage":
+		// A data view's "no entity" message, a Texts$Text (ako/mxcli#2133).
+		if t := bsonnav.DGetString(widget, "$Type"); t != "Forms$DataView" && t != "Pages$DataView" {
+			return false, nil
+		}
+		msg := bsonnav.DGetDoc(widget, "NoEntityMessage")
+		if msg == nil {
+			msg = bson.D{
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
+				{Key: "$Type", Value: "Texts$Text"},
+				{Key: "Items", Value: bson.A{int32(3)}},
+			}
+		}
+		if err := setTranslatableText(msg, "NoEntityMessage", value); err != nil {
+			return true, err
+		}
+		if !bsonnav.DSet(widget, "NoEntityMessage", msg) {
+			return true, fmt.Errorf("data view has no NoEntityMessage slot")
+		}
+		return true, nil
 	case "placeholder":
 		tmpl := bsonnav.DGetDoc(widget, "PlaceholderTemplate")
 		if tmpl == nil {

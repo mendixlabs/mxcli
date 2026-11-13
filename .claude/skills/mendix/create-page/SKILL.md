@@ -16,11 +16,11 @@ description: "CREATE PAGE syntax reference — parameters, variables, layouts, a
 | 223-293 | Basic Examples |
 | 294-318 | Modifying Existing Pages |
 | 319-431 | Conditional Visibility and Editability |
-| 432-596 | Known Limitations |
-| 597-605 | Tips |
-| 606-632 | Related Commands |
-| 633-657 | PLUGGABLEWIDGET Escape Hatch |
-| 658-661 | See Also |
+| 432-601 | Known Limitations |
+| 602-610 | Tips |
+| 611-637 | Related Commands |
+| 638-662 | PLUGGABLEWIDGET Escape Hatch |
+| 663-666 | See Also |
 
 <!-- /skill-index -->
 # CREATE PAGE - MDL Syntax Guide
@@ -158,7 +158,7 @@ actionbutton btn (caption: 'Save', class: 'btn-lg')
 container c (style: 'background-color: #f8f9fa; padding: 16px;') { ... }
 ```
 
-> **Warning:** Do NOT use `style` directly on DYNAMICTEXT widgets — it crashes MxBuild with a NullReferenceException. Wrap the DYNAMICTEXT in a styled CONTAINER instead. (A building block's own styled dynamic text is placed as stored by `use building block`; the refusal is for hand-written MDL.)
+> **Note:** `style` works on DYNAMICTEXT like on any widget (an old "crashes MxBuild" warning does not reproduce). Prefer `class:` with a theme class for anything reusable.
 
 **Design Properties** — Atlas UI structured properties (spacing, colors, toggles):
 ```sql
@@ -480,8 +480,13 @@ The two other sources take no collection entry:
 
 ```sql
 image imgRemote (ImageType: imageUrl, ImageUrl: 'https://example.com/logo.svg')
-image imgIcon   (ImageType: icon)
+image imgIcon   (ImageType: icon, Icon: 'Atlas_Core.Atlas_Filled.user')
 ```
+
+An icon image names its icon exactly as a button does — `Icon: 'Module.Collection.Icon'`
+(icon collection), `Icon: image 'Module.Collection.Image'`, or `Icon: glyph 57377` —
+and without one mxbuild refuses it ("No icon selected."), which check reports as
+MDL-WIDGET22.
 
 **An uploaded image** — an object of an entity that extends `System.Image` — is
 shown by binding the widget to the data view's object. It is not an `ImageType`

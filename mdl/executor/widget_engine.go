@@ -285,6 +285,9 @@ type BuildContext struct {
 	// ImageEntity is the entity an image-typed property binds to when it was
 	// written `$currentObject` rather than as a collection entry (#1476).
 	ImageEntity string
+	// Icon is the icon element an icon-typed property holds, read from the
+	// widget's `Icon:` with the kind the author wrote (ako/mxcli#2174).
+	Icon        *pages.Icon
 	pageBuilder *pageBuilder
 }
 
@@ -1114,6 +1117,10 @@ func (e *PluggableWidgetEngine) applyOperation(builder backend.WidgetObjectBuild
 		} else {
 			builder.SetImage(propKey, ctx.PrimitiveVal)
 		}
+	case "icon":
+		if ctx.Icon != nil {
+			builder.SetIcon(propKey, ctx.Icon)
+		}
 	case "expression":
 		// No MDL value: keep the template's default expression rather than
 		// writing an empty one over it — an empty required expression is CE0642.
@@ -1668,6 +1675,20 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 			}
 			ctx.PrimitiveVal = val
 		}
+		return ctx, nil
+	}
+
+	// An icon-typed property takes the widget's `Icon:` in the same three
+	// spellings a button's does — collection, `image`, `glyph` — and is built
+	// into the same element, so the kind the author wrote is the $Type stored
+	// (ako/mxcli#2174). Read before the generic scalar path, which has no shape
+	// for a typed icon value.
+	if mapping.Operation == "icon" {
+		icon, err := buildWidgetIcon(w)
+		if err != nil {
+			return nil, err
+		}
+		ctx.Icon = icon
 		return ctx, nil
 	}
 

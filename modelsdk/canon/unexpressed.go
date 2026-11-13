@@ -31,6 +31,12 @@ import (
 //     flag. The writer lists them in enumeration order, Studio Pro in the
 //     order they were added.
 //
+// and, measured on TestApp's WorkflowCommons snippets (ako/mxcli#2128):
+//
+//   - A screen-reader label whose translations all have empty text.
+//   - A condition list with values mxcli's metadata lacks, the known ones
+//     carrying the same flags (storedConditionsExtend).
+//
 // Only elements whose $ID the stored document already has take anything, which
 // after TransplantIDs means the elements that correspond; a real change — other
 // expression text, a label with text — is not touched and still lands.
@@ -60,6 +66,9 @@ func CarryUnexpressed(contents, stored []byte) []byte {
 		if !ok {
 			return
 		}
+		if carryUnstatedFlowProperties(d, old, used) {
+			changed = true
+		}
 		for i, e := range d {
 			ov := docLookup(old, e.Key)
 			switch v := e.Value.(type) {
@@ -74,7 +83,8 @@ func CarryUnexpressed(contents, stored []byte) []byte {
 				if !isList {
 					continue
 				}
-				if e.Key == "Conditions" && sameConditionsReordered(v, stored) && !anyIDUsedOutside(stored, used, v) {
+				if e.Key == "Conditions" && (sameConditionsReordered(v, stored) || storedConditionsExtend(v, stored)) &&
+					!anyIDUsedOutside(stored, used, v) {
 					d[i].Value = stored
 					changed = true
 				}
@@ -122,11 +132,31 @@ func isEmptyClientTemplate(t bson.D) bool {
 		return false
 	}
 	for _, k := range []string{"Template", "Fallback"} {
-		if txt, ok := docLookup(t, k).(bson.D); ok && hasItems(docLookup(txt, "Items")) {
+		if txt, ok := docLookup(t, k).(bson.D); ok && hasText(docLookup(txt, "Items")) {
 			return false
 		}
 	}
 	return true
+}
+
+// hasText reports whether a Texts$Text item list holds a translation with any
+// text. Studio Pro also stores an unset label as one translation of "" (TestApp
+// WorkflowCommons.Snip_Assignee_Search, ako/mxcli#2128); that is no label too.
+func hasText(v any) bool {
+	a, ok := v.(bson.A)
+	if !ok {
+		return false
+	}
+	for _, item := range a[min(1, len(a)):] {
+		tr, ok := item.(bson.D)
+		if !ok {
+			return true
+		}
+		if txt, _ := docLookup(tr, "Text").(string); txt != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // hasItems reports whether a Mendix list holds anything past its leading
@@ -199,6 +229,41 @@ func sameConditionsReordered(written, stored bson.A) bool {
 	}
 	for _, n := range count {
 		if n != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// storedConditionsExtend reports whether the stored Enumerations$Condition
+// list holds every written condition with the same flag, plus conditions for
+// values the written list does not name at all. Those are values mxcli's
+// metadata does not have — a System enumeration a newer Mendix extended
+// (WorkflowActivityType on 11.14: 25 stored, 17 written; ako/mxcli#2128) — so
+// MDL cannot state them, and writing the shorter list would drop them.
+func storedConditionsExtend(written, stored bson.A) bool {
+	conds := func(a bson.A) (map[string]any, bool) {
+		out := map[string]any{}
+		for _, item := range a[min(1, len(a)):] {
+			c, ok := item.(bson.D)
+			if !ok || docLookup(c, "$Type") != "Enumerations$Condition" {
+				return nil, false
+			}
+			v, _ := docLookup(c, "AttributeValue").(string)
+			if _, dup := out[v]; dup {
+				return nil, false
+			}
+			out[v] = docLookup(c, "EditableVisible")
+		}
+		return out, true
+	}
+	w, okW := conds(written)
+	s, okS := conds(stored)
+	if !okW || !okS || len(w) == 0 || len(s) <= len(w) {
+		return false
+	}
+	for v, flag := range w {
+		if sf, ok := s[v]; !ok || sf != flag {
 			return false
 		}
 	}

@@ -370,7 +370,7 @@ func writeDefinitionFile(path string, data []byte) error {
 }
 
 // RefreshStaleWidgetDefinitions makes a project's `.mxcli/widgets/*.def.json`
-// current before the engine reads them, in two cases:
+// current before the engine reads them, in three cases:
 //
 //  1. No defs exist yet (project never `widget init`-ed) but `.mpk` widgets are
 //     installed — generate them from the `.mpk` files. This makes `exec`
@@ -380,10 +380,16 @@ func writeDefinitionFile(path string, data []byte) error {
 //     `generatorVersion` stamp is behind WidgetDefGeneratorVersion) — refresh
 //     them, otherwise they'd silently emit stale BSON (spurious CE0463 after
 //     the v0.12.0 widget work).
+//  3. Defs exist and are current, but a package was installed (or replaced)
+//     after they were extracted — extract it. Without this a widget copied
+//     into widgets/ after the first extraction passed `check` (the package is
+//     installed) and `exec` refused it until `widget init` ran
+//     (ako/mxcli#2155).
 //
 // Returns true if any def was generated or refreshed. The stamp check reads
 // only `generatorVersion` from each def.json — no `.mpk` parsing — so the
-// common "defs present and current" case is cheap; the expensive generate /
+// common "defs present and current" case is cheap (case 3 adds a stat per
+// file against the last refresh's state); the expensive generate /
 // regenerate only runs when something is missing or behind. (Mirrors what
 // `refresh catalog` does via RefreshWidgetDefinitions.)
 func RefreshStaleWidgetDefinitions(projectPath string) (bool, error) {
@@ -435,7 +441,17 @@ func RefreshStaleWidgetDefinitions(projectPath string) (bool, error) {
 		}
 	}
 	if !stale {
-		return false, nil
+		// Case 3: defs exist and are current, but widgets/ may hold a package
+		// that arrived after they were extracted (ako/mxcli#2155). The
+		// non-forced refresh answers that from the state file — a stat per
+		// file, no .mpk read — and only re-reads the packages when widgets/
+		// or the defs differ from what the last refresh left; then it writes
+		// only the definitions that are new or changed.
+		stats, err := RefreshWidgetDefinitions(projectPath, false, nil)
+		if err != nil {
+			return false, err
+		}
+		return stats.Extracted > 0 || stats.Refreshed > 0, nil
 	}
 
 	if _, err := RefreshWidgetDefinitions(projectPath, true, nil); err != nil {

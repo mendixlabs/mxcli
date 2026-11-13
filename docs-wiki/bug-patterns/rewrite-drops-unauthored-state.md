@@ -48,6 +48,15 @@ for a whole feature's life, unguarded, because only the rule looked configurable
 The reliable audit is mechanical — diff a Studio Pro-saved document key by key
 against what the writer emits, and every constant is a candidate.
 
+**Where the identities already survive, carry there.** A flow rebuild — `drop` +
+`create` in one script, or a `create or modify` that cannot splice — reaches
+`canon.Reconcile` with the stored unit, which has already paired the elements by
+`$ID`. A property with no MDL spelling is then a table entry (element `$Type`,
+key, the writer's default), carried only while the written value *is* that
+default. Doing it in the executor instead means re-pairing activities by hand
+and wiring each rebuild path separately — the dropped path carried nothing but the
+unit id and grants.
+
 **Read the stored side raw, not through the reader.** A guard that asks the
 semantic model "what did the stored document hold?" inherits the reader's blind
 spots, and the reader is usually why the construct was at risk in the first place.

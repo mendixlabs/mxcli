@@ -154,7 +154,10 @@ func execAlterPage(ctx *ExecContext, s *ast.AlterPageStmt) error {
 		return mdlerrors.NewBackend("save modified "+strings.ToLower(containerType), err)
 	}
 
-	fmt.Fprintf(ctx.Output, "Altered %s %s\n", strings.ToLower(containerType), s.PageName.String())
+	// The report follows what landed, not what was attempted: storage elides a
+	// save whose content equals what is stored (ADR-0008), so re-running an
+	// applied alter must say "Unchanged", not "Altered" (ako/mxcli#2156).
+	ctx.ReportMutation("Altered", "%s %s", strings.ToLower(containerType), s.PageName.String())
 	return nil
 }
 

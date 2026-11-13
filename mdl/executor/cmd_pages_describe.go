@@ -1076,6 +1076,9 @@ type rawWidget struct {
 	// DataView-only: ShowFooter read from BSON. Round-tripping it matters only when
 	// the footer block would not imply the same value (#813).
 	ShowFooter bool
+	// NoEntityMessage is a data view's "no entity" message, default language
+	// (ako/mxcli#2133).
+	NoEntityMessage string
 	// Pluggable Image widget properties
 	ImageUrl        string // Image URL (from textTemplate)
 	AlternativeText string // Alt text (from textTemplate)

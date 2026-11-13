@@ -39,6 +39,11 @@ var defaultKnownOperations = map[string]bool{
 	// `imageObject`). Without it the property is unreachable from MDL and the
 	// widget's default source has nothing to show — see setImageValue.
 	"image": true,
+	// An icon element on an icon-typed property (the Image widget's
+	// `imageIcon`), written `Icon:` exactly as a button's is. Without it an
+	// `ImageType: icon` image could not say which icon, and mxbuild refused it
+	// with "No icon selected." (ako/mxcli#2174).
+	"icon": true,
 }
 
 // knownOperations is the active set used for validation, initialized from

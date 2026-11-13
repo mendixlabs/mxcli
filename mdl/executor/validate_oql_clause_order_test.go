@@ -21,9 +21,11 @@ import (
 // moving the blind spot.
 
 // fromFirst and selectFirst are the same query in the two clause orders.
+// `Order` is quoted because the unquoted form is CE0174 (ako/mxcli#2208): a
+// well-formed fixture has to be one mxbuild accepts.
 const (
-	fromFirstOQL   = `from Sales.Order as o group by o.Number select o.Number as Number, count(o.ID) as Lines`
-	selectFirstOQL = `select o.Number as Number, count(o.ID) as Lines from Sales.Order as o group by o.Number`
+	fromFirstOQL   = `from Sales."Order" as o group by o.Number select o.Number as Number, count(o.ID) as Lines`
+	selectFirstOQL = `select o.Number as Number, count(o.ID) as Lines from Sales."Order" as o group by o.Number`
 )
 
 func TestExtractSelectClause_ReadsBothClauseOrders(t *testing.T) {
