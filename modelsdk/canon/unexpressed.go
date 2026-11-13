@@ -37,6 +37,12 @@ import (
 //   - A condition list with values mxcli's metadata lacks, the known ones
 //     carrying the same flags (storedConditionsExtend).
 //
+// and, from a drop + create of a flow (ako/mxcli#2179):
+//
+//   - A loop's Size. MDL has no way to state it, so a rebuild wrote the size
+//     mxcli computes and a loop drawn larger in Studio Pro overlapped its
+//     neighbours (carryLoopSize).
+//
 // Only elements whose $ID the stored document already has take anything, which
 // after TransplantIDs means the elements that correspond; a real change — other
 // expression text, a label with text — is not touched and still lands.
@@ -67,6 +73,9 @@ func CarryUnexpressed(contents, stored []byte) []byte {
 			return
 		}
 		if carryUnstatedFlowProperties(d, old, used) {
+			changed = true
+		}
+		if carryLoopSize(d, old) {
 			changed = true
 		}
 		for i, e := range d {
@@ -104,6 +113,49 @@ func CarryUnexpressed(contents, stored []byte) []byte {
 		return contents
 	}
 	return out
+}
+
+// carryLoopSize keeps a loop's stored Size, per dimension never smaller than
+// the size written: a box drawn larger in Studio Pro stays as drawn, and a body
+// that grew past it still gets the room the writer computed for it, so the
+// loop's own activities never end up outside its box.
+func carryLoopSize(d, old bson.D) bool {
+	if docLookup(d, "$Type") != "Microflows$LoopedActivity" {
+		return false
+	}
+	ws, _ := docLookup(d, "Size").(string)
+	ss, _ := docLookup(old, "Size").(string)
+	if ws == "" || ss == "" || ws == ss {
+		return false
+	}
+	ww, wh, ok1 := parseSize(ws)
+	sw, sh, ok2 := parseSize(ss)
+	if !ok1 || !ok2 {
+		return false
+	}
+	size := fmt.Sprintf("%d;%d", max(ww, sw), max(wh, sh))
+	if size == ws {
+		return false
+	}
+	for i := range d {
+		if d[i].Key == "Size" {
+			d[i].Value = size
+		}
+	}
+	return true
+}
+
+// parseSize reads a stored "width;height".
+func parseSize(s string) (int, int, bool) {
+	w, h, ok := strings.Cut(s, ";")
+	if !ok {
+		return 0, 0, false
+	}
+	var a, b int
+	if _, err := fmt.Sscanf(w+" "+h, "%d %d", &a, &b); err != nil {
+		return 0, 0, false
+	}
+	return a, b, true
 }
 
 // walkElements calls fn on every embedded document, depth first. The bson.D

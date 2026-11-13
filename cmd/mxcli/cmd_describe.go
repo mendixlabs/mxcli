@@ -534,12 +534,8 @@ func catalogMatchesProject(cat *catalog.Catalog, projectPath string) bool {
 	}
 	// Compare absolute paths when both resolve; a path mismatch means the cache
 	// is for a different .mpr in the same directory.
-	if info.MprPath != "" {
-		a, err1 := filepath.Abs(info.MprPath)
-		b, err2 := filepath.Abs(projectPath)
-		if err1 == nil && err2 == nil && a != b {
-			return false
-		}
+	if info.MprPath != "" && !catalog.SameMprPath(info.MprPath, projectPath) {
+		return false
 	}
 	return true
 }

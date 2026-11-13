@@ -1667,6 +1667,15 @@ func findInWidgetChildren(wDoc bson.D, widgetName string) *bsonWidgetResult {
 		return result
 	}
 
+	// ListView specialization templates: Templates[] hold no Name, but the
+	// widgets inside each one do. A template's widgets were unreachable — every
+	// `set … on`, `insert after` and `drop` on one answered "widget not found",
+	// though the alter-page skill documents them as ordinary named widgets
+	// (ako/mxcli#2173). findInWidgetArray descends into Templates[].Widgets[].
+	if result := findInWidgetArray(wDoc, "Templates", widgetName); result != nil {
+		return result
+	}
+
 	// NavigationList: Items[] hold no Name, but the widgets inside each one do
 	// (mendixlabs/mxcli#1388); findInWidgetArray descends into Items[].Widgets[].
 	if isNavigationList(wDoc) {
@@ -2479,6 +2488,23 @@ func findNearestDSInChildren(wDoc bson.D, widgetName string, curDS bson.D) (bson
 	if ds, found := findNearestDSInWidgets(wDoc, "TabPages", widgetName, curDS); found {
 		return ds, true
 	}
+	// A list view's specialization template renders its own entity: its widgets
+	// bind to the specialization, not to the list view's (generalized) source
+	// (ako/mxcli#2173). The template stores the entity and no data source, so it
+	// is handed down as a direct entity reference.
+	for _, el := range bsonnav.DGetArrayElements(bsonnav.DGet(wDoc, "Templates")) {
+		tmpl, ok := el.(bson.D)
+		if !ok {
+			continue
+		}
+		tmplDS := curDS
+		if entity := bsonnav.DGetString(tmpl, "Entity"); entity != "" {
+			tmplDS = bson.D{{Key: "EntityRef", Value: bson.D{{Key: "Entity", Value: entity}}}}
+		}
+		if ds, found := findNearestDSInWidgets(tmpl, "Widgets", widgetName, tmplDS); found {
+			return ds, true
+		}
+	}
 	if ds, found := findNearestDSInWidgets(wDoc, "Cells", widgetName, curDS); found {
 		return ds, true
 	}
@@ -2684,7 +2710,8 @@ func collectWidgetScopeInChildren(wDoc bson.D, scope map[string]model.ID) {
 		}
 	}
 	collectWidgetScope(wDoc, "TabPages", scope)
-	collectWidgetScope(wDoc, "Cells", scope) // legacy table cells (#1453)
+	collectWidgetScope(wDoc, "Templates", scope) // list view specialization templates (#2173)
+	collectWidgetScope(wDoc, "Cells", scope)     // legacy table cells (#1453)
 	if isNavigationList(wDoc) {
 		collectWidgetScope(wDoc, "Items", scope)
 	}
