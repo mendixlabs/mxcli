@@ -711,6 +711,13 @@ func (m *Mutator) InsertBoundaryEvent(activityRef string, atPos int, eventType s
 	}
 
 	events := bsonnav.DGetArrayElements(bsonnav.DGet(actDoc, "BoundaryEvents"))
+	// mx check reports CE6696 on a sixth boundary event (ako/mxcli#2242). Only
+	// here is the stored count known, so the static MDL-WF23 check cannot
+	// catch an insert onto an activity that already has five.
+	if len(events) >= workflows.MaxBoundaryEventsPerActivity {
+		return fmt.Errorf("insert boundary event: activity '%s' already has %d boundary events, the most an activity may have (mx check CE6696) [MDL-WF23]",
+			activityRef, len(events))
+	}
 	events = append(events, eventDoc)
 	bsonnav.DSetArray(actDoc, "BoundaryEvents", events)
 	return nil

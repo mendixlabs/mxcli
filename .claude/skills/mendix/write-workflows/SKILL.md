@@ -12,18 +12,18 @@ description: "Author Mendix workflows in MDL — user tasks, decisions, parallel
 |---|---|
 | 36-47 | When to Use This Skill |
 | 48-118 | Syntax — CREATE WORKFLOW |
-| 119-301 | Activities |
-| 302-308 | DROP WORKFLOW |
-| 309-376 | ALTER WORKFLOW |
-| 377-397 | DESCRIBE round-trip |
-| 398-418 | Activity names, and why `jump to` depends on them |
-| 419-439 | Rewriting an existing workflow |
-| 440-449 | Task pages |
-| 450-537 | Microflow statements for workflow tasks |
-| 538-558 | System-module enumerations are synthesized, not stored |
-| 559-683 | Platform rules |
-| 684-714 | Observing a running workflow |
-| 715-724 | Validate before presenting |
+| 119-302 | Activities |
+| 303-309 | DROP WORKFLOW |
+| 310-377 | ALTER WORKFLOW |
+| 378-398 | DESCRIBE round-trip |
+| 399-419 | Activity names, and why `jump to` depends on them |
+| 420-440 | Rewriting an existing workflow |
+| 441-450 | Task pages |
+| 451-538 | Microflow statements for workflow tasks |
+| 539-559 | System-module enumerations are synthesized, not stored |
+| 560-684 | Platform rules |
+| 685-715 | Observing a running workflow |
+| 716-725 | Validate before presenting |
 
 <!-- /skill-index -->
 # Mendix Workflows Skill
@@ -248,6 +248,7 @@ end workflow;
   'Workflows$TimerBoundaryEvent' could not be found"). mxcli refuses the bare form
   on Mendix 11 (MDL-WF07).
 - **The delay is a DateTime expression** (`addDays([%CurrentDateTime%], 3)`, not `'P3D'`). A **reminder** repeats a non-interrupting timer: `… timer addDays([%CurrentDateTime%], 1) repeat every 1 day at most 5 times { … }` — minute(s) to month(s), the count includes the first firing and is at least 2 (MDL-WF22); a timer event sub-process start takes it on 11.15+.
+- **At most 5 boundary events per activity** (mx check CE6696, MDL-WF23). For more reminders, repeat one non-interrupting timer instead of stacking timers.
 - **Every boundary path must end**, and mxcli ends one that runs to its last
   activity as Studio Pro does (ako/mxcli#1712): an **interrupting** path with an
   End — the timeout ends the workflow; `describe` shows `end workflow;` — and a
