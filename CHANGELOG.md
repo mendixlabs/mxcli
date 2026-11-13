@@ -32,6 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Every spelling of the same `.mpr` finds the same catalog cache** (ako/mxcli#2200, mendixlabs/mxcli#1845) — `App.mpr`, `./App.mpr`, an absolute path or, on Windows, `\` for `/` read the cache as "Invalid (MPR path changed)", and queries then ran on a narrower catalog built in memory: `CATALOG.ACTIVITIES` came back empty and `GRAPH_DEAD_ASSETS` too long, with no warning. The cache is now matched on the file, and records its absolute path; a different `.mpr` in the same folder is still a different project.
+
 - **`mxcli syntax workflow user-task` shows the user task syntax** (ako/mxcli#2238, mendixlabs/mxcli#1852) — a topic with subtopics of its own (`workflow.user-task`, `domain-model.entity`, …) printed only an index of itself and its subtopics; it now prints its own detail and then lists them, in `mxcli syntax` and in the REPL's `help`. A top-level area such as `workflow` is still an index.
 - **DESCRIBE of a multi-line note linked to another note parses again** (ako/mxcli#2166, mendixlabs/mxcli#1827) — the warning about the link quoted the note's text with its line break, which ended the `--` comment mid-quote: `check` failed on the description, and `create or modify` of the flow was refused because the stored flow's description did not parse. The comment now shows a line break as `⏎`.
 - **A parameter `create or modify` adds between existing ones no longer lands on top of the next one** (ako/mxcli#2185, mendixlabs/mxcli#1838) — it took the position derived from its index, where the following stored parameter still sits; it now goes after the rightmost parameter, and the stored ones stay where they are.

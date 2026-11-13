@@ -400,8 +400,8 @@ func isCacheValid(ctx *ExecContext, cachePath string, requiredMode string) (bool
 		return false, fmt.Sprintf("failed to read cache info: %v", err)
 	}
 
-	// Check MPR path matches
-	if info.MprPath != ctx.MprPath {
+	// Check MPR path matches: the same file, however -p spells it (#2200).
+	if !catalog.SameMprPath(info.MprPath, ctx.MprPath) {
 		return false, "MPR path changed"
 	}
 
@@ -607,7 +607,7 @@ func buildCatalog(ctx *ExecContext, full, isSource, communities bool, resolution
 	} else if full {
 		buildMode = "full"
 	}
-	cat.SetCacheInfo(ctx.MprPath, getMprModTime(ctx), version, buildMode, elapsed)
+	cat.SetCacheInfo(catalog.AbsMprPath(ctx.MprPath), getMprModTime(ctx), version, buildMode, elapsed)
 
 	cat.SetBuilt(true)
 	ctx.Catalog = cat
