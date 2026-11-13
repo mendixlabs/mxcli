@@ -944,6 +944,7 @@ func TestResolveNestedMergeID_UsesParentMergeBeforeDownstreamJoin(t *testing.T) 
 	falseFlow := mkFlow("nested_split", "false_branch")
 
 	got := resolveNestedMergeID(
+		mkID("nested_split"),
 		mkID("downstream_join"),
 		mkID("parent_merge"),
 		trueFlow,
@@ -964,6 +965,7 @@ func TestResolveNestedMergeID_KeepsIndependentNestedJoin(t *testing.T) {
 	falseFlow := mkFlow("nested_split", "nested_join")
 
 	got := resolveNestedMergeID(
+		mkID("nested_split"),
 		mkID("nested_join"),
 		mkID("parent_merge"),
 		trueFlow,

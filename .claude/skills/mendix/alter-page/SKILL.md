@@ -13,14 +13,14 @@ description: "Modify an existing page or snippet's widget tree in place with ALT
 | 28-31 | Overview |
 | 32-64 | When to Use |
 | 65-115 | Syntax |
-| 116-481 | Operations |
-| 482-560 | Examples |
-| 561-651 | DataGrid 2 columns: how to address them, and what you can set |
-| 652-663 | Common Mistakes |
-| 664-698 | Limitations — prefer binding at page creation (ledger finding #45) |
-| 699-706 | Validation Checklist |
-| 707-716 | Related Commands |
-| 717-721 | Related Skills |
+| 116-470 | Operations |
+| 471-549 | Examples |
+| 550-640 | DataGrid 2 columns: how to address them, and what you can set |
+| 641-652 | Common Mistakes |
+| 653-687 | Limitations — prefer binding at page creation (ledger finding #45) |
+| 688-695 | Validation Checklist |
+| 696-705 | Related Commands |
+| 706-710 | Related Skills |
 
 <!-- /skill-index -->
 # ALTER PAGE / ALTER SNIPPET - Modify Existing Pages and Snippets
@@ -247,18 +247,7 @@ so a silent write would build cleanly and then fail to open.
 
 **Column property names are case-insensitive** in MDL — `set (caption: …)` and `set (Caption: …)` both work. The internal BSON keys are dictated by the widget schema and stay case-sensitive on the storage side.
 
-> **Warning: Style on DYNAMICTEXT** — Setting `style` directly on a DYNAMICTEXT widget crashes MxBuild with a NullReferenceException. Wrap the DYNAMICTEXT in a CONTAINER and apply styling to the container instead:
-> ```sql
-> -- Wrong: crashes MxBuild
-> SET (Style: 'color: red;') ON txtHeading
->
-> -- Correct: style the container
-> REPLACE txtHeading WITH {
->   CONTAINER ctnHeading (Style: 'color: red;') {
->     DYNAMICTEXT txtHeading (Content: 'Heading', RenderMode: H2)
->   }
-> }
-> ```
+> **Style on DYNAMICTEXT** works like on any widget: `SET (Style: 'color: red;') ON txtHeading`. (An old warning that it crashes MxBuild does not reproduce.) Prefer `Class:` with a theme class for anything reusable.
 
 #### Changing a widget's DataSource
 
