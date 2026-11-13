@@ -1,0 +1,57 @@
+mdl 1;
+-- ============================================================================
+-- Bug ako/mxcli#2168 (mendixlabs/mxcli#1829): DESCRIBE puts the step after an
+-- if/else join inside a `while true` into the THEN branch
+-- ============================================================================
+--
+-- Symptom (before fix): the stored flow is right, but describe prints
+--     if $i = 2 then
+--       set $created = $created + 1;
+--       set $i = $i + 1;          -- moved into the then branch
+--     else ...
+-- Rebuilt from that text (drop + create, as MDL-V1-REBUILD suggests) the else
+-- branch jumps straight back to the loop start and the loop never ends.
+--
+-- After fix: `set $i = $i + 1;` is printed after `end if;`, and
+-- describe -> drop + create -> describe gives the same text.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/2168-while-true-step-after-if-join.mdl -p app.mpr
+--   mxcli -p app.mpr -c "describe microflow BugTest2168.ACT_merge_cycle"
+-- ============================================================================
+
+create module BugTest2168;
+
+create microflow BugTest2168.ACT_merge_cycle ()
+begin
+  declare $i Integer = 0;
+  declare $created Integer = 0;
+  while true
+  begin
+    if $i > 5 then
+      return;
+    end if;
+    if $i = 2 then
+      set $created = $created + 1;
+    else
+      log info 'exists';
+    end if;
+    set $i = $i + 1;
+  end while;
+end;
+
+-- The exit in the ELSE arm must stay there (the shape the same walk got
+-- wrong while this was being fixed: WorkflowCommons.SUB_UserTaskView_Migrate).
+create microflow BugTest2168.ACT_exit_in_else () returns Integer
+begin
+  declare $total Integer = 0;
+  while true
+  begin
+    if $total < 5 then
+      set $total = $total + 1;
+    else
+      log info 'done';
+      return $total;
+    end if;
+  end while;
+end;
