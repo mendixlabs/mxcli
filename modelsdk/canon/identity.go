@@ -4,9 +4,12 @@ package canon
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 
 	"go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // Reconcile is ADR-0008 decision 1, as a single decision both storage engines
@@ -131,8 +134,14 @@ func Reconcile(contents, stored []byte, opts ...Option) (out []byte, unchanged b
 	// version control as a whole-document replacement. TransplantIDs puts the
 	// stored ids back on the elements that still correspond, rewriting every
 	// reference with them.
+	//
+	// The stored document is parsed once here for the two steps that only read
+	// it, this pairing and the comparison at the end (parsedStored). The carries
+	// in between copy parts of the stored document into the new one and keep a
+	// parse of their own.
+	storedDoc := parseStored(stored)
 	if !o.contentsOwnElementIDs {
-		contents = TransplantIDs(contents, stored)
+		contents = transplantIDs(contents, storedDoc)
 	}
 
 	// And the nested identity property the transplant does not cover: every
@@ -155,11 +164,103 @@ func Reconcile(contents, stored []byte, opts ...Option) (out []byte, unchanged b
 	if alwaysWrite() {
 		return contents, false
 	}
+	eq, err := equalToStored(contents, storedDoc)
+	if err != nil {
+		return contents, false
+	}
+	return contents, eq
+}
+
+// reconcileInPasses is Reconcile as it was before its read-only steps shared a
+// parse of the stored document: every step on the bytes alone. It is what
+// Reconcile is defined by and what its test compares it with.
+func reconcileInPasses(contents, stored []byte, opts ...Option) (out []byte, unchanged bool) {
+	if len(stored) == 0 {
+		return contents, false
+	}
+	var o reconcileOpts
+	for _, fn := range opts {
+		fn(&o)
+	}
+
+	// Identity is carried unconditionally. MXCLI_ALWAYS_WRITE turns off *eliding*
+	// the write, not preserving what the document is: a forced write that
+	// re-minted StableId would renumber the deployed model's operation ids, which
+	// is a change to the app rather than a debugging aid.
+	contents = CarryIdentity(contents, stored)
+
+	// The translations the statement had no way to say. MDL carries ONE string
+	// per text, so a rebuild drops every other language the document held — a
+	// describe→exec round-trip deleted a page's Dutch title from a real project.
+	// Runs before the transplant because it is the one carry that changes the
+	// document's length; the transplant patches fixed-width binaries in place and
+	// must see the final framing.
+	if !o.contentsOwnTranslations {
+		contents = CarryTranslations(contents, stored)
+	}
+
+	// The same reasoning one level down, for the writes that do land: a rebuild
+	// mints a fresh $ID for every sub-element, so a two-line change reads in
+	// version control as a whole-document replacement. TransplantIDs puts the
+	// stored ids back on the elements that still correspond, rewriting every
+	// reference with them.
+	if !o.contentsOwnElementIDs {
+		contents = transplantIDsInPasses(contents, stored)
+	}
+
+	// And the nested identity property the transplant does not cover: every
+	// Workflows$* element carries a PersistentId that both engines re-mint on
+	// every write, so without this a workflow document never equals itself and
+	// no-op elision could never fire for one (issue #949).
+	contents = carryPersistentIDsUnfiltered(contents, stored)
+
+	// A property MDL cannot state: a tab container's default tab. The writer
+	// points it at the first tab, so a round trip rewrote a page whose stored
+	// default was null and reset any other choice (ako/mxcli#1897). Needs the
+	// transplanted $IDs, so it runs after TransplantIDs.
+	contents = CarryDefaultTabPages(contents, stored)
+
+	// The rest of what MDL cannot state: an expression's surrounding whitespace
+	// and an empty screen-reader label Studio Pro stores as a ClientTemplate
+	// (ako/mxcli#1897).
+	contents = CarryUnexpressed(contents, stored)
+
+	if alwaysWrite() {
+		return contents, false
+	}
 	eq, err := Equal(contents, stored)
 	if err != nil {
 		return contents, false
 	}
 	return contents, eq
+}
+
+// parsedStored is the stored document parsed for the steps of Reconcile that
+// only read it. ok is false for bytes that are not a document, which those
+// steps treat as they treat a failed parse of their own.
+type parsedStored struct {
+	doc bson.D
+	ok  bool
+}
+
+func parseStored(stored []byte) parsedStored {
+	var doc bson.D
+	if err := bson.Unmarshal(stored, &doc); err != nil {
+		return parsedStored{}
+	}
+	return parsedStored{doc: doc, ok: true}
+}
+
+// equalToStored is Equal(contents, stored) with the stored side already parsed.
+func equalToStored(contents []byte, stored parsedStored) (bool, error) {
+	da, err := Digest(contents)
+	if err != nil {
+		return false, fmt.Errorf("canonicalise left: %w", err)
+	}
+	if !stored.ok {
+		return false, fmt.Errorf("canonicalise right: not a document")
+	}
+	return da == digestOfDoc(stored.doc, nil), nil
 }
 
 // alwaysWrite disables no-op elision. An escape hatch for bisecting a suspected

@@ -67,11 +67,17 @@ func DigestMasking(raw []byte, mask map[string]bool) (string, error) {
 	if err := bson.Unmarshal(raw, &doc); err != nil {
 		return "", fmt.Errorf("unmarshal BSON (%d bytes): %w", len(raw), err)
 	}
+	return digestOfDoc(doc, mask), nil
+}
+
+// digestOfDoc is DigestMasking for a document already parsed. It only reads
+// doc.
+func digestOfDoc(doc bson.D, mask map[string]bool) string {
 	ids := collectElementIDs(doc)
 	var b strings.Builder
 	renderValue(&b, doc, ids, mask)
 	sum := sha256.Sum256([]byte(b.String()))
-	return hex.EncodeToString(sum[:]), nil
+	return hex.EncodeToString(sum[:])
 }
 
 // collectElementIDs walks containment in a deterministic order and numbers every

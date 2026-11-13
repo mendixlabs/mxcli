@@ -64,12 +64,35 @@ import (
 // mapping and the contents pass through untouched, which is the behaviour that
 // existed before this function.
 func TransplantIDs(contents, stored []byte) []byte {
+	return transplantIDs(contents, parseStored(stored))
+}
+
+// transplantIDs is TransplantIDs with the stored document already parsed. It
+// only reads the parse.
+func transplantIDs(contents []byte, stored parsedStored) []byte {
+	if !stored.ok {
+		return contents
+	}
+	m := idMappingWith(contents, stored.doc)
+	if len(m) == 0 {
+		return contents
+	}
+	out := append([]byte(nil), contents...)
+	if !substituteIDs(out, m, elementIDSetOf) {
+		return contents
+	}
+	return out
+}
+
+// transplantIDsInPasses is TransplantIDs as it was: both documents parsed
+// here, and the substitution checked by parsing the document before and after.
+func transplantIDsInPasses(contents, stored []byte) []byte {
 	m := idMapping(contents, stored)
 	if len(m) == 0 {
 		return contents
 	}
 	out := append([]byte(nil), contents...)
-	if !substituteIDs(out, m) {
+	if !substituteIDs(out, m, elementIDSetByParsing) {
 		return contents
 	}
 	return out
@@ -79,11 +102,17 @@ func TransplantIDs(contents, stored []byte) []byte {
 // for every pair that is safe to apply. Entries that would be no-ops are kept so
 // the collision check can see them, and skipped when applied.
 func idMapping(contents, stored []byte) map[string][]byte {
-	var newDoc, oldDoc bson.D
-	if err := bson.Unmarshal(contents, &newDoc); err != nil {
+	var oldDoc bson.D
+	if err := bson.Unmarshal(stored, &oldDoc); err != nil {
 		return nil
 	}
-	if err := bson.Unmarshal(stored, &oldDoc); err != nil {
+	return idMappingWith(contents, oldDoc)
+}
+
+// idMappingWith is idMapping with the stored document already parsed.
+func idMappingWith(contents []byte, oldDoc bson.D) map[string][]byte {
+	var newDoc bson.D
+	if err := bson.Unmarshal(contents, &newDoc); err != nil {
 		return nil
 	}
 	w := &pairer{pairs: map[string][]byte{}, claimed: map[string]bool{}}
@@ -339,8 +368,8 @@ func dropCollisions(pairs map[string][]byte, newIDs map[string]int) map[string][
 // copying out of it — a property of the library, not of this package. Rather
 // than assume it, the result is read back and checked against the id set the
 // substitution was supposed to produce.
-func substituteIDs(raw []byte, m map[string][]byte) bool {
-	before, ok := elementIDsOf(raw)
+func substituteIDs(raw []byte, m map[string][]byte, idsOf func([]byte) (map[string]bool, bool)) bool {
+	before, ok := idsOf(raw)
 	if !ok {
 		return false
 	}
@@ -361,7 +390,7 @@ func substituteIDs(raw []byte, m map[string][]byte) bool {
 		return false
 	}
 
-	after, ok := elementIDsOf(raw)
+	after, ok := idsOf(raw)
 	if !ok || len(after) != len(want) {
 		return false
 	}
@@ -371,6 +400,81 @@ func substituteIDs(raw []byte, m map[string][]byte) bool {
 		}
 	}
 	return true
+}
+
+// elementIDSetByParsing is the set of element ids of a document, read by
+// parsing it: what elementIDSetOf is compared with.
+func elementIDSetByParsing(raw []byte) (map[string]bool, bool) {
+	ids, ok := elementIDsOf(raw)
+	if !ok {
+		return nil, false
+	}
+	out := make(map[string]bool, len(ids))
+	for id := range ids {
+		out[id] = true
+	}
+	return out, true
+}
+
+// elementIDSetOf is the set of element ids of a document, read where they lie:
+// every $ID of the document and of every document under it, a 16-byte binary
+// as its UUID and a string as itself (elementID). ok is false for bytes that
+// are not a document.
+//
+// The substitution check reads the ids before and after it patches. Parsing
+// the whole document for each was two of the twelve parses a reconcile made
+// (ako/mxcli#2160); the ids are all it needs, and they can be read without
+// building the tree.
+func elementIDSetOf(raw []byte) (map[string]bool, bool) {
+	if bson.Raw(raw).Validate() != nil {
+		return nil, false
+	}
+	out := map[string]bool{}
+	var walkDoc func(doc bsoncore.Document, isArray bool)
+	walkDoc = func(doc bsoncore.Document, isArray bool) {
+		elems, err := doc.Elements()
+		if err != nil {
+			return
+		}
+		id, hasID := "", false
+		for _, e := range elems {
+			v := e.Value()
+			switch v.Type {
+			case bsoncore.TypeEmbeddedDocument:
+				if d, ok := v.DocumentOK(); ok {
+					walkDoc(d, false)
+				}
+			case bsoncore.TypeArray:
+				if a, ok := v.ArrayOK(); ok {
+					walkDoc(bsoncore.Document(a), true)
+				}
+			}
+			if isArray || e.Key() != "$ID" {
+				continue
+			}
+			// The last $ID of a document wins, as it does in the map a parsed
+			// document becomes.
+			switch v.Type {
+			case bsoncore.TypeBinary:
+				if _, data, ok := v.BinaryOK(); ok && len(data) == 16 {
+					id, hasID = blobToUUID(data), true
+				} else {
+					hasID = false
+				}
+			case bsoncore.TypeString:
+				if str, ok := v.StringValueOK(); ok {
+					id, hasID = str, true
+				}
+			default:
+				hasID = false
+			}
+		}
+		if hasID {
+			out[id] = true
+		}
+	}
+	walkDoc(bsoncore.Document(raw), false)
+	return out, true
 }
 
 func elementIDsOf(raw []byte) (map[string]int, bool) {
