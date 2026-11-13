@@ -1637,17 +1637,24 @@ alter module Inventory set (Version: '2.4.0');
 		Summary:  "Manage Maven/JAR dependencies in a module's settings",
 		Keywords: []string{
 			"jar dependency", "maven", "jar dep", "module settings",
-			"group", "artifact", "classpath", "exclusion",
+			"group", "artifact", "classpath", "exclusion", "if not exists", "re-runnable",
 		},
 		Syntax: `LIST JAR DEPENDENCIES [IN <module>];
 DESCRIBE JAR DEPENDENCY <module> '<group:artifact>';
 ALTER MODULE <name>
-  ADD JAR DEPENDENCY (
+  ADD JAR DEPENDENCY [IF NOT EXISTS] (
     group    = '<group>',
     artifact = '<artifact>',
     version  = '<version>',
     included = true|false,
   );
+-- Bare ADD errors when the module already declares group:artifact.
+-- IF NOT EXISTS makes the script re-runnable: an existing coordinate is left
+-- UNTOUCHED with a "skipped" notice, even when its stored version or included
+-- flag differs (the notice names the difference and the SET that changes it),
+-- and a statement whose every ADD skipped writes nothing and reports Unchanged.
+-- Same semantics as ADD ATTRIBUTE / ADD VALUE / CREATE ENTITY IF NOT EXISTS.
+-- To also move an existing dependency to a new version, follow it with SET … VERSION.
 ALTER MODULE <name> SET JAR DEPENDENCY '<group:artifact>' VERSION '<version>';
 ALTER MODULE <name> SET JAR DEPENDENCY '<group:artifact>' INCLUDED true|false;
 ALTER MODULE <name> SET JAR DEPENDENCY '<group:artifact>' ADD EXCLUSION '<group:artifact>';
@@ -1663,7 +1670,16 @@ ALTER MODULE MyModule
     included = true,
   );
 
--- Update the version
+-- Re-runnable form for a project script: the second exec writes nothing
+ALTER MODULE MyModule
+  ADD JAR DEPENDENCY IF NOT EXISTS (
+    group    = 'org.duckdb',
+    artifact = 'duckdb_jdbc',
+    version  = '1.1.3',
+    included = true,
+  );
+
+-- Update the version (also re-runnable: restating it writes nothing)
 ALTER MODULE MyModule SET JAR DEPENDENCY 'org.duckdb:duckdb_jdbc' VERSION '1.2.0';
 
 -- Exclude a transitive dependency
