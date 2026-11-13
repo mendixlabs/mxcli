@@ -12,6 +12,7 @@
 -- gone. This was the negative test 673-dynamictext-style-rejected.fail.mdl.
 --
 -- Expected: `mxcli check` passes.
+mdl 1;
 
 create page BugTest.DynamicTextStylePage
 (
@@ -22,4 +23,4 @@ create page BugTest.DynamicTextStylePage
 {
   dynamictext dtStyled (content: 'Hello', style: 'color: red;')
   dynamictext dtVariable (content: 'Icon', style: '--icon-size: auto;')
-}
+};
