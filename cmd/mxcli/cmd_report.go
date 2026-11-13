@@ -22,6 +22,13 @@ var reportCmd = &cobra.Command{
 conventions. The report includes category scores, recommendations, and
 detailed findings.
 
+For reports that answer one question rather than score, use a kind:
+  mxcli report architecture   module layers, coupling, bounded contexts, cycles
+  mxcli report tests          test results and measured microflow coverage
+  mxcli report security       access grid, caller-trusting flows, unsafe defaults
+  mxcli report performance    journeys at volume: time per step, plans, before/after
+  mxcli report traceability   requirements per milestone: built, partial, proven
+
 Output formats:
   - markdown (default): Human-readable Markdown with tables and progress bars
   - json: Machine-readable structured output
