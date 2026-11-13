@@ -1596,7 +1596,7 @@ func traverseFlowUntilMerge(
 			return
 		}
 		trueFlow, falseFlow := findBranchFlows(flows)
-		nestedMergeID = resolveNestedMergeID(nestedMergeID, mergeID, trueFlow, falseFlow, flowsByOrigin)
+		nestedMergeID = resolveNestedMergeID(currentID, nestedMergeID, mergeID, trueFlow, falseFlow, flowsByOrigin)
 		// Printed as stored, never folded into not(X) (ako/mxcli#1963).
 
 		if stmt != "" {
@@ -1909,7 +1909,18 @@ func emitJoinAsLoopHeader(
 	return true
 }
 
+// resolveNestedMergeID decides where a nested split's branches stop: at its own
+// join, or at the enclosing one (parentMergeID) when the nested join lies past
+// the enclosing join.
+//
+// "Lies past" is the parent reaching the nested join WITHOUT going through the
+// split. Inside a `while true` the parent is the loop header and is on a cycle,
+// so it reaches everything in the body — but only round the loop, through this
+// very split. Counting that path paired the split with the header, and the step
+// after its own join was printed inside the THEN branch (mendixlabs/mxcli#1829):
+// rebuilt, the ELSE branch skipped it.
 func resolveNestedMergeID(
+	splitID model.ID,
 	nestedMergeID model.ID,
 	parentMergeID model.ID,
 	trueFlow *microflows.SequenceFlow,
@@ -1917,7 +1928,7 @@ func resolveNestedMergeID(
 	flowsByOrigin map[model.ID][]*microflows.SequenceFlow,
 ) model.ID {
 	if nestedMergeID != "" && parentMergeID != "" && nestedMergeID != parentMergeID &&
-		canReachNode(parentMergeID, nestedMergeID, flowsByOrigin, make(map[model.ID]bool)) {
+		canReachNode(parentMergeID, nestedMergeID, flowsByOrigin, map[model.ID]bool{splitID: true}) {
 		for _, flow := range []*microflows.SequenceFlow{trueFlow, falseFlow} {
 			if flow == nil {
 				continue
