@@ -53,6 +53,14 @@ func TestVendoredFamilies(t *testing.T) {
 	}
 }
 
+// probeBase is the base theme's own font stacks, shaped like Signal's and
+// Console's: the heading follows the body font by var() reference.
+var probeBase = TokenSet{
+	"--mxt-font":         `"IBM Plex Sans", system-ui, sans-serif`,
+	"--mxt-font-heading": `var(--mxt-font)`,
+	"--mxt-font-mono":    `"IBM Plex Mono", ui-monospace, monospace`,
+}
+
 func TestUnusedVendoredFamilies(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -88,14 +96,36 @@ func TestUnusedVendoredFamilies(t *testing.T) {
 		{
 			name: "a heading font that still names the family keeps it",
 			tokens: tokensWith(map[string]string{
+				"--mxt-font":         `"Neue Haas Grotesk", sans-serif`,
 				"--mxt-font-heading": `"IBM Plex Sans", sans-serif`,
+				"--mxt-font-mono":    `ui-monospace, monospace`,
+			}),
+			want: []string{"IBM Plex Mono"},
+		},
+		// ako/mxcli#2210: a token the design leaves alone keeps the base's
+		// value, so the family that value names is still loaded.
+		{
+			name:   "seeding only the body font keeps the mono the base still names",
+			tokens: tokensWith(map[string]string{"--mxt-font": `Inter, system-ui, sans-serif`}),
+			want:   []string{"IBM Plex Sans"},
+		},
+		{
+			name:   "seeding only the heading keeps both base families",
+			tokens: tokensWith(map[string]string{"--mxt-font-heading": `Inter, sans-serif`}),
+			want:   nil,
+		},
+		{
+			name: "a seeded heading of var(--mxt-font) follows the base body font",
+			tokens: tokensWith(map[string]string{
+				"--mxt-font-heading": `var(--mxt-font)`,
+				"--mxt-font-mono":    `ui-monospace, monospace`,
 			}),
 			want: []string{"IBM Plex Mono"},
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := unusedVendoredFamilies(probePartial, tc.tokens)
+			got := unusedVendoredFamilies(probePartial, probeBase, tc.tokens)
 			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
 				t.Errorf("got %v, want %v", got, tc.want)
 			}
@@ -212,6 +242,7 @@ func TestSeededSummaryNamesTheSource(t *testing.T) {
 // mismatch between them.
 func TestScaffoldedThemeShipsExactlyTheFontsItLoads(t *testing.T) {
 	tests := map[string]struct {
+		base       string // "" scaffolds from the default base
 		css        string
 		wantLoaded []string
 	}{
@@ -235,6 +266,33 @@ func TestScaffoldedThemeShipsExactlyTheFontsItLoads(t *testing.T) {
 			css:        `:root { --mxt-brand: #10069F; }`,
 			wantLoaded: []string{"IBM Plex Sans", "IBM Plex Mono"},
 		},
+		// ako/mxcli#2210: seeding only the body font left --mxt-font-mono at
+		// console's "JetBrains Mono" while its @font-face and woff2 files were
+		// dropped, because only the SEEDED stacks were consulted. The theme's
+		// resulting stacks decide: mono still names JetBrains Mono, and the
+		// heading (var(--mxt-font)) now resolves to Inter, so only Space
+		// Grotesk goes.
+		"console: seeding only the body font keeps the mono the base still names": {
+			base:       "console",
+			css:        `:root { --mxt-font: Inter, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }`,
+			wantLoaded: []string{"JetBrains Mono"},
+		},
+		"console: seeding the mono font too drops it": {
+			base: "console",
+			css: `:root {
+				--mxt-font: Inter, system-ui, sans-serif;
+				--mxt-font-mono: "Fira Code", ui-monospace, monospace;
+			}`,
+			wantLoaded: nil,
+		},
+		"console: a heading that names the base body font keeps it": {
+			base: "console",
+			css: `:root {
+				--mxt-font: Inter, system-ui, sans-serif;
+				--mxt-font-heading: "Space Grotesk", sans-serif;
+			}`,
+			wantLoaded: []string{"Space Grotesk", "JetBrains Mono"},
+		},
 	}
 
 	for name, tc := range tests {
@@ -243,7 +301,7 @@ func TestScaffoldedThemeShipsExactlyTheFontsItLoads(t *testing.T) {
 			design := filepath.Join(dir, "design.css")
 			write(t, design, tc.css)
 
-			if _, err := Create(dir, "probe", CreateOptions{From: design}); err != nil {
+			if _, err := Create(dir, "probe", CreateOptions{From: design, Base: tc.base}); err != nil {
 				t.Fatal(err)
 			}
 			themeDir := filepath.Join(dir, "theme", "mxcli-themes", "probe", "files", "theme", "web")
