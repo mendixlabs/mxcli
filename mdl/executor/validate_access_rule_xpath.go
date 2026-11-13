@@ -51,12 +51,27 @@ import (
 // runs too. The association and System-member rules are the retrieve's own
 // functions, not a third copy.
 //
+// Tokens other than [%CurrentUser%], measured the same way: a quoted token is
+// a string, so any token on a number is CE0161, like '5'; a date token
+// ([%CurrentDateTime%], [%BeginOf…%], [%EndOf…%]) or a user role token
+// ([%UserRole_…%]) on a String is CE0161; a user role token on a DateTime is
+// CE0161, a date token on one builds. And '[%CurrentUser%]' compared with an
+// association whose far end is not System.User or a specialization of it is
+// CE0161.
+//
+//	CE0161    [Title = '[%CurrentDateTime%]']  [Title = '[%BeginOfCurrentDay%]']
+//	          [Title = '[%UserRole_User%]']  [D = '[%UserRole_User%]']
+//	          [Cnt = '[%CurrentDateTime%]']  [Cnt = '[%DayLength%]']
+//	          [M.E_Kid = '[%CurrentUser%]'] (M.Kid is not a user)
+//	0 errors  [M.E_Acc = '[%CurrentUser%]'] (Administration.Account, a
+//	          specialization of System.User)
+//
 // Could-not-establish is silence: an attribute reached over a path, an
 // inherited one, one of a kind not measured (AutoNumber, HashedString, Binary,
-// Date), an entity the script alters, a token other than [%CurrentUser%] (a
-// date token compared with a number was measured as CE0161 too, but the token
-// vocabulary is not modelled here), and an enumeration whose values neither the
-// script nor the project states.
+// Date), an entity the script alters, a token on a Boolean or enumeration, any
+// other token on a String or DateTime, an association the entity is not the
+// FROM end of, a far end whose generalization chain cannot be read to the root,
+// and an enumeration whose values neither the script nor the project states.
 
 // accessRuleVariableRule reports a variable in an access rule. A flow, a page
 // and a user task have variables to hand an XPath constraint; an access rule
@@ -181,35 +196,54 @@ func (l xpathLiteral) text() string {
 // walkXPathLiteralComparisons calls fn for each comparison of a bare attribute
 // with a literal, either way round, through and/or, not() and parentheses.
 func walkXPathLiteralComparisons(e ast.Expression, fn func(attr, op string, lit xpathLiteral)) {
+	walkXPathMemberComparisons(e, func(member ast.Expression, op string, lit xpathLiteral) {
+		if id, ok := member.(*ast.IdentifierExpr); ok {
+			fn(id.Name, op, lit)
+		}
+	})
+}
+
+// walkXPathMemberComparisons calls fn for each comparison of a member — a bare
+// attribute or a qualified association — with a literal, either way round,
+// through and/or, not() and parentheses.
+func walkXPathMemberComparisons(e ast.Expression, fn func(member ast.Expression, op string, lit xpathLiteral)) {
 	switch x := e.(type) {
 	case *ast.ParenExpr:
-		walkXPathLiteralComparisons(x.Inner, fn)
+		walkXPathMemberComparisons(x.Inner, fn)
 	case *ast.UnaryExpr:
-		walkXPathLiteralComparisons(x.Operand, fn)
+		walkXPathMemberComparisons(x.Operand, fn)
 	case *ast.FunctionCallExpr:
 		if strings.EqualFold(x.Name, "not") {
 			for _, a := range x.Arguments {
-				walkXPathLiteralComparisons(a, fn)
+				walkXPathMemberComparisons(a, fn)
 			}
 		}
 	case *ast.BinaryExpr:
 		op := strings.ToLower(x.Operator)
 		switch op {
 		case "and", "or":
-			walkXPathLiteralComparisons(x.Left, fn)
-			walkXPathLiteralComparisons(x.Right, fn)
+			walkXPathMemberComparisons(x.Left, fn)
+			walkXPathMemberComparisons(x.Right, fn)
 		case "=", "!=", "<>", "<", ">", "<=", ">=":
-			if id, ok := x.Left.(*ast.IdentifierExpr); ok {
+			if isXPathMember(x.Left) {
 				if lit, ok := xpathLiteralOf(x.Right); ok {
-					fn(id.Name, op, lit)
+					fn(x.Left, op, lit)
 				}
-			} else if id, ok := x.Right.(*ast.IdentifierExpr); ok {
+			} else if isXPathMember(x.Right) {
 				if lit, ok := xpathLiteralOf(x.Left); ok {
-					fn(id.Name, op, lit)
+					fn(x.Right, op, lit)
 				}
 			}
 		}
 	}
+}
+
+func isXPathMember(e ast.Expression) bool {
+	switch e.(type) {
+	case *ast.IdentifierExpr, *ast.QualifiedNameExpr:
+		return true
+	}
+	return false
 }
 
 // literalTypeProblems reports each literal in the constraint whose type the
@@ -226,7 +260,15 @@ func (g *grantResolver) literalTypeProblems(entityQN, constraint string) []strin
 		if !ok || expr == nil {
 			continue
 		}
-		walkXPathLiteralComparisons(expr, func(attr, op string, lit xpathLiteral) {
+		walkXPathMemberComparisons(expr, func(member ast.Expression, op string, lit xpathLiteral) {
+			if qn, ok := member.(*ast.QualifiedNameExpr); ok {
+				if p := g.currentUserAssociationProblem(entityQN, qn.QualifiedName.String(), op, lit); p != "" && !seen[p] {
+					seen[p] = true
+					out = append(out, p)
+				}
+				return
+			}
+			attr := member.(*ast.IdentifierExpr).Name
 			at, ok := retrieveAttributeType(g.ctx, g.whole, entityQN, attr)
 			if !ok {
 				return
@@ -257,8 +299,10 @@ func (g *grantResolver) literalTypeProblem(at ast.DataType, op string, lit xpath
 		return "[%CurrentUser%] is the current user object, which compares with an association to System.User " +
 			"(or System.owner), not with an attribute value"
 	}
-	if lit.class == "string" && strings.Contains(lit.value, "[%") {
-		return "" // another token: its type is not modelled here
+	if tok, ok := xpathToken(lit); ok && class != "number" {
+		// On a number every quoted value is refused, a token included (the
+		// number case below). Elsewhere only the measured pairs are judged.
+		return tokenTypeProblem(class, tok)
 	}
 	switch class {
 	case "string":
@@ -320,4 +364,115 @@ func (g *grantResolver) enumValues(enumQN string) ([]string, bool) {
 		v = append(v, ev.Name)
 	}
 	return v, true
+}
+
+// xpathToken is the name of the token a string literal is, such as
+// "CurrentDateTime" for '[%CurrentDateTime%]'.
+func xpathToken(lit xpathLiteral) (string, bool) {
+	if lit.class != "string" || !strings.HasPrefix(lit.value, "[%") || !strings.HasSuffix(lit.value, "%]") {
+		return "", false
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(lit.value, "[%"), "%]"), true
+}
+
+// isDateToken reports the tokens that stand for a date and time.
+func isDateToken(tok string) bool {
+	return tok == "CurrentDateTime" || strings.HasPrefix(tok, "BeginOf") || strings.HasPrefix(tok, "EndOf")
+}
+
+// tokenTypeProblem is why an attribute of the class does not take the token
+// (CurrentUser is judged before), or "" when it does or that was not measured.
+func tokenTypeProblem(class, tok string) string {
+	userRole := strings.HasPrefix(tok, "UserRole_")
+	switch class {
+	case "string":
+		if isDateToken(tok) {
+			return "[%" + tok + "%] is a date and time, not a string; it compares with a DateTime attribute"
+		}
+		if userRole {
+			return "[%" + tok + "%] is a user role, not a string"
+		}
+	case "datetime":
+		if userRole {
+			return "[%" + tok + "%] is a user role, not a date; a DateTime attribute compares with a date string or a date token such as '[%CurrentDateTime%]'"
+		}
+	}
+	return ""
+}
+
+// currentUserAssociationProblem reports '[%CurrentUser%]' compared with an
+// association of the entity whose far end is not System.User or a
+// specialization of it. Silent unless the association is known, the entity is
+// its FROM end, and the far end's generalization chain was read to the root.
+func (g *grantResolver) currentUserAssociationProblem(entityQN, assocQN, op string, lit xpathLiteral) string {
+	if tok, ok := xpathToken(lit); !ok || tok != "CurrentUser" || (op != "=" && op != "!=") {
+		return ""
+	}
+	from, to, ok := g.associationEndsFor(assocQN)
+	if !ok || !strings.EqualFold(from, entityQN) {
+		return ""
+	}
+	chain, complete := g.generalizationChain(to)
+	if !complete {
+		return ""
+	}
+	for _, e := range chain {
+		if strings.EqualFold(e, "System.User") {
+			return ""
+		}
+	}
+	return fmt.Sprintf("the access rule's constraint compares association %s, which leads to %s, with '[%%CurrentUser%%]' — "+
+		"the current user is a System.User and %s is not one; mxbuild rejects the constraint with CE0161 \"Error(s) in XPath constraint.\"",
+		assocQN, to, to)
+}
+
+// associationEndsFor is an association's FROM and TO entity, as the script
+// declares it or else as the project stores it.
+func (g *grantResolver) associationEndsFor(assocQN string) (string, string, bool) {
+	if ends, ok := g.whole.associationEnds[strings.ToLower(assocQN)]; ok {
+		return ends[0], ends[1], true
+	}
+	if g.assocCatalog == nil {
+		var cat associationCatalog
+		if b, ok := g.ctx.Backend.(entityLookupBackend); ok {
+			cat = associationCatalogFor(b)
+		}
+		g.assocCatalog = &cat
+	}
+	shape, ok := g.assocCatalog.shapes[strings.ToLower(assocQN)]
+	if !ok {
+		return "", "", false
+	}
+	return shape.from, shape.to, true
+}
+
+// generalizationChain is the entity followed by its generalizations, nearest
+// first, and whether the walk reached the root. An entity the script declares
+// answers with its declared generalization; one it alters, renames or moves is
+// not established.
+func (g *grantResolver) generalizationChain(entityQN string) ([]string, bool) {
+	b, _ := g.ctx.Backend.(entityLookupBackend)
+	var chain []string
+	seen := map[string]bool{}
+	for qn := entityQN; qn != ""; {
+		key := strings.ToLower(qn)
+		if seen[key] || g.whole.alteredEntities[qn] || g.whole.indirectEntities[qn] {
+			return chain, false
+		}
+		seen[key] = true
+		chain = append(chain, qn)
+		if gen, ok := g.whole.entityGeneralizations[key]; ok {
+			qn = gen
+			continue
+		}
+		if strings.EqualFold(qn, "System.User") {
+			return chain, true
+		}
+		e, ok := findEntityByQN(b, qn)
+		if !ok {
+			return chain, false
+		}
+		qn = e.GeneralizationRef
+	}
+	return chain, true
 }

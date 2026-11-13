@@ -100,6 +100,9 @@ type grantResolver struct {
 	prog          *ast.Program
 	scriptEnums   map[string][]string
 	unjudgedEnums map[string]bool
+	// assocCatalog is the project's associations with their ends, for
+	// '[%CurrentUser%]' compared with an association; read on first use.
+	assocCatalog *associationCatalog
 }
 
 func (g *grantResolver) recordLater(stmt ast.Statement) {

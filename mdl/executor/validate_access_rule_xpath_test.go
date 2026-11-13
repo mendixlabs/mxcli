@@ -27,6 +27,8 @@ create persistent entity M.E ( Title: String(100), Cnt: Integer, Big: Long, Amt:
 create persistent entity M.O ( Title: String(100), owner: AutoOwner );
 create association M.E_Kid from M.E to M.Kid;
 create association M.E_User from M.E to System.User;
+create persistent entity M.Acc extends System.User ( Nick: String(50) );
+create association M.E_Acc from M.E to M.Acc;
 create module role M.User;
 `
 
@@ -95,6 +97,15 @@ func TestAccessRuleXPath_ReportsWhatMxbuildRejects(t *testing.T) {
 		{"empty key", "[Status = '']", "Red, Grn"},
 		{"number on an enumeration", "[Status = 5]", "M.Color"},
 		{"inside an and", "[Title = 'a' and Cnt = '5']", "Integer"},
+		// tokens other than CurrentUser
+		{"date token on a String", "[Title = '[%CurrentDateTime%]']", "[%CurrentDateTime%]"},
+		{"begin-of token on a String", "[Title = '[%BeginOfCurrentDay%]']", "[%BeginOfCurrentDay%]"},
+		{"user role token on a String", "[Title = '[%UserRole_User%]']", "[%UserRole_User%]"},
+		{"user role token on a DateTime", "[D = '[%UserRole_User%]']", "[%UserRole_User%]"},
+		{"date token on an Integer", "[Cnt = '[%CurrentDateTime%]']", "Integer"},
+		{"quoted number token on an Integer", "[Cnt = '[%DayLength%]']", "Integer"},
+		// the current user compared with an association to a non-user
+		{"user token on an association to M.Kid", "[M.E_Kid = '[%CurrentUser%]']", "M.Kid is not one"},
 	}
 	ctx := accessRuleCtx(t)
 	for _, c := range cases {
@@ -138,11 +149,13 @@ func TestAccessRuleXPath_LegalTwinsPass(t *testing.T) {
 		{"M.E", "[Cnt = empty]"},
 		{"M.E", "[Status = empty]"},
 		{"M.E", "[Status = 'Red' and Cnt = 5 and Flag = 'false' and D = '2020-01-01' and Title = 'x']"},
-		// Not established, so not judged: a token other than CurrentUser on a
-		// number (measured CE0161, but the token vocabulary is not modelled),
-		// and an attribute reached over a path.
-		{"M.E", "[Cnt = '[%DayLength%]']"},
+		// the current user compared with an association to a specialization
+		// of System.User
+		{"M.E", "[M.E_Acc = '[%CurrentUser%]']"},
+		// Not established, so not judged: an attribute reached over a path,
+		// and a token on a String that was not measured.
 		{"M.E", "[M.E_Kid/M.Kid/Name = 5]"},
+		{"M.E", "[Title = '[%DayLength%]']"},
 	}
 	ctx := accessRuleCtx(t)
 	for _, c := range cases {
