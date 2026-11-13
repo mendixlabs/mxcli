@@ -1255,7 +1255,7 @@ var staticWidgetKnownProps = func() map[string]bool {
 		// mendixlabs/mxcli#1346: a dataview's explicit footer flag (#813), the
 		// menu source and orientation of navigationtree / menubar /
 		// simplemenubar, and a scroll-container region's size mode.
-		"ShowFooter", "Menu", "Profile", "Orientation", "SizeMode",
+		"ShowFooter", "NoEntityMessage", "Menu", "Profile", "Orientation", "SizeMode",
 		// a scroll-container region's toggle mode, which a sidebartoggle opens
 		// (mendixlabs/mxcli#1220).
 		"ToggleMode",
