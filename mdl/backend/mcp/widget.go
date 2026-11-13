@@ -211,6 +211,15 @@ func (w *mcpWidgetBuilder) SetImage(propertyKey, imageQN string) {
 	w.object[propertyKey] = imageQN
 }
 
+// SetIcon has no PED spelling this backend knows of; it is recorded rather than
+// sent in a shape the Studio Pro side may not read.
+func (w *mcpWidgetBuilder) SetIcon(propertyKey string, icon *pages.Icon) {
+	if icon == nil {
+		return
+	}
+	w.note("SetIcon(" + propertyKey + ")")
+}
+
 // SetImageEntity has no PED spelling this backend knows of; it is recorded
 // rather than sent as a collection entry it is not.
 func (w *mcpWidgetBuilder) SetImageEntity(propertyKey, entityName string) {

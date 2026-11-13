@@ -2277,6 +2277,13 @@ func describeImageWidgetProps(ctx *ExecContext, w rawWidget) []string {
 	if w.ImageType != "" && w.ImageType != "image" {
 		props = append(props, fmt.Sprintf("ImageType: %s", w.ImageType))
 	}
+	// The icon an `ImageType: icon` image shows, in a button's spelling. Without
+	// it a re-created image named no icon: "No icon selected." (ako/mxcli#2174).
+	if icon := widgetIconMDL(ctx, w); icon != "" {
+		props = append(props, icon)
+	} else if note := widgetIconNote(ctx, w); note != "" {
+		props = append(props, note)
+	}
 	switch {
 	case w.ImageFromObject:
 		// Bound to the object in context, unquoted: a quoted value is a
