@@ -107,3 +107,6 @@ if [ "$SCORE" -lt 70 ]; then
   exit 1
 fi
 ```
+
+For reports that answer one question instead of scoring — architecture, tests,
+security, performance and traceability — see [Project Reports](project-reports.md).

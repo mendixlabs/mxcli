@@ -142,6 +142,7 @@
   - [Writing Custom Rules](tools/custom-rules.md)
   - [mxcli lint](tools/mxcli-lint.md)
   - [mxcli report](tools/mxcli-report.md)
+  - [Project Reports](tools/project-reports.md)
 - [Claude Code Companion](tools/companion.md)
 - [Terminal UI (TUI)](tools/tui.md)
   - [Navigation and Layout](tools/tui-navigation.md)
