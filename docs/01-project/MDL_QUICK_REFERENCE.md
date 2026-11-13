@@ -772,7 +772,7 @@ mandatory and a misplaced clause failed with a token error
 - `notification [<name>] [caption '<caption>'];` — an intermediate notification event (Mendix 11.11+)
 - `end workflow [caption '<caption>'];` — only inside a `{ }` block; ends the whole workflow
 - `caption '…'` sets the caption Studio Pro shows on an activity; `comment '…'`, the old spelling, is a deprecated alias (`MDL-DEPR104`)
-- Boundary events, after `outcomes`: `boundary event [non] interrupting timer <expr> [repeat every <n> <unit> at most <m> times] [caption '<caption>'] { … }` or `boundary event [non] interrupting notification <name> ['<caption>'] { … }` (11.11+). One interrupting event per activity (CE6697, MDL-WF15).
+- Boundary events, after `outcomes`: `boundary event [non] interrupting timer <expr> [repeat every <n> <unit> at most <m> times] [caption '<caption>'] { … }` or `boundary event [non] interrupting notification <name> ['<caption>'] { … }` (11.11+). One interrupting event per activity (CE6697, MDL-WF15), at most five events in all (CE6696, MDL-WF23).
 - **Variables in a workflow expression**: `$WorkflowContext` (or the header's declared name) and `$WorkflowInstance`, the running `System.Workflow` — `call microflow M.ACT(Workflow = $WorkflowInstance)`. Anything else (`$Workflow`, `$currentUser`, `$WorkflowUserTask`, …) is CE0117 (MDL-WF19); the workflow's own `due date` sees only the context.
 
 **Notifying a workflow** (a microflow statement): `[$Notified =] notify workflow $Workflow target Module.Workflow.ElementName;` — the element is a notification-started event sub-process's start, a notification activity, a notification boundary event or a wait for notification, and mxcli resolves which. The target is required (CE0166, MDL-WF16).

@@ -247,7 +247,7 @@ end workflow;
   runtime then **refuses to start the application** ("Class
   'Workflows$TimerBoundaryEvent' could not be found"). mxcli refuses the bare form
   on Mendix 11 (MDL-WF07).
-- **The delay is a DateTime expression** (`addDays([%CurrentDateTime%], 3)`, not `'P3D'`). A **reminder** repeats a non-interrupting timer: `… timer addDays([%CurrentDateTime%], 1) repeat every 1 day at most 5 times { … }` — minute(s) to month(s), the count includes the first firing and is at least 2 (MDL-WF22); a timer event sub-process start takes it on 11.15+.
+- **The delay is a DateTime expression** (`addDays([%CurrentDateTime%], 3)`, not `'P3D'`). A **reminder** repeats a non-interrupting timer: `… timer addDays([%CurrentDateTime%], 1) repeat every 1 day at most 5 times { … }` — minute(s) to month(s), the count includes the first firing and is at least 2 (MDL-WF22); a timer event sub-process start takes it on 11.15+. **At most 5 boundary events per activity** (CE6696, MDL-WF23): repeat one timer rather than stacking them.
 - **Every boundary path must end**, and mxcli ends one that runs to its last
   activity as Studio Pro does (ako/mxcli#1712): an **interrupting** path with an
   End — the timeout ends the workflow; `describe` shows `end workflow;` — and a

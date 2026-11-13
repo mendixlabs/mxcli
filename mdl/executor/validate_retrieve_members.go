@@ -59,6 +59,12 @@ func validateRetrieveMembers(ctx *ExecContext, retrieves []retrieveConstraintRef
 // AND the entities and associations the script declares. Shared by the
 // microflow retrieve check and the access-rule check (mendixlabs/mxcli#1472).
 func scriptXPathResolver(ctx *ExecContext, sc *scriptContext) (*scriptXPathModel, func(entityQN, member string) memberResolution) {
+	// exec validates a statement with no script context. It declares nothing,
+	// so an empty one answers the same; the closure below used to read the nil
+	// pointer and panic (ako/mxcli#2237).
+	if sc == nil {
+		sc = newScriptContext()
+	}
 	m := &scriptXPathModel{base: &execXPathModel{ctx: ctx}, ctx: ctx, sc: sc}
 	var assocs map[string]string // unqualified association name -> qualified, loaded on demand
 	resolve := func(entityQN, member string) memberResolution {

@@ -52,6 +52,9 @@ func execAlterWorkflow(ctx *ExecContext, s *ast.AlterWorkflowStmt) error {
 	if vs := checkWorkflowRecurrences(alterWorkflowRecurrenceSites(s), workflowLocation(s.Name)); len(vs) > 0 {
 		return mdlerrors.NewValidationf("workflow '%s': %s [%s]\n  → %s", s.Name.String(), vs[0].Message, vs[0].RuleID, vs[0].Suggestion)
 	}
+	if vs := alterWorkflowBoundaryCountViolations(s, workflowLocation(s.Name)); len(vs) > 0 {
+		return mdlerrors.NewValidationf("workflow '%s': %s [%s]\n  → %s", s.Name.String(), vs[0].Message, vs[0].RuleID, vs[0].Suggestion)
+	}
 	if refErrors := validateAlterWorkflowRefs(ctx, s, nil); len(refErrors) > 0 {
 		return mdlerrors.NewValidationf("workflow '%s' has reference errors:\n  - %s",
 			s.Name.String(), strings.Join(refErrors, "\n  - "))
