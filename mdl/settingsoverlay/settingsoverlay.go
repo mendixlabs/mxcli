@@ -53,25 +53,66 @@ func SafeInt64(v int) int64 {
 
 // Configurations rebuilds the Configurations list of a raw
 // Settings$ConfigurationSettings part, overlaying each modelled configuration onto
-// the raw configuration it was read from. Configurations are matched by name, which
-// is also how the executor resolves them (ALTER SETTINGS CONFIGURATION '<name>');
-// a modelled configuration with no match on disk is treated as newly created.
+// the raw configuration it was read from. A configuration read from disk carries
+// its stored $ID and is paired by it; one without (built by hand) falls back to
+// its name, which is how the executor addresses configurations (ALTER SETTINGS
+// CONFIGURATION '<name>'). A modelled configuration with no match on disk is
+// treated as newly created.
+//
+// Names are not unique: Studio Pro accepts two configurations called "Default"
+// (a merge brings them in). Pairing by name alone put both modelled
+// configurations onto the last stored document, the unit then held that $ID
+// twice and every settings write was refused (ako/mxcli#2184). So each stored
+// document is claimed at most once, and the id pass runs before the name pass.
 //
 // raw is mutated and returned.
 func Configurations(cs *model.ConfigurationSettings, raw map[string]any) map[string]any {
 	rawConfigs := ArrayElements(raw["Configurations"])
-	byName := make(map[string]map[string]any, len(rawConfigs))
-	for _, rc := range rawConfigs {
-		name, _ := rc["Name"].(string)
-		byName[strings.ToLower(name)] = rc
+	claimed := make([]bool, len(rawConfigs))
+	matched := make([]map[string]any, len(cs.Configurations))
+
+	for i, cfg := range cs.Configurations {
+		if cfg.ID == "" {
+			continue
+		}
+		for j, rc := range rawConfigs {
+			if !claimed[j] && rawIDString(rc["$ID"]) == strings.ToLower(string(cfg.ID)) {
+				claimed[j], matched[i] = true, rc
+				break
+			}
+		}
+	}
+	for i, cfg := range cs.Configurations {
+		if matched[i] != nil {
+			continue
+		}
+		for j, rc := range rawConfigs {
+			name, _ := rc["Name"].(string)
+			if !claimed[j] && strings.EqualFold(name, cfg.Name) {
+				claimed[j], matched[i] = true, rc
+				break
+			}
+		}
 	}
 
 	configs := bson.A{ArrayMarker(raw["Configurations"], DefaultListMarker)}
-	for _, cfg := range cs.Configurations {
-		configs = append(configs, ServerConfiguration(cfg, byName[strings.ToLower(cfg.Name)], rawConfigs))
+	for i, cfg := range cs.Configurations {
+		configs = append(configs, ServerConfiguration(cfg, matched[i], rawConfigs))
 	}
 	raw["Configurations"] = configs
 	return raw
+}
+
+// rawIDString returns a stored $ID as a lower-case UUID string, or "" when the
+// value is absent or not an id.
+func rawIDString(v any) string {
+	switch id := v.(type) {
+	case bson.Binary:
+		return strings.ToLower(bsonutil.BsonBinaryToID(id))
+	case string:
+		return strings.ToLower(id)
+	}
+	return ""
 }
 
 // ServerConfiguration writes the fields the read path populates onto a
