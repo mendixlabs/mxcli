@@ -1352,6 +1352,21 @@ func conditionalEditabilityToGen(ces *pages.ConditionalEditabilitySettings) elem
 	}
 	assignID(g)
 	g.SetExpression(ces.Expression)
+	// "Editable: based on attribute value" (ako/mxcli#2111): written exactly as
+	// the visibility settings' attribute form above.
+	if ces.Attribute != "" {
+		g.SetAttributeQualifiedName(ces.Attribute)
+		for _, c := range ces.Conditions {
+			cg := genEnum.NewCondition()
+			assignID(cg)
+			cg.SetAttributeValue(c.Value)
+			cg.SetEditableVisible(c.Visible)
+			g.AddConditions(cg)
+		}
+		if sv := inputSourceVariableToGen(ces.SourceVariable); sv != nil {
+			g.SetSourceVariable(sv)
+		}
+	}
 	return g
 }
 

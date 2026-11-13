@@ -1031,6 +1031,10 @@ type rawWidget struct {
 	// expression/attribute condition (mendixlabs/mxcli#1460).
 	VisibleRoles []string
 	EditableIf   string // Expression from ConditionalEditabilitySettings
+	// "Editable: based on attribute value", as VisibleAttr/VisibleValues are
+	// for visibility: the values that make the widget EDITABLE (ako/mxcli#2111).
+	EditableAttr   string
+	EditableValues []string
 	// Design properties from Appearance
 	DesignProperties []rawDesignProp
 	// Explicit widget properties (for generic PLUGGABLEWIDGET output)

@@ -1229,7 +1229,7 @@ var staticWidgetKnownProps = func() map[string]bool {
 		// keys the builders/visitor consume and the conditional-binding metadata
 		"CaptionAttribute", "Collapsible", "DatabaseHost", "DefaultLanguage", "Footer",
 		"FormOrientation", "HeaderMode", "LabelWidth", "Prefix", "ShowContentAs", "Title",
-		"Widget", "WidgetType", "ShowLabel", "VisibleIf", "VisibleWhen", "VisibleRoles", "EditableIf", "DynamicClasses",
+		"Widget", "WidgetType", "ShowLabel", "VisibleIf", "VisibleWhen", "VisibleRoles", "EditableIf", "EditableWhen", "DynamicClasses",
 		// vocabulary describe page emits (native widgets + datagrid columns)
 		"Alignment", "AlternativeText", "ColumnClass", "ColumnWidth", "DesktopColumns",
 		"DisplayAs", "Draggable", "DynamicCellClass", "HeightUnit", "Hidable", "ImageType",

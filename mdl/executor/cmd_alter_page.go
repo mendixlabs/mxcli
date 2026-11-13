@@ -1040,7 +1040,7 @@ func refuseStaleContentReplace(ctx *ExecContext, mutator backend.PageMutator, op
 // replacement differs from the baseline" as "the statement states it", so one
 // the statement leaves out must be left out of the baseline too, or the
 // replacement's default would overwrite the stored value.
-var replaceBaselineSystemProps = []string{"Editable", "EditableIf", "Visible", "VisibleIf", "VisibleWhen", "VisibleRoles"}
+var replaceBaselineSystemProps = []string{"Editable", "EditableIf", "EditableWhen", "Visible", "VisibleIf", "VisibleWhen", "VisibleRoles"}
 
 // replaceBaseline is the stored widget's description with the visibility and
 // editability properties the statement does not state removed.
