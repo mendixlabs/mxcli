@@ -350,6 +350,9 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	violations = append(violations, ValidateAgentProviders(prog)...)
 	violations = append(violations, ValidateAgentSelectedModel(prog)...)
 	violations = append(violations, ValidateConsumedMCPEndpoint(prog)...)
+	// An agent value longer than the Agent Commons attribute it is copied
+	// into fails the startup import and leaves the old agent in use (#2211).
+	violations = append(violations, ValidateAgentCommonsLengths(prog)...)
 
 	// Flag an after-startup microflow that does not return Boolean (CE0142).
 	// The reference RESOLVES — the name exists — so #274's existence check has
