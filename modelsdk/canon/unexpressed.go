@@ -60,6 +60,9 @@ func CarryUnexpressed(contents, stored []byte) []byte {
 		if !ok {
 			return
 		}
+		if carryUnstatedFlowProperties(d, old, used) {
+			changed = true
+		}
 		for i, e := range d {
 			ov := docLookup(old, e.Key)
 			switch v := e.Value.(type) {
