@@ -36,7 +36,9 @@ func main() {
 	flag.IntVar(&cfg.sessionEntities, "session-entities", 25, "entities the session authors (each brings 2 microflows and 2 pages)")
 	flag.IntVar(&cfg.large.Modules, "large-modules", 12, "modules seeded into the large project")
 	flag.IntVar(&cfg.large.Entities, "large-entities", 10, "entities per seeded module (each brings 2 microflows and 2 pages)")
-	flag.StringVar(&sizes, "sizes", "small,large", "project sizes to run the session at")
+	flag.IntVar(&cfg.scaleMicroflows, "scale-microflows", 4000, "filler microflows seeded into the scale project")
+	flag.IntVar(&cfg.scaleBatch, "scale-batch", 100, "statements in each batch of the scale session")
+	flag.StringVar(&sizes, "sizes", "small,large,scale", "sessions to run: small and large are the scripted session at two project sizes, scale is per-statement cost on a project of thousands of units")
 	flag.StringVar(&cfg.runtimeVersion, "runtime-version", "", "also run the running-app session (boot, hot apply, tests) on a project created by `mxcli new` for this Mendix version, e.g. 11.13.0; installs mxbuild and the runtime if they are not cached")
 	flag.IntVar(&cfg.runtimeReps, "runtime-reps", 3, "repetitions of the running-app session per arm")
 	flag.BoolVar(&cfg.pageCheck, "page-check", true, "include the page-check step in the running-app session (needs node with playwright and a Chromium)")
@@ -50,6 +52,9 @@ func main() {
 		cfg.sizes = strings.Split(sizes, ",")
 	}
 	cfg.log = os.Stderr
+	if cfg.scaleMicroflows < 1 || cfg.scaleBatch < 1 {
+		fatal(errors.New("-scale-microflows and -scale-batch must be at least 1"))
+	}
 	if cfg.reps < 1 || cfg.runtimeReps < 1 {
 		fatal(errors.New("-reps and -runtime-reps must be at least 1"))
 	}

@@ -286,3 +286,63 @@ $result = call microflow %[1]s.VAL_%[2]s_Save(Item = $item);
 /
 `, mod, ent)
 }
+
+// Filler is the script that creates count filler microflows in one module:
+// six activities each and no reference to anything else, so the project grows
+// by exactly count units and by nothing a statement elsewhere has to resolve.
+// It is what the scale session seeds its project with.
+func Filler(prefix string, count int) string {
+	var sb strings.Builder
+	sb.WriteString(header)
+	fmt.Fprintf(&sb, "\ncreate module if not exists %s;\n", prefix)
+	for i := 0; i < count; i++ {
+		sb.WriteString(fillerFlow(prefix, FillerName(i), "filler"))
+	}
+	return sb.String()
+}
+
+// FillerName is the name of filler microflow i (0-based).
+func FillerName(i int) string { return fmt.Sprintf("Fill_%05d", i+1) }
+
+// FillerUpdates re-creates the first n filler microflows with one log text
+// changed: n updates of existing flows, each spliced in place. tag makes the
+// text differ from the stored one and from another batch's.
+func FillerUpdates(prefix string, n int, tag string) string {
+	var sb strings.Builder
+	sb.WriteString(header)
+	for i := 0; i < n; i++ {
+		sb.WriteString(fillerFlow(prefix, FillerName(i), "changed "+tag))
+	}
+	return sb.String()
+}
+
+// FillerNew creates n microflows the seeded project does not have.
+func FillerNew(prefix string, n int) string {
+	var sb strings.Builder
+	sb.WriteString(header)
+	for i := 0; i < n; i++ {
+		sb.WriteString(fillerFlow(prefix, fmt.Sprintf("New_%05d", i+1), "new"))
+	}
+	return sb.String()
+}
+
+func fillerFlow(module, name, text string) string {
+	return fmt.Sprintf(`
+create or modify microflow %[1]s.%[2]s (
+  $Count: integer
+)
+returns integer
+begin
+  declare $Total integer = $Count;
+  log info node 'Filler' '%[3]s';
+  set $Total = $Total + 1;
+
+  if $Total > 100 then
+    set $Total = 0;
+  end if;
+
+  log info node 'Filler' 'done';
+  return $Total;
+end;
+`, module, name, text)
+}
