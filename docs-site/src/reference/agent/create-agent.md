@@ -38,6 +38,10 @@ Requires Mendix 11.9+.
 
 Creates an agent document in the Mendix Agent Editor. An agent defines how an AI assistant behaves: which model it uses, what instructions it follows, and which tools and knowledge bases it can access.
 
+### Lengths Agent Commons stores
+
+At startup Agent Editor copies each agent into Agent Commons entities with fixed lengths (measured in Agent Editor 2.7.0): the agent's name (the document name, without the module) into `AgentCommons.Agent.Title` (50 characters), `Description` into `AgentCommons.Agent.Description` (200), and a tool's name, `DisplayTitle` and `Description` into `AgentCommons.Tool.Name` (200), `DisplayTitle` (200) and `Description` (4096). A longer value fails the import, and the previous version of the agent stays in use; the build is green. `mxcli check` warns on it (MDL-AGENT04).
+
 ### Usage Types
 
 | Value | Description |

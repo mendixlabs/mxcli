@@ -399,6 +399,9 @@ func setBoolField(doc bson.D, key string, value bool) {
 // listed, and landed in the app root as untracked files (mendixlabs/mxcli#1487).
 // `mx module-import` writes exactly the listed files and passes over a listed
 // one the archive lacks — measured on 11.12.1 — so this does the same.
+// The one exception is an add-on module package, modules/<Name>.mxmodule,
+// which is installed whether listed or not (ako/mxcli#2205, see addon.go) and,
+// like every other written file, replaces the project's copy on update.
 //
 // Three kinds of entry are deliberately not installed, all measured on real
 // packages: one package.xml does not list; a bundled widget older than the copy
@@ -555,7 +558,14 @@ func declaredProjectFiles(entries []*zip.File) (declared map[string]bool, listed
 // <files> list that list decides. Without one, only an entry at the package
 // root is left out: every root entry in the packages measured was metadata, and
 // every project file sits under a folder (javasource/, themesource/, widgets/).
+//
+// An add-on module package (modules/<Name>.mxmodule) is a project file whatever
+// the list says: Studio Pro installs it, and without it the add-on's extension
+// and document types are missing from the app (ako/mxcli#2205).
 func isProjectFile(name string, declared map[string]bool, listed bool) bool {
+	if isAddOnModulePackage(name) {
+		return true
+	}
 	name = packagePath(name)
 	if listed {
 		return declared[name]
