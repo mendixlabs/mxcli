@@ -105,6 +105,12 @@ a node that kept its element ID — an activity of the same kind, a decision's
 condition, a return's value — and `replaced with new element IDs` for one
 that did not.
 
+An activity edited in place keeps the stored value of every property MDL has
+no spelling for — its documentation, and a REST call's proxy setting (`Override`
+with its host, port and credential expressions, or `NoProxy`). The statement
+cannot state them, so it cannot change them either; a `drop` + `create`
+rebuild still writes the defaults.
+
 ## Examples
 
 Insert, replace and drop at top level:
