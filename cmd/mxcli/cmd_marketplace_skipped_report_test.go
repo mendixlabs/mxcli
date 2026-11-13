@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -30,5 +31,22 @@ func TestReportSkippedFiles_PackageMetadataOnOneLine(t *testing.T) {
 	}
 	if !strings.Contains(got, "widgets/Charts.mpk — kept 3.11.3, package ships 3.4.0") {
 		t.Errorf("kept widget no longer reported:\n%s", got)
+	}
+}
+
+// An add-on module package an install or update wrote is named, since it is
+// the one bundled file with no unit in the .mpr (ako/mxcli#2205).
+func TestReportAddOnModules_NamesTheMxmoduleWritten(t *testing.T) {
+	var out bytes.Buffer
+	reportAddOnModules(&out, []string{
+		filepath.Join("modules", "AgentEditor.mxmodule"),
+		filepath.Join("themesource", "agenteditorcommons", "settings.json"),
+	})
+	got := out.String()
+	if !strings.Contains(got, "Add-on module package written: modules/AgentEditor.mxmodule") {
+		t.Errorf("add-on not reported:\n%s", got)
+	}
+	if strings.Contains(got, "settings.json") {
+		t.Errorf("an ordinary bundled file was reported as an add-on:\n%s", got)
 	}
 }

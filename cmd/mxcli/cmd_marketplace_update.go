@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/marketplace"
@@ -292,6 +293,7 @@ func reportUpdate(out io.Writer, r *marketplace.UpdateResult) {
 	if len(r.FilesInstalled) > 0 {
 		fmt.Fprintf(out, "  %d bundled file(s) replaced (widgets, themesource, ...).\n", len(r.FilesInstalled))
 	}
+	reportAddOnModules(out, r.FilesInstalled)
 	reportSkippedFiles(out, r.FilesSkipped)
 
 	if len(r.IdentitiesLost) > 0 {
@@ -345,6 +347,18 @@ func init() {
 	marketplaceUpdateCmd.Flags().String("profile", auth.ProfileDefault, "credential profile")
 
 	marketplaceCmd.AddCommand(marketplaceUpdateCmd)
+}
+
+// reportAddOnModules names the add-on module packages (modules/<Name>.mxmodule)
+// among the files an install or update wrote. They have no unit in the .mpr, so
+// `show modules` lists them only through the file, and the file is what Studio
+// Pro loads the add-on's extension from (ako/mxcli#2205). An add-on the previous
+// version shipped and this one does not is left in place, like every other
+// bundled file.
+func reportAddOnModules(out io.Writer, written []string) {
+	for _, p := range marketplace.AddOnModulePackages(written) {
+		fmt.Fprintf(out, "  Add-on module package written: %s\n", filepath.ToSlash(p))
+	}
 }
 
 // reportSkippedFiles names the bundled files that were deliberately not written.
