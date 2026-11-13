@@ -182,6 +182,31 @@ type Report struct {
 	MissingSources []SourceFinding `json:"missing_sources,omitempty"`
 	Slices         []SliceProgress `json:"slices"`
 	Open           []OpenQuestion  `json:"open"`
+	// Requirements is each checked requirement with each anchor's
+	// resolution: the per-requirement form of Slices, so a consumer (`brain
+	// plan --json`, `report traceability`) reads "built" from the one place it
+	// is defined instead of re-deriving it (ako/mxcli#2226).
+	Requirements []RequirementResult `json:"requirements,omitempty"`
+	// UnknownRequirementRefs are decisions whose verdict line names a
+	// requirement id the plan does not have. It fails the check: a verdict on
+	// nothing is a reference to nothing.
+	UnknownRequirementRefs []VerdictRef `json:"unknown_requirement_refs,omitempty"`
+}
+
+// RequirementResult is one requirement and how each of its anchors resolved.
+type RequirementResult struct {
+	ID      string         `json:"id"`
+	Slice   string         `json:"slice"`
+	Title   string         `json:"title"`
+	Built   bool           `json:"built"`
+	Anchors []AnchorResult `json:"anchors"`
+}
+
+// AnchorResult is one anchor's resolution.
+type AnchorResult struct {
+	Anchor string      `json:"anchor"`
+	State  AnchorState `json:"state"`
+	Kind   string      `json:"kind,omitempty"`
 }
 
 // MarshalJSON adds a derived "failed" alongside the report's contents. A
@@ -205,7 +230,7 @@ func (r Report) MarshalJSON() ([]byte, error) {
 // the wrong shard. A NotIndexable anchor is information, not a defect — see the
 // constant's comment.
 func (r Report) Failed() bool {
-	if len(r.Misfiled) > 0 || len(r.Malformed) > 0 || len(r.MissingSources) > 0 {
+	if len(r.Misfiled) > 0 || len(r.Malformed) > 0 || len(r.MissingSources) > 0 || len(r.UnknownRequirementRefs) > 0 {
 		return true
 	}
 	for _, f := range r.Findings {
@@ -241,8 +266,14 @@ func Check(s *Store, r Resolver, shards []string) (Report, error) {
 			rep.Unverifiable += progress.unverifiable
 			rep.Slices = append(rep.Slices, progress.SliceProgress)
 			rep.Open = append(rep.Open, progress.open...)
+			rep.Requirements = append(rep.Requirements, progress.requirements...)
 			continue
 		}
+		unknown, err := s.unknownVerdictRefs(shard, entries)
+		if err != nil {
+			return rep, err
+		}
+		rep.UnknownRequirementRefs = append(rep.UnknownRequirementRefs, unknown...)
 		for _, e := range entries {
 			rep.Entries++
 			if e.Open {
@@ -289,6 +320,7 @@ type sliceCounts struct {
 	SliceProgress
 	anchors, resolved, unverifiable int
 	open                            []OpenQuestion
+	requirements                    []RequirementResult
 }
 
 // checkSlice counts a slice's requirements against the model. It records no
@@ -311,15 +343,18 @@ func checkSlice(r Resolver, shard string, entries []Entry) (sliceCounts, error) 
 		anchors := e.ParsedAnchors()
 		if len(anchors) == 0 {
 			out.Unanchored++
+			out.requirements = append(out.requirements, RequirementResult{ID: e.ID, Slice: out.Slice, Title: e.Title})
 			continue
 		}
 		built := true
+		rr := RequirementResult{ID: e.ID, Slice: out.Slice, Title: e.Title}
 		for _, a := range anchors {
 			out.anchors++
 			res, err := r.Resolve(a)
 			if err != nil {
 				return out, err
 			}
+			rr.Anchors = append(rr.Anchors, AnchorResult{Anchor: a.String(), State: res.State, Kind: res.Kind})
 			// NotIndexable counts as built: the thing is there, the catalog
 			// simply does not index its type. Calling it planned would report
 			// finished work as outstanding.
@@ -338,6 +373,8 @@ func checkSlice(r Resolver, shard string, entries []Entry) (sliceCounts, error) 
 			}
 			out.resolved++
 		}
+		rr.Built = built
+		out.requirements = append(out.requirements, rr)
 		if built {
 			out.Built++
 		} else {
