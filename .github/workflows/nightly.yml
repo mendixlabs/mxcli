@@ -219,6 +219,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     name: agent dev-loop benchmark
+    permissions:
+      # The record and the trend are pushed to the `benchmarks` branch; an
+      # alert opens or updates an issue.
+      contents: write
+      issues: write
     env:
       # One version, the one the running-app session was developed against.
       # Moving it is a deliberate change: boot and apply times differ between
@@ -287,39 +292,103 @@ jobs:
           path: agentbench-record.json
           if-no-files-found: ignore
 
-      # One file per run, so two runs never edit the same file; the retry is
-      # for two runs pushing at once. An orphan branch: results only, never
-      # merged. Runs from another branch (workflow_dispatch) are not history.
-      - name: Commit the record to the benchmarks branch
+      # One file per run, so two runs never edit the same file. An orphan
+      # branch: results only, never merged. With the record go TREND.md and
+      # trend.json, rebuilt from every record on the branch by
+      # scripts/agentbench/trend -- so a lost push is retried from the
+      # branch as it then stands, not rebased: the trend is a function of
+      # the records, and two runs' versions of it would conflict.
+      #
+      # A run from another branch (workflow_dispatch) builds the trend with
+      # its own record in it and uploads that, and pushes nothing: it is not
+      # history, but it is how a change to the trend is tried.
+      - name: Record the run and build the trend
         # hashFiles sees the workspace only, which is why the record is written there.
-        if: always() && github.ref == 'refs/heads/main' && hashFiles('agentbench-record.json') != ''
+        if: always() && hashFiles('agentbench-record.json') != ''
         run: |
           set -euo pipefail
           sha=$(git rev-parse --short HEAD)
           file="results/$(date -u +%Y/%m)/$(date -u +%Y-%m-%dT%H%M)-$sha.json"
+          bm="$RUNNER_TEMP/benchmarks"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git fetch origin benchmarks:benchmarks 2>/dev/null; then
-            git worktree add "$RUNNER_TEMP/benchmarks" benchmarks
+            git worktree add "$bm" benchmarks
           else
-            git worktree add --detach "$RUNNER_TEMP/benchmarks"
-            git -C "$RUNNER_TEMP/benchmarks" checkout --orphan benchmarks
-            git -C "$RUNNER_TEMP/benchmarks" rm -rf -q .
+            git worktree add --detach "$bm"
+            git -C "$bm" checkout --orphan benchmarks
+            git -C "$bm" rm -rf -q .
             printf '%s\n' '# Agent dev-loop benchmark records' '' \
               'One JSON file per nightly run, written by the `bench` job of `.github/workflows/nightly.yml`.' \
               'Never merged into `main`. How to read a record: `docs-site/src/internals/agent-benchmark.md` on `main`.' \
-              > "$RUNNER_TEMP/benchmarks/README.md"
+              > "$bm/README.md"
           fi
-          cd "$RUNNER_TEMP/benchmarks"
-          mkdir -p "$(dirname "$file")"
-          cp "$GITHUB_WORKSPACE/agentbench-record.json" "$file"
-          git add -A
-          git commit -q -m "bench: $sha"
           for attempt in 1 2 3; do
-            if git push origin benchmarks; then exit 0; fi
-            git pull --rebase origin benchmarks
+            mkdir -p "$bm/$(dirname "$file")"
+            cp agentbench-record.json "$bm/$file"
+            # The record is what must not be lost: a trend that fails to
+            # build is a warning, and the next run rebuilds it.
+            go run ./scripts/agentbench/trend -records "$bm/results" \
+              -md "$bm/TREND.md" -json "$bm/trend.json" -alerts "$RUNNER_TEMP/bench-alerts.md" \
+              || echo "::warning::the benchmark trend could not be built"
+            if [ "$GITHUB_REF" != refs/heads/main ]; then
+              echo "Not main: the record and the trend are not pushed."
+              exit 0
+            fi
+            git -C "$bm" add -A
+            git -C "$bm" commit -q -m "bench: $sha"
+            if git -C "$bm" push origin benchmarks; then exit 0; fi
+            git -C "$bm" fetch origin benchmarks
+            git -C "$bm" reset -q --hard FETCH_HEAD
           done
           exit 1
+
+      - name: Upload the trend
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-benchmark-trend
+          path: |
+            ${{ runner.temp }}/benchmarks/TREND.md
+            ${{ runner.temp }}/benchmarks/trend.json
+            ${{ runner.temp }}/bench-alerts.md
+          if-no-files-found: ignore
+
+      # One issue, opened when the trend has something to report and updated
+      # while it does. A comment is added only when what is reported changed,
+      # so a regression nobody has got to yet does not notify every night.
+      # Never closed from here: that an alert stopped firing is not the same
+      # as someone having looked.
+      - name: Report alerts in an issue
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/bench-alerts.md"
+          if [ ! -s "$body" ]; then
+            echo "No alerts."
+            exit 0
+          fi
+          cat "$body" >> "$GITHUB_STEP_SUMMARY"
+          printf '\nRun: %s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> "$body"
+          gh label create benchmark-regression --repo "$GITHUB_REPOSITORY" --color D93F0B \
+            --description "The agent dev-loop benchmark has something to report" 2>/dev/null || true
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --label benchmark-regression --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -z "$number" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --label benchmark-regression \
+              --title "Agent dev-loop benchmark: regression alert" --body-file "$body"
+            exit 0
+          fi
+          # The alert lines are the list items; the figures in them move a
+          # little every night, so compare kind, session and step only.
+          reported() { grep '^- \*\*' "$1" | sed 's/: .*//' | sort; }
+          gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$RUNNER_TEMP/bench-alerts-was.md"
+          gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$body"
+          if [ "$(reported "$body")" != "$(reported "$RUNNER_TEMP/bench-alerts-was.md")" ]; then
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body-file "$body"
+          fi
 
   nightly:
     needs: test

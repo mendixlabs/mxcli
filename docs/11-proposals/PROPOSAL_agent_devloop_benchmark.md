@@ -10,7 +10,7 @@ related:
 
 # Proposal: Nightly Agent Dev-Loop Performance Benchmark
 
-**Status:** Partial — Phases 1 to 3 are implemented (see the "as built" sections); the trend chart and the alert are not
+**Status:** Partial — every phase, the trend and the alert are built (see the "as built" sections); what is left is setting the alert thresholds from two weeks of records
 **Date:** 2026-11-11
 
 ## Problem Statement
@@ -297,9 +297,8 @@ above, and what building it showed:
   the steadier of the two ratios on a shared machine.
 - **The ratio is the median of per-repetition pair ratios**, not the ratio of
   two medians, and the arm that goes first alternates.
-- **Not built yet:** the trend chart, and the issue-opening alert. Both need
-  records to exist first; the alert thresholds are to be set from the first
-  weeks of data, as planned.
+- **The trend chart and the alert are built** — see "Trend and alert — as
+  built" below.
 
 ### Phase 2 — running app and tests
 
@@ -398,6 +397,31 @@ decision and not part of this proposal.
 | `.github/workflows/nightly.yml` | `bench` job; commit of the record to the `benchmarks` branch |
 | `mdl/executor/process_stats.go` (new) | `MXCLI_STATS_FILE`: read and write counters per closed connection |
 | `docs-site/src/internals/` | Page describing the benchmark and showing the trend chart |
+
+### Trend and alert — as built
+
+- **The trend is a Markdown file on the `benchmarks` branch, not a docs-site
+  page** (Open Question 6). `scripts/agentbench/trend` rebuilds `TREND.md`
+  and `trend.json` from every record after each run. GitHub renders the
+  Mermaid charts and the tables in place, so nothing is hosted and the docs
+  build does not read another branch.
+- **The times charted are raw, per night's runner.** A chained index of the
+  nightly ratios was considered and not built: each ratio carries a few
+  percent of noise and a product of them is a random walk.
+- **Four alerts, one issue** (`benchmark-regression`): slower than its
+  baseline two runs running, a count above the baseline's on the first
+  night, a write on a settled re-run, and drift — the last three runs
+  against the seven before, which is the slow regression the nightly ratio
+  cannot show.
+- **Drift is corrected for the runner.** The first two records differed by a
+  quarter on every step, from the machine alone; uncorrected, three nights on
+  a slow runner would report every step. The correction is the median over
+  all steps of the run's time against each step's own median, so it cannot
+  see a change that slows every step alike.
+- **The thresholds are provisional** (1.20 for a night, 1.30 for drift): the
+  plan was to set them from two weeks of data, and there were two records
+  when this was built. They are flags, to be set from the spread once it can
+  be measured.
 
 ## Version Compatibility
 
