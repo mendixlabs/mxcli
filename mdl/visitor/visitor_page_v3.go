@@ -932,6 +932,21 @@ func parseWidgetPropertyV3(ctx parser.IWidgetPropertyV3Context, widget *ast.Widg
 
 	// Editable: [expression] (conditional editability) or Editable: Never (static)
 	if propCtx.EDITABLE() != nil {
+		// `Editable: Attr in (v1, …)` — Studio Pro's "based on attribute
+		// value", read as `Visible: Attr in (…)` is (ako/mxcli#2111).
+		if propCtx.IN() != nil {
+			ew := &ast.VisibleWhenV3{}
+			if refCtx := propCtx.WidgetAttributeRefV3(); refCtx != nil {
+				ew.Attribute = buildWidgetAttributeRefV3(refCtx)
+			} else {
+				ew.Attribute = getQualifiedNameText(propCtx.QualifiedName())
+			}
+			for _, v := range propCtx.AllVisibleValueV3() {
+				ew.Values = append(ew.Values, unquoteIdentifier(v.GetText()))
+			}
+			widget.Properties["EditableWhen"] = ew
+			return
+		}
 		if xc := propCtx.XpathConstraint(); xc != nil {
 			widget.Properties["EditableIf"] = buildConditionalExpression(xc) // MDL-DEPR081
 		} else if e := propCtx.Expression(); e != nil {

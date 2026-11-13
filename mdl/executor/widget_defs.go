@@ -787,6 +787,14 @@ var propertyAliases = map[string]map[string][]string{
 // `OnChange:` would write three different actions.
 func actionSourceForKey(key string) string {
 	k := strings.ToLower(key)
+	// A slot keyed plain `action` is the widget's one action, and `action:` is
+	// MDL's own keyword for it (Switch: "On change", key "action"). Trimmed as
+	// a suffix below it became the empty name, so the slot took no source, the
+	// keyword routed nowhere, and describe's `action: …` of a stored switch
+	// was refused as MDL-WIDGET37 (ako/mxcli#2114).
+	if k == "action" {
+		return "OnClick"
+	}
 	k = strings.TrimSuffix(k, "event")
 	k = strings.TrimSuffix(k, "action")
 	switch k {

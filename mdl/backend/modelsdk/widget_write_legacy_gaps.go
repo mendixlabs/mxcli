@@ -202,10 +202,9 @@ func dynamicImageToGen(img *pages.DynamicImage) (element.Element, error) {
 // that has none, so refusing here would make describe -> exec fail on a model
 // that already exists (guard-don't-drop, ADR-0005).
 //
-// Any OTHER source is refused rather than ignored. Forms$ImageViewerSource has
-// no slot for a microflow, a nanoflow or an association, and the metamodel's
-// context-path variants (EntityPath / SourceVariable) have no Studio Pro
-// reference here to pin them against. Writing the holder without them would
+// An association path from the context object is written as a data view's is
+// (ako/mxcli#2108). Any OTHER source is refused rather than ignored.
+// Forms$ImageViewerSource has no slot for a microflow or a nanoflow. Writing the holder without them would
 // produce CE0489 — a message that says the author forgot the source when they
 // did not — so the gap is named at the point it is hit instead.
 func imageViewerSourceToGen(ds pages.DataSource) (element.Element, error) {
@@ -221,6 +220,22 @@ func imageViewerSourceToGen(ds pages.DataSource) (element.Element, error) {
 			assignID(ref)
 			ref.SetEntityQualifiedName(d.EntityName)
 			src.SetEntityRef(ref)
+		}
+		return src, nil
+	case *pages.AssociationSource:
+		// An image over an association from the context object (Studio Pro's
+		// "data from context"): the path rides in the source's EntityRef as a
+		// DomainModels$IndirectEntityRef, and a page parameter as the context
+		// rides in its SourceVariable — the same two slots, filled the same
+		// way, as a data view's (dataViewContextAssociationSourceToGen).
+		// FactoryManagement stores three such images (ako/mxcli#2108), and
+		// describe already read them back as `$currentObject/Assoc`.
+		if d.ID != "" {
+			src.SetID(element.ID(d.ID))
+		}
+		src.SetEntityRef(associationEntityPathToGen(d.EntityPath))
+		if d.ContextVariable != "" {
+			src.SetSourceVariable(associationContextVariableToGen(d))
 		}
 		return src, nil
 	default:

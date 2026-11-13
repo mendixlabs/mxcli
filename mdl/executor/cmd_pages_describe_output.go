@@ -188,7 +188,7 @@ func appendAppearanceProps(ctx *ExecContext, props []string, w rawWidget) []stri
 	// quiet round-trip. Empty means the widget type has no editability at all.
 	// "Conditional" is not authorable: the `Editable: <expr>` printed below is
 	// what makes it conditional, and printing both gives the key twice.
-	if w.Editable != "" && w.Editable != "Always" && !(w.Editable == "Conditional" && w.EditableIf != "") {
+	if w.Editable != "" && w.Editable != "Always" && !(w.Editable == "Conditional" && (w.EditableIf != "" || w.EditableAttr != "")) {
 		props = append(props, fmt.Sprintf("Editable: %s", w.Editable))
 	}
 	if w.Class != "" {
@@ -214,6 +214,9 @@ func appendAppearanceProps(ctx *ExecContext, props []string, w rawWidget) []stri
 	}
 	if w.EditableIf != "" {
 		props = append(props, widgetConditionMDL("Editable", w.EditableIf))
+	}
+	if prop := attributeConditionProp("Editable", "editable", w.EditableAttr, w.EditableValues); prop != "" {
+		props = append(props, prop)
 	}
 	return props
 }
@@ -2345,15 +2348,21 @@ func actionProp(key, rendered string) string {
 // (the list would be empty); Studio Pro allows it, so say what it is rather
 // than drop it — a dropped setting is an always-visible widget.
 func visibleWhenProp(w rawWidget) string {
-	if w.VisibleAttr == "" {
+	return attributeConditionProp("Visible", "visible", w.VisibleAttr, w.VisibleValues)
+}
+
+// attributeConditionProp renders a "based on attribute value" setting —
+// visibility or editability — as `<Key>: Attr in (v1, …)`.
+func attributeConditionProp(key, adjective, attrName string, values []string) string {
+	if attrName == "" {
 		return ""
 	}
-	if len(w.VisibleValues) == 0 {
-		return "-- NOT re-executable: visible for no value of " + w.VisibleAttr +
-			" (never shown) — MDL cannot spell an empty value list, so re-running this script would make it always visible"
+	if len(values) == 0 {
+		return "-- NOT re-executable: " + adjective + " for no value of " + attrName +
+			" — MDL cannot spell an empty value list, so re-running this script would make it always " + adjective
 	}
-	vals := make([]string, len(w.VisibleValues))
-	for i, v := range w.VisibleValues {
+	vals := make([]string, len(values))
+	for i, v := range values {
 		// `empty` (Studio Pro's "(empty)") and the boolean values are keywords
 		// the value list takes bare; quoting them would read as identifiers.
 		if v == "empty" || v == "true" || v == "false" {
@@ -2362,13 +2371,13 @@ func visibleWhenProp(w rawWidget) string {
 		}
 		vals[i] = mdlIdent(v)
 	}
-	attr := mdlIdent(w.VisibleAttr)
-	if strings.Contains(w.VisibleAttr, ".") {
+	attr := mdlIdent(attrName)
+	if strings.Contains(attrName, ".") {
 		// Qualified (Module.Entity.Attr) where no entity is in scope — written
 		// as a qualified name, which takes keyword segments bare.
-		attr = w.VisibleAttr
+		attr = attrName
 	}
-	return fmt.Sprintf("Visible: %s in (%s)", attr, strings.Join(vals, ", "))
+	return fmt.Sprintf("%s: %s in (%s)", key, attr, strings.Join(vals, ", "))
 }
 
 // visibleRolesProp renders "Visible for module roles" as `Visible: roles

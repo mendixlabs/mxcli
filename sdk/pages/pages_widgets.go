@@ -123,6 +123,15 @@ type ValueCondition struct {
 type ConditionalEditabilitySettings struct {
 	model.BaseElement
 	Expression string `json:"expression,omitempty"`
+	// Attribute, Conditions and SourceVariable are Studio Pro's "Editable:
+	// based on attribute value" — the same three fields, with the same
+	// meaning, as on ConditionalVisibilitySettings: the qualified attribute,
+	// one condition per value it can hold (Visible meaning editable here, as
+	// Enumerations$Condition.EditableVisible serves both), and the parameter
+	// it is read from when not the enclosing object (ako/mxcli#2111).
+	Attribute      string           `json:"attribute,omitempty"`
+	Conditions     []ValueCondition `json:"conditions,omitempty"`
+	SourceVariable *WidgetVariable  `json:"sourceVariable,omitempty"`
 }
 
 // StaticVisibleExpression maps a static/string `Visible` value to the client

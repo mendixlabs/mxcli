@@ -44,6 +44,9 @@ type step struct {
 	// noWrites marks a step that must change no unit file: the idempotence
 	// canary. A candidate that writes there has a defect, not a slowdown.
 	noWrites bool
+	// statements is how many statements the step's script holds, for a step
+	// whose cost is reported per statement (the scale session's batches).
+	statements int
 }
 
 // one is a step of a single command.
@@ -78,6 +81,75 @@ func sessionSteps() []step {
 		{name: "re-exec", cmds: one("exec", "{S}/bulk-alter.mdl", "-p", "{P}"), weight: 1, noWrites: true},
 		{name: "rename", cmds: one("-p", "{P}", "-c", "rename entity Bench.Item01 to Item01Renamed"), weight: 1},
 	}
+}
+
+// scaleModule is the module the scale session's filler microflows live in.
+const scaleModule = "Scale"
+
+// scaleSteps is the scale session: what a statement costs in a project of
+// thousands of units, the measurement of mendixlabs/mxcli#1842. There, `exec`
+// of an update cost time linear in the project size, about 0.27 s more per
+// statement for every 1,000 units, and `check` cost seconds per run before it
+// had looked at a statement.
+//
+// The small and large sessions cannot show either: their largest project is
+// under a thousand units, where both costs are inside the noise. This one runs
+// on a project grown with filler microflows and reports the batches per
+// statement, so that a cost that follows the project again shows as a ratio
+// here and as a number an agent would feel.
+func scaleSteps(batch int) []step {
+	return []step{
+		// One statement, so nearly all of it is what a check costs per run. The
+		// first is the first command on a fresh copy of the project and reads
+		// every unit file it needs from disk; the second finds them read.
+		{name: "check-cold", cmds: one("check", "{S}/scale-one.mdl", "-p", "{P}", "--references"), weight: 1, statements: 1},
+		{name: "check-one", cmds: one("check", "{S}/scale-one.mdl", "-p", "{P}", "--references"), weight: 1, statements: 1},
+		{name: "check-batch", cmds: one("check", "{S}/scale-updates.mdl", "-p", "{P}", "--references"), weight: 1, statements: batch},
+		// Without the check `exec` runs first, so the two are not counted twice.
+		{name: "exec-batch", cmds: one("exec", "{S}/scale-updates.mdl", "-p", "{P}", "--no-check"), weight: 1, statements: batch},
+		{name: "re-exec-batch", cmds: one("exec", "{S}/scale-updates.mdl", "-p", "{P}", "--no-check"), weight: 1, statements: batch, noWrites: true},
+		{name: "new-batch", cmds: one("exec", "{S}/scale-new.mdl", "-p", "{P}", "--no-check"), weight: 1, statements: batch},
+	}
+}
+
+// writeScale writes the scale session's scripts.
+func writeScale(dir string, batch int) error {
+	for name, src := range map[string]string{
+		"scale-one.mdl":     gen.FillerUpdates(scaleModule, 1, "one"),
+		"scale-updates.mdl": gen.FillerUpdates(scaleModule, batch, "batch"),
+		"scale-new.mdl":     gen.FillerNew(scaleModule, batch),
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// seedScale builds the scale fixture: a copy of the base project with the
+// filler microflows executed into it, by the candidate, timed once.
+func seedScale(cfg config, scripts string) (string, []seedResult, error) {
+	if cfg.scaleBatch > cfg.scaleMicroflows {
+		return "", nil, fmt.Errorf("the scale session updates %d microflows of a project seeded with %d", cfg.scaleBatch, cfg.scaleMicroflows)
+	}
+	dir := filepath.Join(cfg.work, "scale-snapshot")
+	if err := copyProject(cfg.base, dir); err != nil {
+		return "", nil, err
+	}
+	mpr, err := findMPR(dir)
+	if err != nil {
+		return "", nil, err
+	}
+	script := filepath.Join(scripts, "seed-filler.mdl")
+	if err := os.WriteFile(script, []byte(gen.Filler(scaleModule, cfg.scaleMicroflows)), 0o644); err != nil {
+		return "", nil, err
+	}
+	s, err := runStep(cfg.candidate, one("exec", script, "-p", "{P}", "--no-check"), filepath.Join(dir, mpr), scripts, cfg.work)
+	if err != nil {
+		return "", nil, fmt.Errorf("seed-filler: %w", err)
+	}
+	fmt.Fprintf(cfg.log, "  seed-filler: %.1fs\n", s.WallMS/1000)
+	return dir, []seedResult{{Name: "seed-filler", sample: s}}, nil
 }
 
 // writeSession writes the session's scripts for an app of the given size.
@@ -402,6 +474,9 @@ type stepResult struct {
 	// Flags are what a reader should look at: "slower", "faster",
 	// "counts-changed", "counts-unstable", "wrote-on-re-exec".
 	Flags []string `json:"flags,omitempty"`
+	// Statements is how many statements the step's script holds, when its
+	// cost is reported per statement; 0 otherwise.
+	Statements int `json:"statements,omitempty"`
 }
 
 // sessionResult is the scripted session at one project size.
@@ -443,7 +518,10 @@ type config struct {
 	reps                int
 	sessionEntities     int
 	large               gen.Params
-	sizes               []string
+	// scaleMicroflows is how many filler microflows the scale project is
+	// seeded with, and scaleBatch how many statements its batches hold.
+	scaleMicroflows, scaleBatch int
+	sizes                       []string
 	// runtimeVersion, when set, adds the running-app session on a project
 	// created by `mxcli new` for that Mendix version.
 	runtimeVersion string
@@ -579,7 +657,7 @@ func runSession(cfg config, def session, snapshot, scripts string) (sessionResul
 
 	var invariant bool
 	for i, st := range steps {
-		sr := stepResult{Name: st.name, Weight: st.weight, Candidate: newArmResult(candidate[i])}
+		sr := stepResult{Name: st.name, Weight: st.weight, Candidate: newArmResult(candidate[i]), Statements: st.statements}
 		res.Weighted.CandidateMS += sr.Candidate.Wall.Median * float64(st.weight)
 		if b := newArmResult(baseline[i]); b != nil {
 			sr.Baseline = b
@@ -760,6 +838,11 @@ func run(cfg config) ([]sessionResult, error) {
 			err = copyProject(cfg.base, snapshot)
 		case "large":
 			snapshot, seed, err = seedLarge(cfg, scripts)
+		case "scale":
+			def.steps = scaleSteps(cfg.scaleBatch)
+			if err = writeScale(scripts, cfg.scaleBatch); err == nil {
+				snapshot, seed, err = seedScale(cfg, scripts)
+			}
 		case "runtime":
 			def = session{
 				name: name, steps: runtimeSteps(cfg.pageCheck), reps: cfg.runtimeReps,
@@ -767,7 +850,7 @@ func run(cfg config) ([]sessionResult, error) {
 			}
 			snapshot, seed, err = prepareRuntime(cfg, scripts)
 		default:
-			err = fmt.Errorf("unknown size %q (want small or large)", name)
+			err = fmt.Errorf("unknown size %q (want small, large or scale)", name)
 		}
 		if err != nil {
 			return results, err

@@ -587,6 +587,10 @@ widgetPropertyV3
     | VISIBLE COLON propertyValueV3                   // Visible: false
     | VISIBLE COLON expression                        // Visible: $currentObject/Status = 'Open'
     | EDITABLE COLON xpathConstraint /* @alias MDL-DEPR081 */ // Editable: [Status != 'Closed']
+    // Studio Pro's "Editable: based on attribute value", spelled as its
+    // visibility twin (ako/mxcli#2111).
+    | EDITABLE COLON qualifiedName IN LPAREN visibleValueV3 (COMMA visibleValueV3)* RPAREN  // Editable: Status in (Draft, empty)
+    | EDITABLE COLON widgetAttributeRefV3 IN LPAREN visibleValueV3 (COMMA visibleValueV3)* RPAREN  // Editable: $Param.Status in (Draft)
     | EDITABLE COLON propertyValueV3                  // Editable: Never | Always
     | EDITABLE COLON expression                       // Editable: $currentObject/Status != 'Closed'
     | TOOLTIP COLON propertyValueV3                   // Tooltip: 'text'

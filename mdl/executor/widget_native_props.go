@@ -368,7 +368,7 @@ func nativeWidgetAcceptedNames(kind, keyword string) []string {
 func nativeWidgetKeyOwnedElsewhere(kind, keyword, key string) bool {
 	l := strings.ToLower(key)
 	switch l {
-	case "editable", "editableif":
+	case "editable", "editableif", "editablewhen":
 		return true
 	case "action", "onclick":
 		if clickDroppedNoSlot[keyword] || clickCapableInMendix[keyword] {
