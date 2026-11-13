@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/mendixlabs/mxcli/mdl/catalog"
 )
 
 func TestRenderGraphMarkdown(t *testing.T) {
@@ -55,5 +57,42 @@ func TestRenderGraphJSON(t *testing.T) {
 	}
 	if got := parsed.Sections[0].Rows[0]["Asset"]; got != "M.Order" {
 		t.Errorf("Asset = %v, want M.Order", got)
+	}
+}
+
+// An --exclude'd module must not appear in the coupling section on EITHER end
+// of an edge. The coupling query used to carry no filter at all, so an
+// excluded OIDC still showed as a coupling source (ako/mxcli#2222).
+func TestGraphReportExcludeFiltersCouplingBothEnds(t *testing.T) {
+	cat, err := catalog.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cat.Close()
+	for _, r := range [][3]string{
+		{"OIDC.Login", "App.User", "call"},
+		{"App.Home", "OIDC.Config", "call"},
+		{"App.Home", "Core.Order", "call"},
+	} {
+		if _, err := cat.CatalogDB().Exec(`INSERT INTO refs (SourceType, SourceId, SourceName, TargetType, TargetName, RefKind)
+			VALUES ('MICROFLOW', 'x', ?, 'MICROFLOW', ?, ?)`, r[0], r[1], r[2]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var coupling string
+	for _, s := range graphReportSections(false, []string{"OIDC"}) {
+		if strings.HasPrefix(s.title, "Module coupling") {
+			coupling = strings.Replace(s.query, "?", "50", 1)
+		}
+	}
+	res, err := cat.Query(coupling)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Rows) != 1 {
+		t.Fatalf("want only App→Core, got %v", res.Rows)
+	}
+	if res.Rows[0][0] != "App" || res.Rows[0][1] != "Core" {
+		t.Errorf("got %v", res.Rows[0])
 	}
 }
