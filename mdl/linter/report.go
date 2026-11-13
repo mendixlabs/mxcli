@@ -208,6 +208,11 @@ func BuildReport(projectName, date string, all []Violation) *Report {
 	return report
 }
 
+// CategoryOf is the report category a rule scores under ("Security",
+// "Quality", …). Exported so `report security` groups exactly the rules the
+// scored report counts as security.
+func CategoryOf(ruleID string) string { return resolveCategory(ruleID) }
+
 func resolveCategory(ruleID string) string {
 	if cat, ok := categoryMapping[ruleID]; ok {
 		return cat
