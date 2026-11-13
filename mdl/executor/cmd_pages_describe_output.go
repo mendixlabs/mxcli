@@ -665,6 +665,9 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 		if hasFooter := dataViewHasFooterBlock(w); hasFooter != w.ShowFooter {
 			props = append(props, fmt.Sprintf("ShowFooter: %t", w.ShowFooter))
 		}
+		if w.NoEntityMessage != "" {
+			props = append(props, fmt.Sprintf("NoEntityMessage: %s", mdlQuote(ctx, w.NoEntityMessage)))
+		}
 		// A DataView has its own ReadOnlyStyle, distinct from a CheckBox's and
 		// wired nowhere until ako/mxcli#550. Inherit is Studio Pro's default, so
 		// only the other two are emitted.

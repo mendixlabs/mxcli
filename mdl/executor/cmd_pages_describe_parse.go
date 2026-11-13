@@ -433,6 +433,9 @@ func parseRawWidget(ctx *ExecContext, w map[string]any, parentEntityContext ...s
 		}
 		widget.ReadOnlyStyle = extractReadOnlyStyle(ctx, w)
 		widget.ShowFooter, _ = w["ShowFooter"].(bool)
+		// The message shown when the data view has no object. Never read, so
+		// describe -> exec dropped it (ako/mxcli#2133).
+		widget.NoEntityMessage = extractTextsText(ctx, w, "NoEntityMessage")
 		widget.Children = withQualifiedAttrs(ctx, widget.DataSource, func() []rawWidget {
 			return parseDataViewChildren(ctx, w, widget.EntityContext)
 		})
