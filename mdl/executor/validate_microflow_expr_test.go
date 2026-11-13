@@ -76,6 +76,15 @@ func TestValidateMicroflow_UnknownFunction(t *testing.T) {
 		{"currentDateTime() is not a Mendix built-in", "declare $d DateTime = currentDateTime();", true, "[%CurrentDateTime%]"},
 		{"currentDateTime() nested in a call", "declare $d DateTime = addDays(currentDateTime(), 1);", true, "[%CurrentDateTime%]"},
 		{"the [%CurrentDateTime%] token is accepted", "declare $d DateTime = addDays([%CurrentDateTime%], 1);", false, ""},
+		// ako/mxcli#2199: `show message information (expr)` parses as a CALL to
+		// information() — the type belongs after the message — and is stored as
+		// '{1}' with that call as its parameter: CE0117 at "Show message activity
+		// '{1}'" on 11.16.0. Show message and validation feedback were never walked.
+		{"type word written before show message", "show message information (if $x = '' then 'a' else 'b');", true, "type Information"},
+		{"unknown in show message template param", "show message '{1}' type Warning with ({1} = currentDeviceType());", true, ""},
+		{"unknown in validation feedback", "validation feedback $x/Name message '{1}' with ({1} = currentDeviceType());", true, ""},
+		{"show message expression is accepted", "show message (if $x = '' then 'a' else 'b') type Information;", false, ""},
+		{"show message template is accepted", "show message '{1}' type Information with ({1} = toUpperCase($x));", false, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
