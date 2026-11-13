@@ -2156,6 +2156,24 @@ func listOperationResult(op microflows.ListOperation) listResult {
 	return listResultNone
 }
 
+// listOperationStmtResult is listOperationResult for the statement, before
+// any activity is built: the same answer, so a check that types variables from
+// the text (flowObjectTypes, behind MDL-SET01) and the build that types them
+// from the activity agree on what a list operation's output holds
+// (ako/mxcli#2176). The string-overloaded find/contains on a String input is
+// not a list operation at all; callers type an output only when the input is
+// a list.
+func listOperationStmtResult(op ast.ListOperationType) listResult {
+	switch op {
+	case ast.ListOpFilter, ast.ListOpSort, ast.ListOpTail, ast.ListOpUnion, ast.ListOpIntersect,
+		ast.ListOpSubtract, ast.ListOpRange:
+		return listResultList
+	case ast.ListOpHead, ast.ListOpFind:
+		return listResultElement
+	}
+	return listResultNone
+}
+
 // typeFrom is the type an output holding r has when the list it reads has
 // inputType ("List of Module.Entity"); "" when that is not known or the
 // output holds no entity.
