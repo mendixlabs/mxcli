@@ -61,7 +61,7 @@ mxcli marketplace install 2888 --version 7.0.3 -p app.mpr   # a module
 | Content type | What `install` does |
 |---|---|
 | **Widget** | Copies the `.mpk` into the project's `widgets/` folder (overwrites on update). Reload in Studio Pro or run `mx update-widgets` to pick it up. |
-| **Module** (new) | Copies the module in with mxcli's own writer, preserving the project's MPR format, plus everything the package ships (widgets, themesource, ...). Requires a matching mxbuild — run `mxcli setup mxbuild -p app.mpr` if missing. |
+| **Module** (new) | Copies the module in with mxcli's own writer, preserving the project's MPR format, plus everything the package ships (widgets, themesource, an add-on module's `modules/<Name>.mxmodule`, ...). Requires a matching mxbuild — run `mxcli setup mxbuild -p app.mpr` if missing. |
 | **Module** (already present) | **Reported, not modified** — see below. |
 | Theme / Starter App / Sample | Downloaded to disk with import instructions (import via Studio Pro). |
 
@@ -242,7 +242,7 @@ Administration updated 4.3.2 → 4.5.0
 
 - **Element identity.** The runtime keys entities and their attributes on the model's `GUID`, so a module whose documents are replaced without carrying the old GUIDs is a *different* module to the database and its tables are dropped on the next deploy. Studio Pro transplants them; so does this.
 - **Access.** A user role's grant of a module role lives in the project's security document, not the module, so removing the module takes the grants with it and putting it back does not return them.
-- **Everything else the package ships.** A module is not only its model: the `.mpk` carries widget binaries under `widgets/`, styling and design-property declarations under `themesource/`, and whatever else it needs. All of it is replaced: every file the package's `package.xml` lists under `<files>`, which is exactly what `mx module-import` installs. What it does not list is the package's own metadata — `License.txt`, `manifest.json`, the `READMEOSS` report, `Mendix EULA.docx` — and is left out, named on one line of the output. DataWidgets 3.11.3 replaces 49 such files, and skipping them leaves the app running old widget code and reporting `CE6083` for design properties the module itself declares.
+- **Everything else the package ships.** A module is not only its model: the `.mpk` carries widget binaries under `widgets/`, styling and design-property declarations under `themesource/`, and whatever else it needs. All of it is replaced: every file the package's `package.xml` lists under `<files>`, which is exactly what `mx module-import` installs. What it does not list is the package's own metadata — `License.txt`, `manifest.json`, the `READMEOSS` report, `Mendix EULA.docx` — and is left out, named on one line of the output. An add-on module the package carries as `modules/<Name>.mxmodule` (AgentEditorCommons ships AgentEditor this way) is installed into the project's `modules/` folder whether or not it is listed — it has no unit in the `.mpr`, and Studio Pro loads the add-on's extension from that file — and the output names it. One a newer package no longer ships is left in place. DataWidgets 3.11.3 replaces 49 such files, and skipping them leaves the app running old widget code and reporting `CE6083` for design properties the module itself declares.
 
 It does not use `mx module-import`, which would rewrite an MPR v2 project as v1 and refuses theme modules. Units are copied with mxcli's own writer, so the project keeps its format.
 
