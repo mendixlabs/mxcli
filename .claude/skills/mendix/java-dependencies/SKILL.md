@@ -12,15 +12,15 @@ description: "Add, update, remove and audit a module's Maven/JAR dependencies in
 |---|---|
 | 34-44 | When to Use This Skill |
 | 45-56 | Listing Dependencies |
-| 57-64 | Describing a Dependency |
-| 65-80 | Adding a Dependency |
-| 81-93 | Updating a Dependency |
-| 94-108 | Managing Transitive Exclusions |
-| 109-116 | Removing a Dependency |
-| 117-132 | Jackson Version Gotcha |
-| 133-143 | After Adding a Dependency |
-| 144-154 | Coordinate Format |
-| 155-158 | Related Skills |
+| 57-65 | Describing a Dependency |
+| 66-103 | Adding a Dependency |
+| 104-116 | Updating a Dependency |
+| 117-131 | Managing Transitive Exclusions |
+| 132-139 | Removing a Dependency |
+| 140-155 | Jackson Version Gotcha |
+| 156-166 | After Adding a Dependency |
+| 167-177 | Coordinate Format |
+| 178-181 | Related Skills |
 
 <!-- /skill-index -->
 # Managing Maven / JAR Dependencies
@@ -60,7 +60,8 @@ Output columns: `module`, `group`, `artifact`, `version`, `included`.
 DESCRIBE JAR DEPENDENCY MyModule 'com.fasterxml.jackson.core:jackson-databind';
 ```
 
-Outputs a re-executable `ALTER MODULE ... ADD JAR DEPENDENCY (...)` block.
+Outputs an `ALTER MODULE ... ADD JAR DEPENDENCY (...)` block (bare `ADD`: add
+`IF NOT EXISTS` before re-executing it against a module that has it).
 
 ## Adding a Dependency
 
@@ -76,7 +77,29 @@ ALTER MODULE MyModule
 ```
 
 - `included` defaults to `true` when set explicitly; always set it to be explicit.
-- The coordinate `group:artifact` must be unique within the module.
+- The coordinate `group:artifact` must be unique within the module: a bare
+  `ADD` of a declared coordinate **fails**, so a project script holding it
+  cannot be executed twice.
+
+### In a re-runnable script: `IF NOT EXISTS`
+
+```sql
+mdl 1;
+ALTER MODULE MyModule
+  ADD JAR DEPENDENCY IF NOT EXISTS (
+    group    = 'org.duckdb',
+    artifact = 'duckdb_jdbc',
+    version  = '1.1.3',
+    included = true,
+  );
+```
+
+Same semantics as `ADD ATTRIBUTE IF NOT EXISTS`: absent → added; present →
+**left untouched**, "already exists — skipped", and a second exec writes nothing
+("Unchanged jar dependencies …"). A present coordinate with a *different*
+version is still not updated — the notice names the stored version and the
+`SET … VERSION` to run. To pin the version as well, follow the guarded `ADD`
+with `SET JAR DEPENDENCY '…' VERSION '…'`, which is also a no-op when restated.
 
 ## Updating a Dependency
 

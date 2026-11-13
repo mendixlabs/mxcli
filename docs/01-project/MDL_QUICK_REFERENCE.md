@@ -74,6 +74,7 @@ create persistent entity Module.Photo (
 | List dependencies | `list jar dependencies [in ModuleName];` | All modules or filtered by module |
 | Describe dependency | `describe jar dependency ModuleName 'group:artifact';` | Full MDL output (roundtrippable) |
 | Add dependency | `alter module Name add jar dependency (group = '...', artifact = '...', version = '...', included = true);` | `included` defaults to `true` |
+| Add, re-runnable | `alter module Name add jar dependency if not exists (group = '...', artifact = '...', version = '...', included = true);` | A declared `group:artifact` is left untouched ("skipped", even with another version — the notice names the `set … version` to run); a second exec writes nothing |
 | Update version | `alter module Name set jar dependency 'group:artifact' version '...';` | Change version string |
 | Toggle inclusion | `alter module Name set jar dependency 'group:artifact' included true\|false;` | Enable/disable in classpath |
 | Add exclusion | `alter module Name set jar dependency 'group:artifact' add exclusion 'group:artifact';` | Transitive exclusion |

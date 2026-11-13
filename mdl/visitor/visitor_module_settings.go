@@ -13,7 +13,7 @@ import (
 
 // ExitAlterModuleJarDepStatement handles:
 //
-//	ALTER MODULE name ADD JAR DEPENDENCY (...)
+//	ALTER MODULE name ADD JAR DEPENDENCY [IF NOT EXISTS] (...)
 //	ALTER MODULE name SET JAR DEPENDENCY 'coord' VERSION '...'
 //	ALTER MODULE name SET JAR DEPENDENCY 'coord' INCLUDED true|false
 //	ALTER MODULE name SET JAR DEPENDENCY 'coord' ADD EXCLUSION '...'
@@ -48,7 +48,7 @@ func (b *Builder) ExitAlterModuleJarDepStatement(ctx *parser.AlterModuleJarDepSt
 func parseJarDepAction(ctx *parser.AlterModuleJarDepActionContext) ast.JarDepAction {
 	if ctx.ADD() != nil && ctx.JAR() != nil && ctx.DEPENDENCY() != nil && ctx.LPAREN() != nil {
 		// ADD JAR DEPENDENCY (group = '...', artifact = '...', ...)
-		action := &ast.AddJarDepAction{Included: true} // default included = true
+		action := &ast.AddJarDepAction{Included: true, IfNotExists: ctx.IfNotExists() != nil} // default included = true
 		for _, rawProp := range ctx.AllJarDepProperty() {
 			propCtx := rawProp.(*parser.JarDepPropertyContext)
 			key := strings.ToLower(identifierOrKeywordText(propCtx.IdentifierOrKeyword()))

@@ -78,7 +78,7 @@ func checkJarDependencyActions(ctx *ExecContext, prog *ast.Program) []error {
 				settings[s.ModuleName] = ms
 			}
 			for _, action := range s.Actions {
-				if err := applyJarDepAction(ms, action, s.ModuleName); err != nil {
+				if _, err := applyJarDepAction(ms, action, s.ModuleName); err != nil {
 					errs = append(errs, fmt.Errorf("statement %d: %w", i+1, err))
 					unknown[s.ModuleName] = true
 					break
