@@ -1555,6 +1555,27 @@ func ValidateOQLSyntax(oql string) []linter.Violation {
 		})
 	}
 
+	// `empty` is the microflow/XPath literal; OQL has none. It reads the word
+	// as a path, and mxbuild rejects the view with CE0174 "Cannot resolve path
+	// part 'empty'" (measured on 11.16.0, ako/mxcli#2208). String literals are
+	// blanked first so `= 'empty'` is not mistaken for it.
+	if m := oqlEmptyComparisonRe.FindStringSubmatch(blankOQLStringLiterals(oql)); m != nil {
+		op := strings.TrimSpace(m[1] + m[2])
+		fix := "is null"
+		if op == "!=" || op == "<>" {
+			fix = "is not null"
+		}
+		violations = append(violations, linter.Violation{
+			RuleID:   "MDL030",
+			Severity: linter.SeverityError,
+			Message: fmt.Sprintf(
+				"'%s empty' is not OQL: OQL has no empty literal and reads 'empty' as a path, "+
+					"so MxBuild rejects the view with CE0174 (\"Cannot resolve path part 'empty'\")", op),
+			Location:   linter.Location{DocumentType: "viewentity"},
+			Suggestion: fmt.Sprintf("Write '%s' instead", fix),
+		})
+	}
+
 	// Check for correlated subquery pattern
 	correlatedPattern := regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)/([A-Z][a-zA-Z0-9_]*\.[A-Z][a-zA-Z0-9_]*_[A-Z][a-zA-Z0-9_]*)\s*=\s*([a-zA-Z_][a-zA-Z0-9_]*)(?:\s|$|and|or|\))`)
 	correlatedMatches := correlatedPattern.FindAllStringSubmatch(oql, -1)
@@ -1595,7 +1616,7 @@ func ValidateOQLSyntax(oql string) []linter.Violation {
 	// identifier there for ANY name (`as "Total"` is CE0174 too). So a view
 	// column carrying the name has to be renamed. Warning, not error: the set is
 	// the common date-part list, not an exhaustive mirror of Mendix's grammar.
-	reservedIdentRe := regexp.MustCompile(`(?i)(?:\.\s*|\bas\s+)(` + oqlReservedWordAlternation + `)\b`)
+	reservedIdentRe := regexp.MustCompile(`(?i)(?:\.\s*|\bas\s+)(` + oqlReservedIdentAlternation + `)\b`)
 	seenReserved := map[string]bool{}
 	for _, m := range reservedIdentRe.FindAllStringSubmatch(oql, -1) {
 		word := m[1]
@@ -1620,7 +1641,7 @@ func ValidateOQLSyntax(oql string) []linter.Violation {
 			// quotes through unchanged. It is NOT available for an alias: the
 			// MDL grammar rejects `as "X"` for any X, reserved or not. So a view
 			// column cannot carry the name, and only that case needs a rename.
-			Suggestion: fmt.Sprintf("In a source position, quote it: `s.%q`, `from Module.%q as s` — OQL takes double-quoted identifiers like SQL. For an ALIAS / view column name this is not available (MDL cannot express `as %q`), so rename that one, e.g. %qValue. MDL071 reports the collision at CREATE time, before the name spreads", word, word, word, word),
+			Suggestion: reservedWordSuggestion(word),
 		})
 	}
 
@@ -1640,6 +1661,65 @@ var oqlReservedWords = []string{
 	"DAYOFYEAR", "DAYOFMONTH", "DAYOFWEEK", "HOUR", "MINUTE", "SECOND",
 }
 
-// oqlReservedWordAlternation is the regex alternation of oqlReservedWords, e.g.
-// "YEAR|QUARTER|...". Built once so the MDL032 check regex stays a literal join.
-var oqlReservedWordAlternation = strings.Join(oqlReservedWords, "|")
+// oqlReservedSQLWords are the OQL keywords that are plausible ENTITY or
+// ATTRIBUTE names (an `Order` entity, a `Key` or `Count` attribute). Each was
+// measured on mxbuild 11.16.0, unquoted both as an entity (`from M.Order as o`,
+// `…/M.Order as o`) and as an attribute (`x.Order`): every one is CE0174 "The
+// 'Order' part is incomplete or incorrect", and the quoted form builds. In the
+// same run Status, Value, Date, Position, Index, Coalesce and Top built
+// unquoted, so they are deliberately absent (ako/mxcli#2208, where `Order` hit
+// a real project twice).
+//
+// Only words that make sense as a name are listed: the regex below matches a
+// word after `.` or `as`, and type names such as DECIMAL or STRING follow `as`
+// inside cast(), so they must never be added here.
+var oqlReservedSQLWords = []string{
+	"ORDER", "GROUP", "LIMIT", "OFFSET", "END", "KEY", "COUNT", "SUM",
+	"DISTINCT", "SELECT", "LIKE", "ASC", "DESC", "HAVING", "WHERE", "JOIN",
+	"EXISTS", "CAST",
+}
+
+// oqlReservedIdentAlternation is the regex alternation MDL032 matches: the
+// date-part words plus the SQL keywords above, e.g. "YEAR|...|ORDER|...".
+//
+// MDL071 (validate_oql_reserved_names.go), which warns when an entity or
+// attribute is CREATED with such a name, keeps to oqlReservedWords. The SQL
+// list holds names nearly every app has (Order, Key, Count), and warning on
+// each of them at create time, for a view most of them never get, would be
+// noise; MDL032 still reports the unquoted use where it actually breaks.
+var oqlReservedIdentAlternation = strings.Join(append(append([]string{}, oqlReservedWords...), oqlReservedSQLWords...), "|")
+
+// oqlEmptyComparisonRe matches a comparison with the bare word `empty` on
+// either side: `x != empty`, `x = empty`, `empty = x`. Group 1 is the operator
+// before the word, group 2 the one after it; one of them is empty.
+var oqlEmptyComparisonRe = regexp.MustCompile(`(?i)(?:(!=|<>|=)\s*\bempty\b|\bempty\b\s*(!=|<>|=))`)
+
+// blankOQLStringLiterals replaces the contents of every '…' literal with
+// spaces, keeping offsets, so a pattern cannot match inside a string. OQL
+// escapes a quote by doubling it, which this treats as closing and reopening
+// the literal — the doubled quote itself stays, so the result is the same.
+func blankOQLStringLiterals(oql string) string {
+	b := []byte(oql)
+	in := false
+	for i, c := range b {
+		switch {
+		case c == '\'':
+			in = !in
+		case in:
+			b[i] = ' '
+		}
+	}
+	return string(b)
+}
+
+// reservedWordSuggestion is MDL032's advice for one word. Only the date-part
+// words are also reported at CREATE time (MDL071), so only they mention it.
+func reservedWordSuggestion(word string) string {
+	msg := fmt.Sprintf("In a source position, quote it: `s.%q`, `from Module.%q as s` — OQL takes "+
+		"double-quoted identifiers like SQL. For an ALIAS / view column name this is not available "+
+		"(MDL cannot express `as %q`), so rename that one, e.g. %sValue.", word, word, word, word)
+	if isOQLReservedName(word) {
+		msg += " MDL071 reports the collision at CREATE time, before the name spreads."
+	}
+	return msg
+}

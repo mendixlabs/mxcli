@@ -319,6 +319,25 @@ set its value per environment. `create or modify` keeps a stored endpoint when t
 out, so `check --references` and `exec` warn on it only when there is none to keep. `mxcli lint`
 reports stored services without one as MPR015.
 
+### MDL-AGENT04: An agent value longer than Agent Commons stores
+
+```
+agent Shop.SupportAgent: the Description is 250 characters, longer than
+AgentCommons.Agent.Description (200): Agent Editor's import fails at startup and the
+previous version of the agent stays in use [MDL-AGENT04]
+```
+
+**Cause:** At startup `AgentEditorCommons.AgentFromModel_CreateUpdateAgent` copies each agent
+document into Agent Commons entities with fixed lengths (Agent Editor 2.7.0): the document name
+into `AgentCommons.Agent.Title` (50), `Description` into `AgentCommons.Agent.Description` (200),
+a tool's name and `DisplayTitle` into `AgentCommons.Tool.Name` / `DisplayTitle` (200) and its
+`Description` into `AgentCommons.Tool.Description` (4096). A longer value fails the import ("tried
+setting a value of length 203") and Agent Commons keeps the previous version of the agent.
+mxbuild does not read agent documents, so the build is green.
+
+**Solution:** Shorten the value. Lengths are counted in characters, not bytes. It is a warning,
+like MDL-AGENT01..03, because the lengths belong to the installed AgentCommons version.
+
 ### MDL-LISTOP02: A list operation nested inside another one
 
 ```
