@@ -369,7 +369,8 @@ func TestRuntimeSteps_PageCheckIsOptional(t *testing.T) {
 // microflows, records how many statements each batch holds, and reports them
 // per statement. A batch larger than the seed is refused before anything runs.
 func TestRun_ScaleSessionReportsItsBatchesPerStatement(t *testing.T) {
-	t.Parallel()
+	// Not parallel: it times nothing, and run beside the tests that do, its
+	// thirty processes take the processor they are measuring 30 ms commands on.
 	log := filepath.Join(t.TempDir(), "calls.log")
 	candidate := fakeMxcliLogging(t, "candidate", "", "", "", log)
 	cfg := testConfig(t, candidate, "")
