@@ -20,9 +20,9 @@ description: "Make a Mendix app look designed rather than default-Atlas: layout,
 | 241-326 | Layer 1 in practice — start from the shipped theme |
 | 327-367 | Dark mode — Mendix 11 makes this cheap |
 | 368-410 | Verify at runtime — this is mandatory |
-| 411-475 | Gotchas catalog |
-| 476-493 | Validation Checklist |
-| 494-501 | Related skills |
+| 411-474 | Gotchas catalog |
+| 475-492 | Validation Checklist |
+| 493-500 | Related skills |
 
 <!-- /skill-index -->
 # Atlas Design — Make a Mendix App Look Designed, Not Bland
@@ -422,7 +422,6 @@ row before opening files.
 | `sort by` not allowed on **association-sourced** listviews | sort the parent, or use a DB datasource |
 | Reserved widget identifiers exist (e.g. `v3`) | prefix names (`sv3`); avoid bare `v<n>` |
 | Pluggable widgets impose their own DOM (charts / timeline / treenode) | for pixel-fidelity use a native `listview` / `gallery` you fully style |
-| Inline `style:` on a `dynamictext` crashes MxBuild (NullReferenceException) | use `class:`, or wrap the text in a styled `container` (a block's own stored style is placed as is by `use building block`) |
 | `alter styling` can't find widgets in MDL-builder-created pages | apply classes via `Class:` / `DynamicClasses:` in `create page` / `alter page` |
 | Full-screen page wanted (no Atlas sidebar) but no blank layout resolves | keep a normal Atlas layout; hide the shell per-page with `.mx-page:has(.my-app) .region-sidebar { display:none }` |
 | "Colour by state" (status pills / cards) | one `dynamicclasses` enum→class expression + one `--st` CSS var cascaded into pill/number/dot/border |
