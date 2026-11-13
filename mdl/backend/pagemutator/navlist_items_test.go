@@ -233,7 +233,7 @@ func TestNavItemAddress_RefusesMissesAndAmbiguity(t *testing.T) {
 		"navList1 item('Home')@3": "2 items match, so there is no @3",
 		"navList1 item(zz)":       "item@2 = item(t2) = item('Orders')",
 		"t1 item@1":               "is a Forms$DynamicText, not a navigation list",
-		"nope item@1":             `navigation list "nope" not found`,
+		"nope item@1":             `widget "nope" not found`,
 	} {
 		if m.widgetFinder(m.rawData, ref) != nil {
 			t.Errorf("%s resolved; want a refusal", ref)
