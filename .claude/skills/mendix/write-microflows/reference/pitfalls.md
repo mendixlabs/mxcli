@@ -960,6 +960,13 @@ microflow that carries any of them — and note that `describe` now emits all
 four clauses, so **describe → rename → exec copies them faithfully**. Give the
 copy a different `url`, though: two microflows may not share one (CE0570).
 
+What no statement *can* state is different: in ONE script, the create is written
+as an update of the dropped unit, so it keeps the flow's Mark as used, the
+documentation of its parameters, activities, loops and decisions, each loop's
+error handling and a REST call's proxy (ako/mxcli#2178). A create in a later run
+has nothing to take them from and writes the defaults — loop error handling
+`Rollback` among them.
+
 The flow's `/** … */` doc comment goes directly above the `create`, **after** the
 `drop`. A doc comment belongs to the statement right after it, and a `drop` (like
 a `grant`, `revoke`, `set` or `alter`) cannot store one, so a comment above the

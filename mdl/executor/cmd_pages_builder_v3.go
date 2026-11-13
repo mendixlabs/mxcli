@@ -699,22 +699,12 @@ func expressionVisibility(w *ast.WidgetV3) *pages.ConditionalVisibilitySettings 
 func applyWidgetAppearance(widget pages.Widget, w *ast.WidgetV3, theme *ThemeRegistry) error {
 	class, style := w.GetClass(), w.GetStyle()
 
-	// A DynamicText with an inline Style crashes MxBuild with a
-	// NullReferenceException. Reject it here (the workaround is to wrap the
-	// widget in a container and style the container instead).
-	//
-	// Not for a widget a building block copied in: that style is the block's
-	// own, written by Studio Pro and carried through verbatim, and mxbuild
-	// builds it — PlatformDesignSystem's Icon_After_Text styles its text
-	// `--icon-size: auto;`, and refusing it refused the whole block
-	// (ako/mxcli#2183). Measured on 11.12.1: a dynamic text with that style,
-	// written by this engine, passes `mx check` and `mxcli docker build`.
-	if style != "" && strings.EqualFold(w.Type, "dynamictext") && !w.FromBuildingBlock {
-		return mdlerrors.NewValidationf(
-			"dynamictext %q: an inline `style` crashes MxBuild — wrap it in a container and style the container instead",
-			w.Name,
-		)
-	}
+	// A DynamicText takes an inline Style like any widget. It used to be
+	// refused (MDL-WIDGET03, #673) on the claim that it crashed MxBuild with a
+	// NullReferenceException; measured on 11.12.1, a styled dynamic text this
+	// engine writes passes `mx check` and builds, Studio Pro stores the same
+	// (testdata/testapp, PlatformDesignSystem's Icon_After_Text), and the
+	// refusal blocked whole building blocks (ako/mxcli#2183).
 
 	if class != "" || style != "" {
 		type appearanceSetter interface {

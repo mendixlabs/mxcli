@@ -196,10 +196,9 @@ type WidgetV3 struct {
 
 	// FromBuildingBlock records that the widget was copied in by `use building
 	// block` rather than written by the author: Studio Pro authored it, and its
-	// values are the block's stored ones. A refusal meant to stop hand-written
-	// MDL from writing something Studio Pro would not (an inline style on a
-	// dynamictext, MDL-WIDGET03) does not apply to a value Studio Pro wrote
-	// itself — refusing it blocked the whole block (ako/mxcli#2183). Set by the
+	// values are the block's stored ones. A message about what the author must
+	// still configure (a list view with no data source) says so, since the
+	// author never wrote that widget (ako/mxcli#2183). Set by the
 	// building-block expander only.
 	FromBuildingBlock bool
 }
