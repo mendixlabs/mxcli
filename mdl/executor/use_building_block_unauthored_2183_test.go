@@ -133,18 +133,33 @@ func TestBuildingBlockCarriesDynamicTextStyle(t *testing.T) {
 	}
 }
 
-// Control: a hand-written dynamictext with an inline style is still refused
-// (MDL-WIDGET03); only the block's stored value is carried.
-func TestHandWrittenDynamicTextStyleStillRefused(t *testing.T) {
+// A hand-written dynamictext with an inline style is written too, and check
+// accepts it. Both used to refuse it (MDL-WIDGET03, #673) on the claim that it
+// crashed MxBuild with a NullReferenceException; measured on 11.12.1, a dynamic
+// text this engine writes with an inline style passes `mx check` with 0 errors
+// and builds, and nothing in the history records the crash being reproduced.
+func TestHandWrittenDynamicTextStyleIsWritten(t *testing.T) {
 	pb, _ := blockCtx(t, "Unused")
 	w := &ast.WidgetV3{
 		Type:       "DYNAMICTEXT",
 		Name:       "dt",
 		Properties: map[string]any{"Content": "x", "Style": "color: red;"},
 	}
-	_, err := pb.buildWidgetV3(w)
-	if err == nil || !strings.Contains(err.Error(), "an inline `style` crashes MxBuild") {
-		t.Errorf("want the inline-style refusal, got %v", err)
+	built, err := pb.buildWidgetV3(w)
+	if err != nil {
+		t.Fatalf("a hand-written dynamictext with an inline style was refused: %v", err)
+	}
+	dt, ok := built.(*pages.DynamicText)
+	if !ok {
+		t.Fatalf("built %T, want *pages.DynamicText", built)
+	}
+	if dt.Style != "color: red;" {
+		t.Errorf("Style = %q, want the authored color: red;", dt.Style)
+	}
+	for _, v := range validateStaticWidget(w, "page M.P") {
+		if strings.Contains(v.Message, "inline `style`") {
+			t.Errorf("check still refuses the inline style: %s [%s]", v.Message, v.RuleID)
+		}
 	}
 }
 
