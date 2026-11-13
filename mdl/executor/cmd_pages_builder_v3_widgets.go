@@ -61,6 +61,18 @@ func (pb *pageBuilder) buildDataViewV3(w *ast.WidgetV3) (*pages.DataView, error)
 	}
 	dv.ReadOnlyStyle = dvStyle
 
+	// The message shown when the data view has no object (ako/mxcli#2133). The
+	// writer always wrote the field; nothing filled it.
+	if msg := w.GetStringProp("NoEntityMessage"); msg != "" {
+		dv.NoEntityMessage = &model.Text{
+			BaseElement: model.BaseElement{
+				ID:       model.ID(types.GenerateID()),
+				TypeName: "Texts$Text",
+			},
+			Translations: map[string]string{pb.textLang(): msg},
+		}
+	}
+
 	showFooterSet := false
 	if raw, ok := lookupPropCI(w, "ShowFooter"); ok {
 		v, err := propBool(raw)

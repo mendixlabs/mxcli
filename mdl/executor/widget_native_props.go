@@ -88,7 +88,7 @@ var nativeWidgetKinds = map[string]nativeWidgetKind{
 	// Data and list widgets. `Footer` is the legacy property form of a data
 	// view's footer block, still read by buildDataViewV3.
 	"dataview": {stored: "Forms$DataView", tail: true, visible: true,
-		reads: []string{"DataSource", "FormOrientation", "LabelWidth", "ReadOnlyStyle", "ShowFooter", "Footer"}},
+		reads: []string{"DataSource", "FormOrientation", "LabelWidth", "ReadOnlyStyle", "ShowFooter", "Footer", "NoEntityMessage"}},
 	"listview": {stored: "Forms$ListView", tail: true, visible: true,
 		reads: []string{"DataSource", "Action", "Editable", "PageSize"}},
 
