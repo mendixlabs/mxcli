@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
 // ako/mxcli#2259: a project whose scripts were in sync under one nightly —
@@ -196,4 +197,33 @@ func TestCreateOrModify_LayoutDriftIsUnchanged(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Control: a position the script states is compared however the rest is
+// drawn — a stated node at another place than stored is moved, not reported
+// Unchanged.
+func TestCreateOrModify_LayoutDriftKeepsStatedPositions(t *testing.T) {
+	exec, out, _ := openPedAppCopy(t)
+	c := layoutDriftCases[0]
+	if err := agreeExec(t, exec, layoutDriftSub+"\n"+c.script); err != nil {
+		t.Fatalf("setup: %v\n%s", err, out.String())
+	}
+	driftStoredLayout(t, exec, c.flow)
+	stated := strings.Replace(c.script, "  $Words = call", "  @position(2400, 600)\n  $Words = call", 1)
+	out.Reset()
+	if err := agreeExec(t, exec, stated); err != nil {
+		t.Fatalf("the stated position is refused: %v\n%s", err, out.String())
+	}
+	if strings.Contains(out.String(), "Unchanged ") {
+		t.Fatalf("a stated position the stored node is not at was reported Unchanged:\n%s", out.String())
+	}
+	mf := loopEditFlowOf(t, exec, c.flow)
+	for _, obj := range mf.ObjectCollection.Objects {
+		if obj.GetPosition() == (model.Point{X: 2400, Y: 600}) {
+			if _, ok := obj.(*microflows.ActionActivity); ok {
+				return
+			}
+		}
+	}
+	t.Errorf("no activity is at the stated (2400, 600):\n%s", out.String())
 }
