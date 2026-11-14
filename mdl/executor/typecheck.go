@@ -127,7 +127,17 @@ func scriptFlowParams(reader *exprcatalog.Reader, params []ast.MicroflowParam) [
 		case dt.Kind == ast.TypeListOf && dt.EntityRef != nil:
 			fp.Kind, fp.Ref = exprcheck.KindList, dt.EntityRef.String()
 		case dt.Kind == ast.TypeEntity && dt.EntityRef != nil:
-			fp.Kind, fp.Ref = exprcheck.KindObject, dt.EntityRef.String()
+			// A bare `Module.Name` parses as an entity reference whatever it
+			// names; one the reader knows as an enumeration IS the
+			// enumeration, as the writer resolves it — stored, describe prints
+			// `enum Module.Name`. Read as an object, every enumeration value
+			// passed to it was E009 (ako/mxcli#2259).
+			qn := dt.EntityRef.String()
+			if _, isEnum := reader.EnumCases(qn); isEnum && !reader.KnowsEntity(qn) {
+				fp.Kind, fp.Ref = exprcheck.KindEnumeration, qn
+			} else {
+				fp.Kind, fp.Ref = exprcheck.KindObject, qn
+			}
 		case dt.Kind == ast.TypeEnumeration && dt.EnumRef != nil:
 			qn := dt.EnumRef.String()
 			_, isEnum := reader.EnumCases(qn)
