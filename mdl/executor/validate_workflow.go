@@ -131,6 +131,7 @@ func ValidateWorkflow(stmt *ast.CreateWorkflowStmt) []linter.Violation {
 	out = append(out, ValidateWorkflowExpressionScope(stmt)...)
 	out = append(out, checkWorkflowTemplates(workflowTemplateSites(stmt), loc)...)
 	out = append(out, checkWorkflowRecurrences(workflowRecurrenceSites(stmt), loc)...)
+	out = append(out, workflowBoundaryCountViolations(stmt, loc)...)
 	return out
 }
 
@@ -441,5 +442,6 @@ func ValidateAlterWorkflow(stmt *ast.AlterWorkflowStmt) []linter.Violation {
 	out = append(out, checkWorkflowExprScope(alterWorkflowExprSites(stmt), "", loc)...)
 	out = append(out, checkWorkflowTemplates(alterWorkflowTemplateSites(stmt), loc)...)
 	out = append(out, checkWorkflowRecurrences(alterWorkflowRecurrenceSites(stmt), loc)...)
+	out = append(out, alterWorkflowBoundaryCountViolations(stmt, loc)...)
 	return append(out, ValidateAlterWorkflowEnds(stmt)...)
 }

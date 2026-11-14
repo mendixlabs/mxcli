@@ -72,7 +72,7 @@ func execHelp(ctx *ExecContext, s *ast.HelpStmt) error {
 			return syntax.WriteJSON(ctx.Output, m.Features)
 		}
 		fmt.Fprint(ctx.Output, m.Heading())
-		syntax.WriteText(ctx.Output, m.Features)
+		m.WriteText(ctx.Output)
 		return nil
 	}
 	help := `MDL Commands:

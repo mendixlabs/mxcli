@@ -312,7 +312,7 @@ func prependFreeAnnotationLines(ctx *ExecContext, oc *microflows.MicroflowObject
 			prefix = append(prefix, fmt.Sprintf(
 				"-- WARNING: the note %s is linked to %s, which MDL cannot state. It is described "+
 					"unattached, and re-executing this description drops the link",
-				mdlQuote(ctx, note.Caption), end))
+				commentLine(mdlQuote(ctx, note.Caption)), end))
 		}
 		// A free note is attached to nothing, so there is no activity position
 		// to derive its default from — the writer places it from wherever the
@@ -325,6 +325,16 @@ func prependFreeAnnotationLines(ctx *ExecContext, oc *microflows.MicroflowObject
 	}
 	return append(prefix, activityLines...)
 }
+
+// commentLine folds the line breaks of a value quoted into a `--` comment
+// into a visible ⏎. A break ended the comment mid-quote and the rest of the
+// text parsed as MDL, so neither `check` on the description nor the splice's
+// comparison against the stored flow could read it (ako/mxcli#2166).
+func commentLine(s string) string {
+	return commentLineBreaks.Replace(s)
+}
+
+var commentLineBreaks = strings.NewReplacer("\r\n", "⏎", "\n", "⏎", "\r", "⏎")
 
 // anchorSideKeyword returns the MDL keyword (top/right/bottom/left) for a
 // connection-index value. Returns "" for unknown values.

@@ -1020,17 +1020,33 @@ func execAlterModuleJarDep(ctx *ExecContext, s *ast.AlterModuleJarDepStmt) error
 		return fmt.Errorf("failed to read module settings: %w", err)
 	}
 
+	skipped := 0
 	for _, action := range s.Actions {
-		if err := applyJarDepAction(ms, action, s.ModuleName); err != nil {
+		skip, err := applyJarDepAction(ms, action, s.ModuleName)
+		if err != nil {
 			return err
 		}
+		if skip != "" {
+			skipped++
+			fmt.Fprintln(ctx.Output, skip)
+		}
+	}
+
+	// Every action was an IF NOT EXISTS skip: the settings are exactly what is
+	// stored, so there is nothing to offer storage (ako/mxcli#2239).
+	if skipped == len(s.Actions) {
+		reportUnchanged(ctx, fmt.Sprintf("jar dependencies for module '%s'", s.ModuleName))
+		warnUnvendoredJarDependencies(ctx, ms)
+		return nil
 	}
 
 	if err := ctx.Backend.UpdateModuleSettings(ms); err != nil {
 		return mdlerrors.NewBackend("update module settings", err)
 	}
 
-	fmt.Fprintf(ctx.Output, "Updated jar dependencies for module '%s'\n", s.ModuleName)
+	// ReportMutation says Unchanged when storage elided the write (ADR-0008),
+	// e.g. a SET … VERSION restating the stored version.
+	ctx.ReportMutation("Updated", "jar dependencies for module '%s'", s.ModuleName)
 	warnUnvendoredJarDependencies(ctx, ms)
 	return nil
 }
@@ -1081,12 +1097,26 @@ func pluralItIsTheyAre(n int) string {
 	return "they are"
 }
 
-func applyJarDepAction(ms *types.ModuleSettings, action ast.JarDepAction, moduleName string) error {
+// applyJarDepAction applies one action to ms. A non-empty skip is the notice
+// for an ADD … IF NOT EXISTS whose coordinate is already declared: ms is left
+// as it was, and the caller decides whether to print it (exec) or not (check's
+// replay, which calls this same function so the two cannot disagree).
+func applyJarDepAction(ms *types.ModuleSettings, action ast.JarDepAction, moduleName string) (skip string, err error) {
+	err = applyJarDepActionTo(ms, action, moduleName, &skip)
+	return skip, err
+}
+
+func applyJarDepActionTo(ms *types.ModuleSettings, action ast.JarDepAction, moduleName string, skip *string) error {
 	switch a := action.(type) {
 	case *ast.AddJarDepAction:
 		coord := a.Group + ":" + a.Artifact
-		if jarDepByCoord(ms.JarDependencies, coord) != nil {
-			return fmt.Errorf("jar dependency '%s' already exists in module '%s'; use SET to update version", coord, moduleName)
+		if existing := jarDepByCoord(ms.JarDependencies, coord); existing != nil {
+			if a.IfNotExists {
+				*skip = jarDepSkipNotice(existing, a, moduleName)
+				return nil
+			}
+			return fmt.Errorf("jar dependency '%s' already exists in module '%s'; use SET to update version, "+
+				"or 'add jar dependency if not exists' to make the script re-runnable", coord, moduleName)
 		}
 		ms.JarDependencies = append(ms.JarDependencies, &types.JarDependency{
 			GroupID:    a.Group,
@@ -1153,6 +1183,30 @@ func applyJarDepAction(ms *types.ModuleSettings, action ast.JarDepAction, module
 		dep.Exclusions = append(dep.Exclusions[:excIdx], dep.Exclusions[excIdx+1:]...)
 	}
 	return nil
+}
+
+// jarDepSkipNotice is the line an ADD … IF NOT EXISTS prints for a coordinate
+// the module already declares. Like every IF NOT EXISTS form it leaves the
+// stored element untouched; when the statement asks for a different version or
+// included flag it says so and names the SET that would change it, because a
+// silent skip would let a version bump in the script never reach the model.
+func jarDepSkipNotice(existing *types.JarDependency, a *ast.AddJarDepAction, moduleName string) string {
+	coord := a.Group + ":" + a.Artifact
+	notice := fmt.Sprintf("Jar dependency '%s' already exists in module '%s' — skipped", coord, moduleName)
+	var diffs, fixes []string
+	if existing.Version != a.Version {
+		diffs = append(diffs, fmt.Sprintf("stored version '%s', this statement says '%s'", existing.Version, a.Version))
+		fixes = append(fixes, fmt.Sprintf("set jar dependency '%s' version '%s'", coord, a.Version))
+	}
+	if existing.IsIncluded != a.Included {
+		diffs = append(diffs, fmt.Sprintf("stored included = %t, this statement says %t", existing.IsIncluded, a.Included))
+		fixes = append(fixes, fmt.Sprintf("set jar dependency '%s' included %t", coord, a.Included))
+	}
+	if len(diffs) == 0 {
+		return notice
+	}
+	return fmt.Sprintf("%s (%s; if not exists leaves it untouched — to change it: alter module %s %s)",
+		notice, strings.Join(diffs, "; "), moduleName, strings.Join(fixes, " "))
 }
 
 func jarDepByCoord(deps []*types.JarDependency, coordinate string) *types.JarDependency {

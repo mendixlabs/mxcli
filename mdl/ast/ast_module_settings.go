@@ -36,12 +36,15 @@ type JarDepAction interface {
 	isJarDepAction()
 }
 
-// AddJarDepAction represents: ADD JAR DEPENDENCY (group = '...', artifact = '...', version = '...' [, included = true])
+// AddJarDepAction represents: ADD JAR DEPENDENCY [IF NOT EXISTS] (group = '...', artifact = '...', version = '...' [, included = true])
 type AddJarDepAction struct {
 	Group    string
 	Artifact string
 	Version  string
 	Included bool // defaults to true
+	// IfNotExists leaves a coordinate the module already declares untouched —
+	// whatever its stored version — instead of refusing (ako/mxcli#2239).
+	IfNotExists bool
 }
 
 func (a *AddJarDepAction) isJarDepAction() {}

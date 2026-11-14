@@ -131,3 +131,23 @@ func (r Requirement) versionRange() string {
 	}
 	return r.Since + "+"
 }
+
+// WriteText renders a lookup's answer. A nested topic that has subtopics of
+// its own (workflow.user-task, with workflow.user-task.targeting under it)
+// prints its detail and then lists them; it used to print only the index, so
+// `mxcli syntax workflow user-task` never showed the user task syntax
+// (ako/mxcli#2238). A top-level area (`workflow`, `microflow`) stays an index
+// of its topics, and every other answer is WriteText's.
+func (m Match) WriteText(w io.Writer) {
+	if own := ByPath(m.Path); m.Exact && own != nil && strings.Contains(m.Path, ".") && len(m.Features) > 1 {
+		writeFeatureDetail(w, *own)
+		fmt.Fprintln(w, "Subtopics:")
+		for _, f := range m.Features {
+			if f.Path != own.Path {
+				fmt.Fprintf(w, "  %-40s %s\n", f.Path, f.Summary)
+			}
+		}
+		return
+	}
+	WriteText(w, m.Features)
+}

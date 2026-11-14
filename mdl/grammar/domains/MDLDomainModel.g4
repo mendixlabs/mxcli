@@ -398,8 +398,11 @@ alterModuleJarDepStatement
     : ALTER MODULE (qualifiedName | IDENTIFIER) alterModuleJarDepAction+
     ;
 
+// ADD … IF NOT EXISTS leaves a coordinate the module already declares untouched,
+// as ADD ATTRIBUTE / ADD VALUE IF NOT EXISTS do, so a script that declares a
+// module's Java dependency can be executed twice (ako/mxcli#2239).
 alterModuleJarDepAction
-    : ADD JAR DEPENDENCY LPAREN jarDepProperty (COMMA jarDepProperty)* COMMA? RPAREN
+    : ADD JAR DEPENDENCY ifNotExists? LPAREN jarDepProperty (COMMA jarDepProperty)* COMMA? RPAREN
     | SET JAR DEPENDENCY STRING_LITERAL VERSION STRING_LITERAL
     | SET JAR DEPENDENCY STRING_LITERAL INCLUDED booleanLiteral
     | SET JAR DEPENDENCY STRING_LITERAL ADD EXCLUSION STRING_LITERAL

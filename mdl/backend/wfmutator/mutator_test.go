@@ -1600,3 +1600,24 @@ func TestWorkflowMutator_DropBoundaryEvent_ByIndex(t *testing.T) {
 		t.Fatal("boundary event 2 of 1 accepted")
 	}
 }
+
+// ako/mxcli#2242: a sixth boundary event is CE6696 in mx check. Only the
+// mutator sees the stored count, so it refuses the insert; five is the control.
+func TestWorkflowMutator_InsertBoundaryEvent_RefusesASixth(t *testing.T) {
+	act := makeWfActivity("Workflows$UserTask", "Review", "task1")
+	act = append(act, bson.E{Key: "BoundaryEvents", Value: bson.A{int32(3)}})
+	m := newMutator(makeWorkflowDoc(act))
+	for i := 1; i <= 5; i++ {
+		if err := m.InsertBoundaryEvent("Review", 0, "InterruptingTimer", "PT1H", "", nil, nil); err != nil {
+			t.Fatalf("insert %d of 5 refused: %v", i, err)
+		}
+	}
+	err := m.InsertBoundaryEvent("Review", 0, "InterruptingTimer", "PT1H", "", nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "CE6696") {
+		t.Fatalf("sixth insert: err = %v, want a CE6696 refusal", err)
+	}
+	actDoc, _ := m.findActivityByCaption("Review", 0)
+	if n := len(bsonnav.DGetArrayElements(bsonnav.DGet(actDoc, "BoundaryEvents"))); n != 5 {
+		t.Errorf("activity holds %d boundary events after the refusal, want 5", n)
+	}
+}
