@@ -33,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - **A combo box with `filterType: 'none'` builds** (ako/mxcli#2264, mendixlabs/mxcli#1861) — mx check reported CE0463: Combo box 2.10 hides `noOptionsText` under a two-condition rule (`filterType` is `none` and `selectionMethod` is not `rowclick`), and mxcli read no rule from an `&&` chain, so it wrote a text template where Studio Pro stores none. A widget's `a && b && hide(…)` rules are now read; `widget describe combobox` recognises 31 of 32.
+- **`check` judges the tokens in an access rule's constraint** (ako/mxcli#2189, mendixlabs/mxcli#1843) — a date token compared with a String or an Integer, a quoted `[%DayLength%]` with an Integer, a `[%UserRole_…%]` with a String or a DateTime, and `[%CurrentUser%]` with an association that does not lead to System.User (or an entity extending it) passed `check` and `exec` and failed the build with CE0161. Each is now an error at the grant.
 
 - **E009 resolves a bare enumeration parameter type** (ako/mxcli#2259) — a flow declared `($Leg: "M"."ENUM_DeliveryLeg")` typed the parameter as an object in `check`, so passing `M.ENUM_DeliveryLeg.Outbound` was E009, although the stored parameter is the enumeration and `mx check` is clean. A bare `Module.Name` that names an enumeration now types the parameter as that enumeration.
 
