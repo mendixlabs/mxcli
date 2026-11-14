@@ -93,6 +93,12 @@ the engine chokes on the conflicted state. Its result is copied back:
 .mpr without the hash check, because the .mpr lists every document: a whole
 side would drop the other side's added units and resurrect its deleted ones.
 
+Exit codes: 0 merged (or already up to date), 1 failed, 3 stopped for a
+decision a person must take — a model conflict the engine leaves open (a
+plan template is written) or text conflicts left for manual resolution. The
+merge is aborted or left in place as described above; nothing was committed.
+Once the merge commits, the plan template beside the .mpr is removed.
+
 The merge is refused while Studio Pro has the project open (.mpr.lock).
 MPR v2 projects only. The mx binary is resolved for the project's Mendix
 version (PATH, the mxcli cache, or the Studio Pro installation).`,
@@ -329,7 +335,7 @@ func mergeRun(mprPath, ref, message, strategy, plan string, push bool, runners m
 			return fmt.Errorf("the model merge has conflicts and aborting it failed (%v); resolve in Studio Pro", abortErr)
 		}
 		fmt.Fprintln(out, "Merge aborted; the working tree is back to the pre-merge state.")
-		return errors.New("the model merge needs a decision: re-run with --plan to resolve per unit, or resolve in Studio Pro (Version Control › Merge Changes Here)")
+		return decisionNeeded(errors.New("the model merge needs a decision: re-run with --plan to resolve per unit, or resolve in Studio Pro (Version Control › Merge Changes Here)"))
 	}
 
 	// Exit 0: the engine resolved the model into MINE, the clean worktree at
@@ -565,10 +571,25 @@ func commitTheMerge(root string, repo *gitNoteRepo, stagedPaths []string, messag
 // finishMerge attaches the mx_metadata note to the finished merge and prints
 // (or, with push, runs) the branch-and-notes push.
 func finishMerge(out io.Writer, repo *gitNoteRepo, head, branch string, push bool) error {
+	removeStalePlanTemplate(out, repo)
 	if err := annotateCommits(out, repo, []string{head}, branch, true, false); err != nil {
 		return fmt.Errorf("committed %s, but attaching the note failed (%v) — run 'mxcli git note -p … --write' to attach it", shortCommit(head), err)
 	}
 	return pushBranchAndNotes(out, repo.Root, branch, push)
+}
+
+// removeStalePlanTemplate deletes the plan template a stopped run wrote beside
+// the .mpr (<mpr>.merge-plan.json) once the merge has committed: it described
+// a decision that is now taken, and left behind it turned up in the next
+// `git add -A` (ako/mxcli#2240). Only that file — the one mxcli writes — is
+// removed; a plan passed to --plan from another path is the caller's.
+func removeStalePlanTemplate(out io.Writer, repo *gitNoteRepo) {
+	template := filepath.Join(repo.Root, filepath.FromSlash(repo.MPRPath)) + ".merge-plan.json"
+	if err := os.Remove(template); err == nil {
+		fmt.Fprintf(out, "Removed the plan template %s; the merge is committed.\n", filepath.Base(template))
+	} else if !os.IsNotExist(err) {
+		fmt.Fprintf(out, "  (could not remove the stale plan template %s: %v)\n", filepath.Base(template), err)
+	}
 }
 
 func pushBranchAndNotes(out io.Writer, root, branch string, push bool) error {

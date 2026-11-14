@@ -210,7 +210,7 @@ What the kinds mean:
 
 - **slower-two-runs** — the step was slower than that night's baseline in the latest run and in the one before.
 - **drift** — the median of the last three runs sits above the median of the seven before them, each run corrected for how fast its runner was. Those are different nights, so confirm it locally before acting on it.
-- **counts-increased** — the candidate read more unit files, or landed more writes, than the baseline on the same night. Counts carry no noise.
+- **counts-increased** — the candidate read more units (from files and from the unit store together), or landed more writes, than the baseline on the same night. Counts carry no noise.
 - **wrote-on-re-exec** — a settled script changed a unit file. That is a defect, not a slowdown.
 
 To reproduce, build both commits and run them on one machine:

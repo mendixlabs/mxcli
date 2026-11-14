@@ -182,14 +182,39 @@ func UnvendoredJarDependencies(projectDir string, deps []JarDependencyRef) []str
 // range made a successful sync report the dependency "still missing".
 func jarVendored(vendorlib string, d JarDependencyRef) bool {
 	if !isJarVersionRange(d.Version) {
-		_, err := os.Stat(filepath.Join(vendorlib, fmt.Sprintf("%s-%s.jar", d.Artifact, d.Version)))
-		return err == nil
-	}
-	entries, err := os.ReadDir(vendorlib)
-	if err != nil {
+		if _, err := os.Stat(filepath.Join(vendorlib, fmt.Sprintf("%s-%s.jar", d.Artifact, d.Version))); err == nil {
+			return true
+		}
+		// Gradle keeps the newest version a dependency graph asks for, and
+		// another jar's transitive dependency can ask for a newer patch than
+		// the one declared: a declared bcprov-jdk18on 1.81 is vendored as
+		// 1.81.1, and reporting it "still missing" after a clean sync was
+		// wrong (ako/mxcli#2248). A newer patch of the same major.minor
+		// satisfies the declaration; another minor is a different jar.
+		for _, v := range vendoredJarVersions(vendorlib, d.Artifact) {
+			if newerPatch(v, d.Version) {
+				return true
+			}
+		}
 		return false
 	}
-	prefix := d.Artifact + "-"
+	for _, v := range vendoredJarVersions(vendorlib, d.Artifact) {
+		if jarVersionInRange(v, d.Version) {
+			return true
+		}
+	}
+	return false
+}
+
+// vendoredJarVersions returns the versions of artifact that vendorlib holds,
+// read from the <artifact>-<version>.jar file names.
+func vendoredJarVersions(vendorlib, artifact string) []string {
+	entries, err := os.ReadDir(vendorlib)
+	if err != nil {
+		return nil
+	}
+	prefix := artifact + "-"
+	var out []string
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, ".jar") {
@@ -201,11 +226,51 @@ func jarVendored(vendorlib string, d JarDependencyRef) bool {
 		if v == "" || v[0] < '0' || v[0] > '9' {
 			continue
 		}
-		if jarVersionInRange(v, d.Version) {
-			return true
+		out = append(out, v)
+	}
+	return out
+}
+
+// newerPatch reports whether vendored is a newer release of the same
+// major.minor as declared: 1.81 -> 1.81.1, 3.18.0 -> 3.18.1, not 1.81 -> 1.82
+// and never a qualifier such as 1.81-beta.
+func newerPatch(vendored, declared string) bool {
+	pv, pd := splitJarVersion(vendored), splitJarVersion(declared)
+	if len(pd) < 2 || len(pv) < 2 {
+		return false
+	}
+	for i := 0; i < 2; i++ {
+		if !isJarVersionNumber(pd[i]) || compareJarVersionPart(pv[i], pd[i]) != 0 {
+			return false
 		}
 	}
-	return false
+	return compareJarVersions(vendored, declared) > 0
+}
+
+// DescribeUnvendored adds to each missing coordinate the versions of that
+// artifact vendorlib does hold, so a "still missing" names the cause:
+// "org.x:y:1.2 (vendorlib has y-1.4.jar)".
+func DescribeUnvendored(projectDir string, missing []string) []string {
+	vendorlib := filepath.Join(projectDir, "vendorlib")
+	out := make([]string, 0, len(missing))
+	for _, m := range missing {
+		parts := strings.Split(m, ":")
+		if len(parts) < 3 {
+			out = append(out, m)
+			continue
+		}
+		vs := vendoredJarVersions(vendorlib, parts[1])
+		if len(vs) == 0 {
+			out = append(out, m)
+			continue
+		}
+		jars := make([]string, len(vs))
+		for i, v := range vs {
+			jars[i] = parts[1] + "-" + v + ".jar"
+		}
+		out = append(out, fmt.Sprintf("%s (vendorlib has %s)", m, strings.Join(jars, ", ")))
+	}
+	return out
 }
 
 // trimJarZeros drops trailing ".0" parts, so a range bound "3" and the

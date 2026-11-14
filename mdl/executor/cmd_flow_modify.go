@@ -207,7 +207,12 @@ func modifyFlowInPlace(ctx *ExecContext, d *flowDecl) (handled bool, err error) 
 	} else {
 		ctx.trackCreatedMicroflow(d.name.Module, d.name.Name, a.mf.ID, containerID, returnEntity)
 	}
-	invalidateHierarchy(ctx)
+	// An edit in place changes no unit's container, so the hierarchy built
+	// from them still holds. Rebuilding it after every statement listed every
+	// unit of the project per `create or modify` (ako/mxcli#2160).
+	if moved {
+		invalidateHierarchy(ctx)
+	}
 	return true, nil
 }
 

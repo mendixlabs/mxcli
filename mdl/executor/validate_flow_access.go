@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/linter"
@@ -244,6 +245,12 @@ type flowAccessLister interface {
 // flow need a role. The walk is over raw BSON because the references live in
 // many shapes (button actions, data sources, menu items, call activities) that
 // all store the target's qualified name under a "Microflow" or "Nanoflow" key.
+//
+// It reads the bytes where they lie rather than decoding each document: a
+// page decodes into tens of thousands of values, and decoding every stored
+// page was most of what `check` of one microflow cost in a project with
+// pages (ako/mxcli#2160). storedUsesDecoded is the decoding form, kept as
+// what this one is tested against.
 func (s *flowAccessSim) loadStoredUses(h *ContainerHierarchy) {
 	for _, typ := range flowRefSourceTypes {
 		units, err := s.ctx.Backend.ListRawUnitsByType(typ)
@@ -254,34 +261,124 @@ func (s *flowAccessSim) loadStoredUses(h *ContainerHierarchy) {
 			if u.Type != typ || len(u.Contents) == 0 {
 				continue
 			}
-			var doc bson.D
-			if err := bson.Unmarshal(u.Contents, &doc); err != nil {
-				continue
-			}
-			if b, _ := bsonField(doc, "Excluded").(bool); b {
-				continue
-			}
-			name, _ := bsonField(doc, "Name").(string)
-			if typ == "Navigation$NavigationDocument" {
-				profiles, _ := bsonField(doc, "Profiles").(bson.A)
-				for _, p := range profiles {
-					pd, ok := p.(bson.D)
-					if !ok {
-						continue
+			for _, use := range storedUses(typ, u.Contents) {
+				src := use.label
+				if !use.navigation {
+					src = flowUseSourceLabel(typ) + " " + h.GetQualifiedName(u.ContainerID, use.label)
+					if typ == "Forms$Page" || typ == "Forms$Snippet" {
+						s.storedPg[src] = true
 					}
-					pn, _ := bsonField(pd, "Name").(string)
-					s.usesBy["navigation "+pn] = collectRawFlowRefs(pd)
 				}
-				continue
-			}
-			qn := h.GetQualifiedName(u.ContainerID, name)
-			src := flowUseSourceLabel(typ) + " " + qn
-			s.usesBy[src] = collectRawFlowRefs(doc)
-			if typ == "Forms$Page" || typ == "Forms$Snippet" {
-				s.storedPg[src] = true
+				s.usesBy[src] = use.refs
 			}
 		}
 	}
+}
+
+// A storedUse is one source of flow references in a stored document: the
+// document itself, or — in the navigation document — one profile. label is
+// the document's name, or "navigation <profile>" in full.
+type storedUse struct {
+	label      string
+	navigation bool
+	refs       []flowRef
+}
+
+// storedUses reads a stored document's flow references from its bytes. It
+// returns nothing for an excluded document, and for one that is not BSON.
+func storedUses(typ string, contents []byte) []storedUse {
+	doc := bsoncore.Document(contents)
+	if doc.Validate() != nil {
+		return nil
+	}
+	if b, ok := doc.Lookup("Excluded").BooleanOK(); ok && b {
+		return nil
+	}
+	if typ == "Navigation$NavigationDocument" {
+		profiles, ok := doc.Lookup("Profiles").ArrayOK()
+		if !ok {
+			return nil
+		}
+		values, err := profiles.Values()
+		if err != nil {
+			return nil
+		}
+		var out []storedUse
+		for _, v := range values {
+			pd, ok := v.DocumentOK()
+			if !ok {
+				continue
+			}
+			pn, _ := pd.Lookup("Name").StringValueOK()
+			out = append(out, storedUse{label: "navigation " + pn, navigation: true, refs: rawFlowRefs(pd, nil)})
+		}
+		return out
+	}
+	name, _ := doc.Lookup("Name").StringValueOK()
+	return []storedUse{{label: name, refs: rawFlowRefs(doc, nil)}}
+}
+
+// rawFlowRefs appends every qualified name stored under a "Microflow" or
+// "Nanoflow" key anywhere in the document, in document order, without
+// decoding it. The document has been validated by the caller.
+func rawFlowRefs(doc []byte, out []flowRef) []flowRef {
+	if len(doc) < 5 {
+		return out
+	}
+	rest := doc[4 : len(doc)-1]
+	for len(rest) > 0 {
+		elem, after, ok := bsoncore.ReadElement(rest)
+		if !ok {
+			return out
+		}
+		rest = after
+		value := elem.Value()
+		switch value.Type {
+		case bsoncore.TypeString:
+			kind := ""
+			switch elem.Key() {
+			case "Microflow":
+				kind = "microflow"
+			case "Nanoflow":
+				kind = "nanoflow"
+			}
+			if kind != "" {
+				if s := value.StringValue(); strings.Contains(s, ".") {
+					out = append(out, flowRef{kind, s})
+				}
+			}
+		case bsoncore.TypeEmbeddedDocument, bsoncore.TypeArray:
+			out = rawFlowRefs(value.Data, out)
+		}
+	}
+	return out
+}
+
+// storedUsesDecoded is storedUses by decoding the whole document: what it
+// did before, and what the test holds storedUses to.
+func storedUsesDecoded(typ string, contents []byte) []storedUse {
+	var doc bson.D
+	if err := bson.Unmarshal(contents, &doc); err != nil {
+		return nil
+	}
+	if b, _ := bsonField(doc, "Excluded").(bool); b {
+		return nil
+	}
+	if typ == "Navigation$NavigationDocument" {
+		var out []storedUse
+		profiles, _ := bsonField(doc, "Profiles").(bson.A)
+		for _, p := range profiles {
+			pd, ok := p.(bson.D)
+			if !ok {
+				continue
+			}
+			pn, _ := bsonField(pd, "Name").(string)
+			out = append(out, storedUse{label: "navigation " + pn, navigation: true, refs: collectRawFlowRefs(pd)})
+		}
+		return out
+	}
+	name, _ := bsonField(doc, "Name").(string)
+	return []storedUse{{label: name, refs: collectRawFlowRefs(doc)}}
 }
 
 func flowUseSourceLabel(unitType string) string {

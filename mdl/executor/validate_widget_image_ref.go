@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/mendixlabs/mxcli/modelsdk/meta"
 )
 
 // Resolving the `Image:` reference an image widget now carries.
@@ -66,10 +68,23 @@ func imageRefErrors(refs []string, known map[string]bool, collections map[string
 					collection, ref, stored))
 				continue
 			}
+			if isSystemCollection(collection) {
+				errors = append(errors, fmt.Sprintf(
+					"image collection not found: %s (referenced as %s) — the System module's "+
+						"image collections are System.Images and System.WorkflowImages",
+					collection, ref))
+				continue
+			}
 			errors = append(errors, fmt.Sprintf(
 				"image collection not found: %s (referenced as %s) — "+
 					"`show image collections` lists them",
 				collection, ref))
+			continue
+		}
+		if !known[ref] && isSystemCollection(collection) {
+			// An image of a System collection the measured list lacks: other
+			// Mendix versions hold other images, so refusing it would block a
+			// valid reference. mxbuild resolves it (CE1613 if it is wrong).
 			continue
 		}
 		if !known[ref] {
@@ -143,5 +158,19 @@ func buildImageQualifiedNames(ctx *ExecContext) (images map[string]bool, collect
 			images[qn+"."+img.Name] = true
 		}
 	}
+	addSystemImages(images, collections)
 	return images, collections
+}
+
+// addSystemImages adds the System module's image collections, which ship with
+// the platform and are never in the project's listing: `System.Images.Completed`
+// was "image collection not found" although mx check accepts it
+// (ako/mxcli#2235). Their images are listed as measured on one version.
+func addSystemImages(images, collections map[string]bool) {
+	for qn, names := range meta.SystemImageCollections {
+		collections[qn] = true
+		for _, n := range names {
+			images[qn+"."+n] = true
+		}
+	}
 }

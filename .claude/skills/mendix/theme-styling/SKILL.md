@@ -420,7 +420,7 @@ validated against the project's theme registry (`themesource/*/web/design-proper
 - **MDL-WIDGET12** — an option value that isn't allowed; the message **lists the
   allowed values** (case-sensitive), which is the fastest way to fix a casing typo.
 
-Both are warnings (a newer theme may add keys/values), so they inform without blocking.
+Both are **errors**: the registry is the project's own theme, and mxbuild refuses an unknown key (CE6083) and an unknown option (CE6085), so `exec` writes nothing. An old name of a renamed property is a warning (CE6087, not on an excluded page).
 `list design properties <widget>` lists the same allowed keys/values up front. On the
 write side, the value's BSON type is taken from the registry (a `ColorPicker` /
 `ToggleButtonGroup` property serializes as a custom value, not a plain option).

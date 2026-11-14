@@ -54,7 +54,13 @@ func (b *Backend) ListMicroflowsNamed(name string) ([]*microflows.Microflow, err
 // ListMicroflowHeaders lists every microflow's ID, container, name and
 // Excluded flag without decoding any flow.
 func (b *Backend) ListMicroflowHeaders() ([]types.DocumentHeader, error) {
-	hs, err := mprread.ListUnitHeaders[*genMf.Microflow](b.reader)
+	return b.ListMicroflowHeadersWhere(nil)
+}
+
+// ListMicroflowHeadersWhere is ListMicroflowHeaders for the microflows whose
+// name keep accepts (nil accepts all).
+func (b *Backend) ListMicroflowHeadersWhere(keep func(name string) bool) ([]types.DocumentHeader, error) {
+	hs, err := mprread.ListUnitHeadersWhere[*genMf.Microflow](b.reader, keep)
 	if err != nil {
 		return nil, err
 	}

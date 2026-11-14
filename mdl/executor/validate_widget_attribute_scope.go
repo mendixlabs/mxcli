@@ -78,6 +78,7 @@ func validatePluggableAttributeScopes(ctx *ExecContext, layout string, params []
 	}
 	if sc != nil {
 		v.generalizations = sc.entityGeneralizations
+		v.decls = sc.entityDecls
 	}
 	for _, w := range widgets {
 		v.walk(w, dataContext{})
@@ -108,6 +109,10 @@ type attributeScopeValidator struct {
 	// pb answers the association-as-attribute question with exec's own
 	// function (validate_assoc_as_attribute.go).
 	pb *pageBuilder
+
+	// decls are the script's entity declarations, for the audit fields'
+	// declared names (validate_expr_system_member.go).
+	decls map[string]*ast.CreateEntityStmt
 }
 
 // paramEntity is the entity of the document parameter `$name`, or "".
@@ -126,6 +131,7 @@ func (v *attributeScopeValidator) walk(w *ast.WidgetV3, enclosing dataContext) {
 	v.checkViewAssocReverse(w, enclosing)
 	v.checkAssocHopStart(w, enclosing)
 	v.checkReactUnsupported(w)
+	v.checkExprSystemMembers(w, enclosing)
 	if v.registry == nil {
 		// No registry: the pluggable half cannot run, and a pluggable widget's
 		// slots cannot be told apart, so nothing inside one is judged rather

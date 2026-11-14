@@ -95,21 +95,44 @@ type UnitHeaderRef struct {
 // every one of their files on each call (ako/mxcli#1791). MPR v1 reads the
 // blobs, which live in the one database file.
 func (r *Reader) ListUnitHeaders(typeName string) ([]UnitHeaderRef, error) {
-	out, err := r.listStoredUnitHeaders(typeName)
+	return r.ListUnitHeadersWhere(typeName, nil)
+}
+
+// ListUnitHeadersWhere is ListUnitHeaders for the units whose Name keep
+// accepts (nil accepts all), in the same order. A lookup of one document by
+// name is a filter over the names; listing every header of the type and
+// discarding all but one copied the header of every microflow in the project
+// several times per statement — half of what a `create or modify microflow`
+// allocated in a project of 5,000 of them (ako/mxcli#2160).
+func (r *Reader) ListUnitHeadersWhere(typeName string, keep func(name string) bool) ([]UnitHeaderRef, error) {
+	out, err := r.listStoredUnitHeaders(typeName, keep)
 	if err != nil {
 		return nil, err
 	}
 	for _, u := range r.packagedUnitsOf(typeName, "", nil) {
 		e := unitIndexEntryOf(u.Contents)
+		if keep != nil && !keep(e.Name) {
+			continue
+		}
 		out = append(out, UnitHeaderRef{ID: u.ID, ContainerID: u.ContainerID, Name: e.Name, Excluded: e.Excluded})
 	}
 	return out, nil
 }
 
-// listStoredUnitHeaders is ListUnitHeaders for the units the .mpr stores.
-func (r *Reader) listStoredUnitHeaders(typeName string) ([]UnitHeaderRef, error) {
+// listStoredUnitHeaders is ListUnitHeadersWhere for the units the .mpr stores.
+func (r *Reader) listStoredUnitHeaders(typeName string, keep func(name string) bool) ([]UnitHeaderRef, error) {
 	if r.version != MPRVersionV2 {
-		return r.listUnitHeadersV1(typeName)
+		all, err := r.listUnitHeadersV1(typeName)
+		if err != nil || keep == nil {
+			return all, err
+		}
+		var out []UnitHeaderRef
+		for _, h := range all {
+			if keep(h.Name) {
+				out = append(out, h)
+			}
+		}
+		return out, nil
 	}
 	if !r.unitCacheValid {
 		if err := r.buildUnitCache(); err != nil {
@@ -129,6 +152,9 @@ func (r *Reader) listStoredUnitHeaders(typeName string) ([]UnitHeaderRef, error)
 				continue
 			}
 			name, excluded = e.Name, e.Excluded
+		}
+		if keep != nil && !keep(name) {
+			continue
 		}
 		out = append(out, UnitHeaderRef{ID: cu.ID, ContainerID: cu.ContainerID, Name: name, Excluded: excluded})
 	}

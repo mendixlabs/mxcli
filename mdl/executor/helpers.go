@@ -15,6 +15,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/folderpath"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/modelsdk/meta"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
@@ -531,6 +532,16 @@ func buildMicroflowQualifiedNames(ctx *ExecContext) map[string]bool {
 	for _, mf := range mfs {
 		qn := h.GetQualifiedName(mf.ContainerID, mf.Name)
 		result[qn] = true
+	}
+	// The System module's microflows ship with the platform and are never in
+	// the listing; describe navigation prints `call microflow
+	// System.ShowHomePage` (ako/mxcli#2247). Added only to a listing that has
+	// an answer: callers read an empty set as "could not be read" and skip
+	// the check, and adding these would turn that into false errors.
+	if len(result) > 0 {
+		for _, qn := range meta.SystemMicroflows {
+			result[qn] = true
+		}
 	}
 	return result
 }

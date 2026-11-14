@@ -58,8 +58,11 @@ func TestAlterStyling_UndeclaredKeyIsReported(t *testing.T) {
 	if got[0].RuleID != "MDL-WIDGET11" {
 		t.Errorf("RuleID = %q, want MDL-WIDGET11", got[0].RuleID)
 	}
-	if got[0].Severity != linter.SeverityWarning {
-		t.Errorf("severity = %v, want Warning — a newer theme may add keys the snapshot lacks", got[0].Severity)
+	// An error (ako/mxcli#2236): the registry is the project's own
+	// themesource, the theme mxbuild builds against, and CE6083 above is what
+	// a warning let exec write.
+	if got[0].Severity != linter.SeverityError {
+		t.Errorf("severity = %v, want Error — mxbuild refuses it with CE6083", got[0].Severity)
 	}
 	if !strings.Contains(got[0].Message, "Remove empty text") {
 		t.Errorf("message does not name the key: %q", got[0].Message)

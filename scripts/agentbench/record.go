@@ -286,7 +286,11 @@ func reads(c *counts) string {
 	if c == nil {
 		return "n/a"
 	}
-	return fmt.Sprint(c.UnitFileReads)
+	if c.UnitStoreHits == nil {
+		return fmt.Sprint(c.UnitFileReads)
+	}
+	// Every read not served from memory: files, and the persisted store.
+	return fmt.Sprintf("%d + %d", c.UnitFileReads, *c.UnitStoreHits)
 }
 
 func firstLine(s string) string {

@@ -136,7 +136,7 @@ func validateAlterStylingDesignProps(prog *ast.Program, reg *ThemeRegistry) []li
 			}
 			out = append(out, linter.Violation{
 				RuleID:   "MDL-WIDGET11",
-				Severity: linter.SeverityWarning,
+				Severity: linter.SeverityError, // CE6083, as for CREATE PAGE (ako/mxcli#2236)
 				Message: fmt.Sprintf("%s: sets design property %q on %q, which no widget type "+
 					"in this project's theme declares — mxbuild reports this as CE6083",
 					label, a.Property, s.WidgetName),

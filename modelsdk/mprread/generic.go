@@ -187,15 +187,12 @@ func UnitByID[T element.Element](r *mmpr.Reader, id model.ID) (unit Unit[T], ok 
 // units are opened, where filtering the listing on the stored Name opened
 // every unit of the type to read it (ako/mxcli#1791).
 func ListUnitsNamed[T element.Element](r *mmpr.Reader, name string) ([]Unit[T], error) {
-	hs, err := r.ListUnitHeaders(bsonTypeName[T]())
+	hs, err := r.ListUnitHeadersWhere(bsonTypeName[T](), func(n string) bool { return n == name })
 	if err != nil {
 		return nil, err
 	}
 	var out []Unit[T]
 	for _, h := range hs {
-		if h.Name != name {
-			continue
-		}
 		u, ok, err := UnitByID[T](r, model.ID(h.ID))
 		if err != nil {
 			return nil, err
@@ -219,7 +216,14 @@ type UnitHeader struct {
 // type T without decoding any of them: for callers that build a name set or an
 // ID-to-name map and would otherwise decode the whole flow of every document.
 func ListUnitHeaders[T element.Element](r *mmpr.Reader) ([]UnitHeader, error) {
-	hs, err := r.ListUnitHeaders(bsonTypeName[T]())
+	return ListUnitHeadersWhere[T](r, nil)
+}
+
+// ListUnitHeadersWhere is ListUnitHeaders for the units whose Name keep
+// accepts (nil accepts all): a lookup of one name copies one header, not the
+// header of every unit of the type.
+func ListUnitHeadersWhere[T element.Element](r *mmpr.Reader, keep func(name string) bool) ([]UnitHeader, error) {
+	hs, err := r.ListUnitHeadersWhere(bsonTypeName[T](), keep)
 	if err != nil {
 		return nil, err
 	}

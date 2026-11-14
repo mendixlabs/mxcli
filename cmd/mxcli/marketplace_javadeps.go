@@ -48,7 +48,7 @@ func syncInstalledJarDependencies(out io.Writer, mprPath string) {
 	err = postInstallSyncJars(mprPath, "", version, out)
 	if err == nil {
 		if still := docker.UnvendoredJarDependencies(dir, deps); len(still) > 0 {
-			err = fmt.Errorf("the sync finished but %s is still missing from vendorlib/", strings.Join(still, ", "))
+			err = fmt.Errorf("the sync finished but %s is still missing from vendorlib/", strings.Join(docker.DescribeUnvendored(dir, still), ", "))
 		}
 	}
 	if err != nil {

@@ -195,8 +195,14 @@ type sample struct {
 // them (a baseline older than the stats file).
 type counts struct {
 	UnitFileReads int64 `json:"unit_file_reads"`
-	WritesOffered int   `json:"writes_offered"`
-	WritesWritten int   `json:"writes_written"`
+	// UnitStoreHits is the reads served from the persisted unit store rather
+	// than a file. nil when the binary does not report them: a re-read of a
+	// unit is served from the store, so without this count a command that
+	// reads every unit twice looks like one that reads it once
+	// (ako/mxcli#2160).
+	UnitStoreHits *int64 `json:"unit_store_hits,omitempty"`
+	WritesOffered int    `json:"writes_offered"`
+	WritesWritten int    `json:"writes_written"`
 }
 
 // commandTimeout bounds one command. A hung boot must fail the run with its
@@ -246,14 +252,36 @@ func runStep(bin string, cmds [][]string, project, scripts, scratch string) (sam
 			if s.Counts == nil {
 				s.Counts = &counts{}
 			}
-			s.Counts.UnitFileReads += c.UnitFileReads
-			s.Counts.WritesOffered += c.WritesOffered
-			s.Counts.WritesWritten += c.WritesWritten
+			s.Counts.add(*c)
 		}
 		_ = os.Remove(statsPath)
 	}
 	s.FilesChanged = changedFiles(before, unitDigests(filepath.Dir(project)))
 	return s, nil
+}
+
+// add sums o into c. The store hits stay unreported unless a line reports
+// them.
+func (c *counts) add(o counts) {
+	c.UnitFileReads += o.UnitFileReads
+	c.WritesOffered += o.WritesOffered
+	c.WritesWritten += o.WritesWritten
+	if o.UnitStoreHits != nil {
+		if c.UnitStoreHits == nil {
+			c.UnitStoreHits = new(int64)
+		}
+		*c.UnitStoreHits += *o.UnitStoreHits
+	}
+}
+
+// same reports whether two counts agree. Store hits are compared only when
+// both sides report them: against a baseline too old to count them, their
+// absence is not a difference.
+func (c counts) same(o counts) bool {
+	if c.UnitFileReads != o.UnitFileReads || c.WritesOffered != o.WritesOffered || c.WritesWritten != o.WritesWritten {
+		return false
+	}
+	return c.UnitStoreHits == nil || o.UnitStoreHits == nil || *c.UnitStoreHits == *o.UnitStoreHits
 }
 
 func readCounts(path string) *counts {
@@ -267,9 +295,7 @@ func readCounts(path string) *counts {
 	for sc.Scan() {
 		var c counts
 		if json.Unmarshal(sc.Bytes(), &c) == nil {
-			total.UnitFileReads += c.UnitFileReads
-			total.WritesOffered += c.WritesOffered
-			total.WritesWritten += c.WritesWritten
+			total.add(c)
 		}
 	}
 	return &total
@@ -453,7 +479,7 @@ func newArmResult(samples []sample) *armResult {
 	for _, s := range samples {
 		wall, cpu, rss = append(wall, s.WallMS), append(cpu, s.CPUMS), append(rss, s.RSSMB)
 		if s.FilesChanged != r.FilesChanged ||
-			(s.Counts == nil) != (r.Counts == nil) || (s.Counts != nil && *s.Counts != *r.Counts) {
+			(s.Counts == nil) != (r.Counts == nil) || (s.Counts != nil && !s.Counts.same(*r.Counts)) {
 			r.CountsStable = false
 		}
 	}
@@ -671,7 +697,7 @@ func runSession(cfg config, def session, snapshot, scripts string) (sessionResul
 				sr.Flags = append(sr.Flags, "faster")
 			}
 			if sr.Candidate.FilesChanged != b.FilesChanged ||
-				(sr.Candidate.Counts != nil && b.Counts != nil && *sr.Candidate.Counts != *b.Counts) {
+				(sr.Candidate.Counts != nil && b.Counts != nil && !sr.Candidate.Counts.same(*b.Counts)) {
 				sr.Flags = append(sr.Flags, "counts-changed")
 			}
 		}

@@ -162,7 +162,13 @@ With a baseline, each step has these columns:
   disturbed by a busy machine than wall time, and blind to waiting on the disk.
   A step that is slower in both columns is slower; one that is slower in wall
   time only is more often noise or I/O.
-- **reads** — unit files the command read, as counted by mxcli itself.
+- **reads** — the units the command read, as counted by mxcli itself and
+  shown as `files + store`: unit files opened, and units served from the
+  persisted unit store (`.mxcli/cache/`). Together they are every read not
+  served from memory. A unit read a second time comes from the store, so it
+  is the second figure that shows a command reading the project twice. A
+  binary too old to count store reads shows the first figure alone, and is
+  compared on it.
 - **files changed** — unit files added, rewritten with different bytes, or
   removed, measured by comparing the project before and after the command.
 
@@ -198,7 +204,7 @@ speed.
 | Flag | Meaning |
 |---|---|
 | `slower` / `faster` | wall ratio beyond the threshold |
-| `counts-changed` | the two binaries read or changed a different number of files |
+| `counts-changed` | the two binaries read a different number of units, or changed a different number of files |
 | `counts-unstable` | one binary's counts differed between repetitions — a deterministic session should never show this |
 | `wrote-on-re-exec` | re-running a settled script changed a file. This is a defect ([Idempotent Writes](idempotent-writes.md)), and the only finding that makes the run exit non-zero besides a failing command |
 
@@ -215,11 +221,15 @@ any mxcli command:
 ```bash
 MXCLI_STATS_FILE=/tmp/stats.jsonl mxcli exec bulk-alter.mdl -p app.mpr
 cat /tmp/stats.jsonl
-# {"unit_file_reads":73,"writes_offered":49,"writes_written":49}
+# {"unit_file_reads":73,"unit_store_hits":212,"writes_offered":49,"writes_written":49}
 ```
 
 One line is appended per project connection closed, so a command that
-reconnects, or starts child mxcli processes, appends several. `writes_written`
+reconnects, or starts child mxcli processes, appends several. `unit_store_hits`
+is the units read from the persisted unit store (`.mxcli/cache/`) instead of
+their files: with `unit_file_reads` it is every read that was not served from
+memory, which is how a command that reads the same unit twice shows up when no
+file was opened twice. `writes_written`
 counts stored units rewritten after reconciliation; a newly created document
 is not in it, which is why the benchmark also counts changed files from
 outside.
@@ -276,7 +286,7 @@ it.
 |---|---|
 | `slower-two-runs` | A step's wall ratio against that night's baseline was above 1.20 in the latest run **and** in the one before. One slow night is noise too often to report. |
 | `drift` | The median of a step's last three runs is more than 1.30 times the median of the seven before them. Needs ten runs, and a step of at least 100 ms. |
-| `counts-increased` | The candidate read more unit files, or landed more writes, than the baseline in the same run. Counts carry no noise, so the first night is reported. |
+| `counts-increased` | The candidate read more units (files and store reads together, where both binaries report the second), or landed more writes, than the baseline in the same run. Counts carry no noise, so the first night is reported. |
 | `wrote-on-re-exec` | A settled script changed a unit file. |
 
 `drift` compares different nights, and so different machines. Each run is

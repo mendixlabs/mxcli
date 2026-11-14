@@ -59,8 +59,9 @@ type arm struct {
 		Median float64 `json:"median"`
 	} `json:"wall_ms"`
 	Counts *struct {
-		UnitFileReads int64 `json:"unit_file_reads"`
-		WritesWritten int   `json:"writes_written"`
+		UnitFileReads int64  `json:"unit_file_reads"`
+		UnitStoreHits *int64 `json:"unit_store_hits"`
+		WritesWritten int    `json:"writes_written"`
 	} `json:"counts"`
 	FilesChanged int `json:"files_changed"`
 }
@@ -249,7 +250,15 @@ func findAlerts(records []record, t thresholds) []alert {
 			}
 			if st.Baseline != nil && st.Candidate.Counts != nil && st.Baseline.Counts != nil {
 				c, b := st.Candidate.Counts, st.Baseline.Counts
-				if c.UnitFileReads > b.UnitFileReads {
+				// A re-read of a unit is served from the persisted store, not
+				// its file, so where both arms report store hits the reads
+				// compared are the two together.
+				if c.UnitStoreHits != nil && b.UnitStoreHits != nil {
+					if cr, br := c.UnitFileReads+*c.UnitStoreHits, b.UnitFileReads+*b.UnitStoreHits; cr > br {
+						out = append(out, alert{"counts-increased", s.Size, st.Name,
+							fmt.Sprintf("units read from a file or the unit store: %d, the baseline %d", cr, br)})
+					}
+				} else if c.UnitFileReads > b.UnitFileReads {
 					out = append(out, alert{"counts-increased", s.Size, st.Name,
 						fmt.Sprintf("unit files read: %d, the baseline %d", c.UnitFileReads, b.UnitFileReads)})
 				}

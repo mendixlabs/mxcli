@@ -159,15 +159,21 @@ func warnIfCatalogModeInsufficient(ctx *ExecContext, tables []string) {
 
 // execCatalogQuery handles SELECT ... FROM CATALOG.xxx queries.
 func execCatalogQuery(ctx *ExecContext, query string) error {
-	// Build catalog if not already built (fast mode by default)
-	if ctx.Catalog == nil || !ctx.Catalog.IsBuilt() {
-		if err := ensureCatalog(ctx, false); err != nil {
+	// Convert CATALOG.xxx table names to actual table names
+	query, tables := rewriteCatalogTableRefs(query)
+
+	// The catalog the query needs: current, and built in the mode its tables
+	// are filled by. A query used to build fast whenever the cache was stale —
+	// after every exec that wrote, since a write changes the .mpr — and
+	// CATALOG.ACTIVITIES, refs and the graph views then answered empty or
+	// short, with only a progress-line warning an agent rarely reads
+	// (ako/mxcli#2200). The rebuild is incremental: only units changed since
+	// the cached catalog are read again.
+	if required := requiredCatalogMode(tables); !catalogCurrent(ctx, required) {
+		if err := ensureCatalogMode(ctx, required); err != nil {
 			return err
 		}
 	}
-
-	// Convert CATALOG.xxx table names to actual table names
-	query, tables := rewriteCatalogTableRefs(query)
 
 	// Warn if querying a table that requires a higher build mode
 	warnIfCatalogModeInsufficient(ctx, tables)
@@ -186,6 +192,53 @@ func execCatalogQuery(ctx *ExecContext, query string) error {
 
 	outputCatalogResults(ctx, result)
 	return nil
+}
+
+// requiredCatalogMode is the build mode that fills every table in tables:
+// "source", "full" or "fast". The communities tables are filled by the graph
+// pass, not a mode; they need full (the pass reads refs) and keep their own
+// warning.
+func requiredCatalogMode(tables []string) string {
+	mode := "fast"
+	for _, t := range tables {
+		switch {
+		case sourceOnlyTables[t]:
+			return "source"
+		case fullOnlyTables[t], communitiesOnlyTables[t]:
+			mode = "full"
+		}
+	}
+	return mode
+}
+
+// catalogCurrent reports whether the session's catalog can answer a query
+// that needs mode: built, at that level or above, for this .mpr, and not older
+// than the project file — a write earlier in the same session changes the .mpr
+// and leaves the in-memory catalog behind it.
+func catalogCurrent(ctx *ExecContext, mode string) bool {
+	if ctx.Catalog == nil || !ctx.Catalog.IsBuilt() {
+		return false
+	}
+	info, err := ctx.Catalog.GetCacheInfo()
+	if err != nil || info == nil {
+		return false
+	}
+	// A catalog that records no build mode, or a session with no project file,
+	// was not built from the project (a test hands one in): there is nothing
+	// to compare it against or rebuild it from, so it answers as before.
+	if info.BuildMode == "" || ctx.MprPath == "" {
+		return true
+	}
+	if catalogModeRank(info.BuildMode) < catalogModeRank(mode) {
+		return false
+	}
+	if info.MprPath != "" && !catalog.SameMprPath(info.MprPath, ctx.MprPath) {
+		return false
+	}
+	if mt := getMprModTime(ctx); !mt.IsZero() && !info.MprModTime.IsZero() && info.MprModTime.Unix() != mt.Unix() {
+		return false
+	}
+	return true
 }
 
 // tableRequiredMode returns the command that populates a table.
@@ -298,10 +351,17 @@ func cachedCatalogInfo(ctx *ExecContext) *catalog.CacheInfo {
 
 // ensureCatalog ensures a catalog is available, using cache if possible.
 func ensureCatalog(ctx *ExecContext, full bool) error {
-	requiredMode := "fast"
 	if full {
-		requiredMode = "full"
+		return ensureCatalogMode(ctx, "full")
 	}
+	return ensureCatalogMode(ctx, "fast")
+}
+
+// ensureCatalogMode is ensureCatalog for a required build mode: "fast",
+// "full" or "source". A source requirement builds source; a full one builds at
+// the cached level when that is source (below).
+func ensureCatalogMode(ctx *ExecContext, requiredMode string) error {
+	full := requiredMode == "full" || requiredMode == "source"
 
 	// Try to load from cache first
 	cachePath := getCachePath(ctx)
@@ -328,7 +388,7 @@ func ensureCatalog(ctx *ExecContext, full bool) error {
 	// invocation, and the cache goes stale on every project save — so making it
 	// pay for a source reindex would trade one papercut for a worse one. It
 	// builds narrow in memory and the guard keeps its result off disk.
-	isSource := false
+	isSource := requiredMode == "source"
 	if full && cachedCatalogMode(ctx) == "source" {
 		isSource = true
 	}

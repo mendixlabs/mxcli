@@ -113,5 +113,5 @@ func reportTextConflicts(out io.Writer, other []string) error {
 	for _, p := range other {
 		fmt.Fprintf(out, "  %s\n", p)
 	}
-	return errors.New("merge has non-model conflicts left for manual resolution")
+	return decisionNeeded(errors.New("merge has non-model conflicts left for manual resolution"))
 }

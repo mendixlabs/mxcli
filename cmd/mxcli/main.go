@@ -69,8 +69,9 @@ func main() {
 func runCLI() int {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		diaglog.CloseCurrentWithExit(1)
-		return 1
+		code := exitCodeFor(err)
+		diaglog.CloseCurrentWithExit(code)
+		return code
 	}
 	diaglog.CloseCurrent()
 	return 0

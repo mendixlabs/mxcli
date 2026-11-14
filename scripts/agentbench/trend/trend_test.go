@@ -41,9 +41,10 @@ func newArm(wall float64, reads int64, written int) *arm {
 	a := &arm{}
 	a.Wall.Median = wall
 	a.Counts = &struct {
-		UnitFileReads int64 `json:"unit_file_reads"`
-		WritesWritten int   `json:"writes_written"`
-	}{reads, written}
+		UnitFileReads int64  `json:"unit_file_reads"`
+		UnitStoreHits *int64 `json:"unit_store_hits"`
+		WritesWritten int    `json:"writes_written"`
+	}{reads, nil, written}
 	return a
 }
 
@@ -105,6 +106,36 @@ func TestAlerts_CountsAreReportedOnTheFirstNight(t *testing.T) {
 	stepOf(&recs[1], "open").Candidate.Counts.UnitFileReads = 10
 	if got := kinds(findAlerts(recs, testThresholds)); got != "counts-increased:check counts-increased:domain" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// A unit read a second time is served from the persisted store, not its file:
+// the file reads are equal and only the store hits show it. Where both arms
+// report them the two are compared together; against a baseline that does
+// not, the file reads are compared as before.
+func TestAlerts_AReReadShowsInTheStoreHits(t *testing.T) {
+	n := func(v int64) *int64 { return &v }
+	recs := nights(2)
+	st := stepOf(&recs[1], "check")
+	st.Candidate.Counts.UnitStoreHits, st.Baseline.Counts.UnitStoreHits = n(454), n(278)
+	if got := kinds(findAlerts(recs, testThresholds)); got != "counts-increased:check" {
+		t.Fatalf("got %q, want counts-increased:check", got)
+	}
+	// Control: the same hits on both arms.
+	st.Candidate.Counts.UnitStoreHits = n(278)
+	if got := findAlerts(recs, testThresholds); len(got) != 0 {
+		t.Fatalf("equal reads were reported: %s", kinds(got))
+	}
+	// A baseline that does not report them.
+	st.Candidate.Counts.UnitStoreHits, st.Baseline.Counts.UnitStoreHits = n(454), nil
+	if got := findAlerts(recs, testThresholds); len(got) != 0 {
+		t.Fatalf("an unreported count was compared: %s", kinds(got))
+	}
+	// Files moved to the store, the total the same: not an increase.
+	st.Candidate.Counts.UnitFileReads, st.Candidate.Counts.UnitStoreHits = 0, n(378)
+	st.Baseline.Counts.UnitStoreHits = n(278)
+	if got := findAlerts(recs, testThresholds); len(got) != 0 {
+		t.Fatalf("reads moving from files to the store were reported: %s", kinds(got))
 	}
 }
 

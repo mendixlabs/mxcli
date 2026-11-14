@@ -9,6 +9,9 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/mendixlabs/mxcli/mdl/types"
+	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/modelsdk/meta"
 )
 
 // A documentNameSpace is a group of element kinds that share one name space per
@@ -194,6 +197,113 @@ func loadNameSet(ctx *ExecContext, docType string) *nameSet {
 		names = buildWorkflowQualifiedNames(ctx)
 	}
 	return newNameSet(names)
+}
+
+// namedNameSet is the names of one kind that a lookup of target can match:
+// the elements whose own name folds to target's. A statement looks up one
+// qualified name, and names compare with case folded, so those are the whole
+// set its lookups can find. loadNameSet builds, and folds, the qualified name
+// of every element of the kind in the project for the same answer, once per
+// kind per statement — a few milliseconds and the garbage of 5,000 names for
+// each `create or modify microflow` in a project of that size
+// (ako/mxcli#2160).
+//
+// The filter is strings.EqualFold where the set folds with strings.ToLower.
+// Two names with the same ToLower are EqualFold, so nothing the set would
+// have matched is left out.
+//
+// nil when it does not apply — a kind not listed here, or no target — and the
+// caller lists.
+func namedNameSet(ctx *ExecContext, kind, target string) *nameSet {
+	i := strings.Index(target, ".")
+	if i <= 0 {
+		return nil
+	}
+	short := target[i+1:]
+	names := map[string]bool{}
+	add := func(h *ContainerHierarchy, containerID model.ID, name string) {
+		if strings.EqualFold(name, short) {
+			names[h.GetQualifiedName(containerID, name)] = true
+		}
+	}
+	switch kind {
+	case "microflow":
+		h, err := getHierarchy(ctx)
+		if err != nil {
+			return newNameSet(nil)
+		}
+		mfs, err := microflowHeadersNamedFold(ctx, short)
+		if err != nil {
+			return newNameSet(nil)
+		}
+		for _, mf := range mfs {
+			add(h, mf.ContainerID, mf.Name)
+		}
+		// As buildMicroflowQualifiedNames: the platform's own, only beside a
+		// listing that has an answer. Whether it has one is only asked when
+		// the target is one of them.
+		for _, qn := range meta.SystemMicroflows {
+			if !strings.EqualFold(qn, target) {
+				continue
+			}
+			if all, err := microflowHeaders(ctx); err == nil && len(all) > 0 {
+				names[qn] = true
+			}
+		}
+	case "nanoflow":
+		h, err := getHierarchy(ctx)
+		if err != nil {
+			return newNameSet(nil)
+		}
+		nfs, err := projectNanoflows(ctx)
+		if err != nil {
+			return newNameSet(nil)
+		}
+		for _, nf := range nfs {
+			add(h, nf.ContainerID, nf.Name)
+		}
+	case "page":
+		h, err := getHierarchy(ctx)
+		if err != nil {
+			return newNameSet(nil)
+		}
+		pgs, err := projectPages(ctx)
+		if err != nil {
+			return newNameSet(nil)
+		}
+		for _, p := range pgs {
+			add(h, p.ContainerID, p.Name)
+		}
+	default:
+		return nil
+	}
+	return newNameSet(names)
+}
+
+// microflowHeaderFilter is a backend that lists the microflow headers a name
+// filter accepts without copying the header of every microflow.
+type microflowHeaderFilter interface {
+	ListMicroflowHeadersWhere(keep func(name string) bool) ([]types.DocumentHeader, error)
+}
+
+// microflowHeadersNamedFold is the headers of the microflows whose name
+// folds to short.
+func microflowHeadersNamedFold(ctx *ExecContext, short string) ([]types.DocumentHeader, error) {
+	keep := func(name string) bool { return strings.EqualFold(name, short) }
+	if l, ok := ctx.Backend.(microflowHeaderFilter); ok {
+		return l.ListMicroflowHeadersWhere(keep)
+	}
+	all, err := microflowHeaders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []types.DocumentHeader
+	for _, h := range all {
+		if keep(h.Name) {
+			out = append(out, h)
+		}
+	}
+	return out, nil
 }
 
 // domainModelNameSet is the entity or association names of the modules called
@@ -394,16 +504,28 @@ func refuseNameClash(ctx *ExecContext, stmt ast.Statement) error {
 	// scope is the module a create names. Its entity and association names are
 	// then read from that module's domain model alone (domainModelNameSet).
 	scope := ""
+	// target is the one qualified name this statement looks up: the name a
+	// create gives, or the one a rename or move would give.
+	target := ""
 	sets := func(kind string) *nameSet {
 		if s, ok := loaded[kind]; ok {
 			return s
 		}
 		s := domainModelNameSet(ctx, kind, scope)
 		if s == nil {
+			s = namedNameSet(ctx, kind, target)
+		}
+		if s == nil {
 			s = loadNameSet(ctx, kind)
 		}
 		loaded[kind] = s
 		return s
+	}
+	switch st := stmt.(type) {
+	case *ast.RenameStmt:
+		_, _, target, _ = renameTarget(st)
+	case *ast.MoveStmt:
+		_, _, target, _ = moveTarget(st)
 	}
 	switch stmt.(type) {
 	case *ast.RenameStmt, *ast.MoveStmt:
@@ -416,6 +538,7 @@ func refuseNameClash(ctx *ExecContext, stmt ast.Statement) error {
 	if i := strings.Index(name, "."); i > 0 {
 		scope = name[:i]
 	}
+	target = name
 	if c, ok := createClash(sets, docType, name); ok {
 		return mdlerrors.NewAlreadyExistsMsg(c.kind, c.stored, c.msg+" — "+c.hint)
 	}

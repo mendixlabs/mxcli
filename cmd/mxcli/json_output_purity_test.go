@@ -102,9 +102,10 @@ func TestJSONFlagKeepsStdoutPureJSON(t *testing.T) {
 		{name: "show entities", args: []string{"show", "entities"}},
 		{name: "show modules", args: []string{"show", "modules"}},
 		{name: "describe", args: []string{"describe", "entity", "System.User"}},
-		// Before the searches: a search builds the source index (ako/mxcli#2004),
-		// and this case is the empty answer of a catalog without one.
-		{name: "select, source-only table", args: []string{"-c", "select QualifiedName from CATALOG.source limit 1"}, empty: true},
+		// A query on a source-only table builds the source index it needs
+		// (ako/mxcli#2200); it used to answer [] from a catalog without one.
+		// The build's progress must stay off stdout.
+		{name: "select, source-only table", args: []string{"-c", "select QualifiedName from CATALOG.source limit 1"}},
 		{name: "search", args: []string{"search", "User"}},
 		{name: "search, nothing found", args: []string{"search", "zzqqxxnomatch"}, empty: true},
 		{name: "select", args: []string{"-c", "select Name from CATALOG.entities order by Name limit 3"}},

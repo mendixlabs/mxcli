@@ -367,6 +367,11 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 			}
 		}
 		exec = e
+		// check writes nothing, and its tiers each list the project's flows
+		// and pages: one span over all of them, so a unit is read once per
+		// run rather than once per tier (ako/mxcli#2160). The tiers' own
+		// spans nest inside it. Released before the deferred Close.
+		defer e.CacheUnitReads()()
 		if b := exec.Backend(); b != nil {
 			violations = executor.DropSettledCommitNotes(violations, prog, executor.NewStoredCommitEvents(b))
 			// MDL004 on a void microflow's end-event value is a warning for a flow

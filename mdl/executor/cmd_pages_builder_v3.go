@@ -2600,6 +2600,17 @@ func (pb *pageBuilder) resolveAssociationPathFrom(path, start string) (finalQN s
 		return "", nil, false
 	}
 
+	// `Module.Entity/Assoc/…/Attr`: a leading step naming the entity the path
+	// starts from — the way a microflow writes `$X/…` fully qualified — is the
+	// start itself. Unresolved, the whole string was written as one flat
+	// attribute and mxbuild aborted the build (ako/mxcli#2252). Only the start
+	// or a generalization of it, and only where no association has that name.
+	if len(segs) > 2 && strings.Count(segs[0], ".") == 1 && pb.entityIsOrDescendsFrom(current, segs[0]) {
+		if _, isAssoc := pb.associationDestination(pb.resolveAssociationPathIn(segs[0], current), current); !isAssoc {
+			segs = segs[1:]
+		}
+	}
+
 	steps = make([]pages.AttributeRefStep, 0, len(segs)-1)
 	afterAssociation := false
 	for _, seg := range segs[:len(segs)-1] {

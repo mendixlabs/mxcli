@@ -27,6 +27,12 @@ const StatsFileEnv = "MXCLI_STATS_FILE"
 // ProcessStats is one line of the stats file.
 type ProcessStats struct {
 	UnitFileReads int64 `json:"unit_file_reads"`
+	// UnitStoreHits is the reads served from the persisted unit store. With
+	// UnitFileReads it is every read not served from memory, so a command
+	// that reads a unit twice shows here even when no file was opened twice.
+	// Always written, zero included: a reader tells a command that made none
+	// from a binary too old to count them by whether the key is there.
+	UnitStoreHits int64 `json:"unit_store_hits"`
 	WritesOffered int   `json:"writes_offered"`
 	WritesWritten int   `json:"writes_written"`
 }
@@ -46,6 +52,9 @@ func disconnectBackend(b backend.FullBackend) error {
 	var stats ProcessStats
 	if r, ok := b.(interface{ UnitFileReads() int64 }); ok {
 		stats.UnitFileReads = r.UnitFileReads()
+	}
+	if r, ok := b.(interface{ UnitStoreHits() int64 }); ok {
+		stats.UnitStoreHits = r.UnitStoreHits()
 	}
 	err := b.Disconnect()
 	ws := currentWriteStats(b)
