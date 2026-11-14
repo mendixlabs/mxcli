@@ -22,13 +22,13 @@ func TestAccessRuleXPath_TokenTypes(t *testing.T) {
 		return strings.Join(accessRuleProblems(t, ctx, src), "\n")
 	}
 	for _, c := range []struct{ where, want string }{
-		{"[Title = '[%CurrentDateTime%]']", "[%CurrentDateTime%]"},   // date token on a String
+		{"[Title = '[%CurrentDateTime%]']", "[%CurrentDateTime%]"},     // date token on a String
 		{"[Title = '[%BeginOfCurrentDay%]']", "[%BeginOfCurrentDay%]"}, // date token on a String
-		{"[Title = '[%UserRole_User%]']", "[%UserRole_User%]"},       // role token on a String
-		{"[D = '[%UserRole_User%]']", "[%UserRole_User%]"},           // role token on a DateTime
-		{"[Cnt = '[%CurrentDateTime%]']", "[%CurrentDateTime%]"},     // quoted token on an Integer
-		{"[Cnt = '[%DayLength%]']", "[%DayLength%]"},                 // quoted token on an Integer
-		{"[M.E_Kid = '[%CurrentUser%]']", "M.Kid"},                   // leads to M.Kid, not a user
+		{"[Title = '[%UserRole_User%]']", "[%UserRole_User%]"},         // role token on a String
+		{"[D = '[%UserRole_User%]']", "[%UserRole_User%]"},             // role token on a DateTime
+		{"[Cnt = '[%CurrentDateTime%]']", "[%CurrentDateTime%]"},       // quoted token on an Integer
+		{"[Cnt = '[%DayLength%]']", "[%DayLength%]"},                   // quoted token on an Integer
+		{"[M.E_Kid = '[%CurrentUser%]']", "M.Kid"},                     // leads to M.Kid, not a user
 	} {
 		if got := problems(c.where); !strings.Contains(got, c.want) || !strings.Contains(got, "CE0161") {
 			t.Errorf("%s: want a CE0161 report naming %q, got:\n%s", c.where, c.want, got)
