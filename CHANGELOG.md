@@ -32,6 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`check` resolves the members a widget expression names** (ako/mxcli#2258) — `Visible: $currentObject/NoSuchAttr != empty`, the same in `Editable` and `DynamicClasses`, a page parameter's `$Product/NoSuchAttr`, and a bare association step (`$currentObject/Assoc/Attr`) passed `check` and `exec` and failed the build with CE0117. Each is now an error naming the entity's members, as microflow expressions already were. Widgets inside a list view's specialization template are judged against the specialization, not the list view's entity — which also removes seven false "no attribute" errors on Studio Pro-authored template pages.
+
 - **A catalog query builds what its tables need, after any change** (ako/mxcli#2200, mendixlabs/mxcli#1845) — once the project changed (every `exec` that writes), `SELECT … FROM CATALOG.ACTIVITIES`, refs, widgets and the graph views rebuilt the catalog in fast mode and answered empty or short, with only a warning to run `refresh catalog full`. A query now builds the mode its tables are filled by, incrementally — on TestApp, 0.4 s after one changed microflow against 3.6 s for a full build — and saves it as the cache. A stale catalog kept in memory within one session is rebuilt the same way.
 
 - **`check` refuses an audit field's declared name in a widget expression** (ako/mxcli#2253) — with `ChangedDate: AutoChangedDate` on the entity, `Visible: $currentObject/ChangedDate != empty` passed `check` and `exec` and failed the build with CE0117: the member is the system attribute. The error names the spelling that builds — `changedDate`, `createdDate`, `System.owner`, `System.changedBy` (measured on Mendix 11.12.6).
