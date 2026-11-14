@@ -15,17 +15,26 @@ import (
 )
 
 func init() {
-	// Every list in a DatabaseConnection tree uses the typed-array marker 2 (the
-	// legacy serializer prefixes each bson.A with int32(2)), both empty and
-	// populated. Register the per-child-$Type marker for the populated case and
-	// MandatoryListMarkers on the parents for the empty case. Mirrors the legacy
-	// serializer in sdk/mpr/writer_dbconnection.go field-for-field.
-	codec.RegisterListMarker("DatabaseConnector$DatabaseQuery", 2)
+	// A DatabaseConnection's Queries list is marker 3, empty or not; every other
+	// list in the tree (AdditionalProperties, a query's Parameters and
+	// TableMappings, a mapping's Columns) is marker 2. Measured (ako/mxcli#2256):
+	// Studio Pro 11.16.1 saving ChatV2's VectorDatabase (ChatV2 commit 5a85760,
+	// two queries) changed only Queries 2 -> 3; `mx convert` 11.16.0 rewriting a
+	// connection with no queries and one with a query did the same and nothing
+	// else. The 2 mxcli used to write for Queries came from the legacy
+	// serializer's initial commit, never from a measurement, and every exec of
+	// the defining script flipped Studio Pro's 3 back.
+	//
+	// Queries is registered per owner/key, so it covers the empty list and every
+	// write applies it to a stored list too (canon.NormalizeListMarkers): a
+	// connection an older mxcli stored with 2 gets 3 on its next write.
+	codec.RegisterMandatoryPropertyList("DatabaseConnector$DatabaseConnection", "Queries", 3)
+	codec.RegisterListMarker("DatabaseConnector$DatabaseQuery", 3)
 	codec.RegisterListMarker("DatabaseConnector$QueryParameter", 2)
 	codec.RegisterListMarker("DatabaseConnector$TableMapping", 2)
 	codec.RegisterListMarker("DatabaseConnector$ColumnMapping", 2)
 	codec.RegisterTypeDefaults("DatabaseConnector$DatabaseConnection", codec.TypeDefaults{
-		MandatoryListMarkers: map[string]int32{"Queries": 2, "AdditionalProperties": 2},
+		MandatoryListMarkers: map[string]int32{"AdditionalProperties": 2},
 	})
 	codec.RegisterTypeDefaults("DatabaseConnector$DatabaseQuery", codec.TypeDefaults{
 		MandatoryListMarkers: map[string]int32{"TableMappings": 2, "Parameters": 2},
