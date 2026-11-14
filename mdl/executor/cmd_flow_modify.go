@@ -325,7 +325,7 @@ func planFlowModify(ctx *ExecContext, d *flowDecl) (*flowPlan, error) {
 	// matches its stored one, so neither builtAsStored nor the statement diff
 	// could find a change.
 	sameBody := !headerChanged && declaredMatches(d.body, storedBody(stored))
-	if !sameBody && !builtAsStored(ctx, a, build) {
+	if !sameBody && !builtAsStored(ctx, d, a, build) {
 		// Members are compared in the spelling describe prints them in, or a
 		// script naming one another way never matches its own stored activity.
 		// Which entity a variable holds is the builder's to say where the
@@ -388,7 +388,7 @@ func planFlowModify(ctx *ExecContext, d *flowDecl) (*flowPlan, error) {
 // build, or a backend that cannot say how a flow reads back — including a
 // flow the reader would not read back whole, where both sides would compare
 // equal in what it drops — leaves it to the statement diff.
-func builtAsStored(ctx *ExecContext, a *alterFlowContext, build func() (any, []*microflows.MicroflowParameter, map[string]string, error)) bool {
+func builtAsStored(ctx *ExecContext, d *flowDecl, a *alterFlowContext, build func() (any, []*microflows.MicroflowParameter, map[string]string, error)) bool {
 	built, _, _, err := build()
 	if err != nil {
 		return false
@@ -413,7 +413,12 @@ func builtAsStored(ctx *ExecContext, a *alterFlowContext, build func() (any, []*
 	if oc == nil || a.mf.ObjectCollection == nil {
 		return false
 	}
-	same, _ := sameBuiltFlow(oc, a.mf.ObjectCollection)
+	if same, _ := sameBuiltFlow(oc, a.mf.ObjectCollection); same {
+		return true
+	}
+	// Drawn elsewhere by this release's layout pass, where the script states
+	// no position: the same graph all the same (ako/mxcli#2259).
+	same, _ := sameBuiltFlowUpToLayout(oc, a.mf.ObjectCollection, declaredLayout(d))
 	return same
 }
 
