@@ -12,6 +12,11 @@
 -- constraint." for a nested list's `where`. These slots are evaluated in the
 -- enclosing context, where dvP's object is $currentObject; `$dvP` is a
 -- variable only one data container deeper (cVisOuter builds clean).
+--
+-- ako/mxcli#2149: the data-source argument passing the bare `$dvP` (dvDsOwn) is
+-- now stored as a variable reference and builds with 0 errors on mx check
+-- 11.12.6 and 11.14.0; it is no longer flagged. The other slots are expression
+-- text and still fail on both.
 
 create module G52;
 create persistent entity G52.Gate (Name: String(50));
