@@ -167,8 +167,8 @@ func (v *attributeScopeValidator) judgeQualifiedPath(w *ast.WidgetV3, where, wri
 		stored = prefix + short
 	}
 	v.warns = append(v.warns, fmt.Sprintf(
-		"%s binds `%s`, which names an entity the path is already at; exec drops that step and stores "+
-			"the binding `%s` is — write that [%s]",
+		"%s binds `%s`, which repeats an entity the path is already at; exec stores it as `%s`, "+
+			"so write that instead [%s]",
 		subject, written, stored, qualifiedPathStoredRule))
 }
 
