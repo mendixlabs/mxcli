@@ -204,6 +204,24 @@ CE4899 "Empty caption" [MDL-I18N01]
 
 **Solution:** Change the default language before the script creates its pages, or give each caption a text in the new default after the change — `alter page … { set (Caption: '…') on <tab>; };` (or `alter snippet`) writes the default language. `alter settings language (DefaultLanguageCode: …)` prints the list when it runs, and `mxcli lint` reports the project's existing ones as **QUAL006**. A page the script creates or rewrites *after* the change is written in the new default and is not reported.
 
+### MDL-TOKEN01: A token Mendix does not have
+
+```
+✗ [%CurrentDateTim%] is not a Mendix token — did you mean [%CurrentDateTime%]?
+(mxbuild: CE0117 "Error(s) in expression.") [MDL-TOKEN01]
+```
+
+**Cause:** A `[%Token%]` whose name Mendix does not define where it is written. MDL reads any `[%…%]` as a token, so a typo used to pass `check` and `exec` and fail the build: CE0117 in an expression, CE0161 in an XPath constraint. The names were measured on Mendix 11.14, about 130 of them, each in a microflow, a nanoflow and an XPath. Names are case-sensitive.
+
+| Token | Expression (microflow, nanoflow) | XPath |
+|---|---|---|
+| `CurrentDateTime`, `BeginOfCurrent…` / `EndOfCurrent…` (Minute, Hour, Day, Week, Month, Year), `BeginOf…` / `EndOf…` (Tomorrow, Yesterday), each also with `UTC` | yes | yes |
+| `CurrentUser` | yes | yes |
+| `SecondLength` … `YearLength`, `UserRole_<role>` | no | yes |
+| `CurrentObject` | no | a page data source's, not a retrieve's |
+
+**Solution:** Use the suggested spelling, or the right token for the context: a length or role token only in an XPath, the flow's variable instead of `[%CurrentObject%]`. A role token's role name is checked separately, against the project's user roles (CE1613).
+
 ### MDL-DUPDEF: Element defined twice in one script
 
 ```
