@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
@@ -35,7 +36,7 @@ func describeMenu(ctx *ExecContext, name ast.QualifiedName) error {
 
 	if md.Documentation != "" {
 		fmt.Fprintf(ctx.Output, "/**\n * %s\n */\n",
-			strings.ReplaceAll(md.Documentation, "\n", "\n * "))
+			strings.ReplaceAll(doccomment.Escape(md.Documentation), "\n", "\n * "))
 	}
 
 	if md.Excluded {

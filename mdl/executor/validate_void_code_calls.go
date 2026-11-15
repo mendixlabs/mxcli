@@ -407,3 +407,40 @@ func (f *FlowRules) Close() {
 		f.b = nil
 	}
 }
+
+// describedCallIsVoid reports whether describe should treat a stored call to
+// the named microflow or nanoflow as a call to a flow KNOWN to return nothing.
+//
+// Studio Pro keeps a result variable name on such a call when the called flow
+// used to return a value (`variable`, UseReturnVariable=true) and does not show
+// it, since there is nothing to return. Describe printed it as an assignment,
+// `$variable = call microflow …`, naming a variable that does not exist
+// (mendixlabs/mxcli#1820, ako/mxcli#2138). A flow that cannot be found is not
+// known to be void: the stored name is printed as before.
+func describedCallIsVoid(ctx *ExecContext, nanoflow bool, qn string) bool {
+	if ctx == nil || ctx.Backend == nil || qn == "" {
+		return false
+	}
+	var r *voidCodeActions
+	if m := flowAnalysisOf(ctx); m != nil && m.voids != nil {
+		r = *m.voids
+		if r == nil {
+			r = newDescribeVoids(ctx)
+			*m.voids = r
+		}
+	} else {
+		r = newDescribeVoids(ctx)
+	}
+	v := r.resolveFlow(nanoflow, qn)
+	return v.known && v.void
+}
+
+// newDescribeVoids is the resolver describe reads stored flows through: the
+// project behind the context, with microflows found by ID (#1789).
+func newDescribeVoids(ctx *ExecContext) *voidCodeActions {
+	r := newVoidCodeActions(nil, func() backend.FullBackend { return ctx.Backend })
+	if h, err := getHierarchy(ctx); err == nil && h != nil {
+		r.microflowNames = func() map[model.ID]string { return getMicroflowNames(ctx, h) }
+	}
+	return r
+}

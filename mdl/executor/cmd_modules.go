@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
@@ -675,7 +676,7 @@ func describeModule(ctx *ExecContext, moduleName string, withAll bool) error {
 	// The module's documentation is its domain model's; print it as the doc
 	// comment that sets it, so the output re-run stores it (mendixlabs/mxcli#1314).
 	if dm, err := ctx.Backend.GetDomainModel(targetModule.ID); err == nil && dm != nil && dm.Documentation != "" {
-		fmt.Fprintf(ctx.Output, "/**\n * %s\n */\n", strings.ReplaceAll(dm.Documentation, "\n", "\n * "))
+		fmt.Fprintf(ctx.Output, "/**\n * %s\n */\n", strings.ReplaceAll(doccomment.Escape(dm.Documentation), "\n", "\n * "))
 	}
 	// Listed rather than got by module: the same read moduleProtection makes.
 	var settings *types.ModuleSettings
