@@ -214,6 +214,7 @@ func checkSetOp(ctx *ExecContext, p pageProbe, label string, op *ast.SetProperty
 		for _, msg := range setImageRefErrors(ctx, p, op.Target, name, op.Properties[name], sc) {
 			errs = append(errs, mdlerrors.NewValidation(fmt.Sprintf("%s: %s", label, msg)))
 		}
+		judgeSetInputAttributePath(ctx, p, op.Target, name, op.Properties[name], sc)
 	}
 	// A column's properties are then judged TOGETHER, with the follow-up that
 	// resets what the widget now hides: `ColumnWidth: autoFill, Size: 220` is
@@ -400,4 +401,41 @@ func documentsTheScriptAddsWidgetsTo(prog *ast.Program) map[string]bool {
 		}
 	}
 	return grows
+}
+
+// judgeSetInputAttributePath judges a built-in input's `set (attribute: …)`
+// path as create page's check judges the same path on the same widget
+// (checkQualifiedAttributePaths): a qualified form exec normalises warns
+// MDL-ATTRPATH01 with what exec stores (ako/mxcli#2278). Only the warning is
+// taken: a path exec refuses — MDL-ATTRPATH02 included — is already reported
+// by the dry run above, with exec's own message.
+func judgeSetInputAttributePath(ctx *ExecContext, p pageProbe, target ast.WidgetRef, prop string, value any, sc *scriptContext) {
+	attr, ok := value.(string)
+	if sc == nil || !ok || !strings.EqualFold(prop, "Attribute") || target.Widget == "" || target.IsColumn() ||
+		target.Item != nil || !strings.Contains(attr, "/") {
+		return
+	}
+	probe, err := p.Probe()
+	if err != nil {
+		return
+	}
+	entity := probe.EnclosingEntity(target.Widget)
+	if entity == "" {
+		return
+	}
+	kind, _ := p.WidgetStorageType(target.Widget)
+	if i := strings.LastIndex(kind, "$"); i >= 0 {
+		kind = kind[i+1:]
+	}
+	v := &attributeScopeValidator{
+		types:           checkMemberTypeIndex(ctx, sc),
+		pb:              &pageBuilder{ctx: ctx, backend: ctx.Backend, execCache: ctx.Cache},
+		generalizations: sc.entityGeneralizations,
+	}
+	path := strings.TrimPrefix(strings.TrimSpace(attr), "$currentObject/")
+	if strings.HasPrefix(path, "$") {
+		return
+	}
+	v.judgeQualifiedPath(&ast.WidgetV3{Name: target.Widget, Type: kind}, "", attr, path, entity)
+	sc.warnings = append(sc.warnings, v.warns...)
 }
