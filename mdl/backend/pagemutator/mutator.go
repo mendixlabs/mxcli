@@ -4077,22 +4077,34 @@ func setWidgetLabelMut(widget bson.D, value any) error {
 	return fmt.Errorf("widget has no Label property")
 }
 
+// setWidgetAttributeRefMut writes a built-in input widget's AttributeRef. The
+// executor hands it a backend.AttributeBinding resolved by create page's rule
+// — the final attribute plus the association hops, written as the EntityRef
+// exactly as create page writes `Assoc/Attr` (ako/mxcli#2278). A plain string
+// is still taken as an already-qualified attribute. A value that is not a
+// qualified attribute is refused: it used to be stored as a null AttributeRef,
+// leaving the input bound to nothing while ALTER reported success.
 func setWidgetAttributeRefMut(widget bson.D, value any) error {
-	attrPath, ok := value.(string)
-	if !ok {
+	var b backend.AttributeBinding
+	switch v := value.(type) {
+	case backend.AttributeBinding:
+		b = v
+	case string:
+		b = backend.AttributeBinding{Path: v}
+	default:
 		return fmt.Errorf("Attribute value must be a string")
 	}
-
-	var attrRefValue any
-	if strings.Count(attrPath, ".") >= 2 {
-		attrRefValue = bson.D{
-			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
-			{Key: "$Type", Value: "DomainModels$AttributeRef"},
-			{Key: "Attribute", Value: attrPath},
-			{Key: "EntityRef", Value: nil},
-		}
-	} else {
-		attrRefValue = nil
+	if b.SourceVariable != nil {
+		return fmt.Errorf("an input's attribute read from a parameter cannot be set in place — replace the widget instead")
+	}
+	if strings.Count(b.Path, ".") < 2 || strings.Contains(b.Path, "/") {
+		return fmt.Errorf("attribute %q is not a qualified attribute of the widget's entity", b.Path)
+	}
+	attrRefValue := bson.D{
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
+		{Key: "$Type", Value: "DomainModels$AttributeRef"},
+		{Key: "Attribute", Value: b.Path},
+		{Key: "EntityRef", Value: widgetobj.AttributeEntityRefBSON(b.Steps)},
 	}
 
 	for i, elem := range widget {

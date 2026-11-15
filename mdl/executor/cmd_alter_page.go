@@ -580,6 +580,16 @@ func applySetProperties(ctx *ExecContext, mutator backend.PageMutator, op *ast.S
 			if err != nil {
 				return err
 			}
+			// A built-in input's `Attribute:` — the value passed through the
+			// pluggable resolver unchanged — is bound by create page's rule
+			// (ako/mxcli#2278).
+			if s, isString := resolved.(string); isString && strings.EqualFold(propName, "Attribute") && op.Target.Widget != "" {
+				b, err := resolveInputSetAttribute(ctx, mutator, op.Target.Widget, s, moduleName, moduleID)
+				if err != nil {
+					return err
+				}
+				resolved = b
+			}
 			if err := mutator.SetWidgetProperty(op.Target.Widget, propName, resolved); err != nil {
 				return mdlerrors.NewBackend("set "+propName+" on "+op.Target.Name(), err)
 			}
