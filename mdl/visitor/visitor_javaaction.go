@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/codesection"
 	"github.com/mendixlabs/mxcli/mdl/grammar/parser"
 )
 
@@ -162,7 +163,9 @@ func (b *Builder) ExitCreateJavaScriptActionStatement(ctx *parser.CreateJavaScri
 	}
 
 	if body := ctx.SourceCodeText(); body != nil {
-		stmt.JavaScriptCode = strings.TrimSpace(sourceCodeTextValue(body))
+		// Relative: trimming only the first line's indentation kept every
+		// other line's, and the writer's tab then went on top (ako/mxcli#2131).
+		stmt.JavaScriptCode = codesection.Normalize(sourceCodeTextValue(body))
 	}
 
 	if parent, ok := ctx.GetParent().(*parser.CreateStatementContext); ok {
@@ -248,7 +251,7 @@ func extractJavaImports(code string) (body string, imports []string) {
 			bodyLines = append(bodyLines, line)
 		}
 	}
-	return strings.TrimSpace(strings.Join(bodyLines, "\n")), imports
+	return codesection.Normalize(strings.Join(bodyLines, "\n")), imports
 }
 
 // sourceCodeTextValue is the text of a Java or JavaScript action's source

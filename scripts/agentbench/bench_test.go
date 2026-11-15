@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -34,6 +35,14 @@ func fakeMxcli(t *testing.T, name, slowOn, failOn, writeOn string) string {
 // which the driver ran two binaries can be read back.
 func fakeMxcliLogging(t *testing.T, name, slowOn, failOn, writeOn, callLog string) string {
 	t.Helper()
+	return fakeMxcliScript(t, name, slowOn, failOn, writeOn, callLog, fakeBase, fakeSlow)
+}
+
+// The fake's pace: every command sleeps base, and a slowOn command slow on top.
+const fakeBase, fakeSlow = "0.03", "0.25"
+
+func fakeMxcliScript(t *testing.T, name, slowOn, failOn, writeOn, callLog, base, slow string) string {
+	t.Helper()
 	script := fmt.Sprintf(`#!/bin/sh
 if [ "$1" = version ]; then echo "mxcli version %[1]s"; exit 0; fi
 match() { [ -n "$1" ] && case "$ARGS" in *"$1"*) return 0;; esac; return 1; }
@@ -49,20 +58,32 @@ done
 if [ -n "$outdir" ]; then
   mkdir -p "$outdir/mprcontents" && echo mpr > "$outdir/App.mpr" && echo unit > "$outdir/mprcontents/unit.mxunit"
 fi
-sleep 0.03
-if match %[2]q; then sleep 0.25; fi
+sleep %[6]s
+if match %[2]q; then sleep %[7]s; fi
 if match %[3]q; then echo "unknown statement" >&2; exit 3; fi
 if match %[4]q; then date +%%s%%N >> "$(dirname "$project")/mprcontents/unit.mxunit"; fi
 if [ -n "$MXCLI_STATS_FILE" ]; then
   echo '{"unit_file_reads":7,"writes_offered":2,"writes_written":1}' >> "$MXCLI_STATS_FILE"
 fi
 echo ok
-`, name, slowOn, failOn, writeOn, callLog)
+`, name, slowOn, failOn, writeOn, callLog, base, slow)
 	path := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	if err := writeExecutable(path, []byte(script)); err != nil {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// writeExecutable writes a script the test is about to run, with no fork in
+// flight while its file is open for writing. A process forked from a parallel
+// test meanwhile inherits that descriptor until it execs, and running the script
+// then fails with "text file busy" (ETXTBSY, golang/go#22315): the nightly saw
+// it as `fork/exec …/candidate: text file busy`. syscall.ForkLock is the lock
+// fork takes, held here for reading.
+func writeExecutable(path string, data []byte) error {
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+	return os.WriteFile(path, data, 0o755)
 }
 
 // fakeProject is the smallest thing the driver accepts as a base project.
@@ -103,11 +124,22 @@ func stepNamed(t *testing.T, s sessionResult, name string) stepResult {
 // reported slower in that step and in no other. The control is the baseline,
 // which is the same script without the delay — so a driver that flagged
 // nothing, or everything, fails here.
+//
+// "In no other" is a claim about the machine as much as the driver: a step is
+// flagged when two of its three paired runs are threshold times the
+// baseline's, so a stall in the candidate's command alone can flag a step that
+// did not change. At 30 ms a command and the 1.5 the other tests use, the
+// nightly flagged one ([domain rename]) while integration packages loaded the
+// runner. So here a command takes 150 ms, the threshold is 3 (the slowed step
+// reads about 7), and the test does not run beside the package's other forking
+// tests: a false flag needs the candidate to stall some 300 ms more than three
+// times the baseline did, twice in three pairs.
 func TestRun_FlagsExactlyTheStepThatGotSlower(t *testing.T) {
-	t.Parallel()
-	candidate := fakeMxcli(t, "candidate", "rename entity", "", "")
-	baseline := fakeMxcli(t, "baseline", "", "", "")
-	sessions, err := run(testConfig(t, candidate, baseline))
+	candidate := fakeMxcliScript(t, "candidate", "rename entity", "", "", "", "0.15", "0.9")
+	baseline := fakeMxcliScript(t, "baseline", "", "", "", "", "0.15", "0.9")
+	cfg := testConfig(t, candidate, baseline)
+	cfg.threshold = 3
+	sessions, err := run(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,8 +152,8 @@ func TestRun_FlagsExactlyTheStepThatGotSlower(t *testing.T) {
 	if want := []string{"rename"}; !slices.Equal(slower, want) {
 		t.Fatalf("flagged slower: %v, want %v", slower, want)
 	}
-	if r := stepNamed(t, sessions[0], "rename").WallRatio; r < 3 {
-		t.Errorf("rename ratio %.2f, want a 250 ms delay on a 30 ms command to read well above 3", r)
+	if r := stepNamed(t, sessions[0], "rename").WallRatio; r < 5 {
+		t.Errorf("rename ratio %.2f, want a 900 ms delay on a 150 ms command to read well above the threshold of 3", r)
 	}
 }
 
