@@ -896,6 +896,7 @@ func buildListOperationStatement(ctx parser.IListOperationStatementContext) *ast
 	// which, exactly as the flow builder has always decided (ast.IsMemberEquality).
 	defer func() {
 		if stmt.Operation == ast.ListOpFind || stmt.Operation == ast.ListOpFilter {
+			stmt.Condition = ast.MemberEqualityCondition(stmt.Condition) // ako/mxcli#1943
 			stmt.ByExpression = !ast.IsMemberEquality(stmt.Condition)
 		}
 	}()

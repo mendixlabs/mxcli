@@ -102,6 +102,11 @@ func buildListOperationActivity(act *parser.ListOperationActivityContext, stmt *
 		}
 		stmt.Condition = buildSourceExpression(c.Expression())
 		stmt.ByExpression = c.WHERE() != nil
+		if !stmt.ByExpression {
+			// `by Number = $N-1`: the value keeps its spelling, the condition
+			// stays a member equality (ako/mxcli#1943).
+			stmt.Condition = ast.MemberEqualityCondition(stmt.Condition)
+		}
 	}
 	switch {
 	case act.HEAD() != nil:
