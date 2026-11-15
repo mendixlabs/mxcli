@@ -515,6 +515,10 @@ func applySetProperties(ctx *ExecContext, mutator backend.PageMutator, op *ast.S
 					return err
 				}
 				value = b
+			} else if expr, ok := value.(*ast.WidgetExpressionV3); ok {
+				// `$Param.Attr` / `Assoc/Attr` bind an attribute; any other
+				// column property was stringified into "&{…}" (ako/mxcli#2283).
+				return mdlerrors.NewValidationf("column property %s takes a plain value, not an expression: %s", propName, expr.Text)
 			}
 			if err := mutator.SetColumnProperty(op.Target.Widget, columnRefOf(op.Target), propName, value); err != nil {
 				return mdlerrors.NewBackend("set "+propName+" on "+op.Target.Name(), err)

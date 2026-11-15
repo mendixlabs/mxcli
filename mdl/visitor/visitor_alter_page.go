@@ -4,6 +4,7 @@ package visitor
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -160,6 +161,12 @@ func (b *Builder) buildAlterPageAssignment(ctx *parser.AlterPageAssignmentContex
 			// parameter (ako/mxcli#1622); the executor, which knows the
 			// property's kind, resolves or refuses it.
 			if text := stripExpressionIdentifierQuotes(ruleSourceText(expr.(antlr.ParserRuleContext))); ast.IsParameterAttributeText(text) {
+				return name, &ast.WidgetExpressionV3{Text: text}
+			}
+			// `Assoc/…/Attr` binds an attribute property over associations, as
+			// CREATE PAGE takes it (ako/mxcli#2283); parsed as a division, it
+			// reaches the executor as text, which resolves or refuses it.
+			if text, ok := attributePathText(expr); ok {
 				return name, &ast.WidgetExpressionV3{Text: text}
 			}
 			b.addError(widgetExpressionNotAllowed(name, expr))
@@ -480,4 +487,27 @@ func (b *Builder) exitAlterPagesStylingStatement(ctx *parser.AlterPagesStylingSt
 	}
 
 	b.statements = append(b.statements, stmt)
+}
+
+// attributePathSegment is one segment of an attribute path: a name, quoted
+// when it is a keyword, and module-qualified on a hop.
+const attributePathSegment = `(?:[A-Za-z_][A-Za-z0-9_]*|"[A-Za-z_][A-Za-z0-9_]*")`
+
+// attributePathTextRe is `Assoc/…/Attr` (attributePathV3 with at least one
+// hop), optionally read from `$currentObject/`, and nothing else.
+var attributePathTextRe = regexp.MustCompile(`^(?:\$currentObject\s*/\s*)?(?:` + attributePathSegment +
+	`(?:\.` + attributePathSegment + `)?\s*/\s*)+` + attributePathSegment + `$`)
+
+// attributePathText is the path an expression spells, identifier quotes and
+// the spaces around each `/` removed; ok is false for any other expression.
+func attributePathText(expr parser.IExpressionContext) (string, bool) {
+	raw := strings.TrimSpace(ruleSourceText(expr.(antlr.ParserRuleContext)))
+	if !attributePathTextRe.MatchString(raw) {
+		return "", false
+	}
+	segs := strings.Split(raw, "/")
+	for i, seg := range segs {
+		segs[i] = strings.TrimSpace(seg)
+	}
+	return stripExpressionIdentifierQuotes(strings.Join(segs, "/")), true
 }
