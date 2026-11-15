@@ -53,10 +53,10 @@ import (
 //
 // Could-not-establish is silence: an attribute reached over a path, an
 // inherited one, one of a kind not measured (AutoNumber, HashedString, Binary,
-// Date), an entity the script alters, a token other than [%CurrentUser%] (a
-// date token compared with a number was measured as CE0161 too, but the token
-// vocabulary is not modelled here), and an enumeration whose values neither the
-// script nor the project states.
+// Date), an entity the script alters, a token pairing xpathTokenTypeProblem has
+// not measured (the date, length and role tokens it judges are ako/mxcli#2189's
+// measurements), and an enumeration whose values neither the script nor the
+// project states.
 
 // accessRuleVariableRule reports a variable in an access rule. A flow, a page
 // and a user task have variables to hand an XPath constraint; an access rule
@@ -199,17 +199,30 @@ func walkXPathLiteralComparisons(e ast.Expression, fn func(attr, op string, lit 
 			walkXPathLiteralComparisons(x.Left, fn)
 			walkXPathLiteralComparisons(x.Right, fn)
 		case "=", "!=", "<>", "<", ">", "<=", ">=":
-			if id, ok := x.Left.(*ast.IdentifierExpr); ok {
+			if name, ok := xpathMemberName(x.Left); ok {
 				if lit, ok := xpathLiteralOf(x.Right); ok {
-					fn(id.Name, op, lit)
+					fn(name, op, lit)
 				}
-			} else if id, ok := x.Right.(*ast.IdentifierExpr); ok {
+			} else if name, ok := xpathMemberName(x.Right); ok {
 				if lit, ok := xpathLiteralOf(x.Left); ok {
-					fn(id.Name, op, lit)
+					fn(name, op, lit)
 				}
 			}
 		}
 	}
+}
+
+// xpathMemberName is the member a comparison operand names: a bare attribute,
+// or a qualified association (`M.E_Kid`, which the parser reads as a qualified
+// name rather than an identifier).
+func xpathMemberName(e ast.Expression) (string, bool) {
+	switch x := e.(type) {
+	case *ast.IdentifierExpr:
+		return x.Name, true
+	case *ast.QualifiedNameExpr:
+		return x.QualifiedName.String(), true
+	}
+	return "", false
 }
 
 // literalTypeProblems reports each literal in the constraint whose type the
@@ -229,6 +242,12 @@ func (g *grantResolver) literalTypeProblems(entityQN, constraint string) []strin
 		walkXPathLiteralComparisons(expr, func(attr, op string, lit xpathLiteral) {
 			at, ok := retrieveAttributeType(g.ctx, g.whole, entityQN, attr)
 			if !ok {
+				// Not an attribute: `[M.Assoc = '[%CurrentUser%]']` compares an
+				// association with the current user (ako/mxcli#2189).
+				if p := g.currentUserAssociationProblem(entityQN, attr, lit); p != "" && !seen[p] {
+					seen[p] = true
+					out = append(out, p)
+				}
 				return
 			}
 			msg := g.literalTypeProblem(at, op, lit)
@@ -258,7 +277,7 @@ func (g *grantResolver) literalTypeProblem(at ast.DataType, op string, lit xpath
 			"(or System.owner), not with an attribute value"
 	}
 	if lit.class == "string" && strings.Contains(lit.value, "[%") {
-		return "" // another token: its type is not modelled here
+		return xpathTokenTypeProblem(class, lit.value)
 	}
 	switch class {
 	case "string":
@@ -293,6 +312,90 @@ func (g *grantResolver) literalTypeProblem(at ast.DataType, op string, lit xpath
 			enumQN, lit.value, strings.Join(values, ", "))
 	}
 	return ""
+}
+
+// xpathTokenRE is a whole XPath token, `[%Name%]`; one inside a longer value
+// (date arithmetic) is not judged.
+var xpathTokenRE = regexp.MustCompile(`^\[%([A-Za-z_][A-Za-z0-9_]*)%\]$`)
+
+var (
+	xpathDateTokenRE   = regexp.MustCompile(`^(CurrentDateTime|(Begin|End)OfCurrent(Minute|Hour|Day|Week|Month|Year)(UTC)?)$`)
+	xpathLengthTokenRE = regexp.MustCompile(`^(Second|Minute|Hour|Day|Week|Month|Year)Length$`)
+)
+
+// xpathTokenTypeProblem is why a quoted token does not compare with an
+// attribute of operand class class, or "" when it does or that has not been
+// measured (ako/mxcli#2189). Measured with mx check on 11.14.0, security level
+// Production — each CE0161 "Error(s) in XPath constraint.":
+//
+//	date token   ('[%CurrentDateTime%]', '[%BeginOfCurrentDay%]')  on a String, on an Integer
+//	length token ('[%DayLength%]')                                  on an Integer
+//	role token   ('[%UserRole_User%]')                              on a String, on a DateTime
+//
+// and clean: a date token on a DateTime (=, >). Every other pairing is left to
+// mxbuild.
+func xpathTokenTypeProblem(class, value string) string {
+	m := xpathTokenRE.FindStringSubmatch(value)
+	if m == nil {
+		return ""
+	}
+	name := m[1]
+	switch {
+	case xpathDateTokenRE.MatchString(name):
+		switch class {
+		case "string":
+			return value + " is a date and time, and a String attribute compares with a quoted string"
+		case "number":
+			return value + " is a date and time; a number attribute compares with an unquoted number"
+		}
+	case xpathLengthTokenRE.MatchString(name):
+		if class == "number" {
+			return value + " is quoted, so it is a string; a number attribute compares with an unquoted number"
+		}
+	case strings.HasPrefix(name, "UserRole_"):
+		switch class {
+		case "string", "datetime":
+			return value + " is a user role, which compares with System.UserRoles, not with an attribute value"
+		}
+	}
+	return ""
+}
+
+// currentUserAssociationProblem is why `[<assoc> = '[%CurrentUser%]']` fails,
+// or "": the current user is a System.User, so the association must lead to
+// System.User or a specialization of it. Measured on 11.14.0: an association to
+// another entity is CE0161; one to System.User, or to Administration.Account
+// (which extends it), is clean. An association or a destination that cannot be
+// established is not judged.
+func (g *grantResolver) currentUserAssociationProblem(entityQN, attr string, lit xpathLiteral) string {
+	if lit.class != "string" || lit.value != "[%CurrentUser%]" || strings.Count(attr, ".") != 1 {
+		return ""
+	}
+	dest := ""
+	if g.whole != nil {
+		if ends, ok := g.whole.associationEnds[strings.ToLower(attr)]; ok {
+			switch entityQN {
+			case ends[0]:
+				dest = ends[1]
+			case ends[1]:
+				dest = ends[0]
+			}
+		}
+	}
+	if dest == "" {
+		to, res := resolveAssociationFrom(g.ctx, attr, entityQN)
+		if res != assocResolved {
+			return ""
+		}
+		dest = to
+	}
+	chain, complete := scriptGeneralizationChain(g.ctx, g.whole, dest)
+	if slices.Contains(chain, "System.User") || !complete {
+		return ""
+	}
+	return fmt.Sprintf("the access rule's constraint compares %s with '[%%CurrentUser%%]' — %s leads to %s, and the "+
+		"current user is a System.User: compare an association to System.User (or to an entity that extends it); "+
+		"mxbuild rejects the constraint with CE0161 \"Error(s) in XPath constraint.\"", attr, attr, dest)
 }
 
 // enumValues is an enumeration's value names as the script leaves them, or the

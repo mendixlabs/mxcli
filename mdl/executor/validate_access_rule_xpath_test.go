@@ -138,10 +138,9 @@ func TestAccessRuleXPath_LegalTwinsPass(t *testing.T) {
 		{"M.E", "[Cnt = empty]"},
 		{"M.E", "[Status = empty]"},
 		{"M.E", "[Status = 'Red' and Cnt = 5 and Flag = 'false' and D = '2020-01-01' and Title = 'x']"},
-		// Not established, so not judged: a token other than CurrentUser on a
-		// number (measured CE0161, but the token vocabulary is not modelled),
-		// and an attribute reached over a path.
-		{"M.E", "[Cnt = '[%DayLength%]']"},
+		// Not established, so not judged: an attribute reached over a path. (A
+		// quoted token on a number, measured CE0161, is judged since #2189 —
+		// validate_access_rule_tokens_2189_test.go.)
 		{"M.E", "[M.E_Kid/M.Kid/Name = 5]"},
 	}
 	ctx := accessRuleCtx(t)
