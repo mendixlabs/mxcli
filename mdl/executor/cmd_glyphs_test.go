@@ -58,7 +58,7 @@ func TestListGlyphs_UnfilteredListsTheWholeFont(t *testing.T) {
 	if err := listGlyphs(ctx, ""); err != nil {
 		t.Fatalf("listGlyphs: %v", err)
 	}
-	if !strings.Contains(out.String(), "247") {
+	if !strings.Contains(out.String(), "258") {
 		t.Errorf("the summary does not report the full count:\n%s",
 			lastLine(out.String()))
 	}
@@ -72,7 +72,7 @@ func TestListGlyphs_EmptyResultNamesTheSearch(t *testing.T) {
 		t.Fatalf("listGlyphs: %v", err)
 	}
 	got := out.String()
-	if !strings.Contains(got, "definitely-not-an-icon") || !strings.Contains(got, "247") {
+	if !strings.Contains(got, "definitely-not-an-icon") || !strings.Contains(got, "258") {
 		t.Errorf("an empty result does not say what was searched or how many exist:\n%s", got)
 	}
 }
