@@ -25,7 +25,9 @@ import "github.com/mendixlabs/mxcli/mdl/ast"
 //
 //   - An `if` with an empty `else` and the same `if` with none. Both build a
 //     split whose false flow goes on to what follows; describe drops the
-//     empty else, so the canonical form has none (ako/mxcli#942).
+//     empty else, so the canonical form has none (ako/mxcli#942) — in an
+//     activity's error handler as well, where describe prints the empty
+//     else (ako/mxcli#2259).
 //
 //   - A `join L` directly followed by its own `merge L`, where nothing else
 //     joins L. Falling through into a merge and joining it are the same flow,
@@ -110,6 +112,12 @@ func canonicalNested(st ast.MicroflowStatement, joins map[string]int) ast.Microf
 		c.ElseBody = canonicalList(s.ElseBody, joins)
 		return &c
 	}
+	// An activity's custom error handler is a statement list like a branch:
+	// describe prints an `if` in it with an empty else, the script states
+	// none, and the two build the same graph (ako/mxcli#2259).
+	if eh := errorHandling(st); eh != nil && len(eh.Body) > 0 {
+		return withHandlerBody(st, canonicalList(eh.Body, joins))
+	}
 	return st
 }
 
@@ -136,6 +144,12 @@ func countJoins(stmts []ast.MicroflowStatement, joins map[string]int) {
 				countJoins(k.Body, joins)
 			}
 			countJoins(s.ElseBody, joins)
+		default:
+			// A handler's `join` counts as any other: a label joined from a
+			// handler as well is a real join point.
+			if eh := errorHandling(st); eh != nil {
+				countJoins(eh.Body, joins)
+			}
 		}
 	}
 }
