@@ -1,0 +1,14 @@
+-- ako/mxcli#2271, negative test (.fail.mdl): `make check-mdl` expects
+-- `mxcli check` to FAIL on this file.
+--
+-- `[%CurrentDateTim%]` is not a Mendix token. It passed check and exec, and mx
+-- check (11.14.0) reported CE0117 "Error(s) in expression.". It is now
+-- MDL-TOKEN01, with "did you mean [%CurrentDateTime%]?". The positive twin is
+-- 2271-token-names.mdl.
+mdl 1;
+
+create module BugTokens2271Fail;
+
+create microflow BugTokens2271Fail.ACT_Typo () begin
+  declare $now DateTime = [%CurrentDateTim%];
+end;

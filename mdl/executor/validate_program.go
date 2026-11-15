@@ -89,6 +89,10 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 		violations = append(violations, validateEnumValueDocs(stmt)...)
 		violations = append(violations, validateMenuItemIcons(stmt)...)
 		violations = append(violations, validateGlyphCodes(stmt)...)
+		// A `[%Token%]` whose name Mendix does not have where it is written:
+		// lexed whatever the name, so a typo passed check and exec and the build
+		// refused it, CE0117 or CE0161 (MDL-TOKEN01, ako/mxcli#2271).
+		violations = append(violations, validateTokenNames(stmt)...)
 		// A layout must declare exactly one placeholder named `Main`, with unique
 		// names (MDL081/MDL082). mxbuild validates this — CE0848/CE0849/CE0495 —
 		// and nothing before it resolves a placeholder name, so the reported
