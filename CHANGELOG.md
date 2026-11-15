@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-15
+
+Headline: **Much faster on large projects, and far more of the model visible to lint rules and the catalog.** Parsing MDL is several times faster and `check`, `create` and `exec` stop decoding the whole project per statement; `run --local --watch` applies a change in about 5 s instead of 20-28 s; `mxcli test --attach` runs a test with no build at all. Lint rules gain workflow activities, sequence flows, annotations, folders, jar files and widget captions, the catalog gains the agent tables, and a long run of fixes makes `check` refuse what the build would refuse and `describe` → `exec` round trips leave pages and flows untouched. The catalog schema moves to version 48.
+
 ### Added
 
 - **`mxcli check` warns when an agent's name, Description or tool text is longer than Agent Commons stores** (ako/mxcli#2211) — MDL-AGENT04: name over 50 characters (`AgentCommons.Agent.Title`), Description over 200, a tool's name or DisplayTitle over 200 or its Description over 4096 fail Agent Editor's startup import, and the previous version of the agent stays in use while check, exec and mx check are clean.
