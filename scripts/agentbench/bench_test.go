@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -59,10 +60,22 @@ fi
 echo ok
 `, name, slowOn, failOn, writeOn, callLog)
 	path := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	if err := writeExecutable(path, []byte(script)); err != nil {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// writeExecutable writes a script the test is about to run, with no fork in
+// flight while its file is open for writing. A process forked from a parallel
+// test meanwhile inherits that descriptor until it execs, and running the script
+// then fails with "text file busy" (ETXTBSY, golang/go#22315): the nightly saw
+// it as `fork/exec …/candidate: text file busy`. syscall.ForkLock is the lock
+// fork takes, held here for reading.
+func writeExecutable(path string, data []byte) error {
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+	return os.WriteFile(path, data, 0o755)
 }
 
 // fakeProject is the smallest thing the driver accepts as a base project.
