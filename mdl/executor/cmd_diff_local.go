@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	"github.com/mendixlabs/mxcli/modelsdk/bsoncompat"
 	"os"
 	"os/exec"
@@ -627,7 +628,7 @@ func entityBsonToMDL(ctx *ExecContext, raw map[string]any, qualifiedName string)
 	// Documentation
 	if doc := extractString(raw["Documentation"]); doc != "" {
 		lines = append(lines, "/**")
-		lines = append(lines, " * "+doc)
+		lines = append(lines, " * "+strings.ReplaceAll(doccomment.Escape(doc), "\n", "\n * "))
 		lines = append(lines, " */")
 	}
 
@@ -844,7 +845,7 @@ func enumerationBsonToMDL(_ *ExecContext, raw map[string]any, qualifiedName stri
 
 	if doc := extractString(raw["Documentation"]); doc != "" {
 		lines = append(lines, "/**")
-		lines = append(lines, " * "+doc)
+		lines = append(lines, " * "+strings.ReplaceAll(doccomment.Escape(doc), "\n", "\n * "))
 		lines = append(lines, " */")
 	}
 
@@ -969,7 +970,7 @@ func docCommentLines(doc string) []string {
 		return nil
 	}
 	lines := []string{"/**"}
-	for line := range strings.SplitSeq(doc, "\n") {
+	for line := range strings.SplitSeq(doccomment.Escape(doc), "\n") {
 		lines = append(lines, " * "+line)
 	}
 	return append(lines, " */")
@@ -1015,7 +1016,7 @@ func moduleBsonToMDL(_ *ExecContext, raw map[string]any) string {
 
 	if doc := extractString(raw["Documentation"]); doc != "" {
 		lines = append(lines, "/**")
-		lines = append(lines, " * "+doc)
+		lines = append(lines, " * "+strings.ReplaceAll(doccomment.Escape(doc), "\n", "\n * "))
 		lines = append(lines, " */")
 	}
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
@@ -292,7 +293,7 @@ func describeEntityWith(ctx *ExecContext, name ast.QualifiedName, withGrants boo
 					// as the gutter, so anything else needs the guttered block
 					// or a markdown bullet is eaten (mendixlabs/mxcli#1428).
 					if !strings.Contains(attr.Documentation, "\n") && !strings.HasPrefix(attr.Documentation, "*") {
-						line.WriteString(fmt.Sprintf("  /** %s */\n", attr.Documentation))
+						line.WriteString(fmt.Sprintf("  /** %s */\n", doccomment.Escape(attr.Documentation)))
 					} else {
 						outputJavadocIndented(&line, attr.Documentation, "  ")
 					}

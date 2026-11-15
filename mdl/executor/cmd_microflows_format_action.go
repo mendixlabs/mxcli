@@ -809,7 +809,9 @@ func formatAction(
 		if a.MicroflowCall != nil {
 			queue = queueClauseMDL(a.MicroflowCall.QueueSettings)
 		}
-		if a.UseReturnVariable && a.ResultVariableName != "" {
+		// A name kept on a call to a flow that returns nothing names no
+		// variable: Studio Pro does not show it (ako/mxcli#2138).
+		if a.UseReturnVariable && a.ResultVariableName != "" && !describedCallIsVoid(ctx, false, mfName) {
 			return fmt.Sprintf("$%s = call microflow %s(%s)%s;", a.ResultVariableName, mfName, paramStr, queue)
 		}
 		return fmt.Sprintf("call microflow %s(%s)%s;", mfName, paramStr, queue)
@@ -838,7 +840,7 @@ func formatAction(
 			paramStr = strings.Join(params, ", ")
 		}
 
-		if a.UseReturnVariable && a.OutputVariableName != "" {
+		if a.UseReturnVariable && a.OutputVariableName != "" && !describedCallIsVoid(ctx, true, nfName) {
 			return fmt.Sprintf("$%s = call nanoflow %s(%s);", a.OutputVariableName, nfName, paramStr)
 		}
 		return fmt.Sprintf("call nanoflow %s(%s);", nfName, paramStr)

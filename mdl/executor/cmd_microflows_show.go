@@ -10,6 +10,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/microflowgraph"
 	"github.com/mendixlabs/mxcli/mdl/types"
@@ -271,7 +272,7 @@ func describeMicroflowMode(ctx *ExecContext, name ast.QualifiedName, opts descri
 	// Documentation
 	if targetMf.Documentation != "" {
 		lines = append(lines, "/**")
-		for docLine := range strings.SplitSeq(targetMf.Documentation, "\n") {
+		for docLine := range strings.SplitSeq(doccomment.Escape(targetMf.Documentation), "\n") {
 			lines = append(lines, " * "+docLine)
 		}
 		lines = append(lines, " */")
@@ -420,7 +421,7 @@ func describeNanoflow(ctx *ExecContext, name ast.QualifiedName) error {
 	// Documentation
 	if targetNf.Documentation != "" {
 		lines = append(lines, "/**")
-		for docLine := range strings.SplitSeq(targetNf.Documentation, "\n") {
+		for docLine := range strings.SplitSeq(doccomment.Escape(targetNf.Documentation), "\n") {
 			lines = append(lines, " * "+docLine)
 		}
 		lines = append(lines, " */")
@@ -643,7 +644,7 @@ func renderMicroflowMDL(
 
 	if mf.Documentation != "" {
 		lines = append(lines, "/**")
-		for docLine := range strings.SplitSeq(mf.Documentation, "\n") {
+		for docLine := range strings.SplitSeq(doccomment.Escape(mf.Documentation), "\n") {
 			lines = append(lines, " * "+docLine)
 		}
 		lines = append(lines, " */")
@@ -1585,7 +1586,7 @@ func describeRule(ctx *ExecContext, name ast.QualifiedName) error {
 
 	if target.Documentation != "" {
 		lines = append(lines, "/**")
-		for docLine := range strings.SplitSeq(target.Documentation, "\n") {
+		for docLine := range strings.SplitSeq(doccomment.Escape(target.Documentation), "\n") {
 			lines = append(lines, " * "+docLine)
 		}
 		lines = append(lines, " */")
