@@ -401,7 +401,7 @@ func (m *layoutMeasurer) measureIf(s *ast.IfStmt, atTail bool) Bounds {
 		branchWidth = HorizontalSpacing / 2
 	}
 
-	elseColumn := m.layoutStyle().IfElse == IfElseColumn && (s.HasElse || len(s.ElseBody) > 0)
+	elseColumn := m.layoutStyle().IfElse == IfElseColumn && ifHasElse(s)
 	var column Bounds
 	if elseColumn {
 		column = m.measureColumn(s.ElseBody)
