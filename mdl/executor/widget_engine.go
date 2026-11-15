@@ -1634,6 +1634,13 @@ func singleValueAttributeProperty(ids map[string]pages.PropertyTypeIDEntry, prop
 // flat attribute name the entity does not have, CE1613 (ako/mxcli#2279).
 func (pb *pageBuilder) pluggableAssociationAttributePath(w *ast.WidgetV3, propertyKey, attr, entity string, singleValue bool) (string, []pages.AttributeRefStep, error) {
 	where := fmt.Sprintf("%s `%s` property `%s`", strings.ToLower(w.Type), w.Name, propertyKey)
+	return pb.pluggableAssociationAttributePathAt(where, attr, entity, singleValue)
+}
+
+// pluggableAssociationAttributePathAt is pluggableAssociationAttributePath for
+// a caller that names the property itself: ALTER … SET, which holds the stored
+// widget rather than its AST (ako/mxcli#2283).
+func (pb *pageBuilder) pluggableAssociationAttributePathAt(where, attr, entity string, singleValue bool) (string, []pages.AttributeRefStep, error) {
 	if entity == "" {
 		return "", nil, mdlerrors.NewValidationf(
 			"%s: `%s` is an association path, which is read from the object of an enclosing data container, "+

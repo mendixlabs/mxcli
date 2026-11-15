@@ -218,12 +218,19 @@ func (v *attributeScopeValidator) judgeLeadingEntityAttribute(subject, written s
 	if !v.isOrSpecializes(start, lead) {
 		return
 	}
-	v.errs = append(v.errs, fmt.Sprintf(
+	v.errs = append(v.errs, leadingEntityAttributeMessage(subject, written, lead, segs[1]))
+}
+
+// leadingEntityAttributeMessage is MDL-ATTRPATH02's refusal of `lead/attr`,
+// lead being the entity the path is read from; ALTER … SET on a pluggable
+// widget refuses the same shape in the same words (ako/mxcli#2283).
+func leadingEntityAttributeMessage(subject, written, lead, attr string) string {
+	return fmt.Sprintf(
 		"%s binds `%s`, which starts with %s, the entity it is read from. Exec drops that step only when an "+
 			"association follows it, so this path would be written as one flat attribute name and the widget "+
 			"left unbound — mxbuild reports CE0402 / CE7005 / \"An attribute is required\". Name the attribute "+
 			"alone: write `%s` [%s]",
-		subject, written, lead, segs[1], qualifiedPathFlatRule))
+		subject, written, lead, attr, qualifiedPathFlatRule)
 }
 
 // isOrSpecializes reports whether entity is base or provably descends from it,
