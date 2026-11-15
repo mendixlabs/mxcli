@@ -127,19 +127,26 @@ func checkOwnContainerName(w *ast.WidgetV3, nearest string, nearestSelectable bo
 				nearest, nearest),
 		})
 	}
+	// An argument that is the container's variable and nothing else is written
+	// as a variable reference (Variable { Widget, PageParameter }, since #2095),
+	// not as expression text, and builds clean: measured on mx check 11.12.6 and
+	// 11.14.0 with the current writer, `microflow F(Gate = $dvP)` and a data
+	// source `microflow DS(Gate = $dvP)` give 0 errors, while `S = $dvP/Name`,
+	// stored as an expression, is still CE0117 (ako/mxcli#2149). The 11.14.0
+	// CE0117 behind this rule (mendixlabs/mxcli#1324) was the expression form.
 	for a := w.GetAction(); a != nil; a = a.ThenAction {
 		if nearestSelectable && a.Type == "showPage" {
 			continue
 		}
 		for _, arg := range a.Args {
-			if v, ok := arg.Value.(string); ok {
+			if v, ok := arg.Value.(string); ok && !isBareContainerVariable(v, nearest) {
 				flag(a.Type+" action argument", v, "CE0117")
 			}
 		}
 	}
 	if ds := w.GetDataSource(); ds != nil {
 		for _, arg := range ds.Args {
-			if v, ok := arg.Value.(string); ok {
+			if v, ok := arg.Value.(string); ok && !isBareContainerVariable(v, nearest) {
 				flag("data source argument", v, "CE0117")
 			}
 		}
@@ -157,6 +164,13 @@ func checkOwnContainerName(w *ast.WidgetV3, nearest string, nearestSelectable bo
 		}
 	}
 	return out
+}
+
+// isBareContainerVariable reports whether expression source is `$name` and nothing
+// else, the argument shape the writer stores as a variable reference.
+func isBareContainerVariable(expr, name string) bool {
+	e := strings.TrimSpace(expr)
+	return len(e) > 1 && e[0] == '$' && strings.EqualFold(e[1:], name)
 }
 
 // exprReadsVariable reports whether expression source reads $name as a

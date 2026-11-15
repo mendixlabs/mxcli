@@ -1257,14 +1257,18 @@ pass parameters" changes the rendering for no reason (mendixlabs/mxcli#1082).
 **A data container's name is a variable only *below* it.** `$dvOrder` reads data
 view `dvOrder`'s object from a data view, list or grid nested inside it. In the
 container's own context — directly inside it, through plain containers, or in the
-control bar of a grid inside it — the object is `$currentObject`, and
-`$dvOrder` is **CE0117** "Error(s) in expression." (`mxcli check` reports
-MDL-BUTTON02). That holds for every slot evaluated there, not only action
-arguments: a nested widget's microflow data-source arguments, `Visible:`,
-`Editable:` and `DynamicClasses:` (CE0117), and a nested list's XPath `where`
-(**CE0161**). The same goes for a list view, gallery or grid read by its own
-name from its item or row. A grid's own name *is* valid from its control bar —
-that is the selection, above (mendixlabs/mxcli#1324).
+control bar of a grid inside it — the object is `$currentObject`, and reading
+`$dvOrder` in an expression there (`$dvOrder/Total`) is **CE0117** "Error(s) in
+expression." (`mxcli check` reports MDL-BUTTON02). That holds for every
+expression evaluated there: an action argument such as `$dvOrder/Total`,
+`Visible:`, `Editable:` and `DynamicClasses:` (CE0117), and a nested list's
+XPath `where` (**CE0161**). The same goes for a list view, gallery or grid read
+by its own name from its item or row (mendixlabs/mxcli#1324).
+
+Passing the bare name as an action or data-source argument, `Order = $dvOrder`,
+is fine: it is stored as a variable reference, not expression text, and builds
+clean (measured on 11.12.6 and 11.14.0, ako/mxcli#2149). A grid's own name is
+also valid from its control bar — that is the selection, above.
 
 ### Charts (Charts.mpk — ColumnChart / BarChart / AreaChart / PieChart)
 
