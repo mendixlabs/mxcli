@@ -80,6 +80,7 @@ func validatePluggableAttributeScopes(ctx *ExecContext, layout string, params []
 	if sc != nil {
 		v.generalizations = sc.entityGeneralizations
 		v.decls = sc.entityDecls
+		v.scriptNames = scriptDeclaredNames(sc)
 	}
 	for _, w := range widgets {
 		v.walk(w, dataContext{})
@@ -120,6 +121,11 @@ type attributeScopeValidator struct {
 	// decls are the script's entity declarations, for the audit fields'
 	// declared names (validate_expr_system_member.go).
 	decls map[string]*ast.CreateEntityStmt
+
+	// scriptNames are the entities and associations this script declares,
+	// lower-cased, both qualified and short: what the stored model cannot
+	// resolve yet (namesScriptMember).
+	scriptNames map[string]bool
 
 	// members resolves the members a widget expression names, with the
 	// microflow expression check's verdict (validate_expr_system_member.go).
@@ -268,6 +274,19 @@ func (v *attributeScopeValidator) checkWidget(w *ast.WidgetV3, def *WidgetDefini
 	for _, key := range order {
 		entry, declared := ids[key]
 		scope := resolveBindingScope(entry.DataSourceProperty, declared, outer, dsEntities, "")
+		if _, isPath := contextAssociationAttributePath(values[key]); isPath {
+			// `Assoc/Attr` from the context object: exec's own resolver and hop
+			// rule (ako/mxcli#2279), judged only where the stored model can
+			// answer — a context this walk could not resolve, or a path naming
+			// what the script creates, is left to exec.
+			if scope.Entity != "" && !v.namesScriptMember(scope.Entity, values[key]) {
+				if _, _, err := v.pb.pluggableAssociationAttributePath(w, key, values[key], scope.Entity,
+					singleValueAttributeProperty(ids, key)); err != nil {
+					v.errs = append(v.errs, err.Error())
+				}
+			}
+			continue
+		}
 		// An association where the attribute belongs: exec refuses it in the
 		// engine's Attribute mapping, so only a value that mapping reads is
 		// judged (mendixlabs/mxcli#1440).
@@ -285,6 +304,30 @@ func (v *attributeScopeValidator) checkWidget(w *ast.WidgetV3, def *WidgetDefini
 		}
 	}
 	return namedDataSource
+}
+
+// namesScriptMember reports whether entity, or any step of the association
+// path, names an entity or association this script declares: the stored
+// model the resolver reads does not hold them yet.
+func (v *attributeScopeValidator) namesScriptMember(entity, path string) bool {
+	if len(v.scriptNames) == 0 {
+		return false
+	}
+	if v.scriptNames[strings.ToLower(entity)] {
+		return true
+	}
+	p, _ := contextAssociationAttributePath(path)
+	segs := strings.Split(p, "/")
+	for _, seg := range segs[:len(segs)-1] {
+		seg = strings.ToLower(unquoteQualifiedName(seg))
+		if v.scriptNames[seg] {
+			return true
+		}
+		if i := strings.LastIndex(seg, "."); i >= 0 && v.scriptNames[seg[i+1:]] {
+			return true
+		}
+	}
+	return false
 }
 
 // dataSourceEntity is the entity a datasource supplies, by the childContext
@@ -366,4 +409,27 @@ func checkAttributeIndex(ctx *ExecContext, sc *scriptContext) attributeIndex {
 		}
 	}
 	return ix
+}
+
+// scriptDeclaredNames indexes the entities and associations sc declares,
+// lower-cased, by qualified and by short name.
+func scriptDeclaredNames(sc *scriptContext) map[string]bool {
+	names := map[string]bool{}
+	add := func(qn string) {
+		qn = strings.ToLower(qn)
+		names[qn] = true
+		if i := strings.LastIndex(qn, "."); i >= 0 {
+			names[qn[i+1:]] = true
+		}
+	}
+	for qn := range sc.entityDecls {
+		add(qn)
+	}
+	for qn := range sc.entityAttrs {
+		add(qn)
+	}
+	for qn := range sc.associationShapes {
+		add(qn)
+	}
+	return names
 }
