@@ -96,6 +96,16 @@ compares equal on both sides, so an edit to it was reported Unchanged (a
 lossless — written again, it must be the document first written — and falls
 back to the statement diff when it is not.
 
+**"Deterministic" holds within one release.** The match paired objects by
+where they are drawn, and where the script states no `@position` the layout
+pass decides that — and the layout pass improves between releases. One correct
+measurer fix (#1773) moved enough unpositioned nodes that three flows a project
+had re-run cleanly for weeks were refused after the upgrade, each on a
+different statement-diff gap the match had been hiding (#2259). Geometry the
+script leaves to the layout is not something a re-run changes, so the match
+now falls back to pairing by flows with that geometry set aside. To test the
+class without the old release, move the stored nodes and re-run the script.
+
 **The statement diff still decides every flow that does change**, and there
 two more ways to be unrunnable showed up (#859). A default describe omits —
 `on error rollback` — has to be read as absent on the declared side too, or the
