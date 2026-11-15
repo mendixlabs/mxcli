@@ -67,9 +67,9 @@ alter page MyFirstModule.Ord2278_Edit {
   set (attribute: Ord2278_Cust2278/Active) on rbShort;
 };`
 
-// storedAttributeRefs returns, per named widget of the stored page, its
+// storedInputAttributeRefs returns, per named widget of the stored page, its
 // AttributeRef as "Attribute [Assoc>Dest …]", or "<null>".
-func storedAttributeRefs(t *testing.T, exec *Executor, page string) map[string]string {
+func storedInputAttributeRefs(t *testing.T, exec *Executor, page string) map[string]string {
 	t.Helper()
 	ctx := exec.newExecContext(context.Background())
 	unit, err := ctx.Backend.GetRawUnitByName("page", page)
@@ -159,8 +159,8 @@ func TestAlterSetInputAttribute_MatchesCreatePage(t *testing.T) {
 	}
 	assertAgree(t, exec, dir, alter2278, "")
 
-	want := storedAttributeRefs(t, exec, "MyFirstModule.Ord2278_Control")
-	got := storedAttributeRefs(t, exec, "MyFirstModule.Ord2278_Edit")
+	want := storedInputAttributeRefs(t, exec, "MyFirstModule.Ord2278_Control")
+	got := storedInputAttributeRefs(t, exec, "MyFirstModule.Ord2278_Edit")
 	for _, w := range []string{"tbShort", "tbQual", "tbBare", "tbFull", "taShort", "dpShort", "cbShort", "rbShort"} {
 		if want[w] == "" || want[w] == "<null>" {
 			t.Fatalf("control: create page left %s unbound (%q)", w, want[w])
@@ -178,7 +178,7 @@ func TestAlterSetInputAttribute_MatchesCreatePage(t *testing.T) {
 	if err := agreeExec(t, exec, alter2278); err != nil {
 		t.Fatalf("second alter: %v", err)
 	}
-	if again := storedAttributeRefs(t, exec, "MyFirstModule.Ord2278_Edit"); fmt.Sprint(again) != fmt.Sprint(got) {
+	if again := storedInputAttributeRefs(t, exec, "MyFirstModule.Ord2278_Edit"); fmt.Sprint(again) != fmt.Sprint(got) {
 		t.Errorf("second alter changed the bindings:\n%v\n%v", got, again)
 	}
 }
