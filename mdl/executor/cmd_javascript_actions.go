@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
@@ -86,7 +87,7 @@ func describeJavaScriptAction(ctx *ExecContext, name ast.QualifiedName) error {
 	doc = strings.ReplaceAll(doc, "\r", "\n")
 	if doc != "" {
 		sb.WriteString("/**\n")
-		for line := range strings.SplitSeq(doc, "\n") {
+		for line := range strings.SplitSeq(doccomment.Escape(doc), "\n") {
 			sb.WriteString(" * ")
 			sb.WriteString(line)
 			sb.WriteString("\n")

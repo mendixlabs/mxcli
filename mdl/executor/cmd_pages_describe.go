@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
@@ -57,7 +58,7 @@ func describePage(ctx *ExecContext, name ast.QualifiedName) error {
 
 	// Output documentation if present
 	if foundPage.Documentation != "" {
-		lines := strings.Split(foundPage.Documentation, "\n")
+		lines := strings.Split(doccomment.Escape(foundPage.Documentation), "\n")
 		fmt.Fprint(ctx.Output, "/**\n")
 		for _, line := range lines {
 			fmt.Fprintf(ctx.Output, " * %s\n", line)
@@ -267,7 +268,7 @@ func describeSnippet(ctx *ExecContext, name ast.QualifiedName) error {
 
 	// Output documentation if present
 	if foundSnippet.Documentation != "" {
-		lines := strings.Split(foundSnippet.Documentation, "\n")
+		lines := strings.Split(doccomment.Escape(foundSnippet.Documentation), "\n")
 		fmt.Fprint(ctx.Output, "/**\n")
 		for _, line := range lines {
 			fmt.Fprintf(ctx.Output, " * %s\n", line)
@@ -354,7 +355,7 @@ func describeLayout(ctx *ExecContext, name ast.QualifiedName) error {
 
 	// Output documentation if present
 	if foundLayout.Documentation != "" {
-		lines := strings.Split(foundLayout.Documentation, "\n")
+		lines := strings.Split(doccomment.Escape(foundLayout.Documentation), "\n")
 		fmt.Fprint(ctx.Output, "/**\n")
 		for _, line := range lines {
 			fmt.Fprintf(ctx.Output, " * %s\n", line)
