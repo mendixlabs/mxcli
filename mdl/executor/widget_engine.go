@@ -792,6 +792,15 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 			}
 			attrPath := ""
 			scope := e.bindingScopeFor(propName)
+			if _, isPath := contextAssociationAttributePath(strVal); isPath {
+				// `Assoc/Attr` from the context object (ako/mxcli#2279).
+				finalQN, steps, err := e.contextAssociationAttributeBinding(w, propName, strVal, scope)
+				if err != nil {
+					return nil, err
+				}
+				builder.SetAttributeWithSteps(propName, finalQN, steps)
+				break
+			}
 			if strings.Count(strVal, ".") >= 2 {
 				// Qualified: stored as written, so an attribute of an entity
 				// other than the bound one is refused (CE7247).
@@ -1571,6 +1580,113 @@ func (e *PluggableWidgetEngine) rootedAttributeBinding(w *ast.WidgetV3, property
 	return wv, finalQN, steps, nil
 }
 
+// contextAssociationAttributePath reports whether attr is a context-relative
+// association path — `Assoc/…/Attr`, `$currentObject/Assoc/…/Attr`, or either
+// fully qualified — rather than a plain attribute name or a `$Root/…` path.
+func contextAssociationAttributePath(attr string) (path string, ok bool) {
+	path = strings.TrimPrefix(strings.TrimSpace(attr), "$currentObject/")
+	if path == "" || strings.HasPrefix(path, "$") || !strings.Contains(path, "/") {
+		return "", false
+	}
+	return path, true
+}
+
+// contextAssociationAttributeBinding resolves a context-relative association
+// path on a pluggable widget's attribute property against the entity the
+// property binds to. See pageBuilder.pluggableAssociationAttributePath.
+func (e *PluggableWidgetEngine) contextAssociationAttributeBinding(w *ast.WidgetV3, propertyKey, attr string, scope bindingScope) (string, []pages.AttributeRefStep, error) {
+	return e.pageBuilder.pluggableAssociationAttributePath(w, propertyKey, attr, scope.Entity,
+		singleValueAttributeProperty(e.currentPropertyTypeIDs, propertyKey))
+}
+
+// singleValueAttributeProperty reports whether the template declares
+// propertyKey as an attribute property linked to no datasource: one value of
+// the context object (the widget gets an EditableValue), as opposed to a
+// per-item value of a datasource it is linked to (a ListAttributeValue).
+func singleValueAttributeProperty(ids map[string]pages.PropertyTypeIDEntry, propertyKey string) bool {
+	entry, declared := ids[propertyKey]
+	return declared && entry.DataSourceProperty == ""
+}
+
+// pluggableAssociationAttributePath resolves `Assoc/…/Attr` on a pluggable
+// widget's attribute property, read from entity, into the final attribute and
+// the hops Studio Pro stores as the AttributeRef's IndirectEntityRef (PedApp
+// Administration.Account_Overview: a Data grid 2 column over System.UserRoles,
+// a CustomWidgets$WidgetValue whose AttributeRef carries an EntityRef of
+// EntityRefSteps). The qualified spellings normalise to the same steps, as on
+// the built-in inputs (#2255, #2277). Shared by exec and check, so the two
+// refuse the same paths with the same words.
+//
+// Which paths a property takes is decided by its link, not by a path flag:
+// pluggable widget XML has no per-property path declaration, and the
+// WidgetValueType's IsPath / PathType — a legacy custom-widget field — are
+// "No" / "None" on every template and on that Studio Pro-authored column,
+// which stores a path all the same. Measured on mxbuild 11.16.0:
+//
+//   - linked to no datasource (singleValue): every hop must be a Reference
+//     followed from its owner — a reference set is CE7247 "Association … should
+//     be of type 'Reference'", a reference followed backwards CE7247 "Entity …
+//     has no association …". A reference with owner Both is followed either way.
+//   - linked to a datasource: a reference set is what the Studio Pro column
+//     above follows, so no hop rule is applied.
+//
+// A path that does not resolve is refused too: written as it stood it was one
+// flat attribute name the entity does not have, CE1613 (ako/mxcli#2279).
+func (pb *pageBuilder) pluggableAssociationAttributePath(w *ast.WidgetV3, propertyKey, attr, entity string, singleValue bool) (string, []pages.AttributeRefStep, error) {
+	where := fmt.Sprintf("%s `%s` property `%s`", strings.ToLower(w.Type), w.Name, propertyKey)
+	if entity == "" {
+		return "", nil, mdlerrors.NewValidationf(
+			"%s: `%s` is an association path, which is read from the object of an enclosing data container, "+
+				"and this widget has none. Place it in a data view, or read it from a parameter with `$Param/Assoc/Attr`",
+			where, attr)
+	}
+	path, _ := contextAssociationAttributePath(attr)
+	finalQN, steps, ok := pb.resolveAssociationPathFrom(path, entity)
+	if !ok {
+		return "", nil, mdlerrors.NewValidationf(
+			"%s: `%s` does not resolve from %s, the entity this property binds to — each step before the "+
+				"attribute must be an association of the entity the step before arrives at, and the last an "+
+				"attribute of the entity the path ends at. Written as it stands it would be one flat attribute "+
+				"name %s does not have: CE1613 \"The selected attribute no longer exists\"",
+			where, attr, entity, entity)
+	}
+	if singleValue {
+		if err := pb.singleObjectHopsError(where, attr, entity, steps); err != nil {
+			return "", nil, err
+		}
+	}
+	return finalQN, steps, nil
+}
+
+// singleObjectHopsError refuses a hop that does not arrive at ONE object: a
+// reference set, or a reference followed from the end that does not own it.
+// An association no domain model declares (System.owner, System.changedBy) is
+// a plain reference and passes.
+func (pb *pageBuilder) singleObjectHopsError(where, attr, start string, steps []pages.AttributeRefStep) error {
+	cur := start
+	for _, s := range steps {
+		refSet, ownerBoth, known := pb.associationKind(s.Association)
+		if known {
+			if refSet {
+				return mdlerrors.NewValidationf(
+					"%s: `%s` follows %s, a reference set, and this property holds one value of the context object "+
+						"— mxbuild reports CE7247 \"Association '%s' should be of type 'Reference'\". Show the "+
+						"associated objects in a list view or data grid over that association instead",
+					where, attr, s.Association, s.Association)
+			}
+			if from, _, ok := pb.associationEndpoints(s.Association); ok && !ownerBoth && !pb.entityIsOrDescendsFrom(cur, from) {
+				return mdlerrors.NewValidationf(
+					"%s: `%s` follows %s from %s, the end that does not own it — that direction reaches a list of "+
+						"%s objects, not one, and mxbuild reports CE7247 \"Entity '%s' has no association '%s'\". "+
+						"Read the attribute from %s's side, or list the objects with a data source over the association",
+					where, attr, s.Association, cur, from, cur, s.Association, from)
+			}
+		}
+		cur = s.DestinationEntity
+	}
+	return nil
+}
+
 // notAParameterError refuses a `$name.Attr` binding whose name is no page or
 // snippet parameter. where names the widget property, for the message.
 func notAParameterError(where, attr, name, documentKind string) error {
@@ -1790,6 +1906,18 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 			// none (#647).
 			scope := e.bindingScopeFor(mapping.PropertyKey)
 			entity := scope.Entity
+			if _, isPath := contextAssociationAttributePath(attr); isPath {
+				// `Assoc/Attr` read from the context object: the final attribute
+				// plus the association steps, as a built-in input stores it.
+				// Resolved as one name, it was written as the flat attribute
+				// `Entity.Assoc/Attr` (ako/mxcli#2279).
+				finalQN, steps, err := e.contextAssociationAttributeBinding(w, mapping.PropertyKey, attr, scope)
+				if err != nil {
+					return nil, err
+				}
+				ctx.AttributePath, ctx.AttributeSteps = finalQN, steps
+				break
+			}
 			// An association named where an attribute belongs cannot be stored;
 			// refuse it here rather than writing a dangling AttributeRef (#830).
 			if err := e.pageBuilder.rejectAssociationAsAttributeOn(
