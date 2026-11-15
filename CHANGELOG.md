@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-15
+
+Headline: **Much faster on large projects, and far more of the model visible to lint rules and the catalog.** Parsing MDL is several times faster and `check`, `create` and `exec` stop decoding the whole project per statement; `run --local --watch` applies a change in about 5 s instead of 20-28 s; `mxcli test --attach` runs a test with no build at all. Lint rules gain workflow activities, sequence flows, annotations, folders, jar files and widget captions, the catalog gains the agent tables, and a long run of fixes makes `check` refuse what the build would refuse and `describe` → `exec` round trips leave pages and flows untouched. The catalog schema moves to version 48.
+
 ### Added
 
 - **`rename snippet`, and `mxcli rename snippet`** (ako/mxcli#2130, mendixlabs/mxcli#1811) — a snippet could not be renamed: `rename snippet` was a syntax error and `mxcli rename page <snippet>` said page not found, while lint CONV005 asks for `SNIPPET_` prefixes. `RENAME SNIPPET Module.Old TO New [DRY RUN]` renames it and rewrites every snippet call, in pages, layouts and other snippets; a name already taken by a page, snippet or layout of the module is refused (CE0122). CONV005's suggestion now names the statement.
