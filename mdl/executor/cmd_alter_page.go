@@ -364,9 +364,19 @@ func applySetPropertyMutator(ctx *ExecContext, mutator backend.PageMutator, op *
 	// not found". The attribute drives none of the visibility the follow-up
 	// resets, so the rest is applied and reset under the address as written
 	// (ako/mxcli#1644).
+	//
+	// A column addressed by its caption, `column('Old caption')`, is the same
+	// case with the caption: renaming it applied the new caption, then the
+	// follow-up looked for 'Old caption' and the whole script rolled back
+	// (mendixlabs/mxcli#1823, ako/mxcli#2146). The property written last is
+	// whichever one the address reads.
 	if op.Target.IsColumn() {
+		addressProp := "Attribute"
+		if op.Target.ColumnCaption != "" {
+			addressProp = "Caption"
+		}
 		for name, value := range op.Properties {
-			if !strings.EqualFold(name, "Attribute") {
+			if !strings.EqualFold(name, addressProp) {
 				continue
 			}
 			rest := &ast.SetPropertyOp{Target: op.Target, Properties: map[string]any{}}
