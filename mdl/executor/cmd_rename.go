@@ -29,6 +29,8 @@ func execRename(ctx *ExecContext, s *ast.RenameStmt) error {
 		return execRenameDocument(ctx, s, "nanoflow")
 	case "page":
 		return execRenameDocument(ctx, s, "page")
+	case "snippet":
+		return execRenameDocument(ctx, s, "snippet")
 	case "enumeration":
 		return execRenameEnumeration(ctx, s)
 	case "association":
@@ -290,6 +292,22 @@ func execRenameDocument(ctx *ExecContext, s *ast.RenameStmt, docType string) err
 			if pg.Name == s.Name.Name {
 				docID = pg.ID
 			} else if pg.Name == s.NewName {
+				collision = true
+			}
+		}
+	case "snippet":
+		// A snippet call names its snippet by qualified name, so the reference
+		// sweep below rewrites the calls in pages, layouts and other snippets
+		// (ako/mxcli#2130).
+		sns, _ := ctx.Backend.ListSnippets()
+		for _, sn := range sns {
+			modID := h.FindModuleID(sn.ContainerID)
+			if h.GetModuleName(modID) != s.Name.Module {
+				continue
+			}
+			if sn.Name == s.Name.Name {
+				docID = sn.ID
+			} else if sn.Name == s.NewName {
 				collision = true
 			}
 		}

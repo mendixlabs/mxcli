@@ -21,7 +21,8 @@ def check():
                     document_type="Snippet",
                     document_name=snippet.qualified_name,
                 ),
-                suggestion="Rename to 'SNIPPET_{}'".format(snippet.name),
+                suggestion="Rename to 'SNIPPET_{}': rename snippet {} to SNIPPET_{}; (every snippet call follows)".format(
+                    snippet.name, snippet.qualified_name, snippet.name),
             ))
 
     return violations
