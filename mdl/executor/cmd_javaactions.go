@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/codesection"
 	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
@@ -281,33 +282,7 @@ func javaActionUserCode(source string) string {
 // GenerateSource re-indents each line uniformly, so without this every rewrite
 // shifted the code further right and a second DESCRIBE never matched the first.
 func normalizeJavaSection(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	lines := strings.Split(s, "\n")
-	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
-		lines = lines[1:]
-	}
-	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
-		lines = lines[:len(lines)-1]
-	}
-	indent := ""
-	first := true
-	for _, l := range lines {
-		if strings.TrimSpace(l) == "" {
-			continue
-		}
-		lead := l[:len(l)-len(strings.TrimLeft(l, " \t"))]
-		if first {
-			indent, first = lead, false
-			continue
-		}
-		for !strings.HasPrefix(lead, indent) {
-			indent = indent[:len(indent)-1]
-		}
-	}
-	for i, l := range lines {
-		lines[i] = strings.TrimRight(strings.TrimPrefix(l, indent), " \t")
-	}
-	return strings.Join(lines, "\n")
+	return codesection.Normalize(s)
 }
 
 // formatJavaActionType formats a Java action parameter type for MDL output.

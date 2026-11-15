@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/codesection"
 	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
@@ -259,9 +260,10 @@ func readJavaScriptActionSource(mprPath, moduleName, actionName string) (userCod
 	// "BEGIN USER CODE"; some older content used lowercase), so match
 	// case-insensitively.
 	if uc, ok := sliceBetweenFold(source, "// BEGIN USER CODE", "// END USER CODE"); ok {
-		uc = strings.TrimPrefix(uc, "\n")
-		uc = strings.TrimSuffix(uc, "\n")
-		userCode = strings.TrimRight(uc, " \t")
+		// Relative, as for Java: the writer re-indents every line by one tab,
+		// so printing the stored tab made each round trip add one
+		// (ako/mxcli#2131).
+		userCode = codesection.Normalize(uc)
 	}
 	if ec, ok := sliceBetweenFold(source, "// BEGIN EXTRA CODE", "// END EXTRA CODE"); ok {
 		extraCode = strings.TrimSpace(ec)
