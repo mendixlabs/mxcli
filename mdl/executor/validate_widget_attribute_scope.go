@@ -84,6 +84,10 @@ func validatePluggableAttributeScopes(ctx *ExecContext, layout string, params []
 	for _, w := range widgets {
 		v.walk(w, dataContext{})
 	}
+	if sc != nil {
+		// MDL-ATTRPATH01 says what exec stores; it never blocks.
+		sc.warnings = append(sc.warnings, v.warns...)
+	}
 	return v.errs
 }
 
@@ -94,6 +98,8 @@ type attributeScopeValidator struct {
 	pageParams map[string]string
 	index      attributeIndex
 	errs       []string
+	// warns are reported, never block (validate_qualified_attribute_path.go).
+	warns []string
 
 	// The built-in input widget checks (validate_widget_attribute_type.go).
 	types       memberTypeIndex
@@ -145,6 +151,7 @@ func (v *attributeScopeValidator) walk(w *ast.WidgetV3, enclosing dataContext) {
 	v.checkAssocHopStart(w, enclosing)
 	v.checkReactUnsupported(w)
 	v.checkExprSystemMembers(w, enclosing)
+	v.checkQualifiedAttributePaths(w, enclosing)
 	if v.registry == nil {
 		// No registry: the pluggable half cannot run, and a pluggable widget's
 		// slots cannot be told apart, so nothing inside one is judged rather
@@ -159,6 +166,7 @@ func (v *attributeScopeValidator) walk(w *ast.WidgetV3, enclosing dataContext) {
 			// context its own link says; this walk does not model slots, so it
 			// judges nothing inside rather than judging it wrongly.
 			inner = enclosing.withUnresolved()
+			v.checkDataWidgetItemPaths(w)
 		}
 	}
 	for _, c := range w.Children {
