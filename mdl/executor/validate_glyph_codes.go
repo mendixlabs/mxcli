@@ -59,9 +59,14 @@ import (
 // The snapshot risk is measured, not assumed. mxbuild does not read the font
 // Atlas_Core ships; it bundles its own `modeler/glyphicons-halflings-regular.ttf`,
 // and that file is byte-identical (sha256 e3950440…57456) in mxbuild 9.24, 10.12,
-// 11.6.6 and 11.15.0. Its cmap's private-use range is exactly the 247 codes in
-// glyphIcons, none more and none fewer, and the two measured builds (11.14.0)
-// agree with it on both points. The font has been frozen for the whole span
+// 11.6.6 and 11.15.0. Its cmap's private-use range is exactly the 247
+// private-use codes in glyphIcons, and the two measured builds (11.14.0) agree
+// with it on both points. The cmap also maps code points OUTSIDE that range,
+// and the table first left them out, so MDL078 refused glyph 9999 (pencil) and
+// 43 (plus), which Marketplace modules store and which build
+// (ako/mxcli#2112). One deploy build per code on 11.12.6 settled each of them:
+// the 11 the stylesheet names build, the whitespace ones and U+25FC crash.
+// See glyphIcons. The font has been frozen for the whole span
 // mxcli supports, so refusing a code outside it refuses a build crash, not a
 // valid icon. If a later Mendix ever does extend it, glyphIcons is the one
 // table to update, and `--no-check` is the escape hatch meanwhile.

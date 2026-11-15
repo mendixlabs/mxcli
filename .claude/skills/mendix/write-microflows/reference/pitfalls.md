@@ -264,6 +264,11 @@ so a round trip does not change the model. The name is not a variable: using
 `$RefreshEntity` afterwards is CE0109 "Undefined variable" (MDL093 — `check`
 reports it when the script or, with `-p`, the project says the action is void).
 
+A call to a **microflow or nanoflow** that returns nothing is different: write it
+without `$X =`. Studio Pro keeps a stale result name on such a call when the flow
+used to return a value, and does not show it; `describe` does not print it
+either, `exec` stores no result variable for it, and `check` warns (MDL096).
+
 ### 10. Calling a Rule or Microflow Inside an Expression
 
 **Error**: CE0117 - "Error(s) in expression." (MDL066)

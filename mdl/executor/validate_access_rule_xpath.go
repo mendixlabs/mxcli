@@ -319,7 +319,9 @@ func (g *grantResolver) literalTypeProblem(at ast.DataType, op string, lit xpath
 var xpathTokenRE = regexp.MustCompile(`^\[%([A-Za-z_][A-Za-z0-9_]*)%\]$`)
 
 var (
-	xpathDateTokenRE   = regexp.MustCompile(`^(CurrentDateTime|(Begin|End)OfCurrent(Minute|Hour|Day|Week|Month|Year)(UTC)?)$`)
+	// The date tokens are the vocabulary's (validate_token_names.go), so the two
+	// cannot drift: a date token is a date wherever it is compared.
+	xpathDateTokenRE   = tokenDateRe
 	xpathLengthTokenRE = regexp.MustCompile(`^(Second|Minute|Hour|Day|Week|Month|Year)Length$`)
 )
 

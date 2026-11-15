@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/pages"
@@ -101,7 +102,7 @@ func describeBuildingBlock(ctx *ExecContext, name ast.QualifiedName) error {
 
 	// Output documentation if present
 	if found.Documentation != "" {
-		lines := strings.Split(found.Documentation, "\n")
+		lines := strings.Split(doccomment.Escape(found.Documentation), "\n")
 		fmt.Fprint(ctx.Output, "/**\n")
 		for _, line := range lines {
 			fmt.Fprintf(ctx.Output, " * %s\n", line)

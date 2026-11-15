@@ -56,6 +56,7 @@ func validateNanoflowWith(stmt *ast.CreateNanoflowStmt, voids *voidCodeActions) 
 	// MDL-TEMPLATE02: and the same template grammar (ako/mxcli#1397).
 	v.checkTemplateGrammar(stmt.Body)
 	v.checkVoidCallOutputUse(v.params, stmt.Body)
+	v.checkVoidFlowCallResult(stmt.Body)
 	// MDL-SET01: a nanoflow's Change variable is as primitive-only (CE7247).
 	v.checkSetOnObjectVariable(v.params, stmt.Body)
 	// MDL-CHANGE01: System.owner / System.changedBy are CE1050 in a nanoflow's

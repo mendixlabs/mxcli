@@ -10,6 +10,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend/wfnames"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 	"github.com/mendixlabs/mxcli/sdk/workflows"
@@ -120,7 +121,7 @@ func describeWorkflowToString(ctx *ExecContext, name ast.QualifiedName) (string,
 	// Documentation
 	if targetWf.Documentation != "" {
 		lines = append(lines, "/**")
-		for docLine := range strings.SplitSeq(targetWf.Documentation, "\n") {
+		for docLine := range strings.SplitSeq(doccomment.Escape(targetWf.Documentation), "\n") {
 			lines = append(lines, " * "+docLine)
 		}
 		lines = append(lines, " */")

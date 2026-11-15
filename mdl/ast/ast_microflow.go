@@ -2,6 +2,8 @@
 
 package ast
 
+import "strings"
+
 // ============================================================================
 // Microflow Statements
 // ============================================================================
@@ -1510,3 +1512,28 @@ type TransformJsonStmt struct {
 }
 
 func (s *TransformJsonStmt) isMicroflowStatement() {}
+
+// MemberEqualityCondition returns cond in the shape IsMemberEquality tests for
+// when it is a `Member = value` condition wrapped whole in a SourceExpr.
+//
+// The visitor wraps an expression in a SourceExpr when its spelling differs
+// from the printed form — `$N-1`, `-1`, `$Item/Number-1` without the spaces
+// around the operator — so it is written back as the author spelled it. A
+// whole-condition wrapper hid the BinaryExpr from IsMemberEquality, and
+// `find $L by Number = $N-1` was written as the find-by-EXPRESSION operation
+// while `$N - 1` was a find by attribute (mendixlabs/mxcli#1740,
+// ako/mxcli#1943). The wrapper moves onto the value, which keeps its spelling;
+// any other condition is returned unchanged.
+func MemberEqualityCondition(cond Expression) Expression {
+	src, ok := cond.(*SourceExpr)
+	if !ok || !IsMemberEquality(src.Expression) {
+		return cond
+	}
+	binary := src.Expression.(*BinaryExpr)
+	_, value, found := strings.Cut(src.Source, "=")
+	value = strings.TrimSpace(value)
+	if !found || value == "" {
+		return src.Expression
+	}
+	return &BinaryExpr{Left: binary.Left, Operator: "=", Right: &SourceExpr{Expression: binary.Right, Source: value}}
+}

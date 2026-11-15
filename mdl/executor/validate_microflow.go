@@ -182,6 +182,7 @@ func (v *microflowValidator) validate(body []ast.MicroflowStatement) {
 	// ako/mxcli#962: the other half of #953's void-call finding — the name is
 	// inert both ways, so reading it is CE0109. See validate_void_call_output.go.
 	v.checkVoidCallOutputUse(v.params, body)
+	v.checkVoidFlowCallResult(body)
 
 	// mendixlabs/mxcli#1030: an error event is legal only on an error-handling
 	// flow. See validate_microflow_raise_error.go.
