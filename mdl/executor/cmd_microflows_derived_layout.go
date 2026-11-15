@@ -220,6 +220,11 @@ type flowAnalysisMemo struct {
 	// never shown. It leaves out the body warnings: they are comments, which
 	// the rebuild does not read, and working them out repeats the analysis.
 	rebuildOnly bool
+
+	// voids answers whether a called flow returns nothing, for every call the
+	// description renders (describedCallIsVoid). A pointer, so a derivation
+	// round's view shares it.
+	voids **voidCodeActions
 }
 
 // forRebuild is the memo a derivation round renders with: the same analyses,
@@ -237,6 +242,7 @@ func newFlowAnalysisMemo() *flowAnalysisMemo {
 	return &flowAnalysisMemo{
 		splitMerge: map[*microflows.MicroflowObjectCollection]map[model.ID]model.ID{},
 		labels:     map[*microflows.MicroflowObjectCollection]mergeLabels{},
+		voids:      new(*voidCodeActions),
 	}
 }
 

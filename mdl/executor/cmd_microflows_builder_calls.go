@@ -185,6 +185,19 @@ func (fb *flowBuilder) queueExists(moduleName, name string) bool {
 	return false
 }
 
+// storedResultVariable is the result variable a flow call stores: none for a
+// call to a flow known to return nothing, whatever name the statement gives it.
+// Such a name defines no variable (measured, see voidCodeActions), and storing
+// it is what Studio Pro leaves behind when a flow stops returning a value — the
+// stale name describe no longer prints (ako/mxcli#2138). A flow that cannot be
+// found (nil) keeps the name.
+func storedResultVariable(name string, returnType microflows.DataType) string {
+	if returnType != nil && returnType.GetTypeName() == "Void" {
+		return ""
+	}
+	return name
+}
+
 func (fb *flowBuilder) addCallMicroflowAction(s *ast.CallMicroflowStmt) model.ID {
 	mfQN := s.MicroflowName.Module + "." + s.MicroflowName.Name
 
@@ -212,12 +225,16 @@ func (fb *flowBuilder) addCallMicroflowAction(s *ast.CallMicroflowStmt) model.ID
 		ParameterMappings: mappings,
 		QueueSettings:     fb.buildQueueSettings(s.Queue, s.QueueRetry, "CALL MICROFLOW"),
 	}
+	var returnType microflows.DataType
+	if s.OutputVariable != "" {
+		returnType = fb.lookupMicroflowReturnType(mfQN)
+	}
 	action := &microflows.MicroflowCallAction{
 		BaseElement:        model.BaseElement{ID: model.ID(types.GenerateID())},
 		ErrorHandlingType:  fb.ehType(s.ErrorHandling),
 		MicroflowCall:      mfCall,
-		ResultVariableName: s.OutputVariable,
-		UseReturnVariable:  s.OutputVariable != "",
+		ResultVariableName: storedResultVariable(s.OutputVariable, returnType),
+		UseReturnVariable:  storedResultVariable(s.OutputVariable, returnType) != "",
 	}
 
 	activityX := fb.posX
@@ -237,7 +254,7 @@ func (fb *flowBuilder) addCallMicroflowAction(s *ast.CallMicroflowStmt) model.ID
 	fb.posX += fb.spacing
 
 	if s.OutputVariable != "" {
-		fb.registerResultVariableType(s.OutputVariable, fb.lookupMicroflowReturnType(mfQN))
+		fb.registerResultVariableType(s.OutputVariable, returnType)
 	}
 
 	fb.finishCustomErrorHandler(activity.ID, activityX, s.ErrorHandling, s.OutputVariable)
@@ -271,12 +288,16 @@ func (fb *flowBuilder) addCallNanoflowAction(s *ast.CallNanoflowStmt) model.ID {
 		ParameterMappings: mappings,
 	}
 
+	var returnType microflows.DataType
+	if s.OutputVariable != "" {
+		returnType = fb.lookupNanoflowReturnType(nfQN)
+	}
 	action := &microflows.NanoflowCallAction{
 		BaseElement:        model.BaseElement{ID: model.ID(types.GenerateID())},
 		ErrorHandlingType:  fb.ehType(s.ErrorHandling),
 		NanoflowCall:       nfCall,
-		OutputVariableName: s.OutputVariable,
-		UseReturnVariable:  s.OutputVariable != "",
+		OutputVariableName: storedResultVariable(s.OutputVariable, returnType),
+		UseReturnVariable:  storedResultVariable(s.OutputVariable, returnType) != "",
 	}
 
 	activityX := fb.posX
@@ -296,7 +317,7 @@ func (fb *flowBuilder) addCallNanoflowAction(s *ast.CallNanoflowStmt) model.ID {
 	fb.posX += fb.spacing
 
 	if s.OutputVariable != "" {
-		fb.registerResultVariableType(s.OutputVariable, fb.lookupNanoflowReturnType(nfQN))
+		fb.registerResultVariableType(s.OutputVariable, returnType)
 	}
 
 	fb.finishCustomErrorHandler(activity.ID, activityX, s.ErrorHandling, s.OutputVariable)
