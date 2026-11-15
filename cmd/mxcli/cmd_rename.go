@@ -23,6 +23,7 @@ Types:
   microflow      Rename a microflow
   nanoflow       Rename a nanoflow
   page           Rename a page
+  snippet        Rename a snippet (every snippet call follows)
   enumeration    Rename an enumeration
   association    Rename an association
   constant       Rename a constant
@@ -41,6 +42,7 @@ Example:
   mxcli rename -p app.mpr entity MyModule.Customer Client
   mxcli rename -p app.mpr microflow MyModule.ACT_Old ACT_New
   mxcli rename -p app.mpr page MyModule.OldPage NewPage
+  mxcli rename -p app.mpr snippet MyModule.Combo SNIPPET_Combo
   mxcli rename -p app.mpr java-action MyModule.JA_Old JA_New
   mxcli rename -p app.mpr workflow MyModule.WF_Old WF_New
   mxcli rename -p app.mpr module OldModule NewModule
@@ -113,6 +115,7 @@ var renameTypes = []struct {
 	{"microflow", "MICROFLOW"},
 	{"nanoflow", "NANOFLOW"},
 	{"page", "PAGE"},
+	{"snippet", "SNIPPET"},
 	{"enumeration", "ENUMERATION"},
 	{"association", "ASSOCIATION"},
 	{"constant", "CONSTANT"},
@@ -209,7 +212,7 @@ func renameBrainAnchors(projectPath, objectType, qualifiedName, newName string, 
 // corrupt entries instead of repairing them.
 func brainRenameTarget(objectType, qualifiedName string) (string, bool) {
 	switch objectType {
-	case "ENTITY", "MICROFLOW", "NANOFLOW", "PAGE", "ENUMERATION", "ASSOCIATION", "CONSTANT",
+	case "ENTITY", "MICROFLOW", "NANOFLOW", "PAGE", "SNIPPET", "ENUMERATION", "ASSOCIATION", "CONSTANT",
 		"JAVA ACTION", "WORKFLOW":
 		// These are all Module.Element, which is what an anchor names.
 		if !strings.Contains(qualifiedName, ".") {

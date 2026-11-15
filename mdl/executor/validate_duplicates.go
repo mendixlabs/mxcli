@@ -323,6 +323,8 @@ func renameDocType(objectType string) string {
 		return "nanoflow"
 	case "page":
 		return "page"
+	case "snippet":
+		return "snippet"
 	case "workflow":
 		return "workflow"
 	case "javaaction":
