@@ -27,8 +27,9 @@ import (
 //
 // GetClass is a LINQ `.First(...)` over mxbuild's glyph table, which throws
 // rather than reporting. The table this rule checks is the cmap of the font
-// Atlas_Core ships (glyphicons-halflings-regular.woff): 247 codes, and it agrees
-// with mxbuild on both measured points.
+// Atlas_Core ships (glyphicons-halflings-regular.woff): 247 private-use codes
+// and 11 named icons outside that range (ako/mxcli#2112), and it agrees with
+// mxbuild on every measured point.
 
 func glyphStmt(code int) *ast.CreateNavigationStmt {
 	return &ast.CreateNavigationStmt{
@@ -74,7 +75,7 @@ func TestMDL078_SilentOnCodesTheFontDefines(t *testing.T) {
 	}
 }
 
-// The gaps are real: the font is 247 codes in 35 runs, not one range. A check
+// The gaps are real: the private-use range is 247 codes in 35 runs, not one range. A check
 // written as "between the first and last code" would accept all of these.
 func TestMDL078_ReportsCodesInsideTheGaps(t *testing.T) {
 	for _, code := range []int{
@@ -132,9 +133,9 @@ func TestMDL078_WalksSubItems(t *testing.T) {
 // a regeneration that lost entries would quietly narrow both at once.
 func TestGlyphIconsMatchTheFont(t *testing.T) {
 	icons := GlyphIcons()
-	if len(icons) != 247 {
-		t.Errorf("table holds %d icons, want 247 (the private-use range of "+
-			"glyphicons-halflings-regular.woff)", len(icons))
+	if len(icons) != 258 {
+		t.Errorf("table holds %d icons, want 258 (the private-use range of "+
+			"glyphicons-halflings-regular.woff and its 11 named icons outside it, ako/mxcli#2112)", len(icons))
 	}
 	seenCode := map[int]bool{}
 	seenName := map[string]bool{}
