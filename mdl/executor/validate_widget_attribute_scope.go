@@ -75,6 +75,7 @@ func validatePluggableAttributeScopes(ctx *ExecContext, layout string, params []
 		reactClient: usesReactClient(ctx) && !layoutIsNative(ctx, layout),
 		assocs:      checkAssociationShapes(ctx, sc),
 		pb:          &pageBuilder{ctx: ctx, backend: ctx.Backend, execCache: ctx.Cache},
+		members:     newFlowMemberRefs(ctx, sc),
 	}
 	if sc != nil {
 		v.generalizations = sc.entityGeneralizations
@@ -113,6 +114,10 @@ type attributeScopeValidator struct {
 	// decls are the script's entity declarations, for the audit fields'
 	// declared names (validate_expr_system_member.go).
 	decls map[string]*ast.CreateEntityStmt
+
+	// members resolves the members a widget expression names, with the
+	// microflow expression check's verdict (validate_expr_system_member.go).
+	members *flowMemberRefs
 }
 
 // paramEntity is the entity of the document parameter `$name`, or "".
@@ -125,6 +130,14 @@ func (v *attributeScopeValidator) walk(w *ast.WidgetV3, enclosing dataContext) {
 		return
 	}
 	inner := childContext(enclosing, w.GetDataSource(), v.sigs, v.pageParams)
+	// A list view's specialization template renders its own entity: its
+	// widgets bind to the specialization, not the list view's (generalized)
+	// source. Judged against the source, a template's own attributes were
+	// "no attribute" errors on Studio Pro-authored pages (TestApp's
+	// Pages.Vehicle templates), and so was every expression naming them.
+	if w.Specialization != "" && !enclosing.unresolved {
+		inner = inner.with(unquoteQualifiedName(w.Specialization))
+	}
 	v.checkInputBinding(w, enclosing)
 	v.checkTemplateParams(w, enclosing)
 	v.checkAssocListSource(w, enclosing)
