@@ -19,7 +19,7 @@ import (
 const SchemaVersion = 1
 
 // Kinds lists the report kinds, in the order the help text names them.
-var Kinds = []string{"architecture", "tests", "security", "performance", "traceability"}
+var Kinds = []string{"architecture", "tests", "security", "performance", "traceability", "map"}
 
 // Envelope is what `--format json` writes and `--from` reads back: the
 // collected data plus everything a reader needs to trust it. Method and Limits

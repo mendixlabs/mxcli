@@ -39,6 +39,120 @@ type Span struct {
 	Service  string            `json:"service,omitempty"`
 }
 
+// UnmarshalJSON reads a span line. Attribute values may be any JSON scalar —
+// OTel attributes are often ints (server.port) or booleans — and are kept as
+// text; a typed value used to fail the whole file (ako/mxcli#2299). The time
+// keys of other collectors (start_ns / end_ns, startTimeUnixNano /
+// endTimeUnixNano) are accepted, and a span with no start time is refused:
+// read as time 0 it silently matched no journey.
+func (s *Span) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		TraceID      string         `json:"traceId"`
+		TraceIDSnake string         `json:"trace_id"`
+		SpanID       string         `json:"spanId"`
+		SpanIDSnake  string         `json:"span_id"`
+		ParentID     string         `json:"parentId"`
+		ParentSnake  string         `json:"parent_id"`
+		ParentSpanID string         `json:"parentSpanId"`
+		Name         string         `json:"name"`
+		Kind         json.Number    `json:"kind"`
+		Start        json.Number    `json:"start"`
+		End          json.Number    `json:"end"`
+		StartNs      json.Number    `json:"start_ns"`
+		EndNs        json.Number    `json:"end_ns"`
+		StartOTLP    any            `json:"startTimeUnixNano"`
+		EndOTLP      any            `json:"endTimeUnixNano"`
+		Attrs        map[string]any `json:"attrs"`
+		Attributes   map[string]any `json:"attributes"`
+		Service      string         `json:"service"`
+	}
+	dec := json.NewDecoder(strings.NewReader(string(b)))
+	dec.UseNumber()
+	if err := dec.Decode(&raw); err != nil {
+		return err
+	}
+	num := func(vals ...any) int64 {
+		for _, v := range vals {
+			switch t := v.(type) {
+			case json.Number:
+				if t != "" {
+					n, _ := strconv.ParseInt(string(t), 10, 64)
+					return n
+				}
+			case string:
+				if n, err := strconv.ParseInt(t, 10, 64); err == nil {
+					return n
+				}
+			}
+		}
+		return 0
+	}
+	// SpanKind is a small enum (0-5): parsed at 8 bits, so a value that is not
+	// a kind reads as 0 rather than being narrowed.
+	kind, err := strconv.ParseInt(string(raw.Kind), 10, 8)
+	if err != nil || kind < 0 {
+		kind = 0
+	}
+	*s = Span{
+		TraceID:  nonEmpty(raw.TraceID, raw.TraceIDSnake),
+		SpanID:   nonEmpty(raw.SpanID, raw.SpanIDSnake),
+		ParentID: nonEmpty(raw.ParentID, nonEmpty(raw.ParentSnake, raw.ParentSpanID)),
+		Name:     raw.Name,
+		Kind:     int(kind),
+		Start:    num(raw.Start, raw.StartNs, raw.StartOTLP),
+		End:      num(raw.End, raw.EndNs, raw.EndOTLP),
+		Service:  raw.Service,
+	}
+	attrs := raw.Attrs
+	if attrs == nil {
+		attrs = raw.Attributes
+	}
+	for k, v := range attrs {
+		if s.Attrs == nil {
+			s.Attrs = map[string]string{}
+		}
+		switch t := v.(type) {
+		case nil:
+			s.Attrs[k] = ""
+		case string:
+			s.Attrs[k] = t
+		case json.Number, bool:
+			s.Attrs[k] = fmt.Sprint(t)
+		default:
+			enc, _ := json.Marshal(t)
+			s.Attrs[k] = string(enc)
+		}
+	}
+	if s.Start == 0 {
+		return fmt.Errorf("span %q has no start time: expected \"start\" and \"end\" in unix nanoseconds (or start_ns/end_ns, startTimeUnixNano/endTimeUnixNano)", s.Name)
+	}
+	if s.End < s.Start {
+		return fmt.Errorf("span %q ends before it starts (start %d, end %d)", s.Name, s.Start, s.End)
+	}
+	return nil
+}
+
+// SpansInWindows counts the spans that start inside any record's window. Zero
+// with both spans and journeys present means they do not belong together
+// (another run, another clock, wrong time keys), and the report says so rather
+// than show every journey reaching nothing.
+func SpansInWindows(spans []Span, log *JourneyLog) int {
+	if log == nil {
+		return 0
+	}
+	n := 0
+	for _, sp := range spans {
+		for _, r := range log.Records {
+			s, e := r.window()
+			if sp.Start >= s && sp.Start <= e {
+				n++
+				break
+			}
+		}
+	}
+	return n
+}
+
 // DurationMs is the span's duration in milliseconds.
 func (s Span) DurationMs() float64 { return float64(s.End-s.Start) / 1e6 }
 
@@ -133,7 +247,9 @@ func readSpanFile(path string) ([]Span, error) {
 	var out []Span
 	sc := bufio.NewScanner(strings.NewReader(trimmed))
 	sc.Buffer(make([]byte, 1<<20), 64<<20)
+	lineNo := 0
 	for sc.Scan() {
+		lineNo++
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
 			continue
@@ -148,7 +264,7 @@ func readSpanFile(path string) ([]Span, error) {
 		}
 		var s Span
 		if err := json.Unmarshal([]byte(line), &s); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("line %d: %w", lineNo, err)
 		}
 		out = append(out, s)
 	}

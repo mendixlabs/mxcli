@@ -97,3 +97,57 @@ func TestTraceabilityStatusFootprintAndProof(t *testing.T) {
 		t.Errorf("a milestone naming an unknown requirement is reported: %v", d.Uncaptured)
 	}
 }
+
+// ako/mxcli#2299: requirements anchored on a published REST service, a Java
+// action or an attribute got no footprint; and a verdict in an open question
+// was ignored although `brain check` validates it there.
+func TestTraceabilityFootprintKindsAndQuestionVerdicts(t *testing.T) {
+	f := newFixture(t)
+	f.module("Agenda", "")
+	for _, m := range []string{"Agenda.REST_Feed", "Agenda.ACT_Search", "Agenda.ACT_Edit", "Agenda.ACT_Publish"} {
+		f.microflow(m, true, "")
+	}
+	f.exec(`INSERT INTO published_rest_operations_data (Id, ServiceQualifiedName, ResourceName, HttpMethod, Path, Microflow, ModuleName)
+		VALUES ('op', 'Agenda.PRS_Agenda', 'feed', 'GET', '/feed', 'Agenda.REST_Feed', 'Agenda')`)
+	// The refs row as the catalog names it: space-separated.
+	f.ref("Agenda.PRS_Agenda feed GET /feed", "PUBLISHED_REST_OPERATION", "Agenda.REST_Feed", "MICROFLOW", "publish")
+	f.ref("Agenda.ACT_Search", "MICROFLOW", "Agenda.JA_Search", "JAVA_ACTION", "call")
+	f.ref("Agenda.ACT_Edit", "MICROFLOW", "Agenda.Item.Title", "ATTRIBUTE", "member")
+	f.ref("Agenda.ACT_Publish", "MICROFLOW", "Agenda.Item", "ENTITY", "change")
+
+	in := TraceabilityInput{
+		Requirements: []brain.RequirementResult{
+			req("aaaaaa", "01", "Calendar feed", true, anchor("@Agenda.PRS_Agenda", "published_rest_service", brain.Resolved)),
+			req("bbbbbb", "01", "Chain search", true, anchor("@Agenda.JA_Search", "java_action", brain.Resolved)),
+			req("cccccc", "01", "Edit title", true, anchor("@Agenda.Item.Title", "attribute", brain.Resolved)),
+			req("dddddd", "01", "Public text", true, anchor("@Agenda.Item.PublicText", "attribute", brain.Resolved)),
+		},
+		Entries: []brain.ListedEntry{
+			listed("q00001", "Agenda", "", true, "Which feeds does HR need?", "Partly meets requirement `aaaaaa` until answered: only the public feed."),
+		},
+	}
+	d, err := CollectTraceability(f.cat, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]TraceRequirement{}
+	for _, r := range d.Milestones[0].Requirements {
+		got[r.ID] = r
+	}
+	for id, want := range map[string][]string{
+		"aaaaaa": {"Agenda.REST_Feed"},
+		"bbbbbb": {"Agenda.ACT_Search"},
+		"cccccc": {"Agenda.ACT_Edit"},
+		"dddddd": {"Agenda.ACT_Publish"},
+	} {
+		if !reflect.DeepEqual(got[id].Footprint, want) {
+			t.Errorf("%s footprint = %v, want %v", id, got[id].Footprint, want)
+		}
+	}
+	if got["cccccc"].FootprintApprox || !got["dddddd"].FootprintApprox {
+		t.Errorf("only the attribute no microflow names is approximate: %v / %v", got["cccccc"].FootprintApprox, got["dddddd"].FootprintApprox)
+	}
+	if got["aaaaaa"].Status != StatusPartial || got["aaaaaa"].StatusReason != "open question q00001: until answered: only the public feed." {
+		t.Errorf("status = %q (%q)", got["aaaaaa"].Status, got["aaaaaa"].StatusReason)
+	}
+}

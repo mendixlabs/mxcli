@@ -917,6 +917,9 @@ func printBrainReportCI(rep brain.Report) {
 	for _, v := range rep.UnknownRequirementRefs {
 		fmt.Printf("brain: %s: %s: %s requirement %s, which the plan does not have\n", shardLabel(v.Shard), v.EntryID, v.Verdict, v.RequirementID)
 	}
+	for _, c := range rep.ConflictingVerdicts {
+		fmt.Printf("brain: requirement %s: conflicting verdicts: %s\n", c.RequirementID, verdictList(c.Verdicts))
+	}
 }
 
 // printNoModel says, once, that nothing could be checked. Without it a plan of
@@ -961,6 +964,10 @@ func printBrainReport(rep brain.Report, loc brainLocation) {
 	for _, v := range rep.UnknownRequirementRefs {
 		fmt.Printf("NO REQUIREMENT %s: %q says it %s requirement %s, which no plan slice has\n",
 			v.EntryID, v.Title, v.Verdict, v.RequirementID)
+	}
+	for _, c := range rep.ConflictingVerdicts {
+		fmt.Printf("CONFLICT      requirement %s is both changed and partly met: %s — keep one verdict\n",
+			c.RequirementID, verdictList(c.Verdicts))
 	}
 	if len(rep.Slices) > 0 {
 		fmt.Println()
@@ -1425,4 +1432,13 @@ func planReport(rep brain.Report) map[string]any {
 		out["model_absent"] = true
 	}
 	return out
+}
+
+// verdictList names each verdict and the entry it is in.
+func verdictList(vs []brain.VerdictRef) string {
+	parts := make([]string, len(vs))
+	for i, v := range vs {
+		parts[i] = fmt.Sprintf("%s %s (%s)", v.EntryID, v.Verdict, shardLabel(v.Shard))
+	}
+	return strings.Join(parts, ", ")
 }

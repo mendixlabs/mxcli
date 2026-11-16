@@ -11,6 +11,7 @@ the kinds below answer specific questions instead of scoring.
 | `security` | Who can read what, which client-callable flows trust the caller, which defaults are unsafe? |
 | `performance` | Where does time go in the main journeys at production volume, and did a fix help? |
 | `traceability` | Is each requirement in the specification built, and what proves it? |
+| `map` | What does the app contain, and how does it fit together? (an interactive guide) |
 
 ## Shared shape
 
@@ -130,8 +131,34 @@ Milestones are read from `docs/brain/plan/traceability.json`
 (`{"milestones":[{"name":"M1","slices":["01-accounts"]}]}`); `brain plan --json`
 now lists each requirement with each anchor's resolution.
 
+## map
+
+One interactive page for someone who did not build the app: user roles and where
+each starts, the systems around the app and what runs without a user; the module
+map (domain use apart from screen links, the hub and weak links behind toggles);
+inside each module its data model with other modules' entities as ghosts and the
+flows that write each entity, entry points grouped by what starts them, and the call
+closure of one entry point; page flows per role, with the pages a role may open but
+no click path reaches; associations crossing module boundaries; naming prefixes,
+shared flows and an entry-point × module matrix; published operations with their
+call closure, consumed services, HTTP calls, queues, schedules, Java actions and
+constants; and a searchable index of every document with "uses" and "used by".
+
+```bash
+mxcli report map -p app.mpr -o map.html
+mxcli report map -p app.mpr --format json -o map.json   # the same data for another viewer
+```
+
+The page is self-contained and draws one diagram at a time. Module purposes come
+from domain-model documentation, or from `module:<Name>` notes in `--annotations`.
+
+Entry points include two kinds of reference the catalog records for this: `by_name`
+(a constant whose value is a flow's qualified name) and `queue` (a task queue runs
+the flow a call placed in it). Both also keep such flows off the architecture
+report's unused list.
+
 ## Skills
 
 Each kind has a skill with the judgement the command cannot make and the traps found
 building the reports by hand: `report-architecture`, `report-tests`,
-`report-security`, `report-performance`, `report-traceability`.
+`report-security`, `report-performance`, `report-traceability`, `report-map`.

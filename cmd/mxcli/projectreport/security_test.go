@@ -142,3 +142,39 @@ func TestHTMLEscapesAnnotationText(t *testing.T) {
 	}
 	mustContain(t, b.String(), "<code>&lt;b&gt;</code>")
 }
+
+// ako/mxcli#2299: OIDC.CustomATPTokenType — a Marketplace module's constant,
+// and a token TYPE — was flagged as secret-like.
+func TestSecurityConstantsScopeAndDescriptorNames(t *testing.T) {
+	f := newFixture(t)
+	f.module("Shop", "")
+	f.module("OIDC", "Marketplace v3.0.0")
+	f.constant("OIDC.CustomATPTokenType", "String", "urn:custom:token", false)
+	f.constant("OIDC.ClientSecret", "String", "s3cr3t-value", false)
+	f.constant("Shop.ApiTokenHeader", "String", "X-Api-Token", false)
+	f.constant("Shop.ApiToken", "String", "abc-123-live", false)
+	ids := func(include bool) map[string]bool {
+		d, err := CollectSecurity(f.cat, SecurityInput{Scope: ScopeOptions{IncludeMarketplace: include}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]bool{}
+		for _, fd := range d.Findings {
+			out[fd.ID] = true
+		}
+		return out
+	}
+	got := ids(false)
+	if !got["constant-secret:Shop.ApiToken"] {
+		t.Errorf("the app's own token constant is a finding: %v", got)
+	}
+	for _, id := range []string{"constant-secret:Shop.ApiTokenHeader", "constant-secret:OIDC.ClientSecret", "constant-secret:OIDC.CustomATPTokenType"} {
+		if got[id] {
+			t.Errorf("unexpected %s (a header name, or a module outside the app)", id)
+		}
+	}
+	got = ids(true)
+	if !got["constant-secret:OIDC.ClientSecret"] || got["constant-secret:OIDC.CustomATPTokenType"] {
+		t.Errorf("with --include-marketplace: %v", got)
+	}
+}

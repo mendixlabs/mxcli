@@ -139,3 +139,28 @@ func TestDigraphLayersAndSCCs(t *testing.T) {
 		t.Errorf("sccs = %v", cyc)
 	}
 }
+
+// ako/mxcli#2299: a page placing another module's snippet is screen
+// composition, not domain use. Counted as domain it closed a cycle that does
+// not exist: here Orders uses Billing, and Billing's page shows an Orders
+// snippet.
+func TestSnippetCallIsNotADomainDependency(t *testing.T) {
+	f := newFixture(t)
+	f.module("Orders", "")
+	f.module("Billing", "")
+	f.microflow("Orders.ACT_Order", false, "")
+	f.microflow("Billing.ACT_Invoice", false, "")
+	f.page("Billing.Invoice_Overview")
+	f.call("Orders.ACT_Order", "Billing.ACT_Invoice")
+	f.ref("Billing.Invoice_Overview", "PAGE", "Orders.SNIP_Banner", "SNIPPET", "snippet_call")
+	d, err := CollectArchitecture(f.cat, ArchitectureOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Cycles) != 0 {
+		t.Errorf("snippet placement made a domain cycle: %+v", d.Cycles)
+	}
+	if len(d.NavigationEdges) != 1 || d.NavigationEdges[0].Kinds[0] != "snippet_call" {
+		t.Errorf("navigation edges = %+v", d.NavigationEdges)
+	}
+}
