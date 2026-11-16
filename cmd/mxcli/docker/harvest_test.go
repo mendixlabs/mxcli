@@ -19,6 +19,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mendixlabs/mxcli/mdl/types"
@@ -176,9 +177,16 @@ func TestRunToolPreservingFormat_AlwaysWriteProvesUnitsWereRead(t *testing.T) {
 		t.Fatal("MXCLI_ALWAYS_WRITE wrote 0 units — the harvest is reading nothing, " +
 			"so the 0 in the elision test means 'no data', not 'no change'")
 	}
-	if res.UnitsWritten != res.StorageFiles {
-		t.Errorf("wrote %d of %d units under MXCLI_ALWAYS_WRITE; every unit should be offered",
-			res.UnitsWritten, res.StorageFiles)
+	// Every unit is offered; the update-widgets scope (ako/mxcli#2288) writes
+	// the widget documents and names the rest as left as stored.
+	if res.UnitsWritten+len(res.LeftAsStored) != res.StorageFiles {
+		t.Errorf("wrote %d and left %d of %d units under MXCLI_ALWAYS_WRITE; every unit should be offered",
+			res.UnitsWritten, len(res.LeftAsStored), res.StorageFiles)
+	}
+	for _, u := range res.LeftAsStored {
+		if strings.HasPrefix(u, "Forms$") {
+			t.Errorf("a widget document was left as stored: %s", u)
+		}
 	}
 }
 
