@@ -17,6 +17,12 @@ func TestUnknownFunctionCalls(t *testing.T) {
 		{"$a + length($s)", "", ""},        // known nested
 		{"if $a then floor($b) else ceil($c)", "", ""},
 		{"totallyMadeUpFn($x)", "totallyMadeUpFn", ""}, // no close match
+		// replace() is not a Mendix function: the string replacers are replaceAll
+		// and replaceFirst. MxBuild reports CE0117 and Mendix CLI 2 CE7811
+		// "Unknown function 'replace'" (measured on 11.16.1).
+		{"replace($s, 'a', 'b')", "replace", "replaceAll"},
+		{"replaceAll($s, 'a', 'b')", "", ""},
+		{"replaceFirst($s, 'a', 'b')", "", ""},
 	}
 	for _, c := range cases {
 		got := UnknownFunctionCalls(c.src)

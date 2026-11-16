@@ -2,7 +2,10 @@
 
 package exprcheck
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // FuncRef identifies a function call found in an expression whose name is not a
 // known Mendix built-in — a hallucinated or misspelled function (e.g. randomInt).
@@ -86,7 +89,14 @@ func walkCalls(e RobustExpr, fn func(*CallExpr)) {
 func nearestFunc(name string) string {
 	lower := strings.ToLower(name)
 	best, bestDist := "", 1<<30
+	// Sorted, so a tie (replace is one edit from replaceAll and from replaceFirst)
+	// gives the same suggestion every run rather than whichever the map yielded.
+	cands := make([]string, 0, len(funcTable))
 	for cand := range funcTable {
+		cands = append(cands, cand)
+	}
+	sort.Strings(cands)
+	for _, cand := range cands {
 		cl := strings.ToLower(cand)
 		// A prefix relationship is a strong signal (randomInt / random).
 		if strings.HasPrefix(lower, cl) || strings.HasPrefix(cl, lower) {
