@@ -4,6 +4,7 @@ package executor
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
@@ -67,6 +68,12 @@ func scalarPropertyText(w *ast.WidgetV3, key string, raw any, op string) (string
 		if text, ok := parameterAttributeValue(v); ok && op == "attribute" {
 			return text, nil // `$Param.Attr`, not an expression
 		}
+		if path, ok := associationAttributePathText(v.Text); ok && op == "attribute" {
+			// `Assoc/Attr`, read over associations from the context object —
+			// the spelling describe prints and alter page set takes
+			// (ako/mxcli#2283, #2295); the engine resolves or refuses it.
+			return path, nil
+		}
 		return "", expressionInScalarPropertyError(w, key, op, v.Text)
 	case *ast.DataSourceV3:
 		// `$Name/Assoc/Attr` parses as a data source; on an attribute property
@@ -89,6 +96,36 @@ func scalarPropertyText(w *ast.WidgetV3, key string, raw any, op string) (string
 	}
 	return stringifyAny(raw), nil
 }
+
+// associationAttributePathText reports whether text — a generic property's
+// value that parsed as an expression, identifier quotes already stripped — is
+// an attribute path over associations, `Assoc/…/Attr` (each segment a name,
+// module-qualified or not), optionally read from `$currentObject/`; path is it
+// with the spaces around each `/` removed. Unquoted, it parses as a division.
+func associationAttributePathText(text string) (path string, ok bool) {
+	segs := strings.Split(strings.TrimSpace(text), "/")
+	if len(segs) < 2 {
+		return "", false
+	}
+	for i, seg := range segs {
+		seg = strings.TrimSpace(seg)
+		segs[i] = seg
+		if i == 0 && seg == "$currentObject" {
+			continue
+		}
+		if !attributePathSegmentRe.MatchString(seg) {
+			return "", false
+		}
+	}
+	if segs[0] == "$currentObject" && len(segs) < 3 {
+		return "", false // `$currentObject/Attr` is no path over an association
+	}
+	return strings.Join(segs, "/"), true
+}
+
+// attributePathSegmentRe is one segment of an attribute path: a name, or a
+// module-qualified one.
+var attributePathSegmentRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$`)
 
 func expressionInScalarPropertyError(w *ast.WidgetV3, key, op, text string) error {
 	return fmt.Errorf("widget `%s` property `%s` is a %s property and cannot hold the expression %s — "+
@@ -114,4 +151,9 @@ func widgetLabelForError(w *ast.WidgetV3) string {
 		return w.Name
 	}
 	return strings.ToLower(w.Type)
+}
+
+func isAssociationAttributePath(text string) bool {
+	_, ok := associationAttributePathText(text)
+	return ok
 }

@@ -1387,6 +1387,14 @@ func extractExplicitProperties(ctx *ExecContext, w map[string]any, enclosingEnti
 					// the nearest container — CE7247 (mendixlabs/mxcli#1591,
 					// ako/mxcli#2107).
 					described = parameterAttributeMDL(param, attr)
+				} else if path := columnAttributeFromRef(ctx, attrRef); attrRef["EntityRef"] != nil && strings.Contains(path, "/") {
+					// Read over associations from the context object,
+					// `Assoc/Attr` — what create page and alter page set store as
+					// the final attribute plus its steps (ako/mxcli#2279,
+					// #2283). The final attribute alone re-executed against the
+					// context entity: another binding, or a refusal
+					// (ako/mxcli#2295).
+					described = path
 				} else if schemas[typePointerID].DataSourceProperty == "" && strings.Contains(enclosing, ".") &&
 					!strings.EqualFold(attributeEntity(attr), enclosing) {
 					described = attr
