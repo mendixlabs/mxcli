@@ -44,6 +44,10 @@ type MapData struct {
 	Prefixes    []MapPrefix    `json:"prefixes"`
 	SharedFlows []MapShared    `json:"sharedFlows"`
 	Index       []MapIndexDoc  `json:"index"`
+	// Features is the app by plan slice, when the project has a brain with
+	// requirements (AddFeatures); Unowned is what no feature reaches.
+	Features []MapFeature `json:"features,omitempty"`
+	Unowned  *MapUnowned  `json:"unowned,omitempty"`
 }
 
 // MapModule is one app module.

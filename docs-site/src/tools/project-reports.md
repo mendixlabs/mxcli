@@ -155,6 +155,14 @@ mxcli report map -p app.mpr -o map.html
 mxcli report map -p app.mpr --format json -o map.json   # the same data for another viewer
 ```
 
+With a project brain that has a plan, the map adds a **Features** tab: one feature
+per slice, with its requirements, milestone and status, and what its anchors reach
+— flows (the anchored ones, their footprints and call closure), the pages and
+entities those lead to, entry points started from outside the feature, and the
+roles that may open its pages. **Reached by no feature** lists the pages, entry
+points and persistent entities no requirement leads to. Features are derived from
+the plan, so there is no feature map to maintain alongside it.
+
 The page is self-contained and draws one diagram at a time. Module purposes come
 from domain-model documentation, or from `module:<Name>` notes in `--annotations`.
 

@@ -17,6 +17,7 @@ var MapMethod = []string{
 	"Page flows per role start at the role's home pages and the menu, then follow show-page actions, page buttons and the flows behind them, through snippets and layouts, limited to pages the role may view and flows it may execute.",
 	"Index: attribute and enumeration-value references are folded into their entity or enumeration.",
 	"Module purposes come from the module's domain-model documentation, or from `--annotations` (`module:<Name>` notes) when the model has none.",
+	"Features (when the project has a brain with a plan) are its slices. A feature reaches its anchored flows and the requirements' footprints (as `report traceability` computes them), the flows behind buttons of its anchored pages, and the call closure of all of those; the pages anchored or opened by those flows; the entities anchored or written by them. Entry points are the reached flows something outside the feature starts; roles are the user roles that may open one of its pages. Milestones come from the plan.",
 }
 
 var MapLimits = []string{
@@ -24,6 +25,7 @@ var MapLimits = []string{
 	"A page the role may open but no click path reaches is listed, not judged: workflow task pages and links from notifications are reached that way on purpose.",
 	"Page flows follow the model, not the running app: a button hidden by a condition still counts as a path.",
 	"Clients of published services and the systems behind consumed ones are outside the model; the map names the services, not who calls them.",
+	"A feature is only as complete as its anchors: a requirement anchored on one microflow of a larger flow shows that flow's closure, not the pages that lead to it. \"Reached by no feature\" is what no anchor leads to — unspecified, or reached only through navigation the plan does not anchor.",
 }
 
 // applyPurposes copies annotation notes keyed module:<Name> onto modules that
@@ -78,6 +80,10 @@ func RenderMap(env *Envelope, ann *Annotations) (Doc, error) {
 		bt.Rows = append(bt.Rows, []string{t.Kind, "`" + t.Source + "`", "`" + t.Flow + "`"})
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "landscape", Title: "Landscape", Blocks: []Block{rt, st, bt}})
+
+	if len(d.Features) > 0 {
+		doc.Sections = append(doc.Sections, featureSection(d))
+	}
 
 	// Modules.
 	mt := Table{Columns: []string{"Module", "Purpose", "Entities", "Microflows", "Pages", "Entry points"}}
@@ -151,6 +157,35 @@ func RenderMap(env *Envelope, ann *Annotations) (Doc, error) {
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "apis", Title: "APIs and background work", Blocks: []Block{ot, cn, hc, qt, jt, kt}})
 	return Frame(env, ann, doc), nil
+}
+
+// featureSection is the app by feature: one row per plan slice, and what no
+// feature reaches.
+func featureSection(d MapData) Section {
+	ft := Table{Columns: []string{"Feature", "Milestone", "Requirements", "Modules", "Pages", "Flows", "Entities", "Entry points", "Roles that may open it", "Shares with"}}
+	for _, f := range d.Features {
+		var eps []string
+		for _, e := range f.EntryPoints {
+			eps = append(eps, e.Kind+" `"+e.Flow+"` ("+e.Source+")")
+		}
+		ft.Rows = append(ft.Rows, []string{f.Name, f.Milestone, fmt.Sprintf("%d (%s)", len(f.Requirements), featureStatus(f.Status)),
+			strings.Join(f.Modules, ", "), strings.Join(codeList(f.Pages), ", "), fmt.Sprintf("%d (%d anchored)", len(f.Flows), len(f.Core)),
+			strings.Join(codeList(f.Entities), ", "), strings.Join(eps, ", "), strings.Join(f.Roles, ", "), strings.Join(f.SharesWith, ", ")})
+	}
+	blocks := []Block{ft}
+	if u := d.Unowned; u != nil {
+		ut := Table{Caption: "Reached by no feature", Columns: []string{"Kind", "Count", "Documents"}}
+		for _, r := range []struct {
+			kind string
+			xs   []string
+		}{{"pages", u.Pages}, {"entry points", u.EntryPoints}, {"persistent entities", u.Entities}} {
+			ut.Rows = append(ut.Rows, []string{r.kind, fmt.Sprint(len(r.xs)), strings.Join(codeList(r.xs), ", ")})
+		}
+		blocks = append(blocks, ut)
+	}
+	return Section{ID: "features", Title: "Features",
+		Intro:  "Each feature is a slice of the project brain's plan. What belongs to it is derived from its requirements' anchors: the anchored flows and their footprints with their call closure, the pages anchored or opened by those flows, and the entities anchored or written by them. What no feature reaches is the model nobody specified.",
+		Blocks: blocks}
 }
 
 func hubNote(hub string) string {

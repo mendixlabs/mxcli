@@ -369,7 +369,7 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 			d.Milestones = append(d.Milestones, tm)
 		}
 		var rest TraceMilestone
-		rest.Name = "Not in any milestone"
+		rest.Name = notInMilestone
 		for _, sl := range sliceOrder {
 			for _, id := range bySlice[sl] {
 				if !placed[id] {
@@ -396,6 +396,9 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 	}
 	return d, nil
 }
+
+// notInMilestone names the group of requirements no milestone holds.
+const notInMilestone = "Not in any milestone"
 
 // isFootprintKind is brain's list, so `brain check` and this report agree on
 // which anchors a test can ever reach (ako/mxcli#2303).

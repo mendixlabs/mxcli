@@ -667,6 +667,10 @@ describes what is there and how it fits together:
 
   Landscape            user roles and where each starts; the systems around the
                        app; what runs without a user
+  Features             with a project brain plan: one feature per slice, with
+                       its requirements, milestone and what its anchors reach
+                       (flows, pages, entities, entry points, roles), and what
+                       no feature reaches
   Module map           app modules as a dependency graph, domain use apart from
                        screen links, the hub and weak links behind toggles
   Inside a module      data model (other modules' entities as ghosts, the flows
@@ -706,12 +710,60 @@ modules that have none one sentence each in --annotations:
 		if err != nil {
 			return nil, err
 		}
+		trace, sliceMilestones, warnings, err := mapFeatureTrace(cmd, projectPath, exec)
+		if err != nil {
+			return nil, err
+		}
+		projectreport.AddFeatures(data, trace, sliceMilestones)
 		return projectreport.NewEnvelope("map", reportProjectName(projectPath), reportNow(), version, data,
-			projectreport.MapMethod, projectreport.MapLimits, nil)
+			projectreport.MapMethod, projectreport.MapLimits, warnings)
 	},
 	render:     projectreport.RenderMap,
 	renderHTML: projectreport.RenderMapHTML,
 })
+
+// mapFeatureTrace reads the project brain's plan, when there is one, as the
+// traceability report does — the same statuses, footprints and milestones — so
+// the map can show the app by feature. No brain, or no slices, is no feature
+// view, not an error.
+func mapFeatureTrace(cmd *cobra.Command, projectPath string, exec *executor.Executor) (*projectreport.TraceabilityData, map[string]string, []string, error) {
+	loc, err := resolveBrainLocation(projectPath, "")
+	if err != nil {
+		return nil, nil, nil, nil
+	}
+	store := brain.NewStore(loc.Dir)
+	if !store.Exists() {
+		return nil, nil, nil, nil
+	}
+	sliceShards, err := store.ListSlices()
+	if err != nil || len(sliceShards) == 0 {
+		return nil, nil, nil, err
+	}
+	rep, err := brain.Check(store, &catalogResolver{cat: exec.Catalog(), be: exec.Backend()}, sliceShards)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	list, err := store.List(brain.ListFilter{})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	ms, warnings, err := traceabilityMilestones(cmd, store, loc.Dir)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	sliceMilestones := map[string]string{}
+	if ms != nil {
+		for _, m := range ms.Milestones {
+			for _, sl := range m.Slices {
+				sliceMilestones[sl] = m.Name
+			}
+		}
+	}
+	trace, err := projectreport.CollectTraceability(exec.Catalog(), projectreport.TraceabilityInput{
+		Requirements: rep.Requirements, Entries: list.Entries, Milestones: ms,
+	})
+	return trace, sliceMilestones, warnings, err
+}
 
 func init() {
 	reportCmd.AddCommand(reportMapCmd)

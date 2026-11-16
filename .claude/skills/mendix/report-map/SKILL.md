@@ -10,10 +10,11 @@ description: "Produce and use the software map (mxcli report map): one interacti
 
 | lines | section |
 |---|---|
-| 25-38 | Run it |
-| 39-54 | Give each module a purpose |
-| 55-72 | Reading it — and its traps |
-| 73-76 | Related |
+| 26-39 | Run it |
+| 40-55 | Give each module a purpose |
+| 56-76 | The app by feature |
+| 77-94 | Reading it — and its traps |
+| 95-98 | Related |
 
 <!-- /skill-index -->
 # Software Map
@@ -51,6 +52,27 @@ items:
 Better still, put the sentence in the model, so every tool (and Studio Pro) sees it:
 `alter module Rooster set documentation 'Builds and publishes the monthly roster.';`
 Lint rule QUAL002 reports app modules that have none.
+
+## The app by feature
+
+With a project brain that has a plan (`docs/brain/plan/`), the map adds a
+**Features** tab: one feature per slice, with its requirements and their status,
+its milestone, and what it reaches — derived from the requirements' anchors, never
+listed by hand, so there is no separate feature map to keep up to date:
+
+- **flows:** the anchored flows and the requirements' footprints (★ in the graph),
+  the flows behind buttons of anchored pages, and their call closure;
+- **pages:** anchored, or opened by those flows; **entities:** anchored, or written
+  by them;
+- **entry points:** reached flows started from *outside* the feature (a schedule, a
+  service, the menu, another page's button); **roles:** those that may open one of
+  its pages; **shares with:** other features reaching the same documents.
+
+**Reached by no feature** lists the app's pages, entry points and persistent
+entities no anchor leads to: unspecified, or reached only through navigation the
+plan does not anchor. A thin feature means thin anchors — anchor the page and the
+microflow a requirement is built in (`brain check` flags requirements no test can
+reach). Group slices into milestones with `mxcli brain milestone`.
 
 ## Reading it — and its traps
 
