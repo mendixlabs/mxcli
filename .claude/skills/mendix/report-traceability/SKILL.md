@@ -10,10 +10,10 @@ description: "Produce and read the PRD-to-app traceability report (mxcli report 
 
 | lines | section |
 |---|---|
-| 25-60 | Preconditions |
-| 61-71 | Run it |
-| 72-89 | Reading it |
-| 90-93 | Related |
+| 25-69 | Preconditions |
+| 70-80 | Run it |
+| 81-98 | Reading it |
+| 99-102 | Related |
 
 <!-- /skill-index -->
 # Traceability Report
@@ -40,13 +40,22 @@ built and proven?". Nothing on it is ticked off by hand.
    this", not "untested". `brain check` warns about such a requirement as
    `UNPROVABLE` (`--strict` fails on it), and `brain capture` hints at it, so add
    the implementing microflow as an anchor while you still know which it is.
-3. **Verdicts live on decisions.** When the build differs from the spec, record it
-   on the decision, in its body, so `brain check` can validate the id:
+3. **Verdicts live on decisions and open questions**, never on the requirement.
+   When the build differs from the spec, record it with the entry that explains it:
 
-   ```text
-   Changes requirement `a1b2c3`: approval is per team, not per person.
-   Partly meets requirement `d4e5f6`: web only; mobile in M3.
+   ```bash
+   mxcli brain capture "Approval is per team" --changes a1b2c3:"per team, not per person" -a @Leave.ACT_Approve -p app.mpr
+   mxcli brain capture "Is mobile in scope?" --open --partly-meets d4e5f6:"until answered: web only" -a @Leave.ACT_Request -p app.mpr
    ```
+
+   That writes a ``Changes requirement `a1b2c3`: …`` / ``Partly meets requirement `d4e5f6`: …``
+   line in the body (`brain edit <id> --changes …` adds one later). `brain check`
+   refuses an unknown id, a verdict on a requirement, and a requirement that is
+   both changed and partly met; two verdicts of one kind are fine. On an open
+   question the verdict counts until it is answered: resolving a question filed
+   on a slice drops its verdict lines (and says how to re-record one), resolving
+   a module question keeps them on the decision it becomes. `brain plan --json`
+   reports each requirement's effective `status`, which this report shows.
 
 4. **Milestones** map slices (and single requirements) to the spec's milestones in
    `docs/brain/plan/traceability.json`:

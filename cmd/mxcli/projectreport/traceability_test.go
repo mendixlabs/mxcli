@@ -5,6 +5,7 @@ package projectreport
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/brain"
 	"github.com/mendixlabs/mxcli/mdl/catalog"
@@ -186,5 +187,65 @@ func TestProvableKindsHaveAFootprint(t *testing.T) {
 	_, _, _ = footprint(rq, anchor("@M.R", "module role", brain.Resolved), map[string]string{}, CallGraph{})
 	if rq.n != 0 {
 		t.Error("control: an unprovable kind has no footprint query")
+	}
+}
+
+type resolveEverything struct{}
+
+func (resolveEverything) Resolve(a brain.Anchor) (brain.Resolution, error) {
+	return brain.Resolution{State: brain.Resolved, Module: a.Module, Kind: "microflow"}, nil
+}
+
+// ako/mxcli#2301: `brain plan --json` and `report traceability` report the
+// same status for every requirement — the report reads brain's.
+func TestTraceabilityAgreesWithBrainPlan(t *testing.T) {
+	s := brain.NewStore(t.TempDir())
+	if _, err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
+	var reqs []brain.Entry
+	for _, n := range []string{"Decided", "Questioned", "Plain"} {
+		r, err := brain.NewRequirement("Requirement "+n, []string{"@Shop.ACT_" + n}, "01", now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Promote(r, brain.PlanShard("01")); err != nil {
+			t.Fatal(err)
+		}
+		reqs = append(reqs, r)
+	}
+	unanchored, _ := brain.NewRequirement("Wish", nil, "01", now)
+	_ = s.Promote(unanchored, brain.PlanShard("01"))
+	dec, _ := brain.NewEntry("No discounts\nPartly meets requirement `"+reqs[0].ID+"`: no discounts", []string{"@Shop.ACT_Decided"}, now)
+	q, _ := brain.NewQuestion("Which feeds?\nChanges requirement `"+reqs[1].ID+"` until answered: public only", []string{"@Shop.ACT_Questioned"}, "", now)
+	_ = s.Promote(dec, "Shop")
+	_ = s.Promote(q, "Shop")
+
+	slices, _ := s.ListSlices()
+	rep, err := brain.Check(s, resolveEverything{}, slices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.List(brain.ListFilter{})
+	f := newFixture(t)
+	d, err := CollectTraceability(f.cat, TraceabilityInput{Requirements: rep.Requirements, Entries: list.Entries})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromReport := map[string]string{}
+	for _, m := range d.Milestones {
+		for _, r := range m.Requirements {
+			fromReport[r.ID] = r.Status
+		}
+	}
+	want := map[string]string{reqs[0].ID: StatusPartial, reqs[1].ID: StatusChanged, reqs[2].ID: StatusBuilt, unanchored.ID: StatusNotTraceable}
+	for _, r := range rep.Requirements {
+		if r.Status != want[r.ID] {
+			t.Errorf("brain: %s = %q, want %q", r.Title, r.Status, want[r.ID])
+		}
+		if fromReport[r.ID] != r.Status {
+			t.Errorf("report says %q, brain plan %q for %s", fromReport[r.ID], r.Status, r.Title)
+		}
 	}
 }

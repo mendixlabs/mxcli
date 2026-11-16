@@ -31,6 +31,9 @@ type ListFilter struct {
 type ListedEntry struct {
 	Entry
 	Shard string `json:"shard"`
+	// Verdicts are the entry's verdict lines, parsed, so a consumer does not
+	// re-parse bodies (ako/mxcli#2301).
+	Verdicts []EntryVerdict `json:"verdicts,omitempty"`
 }
 
 // ListResult is a listing plus the blocks that could not be read. Those are
@@ -80,7 +83,7 @@ func (s *Store) List(f ListFilter) (ListResult, error) {
 			if f.Open != nil && e.Open != *f.Open {
 				continue
 			}
-			out.Entries = append(out.Entries, ListedEntry{Entry: e, Shard: sh})
+			out.Entries = append(out.Entries, ListedEntry{Entry: e, Shard: sh, Verdicts: EntryVerdicts(e)})
 		}
 	}
 	return out, nil

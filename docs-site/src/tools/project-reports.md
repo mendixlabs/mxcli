@@ -124,9 +124,12 @@ open questions that bear on it — plus three gap lists.
 mxcli report traceability -p app.mpr --junit results.xml --journeys journeys.jsonl --spans spans.jsonl -o traceability.html
 ```
 
-`partial` and `changed` come from decisions whose body says
-``Partly meets requirement `<id>`: …`` or ``Changes requirement `<id>`: …``;
-`brain check` fails on such a line naming an id the plan does not have.
+`partial` and `changed` come from a decision or open question whose body says
+``Partly meets requirement `<id>`: …`` or ``Changes requirement `<id>`: …``
+(`brain capture --partly-meets <id>:<reason>` / `--changes` write it). The status
+is brain's: `brain plan --json` reports the same `status` per requirement, and
+`brain check` fails on a verdict naming an unknown id, one on a requirement, and a
+requirement that is both changed and partly met.
 Milestones are read from `docs/brain/plan/traceability.json`
 (`{"milestones":[{"name":"M1","slices":["01-accounts"]}]}`); `brain plan --json`
 now lists each requirement with each anchor's resolution.

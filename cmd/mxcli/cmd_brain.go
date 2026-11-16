@@ -112,7 +112,7 @@ list captured twice is a no-op.`,
 			if len(args) > 0 {
 				brainFatal(fmt.Errorf("give the entry as text or --from-json, not both"))
 			}
-			for _, f := range []string{"anchor", "slice", "open", "source"} {
+			for _, f := range []string{"anchor", "slice", "open", "source", "changes", "partly-meets"} {
 				if cmd.Flags().Changed(f) {
 					brainFatal(fmt.Errorf("--%s does not combine with --from-json; set it per item in the JSON", f))
 				}
@@ -148,6 +148,9 @@ list captured twice is a no-op.`,
 			if e.Source, err = brainSource(dir, raw); err != nil {
 				brainFatal(err)
 			}
+		}
+		if e, err = applyVerdictFlags(cmd, dir, e); err != nil {
+			brainFatal(err)
 		}
 		store, queue := brain.NewStore(dir), brain.NewQueue(dir)
 		// Already committed is a duplicate too, found by content: an edited
@@ -445,8 +448,9 @@ An edit that would make the entry say the same as another is refused.`,
 				brainFatal(err)
 			}
 		}
-		if len(args) == 1 && !replace && source == "" {
-			brainFatal(fmt.Errorf("nothing to change: give the new text, -a anchors, --source, or a combination"))
+		verdicts := cmd.Flags().Changed("changes") || cmd.Flags().Changed("partly-meets")
+		if len(args) == 1 && !replace && source == "" && !verdicts {
+			brainFatal(fmt.Errorf("nothing to change: give the new text, -a anchors, --source, --changes / --partly-meets, or a combination"))
 		}
 		runBrainChange(cmd, args[0], "Edited", func(e brain.Entry) (brain.Entry, error) {
 			if source != "" {
@@ -459,7 +463,11 @@ An edit that would make the entry say the same as another is refused.`,
 			if len(args) == 2 {
 				text = args[1]
 			}
-			return e.Edit(text, anchors, replace)
+			edited, err := e.Edit(text, anchors, replace)
+			if err != nil {
+				return edited, err
+			}
+			return applyVerdictFlags(cmd, brainProjectDir(cmd), edited)
 		})
 	},
 }
@@ -674,10 +682,29 @@ is reported by 'brain check' and by 'mxcli lint' until someone does.`,
 		if err != nil {
 			brainFatal(err)
 		}
+		// A verdict on the question ("partly meets X until answered") must
+		// not silently outlive the answer (ako/mxcli#2301). On a slice the
+		// answered question becomes a requirement, which cannot carry a
+		// verdict: the lines go, and the user is told how to keep one. On a
+		// module question it becomes a decision and the verdict stays.
+		var dropped []brain.VerdictRef
+		if resolved.EntryKind() == brain.KindRequirement {
+			resolved, dropped = brain.StripVerdicts(resolved)
+		}
 		if err := store.Replace(shard, resolved); err != nil {
 			brainFatal(err)
 		}
 		fmt.Printf("Resolved %s in %s\n", resolved.ID, shardLabel(shard))
+		for _, v := range dropped {
+			fmt.Printf("Dropped its verdict: %s requirement %s. If the requirement is still not met as asked, record that on a decision:\n"+
+				"  mxcli brain capture \"<why>\" --%s %s:<reason> -a @Module.Element\n", v.Verdict, v.RequirementID, verdictFlag(v.Verdict), v.RequirementID)
+		}
+		if resolved.EntryKind() != brain.KindRequirement {
+			for _, v := range brain.Verdicts(resolved) {
+				fmt.Printf("Kept its verdict: %s requirement %s, now on decision %s. If the answer settles it, remove the line with 'mxcli brain edit %s'.\n",
+					v.Verdict, v.RequirementID, resolved.ID, resolved.ID)
+			}
+		}
 	},
 }
 
@@ -931,6 +958,9 @@ func printBrainReportCI(rep brain.Report) {
 	for _, c := range rep.ConflictingVerdicts {
 		fmt.Printf("brain: requirement %s: conflicting verdicts: %s\n", c.RequirementID, verdictList(c.Verdicts))
 	}
+	for _, v := range rep.MisplacedVerdicts {
+		fmt.Printf("brain: %s: %s: verdict on a requirement (%s %s); record it on a decision or open question\n", shardLabel(v.Shard), v.EntryID, v.Verdict, v.RequirementID)
+	}
 }
 
 // printNoModel says, once, that nothing could be checked. Without it a plan of
@@ -974,6 +1004,10 @@ func printBrainReport(rep brain.Report, loc brainLocation) {
 	}
 	for _, v := range rep.UnknownRequirementRefs {
 		fmt.Printf("NO REQUIREMENT %s: %q says it %s requirement %s, which no plan slice has\n",
+			v.EntryID, v.Title, v.Verdict, v.RequirementID)
+	}
+	for _, v := range rep.MisplacedVerdicts {
+		fmt.Printf("MISPLACED     %s: %q is a requirement but says it %s requirement %s — record that on the decision or open question that explains it\n",
 			v.EntryID, v.Title, v.Verdict, v.RequirementID)
 	}
 	for _, u := range rep.Unprovable {
@@ -1300,6 +1334,12 @@ func init() {
 		"Record this as a requirement of the named slice (plan/<slice>.md) instead of a decision")
 	brainCaptureCmd.Flags().String("source", "",
 		"Where this came from: a document in the project, optionally #<locator> (docs/prd.md#L18-21)")
+	for _, c := range []*cobra.Command{brainCaptureCmd, brainEditCmd} {
+		c.Flags().StringSlice("changes", nil,
+			"Record that this entry changes requirement <id>: adds the line \"Changes requirement `<id>`: <reason>\" (value <id> or <id>:<reason>; repeatable)")
+		c.Flags().StringSlice("partly-meets", nil,
+			"Record that this entry partly meets requirement <id> (on an open question: until it is answered); value <id> or <id>:<reason>; repeatable")
+	}
 	brainEditCmd.Flags().String("source", "",
 		"Set where this came from: a document in the project, optionally #<locator>")
 	brainEditCmd.Flags().StringSliceP("anchor", "a", nil,
@@ -1485,4 +1525,39 @@ func warnUnprovableAtCapture(mpr string, e brain.Entry) {
 	if kinds, ok := brain.Unprovable(results); ok {
 		fmt.Fprintln(os.Stderr, "Hint: "+brain.UnprovableHint(e.ID, kinds))
 	}
+}
+
+// applyVerdictFlags adds the --changes / --partly-meets lines to an entry.
+// When the store exists the requirement id must be one the plan has: a verdict
+// on nothing is refused here rather than left for 'brain check' to find.
+func applyVerdictFlags(cmd *cobra.Command, dir string, e brain.Entry) (brain.Entry, error) {
+	changes, _ := cmd.Flags().GetStringSlice("changes")
+	partly, _ := cmd.Flags().GetStringSlice("partly-meets")
+	if len(changes) == 0 && len(partly) == 0 {
+		return e, nil
+	}
+	if store := brain.NewStore(dir); store.Exists() {
+		known, err := store.RequirementIDs()
+		if err != nil {
+			return e, err
+		}
+		for _, spec := range append(append([]string{}, changes...), partly...) {
+			id, _, _ := strings.Cut(spec, ":")
+			if !known[strings.ToLower(strings.TrimSpace(id))] {
+				return e, fmt.Errorf("no requirement %s in the plan ('brain list --kind requirement' lists them)", id)
+			}
+		}
+	}
+	e, err := brain.AddVerdicts(e, brain.VerdictChanges, changes)
+	if err != nil {
+		return e, err
+	}
+	return brain.AddVerdicts(e, brain.VerdictPartly, partly)
+}
+
+func verdictFlag(kind string) string {
+	if kind == brain.VerdictChanges {
+		return "changes"
+	}
+	return "partly-meets"
 }
