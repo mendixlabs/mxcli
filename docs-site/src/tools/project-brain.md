@@ -115,7 +115,15 @@ to make.
 ```bash
 mxcli brain check -p app.mpr             # every shard
 mxcli brain check --changed -p app.mpr   # only shards this branch touched
+mxcli brain check --strict -p app.mpr    # also fail on requirements no test can prove
 ```
+
+A requirement whose anchors are all module roles, enumerations, constants or
+other kinds no microflow implements is built, but no test can ever be linked to
+it. `brain check` lists it as `UNPROVABLE` (a warning; `--strict` makes it a
+failure), and `brain capture --slice` prints the same hint when the model is
+there to resolve the anchors. Add the microflow, page or entity that implements
+the requirement as an anchor. `report traceability` uses the same list of kinds.
 
 Two independent things are checked.
 
@@ -199,6 +207,28 @@ implement it.
 
 Misfiling is not checked for slices: a slice spans modules by design.
 
+### Milestones
+
+A specification's milestones group its slices. The milestone is part of the
+slice, not a separate file:
+
+```bash
+mxcli brain milestone "M1 — accounts" --slice 01-accounts --slice 02-profiles -p app.mpr
+mxcli brain milestone "M2 — approvals" --requirement a1b2c3 -p app.mpr
+mxcli brain milestone -p app.mpr            # list them
+```
+
+That writes `milestone: "M1 — accounts"` in the slice file's frontmatter, and a
+``Milestone: `M2 — approvals` `` line on a requirement placed apart from its
+slice. `brain plan` adds a MILESTONE column, `brain plan --json` a `milestone`
+per slice, and `report traceability` groups by them. Milestones are ordered by
+where they first appear, walking the slices in name order. `--clear` takes
+slices or requirements out again.
+
+A project that kept milestones in `docs/brain/plan/traceability.json` moves them
+with `mxcli brain milestone --import docs/brain/plan/traceability.json`, which
+removes the file once everything in it is placed.
+
 ### Before there is a project
 
 The brain does not need a model to exist: capture requirements from a
@@ -246,6 +276,42 @@ refused. A file the project would overwrite is reported before anything moves.
 
 So the brain lives where the project will live, not in a workspace above it:
 the directory is the project root from the first requirement onwards.
+
+## Verdicts: built, but not as asked
+
+A requirement is built when its anchors resolve. When what was built differs from
+what was asked, record it on the entry that explains it — a decision, or an open
+question that holds it — never on the requirement:
+
+```bash
+mxcli brain capture "Approval is per team" --changes a1b2c3:"per team, not per person" -a @Leave.ACT_Approve -p app.mpr
+mxcli brain capture "Is mobile in scope?" --open --partly-meets d4e5f6:"until answered: web only" -a @Leave.ACT_Request -p app.mpr
+mxcli brain edit 7f00aa --partly-meets a1b2c3:"no export yet" -p app.mpr
+```
+
+Each flag writes a line in the entry's body (``Changes requirement `a1b2c3`: …``).
+`brain list --json` returns them parsed as `verdicts: [{requirement, kind, reason}]`,
+and `brain plan --json` gives every requirement its effective `status` — `built`,
+`partial`, `changed`, `not built` or `not traceable` — with the reason.
+
+`brain check` fails on a verdict naming a requirement the plan does not have, on a
+verdict written on a requirement, and on a requirement that is both changed and
+partly met. Several verdicts of one kind are fine. A verdict on an open question
+counts until the question is answered; `brain resolve` says what happens to it: a
+question filed on a slice becomes a requirement and drops the line, a module
+question becomes a decision and keeps it.
+
+## Accepting a lint finding
+
+A lint finding the project keeps on purpose is a decision. Record it with
+`--accepts`, on the element it is about, and lint stops counting it:
+
+```bash
+mxcli brain capture "Pages bind Core.Medewerker directly" --accepts "ARCH001:the shell owns it" -a @Core.Medewerker -p app.mpr
+```
+
+See [mxcli lint](mxcli-lint.md#accepted-findings-decisions-in-the-project-brain).
+`brain list --json` returns them as `accepts: [{rule, element, reason}]`.
 
 ## Open questions
 
@@ -459,6 +525,7 @@ progress from 65/65 to 63/65 and the number was the only symptom.
 | `brain capture "<text>" --open [-a @Anchor]…` | Queues an **open question**; anchors not checked |
 | `brain resolve <id> "<answer>"` | Answers it, turning it into a decision in place |
 | `brain plan [--slice <name>]` | Each slice's requirements counted against the model |
+| `brain milestone ["<name>"] [--slice <n>]… [--requirement <id>]… [--clear] [--import <file>]` | Groups slices (or single requirements) into milestones; with no name, lists them |
 | `brain brief --slice <name> \| --module <M>` | The reading pack: exactly the shards that work needs |
 | `brain check [--changed]` | Anchors resolve, entries filed correctly, plus slice progress |
 | `brain list [--slice <n>] [--kind <k>] [--open]` | The committed entries; with `--json`, as data |

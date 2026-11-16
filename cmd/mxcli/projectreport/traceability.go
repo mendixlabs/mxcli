@@ -14,9 +14,9 @@ import (
 )
 
 // Milestones groups plan slices — and single requirements placed apart from
-// their slice — into the specification's milestones. It is the one input the
-// traceability report cannot derive: the brain knows slices, the PRD knows
-// milestones.
+// their slice — into the specification's milestones. The plan carries them
+// (brain.Store.Milestones); this file form is what --milestones and the older
+// docs/brain/plan/traceability.json still read.
 //
 //	{"milestones": [
 //	  {"name": "M1 — accounts", "slices": ["01-accounts"]},
@@ -104,11 +104,11 @@ type TraceQuestion struct {
 
 // Requirement statuses. They are derived, never ticked off by hand.
 const (
-	StatusBuilt        = "built"
-	StatusPartial      = "partial"
-	StatusChanged      = "changed"
-	StatusNotBuilt     = "not built"
-	StatusNotTraceable = "not traceable"
+	StatusBuilt        = brain.StatusBuilt
+	StatusPartial      = brain.StatusPartial
+	StatusChanged      = brain.StatusChanged
+	StatusNotBuilt     = brain.StatusNotBuilt
+	StatusNotTraceable = brain.StatusNotTraceable
 )
 
 var specRef = regexp.MustCompile(`\(((?:slide|p\.|page|§)\s*[\w.-]+)\)\s*$`)
@@ -241,9 +241,6 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 		// answer is recorded, and `brain check` validates it there
 		// (ako/mxcli#2299).
 		for _, v := range brain.Verdicts(e.Entry) {
-			if e.Open {
-				v.Reason = "(open question) " + v.Reason
-			}
 			verdicts[v.RequirementID] = append(verdicts[v.RequirementID], v)
 		}
 	}
@@ -259,38 +256,12 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 		if e.Source != "" {
 			tr.Spec = strings.TrimSpace(e.Source + " " + tr.Spec)
 		}
-		// Status.
-		notFound := false
-		for _, a := range r.Anchors {
-			if a.State == brain.NotFound || a.State == brain.Unverifiable {
-				notFound = true
-			}
-		}
-		switch {
-		case len(r.Anchors) == 0:
-			tr.Status, tr.StatusReason = StatusNotTraceable, "no anchor: nothing in the model can be checked against it"
-		case !r.Built || notFound:
-			tr.Status = StatusNotBuilt
-			var missing []string
-			for _, a := range r.Anchors {
-				if a.State != brain.Resolved && a.State != brain.NotIndexable {
-					missing = append(missing, a.Anchor)
-				}
-			}
-			tr.StatusReason = "not in the model: " + strings.Join(missing, ", ")
-			if in.ModelAbsent {
-				tr.StatusReason = "no model to check against yet"
-			}
-		default:
-			tr.Status = StatusBuilt
-		}
-		for _, v := range verdicts[r.ID] {
-			switch {
-			case v.Verdict == brain.VerdictChanges:
-				tr.Status, tr.StatusReason = StatusChanged, verdictSource(v)
-			case v.Verdict == brain.VerdictPartly && tr.Status != StatusChanged:
-				tr.Status, tr.StatusReason = StatusPartial, verdictSource(v)
-			}
+		// Status: brain's effective status, the one definition `brain plan
+		// --json` reports too (ako/mxcli#2301). A result without one (an older
+		// caller) is derived the same way from the entries' verdicts.
+		tr.Status, tr.StatusReason = r.Status, r.StatusReason
+		if tr.Status == "" {
+			tr.Status, tr.StatusReason = brain.EffectiveStatus(r, verdicts[r.ID], in.ModelAbsent)
 		}
 		// Footprint.
 		fp := map[string]bool{}
@@ -398,7 +369,7 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 			d.Milestones = append(d.Milestones, tm)
 		}
 		var rest TraceMilestone
-		rest.Name = "Not in any milestone"
+		rest.Name = notInMilestone
 		for _, sl := range sliceOrder {
 			for _, id := range bySlice[sl] {
 				if !placed[id] {
@@ -426,23 +397,12 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 	return d, nil
 }
 
-// verdictSource names the entry a verdict came from, for the status reason.
-func verdictSource(v brain.VerdictRef) string {
-	if r, ok := strings.CutPrefix(v.Reason, "(open question) "); ok {
-		return "open question " + v.EntryID + ": " + r
-	}
-	return "decision " + v.EntryID + ": " + v.Reason
-}
+// notInMilestone names the group of requirements no milestone holds.
+const notInMilestone = "Not in any milestone"
 
-func isFootprintKind(kind string) bool {
-	switch strings.ToLower(kind) {
-	case "microflow", "page", "snippet", "workflow", "entity", "attribute", "association", "scheduled_event",
-		"java_action", "java action", "javascript_action", "javascript action",
-		"published_rest_service", "published_odata_service", "published_rest_operation":
-		return true
-	}
-	return false
-}
+// isFootprintKind is brain's list, so `brain check` and this report agree on
+// which anchors a test can ever reach (ako/mxcli#2303).
+func isFootprintKind(kind string) bool { return brain.ProvableKind(kind) }
 
 func intersects(xs []string, set map[string]bool) bool {
 	for _, x := range xs {
@@ -487,7 +447,7 @@ var TraceabilityMethod = []string{
 	"Footprint: the microflows that implement a requirement — an anchored microflow plus its same-module callees; microflows a page, workflow, scheduled event or published service anchor calls; microflows that write an anchored entity or retrieve an anchored view entity; microflows that use an anchored attribute or association. Helpers with more than three callers are left out.",
 	"A microflow test proves a requirement when what it calls, with their call closure, touches the footprint. A journey proves it when a footprint microflow appears in its spans, or its log names an anchored page.",
 	"Decisions bear on a requirement when they share an anchor (module anchors excluded) or cite its id; open questions also when filed on its slice.",
-	"Milestones come from `docs/brain/plan/traceability.json` (or `--milestones`); without one, each slice is a milestone.",
+	"Milestones come from the plan: a slice's frontmatter (`milestone:`), or a requirement's ``Milestone: `<name>` `` line (`mxcli brain milestone`); without any, each slice is a milestone. They are ordered by first appearance, walking the slices in name order.",
 }
 
 var TraceabilityLimits = []string{

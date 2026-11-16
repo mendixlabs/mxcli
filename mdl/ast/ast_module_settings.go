@@ -26,10 +26,15 @@ func (c ModuleSettingsClause) IsEmpty() bool {
 	return c.Version == nil && c.ModuleType == nil && c.UIResources == nil
 }
 
-// AlterModuleSetStmt represents: ALTER MODULE name SET ( Key: value, … )
+// AlterModuleSetStmt represents: ALTER MODULE name SET ( Key: value, … ), or
+// ALTER MODULE name SET DOCUMENTATION '…'.
 type AlterModuleSetStmt struct {
 	ModuleName string
 	Settings   ModuleSettingsClause
+	// DocumentationSet marks the SET DOCUMENTATION form; Documentation may
+	// then be empty, which clears it.
+	DocumentationSet bool
+	Documentation    string
 }
 
 func (s *AlterModuleSetStmt) isStatement() {}

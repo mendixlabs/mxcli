@@ -63,7 +63,7 @@ create persistent entity Module.Photo (
 | Show modules | `list modules;` | List all modules |
 | Describe module | `describe module ModuleName;` | All contents (entities, microflows, pages, etc.) |
 | Create module | `create module ModuleName;` | |
-| Module documentation | `/** text */ create or modify module ModuleName;` | Stored as the module's **domain model** documentation (a module has none of its own) — what lint reads as `modules().domain_model_documentation`. `describe module` prints it the same way. No comment leaves it as stored; `/** */` clears it; a plain `create module` of an existing module changes nothing |
+| Module documentation | `/** text */ create or modify module ModuleName;` or `alter module ModuleName set documentation 'text';` | Stored as the module's **domain model** documentation (a module has none of its own) — what lint reads as `modules().domain_model_documentation`. `describe module` prints it the same way. No comment leaves it as stored; `/** */` clears it; a plain `create module` of an existing module changes nothing |
 | Drop module | `drop module [if exists] ModuleName;` | |
 | Rename module | `rename module OldName to NewName;` | Updates all qualified name references |
 

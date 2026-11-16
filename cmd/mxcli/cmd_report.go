@@ -143,12 +143,17 @@ mappings) are left out, and the report names the selection.
 
 		// Build report
 		// --modules: score the selection only (ako/mxcli#953).
+		// Findings a brain decision accepts are counted apart, not scored
+		// (ako/mxcli#2304).
+		acceptances := loadBrainAcceptances(projectDir)
+		violations = acceptances.apply(violations)
 		report := linter.BuildReport(
 			projectName,
 			time.Now().Format("2006-01-02 15:04:05"),
 			linter.ScopeToModules(violations, moduleFilter),
 		)
 		report.Modules = moduleFilter
+		report.Accepted = len(acceptances.accepted)
 
 		// Format and output
 		formatter := linter.GetReportFormatter(format)

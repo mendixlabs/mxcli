@@ -10,10 +10,10 @@ description: "Produce and read the PRD-to-app traceability report (mxcli report 
 
 | lines | section |
 |---|---|
-| 25-58 | Preconditions |
-| 59-69 | Run it |
-| 70-87 | Reading it |
-| 88-91 | Related |
+| 25-74 | Preconditions |
+| 75-85 | Run it |
+| 86-103 | Reading it |
+| 104-107 | Related |
 
 <!-- /skill-index -->
 # Traceability Report
@@ -37,24 +37,40 @@ built and proven?". Nothing on it is ticked off by hand.
 2. **Anchor where it is built**, not where it is talked about: the microflow, page,
    entity, attribute or published service that implements it. A role, enumeration or
    constant anchor has no microflow footprint; the page says "no microflow implements
-   this", not "untested".
-3. **Verdicts live on decisions.** When the build differs from the spec, record it
-   on the decision, in its body, so `brain check` can validate the id:
+   this", not "untested". `brain check` warns about such a requirement as
+   `UNPROVABLE` (`--strict` fails on it), and `brain capture` hints at it, so add
+   the implementing microflow as an anchor while you still know which it is.
+3. **Verdicts live on decisions and open questions**, never on the requirement.
+   When the build differs from the spec, record it with the entry that explains it:
 
-   ```text
-   Changes requirement `a1b2c3`: approval is per team, not per person.
-   Partly meets requirement `d4e5f6`: web only; mobile in M3.
+   ```bash
+   mxcli brain capture "Approval is per team" --changes a1b2c3:"per team, not per person" -a @Leave.ACT_Approve -p app.mpr
+   mxcli brain capture "Is mobile in scope?" --open --partly-meets d4e5f6:"until answered: web only" -a @Leave.ACT_Request -p app.mpr
    ```
 
-4. **Milestones** map slices (and single requirements) to the spec's milestones in
-   `docs/brain/plan/traceability.json`:
+   That writes a ``Changes requirement `a1b2c3`: …`` / ``Partly meets requirement `d4e5f6`: …``
+   line in the body (`brain edit <id> --changes …` adds one later). `brain check`
+   refuses an unknown id, a verdict on a requirement, and a requirement that is
+   both changed and partly met; two verdicts of one kind are fine. On an open
+   question the verdict counts until it is answered: resolving a question filed
+   on a slice drops its verdict lines (and says how to re-record one), resolving
+   a module question keeps them on the decision it becomes. `brain plan --json`
+   reports each requirement's effective `status`, which this report shows.
 
-   ```json
-   {"milestones": [
-     {"name": "M1 — accounts", "slices": ["01-accounts"]},
-     {"name": "M2 — swaps", "slices": ["02-swaps"], "requirements": ["a1b2c3"]}
-   ]}
+4. **Milestones** live in the plan, on the slices they group. Put slices — or a
+   single requirement apart from its slice — in a milestone:
+
+   ```bash
+   mxcli brain milestone "M1 — accounts" --slice 01-accounts -p app.mpr
+   mxcli brain milestone "M2 — swaps" --slice 02-swaps --requirement a1b2c3 -p app.mpr
    ```
+
+   That writes `milestone: "M1 — accounts"` in the slice file's frontmatter (a
+   ``Milestone: `M2 — swaps` `` line on a requirement). `brain plan` shows the
+   column, and milestones are ordered by first appearance in slice-name order.
+   A project with the older `docs/brain/plan/traceability.json` moves it with
+   `mxcli brain milestone --import docs/brain/plan/traceability.json`; until then
+   the report still reads it, with a warning.
 
 ## Run it
 

@@ -14,8 +14,8 @@ description: "Produce and triage the security review (mxcli report security): wh
 | 39-60 | Triage a client-callable flow |
 | 61-74 | Unsafe defaults |
 | 75-82 | Live probes (only on a local app, only undone through the app) |
-| 83-96 | Statuses |
-| 97-100 | Related |
+| 83-106 | Statuses |
+| 107-110 | Related |
 
 <!-- /skill-index -->
 # Security Report
@@ -81,6 +81,16 @@ the database behind the runtime's back. Never probe a shared or production
 environment.
 
 ## Statuses
+
+An accepted **lint** finding belongs in the project brain, not here: record it once
+as a decision and lint, the scored report and this page all read it.
+
+```bash
+mxcli brain capture "Beperking has no access rules on purpose" --accepts "SEC001:logged reads only" -a @Dossier.Beperking -p app.mpr
+```
+
+The lint table then shows *accepted (brain <id>)*. Use the annotations file for the
+report's own items (findings, flows) and for notes the brain does not hold:
 
 ```yaml
 items:

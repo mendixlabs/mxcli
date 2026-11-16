@@ -104,6 +104,49 @@ V.landscape=function(){
   h+=table(['Started by','Source','Flow'],(D.background||[]).map(function(t){return [esc(t.kind),esc(t.source),link(t.flow)];}));
   return h;
 };
+V.features=function(arg){
+  function arr(x){return x||[];}
+  var fs=arr(D.features).map(function(f){['requirements','modules','pages','flows','core','entities','other','entryPoints','roles','sharesWith'].forEach(function(k){f[k]=arr(f[k]);});f.status=f.status||{};return f;});
+  var u=D.unowned||{}; u={pages:arr(u.pages),entryPoints:arr(u.entryPoints),entities:arr(u.entities)};
+  var h='<div class="bar">Feature <select id="ft-sel"><option value="">All features</option>'+fs.map(function(f){return '<option'+(f.name===arg?' selected':'')+'>'+esc(f.name)+'</option>';}).join('')+'</select></div>';
+  var f=fs.filter(function(x){return x.name===arg;})[0];
+  function status(st){return ['built','partial','changed','not built','not traceable'].filter(function(k){return st[k];}).map(function(k){return '<span class="pill">'+st[k]+' '+esc(k)+'</span>';}).join('');}
+  if(!f){
+    h+=h2('Features','Each feature is a slice of the project brain\'s plan; what belongs to it is derived from its requirements\' anchors. Pick one to see its pages, flows and data.');
+    h+='<div class="cards">'+fs.map(function(f){return '<div class="card"><h4><a class="doc" data-feature="'+esc(f.name)+'">'+esc(f.name)+'</a>'+(f.milestone?' <span class="pill">'+esc(f.milestone)+'</span>':'')+'</h4>'+
+      '<div>'+status(f.status)+'</div><div class="muted">'+f.requirements.length+' requirement(s) · '+f.pages.length+' page(s) · '+f.flows.length+' flow(s) · '+f.entities.length+' entit'+(f.entities.length===1?'y':'ies')+'</div>'+
+      '<div class="muted">'+esc(f.modules.join(', '))+'</div>'+(f.sharesWith&&f.sharesWith.length?'<div class="muted">shares with '+esc(f.sharesWith.join(', '))+'</div>':'')+'</div>';}).join('')+'</div>';
+    h+=h2('Reached by no feature','The part of the app no requirement leads to: specified nowhere, or reached only through navigation the plan does not anchor.');
+    h+=table(['Kind','Count','Documents'],[['pages',u.pages.length,links(u.pages)],['entry points',u.entryPoints.length,links(u.entryPoints)],['persistent entities',u.entities.length,links(u.entities)]].map(function(r){return [esc(r[0]),r[1],r[2]];}));
+    return h;
+  }
+  h+='<p>'+(f.milestone?'Milestone <b>'+esc(f.milestone)+'</b>. ':'')+'Modules: '+esc(f.modules.join(', ')||'none')+'.'+(f.roles.length?' Roles that may open its pages: '+esc(f.roles.join(', '))+'.':'')+
+     (f.sharesWith&&f.sharesWith.length?' Shares pages, flows or data with '+f.sharesWith.map(function(s){return '<a class="doc" data-feature="'+esc(s)+'">'+esc(s)+'</a>';}).join(', ')+'.':'')+'</p>';
+  h+=h2('Requirements');
+  h+=table(['Id','Requirement','Status','Milestone'],f.requirements.map(function(r){return ['<code>'+esc(r.id)+'</code>',esc(r.title),esc(r.status),esc(r.milestone||'')];}));
+  var keep={},nodes=[],edges=[];
+  f.pages.forEach(function(p){keep[p]=1;nodes.push({id:p,label:p,fill:'var(--warnbg)'});});
+  var core={}; f.core.forEach(function(n){core[n]=1;});
+  var shown=f.core.concat(f.flows.filter(function(n){return !core[n];})).slice(0,60);
+  shown.forEach(function(n){keep[n]=1;var fl=flows[n];nodes.push({id:n,label:(core[n]?'★ ':'')+n,fill:fl&&fl.nanoflow?'var(--infobg)':'var(--okbg)'});});
+  f.entities.forEach(function(e){keep[e]=1;nodes.push({id:e,label:e,fill:'var(--card)',dashed:1});});
+  f.flows.forEach(function(n){var fl=flows[n]; if(!fl||!keep[n])return;
+    (fl.calls||[]).forEach(function(c){if(keep[c])edges.push({from:n,to:c,title:'calls'});});
+    (fl.pages||[]).forEach(function(p){if(keep[p])edges.push({from:n,to:p,nav:1,title:'opens'});});});
+  f.pages.forEach(function(p){var pg=pages[p]; (pg&&pg.flows||[]).forEach(function(n){if(keep[n])edges.push({from:p,to:n,title:'button runs'});});});
+  f.entities.forEach(function(e){(ents[e]&&ents[e].writtenBy||[]).forEach(function(n){if(keep[n])edges.push({from:n,to:e,title:'writes'});});});
+  h+=h2('Pages, flows and data','Amber: pages; green: microflows; blue: nanoflows; dashed: entities. Arrows: a button runs a flow, a flow calls, opens or writes. ★ marks the '+f.core.length+' flow(s) the requirements are anchored on or whose footprint they are; the rest is their reach'+(f.flows.length>60?' (60 of '+f.flows.length+' shown)':'')+'.');
+  h+=nodes.length?layout(nodes,edges):'<p>Nothing in the app is anchored yet.</p>';
+  h+=h2('Entry points','Flows in the feature\'s reach that something outside it starts: a schedule, a service, the menu, or a button on a page that is not the feature\'s own.');
+  h+=table(['Started by','Flow','From'],(f.entryPoints||[]).map(function(e){return [esc(e.kind),link(e.flow),esc(e.source)];}));
+  if((f.other||[]).length)h+=h2('Other anchors','Anchors that are not pages, flows or entities: services, workflows, roles, enumerations.')+'<p>'+links(f.other)+'</p>';
+  return h;
+};
+V.features.after=function(root){
+  root.querySelector('#ft-sel').addEventListener('change',function(e){go('features',e.target.value);});
+  root.querySelectorAll('a[data-feature]').forEach(function(a){a.addEventListener('click',function(){go('features',a.getAttribute('data-feature'));});});
+  root.querySelectorAll('.node').forEach(function(g){g.addEventListener('click',function(){openDoc(g.getAttribute('data-id'));});});
+};
 V.modules=function(){
   var h=h2('Module map','Arrows point from a module to what it uses, thicker for more references. Screen links (dashed) and the hub are hidden unless switched on.');
   h+='<div class="bar"><label><input type="checkbox" id="m-nav"> screen links</label>'+(D.hub?'<label><input type="checkbox" id="m-hub"> hub ('+esc(D.hub)+')</label>':'')+
@@ -265,7 +308,7 @@ function showDoc(name){
 function openDoc(name){ if(cur!=='index') go('index',''); showDoc(name); }
 
 // ---- shell
-var tabs=[['landscape','Landscape'],['modules','Module map'],['module','Inside a module'],['pageflows','Page flows'],['data','Data across modules'],['conventions','Conventions'],['apis','APIs & background'],['index','Index'],['about','How this was made']];
+var tabs=[['landscape','Landscape']].concat((D.features||[]).length?[['features','Features']]:[]).concat([['modules','Module map'],['module','Inside a module'],['pageflows','Page flows'],['data','Data across modules'],['conventions','Conventions'],['apis','APIs & background'],['index','Index'],['about','How this was made']]);
 V.about=function(){
   return h2('How this was measured')+'<ul>'+P.method.map(function(m){return '<li>'+esc(m)+'</li>';}).join('')+'</ul>'+
     h2('What this does not cover')+'<ul>'+P.limits.map(function(m){return '<li>'+esc(m)+'</li>';}).join('')+'</ul>';
