@@ -45,6 +45,10 @@ func (b *Builder) exitAlterDocumentStatement(ctx *parser.AlterStatementContext) 
 			stmt.Operations = append(stmt.Operations, b.buildAlterInsert(insertCtx.(*parser.AlterInsertContext)))
 		} else if dropCtx := op.AlterDrop(); dropCtx != nil {
 			stmt.Operations = append(stmt.Operations, b.buildAlterDrop(dropCtx.(*parser.AlterDropContext)))
+		} else if moveCtx := op.AlterMove(); moveCtx != nil {
+			stmt.Operations = append(stmt.Operations, b.buildAlterMove(moveCtx.(*parser.AlterMoveContext)))
+		} else if wrapCtx := op.AlterWrap(); wrapCtx != nil {
+			stmt.Operations = append(stmt.Operations, b.buildAlterWrap(wrapCtx.(*parser.AlterWrapContext)))
 		} else if dropTplCtx := op.AlterPageDropTemplate(); dropTplCtx != nil {
 			stmt.Operations = append(stmt.Operations, b.buildAlterPageDropTemplate(dropTplCtx.(*parser.AlterPageDropTemplateContext)))
 		} else if replaceCtx := op.AlterReplace(); replaceCtx != nil {
@@ -251,6 +255,34 @@ func (b *Builder) buildAlterInsert(ctx *parser.AlterInsertContext) *ast.InsertWi
 	}
 
 	op.Widgets = b.buildAlterFragment(ctx.AlterFragment())
+	return op
+}
+
+// buildAlterMove builds a MoveWidgetOp: MOVE target AFTER|BEFORE|INTO destination.
+func (b *Builder) buildAlterMove(ctx *parser.AlterMoveContext) *ast.MoveWidgetOp {
+	op := &ast.MoveWidgetOp{}
+	switch {
+	case ctx.AFTER() != nil:
+		op.Position = "AFTER"
+	case ctx.BEFORE() != nil:
+		op.Position = "BEFORE"
+	case ctx.INTO() != nil:
+		op.Position = "INTO"
+	}
+	if targets := ctx.AllAlterTarget(); len(targets) == 2 {
+		op.Target = b.buildAlterTarget(targets[0])
+		op.Destination = b.buildAlterTarget(targets[1])
+	}
+	return op
+}
+
+// buildAlterWrap builds a WrapWidgetOp: WRAP target IN { container }.
+func (b *Builder) buildAlterWrap(ctx *parser.AlterWrapContext) *ast.WrapWidgetOp {
+	op := &ast.WrapWidgetOp{}
+	if tr := ctx.AlterTarget(); tr != nil {
+		op.Target = b.buildAlterTarget(tr)
+	}
+	op.Container = b.buildAlterFragment(ctx.AlterFragment())
 	return op
 }
 

@@ -42,6 +42,9 @@ type LintFinding struct {
 	Severity string `json:"severity"`
 	Message  string `json:"message"`
 	Where    string `json:"where"`
+	// AcceptedBy is the brain decision that accepts the finding, if any
+	// (ako/mxcli#2304).
+	AcceptedBy string `json:"acceptedBy,omitempty"`
 }
 
 // SecurityInput is everything the security report reads besides the catalog.
@@ -111,6 +114,10 @@ type LintRule struct {
 	Count    int      `json:"count"`
 	Examples []string `json:"examples"`
 	Hint     string   `json:"hint,omitempty"`
+	// Accepted counts the findings brain decisions accept; AcceptedBy names
+	// those decisions.
+	Accepted   int      `json:"accepted,omitempty"`
+	AcceptedBy []string `json:"acceptedBy,omitempty"`
 }
 
 // XPath access classes, narrowest first.
@@ -595,6 +602,11 @@ func groupLint(ls []LintFinding) []LintRule {
 			by[l.Rule] = r
 		}
 		r.Count++
+		if l.AcceptedBy != "" {
+			r.Accepted++
+			r.AcceptedBy = appendUnique(r.AcceptedBy, l.AcceptedBy)
+			continue
+		}
 		if len(r.Examples) < 3 {
 			ex := l.Message
 			if l.Where != "" {
@@ -791,9 +803,14 @@ func RenderSecurity(env *Envelope, ann *Annotations) (Doc, error) {
 	for _, r := range d.LintRules {
 		key := "rule:" + r.Rule
 		verdict := nonEmpty(r.Hint, "")
-		if n, ok := ann.Get(key); ok {
+		switch n, ok := ann.Get(key); {
+		case ok:
 			verdict = joinNote(n.Status, n.Note, "")
-		} else {
+		case r.Accepted == r.Count:
+			verdict = "accepted (brain " + strings.Join(r.AcceptedBy, ", ") + ")"
+		case r.Accepted > 0:
+			verdict = joinNote("unreviewed", fmt.Sprintf("%d of %d accepted (brain %s)", r.Accepted, r.Count, strings.Join(r.AcceptedBy, ", ")), verdict)
+		default:
 			verdict = joinNote("unreviewed", "", verdict)
 		}
 		lt.Rows = append(lt.Rows, []string{r.Rule, r.Severity, fmt.Sprint(r.Count), strings.Join(r.Examples, " · "), verdict})

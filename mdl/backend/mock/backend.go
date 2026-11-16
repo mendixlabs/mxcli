@@ -47,6 +47,7 @@ type MockBackend struct {
 	ListModuleSettingsFunc   func() ([]*types.ModuleSettings, error)
 	GetModuleSettingsFunc    func(moduleID model.ID) (*types.ModuleSettings, error)
 	UpdateModuleSettingsFunc func(ms *types.ModuleSettings) error
+	SetModuleUIResourcesFunc func(id model.ID, on bool) error
 
 	// FolderBackend
 	ListFoldersFunc  func() ([]*types.FolderInfo, error)

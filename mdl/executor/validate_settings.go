@@ -141,7 +141,39 @@ func settingsStatementErrors(stmt *ast.AlterSettingsStmt) []error {
 	if _, ok := settingsSectionKeys[section]; !ok {
 		return []error{unknownSettingsSection(section)}
 	}
-	return unknownSettingsKeys(section, stmt.Properties)
+	if errs := unknownSettingsKeys(section, stmt.Properties); len(errs) > 0 {
+		return errs
+	}
+	return settingsListValueErrors(section, stmt.Properties)
+}
+
+// settingsListValueErrors refuses a list where a property takes one value, and
+// one value where it takes a list. ThemeModuleOrder is the only list-valued
+// settings property (ako/mxcli#1286); a module named twice in it is refused
+// too, since the order would be ambiguous.
+func settingsListValueErrors(section string, props map[string]any) []error {
+	var errs []error
+	for key, val := range props {
+		list, isList := val.([]string)
+		wantsList := section == "webui" && key == "ThemeModuleOrder"
+		switch {
+		case isList && !wantsList:
+			errs = append(errs, mdlerrors.NewValidationf("%s takes one value, not a list", key))
+		case !isList && wantsList:
+			errs = append(errs, mdlerrors.NewValidationf(
+				"ThemeModuleOrder takes a list of module names, as in ThemeModuleOrder: ('Atlas_Core', 'BrandTheme')"))
+		case isList:
+			seen := map[string]bool{}
+			for _, n := range list {
+				if seen[n] {
+					errs = append(errs, mdlerrors.NewValidationf("ThemeModuleOrder names module %s twice", n))
+				}
+				seen[n] = true
+			}
+		}
+	}
+	sort.Slice(errs, func(i, j int) bool { return errs[i].Error() < errs[j].Error() })
+	return errs
 }
 
 // settingsStatementViolations turns those refusals into check diagnostics. The

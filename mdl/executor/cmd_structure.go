@@ -470,90 +470,95 @@ func structureDepth2(ctx *ExecContext, modules []structureModule) error {
 			fmt.Fprintln(ctx.Output)
 		}
 		fmt.Fprintln(ctx.Output, m.Name)
+		if err := writeStructureModuleNested(ctx, m.Name, func() error {
 
-		// Entities
-		structureEntities(ctx, m.Name, dmByModule[m.Name], false)
+			// Entities
+			structureEntities(ctx, m.Name, dmByModule[m.Name], false)
 
-		// Enumerations
-		if enums, ok := enumsByModule[m.Name]; ok {
-			sortEnumerations(enums)
-			for _, enum := range enums {
-				values := make([]string, len(enum.Values))
-				for i, v := range enum.Values {
-					values[i] = v.Name
+			// Enumerations
+			if enums, ok := enumsByModule[m.Name]; ok {
+				sortEnumerations(enums)
+				for _, enum := range enums {
+					values := make([]string, len(enum.Values))
+					for i, v := range enum.Values {
+						values[i] = v.Name
+					}
+					fmt.Fprintf(ctx.Output, "  Enumeration %s.%s [%s]\n", m.Name, enum.Name, strings.Join(values, ", "))
 				}
-				fmt.Fprintf(ctx.Output, "  Enumeration %s.%s [%s]\n", m.Name, enum.Name, strings.Join(values, ", "))
 			}
-		}
 
-		// Microflows
-		if mfs, ok := mfByModule[m.Name]; ok {
-			sortMicroflows(mfs)
-			for _, mf := range mfs {
-				fmt.Fprintf(ctx.Output, "  Microflow %s.%s%s\n", m.Name, mf.Name, formatMicroflowSignature(mf.Parameters, mf.ReturnType, false))
+			// Microflows
+			if mfs, ok := mfByModule[m.Name]; ok {
+				sortMicroflows(mfs)
+				for _, mf := range mfs {
+					fmt.Fprintf(ctx.Output, "  Microflow %s.%s%s\n", m.Name, mf.Name, formatMicroflowSignature(mf.Parameters, mf.ReturnType, false))
+				}
 			}
-		}
 
-		// Nanoflows
-		if nfs, ok := nfByModule[m.Name]; ok {
-			sortNanoflows(nfs)
-			for _, nf := range nfs {
-				fmt.Fprintf(ctx.Output, "  Nanoflow %s.%s%s\n", m.Name, nf.Name, formatMicroflowSignature(nf.Parameters, nf.ReturnType, false))
+			// Nanoflows
+			if nfs, ok := nfByModule[m.Name]; ok {
+				sortNanoflows(nfs)
+				for _, nf := range nfs {
+					fmt.Fprintf(ctx.Output, "  Nanoflow %s.%s%s\n", m.Name, nf.Name, formatMicroflowSignature(nf.Parameters, nf.ReturnType, false))
+				}
 			}
-		}
 
-		// Workflows
-		structureWorkflows(ctx, m.Name, wfByModule[m.Name], false)
+			// Workflows
+			structureWorkflows(ctx, m.Name, wfByModule[m.Name], false)
 
-		// Pages (from catalog)
-		if err := structurePages(ctx, m.Name); err != nil {
-			return err
-		}
-
-		// Snippets (from catalog)
-		if err := structureSnippets(ctx, m.Name); err != nil {
-			return err
-		}
-
-		// Java Actions
-		outputJavaActions(ctx, m.Name, jaByModule[m.Name], false)
-
-		// Constants
-		if consts, ok := constByModule[m.Name]; ok {
-			sortConstants(consts)
-			for _, c := range consts {
-				fmt.Fprintf(ctx.Output, "  Constant %s.%s: %s\n", m.Name, c.Name, formatConstantTypeBrief(c.Type))
+			// Pages (from catalog)
+			if err := structurePages(ctx, m.Name); err != nil {
+				return err
 			}
-		}
 
-		// Scheduled Events
-		if events, ok := eventsByModule[m.Name]; ok {
-			sortScheduledEvents(events)
-			for _, ev := range events {
-				fmt.Fprintf(ctx.Output, "  ScheduledEvent %s.%s\n", m.Name, ev.Name)
+			// Snippets (from catalog)
+			if err := structureSnippets(ctx, m.Name); err != nil {
+				return err
 			}
-		}
 
-		// Task Queues
-		if queues, ok := queuesByModule[m.Name]; ok {
-			sort.Slice(queues, func(i, j int) bool { return queues[i].Name < queues[j].Name })
-			for _, q := range queues {
-				fmt.Fprintf(ctx.Output, "  Queue %s.%s\n", m.Name, q.Name)
+			// Java Actions
+			outputJavaActions(ctx, m.Name, jaByModule[m.Name], false)
+
+			// Constants
+			if consts, ok := constByModule[m.Name]; ok {
+				sortConstants(consts)
+				for _, c := range consts {
+					fmt.Fprintf(ctx.Output, "  Constant %s.%s: %s\n", m.Name, c.Name, formatConstantTypeBrief(c.Type))
+				}
 			}
-		}
 
-		// OData Clients
-		if err := structureODataClients(ctx, m.Name); err != nil {
-			return err
-		}
+			// Scheduled Events
+			if events, ok := eventsByModule[m.Name]; ok {
+				sortScheduledEvents(events)
+				for _, ev := range events {
+					fmt.Fprintf(ctx.Output, "  ScheduledEvent %s.%s\n", m.Name, ev.Name)
+				}
+			}
 
-		// OData Services
-		if err := structureODataServices(ctx, m.Name); err != nil {
-			return err
-		}
+			// Task Queues
+			if queues, ok := queuesByModule[m.Name]; ok {
+				sort.Slice(queues, func(i, j int) bool { return queues[i].Name < queues[j].Name })
+				for _, q := range queues {
+					fmt.Fprintf(ctx.Output, "  Queue %s.%s\n", m.Name, q.Name)
+				}
+			}
 
-		// Business Event Services
-		if err := structureBusinessEventServices(ctx, m.Name); err != nil {
+			// OData Clients
+			if err := structureODataClients(ctx, m.Name); err != nil {
+				return err
+			}
+
+			// OData Services
+			if err := structureODataServices(ctx, m.Name); err != nil {
+				return err
+			}
+
+			// Business Event Services
+			if err := structureBusinessEventServices(ctx, m.Name); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}
@@ -650,92 +655,97 @@ func structureDepth3(ctx *ExecContext, modules []structureModule) error {
 			fmt.Fprintln(ctx.Output)
 		}
 		fmt.Fprintln(ctx.Output, m.Name)
+		if err := writeStructureModuleNested(ctx, m.Name, func() error {
 
-		// Entities (with types)
-		structureEntities(ctx, m.Name, dmByModule[m.Name], true)
+			// Entities (with types)
+			structureEntities(ctx, m.Name, dmByModule[m.Name], true)
 
-		// Enumerations
-		if enums, ok := enumsByModule[m.Name]; ok {
-			sortEnumerations(enums)
-			for _, enum := range enums {
-				values := make([]string, len(enum.Values))
-				for i, v := range enum.Values {
-					values[i] = v.Name
+			// Enumerations
+			if enums, ok := enumsByModule[m.Name]; ok {
+				sortEnumerations(enums)
+				for _, enum := range enums {
+					values := make([]string, len(enum.Values))
+					for i, v := range enum.Values {
+						values[i] = v.Name
+					}
+					fmt.Fprintf(ctx.Output, "  Enumeration %s.%s [%s]\n", m.Name, enum.Name, strings.Join(values, ", "))
 				}
-				fmt.Fprintf(ctx.Output, "  Enumeration %s.%s [%s]\n", m.Name, enum.Name, strings.Join(values, ", "))
 			}
-		}
 
-		// Microflows (with param names)
-		if mfs, ok := mfByModule[m.Name]; ok {
-			sortMicroflows(mfs)
-			for _, mf := range mfs {
-				fmt.Fprintf(ctx.Output, "  Microflow %s.%s%s\n", m.Name, mf.Name, formatMicroflowSignature(mf.Parameters, mf.ReturnType, true))
-			}
-		}
-
-		// Nanoflows (with param names)
-		if nfs, ok := nfByModule[m.Name]; ok {
-			sortNanoflows(nfs)
-			for _, nf := range nfs {
-				fmt.Fprintf(ctx.Output, "  Nanoflow %s.%s%s\n", m.Name, nf.Name, formatMicroflowSignature(nf.Parameters, nf.ReturnType, true))
-			}
-		}
-
-		// Workflows (with details)
-		structureWorkflows(ctx, m.Name, wfByModule[m.Name], true)
-
-		// Pages
-		if err := structurePages(ctx, m.Name); err != nil {
-			return err
-		}
-
-		// Snippets
-		if err := structureSnippets(ctx, m.Name); err != nil {
-			return err
-		}
-
-		// Java Actions (with param names)
-		outputJavaActions(ctx, m.Name, jaByModule[m.Name], true)
-
-		// Constants (with default value)
-		if consts, ok := constByModule[m.Name]; ok {
-			sortConstants(consts)
-			for _, c := range consts {
-				s := fmt.Sprintf("  Constant %s.%s: %s", m.Name, c.Name, formatConstantTypeBrief(c.Type))
-				if c.DefaultValue != "" {
-					s += " = " + c.DefaultValue
+			// Microflows (with param names)
+			if mfs, ok := mfByModule[m.Name]; ok {
+				sortMicroflows(mfs)
+				for _, mf := range mfs {
+					fmt.Fprintf(ctx.Output, "  Microflow %s.%s%s\n", m.Name, mf.Name, formatMicroflowSignature(mf.Parameters, mf.ReturnType, true))
 				}
-				fmt.Fprintln(ctx.Output, s)
 			}
-		}
 
-		// Scheduled Events
-		if events, ok := eventsByModule[m.Name]; ok {
-			sortScheduledEvents(events)
-			for _, ev := range events {
-				fmt.Fprintf(ctx.Output, "  ScheduledEvent %s.%s\n", m.Name, ev.Name)
+			// Nanoflows (with param names)
+			if nfs, ok := nfByModule[m.Name]; ok {
+				sortNanoflows(nfs)
+				for _, nf := range nfs {
+					fmt.Fprintf(ctx.Output, "  Nanoflow %s.%s%s\n", m.Name, nf.Name, formatMicroflowSignature(nf.Parameters, nf.ReturnType, true))
+				}
 			}
-		}
 
-		// Task Queues
-		if queues, ok := queuesByModule[m.Name]; ok {
-			sort.Slice(queues, func(i, j int) bool { return queues[i].Name < queues[j].Name })
-			for _, q := range queues {
-				fmt.Fprintf(ctx.Output, "  Queue %s.%s\n", m.Name, q.Name)
+			// Workflows (with details)
+			structureWorkflows(ctx, m.Name, wfByModule[m.Name], true)
+
+			// Pages
+			if err := structurePages(ctx, m.Name); err != nil {
+				return err
 			}
-		}
 
-		// OData
-		if err := structureODataClients(ctx, m.Name); err != nil {
-			return err
-		}
-		if err := structureODataServices(ctx, m.Name); err != nil {
-			return err
-		}
+			// Snippets
+			if err := structureSnippets(ctx, m.Name); err != nil {
+				return err
+			}
 
-		// Business Event Services
-		if err := structureBusinessEventServices(ctx, m.Name); err != nil {
+			// Java Actions (with param names)
+			outputJavaActions(ctx, m.Name, jaByModule[m.Name], true)
+
+			// Constants (with default value)
+			if consts, ok := constByModule[m.Name]; ok {
+				sortConstants(consts)
+				for _, c := range consts {
+					s := fmt.Sprintf("  Constant %s.%s: %s", m.Name, c.Name, formatConstantTypeBrief(c.Type))
+					if c.DefaultValue != "" {
+						s += " = " + c.DefaultValue
+					}
+					fmt.Fprintln(ctx.Output, s)
+				}
+			}
+
+			// Scheduled Events
+			if events, ok := eventsByModule[m.Name]; ok {
+				sortScheduledEvents(events)
+				for _, ev := range events {
+					fmt.Fprintf(ctx.Output, "  ScheduledEvent %s.%s\n", m.Name, ev.Name)
+				}
+			}
+
+			// Task Queues
+			if queues, ok := queuesByModule[m.Name]; ok {
+				sort.Slice(queues, func(i, j int) bool { return queues[i].Name < queues[j].Name })
+				for _, q := range queues {
+					fmt.Fprintf(ctx.Output, "  Queue %s.%s\n", m.Name, q.Name)
+				}
+			}
+
+			// OData
+			if err := structureODataClients(ctx, m.Name); err != nil {
+				return err
+			}
+			if err := structureODataServices(ctx, m.Name); err != nil {
+				return err
+			}
+
+			// Business Event Services
+			if err := structureBusinessEventServices(ctx, m.Name); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}

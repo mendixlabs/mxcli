@@ -379,7 +379,38 @@ func IsWebUIPart(typeName string) bool {
 // the executor refuses an ALTER on a part that does not carry it.
 func SetWebUISettings(ws *model.WebUISettings, raw map[string]any) map[string]any {
 	setIfPresent(raw, "UseOptimizedClient", ws.UseOptimizedClient)
+	if Has(raw, "ThemeModuleOrder") {
+		raw["ThemeModuleOrder"] = ThemeModuleOrder(ws.ThemeModuleOrder, raw["ThemeModuleOrder"])
+	}
 	return raw
+}
+
+// ThemeModuleOrder rebuilds App Settings > Theme > module order from module
+// names (ako/mxcli#1286). A stored entry for a name is kept as it is, $ID
+// included, so an unchanged order writes back unchanged; a new name gets a
+// Settings$ThemeModuleEntry { ModuleName }. Measured on mx 11.12.6: such a list
+// passes mx check, the deploy build compiles the listed modules' themesource
+// in that order, and modules it does not list keep Mendix's default place.
+func ThemeModuleOrder(names []string, raw any) bson.A {
+	byName := map[string]map[string]any{}
+	for _, e := range ArrayElements(raw) {
+		if n, _ := e["ModuleName"].(string); n != "" {
+			byName[n] = e
+		}
+	}
+	out := bson.A{ArrayMarker(raw, DefaultListMarker)}
+	for _, n := range names {
+		if e, ok := byName[n]; ok {
+			out = append(out, e)
+			continue
+		}
+		out = append(out, map[string]any{
+			"$ID":        bsonutil.NewIDBsonBinary(),
+			"$Type":      "Settings$ThemeModuleEntry",
+			"ModuleName": n,
+		})
+	}
+	return out
 }
 
 // ConstantValues rebuilds a configuration's ConstantValues list, updating each

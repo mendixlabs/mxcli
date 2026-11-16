@@ -61,20 +61,38 @@ func applyModuleSettings(ms *types.ModuleSettings, c ast.ModuleSettingsClause) b
 }
 
 // setModuleSettings applies a settings clause to an existing module.
+//
+// UIResources lives on the module unit (Projects$ModuleImpl.IsThemeModule),
+// Version and ModuleType on its settings unit, so each is written only when
+// the clause names it and its value differs (ako/mxcli#1286).
 func setModuleSettings(ctx *ExecContext, module *model.Module, c ast.ModuleSettingsClause) error {
 	if c.IsEmpty() {
 		return nil
 	}
-	ms, err := ctx.Backend.GetModuleSettings(module.ID)
-	if err != nil {
-		return mdlerrors.NewBackend(fmt.Sprintf("read settings of module %s", module.Name), err)
+	changed := false
+	if c.UIResources != nil && module.IsThemeModule != *c.UIResources {
+		if err := ctx.Backend.SetModuleUIResources(module.ID, *c.UIResources); err != nil {
+			return mdlerrors.NewBackend(fmt.Sprintf("set UIResources of module %s", module.Name), err)
+		}
+		module.IsThemeModule = *c.UIResources
+		invalidateModuleCache(ctx)
+		changed = true
 	}
-	if !applyModuleSettings(ms, c) {
+	if c.Version != nil || c.ModuleType != nil {
+		ms, err := ctx.Backend.GetModuleSettings(module.ID)
+		if err != nil {
+			return mdlerrors.NewBackend(fmt.Sprintf("read settings of module %s", module.Name), err)
+		}
+		if applyModuleSettings(ms, c) {
+			if err := ctx.Backend.UpdateModuleSettings(ms); err != nil {
+				return mdlerrors.NewBackend(fmt.Sprintf("update settings of module %s", module.Name), err)
+			}
+			changed = true
+		}
+	}
+	if !changed {
 		fmt.Fprintf(ctx.Output, "Module settings of %s unchanged\n", module.Name)
 		return nil
-	}
-	if err := ctx.Backend.UpdateModuleSettings(ms); err != nil {
-		return mdlerrors.NewBackend(fmt.Sprintf("update settings of module %s", module.Name), err)
 	}
 	fmt.Fprintf(ctx.Output, "Updated module settings: %s\n", module.Name)
 	return nil
@@ -92,17 +110,26 @@ func execAlterModuleSet(ctx *ExecContext, s *ast.AlterModuleSetStmt) error {
 	if module == nil {
 		return mdlerrors.NewNotFound("module", s.ModuleName)
 	}
+	if s.DocumentationSet {
+		return setModuleDocumentation(ctx, module, s.Documentation)
+	}
 	return setModuleSettings(ctx, module, s.Settings)
 }
 
 // moduleSettingsMDL is the `( … )` list describe prints after the module name:
 // only the settings that differ from a new module's, so an untouched module
 // describes as it always did. "" when there are none.
-func moduleSettingsMDL(ctx *ExecContext, ms *types.ModuleSettings) string {
-	if ms == nil {
-		return ""
-	}
+func moduleSettingsMDL(ctx *ExecContext, ms *types.ModuleSettings, uiResources bool) string {
 	var props []string
+	if uiResources {
+		props = append(props, "UIResources: true")
+	}
+	if ms == nil {
+		if len(props) == 0 {
+			return ""
+		}
+		return " (\n  " + strings.Join(props, ",\n  ") + ",\n)"
+	}
 	if ms.Version != "" && ms.Version != defaultModuleVersion {
 		props = append(props, fmt.Sprintf("Version: %s", mdlQuote(ctx, ms.Version)))
 	}

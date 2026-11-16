@@ -803,7 +803,7 @@ create or modify translations in Administration for nl_NL (
 			"add language", "remove language", "enable language", "translations",
 			"optimistic locking", "concurrency", "lost update",
 			"workflow group", "workflow groups", "add group", "task assignment",
-			"web ui", "webui", "react client", "optimized client", "classic client", "jvm parameters", "proxy",
+			"web ui", "webui", "react client", "optimized client", "classic client", "theme module order", "theme order", "jvm parameters", "proxy",
 		},
 		Syntax: `ALTER SETTINGS RUNTIME (<key>: <value>, ...);
 ALTER SETTINGS CONFIGURATION '<name>' (<key>: <value>, ...);
@@ -819,6 +819,7 @@ ALTER SETTINGS WORKFLOWS ADD [OR MODIFY] GROUP '<name>' [(Description: '<text>')
 ALTER SETTINGS WORKFLOWS MODIFY GROUP '<name>' (Description: '<text>');
 ALTER SETTINGS WORKFLOWS DROP GROUP '<name>';
 ALTER SETTINGS WEBUI (OptimizedClient: 'Yes' | 'No' | 'MigrationMode');
+ALTER SETTINGS WEBUI (ThemeModuleOrder: ('<module>', ...));
 CREATE [OR MODIFY] CONFIGURATION '<name>' [(<key>: <value>, ...)];
 DROP CONFIGURATION '<name>';
 
@@ -847,6 +848,13 @@ ALTER SETTINGS CONFIGURATION 'Default' (
 -- classic (Dojo) one, MigrationMode Mendix's mixed mode. Widgets differ per
 -- client, so check it (LIST SETTINGS) before choosing one.
 ALTER SETTINGS WEBUI (OptimizedClient: 'Yes');
+
+-- ThemeModuleOrder is App Settings > Theme > module order: the theme compiles
+-- the listed modules' themesource in this order, so a module listed last wins.
+-- Mark your own module UI resources first; modules left out keep Mendix's
+-- default place. An empty order (the default) has no statement.
+ALTER MODULE BrandTheme SET (UIResources: true);
+ALTER SETTINGS WEBUI (ThemeModuleOrder: ('Atlas_Core', 'DataWidgets', 'BrandTheme'));
 
 -- LANGUAGE ADD/REMOVE change the ENABLED languages — the list under App
 -- Settings > Languages, and the only languages a build emits anything for. A
@@ -1217,9 +1225,11 @@ DROP SCHEDULED EVENT Ops.HourlyPing;`,
 		Summary: "DESCRIBE STRUCTURE — compact project overview at configurable depth",
 		Keywords: []string{
 			"structure", "describe structure", "project overview",
-			"repo map", "module summary", "depth",
+			"repo map", "module summary", "depth", "folders",
 		},
-		Syntax: "DESCRIBE STRUCTURE [DEPTH 1|2|3] [IN <module>] [ALL];",
+		Syntax: "DESCRIBE STRUCTURE [DEPTH 1|2|3] [IN <module>] [ALL];\n" +
+			"-- At depth 2 and 3 documents are nested under their folders (`Orders/`),\n" +
+			"-- after the module root's; entities stay at the root (no folders in a domain model).",
 		Example: `-- Module counts only
 DESCRIBE STRUCTURE DEPTH 1;
 
@@ -1615,10 +1625,15 @@ mxcli check script.mdl -p app.mpr --references  -- With reference validation`,
 		Keywords: []string{
 			"module settings", "module version", "module type", "add-on module",
 			"addon", "app module", "semver", "export module",
+			"ui resources", "theme module", "uiresources",
 		},
-		Syntax: `CREATE [OR MODIFY] MODULE <name> ( Version: 'x.y.z', ModuleType: app | addon );
-ALTER MODULE <name> SET ( Version: 'x.y.z', ModuleType: app | addon );
-DESCRIBE MODULE <name>;   -- prints the settings that differ from App / 1.0.0`,
+		Syntax: `CREATE [OR MODIFY] MODULE <name> ( Version: 'x.y.z', ModuleType: app | addon, UIResources: true | false );
+ALTER MODULE <name> SET ( Version: 'x.y.z', ModuleType: app | addon, UIResources: true | false );
+DESCRIBE MODULE <name>;   -- prints the settings that differ from App / 1.0.0 / not UI resources
+
+-- UIResources is Studio Pro's "UI resources package": the module's themesource
+-- styling is part of the theme. Its place in the compile order is
+-- ALTER SETTINGS WEBUI (ThemeModuleOrder: (…)), see settings.alter.`,
 		Example: `mdl 1;
 -- A versioned add-on module
 create or modify module Inventory (
@@ -1631,6 +1646,29 @@ alter module Inventory set (Version: '2.4.0');
 
 -- An add-on hides elements not marked Usable from other modules (CE1406);
 -- check -p --references reports the references that breaks.`,
+	})
+
+	Register(SyntaxFeature{
+		Path:    "module.documentation",
+		Summary: "A module's documentation: one sentence on what the module is for (shown by reports and Studio Pro)",
+		Keywords: []string{
+			"module documentation", "module description", "module purpose", "domain model documentation",
+			"doc comment", "describe module",
+		},
+		Syntax: `/** <documentation> */
+CREATE [OR MODIFY] MODULE <name>;
+ALTER MODULE <name> SET DOCUMENTATION '<documentation>';   -- '' clears it
+DESCRIBE MODULE <name>;   -- prints it as the doc comment
+-- Mendix keeps a module's documentation on its domain model
+-- (DomainModels$DomainModel.Documentation); CATALOG.MODULES.DomainModelDocumentation
+-- has it, and report map / report architecture show it as the module's purpose.
+-- A plain CREATE of an existing module leaves it unchanged; CREATE OR MODIFY sets it.
+-- Stating the stored text again writes nothing.`,
+		Example: `mdl 1;
+/** Shift swaps between colleagues: proposals, approval and the marketplace. */
+create or modify module Swaps;
+
+alter module Swaps set documentation 'Shift swaps between colleagues, with approval.';`,
 	})
 
 	Register(SyntaxFeature{

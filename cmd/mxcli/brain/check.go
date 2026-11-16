@@ -194,6 +194,20 @@ type Report struct {
 	// ConflictingVerdicts are requirements that one decision says are changed
 	// and another partly met. It fails the check: a report cannot show both.
 	ConflictingVerdicts []VerdictConflict `json:"conflicting_verdicts,omitempty"`
+	// MisplacedVerdicts are verdict lines in a requirement entry. A verdict
+	// belongs on the decision or open question that explains it; on a
+	// requirement nothing records why (ako/mxcli#2301). It fails the check.
+	MisplacedVerdicts []VerdictRef `json:"misplaced_verdicts,omitempty"`
+	// BadAcceptances are lint acceptances that cannot hold: on an open
+	// question or a requirement (accepting is a decision), on an element
+	// that does not resolve, or — filled in by the command, which knows the
+	// rules — naming a rule lint does not have (ako/mxcli#2304).
+	BadAcceptances []AcceptanceFinding `json:"bad_acceptances,omitempty"`
+	// Unprovable are built requirements no test can ever be linked to: every
+	// anchor is of a kind no microflow implements (a module role, an
+	// enumeration, a constant). A warning, not a failure, unless the caller
+	// asks for --strict (ako/mxcli#2303).
+	Unprovable []UnprovableFinding `json:"unprovable,omitempty"`
 }
 
 // RequirementResult is one requirement and how each of its anchors resolved.
@@ -203,6 +217,12 @@ type RequirementResult struct {
 	Title   string         `json:"title"`
 	Built   bool           `json:"built"`
 	Anchors []AnchorResult `json:"anchors"`
+	// Status is the effective status — built, partial, changed, not built or
+	// not traceable — from the anchors and any verdicts (EffectiveStatus). It
+	// is the one definition every consumer reads (ako/mxcli#2301).
+	Status       string       `json:"status"`
+	StatusReason string       `json:"status_reason,omitempty"`
+	Verdicts     []VerdictRef `json:"verdicts,omitempty"`
 }
 
 // AnchorResult is one anchor's resolution.
@@ -233,7 +253,7 @@ func (r Report) MarshalJSON() ([]byte, error) {
 // the wrong shard. A NotIndexable anchor is information, not a defect — see the
 // constant's comment.
 func (r Report) Failed() bool {
-	if len(r.Misfiled) > 0 || len(r.Malformed) > 0 || len(r.MissingSources) > 0 || len(r.UnknownRequirementRefs) > 0 || len(r.ConflictingVerdicts) > 0 {
+	if len(r.Misfiled) > 0 || len(r.Malformed) > 0 || len(r.MissingSources) > 0 || len(r.UnknownRequirementRefs) > 0 || len(r.ConflictingVerdicts) > 0 || len(r.MisplacedVerdicts) > 0 || len(r.BadAcceptances) > 0 {
 		return true
 	}
 	for _, f := range r.Findings {
@@ -270,13 +290,13 @@ func Check(s *Store, r Resolver, shards []string) (Report, error) {
 			rep.Slices = append(rep.Slices, progress.SliceProgress)
 			rep.Open = append(rep.Open, progress.open...)
 			rep.Requirements = append(rep.Requirements, progress.requirements...)
+			for _, r := range progress.requirements {
+				if kinds, ok := Unprovable(r.Anchors); ok {
+					rep.Unprovable = append(rep.Unprovable, UnprovableFinding{Shard: shard, EntryID: r.ID, Title: r.Title, Kinds: kinds})
+				}
+			}
 			continue
 		}
-		unknown, err := s.unknownVerdictRefs(shard, entries)
-		if err != nil {
-			return rep, err
-		}
-		rep.UnknownRequirementRefs = append(rep.UnknownRequirementRefs, unknown...)
 		for _, e := range entries {
 			rep.Entries++
 			if e.Open {
@@ -316,11 +336,19 @@ func Check(s *Store, r Resolver, shards []string) (Report, error) {
 			}
 		}
 	}
-	conflicts, err := s.conflictingVerdicts(shards)
+	verdicts, err := s.loadVerdicts()
 	if err != nil {
 		return rep, err
 	}
-	rep.ConflictingVerdicts = conflicts
+	rep.UnknownRequirementRefs, rep.ConflictingVerdicts, rep.MisplacedVerdicts = verdicts.findings(shards)
+	if rep.BadAcceptances, err = s.checkAcceptances(r, shards); err != nil {
+		return rep, err
+	}
+	for i := range rep.Requirements {
+		r := &rep.Requirements[i]
+		r.Verdicts = verdicts.byReq[r.ID]
+		r.Status, r.StatusReason = EffectiveStatus(*r, r.Verdicts, noModel)
+	}
 	return rep, nil
 }
 

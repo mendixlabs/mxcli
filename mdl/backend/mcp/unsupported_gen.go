@@ -1216,6 +1216,11 @@ func (unsupportedBackend) SetDomainModelDocumentation(_ model.ID, _ string) (err
 	return
 }
 
+func (unsupportedBackend) SetModuleUIResources(_ model.ID, _ bool) (err0 error) {
+	err0 = errUnsupported("SetModuleUIResources")
+	return
+}
+
 func (unsupportedBackend) SetProjectAdminPassword(_ model.ID, _ string) (err0 error) {
 	err0 = errUnsupported("SetProjectAdminPassword")
 	return

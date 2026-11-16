@@ -16,17 +16,25 @@ func (s *AlterModuleJarDepStmt) isStatement() {}
 type ModuleSettingsClause struct {
 	Version    *string // "2.3.1"; SemVer, checked by the visitor
 	ModuleType *string // "app" | "addon"
+	// UIResources is Studio Pro's "UI resources package" flag
+	// (Projects$ModuleImpl.IsThemeModule, ako/mxcli#1286).
+	UIResources *bool
 }
 
 // IsEmpty reports whether the clause names no setting.
 func (c ModuleSettingsClause) IsEmpty() bool {
-	return c.Version == nil && c.ModuleType == nil
+	return c.Version == nil && c.ModuleType == nil && c.UIResources == nil
 }
 
-// AlterModuleSetStmt represents: ALTER MODULE name SET ( Key: value, … )
+// AlterModuleSetStmt represents: ALTER MODULE name SET ( Key: value, … ), or
+// ALTER MODULE name SET DOCUMENTATION '…'.
 type AlterModuleSetStmt struct {
 	ModuleName string
 	Settings   ModuleSettingsClause
+	// DocumentationSet marks the SET DOCUMENTATION form; Documentation may
+	// then be empty, which clears it.
+	DocumentationSet bool
+	Documentation    string
 }
 
 func (s *AlterModuleSetStmt) isStatement() {}

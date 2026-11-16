@@ -95,6 +95,12 @@ func setModuleDocumentation(ctx *ExecContext, module *model.Module, doc string) 
 	if dm == nil {
 		return mdlerrors.NewNotFound("domain model of module", module.Name)
 	}
+	// Storage writes nothing when the text is what is stored (ADR-0008); say
+	// so, rather than report a write a re-run did not make.
+	if dm.Documentation == doc {
+		fmt.Fprintf(ctx.Output, "Documentation of module %s unchanged\n", module.Name)
+		return nil
+	}
 	if err := ctx.Backend.SetDomainModelDocumentation(dm.ID, doc); err != nil {
 		return mdlerrors.NewBackend(fmt.Sprintf("set documentation of %s", module.Name), err)
 	}
@@ -687,7 +693,7 @@ func describeModule(ctx *ExecContext, moduleName string, withAll bool) error {
 			}
 		}
 	}
-	fmt.Fprintf(ctx.Output, "create or modify module %s%s;\n", targetModule.Name, moduleSettingsMDL(ctx, settings))
+	fmt.Fprintf(ctx.Output, "create or modify module %s%s;\n", targetModule.Name, moduleSettingsMDL(ctx, settings, targetModule.IsThemeModule))
 	if targetModule.PackageFile != "" {
 		fmt.Fprintf(ctx.Output, "-- packaged module: %s — read-only, the project file holds none of its documents\n", targetModule.PackageFile)
 	}

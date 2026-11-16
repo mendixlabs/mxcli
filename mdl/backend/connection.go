@@ -55,6 +55,10 @@ type ModuleBackend interface {
 	DeleteModule(id model.ID) error
 	// DeleteModuleWithCleanup removes a module and cleans up associated documents.
 	DeleteModuleWithCleanup(id model.ID, moduleName string) error
+	// SetModuleUIResources sets a module's "UI resources package" flag
+	// (Projects$ModuleImpl.IsThemeModule), leaving the rest of the unit as
+	// stored.
+	SetModuleUIResources(id model.ID, on bool) error
 }
 
 // ModuleSettingsBackend provides access to Projects$ModuleSettings (Maven/JAR dependencies).
