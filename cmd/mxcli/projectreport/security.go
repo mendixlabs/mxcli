@@ -144,11 +144,15 @@ func ClassifyXPath(x string) string {
 var (
 	// A bare "Key" is not enough: LocalStorageKey and SortKey are names, not
 	// secrets. The key has to say what kind it is.
-	secretName  = regexp.MustCompile(`(?i)(secret|passw|pwd|token|credential|(api|access|private|encryption|signing|master|crypt|aes|hmac|client)_?key)`)
-	testishName = regexp.MustCompile(`(?i)(mock|test|demo|debug|fake|stub|seed|bypass|skip|dev(mode)?$|sandbox)`)
-	hexKey      = regexp.MustCompile(`^(?i)[0-9a-f]{32}$|^(?i)[0-9a-f]{48}$|^(?i)[0-9a-f]{64}$`)
-	pemBlock    = regexp.MustCompile(`-----BEGIN [A-Z ]*(PRIVATE KEY|CERTIFICATE)-----`)
-	callerCheck = regexp.MustCompile(`(?i)\$currentUser\b|\[%CurrentUser%\]|%CurrentUser%`)
+	secretName = regexp.MustCompile(`(?i)(secret|passw|pwd|token|credential|(api|access|private|encryption|signing|master|crypt|aes|hmac|client)_?key)`)
+	// A name that ends in a descriptor names something ABOUT a secret — its
+	// type, header or endpoint — not the secret: OIDC.CustomATPTokenType is a
+	// token type (ako/mxcli#2299).
+	secretDescriptor = regexp.MustCompile(`(?i)(type|name|url|uri|header|endpoint|kind|format|length|expiry|lifetime|timeout|path|location|prefix|scheme|enabled)$`)
+	testishName      = regexp.MustCompile(`(?i)(mock|test|demo|debug|fake|stub|seed|bypass|skip|dev(mode)?$|sandbox)`)
+	hexKey           = regexp.MustCompile(`^(?i)[0-9a-f]{32}$|^(?i)[0-9a-f]{48}$|^(?i)[0-9a-f]{64}$`)
+	pemBlock         = regexp.MustCompile(`-----BEGIN [A-Z ]*(PRIVATE KEY|CERTIFICATE)-----`)
+	callerCheck      = regexp.MustCompile(`(?i)\$currentUser\b|\[%CurrentUser%\]|%CurrentUser%`)
 )
 
 // LooksLikeKeyMaterial reports whether a string value looks like a key: base64
@@ -318,7 +322,7 @@ func CollectSecurity(q Querier, in SecurityInput) (*SecurityData, error) {
 	if err := collectCallableFlows(q, d, app, userRolesOf, isPersistent, isUser, readClass); err != nil {
 		return nil, err
 	}
-	if err := collectUnsafeDefaults(q, d); err != nil {
+	if err := collectUnsafeDefaults(q, d, scope); err != nil {
 		return nil, err
 	}
 	settingsFindings(d)
@@ -440,9 +444,12 @@ func collectCallableFlows(q Querier, d *SecurityData, app map[string]bool, userR
 	return nil
 }
 
-func collectUnsafeDefaults(q Querier, d *SecurityData) error {
+// collectUnsafeDefaults checks the app's constants only: a Marketplace
+// module's defaults are its vendor's, and flagging them buried the app's own
+// findings (ako/mxcli#2299). --include-marketplace brings them into scope.
+func collectUnsafeDefaults(q Querier, d *SecurityData, scope Scope) error {
 	cs, err := rows(q, `SELECT QualifiedName, ModuleName, COALESCE(DataType, '') AS DataType, COALESCE(DefaultValue, '') AS DefaultValue,
-		COALESCE(ExposedToClient, 0) AS ExposedToClient FROM constants WHERE ModuleName != 'System' ORDER BY QualifiedName`)
+		COALESCE(ExposedToClient, 0) AS ExposedToClient FROM constants WHERE ModuleName IN (`+sqlList(scope.App)+`) ORDER BY QualifiedName`)
 	if err != nil {
 		return err
 	}
@@ -461,7 +468,7 @@ func collectUnsafeDefaults(q Querier, d *SecurityData) error {
 		dt := strings.ToLower(c["DataType"])
 		if dt == "string" || dt == "" {
 			key := LooksLikeKeyMaterial(val)
-			named := secretName.MatchString(short)
+			named := looksSecretNamed(short)
 			switch {
 			case key:
 				sev := "high"
@@ -492,6 +499,11 @@ func collectUnsafeDefaults(q Querier, d *SecurityData) error {
 		}
 	}
 	return nil
+}
+
+// looksSecretNamed reports whether a constant's name says it holds a secret.
+func looksSecretNamed(name string) bool {
+	return secretName.MatchString(name) && !secretDescriptor.MatchString(name)
 }
 
 func exposedNote(exposed bool) string {

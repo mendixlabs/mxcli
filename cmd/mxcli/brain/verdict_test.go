@@ -61,3 +61,49 @@ func TestCheckReportsPerRequirementAndUnknownVerdicts(t *testing.T) {
 		t.Error("a verdict on a requirement the plan does not have must fail the check")
 	}
 }
+
+// ako/mxcli#2299: `brain check` passed a requirement that one decision said
+// was changed and another partly met; a report then has to pick one.
+func TestCheckRefusesConflictingVerdicts(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if _, err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
+	r, _ := NewEntry("Approve leave", []string{"@Shop.ACT_Approve"}, now)
+	r.Kind, r.Slice = KindRequirement, "01-leave"
+	r.ID = r.computeID()
+	changes, _ := NewEntry("Per team\nChanges requirement `"+r.ID+"`: per team, not per person", []string{"@Shop.ACT_Approve"}, now)
+	partly, _ := NewEntry("Web only\nPartly meets requirement `"+r.ID+"`: web only", []string{"@Billing.ACT_Pay"}, now)
+	again, _ := NewEntry("Also web only\nPartly meets requirement `"+r.ID+"`: no mobile", []string{"@Billing.ACT_Pay"}, now)
+	for _, p := range []struct {
+		e     Entry
+		shard string
+	}{{r, PlanShard("01-leave")}, {partly, "Billing"}, {again, "Billing"}} {
+		if err := s.Promote(p.e, p.shard); err != nil {
+			t.Fatal(err)
+		}
+	}
+	shards, _ := s.ListShards()
+	rep, err := Check(s, resolveAll{}, shards)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.ConflictingVerdicts) != 0 {
+		t.Fatalf("two verdicts of one kind are not a conflict: %+v", rep.ConflictingVerdicts)
+	}
+	// The conflict spans two module files; checking only one still sees it.
+	if err := s.Promote(changes, "Shop"); err != nil {
+		t.Fatal(err)
+	}
+	rep, err = Check(s, resolveAll{}, []string{"Shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.ConflictingVerdicts) != 1 || rep.ConflictingVerdicts[0].RequirementID != r.ID || len(rep.ConflictingVerdicts[0].Verdicts) != 3 {
+		t.Fatalf("conflicts = %+v", rep.ConflictingVerdicts)
+	}
+	if !rep.Failed() {
+		t.Error("conflicting verdicts must fail the check")
+	}
+}

@@ -39,6 +39,11 @@ var graphRefKinds = []string{
 	"schedule",
 	"publish",
 	"event",
+	// by_name  a constant's value names the flow (a module is told which
+	//          microflow to run, e.g. OIDC's provisioning microflow)
+	// queue    a task queue runs the flow a call placed in it
+	"by_name",
+	"queue",
 }
 
 // graphRefKindsSQL renders graphRefKinds as a quoted SQL IN list, so the schema

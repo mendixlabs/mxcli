@@ -191,6 +191,9 @@ type Report struct {
 	// requirement id the plan does not have. It fails the check: a verdict on
 	// nothing is a reference to nothing.
 	UnknownRequirementRefs []VerdictRef `json:"unknown_requirement_refs,omitempty"`
+	// ConflictingVerdicts are requirements that one decision says are changed
+	// and another partly met. It fails the check: a report cannot show both.
+	ConflictingVerdicts []VerdictConflict `json:"conflicting_verdicts,omitempty"`
 }
 
 // RequirementResult is one requirement and how each of its anchors resolved.
@@ -230,7 +233,7 @@ func (r Report) MarshalJSON() ([]byte, error) {
 // the wrong shard. A NotIndexable anchor is information, not a defect — see the
 // constant's comment.
 func (r Report) Failed() bool {
-	if len(r.Misfiled) > 0 || len(r.Malformed) > 0 || len(r.MissingSources) > 0 || len(r.UnknownRequirementRefs) > 0 {
+	if len(r.Misfiled) > 0 || len(r.Malformed) > 0 || len(r.MissingSources) > 0 || len(r.UnknownRequirementRefs) > 0 || len(r.ConflictingVerdicts) > 0 {
 		return true
 	}
 	for _, f := range r.Findings {
@@ -313,6 +316,11 @@ func Check(s *Store, r Resolver, shards []string) (Report, error) {
 			}
 		}
 	}
+	conflicts, err := s.conflictingVerdicts(shards)
+	if err != nil {
+		return rep, err
+	}
+	rep.ConflictingVerdicts = conflicts
 	return rep, nil
 }
 

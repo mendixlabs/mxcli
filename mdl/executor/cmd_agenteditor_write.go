@@ -278,14 +278,11 @@ func execCreateAgent(ctx *ExecContext, s *ast.CreateAgentStmt) error {
 
 	// Resolve Model reference
 	if s.Model != nil {
-		m := findAgentEditorModel(ctx, s.Model.Module, s.Model.Name)
-		if m == nil {
-			return fmt.Errorf("create agent %s: model not found: %s", s.Name, s.Model)
+		ref, err := agentModelRef(ctx, "create agent", s.Name.String(), *s.Model)
+		if err != nil {
+			return err
 		}
-		a.Model = &agenteditor.DocRef{
-			DocumentID:    string(m.ID),
-			QualifiedName: s.Model.String(),
-		}
+		a.Model = ref
 	}
 
 	// Resolve Entity reference: its documentId is the entity element's $ID,

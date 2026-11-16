@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -96,5 +97,34 @@ func TestReadSpansOTLPJSON(t *testing.T) {
 	spans, err := ReadSpans([]string{p})
 	if err != nil || len(spans) != 1 || spans[0].DurationMs() != 2 || spans[0].Service != "Shop" {
 		t.Fatalf("%+v %v", spans, err)
+	}
+}
+
+// ako/mxcli#2299: a numeric attribute (server.port) failed the whole file,
+// and a span with unknown time keys was read as time 0 without a word.
+func TestReadSpansTypedAttrsAndTimeKeys(t *testing.T) {
+	dir := t.TempDir()
+	good := filepath.Join(dir, "good.jsonl")
+	_ = os.WriteFile(good, []byte(`{"trace_id":"t","span_id":"s","name":"Microflow Shop.A","start_ns":1000000,"end_ns":3000000,"attrs":{"server.port":8080,"ok":true,"db.system":"postgresql","rows":[1,2]}}
+{"traceId":"t","spanId":"s2","name":"x","startTimeUnixNano":"5000000","endTimeUnixNano":"6000000"}
+`), 0o644)
+	spans, err := ReadSpans([]string{good})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spans) != 2 || spans[0].DurationMs() != 2 || spans[0].Attrs["server.port"] != "8080" || spans[0].Attrs["ok"] != "true" ||
+		spans[0].Attrs["rows"] != "[1,2]" || spans[0].SpanID != "s" || spans[1].DurationMs() != 1 {
+		t.Fatalf("%+v", spans)
+	}
+
+	bad := filepath.Join(dir, "bad.jsonl")
+	_ = os.WriteFile(bad, []byte(`{"traceId":"t","spanId":"s","name":"Microflow Shop.A","begin":1,"finish":2}`+"\n"), 0o644)
+	if _, err := ReadSpans([]string{bad}); err == nil || !strings.Contains(err.Error(), "no start time") || !strings.Contains(err.Error(), "line 1") {
+		t.Errorf("a span with no start time must be refused, got %v", err)
+	}
+
+	log := &JourneyLog{Records: []JourneyRecord{{Journey: "j", Start: "1970-01-01T00:00:00.000000001Z", End: "1970-01-01T00:00:00.004Z"}}}
+	if n := SpansInWindows(spans, log); n != 1 {
+		t.Errorf("spans in windows = %d, want 1 (the second starts after the window)", n)
 	}
 }

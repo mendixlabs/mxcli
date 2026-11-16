@@ -51,6 +51,8 @@ const (
 	RefKindModel       = "model"        // An agent runs on an AI model
 	RefKindKey         = "key"          // An AI model or knowledge base reads its key from a constant
 	RefKindEndpoint    = "endpoint"     // A consumed MCP service reads its server URL from a constant
+	RefKindByName      = "by_name"      // A constant's value (default or a configuration's) is a flow's qualified name: the flow is called by name
+	RefKindQueue       = "queue"        // A task queue runs a microflow or Java action a call places in it
 )
 
 // RefKinds is every value that reaches refs.RefKind. It is the vocabulary a
@@ -69,7 +71,7 @@ var RefKinds = []string{
 	RefKindEvent, RefKindMember, RefKindXPath, RefKindType,
 	RefKindValue, RefKindMapping, RefKindSplit, RefKindSnippetCall,
 	RefKindMappingCall, RefKindStructure, RefKindTool, RefKindModel,
-	RefKindKey, RefKindEndpoint,
+	RefKindKey, RefKindEndpoint, RefKindByName, RefKindQueue,
 }
 
 // Object types recorded in refs.SourceType and refs.TargetType — the catalog's
@@ -121,6 +123,7 @@ const (
 	RefObjectConsumedMCPService  = "CONSUMED_MCP_SERVICE"
 	RefObjectPublishedMCPService = "PUBLISHED_MCP_SERVICE"
 	RefObjectConstant            = "CONSTANT"
+	RefObjectTaskQueue           = "TASK_QUEUE"
 )
 
 // RefSourceObjectTypes is every value that reaches refs.SourceType, and
@@ -156,6 +159,8 @@ var (
 		RefObjectAIModel,
 		RefObjectKnowledgeBase,
 		RefObjectPublishedMCPService,
+		RefObjectConstant,
+		RefObjectTaskQueue,
 	}
 
 	RefTargetObjectTypes = []string{
@@ -1029,6 +1034,15 @@ func (b *Builder) buildReferences() error {
 	// the runtime refused to start (ako/CapTrackV4 049).
 	refCount += b.extractProjectSettingsRefs(stmt, projectID, snapshotID)
 
+	// Two more ways the platform reaches a flow that no call names. A constant
+	// whose value is a flow's qualified name is how a module is told which
+	// microflow to run (OIDC.GlobalUserProvisioningMicroflow): the flow read as
+	// dead while it provisioned every user. And a call placed in a task queue
+	// runs from the queue, which only activities.QueueRef recorded
+	// (ako/mxcli#2297).
+	refCount += b.extractByNameRefs(stmt, projectID, snapshotID)
+	refCount += b.extractQueueRefs(stmt, projectID, snapshotID)
+
 	// A published REST operation runs a microflow the same way a scheduled event
 	// does — the platform invokes it, so nothing in the model calls it. Without
 	// this edge every microflow behind the public API reads as dead: on the
@@ -1446,6 +1460,89 @@ func (b *Builder) resolveMicroflowID(mfID model.ID) string {
 	}
 	b.dependsOn(siteFlowByID, qualifiedName)
 	return qualifiedName
+}
+
+// extractByNameRefs emits one `by_name` edge from a constant to each flow its
+// value names — the default or any configuration's value, trimmed and compared
+// whole. A value that merely contains a name is not an edge: a URL or a message
+// mentioning a flow is not a call. Read from the rows the constants and
+// microflows passes wrote, so it is project-wide and rebuilt every time.
+func (b *Builder) extractByNameRefs(stmt *Stmt, projectID, snapshotID string) int {
+	b.disown()
+	rows, err := b.tx.Query(`SELECT DISTINCT c.QualifiedName, c.ModuleName, m.QualifiedName, m.MicroflowType
+		FROM (SELECT QualifiedName, ModuleName, trim(COALESCE(DefaultValue, '')) AS V FROM constants_data
+			UNION SELECT cv.ConstantName, COALESCE(cd.ModuleName, ''), trim(COALESCE(cv.Value, ''))
+			FROM constant_values cv LEFT JOIN constants_data cd ON cd.QualifiedName = cv.ConstantName) c
+		JOIN microflows_data m ON m.QualifiedName = c.V
+		WHERE c.V != '' ORDER BY 1, 3`)
+	if err != nil {
+		return 0
+	}
+	type edge struct{ constant, module, target, typ string }
+	var edges []edge
+	for rows.Next() {
+		var e edge
+		if rows.Scan(&e.constant, &e.module, &e.target, &e.typ) == nil {
+			edges = append(edges, e)
+		}
+	}
+	rows.Close()
+	count := 0
+	for _, e := range edges {
+		target := RefObjectMicroflow
+		switch e.typ {
+		case "NANOFLOW":
+			target = RefObjectNanoflow
+		case "RULE":
+			target = RefObjectRule
+		}
+		if _, err := stmt.Exec(RefObjectConstant, "", e.constant, target, "", e.target,
+			RefKindByName, e.module, projectID, snapshotID); err == nil {
+			count++
+		}
+	}
+	return count
+}
+
+// extractQueueRefs emits one `queue` edge from a task queue to each microflow
+// or Java action a call runs in it. The caller's own `call` edge is kept: the
+// caller still decides THAT it runs, the queue decides WHEN.
+func (b *Builder) extractQueueRefs(stmt *Stmt, projectID, snapshotID string) int {
+	b.disown()
+	rows, err := b.tx.Query(`SELECT DISTINCT a.QueueRef, a.ActionRef,
+			CASE WHEN EXISTS (SELECT 1 FROM microflows_data m WHERE m.QualifiedName = a.ActionRef) THEN 1 ELSE 0 END
+		FROM activities_data a WHERE COALESCE(a.QueueRef, '') != '' AND COALESCE(a.ActionRef, '') != '' ORDER BY 1, 2`)
+	if err != nil {
+		return 0
+	}
+	type edge struct {
+		queue, target string
+		isFlow        bool
+	}
+	var edges []edge
+	for rows.Next() {
+		var e edge
+		if rows.Scan(&e.queue, &e.target, &e.isFlow) == nil {
+			edges = append(edges, e)
+		}
+	}
+	rows.Close()
+	count := 0
+	for _, e := range edges {
+		target := RefObjectJavaAction
+		if e.isFlow {
+			target = RefObjectMicroflow
+		}
+		module := ""
+		if i := strings.Index(e.queue, "."); i > 0 {
+			module = e.queue[:i]
+		}
+		if _, err := stmt.Exec(RefObjectTaskQueue, "", e.queue, target, "", e.target,
+			RefKindQueue, module, projectID, snapshotID); err == nil {
+			count++
+		}
+	}
+	return count
 }
 
 // projectSettingsMicroflowRefs lists the project settings whose value is the

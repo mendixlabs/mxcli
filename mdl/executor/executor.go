@@ -66,6 +66,8 @@ type executorCache struct {
 	defaultLangLoaded bool
 
 	// Pre-warmed name lookup maps for parallel describe (goroutine-safe after init)
+	// diffNames is set for the length of a diff-local run (buildNameLookups).
+	diffNames      *diffNames
 	entityNames    map[model.ID]string // entity ID -> "Module.EntityName"
 	microflowNames map[model.ID]string // microflow ID -> "Module.MicroflowName"
 	pageNames      map[model.ID]string // page ID -> "Module.PageName"
