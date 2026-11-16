@@ -648,6 +648,10 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// only the project can see (ako/mxcli#2089). Warns, except an agent with a
 	// Model and no selected model: Studio Pro's AE018, an error (ako/mxcli#2289).
 	errors = append(errors, validateAgentDocumentsLeftUnset(ctx, prog, sc)...)
+	// An agent's Model, Entity, tool documents and knowledge bases, and the
+	// agent an alter names: exec resolves and refuses them, check did not
+	// (ako/mxcli#2293).
+	errors = append(errors, validateAgentReferences(ctx, prog)...)
 	return errors, sc.warnings
 }
 

@@ -97,6 +97,18 @@ func agentEntityRef(ctx *ExecContext, verb string, agentName string, qn ast.Qual
 	return ref, nil
 }
 
+// agentModelRef is the reference an agent's Model setting writes: the model
+// document's unit id and its qualified name. A model the project does not
+// contain is refused. check --references calls it too (ako/mxcli#2293), so
+// both refuse the same reference with the same message.
+func agentModelRef(ctx *ExecContext, verb string, agentName string, qn ast.QualifiedName) (*agenteditor.DocRef, error) {
+	m := findAgentEditorModel(ctx, qn.Module, qn.Name)
+	if m == nil {
+		return nil, fmt.Errorf("%s %s: model not found: %s", verb, agentName, qn)
+	}
+	return &agenteditor.DocRef{DocumentID: string(m.ID), QualifiedName: qn.String()}, nil
+}
+
 // carryEntityRef keeps the stored entity reference's documentId when the
 // statement names the same entity and mxcli could not resolve one itself
 // (a System entity): writing it empty wiped what Studio Pro stored.
