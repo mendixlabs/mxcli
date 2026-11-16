@@ -13,14 +13,14 @@ description: "Modify an existing page or snippet's widget tree in place with ALT
 | 28-31 | Overview |
 | 32-64 | When to Use |
 | 65-115 | Syntax |
-| 116-491 | Operations |
-| 492-570 | Examples |
-| 571-661 | DataGrid 2 columns: how to address them, and what you can set |
-| 662-673 | Common Mistakes |
-| 674-708 | Limitations — prefer binding at page creation (ledger finding #45) |
-| 709-716 | Validation Checklist |
-| 717-726 | Related Commands |
-| 727-731 | Related Skills |
+| 116-481 | Operations |
+| 482-560 | Examples |
+| 561-651 | DataGrid 2 columns: how to address them, and what you can set |
+| 652-663 | Common Mistakes |
+| 664-698 | Limitations — prefer binding at page creation (ledger finding #45) |
+| 699-706 | Validation Checklist |
+| 707-716 | Related Commands |
+| 717-721 | Related Skills |
 
 <!-- /skill-index -->
 # ALTER PAGE / ALTER SNIPPET - Modify Existing Pages and Snippets
@@ -375,23 +375,13 @@ Replaces the target widget with one or more new widgets. The new widgets use the
 ### MOVE and WRAP - Rearrange Existing Widgets
 
 ```sql
-mdl 1;
 alter page MyModule.Order_Lines {
-  -- Put the grid in a data view on the page parameter, so it has an object context
-  wrap dgLines in { dataview dvOrder (DataSource: $Order) { } }
-  -- Move a widget after, before or into another
-  move txtTitle into dvOrder;
-  move btnBack after txtTitle;
+  wrap dgLines in { dataview dvOrder (DataSource: $Order) { } }   -- named container | dataview | groupbox
+  move txtTitle into dvOrder;                                     -- or after / before a widget
 };
 ```
 
-`move` relocates a widget as it is stored; `wrap` inserts a new named `container`,
-`dataview` or `groupbox` where the widget is (built like `insert before`, so it
-takes the widget's data context) and moves the widget into it. Neither rebuilds the
-widget, so they also work on widgets MDL cannot re-author — a legacy classic Data
-grid after a 9 → 11 upgrade can be wrapped in a data view that gives its
-`[%CurrentObject%]` a value. Moving a widget into itself or a widget inside it, or
-into something that is not a container, is refused before anything changes.
+Neither rebuilds the widget, so a legacy classic Data grid can be wrapped in a data view after an upgrade. A move into itself, or into a non-container, is refused.
 
 ### DataGrid Column Operations
 
