@@ -348,6 +348,12 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// under --references, where it would only fire with -p (#836).
 	violations = append(violations, ValidateGrantRoles(prog)...)
 
+	// MDL-GRANT03: a role given a constrained and an unconstrained rule on one
+	// entity in this script — rules add up, so the constraint limits nothing
+	// (ako/mxcli#2320). The overlap with the project's rules is reported under
+	// --references (CheckAccessRuleOverlap).
+	violations = append(violations, ValidateAccessRuleOverlap(prog)...)
+
 	// Warn on an AI model or knowledge base Provider no Studio Pro document has
 	// been seen to hold. mxbuild never reads it, so a typo builds and only
 	// shows in Studio Pro (ako/mxcli#2023).

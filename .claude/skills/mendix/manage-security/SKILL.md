@@ -13,11 +13,11 @@ description: "Configure Mendix security in MDL — module and user roles, access
 | 27-35 | When to Use This Skill |
 | 36-44 | Security Concepts |
 | 45-121 | The System-module ceiling — decide the role model around this FIRST |
-| 122-568 | Syntax Reference |
-| 569-583 | Starlark Lint Rule APIs |
-| 584-645 | Common Workflow: Setting Up Module Security |
-| 646-655 | Common Mistakes |
-| 656-665 | Validation |
+| 122-570 | Syntax Reference |
+| 571-585 | Starlark Lint Rule APIs |
+| 586-647 | Common Workflow: Setting Up Module Security |
+| 648-657 | Common Mistakes |
+| 658-667 | Validation |
 
 <!-- /skill-index -->
 # Security Management Skill
@@ -301,7 +301,9 @@ A rule is identified by its role set **and** its `where` constraint. Two grants
 with the same constraint update one rule; with different constraints they make
 two, which Mendix combines at runtime (a role's access is the union of every rule
 naming it). So adding a `where` to an existing grant creates a second rule — it
-does not narrow the first.
+does not narrow the first. To narrow, `revoke all on entity … from <role>;` first,
+then grant with the `where`. `check` and exec warn **MDL-GRANT03** when a role
+ends up with a constrained rule beside an unconstrained one.
 
 ```sql
 mdl 1;

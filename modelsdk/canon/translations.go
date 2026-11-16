@@ -3,6 +3,7 @@
 package canon
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"sort"
 	"strconv"
@@ -102,7 +103,7 @@ func CarryTranslations(contents, stored []byte) []byte {
 
 	storedByPath := textsByPath(storedDoc)
 	newByPath := textsByPath(newDoc)
-	byPath := samePathSet(storedByPath, newByPath)
+	byPath := samePathSet(storedByPath, newByPath) && samePlaces(storedDoc, newDoc)
 
 	_, storedByElement := textsByElement(storedDoc)
 	newElementOf, _ := textsByElement(newDoc)
@@ -607,4 +608,156 @@ func sortedPaths(m map[string]bson.D) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// carryTranslationsByID is the translation carry for texts the transplant has
+// paired: a rebuilt Texts$Text holding the $ID of a stored one is that text,
+// and takes back every language of it the rebuild did not write
+// (ako/mxcli#2329, mendixlabs/mxcli#1872).
+//
+// CarryTranslations runs before the transplant and cannot use its pairing.
+// Its three ways to pair a text all miss a rebuilt Studio Pro flow: the paths
+// differ, because Studio Pro stores a flow's objects in drawing order and
+// mxcli writes the parameters and the start event first; an activity has no
+// name to address its message by; and the source string is no key where the
+// statement changed it, or where two messages share a default text but not
+// their translations. The transplant pairs elements structurally, across that
+// reorder (pairLeftovers), so after it the $ID is the exact pairing.
+//
+// A pairing is not a guarantee — two activities of one kind can cross where
+// the two orders differ — and a translation carried onto the wrong text is the
+// silent failure CarryTranslations is built to avoid. So a text takes back its
+// stored languages only when the pairing is confirmed: the flow object that
+// owns it is drawn at the same place in both (a describe states every
+// position), or every language the rebuild wrote has the stored text.
+//
+// The rules are then CarryTranslations': a language the rebuild wrote is never
+// overwritten, and a carried translation keeps its stored $ID unless the
+// document already holds it.
+func carryTranslationsByID(contents, stored []byte) []byte {
+	if len(contents) == 0 || !bytes.Contains(stored, []byte("Texts$Text")) {
+		return contents
+	}
+	var storedDoc, newDoc bson.D
+	if bson.Unmarshal(stored, &storedDoc) != nil || bson.Unmarshal(contents, &newDoc) != nil {
+		return contents
+	}
+	type placedText struct {
+		text  bson.D
+		place string
+	}
+	storedTexts := map[string]placedText{}
+	walkPlacedTexts(storedDoc, "", func(text bson.D, place string) {
+		if id, ok := docLookup(text, "$ID").(bson.Binary); ok {
+			storedTexts[string(id.Data)] = placedText{text, place}
+		}
+	})
+	if len(storedTexts) == 0 {
+		return contents
+	}
+	used := elementIDs(newDoc)
+	changed := false
+	walkPlacedTexts(newDoc, "", func(text bson.D, place string) {
+		id, ok := docLookup(text, "$ID").(bson.Binary)
+		if !ok {
+			return
+		}
+		old, ok := storedTexts[string(id.Data)]
+		if !ok {
+			return
+		}
+		samePlace := place != "" && place == old.place
+		if !samePlace && !writtenLanguagesAgree(text, old.text) {
+			return
+		}
+		if mergeText(text, textTranslationElems(old.text), textLanguageOrder(old.text), blobToUUID(id.Data), used) {
+			changed = true
+		}
+	})
+	if !changed {
+		return contents
+	}
+	out, err := bson.Marshal(newDoc)
+	if err != nil {
+		return contents
+	}
+	return out
+}
+
+// walkPlacedTexts calls fn on every Texts$Text in v with the RelativeMiddlePoint
+// of the nearest element above it that has one ("" if none does).
+func walkPlacedTexts(v any, place string, fn func(text bson.D, place string)) {
+	switch n := v.(type) {
+	case bson.D:
+		if docLookup(n, "$Type") == "Texts$Text" {
+			fn(n, place)
+			return
+		}
+		if p, ok := docLookup(n, "RelativeMiddlePoint").(string); ok && p != "" {
+			place = p
+		}
+		for _, e := range n {
+			walkPlacedTexts(e.Value, place, fn)
+		}
+	case bson.A:
+		for _, e := range n {
+			walkPlacedTexts(e, place, fn)
+		}
+	}
+}
+
+// writtenLanguagesAgree reports whether every language text holds is in stored
+// with the same text, and text holds at least one.
+func writtenLanguagesAgree(text, stored bson.D) bool {
+	have, want := textTranslations(text), textTranslations(stored)
+	if len(have) == 0 {
+		return false
+	}
+	for lang, t := range have {
+		if s, ok := want[lang]; !ok || s != t {
+			return false
+		}
+	}
+	return true
+}
+
+// samePlaces reports whether every text at one path in the two documents is
+// owned by a flow object drawn at the same place (walkPlacedTexts). A flow's
+// objects are a set stored as a list, in Studio Pro's drawing order or in
+// mxcli's, so the same set of paths does not mean the same texts: two
+// messages stored in the other order sit at each other's path, and pairing by
+// path moved one's translation onto the other (ako/mxcli#2329).
+func samePlaces(stored, written bson.D) bool {
+	placesOf := func(doc bson.D) map[string]string {
+		out := map[string]string{}
+		var walk func(v any, path, place string)
+		walk = func(v any, path, place string) {
+			switch n := v.(type) {
+			case bson.D:
+				if docLookup(n, "$Type") == "Texts$Text" {
+					out[path] = place
+					return
+				}
+				if p, ok := docLookup(n, "RelativeMiddlePoint").(string); ok && p != "" {
+					place = p
+				}
+				for _, e := range n {
+					walk(e.Value, path+"/"+e.Key, place)
+				}
+			case bson.A:
+				for i, e := range n {
+					walk(e, path+"/"+strconv.Itoa(i), place)
+				}
+			}
+		}
+		walk(doc, "", "")
+		return out
+	}
+	sp, wp := placesOf(stored), placesOf(written)
+	for path, p := range wp {
+		if sp[path] != p {
+			return false
+		}
+	}
+	return true
 }
