@@ -13,10 +13,10 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | 24-50 | Overview |
 | 51-195 | Syntax |
 | 196-222 | Altering existing documents |
-| 223-280 | Gotchas |
-| 281-303 | Common Patterns |
-| 304-371 | Calling Agents from Microflows |
-| 372-374 | AI agent documents |
+| 223-284 | Gotchas |
+| 285-307 | Common Patterns |
+| 308-375 | Calling Agents from Microflows |
+| 376-378 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -227,11 +227,15 @@ Agent Editor 2.2+ imports an agent only with a selected model: the id of one of
 the models the Model document's resource offers. Without it, `ASU_AgentEditor`
 logs "Model with name  is referenced but could not be found for the Agent" at
 startup and **stops importing every agent document**, not just that one. `mx
-check` and the build stay green. `mxcli check` warns on a `create agent`
-without it (MDL-AGENT02), and `check --references` and `exec` on a
-`create or modify agent` that leaves a new or stored agent without one.
-`mxcli lint` reports a stored agent without one (MPR014). Agent Editor 1.x
-does not read it, so neither warns there.
+check` and the build stay green, but Studio Pro reports AE018 "Model version
+is required for an agent". So for an agent that names a `Model`, MDL-AGENT02 is
+an **error** and `exec` refuses the statement: on a `create agent` without it
+(`mxcli check`), and on a `create or modify agent` that leaves a new or stored
+agent without one (`check --references` and `exec`). A `create or modify` that
+leaves the key out keeps a stored selected model and is not flagged. With no
+`Model` at all it is a warning. `mxcli lint` reports a stored agent without
+one (MPR014). Agent Editor 1.x does not read it, so the project check is
+silent there.
 
 ```sql
 mdl 1;

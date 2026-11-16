@@ -189,6 +189,7 @@ create or modify consumed mcp service AgentTest."WebSearch" (
 create or modify agent AgentTest."ResearchAssistant" (
   UsageType: task,
   model: AgentTest.TestModel,
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   MaxTokens: 8192,
   Temperature: 0.5,
   SystemPrompt: $$You are an updated research assistant.$$,

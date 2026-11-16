@@ -304,8 +304,12 @@ two tools with one name, is refused too. As a warning: `AuthenticationMicroflow`
 ```
 agent Shop.SupportAgent has no SelectedModel: Agent Editor 2.2+ refuses to import it at
 startup ("Model with name  is referenced but could not be found"), and that stops the
-import of every agent [MDL-AGENT02]
+import of every agent; Studio Pro reports AE018 "Model version is required for an agent"
+[MDL-AGENT02]
 ```
+
+**Severity:** an error, refusing `exec`, when the agent names a `Model` — Studio Pro's AE018
+(ako/mxcli#2289). A warning when it has no `Model` at all.
 
 **Cause:** Agent Editor 2.2+ (AgentEditorCommons `AgentFromModel_Validate`) requires the
 agent's `selectedModel` id and retrieves the deployed model by it. mxbuild does not read agent
@@ -314,9 +318,9 @@ importing the rest.
 
 **Solution:** Add `SelectedModel: '<model id>'` (e.g. `'eu.anthropic.claude-sonnet-5'`), the id
 of a model the Model document's resource offers. `create or modify agent` keeps a stored value
-when the key is left out, so `check --references` and `exec` warn on it only when there is
+when the key is left out, so `check --references` and `exec` flag it only when there is
 none to keep: a new agent, one the script dropped, or a stored agent that has none. They do not
-warn when the project's AgentEditorCommons predates 2.2, which does not read the value. `mxcli
+flag it when the project's AgentEditorCommons predates 2.2, which does not read the value. `mxcli
 lint` reports stored agents without one as MPR014.
 
 ### MDL-AGENT03: A consumed MCP service without an endpoint

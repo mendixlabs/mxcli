@@ -1037,9 +1037,9 @@ var r2Entries = []Entry{
 		Rewrite:   Rewrite{Structural: "attachment's braces: `tool X { … }` becomes `tool X ( … )`"},
 		RemovedIn: 2,
 		Note:      "In create agent and in alter agent … add. An attachment is a child of the agent: its properties are in ( ) (R2).",
-		Example: "create agent M.A (UsageType: Task, Model: M.Gpt, SystemPrompt: 'x') " +
+		Example: "create agent M.A (UsageType: Task, Model: M.Gpt, SelectedModel: 'gpt-4o', SystemPrompt: 'x') " +
 			"{ tool Lookup { Description: 'Find', Enabled: true } };",
-		CanonicalExample: "create agent M.A (UsageType: Task, Model: M.Gpt, SystemPrompt: 'x') " +
+		CanonicalExample: "create agent M.A (UsageType: Task, Model: M.Gpt, SelectedModel: 'gpt-4o', SystemPrompt: 'x') " +
 			"{ tool Lookup ( Description: 'Find', Enabled: true ) };",
 	},
 	{

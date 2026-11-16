@@ -328,7 +328,7 @@ features:
       mdl: "CREATE CONSUMED MCP SERVICE Module.Name (ProtocolVersion: ...)"
     agent:
       min_version: "11.9.0"
-      mdl: "CREATE AGENT Module.Name (UsageType: Task|Chat, Model: ..., SystemPrompt: '...')"
+      mdl: "CREATE AGENT Module.Name (UsageType: Task|Chat, Model: ..., SelectedModel: '...', SystemPrompt: '...')"
     agent_published_mcp_service:
       min_version: "11.9.0"
       mdl: "CREATE PUBLISHED MCP SERVICE Module.Name (ServerName: '...', EndpointPath: '...', ...) { tool ... }"
