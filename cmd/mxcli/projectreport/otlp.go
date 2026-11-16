@@ -87,12 +87,17 @@ func (s *Span) UnmarshalJSON(b []byte) error {
 		}
 		return 0
 	}
+	// SpanKind is a small enum (0-5); anything outside it is not a kind.
+	kind := num(raw.Kind)
+	if kind < 0 || kind > 64 {
+		kind = 0
+	}
 	*s = Span{
 		TraceID:  nonEmpty(raw.TraceID, raw.TraceIDSnake),
 		SpanID:   nonEmpty(raw.SpanID, raw.SpanIDSnake),
 		ParentID: nonEmpty(raw.ParentID, nonEmpty(raw.ParentSnake, raw.ParentSpanID)),
 		Name:     raw.Name,
-		Kind:     int(num(raw.Kind)),
+		Kind:     int(kind),
 		Start:    num(raw.Start, raw.StartNs, raw.StartOTLP),
 		End:      num(raw.End, raw.EndNs, raw.EndOTLP),
 		Service:  raw.Service,
