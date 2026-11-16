@@ -94,3 +94,59 @@ func (s *Store) requirementIDs() (map[string]bool, error) {
 	}
 	return ids, nil
 }
+
+// VerdictConflict is a requirement that decisions say both changed and
+// partly met. A consumer has to pick one, so the store refuses it instead
+// (ako/mxcli#2299). Two verdicts of the same kind are not a conflict.
+type VerdictConflict struct {
+	RequirementID string       `json:"requirement_id"`
+	Verdicts      []VerdictRef `json:"verdicts"`
+}
+
+// conflictingVerdicts reads the verdicts of every decision shard — a conflict
+// can span two modules' files — and keeps the conflicts that touch one of the
+// checked shards, so `check --changed` reports only what the change could
+// have caused.
+func (s *Store) conflictingVerdicts(checked []string) ([]VerdictConflict, error) {
+	all, err := s.ListShards()
+	if err != nil {
+		return nil, err
+	}
+	in := map[string]bool{}
+	for _, sh := range checked {
+		in[sh] = true
+	}
+	byReq := map[string][]VerdictRef{}
+	var order []string
+	for _, sh := range all {
+		if IsPlanShard(sh) {
+			continue
+		}
+		entries, _, err := s.LoadShard(sh)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range entries {
+			for _, v := range Verdicts(e) {
+				v.Shard = sh
+				if _, ok := byReq[v.RequirementID]; !ok {
+					order = append(order, v.RequirementID)
+				}
+				byReq[v.RequirementID] = append(byReq[v.RequirementID], v)
+			}
+		}
+	}
+	var out []VerdictConflict
+	for _, id := range order {
+		vs := byReq[id]
+		kinds, touched := map[string]bool{}, false
+		for _, v := range vs {
+			kinds[v.Verdict] = true
+			touched = touched || in[v.Shard]
+		}
+		if len(kinds) > 1 && touched {
+			out = append(out, VerdictConflict{RequirementID: id, Verdicts: vs})
+		}
+	}
+	return out, nil
+}

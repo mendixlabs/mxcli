@@ -88,11 +88,11 @@ type TraceRequirement struct {
 	FootprintNote string               `json:"footprintNote,omitempty"`
 	// FootprintApprox: an attribute anchor no microflow names, so the
 	// footprint is the microflows that create or change its entity.
-	FootprintApprox bool `json:"footprintApprox,omitempty"`
-	Tests         []string             `json:"tests"`
-	Journeys      []string             `json:"journeys"`
-	Decisions     []string             `json:"decisions"`
-	Questions     []string             `json:"questions"`
+	FootprintApprox bool     `json:"footprintApprox,omitempty"`
+	Tests           []string `json:"tests"`
+	Journeys        []string `json:"journeys"`
+	Decisions       []string `json:"decisions"`
+	Questions       []string `json:"questions"`
 }
 
 // TraceQuestion is an open question that bears on one or more requirements.
