@@ -1217,9 +1217,11 @@ DROP SCHEDULED EVENT Ops.HourlyPing;`,
 		Summary: "DESCRIBE STRUCTURE — compact project overview at configurable depth",
 		Keywords: []string{
 			"structure", "describe structure", "project overview",
-			"repo map", "module summary", "depth",
+			"repo map", "module summary", "depth", "folders",
 		},
-		Syntax: "DESCRIBE STRUCTURE [DEPTH 1|2|3] [IN <module>] [ALL];",
+		Syntax: "DESCRIBE STRUCTURE [DEPTH 1|2|3] [IN <module>] [ALL];\n" +
+			"-- At depth 2 and 3 documents are nested under their folders (`Orders/`),\n" +
+			"-- after the module root's; entities stay at the root (no folders in a domain model).",
 		Example: `-- Module counts only
 DESCRIBE STRUCTURE DEPTH 1;
 
