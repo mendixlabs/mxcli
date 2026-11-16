@@ -115,7 +115,15 @@ to make.
 ```bash
 mxcli brain check -p app.mpr             # every shard
 mxcli brain check --changed -p app.mpr   # only shards this branch touched
+mxcli brain check --strict -p app.mpr    # also fail on requirements no test can prove
 ```
+
+A requirement whose anchors are all module roles, enumerations, constants or
+other kinds no microflow implements is built, but no test can ever be linked to
+it. `brain check` lists it as `UNPROVABLE` (a warning; `--strict` makes it a
+failure), and `brain capture --slice` prints the same hint when the model is
+there to resolve the anchors. Add the microflow, page or entity that implements
+the requirement as an anchor. `report traceability` uses the same list of kinds.
 
 Two independent things are checked.
 
@@ -246,6 +254,30 @@ refused. A file the project would overwrite is reported before anything moves.
 
 So the brain lives where the project will live, not in a workspace above it:
 the directory is the project root from the first requirement onwards.
+
+## Verdicts: built, but not as asked
+
+A requirement is built when its anchors resolve. When what was built differs from
+what was asked, record it on the entry that explains it — a decision, or an open
+question that holds it — never on the requirement:
+
+```bash
+mxcli brain capture "Approval is per team" --changes a1b2c3:"per team, not per person" -a @Leave.ACT_Approve -p app.mpr
+mxcli brain capture "Is mobile in scope?" --open --partly-meets d4e5f6:"until answered: web only" -a @Leave.ACT_Request -p app.mpr
+mxcli brain edit 7f00aa --partly-meets a1b2c3:"no export yet" -p app.mpr
+```
+
+Each flag writes a line in the entry's body (``Changes requirement `a1b2c3`: …``).
+`brain list --json` returns them parsed as `verdicts: [{requirement, kind, reason}]`,
+and `brain plan --json` gives every requirement its effective `status` — `built`,
+`partial`, `changed`, `not built` or `not traceable` — with the reason.
+
+`brain check` fails on a verdict naming a requirement the plan does not have, on a
+verdict written on a requirement, and on a requirement that is both changed and
+partly met. Several verdicts of one kind are fine. A verdict on an open question
+counts until the question is answered; `brain resolve` says what happens to it: a
+question filed on a slice becomes a requirement and drops the line, a module
+question becomes a decision and keeps it.
 
 ## Open questions
 

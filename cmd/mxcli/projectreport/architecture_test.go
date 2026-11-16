@@ -39,6 +39,7 @@ func archFixture(t *testing.T) *fixture {
 	f.ref("Sales.Order_Overview", "PAGE", "Shell.Atlas_Default", "LAYOUT", "layout")
 	f.ref("Navigation.Responsive", "NAVIGATION", "Shell.Home", "PAGE", "home_page")
 	f.constant("Shell.StartupFlow", "String", "Billing.CalledByName", false)
+	f.exec(`UPDATE modules_data SET DomainModelDocumentation = 'Invoices and dunning. Owns payment terms.' WHERE Name = 'Billing'`)
 	return f
 }
 
@@ -61,6 +62,12 @@ func TestArchitectureSeparatesNavigationFromDomain(t *testing.T) {
 	}
 	if !reflect.DeepEqual(d.Cycles[0].Lightest, []string{"Billing → Sales"}) {
 		t.Errorf("lightest = %v", d.Cycles[0].Lightest)
+	}
+	for _, m := range d.Modules {
+		want := map[string]string{"Billing": "Invoices and dunning."}[m.Name]
+		if m.Purpose != want {
+			t.Errorf("%s purpose = %q, want %q (the first sentence of its documentation)", m.Name, m.Purpose, want)
+		}
 	}
 	if len(d.NavigationEdges) != 2 {
 		t.Errorf("navigation edges = %+v", d.NavigationEdges)

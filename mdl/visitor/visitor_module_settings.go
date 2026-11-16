@@ -219,6 +219,12 @@ func (b *Builder) ExitAlterModuleSetStatement(ctx *parser.AlterModuleSetStatemen
 		return
 	}
 	stmt := &ast.AlterModuleSetStmt{ModuleName: moduleName}
+	if ctx.DOCUMENTATION() != nil && ctx.STRING_LITERAL() != nil {
+		stmt.DocumentationSet = true
+		stmt.Documentation = unquoteStringLit(ctx.STRING_LITERAL())
+		b.statements = append(b.statements, stmt)
+		return
+	}
 	body := ctx.ModuleSettingsBody()
 	if bc, ok := body.(*parser.ModuleSettingsBodyContext); ok && bc != nil && len(bc.AllModuleSettingProperty()) == 0 {
 		b.addError(fmt.Errorf("line %d: alter module %s set () names no setting: it takes %s",

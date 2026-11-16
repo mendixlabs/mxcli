@@ -110,6 +110,9 @@ func execAlterModuleSet(ctx *ExecContext, s *ast.AlterModuleSetStmt) error {
 	if module == nil {
 		return mdlerrors.NewNotFound("module", s.ModuleName)
 	}
+	if s.DocumentationSet {
+		return setModuleDocumentation(ctx, module, s.Documentation)
+	}
 	return setModuleSettings(ctx, module, s.Settings)
 }
 

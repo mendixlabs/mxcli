@@ -55,7 +55,10 @@ type ArchitectureData struct {
 
 // ModuleHealth is one app module's size and coupling.
 type ModuleHealth struct {
-	Name        string `json:"name"`
+	Name string `json:"name"`
+	// Purpose is the first sentence of the module's documentation (its domain
+	// model's), or "" when it has none (ako/mxcli#2305).
+	Purpose     string `json:"purpose,omitempty"`
 	Layer       int    `json:"layer"`
 	Documents   int    `json:"documents"`
 	Internal    int    `json:"internal"`
@@ -316,8 +319,17 @@ func CollectArchitecture(q Querier, opt ArchitectureOptions) (*ArchitectureData,
 		fanOut[e.From][e.To] = true
 		fanIn[e.To][e.From] = true
 	}
+	purposes, err := rows(q, `SELECT Name, COALESCE(DomainModelDocumentation, '') AS Doc FROM modules_data`)
+	if err != nil {
+		return nil, err
+	}
+	purpose := map[string]string{}
+	for _, r := range purposes {
+		purpose[r["Name"]] = firstSentence(r["Doc"])
+	}
 	for _, m := range scope.App {
 		h := health[m]
+		h.Purpose = purpose[m]
 		h.Layer = layer[m]
 		for _, n := range docs[m] {
 			h.Documents += n
@@ -624,7 +636,7 @@ func RenderArchitecture(env *Envelope, ann *Annotations) (Doc, error) {
 		}})
 
 	// 2. Health.
-	ht := Table{Columns: []string{"Module", "Layer", "Documents", "Internal refs", "Outbound", "Inbound", "Cohesion", "Fan-in", "Fan-out", "Role / note"}}
+	ht := Table{Columns: []string{"Module", "Purpose", "Layer", "Documents", "Internal refs", "Outbound", "Inbound", "Cohesion", "Fan-in", "Fan-out", "Role / note"}}
 	for _, m := range d.Modules {
 		note := m.Role
 		if m.RoleReason != "" {
@@ -649,12 +661,12 @@ func RenderArchitecture(env *Envelope, ann *Annotations) (Doc, error) {
 		if m.InCycle {
 			note = strings.TrimSpace(note + " (in a cycle)")
 		}
-		ht.Rows = append(ht.Rows, []string{m.Name, fmt.Sprint(m.Layer), fmt.Sprint(m.Documents), fmt.Sprint(m.Internal),
+		ht.Rows = append(ht.Rows, []string{m.Name, m.Purpose, fmt.Sprint(m.Layer), fmt.Sprint(m.Documents), fmt.Sprint(m.Internal),
 			fmt.Sprint(m.ExternalOut), fmt.Sprint(m.ExternalIn), coh, fmt.Sprint(m.FanIn), fmt.Sprint(m.FanOut), note})
-		ht.Classes = append(ht.Classes, []string{"", "num", "num", "num", "num", "num", cls, "num", "num", ""})
+		ht.Classes = append(ht.Classes, []string{"", "", "num", "num", "num", "num", "num", cls, "num", "num", ""})
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "health", Title: "Module health",
-		Intro:  "Low cohesion is flagged only where nothing explains it. A shell, an admin UI or an adapter is low-cohesion by design; annotate `module:<Name>` to explain another.",
+		Intro:  "Purpose is the module's documentation (`alter module <Name> set documentation '…'`). Low cohesion is flagged only where nothing explains it. A shell, an admin UI or an adapter is low-cohesion by design; annotate `module:<Name>` to explain another.",
 		Blocks: []Block{ht}})
 
 	// 3. Matrix.

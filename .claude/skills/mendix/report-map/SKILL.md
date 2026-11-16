@@ -11,9 +11,9 @@ description: "Produce and use the software map (mxcli report map): one interacti
 | lines | section |
 |---|---|
 | 25-38 | Run it |
-| 39-53 | Give each module a purpose |
-| 54-71 | Reading it — and its traps |
-| 72-75 | Related |
+| 39-54 | Give each module a purpose |
+| 55-72 | Reading it — and its traps |
+| 73-76 | Related |
 
 <!-- /skill-index -->
 # Software Map
@@ -48,8 +48,9 @@ items:
   "module:Ruilen":  {note: "Shift swaps between colleagues, with approval."}
 ```
 
-Better still, put the sentence in the module's domain-model documentation so every
-tool sees it.
+Better still, put the sentence in the model, so every tool (and Studio Pro) sees it:
+`alter module Rooster set documentation 'Builds and publishes the monthly roster.';`
+Lint rule QUAL002 reports app modules that have none.
 
 ## Reading it — and its traps
 
