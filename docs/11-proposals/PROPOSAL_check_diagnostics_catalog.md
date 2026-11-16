@@ -99,7 +99,7 @@ MxBuild, Mendix CLI 2 (11.16 build), Linux x64, one clean project from `mxcli ne
 
 - **Detection.** Both Mendix checkers flag all 7 broken fixtures and agree on the control.
   `mxcli check -p` misses 5 of 7, all Tier B (expression and flow typing).
-- **Speed.** `mendix check` 1.3-1.7 s, `mx check` 6.3-8.5 s on the clean project (4.0 s on
+- **Speed.** `mendix check` 1.3-1.7 s, `mx check` 6.3-8.5 s on the clean project (one 18.3 s outlier on the first fixture of a later run, so run-to-run spread is wide; 4.0 s on
   a 28-error project); `mxcli docker check` 7.5 s. None is near the 22 s above.
 - **More specific.** Where `mx check` reports the generic CE0117 "Error(s) in
   expression", `mendix check` names the cause (CE0844 type mismatch, CE7811 unknown

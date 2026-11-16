@@ -15,7 +15,7 @@ TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 printf '%-22s | %-14s | %-16s | %-16s | %s\n' fixture "check -p" "mx check" "mendix check" "secs mx/mendix"
 for f in "$HERE"/fixtures/f*.mdl; do
   n=$(basename "$f" .mdl); W="$TMP/$n"; cp -r "$PDIR" "$W"
-  cat "$HERE/fixtures/00_base.mdl" "$f" > "$W/script.mdl"
+  { cat "$HERE/fixtures/00_base.mdl"; grep -v '^mdl 1;$' "$f"; } > "$W/script.mdl"   # one header only
   pre=$("$MXCLI" check "$W/script.mdl" -p "$PROJECT" 2>&1); case "$pre" in *"Check passed"*) pre=passed;; *) pre=REJECTED;; esac
   "$MXCLI" exec "$W/script.mdl" -p "$W/$PNAME" --no-check >/dev/null 2>&1 || { printf '%-22s | exec refused\n' "$n"; continue; }
   t0=$(date +%s.%N); b=$(cd "$W" && "$MX" check "$PNAME" 2>&1); t1=$(date +%s.%N)
