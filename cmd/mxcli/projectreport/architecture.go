@@ -15,7 +15,11 @@ import (
 // whole app in one cycle: the shell's menu links every screen and every screen
 // uses the shell's layout — measured on a 14-module app, where leaving these
 // out left two real cycles, each with a concrete cause (ako/mxcli#2222).
-var NavigationKinds = []string{"layout", "show_page", "menu_item", "home_page", "widget"}
+//
+// snippet_call is screen composition too: a page placing another module's
+// snippet (a language switcher, a news banner) closed a 14-module "domain"
+// cycle on its own until it was counted here (ako/mxcli#2299).
+var NavigationKinds = []string{"layout", "show_page", "menu_item", "home_page", "widget", "snippet_call"}
 
 // ArchitectureOptions configures the architecture collector.
 type ArchitectureOptions struct {
@@ -553,7 +557,7 @@ func round1(f float64) float64 { return math.Round(f*10) / 10 }
 var ArchitectureMethod = []string{
 	"Every number is read from the mxcli catalog (`refresh catalog full`, plus the `communities` pass for clusters, layers and centrality). Each section is a query over `CATALOG.REFS` or a `CATALOG.GRAPH_*` view and can be re-run by hand.",
 	"The app is the project's own modules: Marketplace modules, `System` and the test runner's `MxTest` are outside unless `--include-marketplace` or `--modules` says otherwise. Their edges from app modules are listed under \"Outside the app\".",
-	"Domain dependencies are every reference kind except navigation (`layout`, `show_page`, `menu_item`, `home_page`, `widget`). The map, layers, matrix and cycles use domain edges only; navigation is reported separately.",
+	"Domain dependencies are every reference kind except screen wiring (`layout`, `show_page`, `menu_item`, `home_page`, `widget`, `snippet_call`). The map, layers, matrix and cycles use domain edges only; navigation is reported separately.",
 	"A module's layer is the longest path from it down the condensed domain graph to a module with no dependencies; modules in a cycle share a layer.",
 	"Cohesion is internal references divided by internal plus outbound references, over every kind.",
 	"Clusters are Leiden communities over the structural kinds (`CATALOG.GRAPH_ANALYSIS_SCOPE`), restricted to app modules; clusters smaller than three documents are counted, not shown.",

@@ -12,7 +12,7 @@ import (
 
 var MapMethod = []string{
 	"Everything is read from the mxcli catalog (`refresh catalog full`): modules, documents, the reference graph (`CATALOG.REFS`), access rules, navigation and task queues. Nothing ran against the app.",
-	"Domain use and screen links (`layout`, `show_page`, `menu_item`, `home_page`, `widget`) are counted apart; the module most others use is the hub and is hidden from the module map by default.",
+	"Domain use and screen links (`layout`, `show_page`, `menu_item`, `home_page`, `widget`, `snippet_call`) are counted apart; the module most others use is the hub and is hidden from the module map by default.",
 	"Entry points are grouped by what starts them, from the reference that reaches the flow: a page button or data source, a menu item, a schedule, a published service, a project setting (startup), a workflow, a task queue (`queue`), an entity event, or a constant whose value is the flow's name (`by_name`).",
 	"Page flows per role start at the role's home pages and the menu, then follow show-page actions, page buttons and the flows behind them, through snippets and layouts, limited to pages the role may view and flows it may execute.",
 	"Index: attribute and enumeration-value references are folded into their entity or enumeration.",
