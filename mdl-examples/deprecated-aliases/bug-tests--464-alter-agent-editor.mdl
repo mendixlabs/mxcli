@@ -48,6 +48,7 @@ CREATE OR MODIFY CONSUMED MCP SERVICE Bug464.MyMCP (
 CREATE OR MODIFY AGENT Bug464.MyAgent (
   UsageType: Task,
   Model: Bug464.MyModel,
+  SelectedModel: 'gpt-4o',
   SystemPrompt: 'original prompt'
 );
 

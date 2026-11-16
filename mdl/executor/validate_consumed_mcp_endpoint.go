@@ -18,7 +18,7 @@ import (
 // an agent that uses it gets none of its tools. Measured in AgentEditorCommons
 // 1.1.0, 2.2.1 and 2.6.0, which all map endpoint/qualifiedName to
 // MCPEndpointConstant. A create or modify is left to
-// warnAgentDocumentsLeftUnset, which can see whether there is a stored
+// validateAgentDocumentsLeftUnset, which can see whether there is a stored
 // endpoint to keep (#2089).
 const consumedMCPEndpointRule = "MDL-AGENT03"
 

@@ -979,8 +979,8 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 			"agent", "agents", "model", "knowledge base", "mcp service",
 			"agent editor", "llm", "ai", "genai", "mxcloudgenai",
 		},
-		Syntax:  "LIST AI MODELS [IN Module];\nLIST KNOWLEDGE BASES [IN Module];\nLIST CONSUMED MCP SERVICES [IN Module];\nLIST AGENTS [IN Module];\nDESCRIBE AI MODEL Module.Name;\nCREATE AI MODEL Module.Name (Provider: MxCloudGenAI, Key: @Module.ApiKey);\nCREATE KNOWLEDGE BASE Module.Name (Provider: MxCloudGenAI, Key: @Module.KBKey);\nCREATE CONSUMED MCP SERVICE Module.Name (ProtocolVersion: v2025_03_26, ...);\nCREATE AGENT Module.Name (UsageType: Task|Chat, Model: Module.MyModel, SystemPrompt: '...') { ... };\nDROP AGENT Module.Name;",
-		Example: "mdl 1;\nCREATE AI MODEL MyModule.GPT4 (\n  Provider: MxCloudGenAI,\n  Key: @MyModule.ModelApiKey\n);\n\nCREATE AGENT MyModule.Summarizer (\n  UsageType: Task,\n  Model: MyModule.GPT4,\n  SystemPrompt: 'Summarize in 3 sentences.',\n  UserPrompt: 'Enter text.'\n);",
+		Syntax:  "LIST AI MODELS [IN Module];\nLIST KNOWLEDGE BASES [IN Module];\nLIST CONSUMED MCP SERVICES [IN Module];\nLIST AGENTS [IN Module];\nDESCRIBE AI MODEL Module.Name;\nCREATE AI MODEL Module.Name (Provider: MxCloudGenAI, Key: @Module.ApiKey);\nCREATE KNOWLEDGE BASE Module.Name (Provider: MxCloudGenAI, Key: @Module.KBKey);\nCREATE CONSUMED MCP SERVICE Module.Name (ProtocolVersion: v2025_03_26, ...);\nCREATE AGENT Module.Name (UsageType: Task|Chat, Model: Module.MyModel, SelectedModel: '<model id>', SystemPrompt: '...') { ... };\nDROP AGENT Module.Name;",
+		Example: "mdl 1;\nCREATE AI MODEL MyModule.GPT4 (\n  Provider: MxCloudGenAI,\n  Key: @MyModule.ModelApiKey\n);\n\nCREATE AGENT MyModule.Summarizer (\n  UsageType: Task,\n  Model: MyModule.GPT4,\n  SelectedModel: 'eu.anthropic.claude-sonnet-5',\n  SystemPrompt: 'Summarize in 3 sentences.',\n  UserPrompt: 'Enter text.'\n);",
 		SeeAlso: []string{"agents.model", "agents.knowledge-base", "agents.mcp-service", "agents.agent"},
 	})
 
@@ -1063,7 +1063,8 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 A TOOL's Document is the microflow it runs. SelectedModel is the id of the
 model the Model document's resource offers (e.g. 'eu.anthropic.claude-sonnet-5');
 Agent Editor 2.2+ refuses to import an agent without one, and that stops the
-import of every agent (check: MDL-AGENT02). Agent Commons stores the name in
+import of every agent (check: MDL-AGENT02, an error when the agent names a
+Model: Studio Pro reports AE018). Agent Commons stores the name in
 50 characters and Description in 200; longer fails the startup import and
 leaves the previous agent in use (check: MDL-AGENT04). SelectedModelName defaults to the
 id. On OR MODIFY, the tools, knowledge bases and entity keep their stored

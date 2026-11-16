@@ -10,6 +10,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/backend/mock"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/agenteditor"
+	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
@@ -45,10 +46,16 @@ func TestCreateOrModifyAgent_KeepsToolTargetsAndIDs(t *testing.T) {
 	stored := storedGraphExplorer(mod, mf, kb)
 	h := mkHierarchy(mod)
 	withContainer(h, mf.ContainerID, mod.ID)
+	// The entity whose $ID Agent Editor stored as the reference's documentId.
+	ent := mkEntity(mod.ID, "OnboardingHelper")
+	ent.ID = model.ID(stored.Entity.DocumentID)
+	dm := mkDomainModel(mod.ID, ent)
 
 	var written *agenteditor.Agent
 	mb := &mock.MockBackend{
 		IsConnectedFunc:                   func() bool { return true },
+		GetModuleByNameFunc:               func(string) (*model.Module, error) { return mod, nil },
+		GetDomainModelFunc:                func(model.ID) (*domainmodel.DomainModel, error) { return dm, nil },
 		ListModulesFunc:                   func() ([]*model.Module, error) { return []*model.Module{mod}, nil },
 		ListMicroflowsFunc:                func() ([]*microflows.Microflow, error) { return []*microflows.Microflow{mf}, nil },
 		ListAgentEditorAgentsFunc:         func() ([]*agenteditor.Agent, error) { return []*agenteditor.Agent{stored}, nil },

@@ -320,7 +320,11 @@ func applyAgentChange(ctx *ExecContext, a *agenteditor.Agent, key, val string) e
 		a.SelectedModel.Name = val
 	case "entity":
 		qn := parseQualifiedNameStr(val)
-		a.Entity = carryEntityRef(&agenteditor.DocRef{QualifiedName: qn.String()}, a.Entity)
+		ref, err := agentEntityRef(ctx, "alter agent", a.Name, qn)
+		if err != nil {
+			return err
+		}
+		a.Entity = carryEntityRef(ref, a.Entity)
 	default:
 		return mdlerrors.NewUnsupported(fmt.Sprintf("unknown agent property: %s", key))
 	}
