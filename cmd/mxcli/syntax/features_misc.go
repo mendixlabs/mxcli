@@ -657,6 +657,11 @@ LIST NAVIGATION MENU <profile> prints every item's shortest address.
 -- carries the item itself, sub-items included. Fragment items are written
 -- exactly as in CREATE NAVIGATION, so DESCRIBE output pastes in.
 --
+-- INSERT is re-runnable: an item the target list already holds, as the
+-- statement builds it, is already there and is not added again (a second
+-- run reports Unchanged). An item of that caption built differently (another
+-- action, other sub-items) is refused -- REPLACE changes it.
+--
 -- mxcli never guesses: an address that matches nothing or several items is
 -- refused, listing the address of each candidate. Positional addresses do
 -- not exist.

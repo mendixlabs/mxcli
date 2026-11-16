@@ -267,8 +267,111 @@ func (m *Mutator) InsertMenuItems(parent backend.MenuItemPath, index int, specs 
 	if index < 0 || index > len(items) {
 		return fmt.Errorf("menu position %d is outside a list of %d items", index, len(items))
 	}
+	built, err = withoutItemsAlreadyThere(items, built)
+	if err != nil {
+		return err
+	}
+	if len(built) == 0 {
+		return nil
+	}
 	out := append(append(append([]bson.D(nil), items[:index]...), built...), items[index:]...)
 	return setItems(holder, out)
+}
+
+// withoutItemsAlreadyThere drops from built each item the list already holds
+// as the statement builds it, so a script that inserts a menu item can run
+// again without adding it twice (ako/mxcli#2312). An item of the same caption
+// that is built differently — another action, other sub-items — is refused:
+// inserting it would leave two items of one caption, and skipping it would
+// drop the statement's change.
+func withoutItemsAlreadyThere(items, built []bson.D) ([]bson.D, error) {
+	var out []bson.D
+	for _, b := range built {
+		caption := captionOf(b)
+		var same *bson.D
+		for i := range items {
+			if captionOf(items[i]) == caption {
+				same = &items[i]
+				break
+			}
+		}
+		if same == nil {
+			out = append(out, b)
+			continue
+		}
+		if sameMenuItem(*same, b) {
+			continue
+		}
+		return nil, fmt.Errorf("the list already has an item %q, with another action or other sub-items — "+
+			"`replace '%s' with { … }` changes it; insert would leave two items of one caption", caption, caption)
+	}
+	return out, nil
+}
+
+// sameMenuItem reports whether stored is the item built would write: equal
+// once element ids are ignored and stored's captions are kept to the languages
+// built writes (a translation added in Studio Pro is not a difference).
+func sameMenuItem(stored, built bson.D) bool {
+	langs := map[string]bool{}
+	collectLanguages(built, langs)
+	a, err1 := bson.Marshal(comparableItem(stored, langs))
+	b, err2 := bson.Marshal(comparableItem(built, langs))
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return bytes.Equal(a, b)
+}
+
+func collectLanguages(v any, into map[string]bool) {
+	switch n := v.(type) {
+	case bson.D:
+		if bsonnav.DGetString(n, "$Type") == "Texts$Translation" {
+			into[bsonnav.DGetString(n, "LanguageCode")] = true
+		}
+		for _, e := range n {
+			collectLanguages(e.Value, into)
+		}
+	case bson.A:
+		for _, e := range n {
+			collectLanguages(e, into)
+		}
+	}
+}
+
+// comparableItem is a copy of v without $IDs, with its keys sorted, and with
+// only the translations in langs.
+func comparableItem(v any, langs map[string]bool) any {
+	switch n := v.(type) {
+	case bson.D:
+		out := bson.D{}
+		for _, e := range n {
+			if e.Key == "$ID" {
+				continue
+			}
+			out = append(out, bson.E{Key: e.Key, Value: comparableItem(e.Value, langs)})
+		}
+		sortKeys(out)
+		return out
+	case bson.A:
+		out := bson.A{}
+		for _, e := range n {
+			if d, ok := e.(bson.D); ok && bsonnav.DGetString(d, "$Type") == "Texts$Translation" &&
+				!langs[bsonnav.DGetString(d, "LanguageCode")] {
+				continue
+			}
+			out = append(out, comparableItem(e, langs))
+		}
+		return out
+	}
+	return v
+}
+
+func sortKeys(d bson.D) {
+	for i := 1; i < len(d); i++ {
+		for j := i; j > 0 && d[j-1].Key > d[j].Key; j-- {
+			d[j-1], d[j] = d[j], d[j-1]
+		}
+	}
 }
 
 func (m *Mutator) build(specs []types.NavMenuItemSpec) ([]bson.D, error) {

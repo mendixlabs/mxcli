@@ -208,6 +208,9 @@ func (pb *pageBuilder) attributeConditions(w *ast.WidgetV3, vw *ast.VisibleWhenV
 // condition on the same element (TestApp WorkflowCommons), so they never
 // replace it. Runs after applyConditionalSettings and applyVisibleWhen.
 func applyVisibleRoles(widget pages.Widget, w *ast.WidgetV3) error {
+	if err := refuseRolesInExpressions(w); err != nil {
+		return err
+	}
 	if len(widgetVisibleRoles(w)) == 0 {
 		return nil
 	}
@@ -313,4 +316,32 @@ func (pb *pageBuilder) getEnumerations() ([]*model.Enumeration, error) {
 		pb.execCache.enumerations = enums
 	}
 	return enums, nil
+}
+
+// refuseRolesInExpressions is MDL-WIDGET54 at exec: a `roles (…)` call left in
+// a widget expression would be stored as invalid expression text with the
+// role restriction lost (ako/mxcli#2319).
+func refuseRolesInExpressions(w *ast.WidgetV3) error {
+	// The keys of expressionWidgetProps, each read by literal: the builder's
+	// property reads are checked that way (widget_native_props_source_test.go).
+	for _, p := range []struct{ key, expr string }{
+		{"DynamicClasses", w.GetStringProp("DynamicClasses")},
+		{"VisibleIf", w.GetStringProp("VisibleIf")},
+		{"EditableIf", w.GetStringProp("EditableIf")},
+	} {
+		if exprCallsRoles(p.expr) {
+			return mdlerrors.NewValidation(rolesInExpressionMessage(w.Type, w.Name, p.key))
+		}
+	}
+	return nil
+}
+
+// refuseRolesInVisibility is refuseRolesInExpressions for an element that has
+// a visibility and nothing else (a tab page, a layout-grid row): only its
+// `Visible:` is read.
+func refuseRolesInVisibility(w *ast.WidgetV3) error {
+	if exprCallsRoles(w.GetStringProp("VisibleIf")) {
+		return mdlerrors.NewValidation(rolesInExpressionMessage(w.Type, w.Name, "VisibleIf"))
+	}
+	return nil
 }

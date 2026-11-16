@@ -1665,6 +1665,7 @@ func validateStaticWidgetOf(w *ast.WidgetV3, def *WidgetDefinition, locationPref
 	// over, because a data binding on the SAME widget can traverse the same
 	// association legitimately. (findings #4)
 	out = append(out, validateWidgetExpressionAssociations(w, locationPrefix)...)
+	out = append(out, validateWidgetExpressionRoles(w, locationPrefix)...)
 
 	// A contentparams/captionparams value is a DATA BINDING (an attribute path),
 	// not a client-side expression: mxcli stores an unquoted value as an attribute
@@ -2405,5 +2406,58 @@ func sortedPropertyKeys(w *ast.WidgetV3) []string {
 		out = append(out, k)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// rolesCallRe finds `roles (` in an expression, checked outside string
+// literals by exprCallsRoles.
+var rolesCallRe = regexp.MustCompile(`(?i)\broles\s*\(`)
+
+// exprCallsRoles reports whether expr calls `roles (…)` outside a string
+// literal. Mendix has no such function: it is MDL's "visible for module
+// roles", which only the leading `roles (…) and <condition>` form, split by
+// the parser, can carry (ako/mxcli#2319).
+func exprCallsRoles(expr string) bool {
+	var b strings.Builder
+	inStr := false
+	for i := 0; i < len(expr); i++ {
+		c := expr[i]
+		if c == '\'' {
+			inStr = !inStr
+			b.WriteByte(' ')
+			continue
+		}
+		if inStr {
+			b.WriteByte(' ')
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return rolesCallRe.MatchString(b.String())
+}
+
+// rolesInExpressionMessage is MDL-WIDGET54's text, shared by check and exec.
+func rolesInExpressionMessage(where, widget, prop string) string {
+	return fmt.Sprintf("%s: widget `%s` property `%s` calls `roles (…)` inside an expression. Mendix expressions have no roles "+
+		"function: it would be stored as invalid expression text and the role restriction lost. Write the roles as their own "+
+		"property beside the condition — `Visible: roles (Mod.Role), Visible: <condition>` — or lead with them: "+
+		"`Visible: roles (Mod.Role) and <condition>` (both apply)", where, widget, prop)
+}
+
+// validateWidgetExpressionRoles refuses a `roles (…)` call left inside a widget
+// expression property (MDL-WIDGET54, ako/mxcli#2319).
+func validateWidgetExpressionRoles(w *ast.WidgetV3, locationPrefix string) []linter.Violation {
+	var out []linter.Violation
+	for _, key := range expressionWidgetProps {
+		expr, ok := lookupWidgetProp(w, key)
+		if !ok || !exprCallsRoles(expr) {
+			continue
+		}
+		out = append(out, linter.Violation{
+			RuleID:   "MDL-WIDGET54",
+			Severity: linter.SeverityError,
+			Message:  rolesInExpressionMessage(locationPrefix, w.Name, key),
+		})
+	}
 	return out
 }

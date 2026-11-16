@@ -546,6 +546,9 @@ func (pb *pageBuilder) buildControlBarV3(w *ast.WidgetV3) (*pages.Container, err
 // layout-grid row (#1461) — in either form: an expression, or `Attr in (…)` —
 // plus any `Visible: roles (…)` (#1460). nil when there is none.
 func (pb *pageBuilder) childVisibility(w *ast.WidgetV3) (*pages.ConditionalVisibilitySettings, error) {
+	if err := refuseRolesInVisibility(w); err != nil {
+		return nil, err
+	}
 	if vw, ok := w.Properties["VisibleWhen"].(*ast.VisibleWhenV3); ok && vw != nil {
 		cvs, err := pb.visibleWhenSettings(w, vw)
 		if err != nil {
