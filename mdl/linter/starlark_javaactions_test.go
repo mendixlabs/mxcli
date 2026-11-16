@@ -317,6 +317,11 @@ func TestQUAL002_DocumentedElementsAreSilent(t *testing.T) {
 	db := cat.CatalogDB()
 	for _, tbl := range []string{"modules", "pages", "workflows", "constants"} {
 		col := "Description"
+		if tbl == "modules" {
+			// A module's documentation is its domain model's: Mendix modules
+			// have no Description of their own (ako/mxcli#2305).
+			col = "DomainModelDocumentation"
+		}
 		if _, err := db.Exec(fmt.Sprintf(
 			`UPDATE %s_data SET %s = 'Documented.'`, tbl, col)); err != nil {
 			t.Fatalf("update %s: %v", tbl, err)
