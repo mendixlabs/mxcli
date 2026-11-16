@@ -13,14 +13,14 @@ description: "Modify an existing page or snippet's widget tree in place with ALT
 | 28-31 | Overview |
 | 32-64 | When to Use |
 | 65-115 | Syntax |
-| 116-470 | Operations |
-| 471-549 | Examples |
-| 550-640 | DataGrid 2 columns: how to address them, and what you can set |
-| 641-652 | Common Mistakes |
-| 653-687 | Limitations — prefer binding at page creation (ledger finding #45) |
-| 688-695 | Validation Checklist |
-| 696-705 | Related Commands |
-| 706-710 | Related Skills |
+| 116-491 | Operations |
+| 492-570 | Examples |
+| 571-661 | DataGrid 2 columns: how to address them, and what you can set |
+| 662-673 | Common Mistakes |
+| 674-708 | Limitations — prefer binding at page creation (ledger finding #45) |
+| 709-716 | Validation Checklist |
+| 717-726 | Related Commands |
+| 727-731 | Related Skills |
 
 <!-- /skill-index -->
 # ALTER PAGE / ALTER SNIPPET - Modify Existing Pages and Snippets
@@ -371,6 +371,27 @@ alter page MyModule.Customer_Edit {
 ```
 
 Replaces the target widget with one or more new widgets. The new widgets use the same syntax as `create page`, and may reuse the names of the widgets the replace removes. `insert into dvMain.footer { … }` appends to a footer and `drop dvMain.footer` empties it.
+
+### MOVE and WRAP - Rearrange Existing Widgets
+
+```sql
+mdl 1;
+alter page MyModule.Order_Lines {
+  -- Put the grid in a data view on the page parameter, so it has an object context
+  wrap dgLines in { dataview dvOrder (DataSource: $Order) { } }
+  -- Move a widget after, before or into another
+  move txtTitle into dvOrder;
+  move btnBack after txtTitle;
+};
+```
+
+`move` relocates a widget as it is stored; `wrap` inserts a new named `container`,
+`dataview` or `groupbox` where the widget is (built like `insert before`, so it
+takes the widget's data context) and moves the widget into it. Neither rebuilds the
+widget, so they also work on widgets MDL cannot re-author — a legacy classic Data
+grid after a 9 → 11 upgrade can be wrapped in a data view that gives its
+`[%CurrentObject%]` a value. Moving a widget into itself or a widget inside it, or
+into something that is not a container, is refused before anything changes.
 
 ### DataGrid Column Operations
 

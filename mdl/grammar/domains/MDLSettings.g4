@@ -823,7 +823,7 @@ keyword
     | ANCHOR | TOP | BOTTOM
 
     // Fragment / ALTER PAGE
-    | AFTER | BEFORE | DEFINE | FRAGMENT | FRAGMENTS | SLOT
+    | AFTER | BEFORE | DEFINE | FRAGMENT | FRAGMENTS | SLOT | WRAP
 
     // General-purpose words (only tokens not already listed above)
     | ACTION | BLOCKING | BOTH | CELL | CONTEXT | DATA | FORMAT | ITEM | LIST

@@ -163,6 +163,25 @@ type DropWidgetOp struct {
 
 func (s *DropWidgetOp) isAlterPageOperation() {}
 
+// MoveWidgetOp represents: MOVE widgetRef AFTER|BEFORE|INTO destinationRef.
+// The widget's stored subtree is moved as it is (ako/mxcli#2122).
+type MoveWidgetOp struct {
+	Target      WidgetRef
+	Position    string // "AFTER", "BEFORE" or "INTO"
+	Destination WidgetRef
+}
+
+func (s *MoveWidgetOp) isAlterPageOperation() {}
+
+// WrapWidgetOp represents: WRAP widgetRef IN { container }. The container is
+// inserted where the widget is, and the widget moved into it (ako/mxcli#2122).
+type WrapWidgetOp struct {
+	Target    WidgetRef
+	Container []*WidgetV3
+}
+
+func (s *WrapWidgetOp) isAlterPageOperation() {}
+
 // DropListViewTemplateOp represents:
 // DROP TEMPLATE FOR Module.Specialization IN listViewName
 //

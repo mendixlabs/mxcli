@@ -419,6 +419,7 @@ CONTAINER: C O N T A I N E R;
 ROW: R O W;
 ITEM: I T E M;
 CELL: C E L L;   // legacy table cell address: `table1 cell(row, column)`
+WRAP: W R A P;   // alter page: `wrap <widget> in { <container> }` (ako/mxcli#2122)
 CONTROLBAR: C O N T R O L B A R;
 SEARCH: S E A R C H;
 SEARCHBAR: S E A R C H B A R;

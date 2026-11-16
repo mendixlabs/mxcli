@@ -175,7 +175,7 @@ func validateAlterPageReferences(ctx *ExecContext, prog *ast.Program, sc *script
 				}
 			}
 			switch o := op.(type) {
-			case *ast.InsertWidgetOp, *ast.ReplaceWidgetOp:
+			case *ast.InsertWidgetOp, *ast.ReplaceWidgetOp, *ast.WrapWidgetOp:
 				grown[doc] = true
 			case *ast.DropWidgetOp:
 				if dropped[doc] == nil {
@@ -232,6 +232,8 @@ func alterOpWidgets(s *ast.AlterPageStmt) []*ast.WidgetV3 {
 			ws = append(ws, o.Widgets...)
 		case *ast.ReplaceWidgetOp:
 			ws = append(ws, o.NewWidgets...)
+		case *ast.WrapWidgetOp:
+			ws = append(ws, o.Container...)
 		}
 	}
 	return ws

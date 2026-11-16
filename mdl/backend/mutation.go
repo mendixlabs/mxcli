@@ -140,6 +140,10 @@ type PageMutator interface {
 	// DropWidget removes widgets by ref from the tree.
 	DropWidget(refs []WidgetRef) error
 
+	// MoveWidget moves a widget's stored subtree before or after another
+	// widget, or into a container, without rebuilding it (ako/mxcli#2122).
+	MoveWidget(widgetRef, destRef string, position InsertPosition) error
+
 	// ReplaceWidget replaces the target widget or column with the given widgets.
 	// columnRef is "" for widget targeting.
 	ReplaceWidget(widgetRef string, columnRef string, widgets []pages.Widget) error
