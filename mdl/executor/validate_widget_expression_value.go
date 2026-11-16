@@ -88,6 +88,10 @@ func validateWidgetExpressionValuesIn(w *ast.WidgetV3, def *WidgetDefinition, it
 			// Mendix expression (that is `$Param/Attr`), so a key whose kind is
 			// out of sight — no project, no schema — is not refused as one.
 			continue
+		case isExpr && op == "attribute" && isAssociationAttributePath(text):
+			// `Assoc/Attr` over associations from the context object
+			// (ako/mxcli#2295); exec resolves or refuses the path.
+			continue
 		case op == "image" && isImageObjectVariable(text):
 			// `Image: $currentObject` binds the object in context (#1476).
 			continue
