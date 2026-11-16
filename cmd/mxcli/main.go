@@ -461,6 +461,7 @@ func init() {
 	lintCmd.Flags().StringSliceP("rules", "r", nil, "Only run these rule IDs (e.g. -r MPR001 -r SEC001)")
 	lintCmd.Flags().StringSliceP("modules", "m", nil, "Only lint the specified modules (comma-separated or repeated)")
 	lintCmd.Flags().StringSliceP("documents", "d", nil, "Only lint these documents, by qualified name (e.g. Sales.ACT_Order); comma-separated or repeated")
+	lintCmd.Flags().Bool("show-accepted", false, "List the findings that decisions in the project brain accept (they are not counted)")
 	lintCmd.Flags().String("baseline", "", "Report only findings not recorded in this baseline file (exit code follows the new ones)")
 	lintCmd.Flags().Bool("update-baseline", false, "Record the current findings in the --baseline file instead of comparing")
 

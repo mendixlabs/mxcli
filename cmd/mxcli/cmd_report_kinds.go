@@ -371,16 +371,27 @@ func securityLintFindings(exec *executor.Executor, projectPath string, scope pro
 	if err != nil {
 		return nil, err
 	}
+	// Findings a brain decision accepts are marked, so the rule's verdict
+	// comes from the brain rather than a second copy in --annotations
+	// (ako/mxcli#2304).
+	acceptances := loadBrainAcceptances(projectDir)
+	open := acceptances.apply(vs)
 	var out []projectreport.LintFinding
-	for _, v := range vs {
+	add := func(v linter.Violation, by string) {
 		if v.RuleFailure || linter.CategoryOf(v.RuleID) != "Security" {
-			continue
+			return
 		}
 		where := v.Location.Module
 		if v.Location.DocumentName != "" {
 			where = strings.TrimPrefix(v.Location.Module+"."+v.Location.DocumentName, ".")
 		}
-		out = append(out, projectreport.LintFinding{Rule: v.RuleID, Severity: v.Severity.String(), Message: v.Message, Where: where})
+		out = append(out, projectreport.LintFinding{Rule: v.RuleID, Severity: v.Severity.String(), Message: v.Message, Where: where, AcceptedBy: by})
+	}
+	for _, v := range open {
+		add(v, "")
+	}
+	for _, a := range acceptances.accepted {
+		add(a.Violation, a.By.EntryID)
 	}
 	return out, nil
 }

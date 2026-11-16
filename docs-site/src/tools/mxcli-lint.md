@@ -99,6 +99,31 @@ Lint baseline lint-baseline.json: 1 new, 1518 already known, 0 fixed
 The file is sorted JSON, so re-recording an unchanged project rewrites the same
 bytes and a committed baseline diffs only where findings changed.
 
+## Accepted Findings: Decisions in the Project Brain
+
+Accepting a finding is a project decision, so it is recorded in the
+[project brain](project-brain.md) with its reason, on the element it is about:
+
+```bash
+mxcli brain capture "Beperking has no entity access rules on purpose" \
+  --accepts "SEC001:read only through DS_Beperkingen_Inzien, which logs every view" \
+  -a @Dossier.Beperking -p app.mpr
+mxcli brain capture "Demo users stay on in the demo app" --accepts "SEC003:never deployed" -p app.mpr
+```
+
+That writes ``Accepts lint `SEC001` on `@Dossier.Beperking`: …`` in the decision.
+An unanchored decision accepts a project-wide finding (``on `project` ``); a module
+anchor accepts the rule anywhere in that module.
+
+`mxcli lint` then leaves accepted findings out of the open findings, the summary
+and the exit code, and says how many there are on stderr; `--show-accepted` lists
+each with the decision that accepts it. An acceptance whose rule ran but no longer
+fires on its element is reported as **stale**, so the decision does not outlive the
+finding. The scored `mxcli report` counts accepted findings apart and does not score
+them, and `mxcli report security` shows a rule's verdict as *accepted (brain …)*.
+`brain check` refuses an acceptance on an open question or requirement, on an element
+that does not resolve, or naming a rule lint does not have.
+
 ## CI Integration
 
 ### GitHub Actions
