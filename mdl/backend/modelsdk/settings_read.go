@@ -97,6 +97,11 @@ func projectSettingsFromGen(g *genSet.ProjectSettings) *model.ProjectSettings {
 				UseOptimizedClient:                  p.UseOptimizedClient(),
 				UrlPrefix:                           p.UrlPrefix(),
 			}
+			for _, item := range p.ThemeModuleOrderItems() {
+				if e, ok := item.(*genSet.ThemeModuleEntry); ok && e.ModuleName() != "" {
+					ps.WebUI.ThemeModuleOrder = append(ps.WebUI.ThemeModuleOrder, e.ModuleName())
+				}
+			}
 			setBase(&ps.WebUI.BaseElement, p, "Forms$WebUIProjectSettingsPart")
 		case *genSet.ConfigurationSettings:
 			ps.Configuration = configurationSettingsFromGen(p)

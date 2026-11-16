@@ -136,6 +136,30 @@ func (b *Backend) UpdateModule(m *model.Module) error {
 	return b.persistUnit(m.ID, gm)
 }
 
+// SetModuleUIResources sets IsThemeModule on an existing module unit and
+// nothing else, as UpdateModule sets only the name (ako/mxcli#1286). It is a
+// method of its own because UpdateModule's callers hold a module read with
+// Name and ID only: a flag carried through it would be reset by every rename.
+func (b *Backend) SetModuleUIResources(id model.ID, on bool) error {
+	if b.writer == nil {
+		return fmt.Errorf("SetModuleUIResources: not connected for writing")
+	}
+	raw, err := b.reader.GetRawUnitBytes(string(id))
+	if err != nil {
+		return fmt.Errorf("SetModuleUIResources: read unit %s: %w", id, err)
+	}
+	el, err := codec.NewDecoder(codec.DefaultRegistry).Decode(raw)
+	if err != nil {
+		return fmt.Errorf("SetModuleUIResources: decode unit %s: %w", id, err)
+	}
+	gm, ok := el.(*genProj.Module)
+	if !ok {
+		return fmt.Errorf("SetModuleUIResources: unit %s is not a Module (%s)", id, el.TypeName())
+	}
+	gm.SetIsThemeModule(on)
+	return b.persistUnit(id, gm)
+}
+
 // DeleteModule deletes a module and every unit transitively contained in it
 // (DomainModel, ModuleSecurity, ModuleSettings, Folders, Documents). Orphaned
 // child units would crash Studio Pro (KeyNotFoundException in LoadChildUnits), so

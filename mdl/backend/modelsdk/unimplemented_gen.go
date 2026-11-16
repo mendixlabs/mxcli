@@ -1107,6 +1107,10 @@ func (unimplemented) SetDomainModelDocumentation(_ model.ID, _ string) error {
 	return errUnimplemented("SetDomainModelDocumentation")
 }
 
+func (unimplemented) SetModuleUIResources(_ model.ID, _ bool) error {
+	return errUnimplemented("SetModuleUIResources")
+}
+
 func (unimplemented) SetProjectAdminPassword(_ model.ID, _ string) error {
 	return errUnimplemented("SetProjectAdminPassword")
 }

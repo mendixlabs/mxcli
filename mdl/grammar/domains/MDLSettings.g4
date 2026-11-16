@@ -102,6 +102,7 @@ settingsValue
     | NUMBER_LITERAL
     | booleanLiteral
     | qualifiedName
+    | LPAREN (settingsValue (COMMA settingsValue)*)? RPAREN   // a list: ThemeModuleOrder: ('Atlas_Core', 'Brand')
     ;
 
 // =============================================================================

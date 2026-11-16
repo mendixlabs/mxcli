@@ -446,6 +446,7 @@ func (b *Backend) enrichModule(m *model.Module) {
 	m.FromAppStore = gm.FromAppStore()
 	m.AppStoreVersion = gm.AppStoreVersion()
 	m.AppStoreGuid = gm.AppStoreGuid()
+	m.IsThemeModule = gm.IsThemeModule()
 }
 
 func (b *Backend) GetModuleByName(name string) (*model.Module, error) {

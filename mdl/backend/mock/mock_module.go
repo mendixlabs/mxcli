@@ -80,6 +80,13 @@ func (m *MockBackend) GetModuleSettings(moduleID model.ID) (*types.ModuleSetting
 	return nil, fmt.Errorf("MockBackend.GetModuleSettings not configured")
 }
 
+func (m *MockBackend) SetModuleUIResources(id model.ID, on bool) error {
+	if m.SetModuleUIResourcesFunc != nil {
+		return m.SetModuleUIResourcesFunc(id, on)
+	}
+	return fmt.Errorf("MockBackend.SetModuleUIResources not configured")
+}
+
 func (m *MockBackend) UpdateModuleSettings(ms *types.ModuleSettings) error {
 	if m.UpdateModuleSettingsFunc != nil {
 		return m.UpdateModuleSettingsFunc(ms)

@@ -107,6 +107,15 @@ globs the directory. An invented folder (`themesource/my_theme/`) is **silently
 skipped** — build succeeds, rules simply absent. Use a module's theme source only
 when the styling belongs to that module (it then exports with the `.mpk`).
 
+**3. The order of module theme sources is App Settings > Theme > module order.**
+A module marked **UI resources** (`alter module X set (UIResources: true)`) can be
+placed in it with `alter settings webui (ThemeModuleOrder: ('Atlas_Core', …, 'X'))`;
+a module listed later compiles later and wins. Measured on 11.12.6 with
+`mxbuild --target=deploy`: listed last, a module's rules land after Atlas Core's
+and DataWidgets'; listed first, before them. Modules the list leaves out keep
+Mendix's default place, and with no order set (the blank app) a user module's
+theme source already compiles after Atlas. `describe settings` prints the order.
+
 > Debugging "my CSS doesn't apply": first prove the file is compiled *at all* —
 > grep a unique probe selector in `theme-cache/web/theme.compiled.css`. Absent and
 > overridden look identical in the browser, and only one of them is a

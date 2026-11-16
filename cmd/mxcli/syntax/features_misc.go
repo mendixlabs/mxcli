@@ -803,7 +803,7 @@ create or modify translations in Administration for nl_NL (
 			"add language", "remove language", "enable language", "translations",
 			"optimistic locking", "concurrency", "lost update",
 			"workflow group", "workflow groups", "add group", "task assignment",
-			"web ui", "webui", "react client", "optimized client", "classic client", "jvm parameters", "proxy",
+			"web ui", "webui", "react client", "optimized client", "classic client", "theme module order", "theme order", "jvm parameters", "proxy",
 		},
 		Syntax: `ALTER SETTINGS RUNTIME (<key>: <value>, ...);
 ALTER SETTINGS CONFIGURATION '<name>' (<key>: <value>, ...);
@@ -819,6 +819,7 @@ ALTER SETTINGS WORKFLOWS ADD [OR MODIFY] GROUP '<name>' [(Description: '<text>')
 ALTER SETTINGS WORKFLOWS MODIFY GROUP '<name>' (Description: '<text>');
 ALTER SETTINGS WORKFLOWS DROP GROUP '<name>';
 ALTER SETTINGS WEBUI (OptimizedClient: 'Yes' | 'No' | 'MigrationMode');
+ALTER SETTINGS WEBUI (ThemeModuleOrder: ('<module>', ...));
 CREATE [OR MODIFY] CONFIGURATION '<name>' [(<key>: <value>, ...)];
 DROP CONFIGURATION '<name>';
 
@@ -847,6 +848,13 @@ ALTER SETTINGS CONFIGURATION 'Default' (
 -- classic (Dojo) one, MigrationMode Mendix's mixed mode. Widgets differ per
 -- client, so check it (LIST SETTINGS) before choosing one.
 ALTER SETTINGS WEBUI (OptimizedClient: 'Yes');
+
+-- ThemeModuleOrder is App Settings > Theme > module order: the theme compiles
+-- the listed modules' themesource in this order, so a module listed last wins.
+-- Mark your own module UI resources first; modules left out keep Mendix's
+-- default place. An empty order (the default) has no statement.
+ALTER MODULE BrandTheme SET (UIResources: true);
+ALTER SETTINGS WEBUI (ThemeModuleOrder: ('Atlas_Core', 'DataWidgets', 'BrandTheme'));
 
 -- LANGUAGE ADD/REMOVE change the ENABLED languages — the list under App
 -- Settings > Languages, and the only languages a build emits anything for. A
@@ -1617,10 +1625,15 @@ mxcli check script.mdl -p app.mpr --references  -- With reference validation`,
 		Keywords: []string{
 			"module settings", "module version", "module type", "add-on module",
 			"addon", "app module", "semver", "export module",
+			"ui resources", "theme module", "uiresources",
 		},
-		Syntax: `CREATE [OR MODIFY] MODULE <name> ( Version: 'x.y.z', ModuleType: app | addon );
-ALTER MODULE <name> SET ( Version: 'x.y.z', ModuleType: app | addon );
-DESCRIBE MODULE <name>;   -- prints the settings that differ from App / 1.0.0`,
+		Syntax: `CREATE [OR MODIFY] MODULE <name> ( Version: 'x.y.z', ModuleType: app | addon, UIResources: true | false );
+ALTER MODULE <name> SET ( Version: 'x.y.z', ModuleType: app | addon, UIResources: true | false );
+DESCRIBE MODULE <name>;   -- prints the settings that differ from App / 1.0.0 / not UI resources
+
+-- UIResources is Studio Pro's "UI resources package": the module's themesource
+-- styling is part of the theme. Its place in the compile order is
+-- ALTER SETTINGS WEBUI (ThemeModuleOrder: (…)), see settings.alter.`,
 		Example: `mdl 1;
 -- A versioned add-on module
 create or modify module Inventory (

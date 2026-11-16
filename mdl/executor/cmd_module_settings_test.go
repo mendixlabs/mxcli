@@ -44,10 +44,10 @@ func TestModuleTypeOf(t *testing.T) {
 // prints parses back to the same settings.
 func TestModuleSettingsMDL(t *testing.T) {
 	ctx, _ := newMockCtx(t)
-	if got := moduleSettingsMDL(ctx, appModuleSettings()); got != "" {
+	if got := moduleSettingsMDL(ctx, appModuleSettings(), false); got != "" {
 		t.Errorf("an untouched app module prints settings: %q", got)
 	}
-	out := "create or modify module Probe" + moduleSettingsMDL(ctx, addOnModuleSettings()) + ";"
+	out := "create or modify module Probe" + moduleSettingsMDL(ctx, addOnModuleSettings(), false) + ";"
 	prog := parseMDL(t, out)
 	s, ok := prog.Statements[0].(*ast.CreateModuleStmt)
 	if !ok || s.Settings.Version == nil || *s.Settings.Version != "2.3.1" ||
@@ -56,7 +56,7 @@ func TestModuleSettingsMDL(t *testing.T) {
 	}
 	// A solution module has no MDL spelling: no ModuleType, so a rerun keeps it.
 	sol := &types.ModuleSettings{ExportLevel: "Protected", ProtectedModuleType: "Solution", Version: "1.0.0"}
-	if got := moduleSettingsMDL(ctx, sol); got != "" {
+	if got := moduleSettingsMDL(ctx, sol, false); got != "" {
 		t.Errorf("a solution module prints %q", got)
 	}
 }

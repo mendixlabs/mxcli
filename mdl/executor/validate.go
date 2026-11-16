@@ -1297,6 +1297,22 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 				ents = buildEntityQualifiedNames(ctx)
 			}
 			errs = validateSettingsReferences(s, mfs, ents, rets, sc)
+			// A theme module order naming a module neither the project nor the
+			// script has is what exec refuses (ako/mxcli#1286).
+			if names, ok := s.Properties["ThemeModuleOrder"].([]string); ok && strings.EqualFold(s.Section, "webui") {
+				if mods, err := ctx.Backend.ListModules(); err == nil {
+					known := map[string]bool{}
+					for _, m := range mods {
+						known[m.Name] = true
+					}
+					for _, n := range names {
+						if !known[n] && !sc.modules[n] {
+							errs = append(errs, mdlerrors.NewNotFoundMsg("module", n, fmt.Sprintf(
+								"ThemeModuleOrder names module %s, which the project does not have", n)))
+						}
+					}
+				}
+			}
 		}
 		if len(errs) > 0 {
 			return errs[0]
