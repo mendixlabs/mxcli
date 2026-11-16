@@ -295,12 +295,11 @@ func applyAgentChange(ctx *ExecContext, a *agenteditor.Agent, key, val string) e
 		}
 		a.TopP = &f
 	case "model":
-		qn := parseQualifiedNameStr(val)
-		m := findAgentEditorModel(ctx, qn.Module, qn.Name)
-		if m == nil {
-			return fmt.Errorf("alter agent %s: model not found: %s", a.Name, val)
+		ref, err := agentModelRef(ctx, "alter agent", a.Name, parseQualifiedNameStr(val))
+		if err != nil {
+			return err
 		}
-		a.Model = &agenteditor.DocRef{DocumentID: string(m.ID), QualifiedName: qn.String()}
+		a.Model = ref
 	case "enablebackendstreaming", "enableuistreaming":
 		b, err := strconv.ParseBool(val)
 		if err != nil {

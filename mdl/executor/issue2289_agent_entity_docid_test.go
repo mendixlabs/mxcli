@@ -141,12 +141,12 @@ func TestIssue2289_AgentEntityNotFound(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "entity not found: MyFirstModule.Missing") {
 		t.Fatalf("got %v, want entity not found", err)
 	}
-	// A System entity is not in the project, so there is no $ID to resolve: it
-	// is written by name alone, as before, rather than refused.
+	// A System entity is not in the project, but it is not refused: its $ID
+	// is the measured one (ako/mxcli#2292).
 	run(t, exec, `create agent MyFirstModule.ForUsers (UsageType: Task, Entity: System.User);`)
 	_, contents := agentContents(t, exec, "ForUsers")
-	if got := agentRef(t, contents, "entity"); got.QualifiedName != "System.User" || got.DocumentID != "" {
-		t.Errorf("System entity ref %+v, want System.User by name", got)
+	if got := agentRef(t, contents, "entity"); got.QualifiedName != "System.User" || got.DocumentID != "0e439bf8-87c0-406f-ad3f-630ec563f770" {
+		t.Errorf("System entity ref %+v, want System.User with its measured $ID", got)
 	}
 
 	run(t, exec, `create agent MyFirstModule.Triage (UsageType: Task, Entity: MyFirstModule.Ticket);`)
