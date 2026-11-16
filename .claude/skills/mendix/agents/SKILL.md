@@ -262,7 +262,7 @@ Single-quoted strings cannot span lines. Use `$$...$$` for any SystemPrompt or U
 `DisplayName`, `KeyName`, `KeyID`, `Environment`, `ResourceName`, `DeepLinkURL` are populated by the Mendix portal at sync time. Do not set them manually in CREATE statements — they will be overwritten.
 
 ### documentId vs qualifiedName
-Each document has both a `qualifiedName` (e.g. `Module.MyModel`) and an opaque `documentId` UUID. The UUID is assigned by ASU_AgentEditor at runtime. Only `qualifiedName` is set by CREATE; cross-reference lookups resolve by scanning all documents for a matching name.
+Each reference stores a `qualifiedName` (e.g. `Module.MyModel`) and a `documentId`. A document reference's id is that document's unit id; an agent's `Entity` holds the entity element's `$ID`, which mxcli resolves and writes as Studio Pro does. For a **System** entity the id comes from a measured table (`modelsdk/meta/system_entity_ids.go`): System.User, System.Language and the other System entities have a fixed `$ID` that is the same in 10.24 and 11.16 builds. A dozen — System.Thumbnail, PrivateFileDocument, BackgroundJob, ChangeHash, WorkflowVersion and others — get an `$ID` minted each time the model loads, so there is none to write: those are stored by name with an empty `documentId`, and a rewrite keeps whatever id is already stored.
 
 ### Drop order
 Agents reference Model, Knowledge Base, and MCP Service documents. Always drop Agents before dropping their dependencies:

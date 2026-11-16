@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/modelsdk/meta"
 
 	"github.com/mendixlabs/mxcli/sdk/agenteditor"
 )
@@ -82,11 +83,17 @@ func keepToolUserSettings(t *agenteditor.AgentTool, stored agenteditor.AgentTool
 // what Studio Pro stores (ako/mxcli#2289, measured on AgentCommons' example
 // agents). An entity the project does not contain is refused, as a model that
 // is not there is. System entities are the exception: the System module is not
-// in the project, so mxcli has no $ID for them, and the reference keeps only
-// its name (carryEntityRef then keeps a stored id).
+// in the project, so its $ID comes from meta.SystemEntityID — measured from
+// built models, and System.Language's is the 83d81a7b-… a Studio Pro save
+// stores (ako/mxcli#2292). A System entity mxbuild gives a per-load $ID has no
+// fixed one to write, so its reference keeps only its name (carryEntityRef then
+// keeps a stored id) rather than an invented one.
 func agentEntityRef(ctx *ExecContext, verb string, agentName string, qn ast.QualifiedName) (*agenteditor.DocRef, error) {
 	ref := &agenteditor.DocRef{QualifiedName: qn.String()}
 	if strings.EqualFold(qn.Module, "System") {
+		if id, ok := meta.SystemEntityID(qn.Name); ok {
+			ref.DocumentID = id
+		}
 		return ref, nil
 	}
 	e, ok := lookupEntity(ctx, qn.String())
@@ -99,7 +106,8 @@ func agentEntityRef(ctx *ExecContext, verb string, agentName string, qn ast.Qual
 
 // carryEntityRef keeps the stored entity reference's documentId when the
 // statement names the same entity and mxcli could not resolve one itself
-// (a System entity): writing it empty wiped what Studio Pro stored.
+// (a System entity whose $ID mxbuild mints per load): writing it empty wiped
+// what Studio Pro stored.
 func carryEntityRef(ref, stored *agenteditor.DocRef) *agenteditor.DocRef {
 	if ref == nil || stored == nil || ref.DocumentID != "" || ref.QualifiedName != stored.QualifiedName {
 		return ref
