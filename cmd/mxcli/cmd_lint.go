@@ -317,6 +317,13 @@ modules, and findings that are not about those documents are not reported.
 			violations = keepDocumentViolations(violations, documentFilter)
 		}
 
+		// Findings a decision in the project brain accepts are left out of
+		// what lint reports as open, and of the exit code; an acceptance whose
+		// rule no longer fires there is stale (ako/mxcli#2304). Applied before
+		// the baseline, so a baseline records only what is not accepted.
+		acceptances := loadBrainAcceptances(projectDir)
+		violations = acceptances.apply(violations)
+
 		// Baseline: record the findings, or keep only the new ones. On stderr,
 		// so the summary cannot corrupt --format json/sarif.
 		if updateBaseline {
@@ -370,6 +377,20 @@ modules, and findings that are not about those documents are not reported.
 		// silent when there is no store or no queue, and on stderr so it cannot
 		// corrupt --format json/sarif.
 		reportBrainGap(projectDir)
+		showAccepted, _ := cmd.Flags().GetBool("show-accepted")
+		var stale []brain.Acceptance
+		if !scoped {
+			// A rule ran when lint has it and it is enabled: RuleEnabled alone
+			// is true for an id lint has never heard of, which is brain
+			// check's to report, not a stale acceptance.
+			has := map[string]bool{}
+			for _, r := range lint.Rules() {
+				has[strings.ToUpper(r.ID())] = true
+			}
+			ran := func(rule string) bool { return has[strings.ToUpper(rule)] && lint.RuleEnabled(rule) }
+			stale = acceptances.stale(ran, func(m string) bool { return !ctx.IsExcluded(m) })
+		}
+		acceptances.report(os.Stderr, showAccepted, stale)
 
 		// Exit with error if there are errors — the new ones, against a
 		// baseline. Recording a baseline accepts what it records.

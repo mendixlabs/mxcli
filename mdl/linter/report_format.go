@@ -48,7 +48,11 @@ func (f *MarkdownReportFormatter) FormatReport(report *Report, w io.Writer) erro
 	fmt.Fprintf(w, "| Errors | %d |\n", report.Summary.Errors)
 	fmt.Fprintf(w, "| Warnings | %d |\n", report.Summary.Warnings)
 	fmt.Fprintf(w, "| Info | %d |\n", report.Summary.Infos)
-	fmt.Fprintf(w, "| **Total** | **%d** |\n\n", report.Summary.Total)
+	fmt.Fprintf(w, "| **Total** | **%d** |\n", report.Summary.Total)
+	if report.Accepted > 0 {
+		fmt.Fprintf(w, "| Accepted (brain decisions, not scored) | %d |\n", report.Accepted)
+	}
+	fmt.Fprintln(w)
 
 	// Category scores
 	fmt.Fprintf(w, "## Category Scores\n\n")
@@ -128,6 +132,7 @@ type JSONReport struct {
 	Date         string          `json:"date"`
 	Modules      []string        `json:"modules,omitempty"`
 	OverallScore float64         `json:"overallScore"`
+	Accepted     int             `json:"accepted,omitempty"`
 	Summary      JSONSummary     `json:"summary"`
 	Categories   []CategoryScore `json:"categories"`
 	Violations   []JSONViolation `json:"violations"`
@@ -150,6 +155,7 @@ func (f *JSONReportFormatter) FormatReport(report *Report, w io.Writer) error {
 		Date:         report.Date,
 		Modules:      report.Modules,
 		OverallScore: report.OverallScore,
+		Accepted:     report.Accepted,
 		Summary: JSONSummary{
 			Total:    report.Summary.Total,
 			Errors:   report.Summary.Errors,
@@ -247,6 +253,9 @@ func (f *HTMLReportFormatter) FormatReport(report *Report, w io.Writer) error {
 	fmt.Fprintf(w, "<tr><td class='severity-warning'>Warnings</td><td>%d</td></tr>\n", report.Summary.Warnings)
 	fmt.Fprintf(w, "<tr><td class='severity-info'>Info</td><td>%d</td></tr>\n", report.Summary.Infos)
 	fmt.Fprintf(w, "<tr><td><strong>Total</strong></td><td><strong>%d</strong></td></tr>\n", report.Summary.Total)
+	if report.Accepted > 0 {
+		fmt.Fprintf(w, "<tr><td>Accepted (brain decisions, not scored)</td><td>%d</td></tr>\n", report.Accepted)
+	}
 	fmt.Fprintf(w, "</table>\n")
 
 	// Category scores

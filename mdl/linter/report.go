@@ -22,6 +22,10 @@ type Report struct {
 	// Modules is the --modules selection the report was scored over; empty
 	// for a whole-project report.
 	Modules []string `json:"modules,omitempty"`
+	// Accepted counts the findings decisions in the project brain accept.
+	// They are not scored and not in Summary: an accepted finding is a
+	// decision, not an open problem (ako/mxcli#2304).
+	Accepted int `json:"accepted,omitempty"`
 }
 
 // CategoryScore tracks the score for a lint category.

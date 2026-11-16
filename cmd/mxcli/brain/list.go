@@ -34,6 +34,8 @@ type ListedEntry struct {
 	// Verdicts are the entry's verdict lines, parsed, so a consumer does not
 	// re-parse bodies (ako/mxcli#2301).
 	Verdicts []EntryVerdict `json:"verdicts,omitempty"`
+	// Accepts are the lint findings the entry accepts (ako/mxcli#2304).
+	Accepts []EntryAcceptance `json:"accepts,omitempty"`
 }
 
 // ListResult is a listing plus the blocks that could not be read. Those are
@@ -83,7 +85,7 @@ func (s *Store) List(f ListFilter) (ListResult, error) {
 			if f.Open != nil && e.Open != *f.Open {
 				continue
 			}
-			out.Entries = append(out.Entries, ListedEntry{Entry: e, Shard: sh, Verdicts: EntryVerdicts(e)})
+			out.Entries = append(out.Entries, ListedEntry{Entry: e, Shard: sh, Verdicts: EntryVerdicts(e), Accepts: EntryAcceptances(e)})
 		}
 	}
 	return out, nil

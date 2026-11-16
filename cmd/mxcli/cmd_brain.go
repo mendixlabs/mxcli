@@ -112,7 +112,7 @@ list captured twice is a no-op.`,
 			if len(args) > 0 {
 				brainFatal(fmt.Errorf("give the entry as text or --from-json, not both"))
 			}
-			for _, f := range []string{"anchor", "slice", "open", "source", "changes", "partly-meets"} {
+			for _, f := range []string{"anchor", "slice", "open", "source", "changes", "partly-meets", "accepts"} {
 				if cmd.Flags().Changed(f) {
 					brainFatal(fmt.Errorf("--%s does not combine with --from-json; set it per item in the JSON", f))
 				}
@@ -151,6 +151,11 @@ list captured twice is a no-op.`,
 		}
 		if e, err = applyVerdictFlags(cmd, dir, e); err != nil {
 			brainFatal(err)
+		}
+		if accepts, _ := cmd.Flags().GetStringArray("accepts"); len(accepts) > 0 {
+			if e, err = brain.AddAcceptances(e, accepts); err != nil {
+				brainFatal(err)
+			}
 		}
 		store, queue := brain.NewStore(dir), brain.NewQueue(dir)
 		// Already committed is a duplicate too, found by content: an edited
@@ -903,6 +908,7 @@ is UNVERIFIABLE, which is counted and reported once and does not fail.`,
 		if err != nil {
 			brainFatal(err)
 		}
+		rep.BadAcceptances = append(rep.BadAcceptances, unknownAcceptedRules(store, shards, loc.Dir)...)
 		strict, _ := cmd.Flags().GetBool("strict")
 		switch ci, _ := cmd.Flags().GetBool("ci"); {
 		case globalJSONFlag:
@@ -958,6 +964,9 @@ func printBrainReportCI(rep brain.Report) {
 	for _, c := range rep.ConflictingVerdicts {
 		fmt.Printf("brain: requirement %s: conflicting verdicts: %s\n", c.RequirementID, verdictList(c.Verdicts))
 	}
+	for _, a := range rep.BadAcceptances {
+		fmt.Printf("brain: %s: %s: acceptance of %s on @%s: %s\n", shardLabel(a.Shard), a.EntryID, a.Rule, a.Element, a.Problem)
+	}
 	for _, v := range rep.MisplacedVerdicts {
 		fmt.Printf("brain: %s: %s: verdict on a requirement (%s %s); record it on a decision or open question\n", shardLabel(v.Shard), v.EntryID, v.Verdict, v.RequirementID)
 	}
@@ -1005,6 +1014,9 @@ func printBrainReport(rep brain.Report, loc brainLocation) {
 	for _, v := range rep.UnknownRequirementRefs {
 		fmt.Printf("NO REQUIREMENT %s: %q says it %s requirement %s, which no plan slice has\n",
 			v.EntryID, v.Title, v.Verdict, v.RequirementID)
+	}
+	for _, a := range rep.BadAcceptances {
+		fmt.Printf("ACCEPTANCE    %s: %q accepts %s on @%s, which cannot hold: %s\n", a.EntryID, a.Title, a.Rule, a.Element, a.Problem)
 	}
 	for _, v := range rep.MisplacedVerdicts {
 		fmt.Printf("MISPLACED     %s: %q is a requirement but says it %s requirement %s — record that on the decision or open question that explains it\n",
@@ -1334,10 +1346,12 @@ func init() {
 		"Record this as a requirement of the named slice (plan/<slice>.md) instead of a decision")
 	brainCaptureCmd.Flags().String("source", "",
 		"Where this came from: a document in the project, optionally #<locator> (docs/prd.md#L18-21)")
+	brainCaptureCmd.Flags().StringArray("accepts", nil,
+		"Record that this decision accepts a lint finding on each of its anchors: adds \"Accepts lint `<RULE>` on `@<anchor>`: <reason>\" (value <RULE> or <RULE>:<reason>; repeatable). mxcli lint then leaves it out of the open findings")
 	for _, c := range []*cobra.Command{brainCaptureCmd, brainEditCmd} {
-		c.Flags().StringSlice("changes", nil,
+		c.Flags().StringArray("changes", nil,
 			"Record that this entry changes requirement <id>: adds the line \"Changes requirement `<id>`: <reason>\" (value <id> or <id>:<reason>; repeatable)")
-		c.Flags().StringSlice("partly-meets", nil,
+		c.Flags().StringArray("partly-meets", nil,
 			"Record that this entry partly meets requirement <id> (on an open question: until it is answered); value <id> or <id>:<reason>; repeatable")
 	}
 	brainEditCmd.Flags().String("source", "",
@@ -1531,8 +1545,8 @@ func warnUnprovableAtCapture(mpr string, e brain.Entry) {
 // When the store exists the requirement id must be one the plan has: a verdict
 // on nothing is refused here rather than left for 'brain check' to find.
 func applyVerdictFlags(cmd *cobra.Command, dir string, e brain.Entry) (brain.Entry, error) {
-	changes, _ := cmd.Flags().GetStringSlice("changes")
-	partly, _ := cmd.Flags().GetStringSlice("partly-meets")
+	changes, _ := cmd.Flags().GetStringArray("changes")
+	partly, _ := cmd.Flags().GetStringArray("partly-meets")
 	if len(changes) == 0 && len(partly) == 0 {
 		return e, nil
 	}
@@ -1560,4 +1574,27 @@ func verdictFlag(kind string) string {
 		return "changes"
 	}
 	return "partly-meets"
+}
+
+// unknownAcceptedRules reports acceptances naming a rule lint does not have —
+// a typo, or a rule since removed. Checked here rather than in the brain
+// package, because only the command knows the project's rules.
+func unknownAcceptedRules(store *brain.Store, checked []string, projectDir string) []brain.AcceptanceFinding {
+	accepted, _, err := store.LoadAcceptances()
+	if err != nil || len(accepted) == 0 {
+		return nil
+	}
+	in := map[string]bool{}
+	for _, sh := range checked {
+		in[sh] = true
+	}
+	known := knownLintRuleIDs(projectDir)
+	var out []brain.AcceptanceFinding
+	for _, a := range accepted {
+		if in[a.Shard] && !known[strings.ToUpper(a.Rule)] {
+			out = append(out, brain.AcceptanceFinding{Acceptance: a,
+				Problem: "lint has no rule " + a.Rule + " ('mxcli lint --list-rules' lists them)"})
+		}
+	}
+	return out
 }

@@ -178,3 +178,24 @@ func TestSecurityConstantsScopeAndDescriptorNames(t *testing.T) {
 		t.Errorf("with --include-marketplace: %v", got)
 	}
 }
+
+// ako/mxcli#2304: a lint rule whose findings brain decisions accept shows as
+// accepted with the decision ids, unless an annotation says otherwise.
+func TestSecurityLintVerdictComesFromTheBrain(t *testing.T) {
+	f := newFixture(t)
+	f.module("Shop", "")
+	d, err := CollectSecurity(f.cat, SecurityInput{Lint: []LintFinding{
+		{Rule: "SEC001", Severity: "warning", Message: "no rules", Where: "Shop.A", AcceptedBy: "d1"},
+		{Rule: "SEC001", Severity: "warning", Message: "no rules", Where: "Shop.B", AcceptedBy: "d2"},
+		{Rule: "SEC010", Severity: "warning", Message: "x", Where: "Shop.P"},
+		{Rule: "SEC010", Severity: "warning", Message: "x", Where: "Shop.Q", AcceptedBy: "d3"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, _ := NewEnvelope("security", "Shop", "now", "t", d, SecurityMethod, SecurityLimits, nil)
+	doc, _ := RenderSecurity(env, nil)
+	var md bytes.Buffer
+	_ = RenderMarkdown(&md, doc)
+	mustContain(t, md.String(), "| SEC001 | warning | 2 |  | accepted (brain d1, d2) |", "1 of 2 accepted (brain d3)")
+}

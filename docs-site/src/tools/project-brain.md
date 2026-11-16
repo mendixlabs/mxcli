@@ -279,6 +279,18 @@ counts until the question is answered; `brain resolve` says what happens to it: 
 question filed on a slice becomes a requirement and drops the line, a module
 question becomes a decision and keeps it.
 
+## Accepting a lint finding
+
+A lint finding the project keeps on purpose is a decision. Record it with
+`--accepts`, on the element it is about, and lint stops counting it:
+
+```bash
+mxcli brain capture "Pages bind Core.Medewerker directly" --accepts "ARCH001:the shell owns it" -a @Core.Medewerker -p app.mpr
+```
+
+See [mxcli lint](mxcli-lint.md#accepted-findings-decisions-in-the-project-brain).
+`brain list --json` returns them as `accepts: [{rule, element, reason}]`.
+
 ## Open questions
 
 An open question is a decision that has not been made yet.
