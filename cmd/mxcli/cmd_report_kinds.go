@@ -37,6 +37,9 @@ type reportKindSpec struct {
 	// collect measures and returns the envelope. It is not called with --from.
 	collect func(cmd *cobra.Command, projectPath string) (*projectreport.Envelope, error)
 	render  func(env *projectreport.Envelope, ann *projectreport.Annotations) (projectreport.Doc, error)
+	// renderHTML, when set, replaces the shared page for --format html: a
+	// kind whose page is interactive rather than a document.
+	renderHTML func(w io.Writer, env *projectreport.Envelope, ann *projectreport.Annotations) error
 	// flags adds the kind's own flags.
 	flags func(cmd *cobra.Command)
 }
@@ -131,6 +134,8 @@ func runReportKind(cmd *cobra.Command, spec reportKindSpec) error {
 	}
 	if format == "json" {
 		err = env.WriteJSON(out)
+	} else if format == "html" && spec.renderHTML != nil {
+		err = spec.renderHTML(out, env, ann)
 	} else {
 		var doc projectreport.Doc
 		if doc, err = spec.render(env, ann); err != nil {
@@ -602,4 +607,65 @@ func reportFileExists(p string) bool {
 
 func init() {
 	reportCmd.AddCommand(reportTraceabilityCmd)
+}
+
+// ---------------------------------------------------------------- map
+
+var reportMapCmd = newReportKindCmd(reportKindSpec{
+	name:  "map",
+	short: "Software map: an interactive guide to what the app contains (modules, data, logic, page flows, APIs, index)",
+	long: `One page that helps someone understand an app they did not build, generated
+from the catalog. Where 'report architecture' judges structure, the map
+describes what is there and how it fits together:
+
+  Landscape            user roles and where each starts; the systems around the
+                       app; what runs without a user
+  Module map           app modules as a dependency graph, domain use apart from
+                       screen links, the hub and weak links behind toggles
+  Inside a module      data model (other modules' entities as ghosts, the flows
+                       that write each entity), entry points by what starts
+                       them, the call closure of one entry point, pages, Java
+                       actions
+  Page flows           per role: home pages and menu, then show-page actions and
+                       the flows behind buttons, limited to what the role may
+                       open; pages it may open that no path reaches
+  Data across modules  every association crossing a module boundary
+  Conventions          naming prefixes, flows shared by many modules, entry
+                       points × module
+  APIs & background    published operations with their call closure, consumed
+                       services and HTTP calls, queues, schedules, Java
+                       actions, constants
+  Index                every document, searchable, with uses and used by
+
+--format html is the interactive page (self-contained: no requests, diagrams
+drawn in the browser, one module or entry point at a time). --format json is
+the same data for another viewer (an IDE panel); markdown is a summary.
+
+Module purposes come from each module's domain-model documentation; give the
+modules that have none one sentence each in --annotations:
+  items:
+    "module:Rooster": {note: "Builds and publishes the monthly roster."}`,
+	example: `  mxcli report map -p app.mpr -o map.html
+  mxcli report map -p app.mpr --format json -o map.json
+  mxcli report map --from map.json --annotations purposes.yaml -o map.html`,
+	flags: scopeFlags,
+	collect: func(cmd *cobra.Command, projectPath string) (*projectreport.Envelope, error) {
+		exec, cleanup, err := openReportCatalog(projectPath, "full")
+		if err != nil {
+			return nil, err
+		}
+		defer cleanup()
+		data, err := projectreport.CollectMap(exec.Catalog(), scopeOptions(cmd), nil)
+		if err != nil {
+			return nil, err
+		}
+		return projectreport.NewEnvelope("map", reportProjectName(projectPath), reportNow(), version, data,
+			projectreport.MapMethod, projectreport.MapLimits, nil)
+	},
+	render:     projectreport.RenderMap,
+	renderHTML: projectreport.RenderMapHTML,
+})
+
+func init() {
+	reportCmd.AddCommand(reportMapCmd)
 }
