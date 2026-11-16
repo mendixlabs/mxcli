@@ -558,6 +558,10 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 		// A consistency rule between two documents, not a reference, so the
 		// reference check above cannot see it.
 		projectViolations = append(projectViolations, exec.CheckEntityAccessCalls(prog)...)
+		// MDL-GRANT03: a grant whose where clause narrows nothing because the
+		// role already holds an unconstrained rule on the entity in the
+		// project, or the reverse (ako/mxcli#2320).
+		projectViolations = append(projectViolations, exec.CheckAccessRuleOverlap(prog)...)
 		// MDL-I18N01 (MxBuild CE4899): a script that changes the default
 		// language leaves every required caption written in the old one empty
 		// in the new one (ako/mxcli#944).

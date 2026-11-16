@@ -47,6 +47,13 @@ func init() {
 			"MDL-DEPR082 and is rewritten the same way.\n\n" +
 			"A module role is always Module.Role. A bare role name parses but is\n" +
 			"refused (MDL-GRANT02) — mxcli cannot tell which module it belongs to.\n\n" +
+			"Grants add rules:\n" +
+			"  A rule is keyed by its roles and its WHERE constraint, and a role's\n" +
+			"  access is the union of every rule naming it. A GRANT with a WHERE\n" +
+			"  beside the role's unconstrained rule narrows nothing; check and exec\n" +
+			"  warn MDL-GRANT03. To narrow, revoke first, then grant:\n" +
+			"    REVOKE ALL ON ENTITY Shop.Customer FROM Shop.Clerk;\n" +
+			"    GRANT READ * ON ENTITY Shop.Customer TO Shop.Clerk WHERE [Name != ''];\n\n" +
 			"Members added later:\n" +
 			"  A rule also carries a default for members added AFTER it was written,\n" +
 			"  derived from the grant: WRITE * gives ReadWrite, READ * gives ReadOnly,\n" +
