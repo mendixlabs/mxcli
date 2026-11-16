@@ -288,13 +288,14 @@ func execCreateAgent(ctx *ExecContext, s *ast.CreateAgentStmt) error {
 		}
 	}
 
-	// Resolve Entity reference. The documentId for entity references is an
-	// opaque agent-editor-internal ID (not a unit UUID), so we set only
-	// qualifiedName here. ASU_AgentEditor populates documentId at runtime.
+	// Resolve Entity reference: its documentId is the entity element's $ID,
+	// which Studio Pro stores there (ako/mxcli#2289).
 	if s.Entity != nil {
-		a.Entity = &agenteditor.DocRef{
-			QualifiedName: s.Entity.String(),
+		ref, err := agentEntityRef(ctx, "create agent", s.Name.String(), *s.Entity)
+		if err != nil {
+			return err
 		}
+		a.Entity = ref
 	}
 
 	// Variables

@@ -3,7 +3,10 @@
 package executor
 
 import (
+	"fmt"
 	"strings"
+
+	"github.com/mendixlabs/mxcli/mdl/ast"
 
 	"github.com/mendixlabs/mxcli/sdk/agenteditor"
 )
@@ -74,9 +77,29 @@ func keepToolUserSettings(t *agenteditor.AgentTool, stored agenteditor.AgentTool
 	}
 }
 
+// agentEntityRef is the reference an agent's Entity setting writes: the
+// entity's qualified name and, as its documentId, the entity element's $ID —
+// what Studio Pro stores (ako/mxcli#2289, measured on AgentCommons' example
+// agents). An entity the project does not contain is refused, as a model that
+// is not there is. System entities are the exception: the System module is not
+// in the project, so mxcli has no $ID for them, and the reference keeps only
+// its name (carryEntityRef then keeps a stored id).
+func agentEntityRef(ctx *ExecContext, verb string, agentName string, qn ast.QualifiedName) (*agenteditor.DocRef, error) {
+	ref := &agenteditor.DocRef{QualifiedName: qn.String()}
+	if strings.EqualFold(qn.Module, "System") {
+		return ref, nil
+	}
+	e, ok := lookupEntity(ctx, qn.String())
+	if !ok || e.ID == "" {
+		return nil, fmt.Errorf("%s %s: entity not found: %s", verb, agentName, qn)
+	}
+	ref.DocumentID = string(e.ID)
+	return ref, nil
+}
+
 // carryEntityRef keeps the stored entity reference's documentId when the
-// statement names the same entity. mxcli cannot compute it, and writing it
-// empty wiped what Studio Pro stored.
+// statement names the same entity and mxcli could not resolve one itself
+// (a System entity): writing it empty wiped what Studio Pro stored.
 func carryEntityRef(ref, stored *agenteditor.DocRef) *agenteditor.DocRef {
 	if ref == nil || stored == nil || ref.DocumentID != "" || ref.QualifiedName != stored.QualifiedName {
 		return ref

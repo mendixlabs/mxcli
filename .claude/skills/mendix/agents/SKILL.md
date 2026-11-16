@@ -11,12 +11,12 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | lines | section |
 |---|---|
 | 24-50 | Overview |
-| 51-194 | Syntax |
-| 195-221 | Altering existing documents |
-| 222-279 | Gotchas |
-| 280-302 | Common Patterns |
-| 303-370 | Calling Agents from Microflows |
-| 371-373 | AI agent documents |
+| 51-195 | Syntax |
+| 196-222 | Altering existing documents |
+| 223-280 | Gotchas |
+| 281-303 | Common Patterns |
+| 304-371 | Calling Agents from Microflows |
+| 372-374 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -156,6 +156,7 @@ create agent Module.MyAgent (
   Temperature: 0.7,             -- float
   TopP: 0.9,                    -- float
   ToolChoice: Auto,
+  Entity: Module.Customer,      -- must exist; stored with the entity's $ID
   variables: ("Language": EntityAttribute, "Name": string),
   SystemPrompt: $$multi-line
 prompt here.$$,
