@@ -130,9 +130,12 @@ mxcli report traceability -p app.mpr --junit results.xml --journeys journeys.jso
 is brain's: `brain plan --json` reports the same `status` per requirement, and
 `brain check` fails on a verdict naming an unknown id, one on a requirement, and a
 requirement that is both changed and partly met.
-Milestones are read from `docs/brain/plan/traceability.json`
-(`{"milestones":[{"name":"M1","slices":["01-accounts"]}]}`); `brain plan --json`
-now lists each requirement with each anchor's resolution.
+Milestones are part of the plan: `mxcli brain milestone "M1" --slice 01-accounts`
+writes `milestone: "M1"` in the slice's frontmatter, and `--requirement <id>`
+places one requirement apart from its slice. The older
+`docs/brain/plan/traceability.json` is still read, with a warning, until
+`mxcli brain milestone --import` moves it into the plan. `brain plan --json` lists
+each requirement with each anchor's resolution, and each slice's milestone.
 
 ## map
 

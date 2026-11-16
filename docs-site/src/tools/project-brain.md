@@ -207,6 +207,28 @@ implement it.
 
 Misfiling is not checked for slices: a slice spans modules by design.
 
+### Milestones
+
+A specification's milestones group its slices. The milestone is part of the
+slice, not a separate file:
+
+```bash
+mxcli brain milestone "M1 — accounts" --slice 01-accounts --slice 02-profiles -p app.mpr
+mxcli brain milestone "M2 — approvals" --requirement a1b2c3 -p app.mpr
+mxcli brain milestone -p app.mpr            # list them
+```
+
+That writes `milestone: "M1 — accounts"` in the slice file's frontmatter, and a
+``Milestone: `M2 — approvals` `` line on a requirement placed apart from its
+slice. `brain plan` adds a MILESTONE column, `brain plan --json` a `milestone`
+per slice, and `report traceability` groups by them. Milestones are ordered by
+where they first appear, walking the slices in name order. `--clear` takes
+slices or requirements out again.
+
+A project that kept milestones in `docs/brain/plan/traceability.json` moves them
+with `mxcli brain milestone --import docs/brain/plan/traceability.json`, which
+removes the file once everything in it is placed.
+
 ### Before there is a project
 
 The brain does not need a model to exist: capture requirements from a
@@ -503,6 +525,7 @@ progress from 65/65 to 63/65 and the number was the only symptom.
 | `brain capture "<text>" --open [-a @Anchor]…` | Queues an **open question**; anchors not checked |
 | `brain resolve <id> "<answer>"` | Answers it, turning it into a decision in place |
 | `brain plan [--slice <name>]` | Each slice's requirements counted against the model |
+| `brain milestone ["<name>"] [--slice <n>]… [--requirement <id>]… [--clear] [--import <file>]` | Groups slices (or single requirements) into milestones; with no name, lists them |
 | `brain brief --slice <name> \| --module <M>` | The reading pack: exactly the shards that work needs |
 | `brain check [--changed]` | Anchors resolve, entries filed correctly, plus slice progress |
 | `brain list [--slice <n>] [--kind <k>] [--open]` | The committed entries; with `--json`, as data |

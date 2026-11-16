@@ -501,9 +501,11 @@ and three gap lists: not fully built as asked, built but untested, and open
 questions that affect a requirement.
 
 It needs requirements in docs/brain/plan/ (see 'mxcli brain capture --slice').
-Milestones come from docs/brain/plan/traceability.json, or --milestones:
-  {"milestones": [{"name": "M1", "slices": ["01-accounts"], "requirements": ["a1b2c3"]}]}
-Without it, each slice is a milestone. Evidence flags are the tests report's.
+Milestones come from the plan ('mxcli brain milestone "M1" --slice 01-accounts');
+without any, each slice is a milestone. A milestones file (--milestones, or the
+older docs/brain/plan/traceability.json) is still read, with a warning;
+'mxcli brain milestone --import <file>' moves it into the plan. Evidence flags
+are the tests report's.
 
 Annotation keys: req:<id>.`,
 	example: `  mxcli report traceability -p app.mpr -o traceability.html
@@ -511,7 +513,7 @@ Annotation keys: req:<id>.`,
 	flags: func(cmd *cobra.Command) {
 		scopeFlags(cmd)
 		evidenceFlags(cmd, true)
-		cmd.Flags().String("milestones", "", "Milestones file (default: docs/brain/plan/traceability.json)")
+		cmd.Flags().String("milestones", "", "Milestones file, instead of the milestones in the plan (deprecated: mxcli brain milestone --import moves it into the plan)")
 	},
 	collect: func(cmd *cobra.Command, projectPath string) (*projectreport.Envelope, error) {
 		loc, err := resolveBrainLocation(projectPath, "")
@@ -586,17 +588,12 @@ Annotation keys: req:<id>.`,
 			warnings = append(warnings, "Malformed brain entry left out: "+m)
 		}
 		in.Entries = list.Entries
-		msPath, _ := cmd.Flags().GetString("milestones")
-		if msPath == "" {
-			if def := filepath.Join(loc.Dir, brain.StoreDir, "plan", "traceability.json"); reportFileExists(def) {
-				msPath = def
-			}
+		ms, msWarnings, err := traceabilityMilestones(cmd, store, loc.Dir)
+		if err != nil {
+			return nil, err
 		}
-		if msPath != "" {
-			if in.Milestones, err = projectreport.ReadMilestones(msPath); err != nil {
-				return nil, err
-			}
-		}
+		in.Milestones = ms
+		warnings = append(warnings, msWarnings...)
 		data, err := projectreport.CollectTraceability(q, in)
 		if err != nil {
 			return nil, err
@@ -610,6 +607,38 @@ Annotation keys: req:<id>.`,
 	},
 	render: projectreport.RenderTraceability,
 })
+
+// traceabilityMilestones reads the milestones from the plan, where the slices
+// carry them. A --milestones file still works, and so does the old
+// docs/brain/plan/traceability.json when the plan names no milestone, each with
+// a warning that says how to move it into the plan.
+func traceabilityMilestones(cmd *cobra.Command, store *brain.Store, dir string) (*projectreport.Milestones, []string, error) {
+	if path, _ := cmd.Flags().GetString("milestones"); path != "" {
+		ms, err := projectreport.ReadMilestones(path)
+		return ms, []string{"Milestones were read from " + path + ". The plan can carry them instead: mxcli brain milestone --import " + path}, err
+	}
+	planned, err := store.Milestones()
+	if err != nil {
+		return nil, nil, err
+	}
+	old := filepath.Join(dir, brain.StoreDir, "plan", "traceability.json")
+	if len(planned) == 0 {
+		if !reportFileExists(old) {
+			return nil, nil, nil
+		}
+		ms, err := projectreport.ReadMilestones(old)
+		return ms, []string{"Milestones were read from " + old + ", which is deprecated. Move them into the plan: mxcli brain milestone --import " + old}, err
+	}
+	var warnings []string
+	if reportFileExists(old) {
+		warnings = append(warnings, "Ignored "+old+": the plan names milestones, which take precedence. Delete the file.")
+	}
+	out := &projectreport.Milestones{}
+	for _, m := range planned {
+		out.Milestones = append(out.Milestones, projectreport.MilestoneSpec{Name: m.Name, Slices: m.Slices, Requirements: m.Requirements})
+	}
+	return out, warnings, nil
+}
 
 func reportFileExists(p string) bool {
 	fi, err := os.Stat(p)
