@@ -126,6 +126,10 @@ func collectEvidence(cmd *cobra.Command, projectPath string, withTests bool) (*e
 		}
 		ev.spans = spans
 	}
+	if ev.journeys != nil && len(ev.journeys.Records) > 0 && len(ev.spans) > 0 && projectreport.SpansInWindows(ev.spans, ev.journeys) == 0 {
+		ev.warnings = append(ev.warnings, fmt.Sprintf("None of the %d spans starts inside any journey's time window, so every journey shows no runtime reach. "+
+			"Check that the spans come from the same run as the journey log and that both use the same clock (span times are unix nanoseconds).", len(ev.spans)))
+	}
 	if db, _ := cmd.Flags().GetString("database"); db != "" {
 		if ev.journeys == nil {
 			ev.journeys = &projectreport.JourneyLog{}

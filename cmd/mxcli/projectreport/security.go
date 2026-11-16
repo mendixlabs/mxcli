@@ -144,15 +144,15 @@ func ClassifyXPath(x string) string {
 var (
 	// A bare "Key" is not enough: LocalStorageKey and SortKey are names, not
 	// secrets. The key has to say what kind it is.
-	secretName  = regexp.MustCompile(`(?i)(secret|passw|pwd|token|credential|(api|access|private|encryption|signing|master|crypt|aes|hmac|client)_?key)`)
+	secretName = regexp.MustCompile(`(?i)(secret|passw|pwd|token|credential|(api|access|private|encryption|signing|master|crypt|aes|hmac|client)_?key)`)
 	// A name that ends in a descriptor names something ABOUT a secret — its
 	// type, header or endpoint — not the secret: OIDC.CustomATPTokenType is a
 	// token type (ako/mxcli#2299).
 	secretDescriptor = regexp.MustCompile(`(?i)(type|name|url|uri|header|endpoint|kind|format|length|expiry|lifetime|timeout|path|location|prefix|scheme|enabled)$`)
-	testishName = regexp.MustCompile(`(?i)(mock|test|demo|debug|fake|stub|seed|bypass|skip|dev(mode)?$|sandbox)`)
-	hexKey      = regexp.MustCompile(`^(?i)[0-9a-f]{32}$|^(?i)[0-9a-f]{48}$|^(?i)[0-9a-f]{64}$`)
-	pemBlock    = regexp.MustCompile(`-----BEGIN [A-Z ]*(PRIVATE KEY|CERTIFICATE)-----`)
-	callerCheck = regexp.MustCompile(`(?i)\$currentUser\b|\[%CurrentUser%\]|%CurrentUser%`)
+	testishName      = regexp.MustCompile(`(?i)(mock|test|demo|debug|fake|stub|seed|bypass|skip|dev(mode)?$|sandbox)`)
+	hexKey           = regexp.MustCompile(`^(?i)[0-9a-f]{32}$|^(?i)[0-9a-f]{48}$|^(?i)[0-9a-f]{64}$`)
+	pemBlock         = regexp.MustCompile(`-----BEGIN [A-Z ]*(PRIVATE KEY|CERTIFICATE)-----`)
+	callerCheck      = regexp.MustCompile(`(?i)\$currentUser\b|\[%CurrentUser%\]|%CurrentUser%`)
 )
 
 // LooksLikeKeyMaterial reports whether a string value looks like a key: base64
