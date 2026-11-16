@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/brain"
+	"github.com/mendixlabs/mxcli/mdl/catalog"
 )
 
 func req(id, slice, title string, built bool, anchors ...brain.AnchorResult) brain.RequirementResult {
@@ -149,5 +150,41 @@ func TestTraceabilityFootprintKindsAndQuestionVerdicts(t *testing.T) {
 	}
 	if got["aaaaaa"].Status != StatusPartial || got["aaaaaa"].StatusReason != "open question q00001: until answered: only the public feed." {
 		t.Errorf("status = %q (%q)", got["aaaaaa"].Status, got["aaaaaa"].StatusReason)
+	}
+}
+
+// recordingQuerier counts the queries a footprint makes.
+type recordingQuerier struct {
+	Querier
+	n int
+}
+
+func (r *recordingQuerier) Query(sql string) (*catalog.QueryResult, error) {
+	r.n++
+	return r.Querier.Query(sql)
+}
+
+// ako/mxcli#2303: `brain check` warns on anchors no test can reach, using
+// brain's list of provable kinds. Every kind on that list must have a footprint
+// here, or the check and the report disagree about which requirements a test
+// can prove. "microflow" uses the call graph, not a query.
+func TestProvableKindsHaveAFootprint(t *testing.T) {
+	f := newFixture(t)
+	for _, kind := range brain.ProvableKinds() {
+		if kind == "microflow" {
+			continue
+		}
+		rq := &recordingQuerier{Querier: f.cat}
+		if _, _, err := footprint(rq, anchor("@M.X", kind, brain.Resolved), map[string]string{}, CallGraph{}); err != nil {
+			t.Fatalf("%s: %v", kind, err)
+		}
+		if rq.n == 0 {
+			t.Errorf("kind %q is provable in brain but the report computes no footprint for it", kind)
+		}
+	}
+	rq := &recordingQuerier{Querier: f.cat}
+	_, _, _ = footprint(rq, anchor("@M.R", "module role", brain.Resolved), map[string]string{}, CallGraph{})
+	if rq.n != 0 {
+		t.Error("control: an unprovable kind has no footprint query")
 	}
 }

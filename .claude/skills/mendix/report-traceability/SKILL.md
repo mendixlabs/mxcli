@@ -10,10 +10,10 @@ description: "Produce and read the PRD-to-app traceability report (mxcli report 
 
 | lines | section |
 |---|---|
-| 25-58 | Preconditions |
-| 59-69 | Run it |
-| 70-87 | Reading it |
-| 88-91 | Related |
+| 25-60 | Preconditions |
+| 61-71 | Run it |
+| 72-89 | Reading it |
+| 90-93 | Related |
 
 <!-- /skill-index -->
 # Traceability Report
@@ -37,7 +37,9 @@ built and proven?". Nothing on it is ticked off by hand.
 2. **Anchor where it is built**, not where it is talked about: the microflow, page,
    entity, attribute or published service that implements it. A role, enumeration or
    constant anchor has no microflow footprint; the page says "no microflow implements
-   this", not "untested".
+   this", not "untested". `brain check` warns about such a requirement as
+   `UNPROVABLE` (`--strict` fails on it), and `brain capture` hints at it, so add
+   the implementing microflow as an anchor while you still know which it is.
 3. **Verdicts live on decisions.** When the build differs from the spec, record it
    on the decision, in its body, so `brain check` can validate the id:
 

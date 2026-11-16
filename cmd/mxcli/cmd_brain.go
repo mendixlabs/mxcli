@@ -210,6 +210,9 @@ list captured twice is a no-op.`,
 		}
 		fmt.Printf("%s %s -> would promote into %s\n", what, e.ID, shardLabel(e.Shard()))
 		fmt.Println("Review with 'mxcli brain staged'; commit it with 'mxcli brain promote " + e.ID + "'.")
+		if e.EntryKind() == brain.KindRequirement && !e.Open && len(e.Anchors) > 0 {
+			warnUnprovableAtCapture(brainLocationOf(cmd).MPR, e)
+		}
 	},
 }
 
@@ -873,6 +876,7 @@ is UNVERIFIABLE, which is counted and reported once and does not fail.`,
 		if err != nil {
 			brainFatal(err)
 		}
+		strict, _ := cmd.Flags().GetBool("strict")
 		switch ci, _ := cmd.Flags().GetBool("ci"); {
 		case globalJSONFlag:
 			// --json wins over --ci: both exist for a machine, and one of them
@@ -880,10 +884,17 @@ is UNVERIFIABLE, which is counted and reported once and does not fail.`,
 			brainJSON(rep)
 		case ci:
 			printBrainReportCI(rep)
+			if strict {
+				// Only under --strict is an unprovable requirement a problem,
+				// and a CI log prints problems only.
+				for _, u := range rep.Unprovable {
+					fmt.Printf("brain: %s: %s: unprovable: anchored only on %s\n", shardLabel(u.Shard), u.EntryID, strings.Join(u.Kinds, ", "))
+				}
+			}
 		default:
 			printBrainReport(rep, loc)
 		}
-		if rep.Failed() {
+		if rep.Failed() || (strict && len(rep.Unprovable) > 0) {
 			os.Exit(1)
 		}
 	},
@@ -964,6 +975,9 @@ func printBrainReport(rep brain.Report, loc brainLocation) {
 	for _, v := range rep.UnknownRequirementRefs {
 		fmt.Printf("NO REQUIREMENT %s: %q says it %s requirement %s, which no plan slice has\n",
 			v.EntryID, v.Title, v.Verdict, v.RequirementID)
+	}
+	for _, u := range rep.Unprovable {
+		fmt.Printf("UNPROVABLE    %s: %q — %s\n", u.EntryID, u.Title, brain.UnprovableHint(u.EntryID, u.Kinds))
 	}
 	for _, c := range rep.ConflictingVerdicts {
 		fmt.Printf("CONFLICT      requirement %s is both changed and partly met: %s — keep one verdict\n",
@@ -1306,6 +1320,7 @@ func init() {
 		"Exit 1 when nothing matches, so a dispatcher can refuse to advance on a slice that recorded nothing")
 	brainCheckCmd.Flags().Bool("changed", false, "Only check shards touched by the working tree")
 	brainCheckCmd.Flags().Bool("ci", false, "Machine-friendly output for CI")
+	brainCheckCmd.Flags().Bool("strict", false, "Also fail on requirements no test can ever be linked to (anchored only on module roles, enumerations, constants, …)")
 
 	brainPlanCmd.Flags().String("slice", "",
 		"Report only this slice, instead of every slice in the plan")
@@ -1441,4 +1456,33 @@ func verdictList(vs []brain.VerdictRef) string {
 		parts[i] = fmt.Sprintf("%s %s (%s)", v.EntryID, v.Verdict, shardLabel(v.Shard))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// warnUnprovableAtCapture says, while the author still knows where the thing is
+// built, that a requirement's anchors can never be linked to a test
+// (ako/mxcli#2303). It needs the model to know the anchors' kinds, so with no
+// .mpr yet it says nothing; resolving uses the cached catalog.
+func warnUnprovableAtCapture(mpr string, e brain.Entry) {
+	if mpr == "" {
+		return
+	}
+	if _, err := os.Stat(mpr); err != nil {
+		return
+	}
+	resolver, closeFn, err := openBrainResolver(mpr)
+	if err != nil {
+		return // a hint is not worth failing a capture for
+	}
+	defer closeFn()
+	var results []brain.AnchorResult
+	for _, a := range e.ParsedAnchors() {
+		res, err := resolver.Resolve(a)
+		if err != nil {
+			return
+		}
+		results = append(results, brain.AnchorResult{Anchor: a.String(), State: res.State, Kind: res.Kind})
+	}
+	if kinds, ok := brain.Unprovable(results); ok {
+		fmt.Fprintln(os.Stderr, "Hint: "+brain.UnprovableHint(e.ID, kinds))
+	}
 }

@@ -115,7 +115,15 @@ to make.
 ```bash
 mxcli brain check -p app.mpr             # every shard
 mxcli brain check --changed -p app.mpr   # only shards this branch touched
+mxcli brain check --strict -p app.mpr    # also fail on requirements no test can prove
 ```
+
+A requirement whose anchors are all module roles, enumerations, constants or
+other kinds no microflow implements is built, but no test can ever be linked to
+it. `brain check` lists it as `UNPROVABLE` (a warning; `--strict` makes it a
+failure), and `brain capture --slice` prints the same hint when the model is
+there to resolve the anchors. Add the microflow, page or entity that implements
+the requirement as an anchor. `report traceability` uses the same list of kinds.
 
 Two independent things are checked.
 

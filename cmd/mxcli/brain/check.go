@@ -194,6 +194,11 @@ type Report struct {
 	// ConflictingVerdicts are requirements that one decision says are changed
 	// and another partly met. It fails the check: a report cannot show both.
 	ConflictingVerdicts []VerdictConflict `json:"conflicting_verdicts,omitempty"`
+	// Unprovable are built requirements no test can ever be linked to: every
+	// anchor is of a kind no microflow implements (a module role, an
+	// enumeration, a constant). A warning, not a failure, unless the caller
+	// asks for --strict (ako/mxcli#2303).
+	Unprovable []UnprovableFinding `json:"unprovable,omitempty"`
 }
 
 // RequirementResult is one requirement and how each of its anchors resolved.
@@ -270,6 +275,11 @@ func Check(s *Store, r Resolver, shards []string) (Report, error) {
 			rep.Slices = append(rep.Slices, progress.SliceProgress)
 			rep.Open = append(rep.Open, progress.open...)
 			rep.Requirements = append(rep.Requirements, progress.requirements...)
+			for _, r := range progress.requirements {
+				if kinds, ok := Unprovable(r.Anchors); ok {
+					rep.Unprovable = append(rep.Unprovable, UnprovableFinding{Shard: shard, EntryID: r.ID, Title: r.Title, Kinds: kinds})
+				}
+			}
 			continue
 		}
 		unknown, err := s.unknownVerdictRefs(shard, entries)

@@ -434,15 +434,9 @@ func verdictSource(v brain.VerdictRef) string {
 	return "decision " + v.EntryID + ": " + v.Reason
 }
 
-func isFootprintKind(kind string) bool {
-	switch strings.ToLower(kind) {
-	case "microflow", "page", "snippet", "workflow", "entity", "attribute", "association", "scheduled_event",
-		"java_action", "java action", "javascript_action", "javascript action",
-		"published_rest_service", "published_odata_service", "published_rest_operation":
-		return true
-	}
-	return false
-}
+// isFootprintKind is brain's list, so `brain check` and this report agree on
+// which anchors a test can ever reach (ako/mxcli#2303).
+func isFootprintKind(kind string) bool { return brain.ProvableKind(kind) }
 
 func intersects(xs []string, set map[string]bool) bool {
 	for _, x := range xs {
