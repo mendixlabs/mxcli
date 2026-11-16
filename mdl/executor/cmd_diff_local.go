@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
@@ -79,6 +80,13 @@ func diffLocal(ctx *ExecContext, ref string, opts DiffOptions) error {
 	if err != nil {
 		return err
 	}
+
+	// The renderers' name lookups are the same for every unit of the run.
+	if ctx.Cache == nil {
+		ctx.Cache = &executorCache{}
+	}
+	ctx.Cache.diffNames = &diffNames{}
+	defer func() { ctx.Cache.diffNames = nil }()
 
 	var results []DiffResult
 	var newCount, modifiedCount, deletedCount int
@@ -788,11 +796,76 @@ func splitQualifiedName(qualifiedName string) ast.QualifiedName {
 	return ast.QualifiedName{Name: qualifiedName}
 }
 
-// buildNameLookups builds ID → qualified-name maps for entities and
-// microflows from the current project. Used by BSON-driven renderers that
-// receive IDs (e.g. entity references) and want to resolve them against
-// the working-tree model. Returns empty maps if the reader is unavailable.
+// diffNames is the ID → qualified-name maps the flow renderers resolve
+// references with, built once for a diff-local run.
+type diffNames struct {
+	entities, flows map[model.ID]string
+}
+
+// buildNameLookups returns ID → qualified-name maps for entities and for
+// microflows and nanoflows, from the current project. Used by BSON-driven
+// renderers that receive IDs (e.g. entity references) and want to resolve
+// them against the working-tree model. Returns empty maps if the reader is
+// unavailable.
+//
+// Within a diff-local run the maps are built once (ctx.Cache.diffNames, set
+// and cleared by diffLocal): the run writes nothing, so they cannot go stale.
+// They were rebuilt for every rendering of every changed flow, and built by
+// decoding every microflow of the project, which made diff-local of 850
+// changed microflows take 21 minutes on a project of 7,700 units
+// (mendixlabs/mxcli#1873).
 func buildNameLookups(ctx *ExecContext) (map[model.ID]string, map[model.ID]string) {
+	if ctx.Cache != nil && ctx.Cache.diffNames != nil {
+		n := ctx.Cache.diffNames
+		if n.entities == nil {
+			n.entities, n.flows = loadNameLookups(ctx)
+		}
+		return n.entities, n.flows
+	}
+	return loadNameLookups(ctx)
+}
+
+// nameLookupLoads counts loadNameLookups calls. For tests.
+var nameLookupLoads atomic.Int64
+
+// loadNameLookups reads the maps from the project. A flow's ID, container
+// and name come from its header: no flow is decoded for them.
+func loadNameLookups(ctx *ExecContext) (map[model.ID]string, map[model.ID]string) {
+	nameLookupLoads.Add(1)
+	entityNames := make(map[model.ID]string)
+	microflowNames := make(map[model.ID]string)
+	if !ctx.Connected() {
+		return entityNames, microflowNames
+	}
+	h, err := getHierarchy(ctx)
+	if err != nil {
+		return entityNames, microflowNames
+	}
+	if domainModels, err := ctx.Backend.ListDomainModels(); err == nil {
+		for _, dm := range domainModels {
+			modName := h.GetModuleName(dm.ContainerID)
+			for _, entity := range dm.Entities {
+				entityNames[entity.ID] = modName + "." + entity.Name
+			}
+		}
+	}
+	if microflows, err := microflowHeaders(ctx); err == nil {
+		for _, mf := range microflows {
+			microflowNames[mf.ID] = h.GetQualifiedName(mf.ContainerID, mf.Name)
+		}
+	}
+	if nanoflows, err := nanoflowHeaders(ctx.Backend); err == nil {
+		for _, nf := range nanoflows {
+			microflowNames[nf.ID] = h.GetQualifiedName(nf.ContainerID, nf.Name)
+		}
+	}
+	return entityNames, microflowNames
+}
+
+// loadNameLookupsDecoding is loadNameLookups as it was: every microflow and
+// nanoflow decoded for its ID, container and name. Kept as what the header
+// form is tested against.
+func loadNameLookupsDecoding(ctx *ExecContext) (map[model.ID]string, map[model.ID]string) {
 	entityNames := make(map[model.ID]string)
 	microflowNames := make(map[model.ID]string)
 	if !ctx.Connected() {
