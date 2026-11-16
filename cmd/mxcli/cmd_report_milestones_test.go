@@ -63,3 +63,41 @@ func TestTraceabilityMilestonesComeFromThePlan(t *testing.T) {
 		t.Errorf("an explicit --milestones file still wins: got %q", name)
 	}
 }
+
+// The hint on an empty plan is a set of commands to copy. Every flag it names
+// must exist on the brain command it names: it once said `brain promote --all`,
+// which promote does not have.
+func TestNoRequirementsHintUsesRealFlags(t *testing.T) {
+	msg := noRequirementsError("docs/brain/plan", "app.mpr").Error()
+	checked := 0
+	for _, line := range strings.Split(msg, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 || fields[0] != "mxcli" || fields[1] != "brain" {
+			continue
+		}
+		sub, _, err := brainCmd.Find([]string{fields[2]})
+		if err != nil || sub == brainCmd {
+			t.Errorf("%q: no brain command %q", line, fields[2])
+			continue
+		}
+		for _, f := range fields[3:] {
+			if !strings.HasPrefix(f, "-") {
+				continue
+			}
+			name := strings.TrimLeft(f, "-")
+			var ok bool
+			if strings.HasPrefix(f, "--") {
+				ok = sub.Flags().Lookup(name) != nil || sub.InheritedFlags().Lookup(name) != nil
+			} else {
+				ok = sub.Flags().ShorthandLookup(name) != nil || sub.InheritedFlags().ShorthandLookup(name) != nil
+			}
+			if !ok {
+				t.Errorf("%q: brain %s has no flag %s", line, fields[2], f)
+			}
+		}
+		checked++
+	}
+	if checked < 2 {
+		t.Fatalf("expected the hint to name brain commands:\n%s", msg)
+	}
+}

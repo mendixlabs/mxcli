@@ -526,10 +526,7 @@ Annotation keys: req:<id>.`,
 			return nil, err
 		}
 		if len(sliceShards) == 0 {
-			return nil, fmt.Errorf("no requirements: %s has no plan slices.\n"+
-				"Capture the specification's requirements first, one per line of the PRD, anchored where they will be built:\n"+
-				"  mxcli brain capture \"<requirement> (p.3)\" --slice 01-<name> -a @Module.Element -p %s\n"+
-				"  mxcli brain promote --all -p %s", filepath.Join(loc.Dir, brain.StoreDir, "plan"), projectPath, projectPath)
+			return nil, noRequirementsError(filepath.Join(loc.Dir, brain.StoreDir, "plan"), projectPath)
 		}
 		var warnings []string
 		in := projectreport.TraceabilityInput{}
@@ -607,6 +604,16 @@ Annotation keys: req:<id>.`,
 	},
 	render: projectreport.RenderTraceability,
 })
+
+// noRequirementsError is what the traceability report says on a brain with no
+// plan: how to capture requirements and commit them.
+func noRequirementsError(planDir, projectPath string) error {
+	return fmt.Errorf("no requirements: %s has no plan slices.\n"+
+		"Capture the specification's requirements first, one per line of the PRD, anchored where they will be built:\n"+
+		"  mxcli brain capture \"<requirement> (p.3)\" --slice 01-<name> -a @Module.Element -p %s\n"+
+		"  mxcli brain staged -p %s\n"+
+		"  mxcli brain promote <id>... -p %s", planDir, projectPath, projectPath, projectPath)
+}
 
 // traceabilityMilestones reads the milestones from the plan, where the slices
 // carry them. A --milestones file still works, and so does the old
