@@ -515,6 +515,10 @@ func applySetProperties(ctx *ExecContext, mutator backend.PageMutator, op *ast.S
 					return err
 				}
 				value = b
+			} else if expr, ok := value.(*ast.WidgetExpressionV3); ok {
+				// `$Param.Attr` / `Assoc/Attr` bind an attribute; any other
+				// column property was stringified into "&{…}" (ako/mxcli#2283).
+				return mdlerrors.NewValidationf("column property %s takes a plain value, not an expression: %s", propName, expr.Text)
 			}
 			if err := mutator.SetColumnProperty(op.Target.Widget, columnRefOf(op.Target), propName, value); err != nil {
 				return mdlerrors.NewBackend("set "+propName+" on "+op.Target.Name(), err)
@@ -575,6 +579,16 @@ func applySetProperties(ctx *ExecContext, mutator backend.PageMutator, op *ast.S
 			resolved, err := resolvePluggableSetValue(ctx, mutator, op.Target.Widget, propName, value, moduleName, moduleID)
 			if err != nil {
 				return err
+			}
+			// A built-in input's `Attribute:` — the value passed through the
+			// pluggable resolver unchanged — is bound by create page's rule
+			// (ako/mxcli#2278).
+			if s, isString := resolved.(string); isString && strings.EqualFold(propName, "Attribute") && op.Target.Widget != "" {
+				b, err := resolveInputSetAttribute(ctx, mutator, op.Target.Widget, s, moduleName, moduleID)
+				if err != nil {
+					return err
+				}
+				resolved = b
 			}
 			if err := mutator.SetWidgetProperty(op.Target.Widget, propName, resolved); err != nil {
 				return mdlerrors.NewBackend("set "+propName+" on "+op.Target.Name(), err)

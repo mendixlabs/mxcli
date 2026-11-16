@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/modelsdk/canon"
@@ -30,6 +31,10 @@ type HarvestResult struct {
 	// something this mechanism was not built for and the caller should say so.
 	Added   []string
 	Removed []string
+	// LeftAsStored names units the tool re-saved with a real difference that
+	// were not written back, as "<type> <id>", because the tool has no business
+	// with that kind of document (harvestScope).
+	LeftAsStored []string
 	// StorageFiles is the number of .mxunit files on disk after the run, and
 	// StorageFilesBefore what it was before. They are the assertion this whole
 	// mechanism exists for: a v2 -> v1 conversion takes the count to zero, so a
@@ -128,7 +133,7 @@ func RunToolPreservingFormat(mxPath, projectPath, subcommand string, w, stderr i
 	// Back to v2, pre-fix, with the tool's output held in memory.
 	restore()
 
-	res, err := applyHarvest(projectPath, fixed, order)
+	res, err := applyHarvest(projectPath, fixed, order, harvestScope(subcommand))
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +191,26 @@ func readAllUnits(projectPath string) (map[string]harvestedUnit, []string, error
 
 // applyHarvest writes the tool's units into the restored v2 project, skipping
 // the ones that did not really change.
-func applyHarvest(projectPath string, fixed map[string]harvestedUnit, order []string) (*HarvestResult, error) {
+// harvestScope is which units a tool's output may be written back to, by unit
+// $Type; nil means any.
+//
+// `mx update-widgets` re-saves units it loads that hold no widget at all —
+// filling in fields Studio Pro leaves out, reordering keys, normalising an
+// enumeration value it does not know — so on a project with no stale widget
+// definition `fix widgets` rewrote a Java action, microflows, a domain model
+// and a REST service whose describe output did not change (ako/mxcli#2288). A
+// Java action's invalid stored ExportLevel "Public", which older mxcli wrote
+// (#705), came back as Hidden (#2287). Widgets live only in the Forms$
+// documents — pages, snippets, layouts, building blocks, page templates — so
+// that is all the resync is carried back to.
+func harvestScope(subcommand string) func(unitType string) bool {
+	if subcommand == "update-widgets" {
+		return func(unitType string) bool { return strings.HasPrefix(unitType, "Forms$") }
+	}
+	return nil
+}
+
+func applyHarvest(projectPath string, fixed map[string]harvestedUnit, order []string, inScope func(unitType string) bool) (*HarvestResult, error) {
 	res := &HarvestResult{Harvested: true}
 
 	writer, err := openForWriting(projectPath)
@@ -211,6 +235,10 @@ func applyHarvest(projectPath string, fixed map[string]harvestedUnit, order []st
 		if unchanged {
 			continue
 		}
+		if inScope != nil && !inScope(prev.unitType) {
+			res.LeftAsStored = append(res.LeftAsStored, fmt.Sprintf("%s %s", prev.unitType, id))
+			continue
+		}
 		if err := writer.UpdateRawUnit(id, out); err != nil {
 			return nil, fmt.Errorf("write unit %s: %w", id, err)
 		}
@@ -224,6 +252,7 @@ func applyHarvest(projectPath string, fixed map[string]harvestedUnit, order []st
 	}
 	sort.Strings(res.Added)
 	sort.Strings(res.Removed)
+	sort.Strings(res.LeftAsStored)
 	return res, nil
 }
 

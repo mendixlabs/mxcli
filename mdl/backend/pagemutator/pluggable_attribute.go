@@ -81,7 +81,8 @@ func pluggablePropertyDataSource(widget bson.D, dsKey string) bson.D {
 }
 
 // setAttributeBindingValue writes a resolved attribute binding into an
-// Attribute-kind property's WidgetValue: the AttributeRef, and the
+// Attribute-kind property's WidgetValue: the AttributeRef (with its association
+// hops, if any), and the
 // SourceVariable naming the parameter it is read from — or null, so a value
 // bound back to the context object is no longer read from the parameter.
 func setAttributeBindingValue(valDoc bson.D, propName, kind string, b backend.AttributeBinding) error {
@@ -104,7 +105,9 @@ func setAttributeBindingValue(valDoc bson.D, propName, kind string, b backend.At
 		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
 		{Key: "$Type", Value: "DomainModels$AttributeRef"},
 		{Key: "Attribute", Value: b.Path},
-		{Key: "EntityRef", Value: nil},
+		// The association hops of `Assoc/Attr`, as CREATE writes them
+		// (SetAttributeWithSteps, ako/mxcli#2283); nil for a direct attribute.
+		{Key: "EntityRef", Value: widgetobj.AttributeEntityRefBSON(b.Steps)},
 	})
 	var sv any
 	if b.SourceVariable != nil && (b.SourceVariable.Widget != "" || b.SourceVariable.Variable != "") {

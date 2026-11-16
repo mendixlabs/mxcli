@@ -1314,14 +1314,14 @@ LIST FOLDERS IN MyModule;`,
 		Path:    "rename",
 		Summary: "RENAME — rename a document, entity, association or module and update every reference",
 		Keywords: []string{
-			"rename", "rename microflow", "rename nanoflow", "rename page",
+			"rename", "rename microflow", "rename nanoflow", "rename page", "rename snippet",
 			"rename entity", "rename enumeration", "rename association",
 			"rename constant", "rename java action", "rename workflow",
 			"rename module", "dry run", "refactor", "update references",
 		},
 		Syntax: `RENAME <target> Module.OldName TO NewName [DRY RUN];
--- target: ENTITY | MICROFLOW | NANOFLOW | PAGE | ENUMERATION | ASSOCIATION
---         | CONSTANT | JAVA ACTION | WORKFLOW
+-- target: ENTITY | MICROFLOW | NANOFLOW | PAGE | SNIPPET | ENUMERATION
+--         | ASSOCIATION | CONSTANT | JAVA ACTION | WORKFLOW
 RENAME MODULE OldModule TO NewModule [DRY RUN];
 
 -- The new name is BARE: the element stays in its module (use MOVE to change
@@ -1331,7 +1331,8 @@ RENAME MODULE OldModule TO NewModule [DRY RUN];
 -- project that IS the old qualified name, or starts with it plus '.', is
 -- rewritten (Module.Old -> Module.New, Module.Old.Attr -> Module.New.Attr).
 -- That covers calls, page and microflow parameters, show-page actions,
--- navigation, security, attribute types, association ends.
+-- snippet calls (in pages, layouts and snippets), navigation, security,
+-- attribute types, association ends.
 -- Inside an expression or XPath, a constant (@Module.Old) and an enumeration
 -- value (Module.Old.Value) are rewritten too; text in a string literal is not.
 -- Any other name inside free text is left as it was; build or
@@ -1350,8 +1351,8 @@ RENAME MODULE OldModule TO NewModule [DRY RUN];
 --
 -- From the shell, the same statement for one element:
 --   mxcli rename -p app.mpr <type> Module.OldName NewName [--dry-run]
---   type: entity | microflow | nanoflow | page | enumeration | association
---         | constant | java-action | workflow | module
+--   type: entity | microflow | nanoflow | page | snippet | enumeration
+--         | association | constant | java-action | workflow | module
 --   (it also updates docs/brain/ anchors; see 'mxcli help rename')`,
 		Example: `mdl 1;
 -- See what would change first
@@ -1360,6 +1361,7 @@ RENAME MICROFLOW Shop.ACT_Old TO ACT_ProcessOrder DRY RUN;
 RENAME MICROFLOW Shop.ACT_Old TO ACT_ProcessOrder;
 RENAME NANOFLOW Shop.NF_Old TO NF_Validate;
 RENAME PAGE Shop.OldPage TO Order_Edit;
+RENAME SNIPPET Shop.Combo TO SNIPPET_Combo;
 RENAME ENTITY Shop.Customer TO Client;
 RENAME ENUMERATION Shop.Status TO OrderStatus;
 RENAME ASSOCIATION Shop.Order_Customer TO Order_Client;

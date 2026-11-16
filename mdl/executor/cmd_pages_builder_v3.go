@@ -2901,6 +2901,39 @@ func (pb *pageBuilder) associationEndpoints(assocQN string) (fromEntity, toEntit
 	return "", "", false
 }
 
+// associationKind reports whether the stored association assocQN is a
+// reference set and whether its owner is Both; ok is false when no domain
+// model declares it (System.owner / System.changedBy among them, both plain
+// references).
+func (pb *pageBuilder) associationKind(assocQN string) (refSet, ownerBoth, ok bool) {
+	modName, assocName, found := strings.Cut(assocQN, ".")
+	if !found {
+		return false, false, false
+	}
+	dms, err := pb.getDomainModels()
+	if err != nil {
+		return false, false, false
+	}
+	h, err := pb.getHierarchy()
+	if err != nil {
+		return false, false, false
+	}
+	for _, dm := range dms {
+		if h.GetModuleName(dm.ContainerID) != modName {
+			continue
+		}
+		if a := dm.FindAssociationByName(assocName); a != nil {
+			return a.Type == domainmodel.AssociationTypeReferenceSet, a.Owner == domainmodel.AssociationOwnerBoth, true
+		}
+		for _, ca := range dm.CrossAssociations {
+			if ca.Name == assocName {
+				return ca.Type == domainmodel.AssociationTypeReferenceSet, ca.Owner == domainmodel.AssociationOwnerBoth, true
+			}
+		}
+	}
+	return false, false, false
+}
+
 // registerDataViewVariable records the Forms$PageVariable a binding read
 // through data view name stores: {Widget: name} plus, when the data view shows a
 // page or snippet parameter, that parameter in its slot. Studio Pro stores the

@@ -37,14 +37,29 @@ const (
 // isGuard reports whether an IF is drawn as a guard: no ELSE, and a THEN that ends
 // the flow, so there is no merge and the branch never rejoins the main line.
 func isGuard(s *ast.IfStmt) bool {
-	return len(s.ElseBody) == 0 && !s.HasElse && lastStmtIsReturn(s.ThenBody)
+	return !ifHasElse(s) && lastStmtIsReturn(s.ThenBody)
+}
+
+// ifHasElse reports whether the layout treats s as having an ELSE branch.
+//
+// An empty `else` after a THEN that ends the flow is no branch: the false flow
+// continues on the main line exactly as with no `else` at all, and the model is
+// the same. Counting it as one put the THEN branch on the main row and drew the
+// false edge to the next activity straight through it and its end event
+// (ako/mxcli#2204). An empty `else` after a THEN that carries on still counts,
+// since the two branches meet at a merge either way.
+func ifHasElse(s *ast.IfStmt) bool {
+	if len(s.ElseBody) > 0 {
+		return true
+	}
+	return s.HasElse && !lastStmtIsReturn(s.ThenBody)
 }
 
 // ifJoinsNothingAtTail reports whether addIfStatement, building s as the last
 // statement of a loop body, leaves out its merge: an IF/ELSE whose two branches
 // both carry on there ends the iteration either way (mendixlabs/mxcli#884).
 func ifJoinsNothingAtTail(s *ast.IfStmt) bool {
-	hasElse := s.HasElse || len(s.ElseBody) > 0
+	hasElse := ifHasElse(s)
 	return hasElse && len(s.ThenBody) > 0 && len(s.ElseBody) > 0 &&
 		!lastStmtIsReturn(s.ThenBody) && !lastStmtIsReturn(s.ElseBody) &&
 		!bodyHasContinuingCustomErrorHandler(s.ThenBody) && !bodyHasContinuingCustomErrorHandler(s.ElseBody) &&
@@ -55,7 +70,7 @@ func ifJoinsNothingAtTail(s *ast.IfStmt) bool {
 // before building the branches. atTail is the builder's atBodyTail.
 func ifHasMerge(s *ast.IfStmt, atTail bool) bool {
 	thenReturns := lastStmtIsReturn(s.ThenBody)
-	if !(s.HasElse || len(s.ElseBody) > 0) {
+	if !ifHasElse(s) {
 		return !thenReturns
 	}
 	if atTail && ifJoinsNothingAtTail(s) {
@@ -73,7 +88,7 @@ func ifHasMerge(s *ast.IfStmt, atTail bool) bool {
 func (m *layoutMeasurer) ifMainWidth(s *ast.IfStmt) int {
 	thenStart := SplitWidth + HorizontalSpacing/2 // from the split's centre
 	next := thenStart
-	if s.HasElse || len(s.ElseBody) > 0 {
+	if ifHasElse(s) {
 		next = max(HorizontalSpacing, thenStart+m.measureBranch(s.ThenBody).Width+HorizontalSpacing/2)
 	}
 	return SplitWidth/2 + next - (HorizontalSpacing - ActivityWidth/2)

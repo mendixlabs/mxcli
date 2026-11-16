@@ -41,7 +41,7 @@ func TestRename_UnsupportedType(t *testing.T) {
 	mb := &mock.MockBackend{IsConnectedFunc: func() bool { return true }}
 	ctx, _ := newMockCtx(t, withBackend(mb))
 	err := execRename(ctx, &ast.RenameStmt{
-		ObjectType: "snippet",
+		ObjectType: "layout", // snippet became renamable (ako/mxcli#2130)
 		Name:       ast.QualifiedName{Module: "M", Name: "N"},
 		NewName:    "X",
 	})

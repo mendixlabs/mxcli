@@ -519,6 +519,7 @@ rather than updating the first.
 | Rename microflow | `rename microflow Module.Old to New;` | Updates all references |
 | Rename nanoflow | `rename nanoflow Module.Old to New;` | Updates all references |
 | Rename page | `rename page Module.Old to New;` | Updates all references |
+| Rename snippet | `rename snippet Module.Old to New;` | Updates every snippet call |
 | Rename constant | `rename constant Module.Old to New;` | Updates all references |
 | Drop microflow | `drop microflow [if exists] Module.Name;` | |
 | Drop nanoflow | `drop nanoflow [if exists] Module.Name;` | |

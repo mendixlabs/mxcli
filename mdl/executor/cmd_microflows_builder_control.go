@@ -25,7 +25,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 
 	// Calculate branch width (max of both branches)
 	branchWidth := max(thenBounds.Width, elseBounds.Width)
-	elseColumn := fb.layoutStyle().IfElse == IfElseColumn && (s.HasElse || len(s.ElseBody) > 0)
+	elseColumn := fb.layoutStyle().IfElse == IfElseColumn && ifHasElse(s)
 	if elseColumn {
 		branchWidth = elseColumnBranchWidth(thenBounds, fb.measurer.measureColumn(s.ElseBody))
 	}
@@ -35,7 +35,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 
 	// Check if branches end with RETURN (creating their own EndEvents)
 	thenReturns := lastStmtIsReturn(s.ThenBody)
-	hasElseBody := s.HasElse || len(s.ElseBody) > 0
+	hasElseBody := ifHasElse(s)
 	elseReturns := hasElseBody && lastStmtIsReturn(s.ElseBody)
 	bothReturn := hasElseBody && thenReturns && elseReturns
 
