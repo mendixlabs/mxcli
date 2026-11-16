@@ -87,9 +87,10 @@ func (s *Span) UnmarshalJSON(b []byte) error {
 		}
 		return 0
 	}
-	// SpanKind is a small enum (0-5); anything outside it is not a kind.
-	kind := num(raw.Kind)
-	if kind < 0 || kind > 64 {
+	// SpanKind is a small enum (0-5): parsed at 8 bits, so a value that is not
+	// a kind reads as 0 rather than being narrowed.
+	kind, err := strconv.ParseInt(string(raw.Kind), 10, 8)
+	if err != nil || kind < 0 {
 		kind = 0
 	}
 	*s = Span{
