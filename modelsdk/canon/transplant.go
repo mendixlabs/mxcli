@@ -117,7 +117,7 @@ func idMappingWith(contents []byte, oldDoc bson.D) map[string][]byte {
 	if err := bson.Unmarshal(contents, &newDoc); err != nil {
 		return nil
 	}
-	w := &pairer{pairs: map[string][]byte{}, claimed: map[string]bool{}}
+	w := &pairer{pairs: map[string][]byte{}, claimed: map[string]bool{}, storedNames: namedElementIDs(oldDoc)}
 	w.pairValue(newDoc, oldDoc)
 	if len(w.pairs) == 0 {
 		return nil
@@ -131,6 +131,14 @@ func idMappingWith(contents []byte, oldDoc bson.D) map[string][]byte {
 type pairer struct {
 	pairs   map[string][]byte
 	claimed map[string]bool
+	// storedNames maps the stored document's named elements' ids to their
+	// names. A written element that carries one of those ids under the same
+	// name IS that stored element — moved to another list, or retyped from an
+	// association to a cross-association — and keeps its id rather than take
+	// the id of whatever the alignment put opposite it (ako/mxcli#2322: a
+	// converted cross-association took its neighbour's $ID, and with it the
+	// GUID mxcli had minted equal to it, and mx check reported CE9208).
+	storedNames map[string]string
 }
 
 func (p *pairer) record(newID string, oldID string, oldData []byte) {
@@ -173,6 +181,12 @@ func (p *pairer) pairDoc(nd, od map[string]any) {
 	}
 	if nid, ndata, ok := binaryElementID(nd); ok {
 		if oid, odata, ok := binaryElementID(od); ok && len(ndata) == len(odata) {
+			// Not the element opposite it: neither it nor anything under it
+			// takes that element's ids (its delete behaviour took the
+			// neighbour's, the second duplicate of #2322).
+			if p.keepsOwnID(nid, oid, nd) {
+				return
+			}
 			p.record(nid, oid, odata)
 		}
 	}
@@ -611,4 +625,41 @@ func patchDocument(doc bsoncore.Document, m map[string][]byte) bool {
 		}
 	}
 	return true
+}
+
+// keepsOwnID reports whether nd, a written element with id nid paired with the
+// stored element oid, is instead the stored element that already holds nid:
+// one with the same name.
+func (p *pairer) keepsOwnID(nid, oid string, nd map[string]any) bool {
+	if nid == oid {
+		return false
+	}
+	name, held := p.storedNames[nid]
+	return held && name != "" && name == nd["Name"]
+}
+
+// namedElementIDs maps the id of every element of doc that has a Name to it.
+func namedElementIDs(doc bson.D) map[string]string {
+	out := map[string]string{}
+	var walk func(v any)
+	walk = func(v any) {
+		if d, ok := asDoc(v); ok {
+			if id, _, ok := binaryElementID(d); ok {
+				if name, ok := d["Name"].(string); ok && name != "" {
+					out[id] = name
+				}
+			}
+			for _, k := range sortedKeys(d) {
+				walk(d[k])
+			}
+			return
+		}
+		if s, ok := asSlice(v); ok {
+			for _, e := range s {
+				walk(e)
+			}
+		}
+	}
+	walk(doc)
+	return out
 }
