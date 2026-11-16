@@ -501,9 +501,11 @@ and three gap lists: not fully built as asked, built but untested, and open
 questions that affect a requirement.
 
 It needs requirements in docs/brain/plan/ (see 'mxcli brain capture --slice').
-Milestones come from docs/brain/plan/traceability.json, or --milestones:
-  {"milestones": [{"name": "M1", "slices": ["01-accounts"], "requirements": ["a1b2c3"]}]}
-Without it, each slice is a milestone. Evidence flags are the tests report's.
+Milestones come from the plan ('mxcli brain milestone "M1" --slice 01-accounts');
+without any, each slice is a milestone. A milestones file (--milestones, or the
+older docs/brain/plan/traceability.json) is still read, with a warning;
+'mxcli brain milestone --import <file>' moves it into the plan. Evidence flags
+are the tests report's.
 
 Annotation keys: req:<id>.`,
 	example: `  mxcli report traceability -p app.mpr -o traceability.html
@@ -511,7 +513,7 @@ Annotation keys: req:<id>.`,
 	flags: func(cmd *cobra.Command) {
 		scopeFlags(cmd)
 		evidenceFlags(cmd, true)
-		cmd.Flags().String("milestones", "", "Milestones file (default: docs/brain/plan/traceability.json)")
+		cmd.Flags().String("milestones", "", "Milestones file, instead of the milestones in the plan (deprecated: mxcli brain milestone --import moves it into the plan)")
 	},
 	collect: func(cmd *cobra.Command, projectPath string) (*projectreport.Envelope, error) {
 		loc, err := resolveBrainLocation(projectPath, "")
@@ -524,10 +526,7 @@ Annotation keys: req:<id>.`,
 			return nil, err
 		}
 		if len(sliceShards) == 0 {
-			return nil, fmt.Errorf("no requirements: %s has no plan slices.\n"+
-				"Capture the specification's requirements first, one per line of the PRD, anchored where they will be built:\n"+
-				"  mxcli brain capture \"<requirement> (p.3)\" --slice 01-<name> -a @Module.Element -p %s\n"+
-				"  mxcli brain promote --all -p %s", filepath.Join(loc.Dir, brain.StoreDir, "plan"), projectPath, projectPath)
+			return nil, noRequirementsError(filepath.Join(loc.Dir, brain.StoreDir, "plan"), projectPath)
 		}
 		var warnings []string
 		in := projectreport.TraceabilityInput{}
@@ -586,17 +585,12 @@ Annotation keys: req:<id>.`,
 			warnings = append(warnings, "Malformed brain entry left out: "+m)
 		}
 		in.Entries = list.Entries
-		msPath, _ := cmd.Flags().GetString("milestones")
-		if msPath == "" {
-			if def := filepath.Join(loc.Dir, brain.StoreDir, "plan", "traceability.json"); reportFileExists(def) {
-				msPath = def
-			}
+		ms, msWarnings, err := traceabilityMilestones(cmd, store, loc.Dir)
+		if err != nil {
+			return nil, err
 		}
-		if msPath != "" {
-			if in.Milestones, err = projectreport.ReadMilestones(msPath); err != nil {
-				return nil, err
-			}
-		}
+		in.Milestones = ms
+		warnings = append(warnings, msWarnings...)
 		data, err := projectreport.CollectTraceability(q, in)
 		if err != nil {
 			return nil, err
@@ -610,6 +604,48 @@ Annotation keys: req:<id>.`,
 	},
 	render: projectreport.RenderTraceability,
 })
+
+// noRequirementsError is what the traceability report says on a brain with no
+// plan: how to capture requirements and commit them.
+func noRequirementsError(planDir, projectPath string) error {
+	return fmt.Errorf("no requirements: %s has no plan slices.\n"+
+		"Capture the specification's requirements first, one per line of the PRD, anchored where they will be built:\n"+
+		"  mxcli brain capture \"<requirement> (p.3)\" --slice 01-<name> -a @Module.Element -p %s\n"+
+		"  mxcli brain staged -p %s\n"+
+		"  mxcli brain promote <id>... -p %s", planDir, projectPath, projectPath, projectPath)
+}
+
+// traceabilityMilestones reads the milestones from the plan, where the slices
+// carry them. A --milestones file still works, and so does the old
+// docs/brain/plan/traceability.json when the plan names no milestone, each with
+// a warning that says how to move it into the plan.
+func traceabilityMilestones(cmd *cobra.Command, store *brain.Store, dir string) (*projectreport.Milestones, []string, error) {
+	if path, _ := cmd.Flags().GetString("milestones"); path != "" {
+		ms, err := projectreport.ReadMilestones(path)
+		return ms, []string{"Milestones were read from " + path + ". The plan can carry them instead: mxcli brain milestone --import " + path}, err
+	}
+	planned, err := store.Milestones()
+	if err != nil {
+		return nil, nil, err
+	}
+	old := filepath.Join(dir, brain.StoreDir, "plan", "traceability.json")
+	if len(planned) == 0 {
+		if !reportFileExists(old) {
+			return nil, nil, nil
+		}
+		ms, err := projectreport.ReadMilestones(old)
+		return ms, []string{"Milestones were read from " + old + ", which is deprecated. Move them into the plan: mxcli brain milestone --import " + old}, err
+	}
+	var warnings []string
+	if reportFileExists(old) {
+		warnings = append(warnings, "Ignored "+old+": the plan names milestones, which take precedence. Delete the file.")
+	}
+	out := &projectreport.Milestones{}
+	for _, m := range planned {
+		out.Milestones = append(out.Milestones, projectreport.MilestoneSpec{Name: m.Name, Slices: m.Slices, Requirements: m.Requirements})
+	}
+	return out, warnings, nil
+}
 
 func reportFileExists(p string) bool {
 	fi, err := os.Stat(p)
@@ -631,6 +667,10 @@ describes what is there and how it fits together:
 
   Landscape            user roles and where each starts; the systems around the
                        app; what runs without a user
+  Features             with a project brain plan: one feature per slice, with
+                       its requirements, milestone and what its anchors reach
+                       (flows, pages, entities, entry points, roles), and what
+                       no feature reaches
   Module map           app modules as a dependency graph, domain use apart from
                        screen links, the hub and weak links behind toggles
   Inside a module      data model (other modules' entities as ghosts, the flows
@@ -670,12 +710,60 @@ modules that have none one sentence each in --annotations:
 		if err != nil {
 			return nil, err
 		}
+		trace, sliceMilestones, warnings, err := mapFeatureTrace(cmd, projectPath, exec)
+		if err != nil {
+			return nil, err
+		}
+		projectreport.AddFeatures(data, trace, sliceMilestones)
 		return projectreport.NewEnvelope("map", reportProjectName(projectPath), reportNow(), version, data,
-			projectreport.MapMethod, projectreport.MapLimits, nil)
+			projectreport.MapMethod, projectreport.MapLimits, warnings)
 	},
 	render:     projectreport.RenderMap,
 	renderHTML: projectreport.RenderMapHTML,
 })
+
+// mapFeatureTrace reads the project brain's plan, when there is one, as the
+// traceability report does — the same statuses, footprints and milestones — so
+// the map can show the app by feature. No brain, or no slices, is no feature
+// view, not an error.
+func mapFeatureTrace(cmd *cobra.Command, projectPath string, exec *executor.Executor) (*projectreport.TraceabilityData, map[string]string, []string, error) {
+	loc, err := resolveBrainLocation(projectPath, "")
+	if err != nil {
+		return nil, nil, nil, nil
+	}
+	store := brain.NewStore(loc.Dir)
+	if !store.Exists() {
+		return nil, nil, nil, nil
+	}
+	sliceShards, err := store.ListSlices()
+	if err != nil || len(sliceShards) == 0 {
+		return nil, nil, nil, err
+	}
+	rep, err := brain.Check(store, &catalogResolver{cat: exec.Catalog(), be: exec.Backend()}, sliceShards)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	list, err := store.List(brain.ListFilter{})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	ms, warnings, err := traceabilityMilestones(cmd, store, loc.Dir)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	sliceMilestones := map[string]string{}
+	if ms != nil {
+		for _, m := range ms.Milestones {
+			for _, sl := range m.Slices {
+				sliceMilestones[sl] = m.Name
+			}
+		}
+	}
+	trace, err := projectreport.CollectTraceability(exec.Catalog(), projectreport.TraceabilityInput{
+		Requirements: rep.Requirements, Entries: list.Entries, Milestones: ms,
+	})
+	return trace, sliceMilestones, warnings, err
+}
 
 func init() {
 	reportCmd.AddCommand(reportMapCmd)

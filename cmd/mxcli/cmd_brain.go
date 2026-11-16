@@ -778,13 +778,25 @@ func printBrainPlan(slices []brain.SliceProgress) {
 		}
 	}
 	var built, total int
-	fmt.Printf("%-*s %8s %8s %12s\n", width, "SLICE", "BUILT", "PLANNED", "UNANCHORED")
+	withMilestones := false
+	for _, sl := range slices {
+		withMilestones = withMilestones || sl.Milestone != ""
+	}
+	header := fmt.Sprintf("%-*s %8s %8s %12s", width, "SLICE", "BUILT", "PLANNED", "UNANCHORED")
+	if withMilestones {
+		header += "  MILESTONE"
+	}
+	fmt.Println(header)
 	for _, sl := range slices {
 		un := ""
 		if sl.Unanchored > 0 {
 			un = fmt.Sprint(sl.Unanchored)
 		}
-		fmt.Printf("%-*s %8d %8d %12s\n", width, sl.Slice, sl.Built, sl.Planned, un)
+		line := fmt.Sprintf("%-*s %8d %8d %12s", width, sl.Slice, sl.Built, sl.Planned, un)
+		if withMilestones {
+			line += "  " + sl.Milestone
+		}
+		fmt.Println(strings.TrimRight(line, " "))
 		built += sl.Built
 		total += sl.Total()
 	}
@@ -1329,7 +1341,7 @@ func brainLocatedCommands() []*cobra.Command {
 		brainInitCmd, brainCaptureCmd, brainStagedCmd, brainPromoteCmd,
 		brainDropCmd, brainShowCmd, brainCheckCmd, brainPlanCmd,
 		brainResolveCmd, brainBriefCmd, brainEditCmd, brainMoveCmd,
-		brainListCmd,
+		brainListCmd, brainMilestoneCmd,
 	}
 }
 

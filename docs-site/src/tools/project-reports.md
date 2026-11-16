@@ -130,9 +130,12 @@ mxcli report traceability -p app.mpr --junit results.xml --journeys journeys.jso
 is brain's: `brain plan --json` reports the same `status` per requirement, and
 `brain check` fails on a verdict naming an unknown id, one on a requirement, and a
 requirement that is both changed and partly met.
-Milestones are read from `docs/brain/plan/traceability.json`
-(`{"milestones":[{"name":"M1","slices":["01-accounts"]}]}`); `brain plan --json`
-now lists each requirement with each anchor's resolution.
+Milestones are part of the plan: `mxcli brain milestone "M1" --slice 01-accounts`
+writes `milestone: "M1"` in the slice's frontmatter, and `--requirement <id>`
+places one requirement apart from its slice. The older
+`docs/brain/plan/traceability.json` is still read, with a warning, until
+`mxcli brain milestone --import` moves it into the plan. `brain plan --json` lists
+each requirement with each anchor's resolution, and each slice's milestone.
 
 ## map
 
@@ -151,6 +154,14 @@ constants; and a searchable index of every document with "uses" and "used by".
 mxcli report map -p app.mpr -o map.html
 mxcli report map -p app.mpr --format json -o map.json   # the same data for another viewer
 ```
+
+With a project brain that has a plan, the map adds a **Features** tab: one feature
+per slice, with its requirements, milestone and status, and what its anchors reach
+— flows (the anchored ones, their footprints and call closure), the pages and
+entities those lead to, entry points started from outside the feature, and the
+roles that may open its pages. **Reached by no feature** lists the pages, entry
+points and persistent entities no requirement leads to. Features are derived from
+the plan, so there is no feature map to maintain alongside it.
 
 The page is self-contained and draws one diagram at a time. Module purposes come
 from domain-model documentation, or from `module:<Name>` notes in `--annotations`.

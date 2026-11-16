@@ -10,10 +10,10 @@ description: "Produce and read the PRD-to-app traceability report (mxcli report 
 
 | lines | section |
 |---|---|
-| 25-69 | Preconditions |
-| 70-80 | Run it |
-| 81-98 | Reading it |
-| 99-102 | Related |
+| 25-74 | Preconditions |
+| 75-85 | Run it |
+| 86-103 | Reading it |
+| 104-107 | Related |
 
 <!-- /skill-index -->
 # Traceability Report
@@ -57,15 +57,20 @@ built and proven?". Nothing on it is ticked off by hand.
    a module question keeps them on the decision it becomes. `brain plan --json`
    reports each requirement's effective `status`, which this report shows.
 
-4. **Milestones** map slices (and single requirements) to the spec's milestones in
-   `docs/brain/plan/traceability.json`:
+4. **Milestones** live in the plan, on the slices they group. Put slices — or a
+   single requirement apart from its slice — in a milestone:
 
-   ```json
-   {"milestones": [
-     {"name": "M1 — accounts", "slices": ["01-accounts"]},
-     {"name": "M2 — swaps", "slices": ["02-swaps"], "requirements": ["a1b2c3"]}
-   ]}
+   ```bash
+   mxcli brain milestone "M1 — accounts" --slice 01-accounts -p app.mpr
+   mxcli brain milestone "M2 — swaps" --slice 02-swaps --requirement a1b2c3 -p app.mpr
    ```
+
+   That writes `milestone: "M1 — accounts"` in the slice file's frontmatter (a
+   ``Milestone: `M2 — swaps` `` line on a requirement). `brain plan` shows the
+   column, and milestones are ordered by first appearance in slice-name order.
+   A project with the older `docs/brain/plan/traceability.json` moves it with
+   `mxcli brain milestone --import docs/brain/plan/traceability.json`; until then
+   the report still reads it, with a warning.
 
 ## Run it
 

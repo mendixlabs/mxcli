@@ -14,9 +14,9 @@ import (
 )
 
 // Milestones groups plan slices — and single requirements placed apart from
-// their slice — into the specification's milestones. It is the one input the
-// traceability report cannot derive: the brain knows slices, the PRD knows
-// milestones.
+// their slice — into the specification's milestones. The plan carries them
+// (brain.Store.Milestones); this file form is what --milestones and the older
+// docs/brain/plan/traceability.json still read.
 //
 //	{"milestones": [
 //	  {"name": "M1 — accounts", "slices": ["01-accounts"]},
@@ -369,7 +369,7 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 			d.Milestones = append(d.Milestones, tm)
 		}
 		var rest TraceMilestone
-		rest.Name = "Not in any milestone"
+		rest.Name = notInMilestone
 		for _, sl := range sliceOrder {
 			for _, id := range bySlice[sl] {
 				if !placed[id] {
@@ -396,6 +396,9 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 	}
 	return d, nil
 }
+
+// notInMilestone names the group of requirements no milestone holds.
+const notInMilestone = "Not in any milestone"
 
 // isFootprintKind is brain's list, so `brain check` and this report agree on
 // which anchors a test can ever reach (ako/mxcli#2303).
@@ -444,7 +447,7 @@ var TraceabilityMethod = []string{
 	"Footprint: the microflows that implement a requirement — an anchored microflow plus its same-module callees; microflows a page, workflow, scheduled event or published service anchor calls; microflows that write an anchored entity or retrieve an anchored view entity; microflows that use an anchored attribute or association. Helpers with more than three callers are left out.",
 	"A microflow test proves a requirement when what it calls, with their call closure, touches the footprint. A journey proves it when a footprint microflow appears in its spans, or its log names an anchored page.",
 	"Decisions bear on a requirement when they share an anchor (module anchors excluded) or cite its id; open questions also when filed on its slice.",
-	"Milestones come from `docs/brain/plan/traceability.json` (or `--milestones`); without one, each slice is a milestone.",
+	"Milestones come from the plan: a slice's frontmatter (`milestone:`), or a requirement's ``Milestone: `<name>` `` line (`mxcli brain milestone`); without any, each slice is a milestone. They are ordered by first appearance, walking the slices in name order.",
 }
 
 var TraceabilityLimits = []string{
