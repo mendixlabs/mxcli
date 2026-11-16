@@ -102,6 +102,7 @@ settingsValue
     | NUMBER_LITERAL
     | booleanLiteral
     | qualifiedName
+    | LPAREN (settingsValue (COMMA settingsValue)*)? RPAREN   // a list: ThemeModuleOrder: ('Atlas_Core', 'Brand')
     ;
 
 // =============================================================================
@@ -822,7 +823,7 @@ keyword
     | ANCHOR | TOP | BOTTOM
 
     // Fragment / ALTER PAGE
-    | AFTER | BEFORE | DEFINE | FRAGMENT | FRAGMENTS | SLOT
+    | AFTER | BEFORE | DEFINE | FRAGMENT | FRAGMENTS | SLOT | WRAP
 
     // General-purpose words (only tokens not already listed above)
     | ACTION | BLOCKING | BOTH | CELL | CONTEXT | DATA | FORMAT | ITEM | LIST

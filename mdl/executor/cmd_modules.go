@@ -687,7 +687,7 @@ func describeModule(ctx *ExecContext, moduleName string, withAll bool) error {
 			}
 		}
 	}
-	fmt.Fprintf(ctx.Output, "create or modify module %s%s;\n", targetModule.Name, moduleSettingsMDL(ctx, settings))
+	fmt.Fprintf(ctx.Output, "create or modify module %s%s;\n", targetModule.Name, moduleSettingsMDL(ctx, settings, targetModule.IsThemeModule))
 	if targetModule.PackageFile != "" {
 		fmt.Fprintf(ctx.Output, "-- packaged module: %s — read-only, the project file holds none of its documents\n", targetModule.PackageFile)
 	}

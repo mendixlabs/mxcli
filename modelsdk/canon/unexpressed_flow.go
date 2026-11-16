@@ -18,7 +18,9 @@ import "go.mongodb.org/mongo-driver/v2/bson"
 //   - a loop's error handling — Continue reset to Rollback made one failing
 //     iteration abort the whole loop;
 //   - a REST call's proxy (Override with its expressions, or NoProxy), which
-//     the in-place edit already keeps (ako/mxcli#2169).
+//     the in-place edit already keeps (ako/mxcli#2169);
+//   - a while loop's condition caption, shown on the loop in Studio Pro
+//     (ako/mxcli#2298, mendixlabs/mxcli#1869).
 //
 // A written value other than the default came from somewhere that CAN state
 // it, and is left alone. The day MDL gains a spelling for one of these, its
@@ -33,6 +35,7 @@ var unstatedFlowDefaults = map[string]map[string]any{
 	"Microflows$InheritanceSplit":   {"Documentation": ""},
 	"Microflows$LoopedActivity":     {"Documentation": "", "ErrorHandlingType": "Rollback"},
 	"Microflows$RestCallAction":     {"RequestProxyType": "DefaultProxy", "ProxyConfiguration": nil},
+	"Microflows$WhileLoopCondition": {"Caption": ""},
 }
 
 // carryUnstatedFlowProperties puts on d, an element of the written document,

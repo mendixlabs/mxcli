@@ -105,6 +105,14 @@ func execAlterPage(ctx *ExecContext, s *ast.AlterPageStmt) error {
 			if err := applyDropWidgetMutator(mutator, o); err != nil {
 				return mdlerrors.NewBackend("drop", err)
 			}
+		case *ast.MoveWidgetOp:
+			if err := mutator.MoveWidget(o.Target.Name(), o.Destination.Name(), backend.InsertPosition(o.Position)); err != nil {
+				return mdlerrors.NewBackend("move", err)
+			}
+		case *ast.WrapWidgetOp:
+			if err := applyWrapWidgetMutator(ctx, mutator, o, modName, containerID); err != nil {
+				return mdlerrors.NewBackend("wrap", err)
+			}
 		case *ast.DropListViewTemplateOp:
 			if err := mutator.DropListViewTemplate(o.ListView, o.Specialization); err != nil {
 				return mdlerrors.NewBackend("drop TEMPLATE", err)
@@ -300,6 +308,10 @@ func alterPageOperationTargets(op ast.AlterPageOperation) []ast.WidgetRef {
 		return []ast.WidgetRef{o.Target}
 	case *ast.DropWidgetOp:
 		return o.Targets
+	case *ast.MoveWidgetOp:
+		return []ast.WidgetRef{o.Target, o.Destination}
+	case *ast.WrapWidgetOp:
+		return []ast.WidgetRef{o.Target}
 	case *ast.DropListViewTemplateOp:
 		return []ast.WidgetRef{{Widget: o.ListView}}
 	}
@@ -706,6 +718,41 @@ func convertASTAction(ctx *ExecContext, mutator backend.PageMutator, value any, 
 // ============================================================================
 // INSERT widget via mutator
 // ============================================================================
+
+// applyWrapWidgetMutator puts a new container where a widget is and moves the
+// widget into it (ako/mxcli#2122). The container is inserted before the widget
+// exactly as INSERT BEFORE would build it — so it takes the widget's own data
+// context — and the widget's stored subtree is then moved into it, never
+// rebuilt: this is how a legacy classic Data grid, which MDL cannot re-author,
+// gets wrapped in a data view after an upgrade.
+func applyWrapWidgetMutator(ctx *ExecContext, mutator backend.PageMutator, op *ast.WrapWidgetOp, moduleName string, moduleID model.ID) error {
+	if len(op.Container) != 1 || op.Container[0] == nil {
+		return mdlerrors.NewValidation("wrap takes exactly one container: `wrap <widget> in { container ctn1 { } }`")
+	}
+	c := op.Container[0]
+	if c.Name == "" {
+		return mdlerrors.NewValidation("the container `wrap` puts the widget into needs a name, so the widget can be moved into it")
+	}
+	if !wrapContainerTypes[strings.ToLower(c.Type)] {
+		return mdlerrors.NewValidationf("cannot wrap in a %s: wrap takes a container, dataview or groupbox — "+
+			"a container that holds one list of widgets", c.Type)
+	}
+	if op.Target.IsColumn() {
+		return mdlerrors.NewValidation("a column cannot be wrapped: only a widget can be moved into a container")
+	}
+	insert := &ast.InsertWidgetOp{Position: "BEFORE", Target: op.Target, Widgets: op.Container}
+	if err := applyInsertWidgetMutator(ctx, mutator, insert, moduleName, moduleID); err != nil {
+		return err
+	}
+	return mutator.MoveWidget(op.Target.Name(), c.Name, backend.InsertPosition("INTO"))
+}
+
+// wrapContainerTypes are the widgets `wrap` can put a widget into: the ones
+// whose children are a single list of widgets (containerAcceptsWidgets in the
+// page mutator).
+var wrapContainerTypes = map[string]bool{
+	"container": true, "dataview": true, "groupbox": true,
+}
 
 func applyInsertWidgetMutator(ctx *ExecContext, mutator backend.PageMutator, op *ast.InsertWidgetOp, moduleName string, moduleID model.ID) error {
 	if strings.EqualFold(op.Position, "INTO") {

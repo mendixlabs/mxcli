@@ -135,7 +135,7 @@ func parseJarDepAction(ctx *parser.AlterModuleJarDepActionContext) ast.JarDepAct
 
 // moduleSettingKeys are the keys of a module's settings list, named after the
 // fields of Studio Pro's Module settings dialog (ako/mxcli#1921).
-var moduleSettingKeys = []string{"Version", "ModuleType"}
+var moduleSettingKeys = []string{"Version", "ModuleType", "UIResources"}
 
 // moduleSettingsVersion is the dialog's rule for a module version: SemVer
 // major.minor.patch, with an optional pre-release and build suffix.
@@ -191,6 +191,17 @@ func (b *Builder) moduleSettings(what string, body parser.IModuleSettingsBodyCon
 				continue
 			}
 			out.ModuleType = &t
+		case "UIResources":
+			var v string
+			if pc.STRING_LITERAL() == nil && pc.IdentifierOrKeyword(1) != nil {
+				v = strings.ToLower(identifierOrKeywordText(pc.IdentifierOrKeyword(1)))
+			}
+			if v != "true" && v != "false" {
+				b.addError(fmt.Errorf("line %d: %s: UIResources takes true or false, not %s", line, what, nodeText(pc.GetChild(2))))
+				continue
+			}
+			on := v == "true"
+			out.UIResources = &on
 		}
 	}
 	return out

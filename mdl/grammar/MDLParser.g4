@@ -389,6 +389,8 @@ alterOperation
     | alterInsert SEMICOLON?
     | alterReplace SEMICOLON?
     | alterDrop SEMICOLON?
+    | alterMove SEMICOLON?
+    | alterWrap SEMICOLON?
     | alterPageDropTemplate SEMICOLON?
     | alterPageAddVariable SEMICOLON?
     | alterPageDropVariable SEMICOLON?
@@ -412,6 +414,21 @@ alterInsert
 
 alterReplace
     : REPLACE alterTarget WITH alterFragment
+    ;
+
+// MOVE relocates an existing widget, its stored subtree unchanged; WRAP puts a
+// new container where a widget is and moves the widget into it. Neither
+// rebuilds the moved widget, so a widget MDL cannot re-author (a legacy classic
+// Data grid) can still be moved or wrapped (ako/mxcli#2122).
+//   move txtNote after txtName;
+//   move dgOrders into ctnMain;
+//   wrap dgOrders in { dataview dvOrder (DataSource: $Order) { } }
+alterMove
+    : MOVE alterTarget (AFTER | BEFORE | INTO) alterTarget
+    ;
+
+alterWrap
+    : WRAP alterTarget IN alterFragment
     ;
 
 alterDrop

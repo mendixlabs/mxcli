@@ -395,7 +395,7 @@ func documentsTheScriptAddsWidgetsTo(prog *ast.Program) map[string]bool {
 		}
 		for _, op := range s.Operations {
 			switch op.(type) {
-			case *ast.InsertWidgetOp, *ast.ReplaceWidgetOp:
+			case *ast.InsertWidgetOp, *ast.ReplaceWidgetOp, *ast.WrapWidgetOp:
 				grows[s.PageName.String()] = true
 			}
 		}

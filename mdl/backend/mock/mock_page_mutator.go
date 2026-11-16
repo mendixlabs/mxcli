@@ -17,6 +17,7 @@ var _ backend.PageMutator = (*MockPageMutator)(nil)
 // nil error (never panics). ContainerType defaults to ContainerPage when unset;
 // all other methods return zero values.
 type MockPageMutator struct {
+	MoveWidgetFunc                 func(widgetRef, destRef string, position backend.InsertPosition) error
 	ContainerTypeFunc              func() backend.ContainerKind
 	ResolveAlterTargetFunc         func(t backend.AlterTarget) (backend.AlterTargetMatch, error)
 	SetWidgetPropertyFunc          func(widgetRef string, prop string, value any) error
@@ -127,6 +128,13 @@ func (m *MockPageMutator) InsertWidget(widgetRef string, columnRef string, posit
 func (m *MockPageMutator) DropWidget(refs []backend.WidgetRef) error {
 	if m.DropWidgetFunc != nil {
 		return m.DropWidgetFunc(refs)
+	}
+	return nil
+}
+
+func (m *MockPageMutator) MoveWidget(widgetRef, destRef string, position backend.InsertPosition) error {
+	if m.MoveWidgetFunc != nil {
+		return m.MoveWidgetFunc(widgetRef, destRef, position)
 	}
 	return nil
 }

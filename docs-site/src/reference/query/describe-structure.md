@@ -13,7 +13,7 @@ This is useful for getting a quick birds-eye view of what a project contains wit
 ## Parameters
 
 *DEPTH*
-: Controls the level of detail in the output. `1` shows one line per module with element counts. `2` (default) shows documents with their signatures. `3` shows full detail including typed attributes and named parameters.
+: Controls the level of detail in the output. `1` shows one line per module with element counts. `2` (default) shows documents with their signatures. `3` shows full detail including typed attributes and named parameters. At depth 2 and 3 a module's documents are nested under the folders they sit in (`Orders/`, then `Actions/` inside it), after the documents at the module root; entities stay at the root, as the domain model has no folders.
 
 *module*
 : When `IN <module>` is specified, restricts output to a single module. Implicitly uses depth 2 unless overridden.

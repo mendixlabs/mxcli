@@ -135,6 +135,7 @@ var typeCoverageExceptions = map[string]string{
 	"Workflows$NotifyWaitForNotificationActivityTarget": "lowered: below 11.7 notify workflow stores its target as the action's Activity (setNotifyTarget)",
 	// Unreachable: the type is written only for something a project below
 	// its floor cannot hold.
+	"Settings$ThemeModuleEntry": "unreachable: written only into a stored ThemeModuleOrder list; below 9.3 the Web UI part has none, and ALTER SETTINGS WEBUI refuses ThemeModuleOrder there (ako/mxcli#1286)",
 	"Workflows$NonInterruptingNotificationEventSubProcessStartActivityTarget": "unreachable: a notify target of that kind, which the stored workflow holds only from 11.8 (notifyTargetType)",
 	"Workflows$InterruptingNotificationEventSubProcessStartActivityTarget":    "unreachable: a notify target of that kind, which the stored workflow holds only from 11.10 (notifyTargetType)",
 	"Workflows$NotifyNotificationActivityTarget":                              "unreachable: a notify target of that kind, which the stored workflow holds only from 11.11 (notifyTargetType)",

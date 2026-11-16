@@ -290,6 +290,35 @@ func writeProjectSettingsMDL(ctx *ExecContext, ps *model.ProjectSettings, consta
 			fmt.Fprintf(ctx.Output, "alter settings webui (\n  OptimizedClient: %s\n);\n\n", mdlQuoted(ps.WebUI.UseOptimizedClient))
 		}
 	}
+	// An empty order is Mendix's default and has no statement.
+	if ps.WebUI != nil && len(ps.WebUI.ThemeModuleOrder) > 0 {
+		quoted := make([]string, len(ps.WebUI.ThemeModuleOrder))
+		for i, n := range ps.WebUI.ThemeModuleOrder {
+			quoted[i] = mdlQuoted(n)
+		}
+		fmt.Fprintf(ctx.Output, "alter settings webui (\n  ThemeModuleOrder: (%s)\n);\n\n", strings.Join(quoted, ", "))
+	}
+}
+
+// checkThemeModuleOrderModules refuses a theme module order naming a module the
+// project does not have: Mendix compiles each listed module's themesource, and
+// an entry naming nothing is a typo no build reports (ako/mxcli#1286).
+func checkThemeModuleOrderModules(ctx *ExecContext, names []string) error {
+	modules, err := ctx.Backend.ListModules()
+	if err != nil {
+		return mdlerrors.NewBackend("list modules", err)
+	}
+	known := map[string]bool{}
+	for _, m := range modules {
+		known[m.Name] = true
+	}
+	for _, n := range names {
+		if !known[n] {
+			return mdlerrors.NewNotFoundMsg("module", n, fmt.Sprintf(
+				"ThemeModuleOrder names module %s, which the project does not have", n))
+		}
+	}
+	return nil
 }
 
 // modelSettingKeys names every property the ALTER SETTINGS MODEL switch below
@@ -392,7 +421,7 @@ var configurationSettingKeys = []string{
 // webUISettingKeys names every property ALTER SETTINGS WEBUI assigns.
 // OptimizedClient is the spelling `show settings` prints and the skills point to;
 // it is stored as UseOptimizedClient.
-var webUISettingKeys = []string{"OptimizedClient"}
+var webUISettingKeys = []string{"OptimizedClient", "ThemeModuleOrder"}
 
 // settingsEnumValues maps "<section>/<key>" to the enumeration members accepted for
 // it, for the properties validated as settingsKindEnum.
@@ -714,6 +743,17 @@ func alterSettings(ctx *ExecContext, stmt *ast.AlterSettingsStmt) error {
 					return err
 				}
 				ps.WebUI.UseOptimizedClient = v
+			case "ThemeModuleOrder":
+				if storedWebUI != nil && !settingsoverlay.Has(storedWebUI, "ThemeModuleOrder") {
+					return mdlerrors.NewUnsupported(
+						"this project does not store the theme module order\n" +
+							"  mxcli will not introduce a property the project's Mendix version does not define.")
+				}
+				names, _ := val.([]string)
+				if err := checkThemeModuleOrderModules(ctx, names); err != nil {
+					return err
+				}
+				ps.WebUI.ThemeModuleOrder = names
 			default:
 				return unknownSettingsKey("webui", key)
 			}

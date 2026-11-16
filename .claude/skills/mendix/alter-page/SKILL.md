@@ -13,14 +13,14 @@ description: "Modify an existing page or snippet's widget tree in place with ALT
 | 28-31 | Overview |
 | 32-64 | When to Use |
 | 65-115 | Syntax |
-| 116-470 | Operations |
-| 471-549 | Examples |
-| 550-640 | DataGrid 2 columns: how to address them, and what you can set |
-| 641-652 | Common Mistakes |
-| 653-687 | Limitations — prefer binding at page creation (ledger finding #45) |
-| 688-695 | Validation Checklist |
-| 696-705 | Related Commands |
-| 706-710 | Related Skills |
+| 116-481 | Operations |
+| 482-560 | Examples |
+| 561-651 | DataGrid 2 columns: how to address them, and what you can set |
+| 652-663 | Common Mistakes |
+| 664-698 | Limitations — prefer binding at page creation (ledger finding #45) |
+| 699-706 | Validation Checklist |
+| 707-716 | Related Commands |
+| 717-721 | Related Skills |
 
 <!-- /skill-index -->
 # ALTER PAGE / ALTER SNIPPET - Modify Existing Pages and Snippets
@@ -371,6 +371,17 @@ alter page MyModule.Customer_Edit {
 ```
 
 Replaces the target widget with one or more new widgets. The new widgets use the same syntax as `create page`, and may reuse the names of the widgets the replace removes. `insert into dvMain.footer { … }` appends to a footer and `drop dvMain.footer` empties it.
+
+### MOVE and WRAP - Rearrange Existing Widgets
+
+```sql
+mdl 1;
+alter page MyModule.Order_Lines {
+  wrap dgLines in { dataview dvOrder (DataSource: $Order) { } } move txtTitle into dvOrder;
+};
+```
+
+`wrap` takes a named container, dataview or groupbox; `move` goes `after`, `before` or `into`. Neither rebuilds the widget, so a legacy classic Data grid can be wrapped in a data view after an upgrade. A move into itself, or into a non-container, is refused.
 
 ### DataGrid Column Operations
 

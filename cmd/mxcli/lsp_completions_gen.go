@@ -205,6 +205,7 @@ var mdlGeneratedKeywords = []protocol.CompletionItem{
 	{Label: "ROW", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
 	{Label: "ITEM", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
 	{Label: "CELL", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
+	{Label: "WRAP", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
 	{Label: "CONTROLBAR", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
 	{Label: "SEARCH", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
 	{Label: "SEARCHBAR", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
