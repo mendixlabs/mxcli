@@ -271,6 +271,7 @@ Agent schema observations:
 - **`tools[]`**: Optional. Array of tool references. Each entry has a UUID `id`, unique `name`, `description`, `enabled` boolean, and a `toolType` discriminator. Observed `toolType` values: `"MCP"` (a whole MCP service attached as tools) or a microflow-tool `"Microflow"` where `document` referencces a microflow document. Tool microflows need to return a String and can only have primitive types and GenAICommons.Request or GenAICommons.Tool objects as input parameters.
 - **`knowledgebaseTools[]`**: Optional. Array of KB references. Same base fields plus `collectionIdentifier`, `maxResults` and `minSimilarity`. ToolType is irrelevant for knowledgebaseTools. MaxResults needs to be a positive integer, minSimilarity is a decimal between 0 and 1.
 - **`variables[]`**: Should be left empty this will be automatically populated by the extension based on the detected variables in the user or system prompt.
+- **`entity`**: `documentId` is the entity element's `$ID` (not its domain model's unit id, and not an id Agent Editor fills in at runtime) — measured in a Studio Pro-saved project, where AgentCommons' example agents store their entities' `$ID`s (ako/mxcli#2289). mxcli has no `$ID` for System entities, so those are written by name and a stored id is kept.
 - **`entity`**: Optional. Present on older agents with `isAttributeInEntity: true` variables; absent on `Agent007`.
 - **`maxTokens`**: Optional. Can be set by the user to restrict the number of tokens to consume in one agent call.
 - **`toolChoice`**: Optional. Agent-level inference parameters. Enum values for `toolChoice` observed: `"Auto"` (capitalized, not the lowercase `auto` used by `GenAICommons.ENUM_ToolChoice` at runtime). Other values: `"None"`, `"Any"`, `"Tool"`. If tool choice is set to `Tool`, then also the `toolChoiceToolName` needs to be set by the unique name referencing one tool in `tools[]`. Only tools where `toolType` = "Microflow" can become tool choice.
@@ -501,7 +502,7 @@ type Variable struct {
 }
 
 type EntityRef struct {
-    DocumentID    string // UUID of the entity's domain model
+    DocumentID    string // the entity element's $ID, as canonical GUID text (ako/mxcli#2289)
     QualifiedName string // Module.EntityName
 }
 

@@ -645,8 +645,9 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	validateToStringIntoShortAttribute(ctx, prog, sc)
 	// A create or modify that leaves an agent without a selected model or a
 	// consumed MCP service without an endpoint: MDL-AGENT02/03 for the case
-	// only the project can see (ako/mxcli#2089). Warns, never blocks.
-	warnAgentDocumentsLeftUnset(ctx, prog, sc)
+	// only the project can see (ako/mxcli#2089). Warns, except an agent with a
+	// Model and no selected model: Studio Pro's AE018, an error (ako/mxcli#2289).
+	errors = append(errors, validateAgentDocumentsLeftUnset(ctx, prog, sc)...)
 	return errors, sc.warnings
 }
 

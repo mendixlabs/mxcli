@@ -9,9 +9,11 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
 )
 
-// warnAgentDocumentsLeftUnset is the project half of MDL-AGENT02 and
+// validateAgentDocumentsLeftUnset is the project half of MDL-AGENT02 and
 // MDL-AGENT03 (ako/mxcli#2089): a create or modify that leaves an agent with
-// no selected model, or a consumed MCP service with no endpoint.
+// no selected model, or a consumed MCP service with no endpoint. Both warn,
+// except an agent that names a Model: that is Studio Pro's AE018, returned as
+// an error so exec refuses it (ako/mxcli#2289).
 //
 // The static rules skip create or modify, because a key it leaves out keeps
 // the stored value. But it is also how project scripts and describe create a
@@ -23,14 +25,15 @@ import (
 //
 // The agent half applies only when AgentEditorCommons reads selectedModel
 // (2.2 and later); every measured version reads the endpoint.
-func warnAgentDocumentsLeftUnset(ctx *ExecContext, prog *ast.Program, sc *scriptContext) {
+func validateAgentDocumentsLeftUnset(ctx *ExecContext, prog *ast.Program, sc *scriptContext) []error {
 	if ctx == nil || prog == nil || sc == nil || !ctx.Connected() {
-		return
+		return nil
 	}
+	var errs []error
 	agentHas := map[string]bool{}
 	svcHas := map[string]bool{}
 	readsSelected := -1 // unknown until an agent needs it
-	for _, stmt := range prog.Statements {
+	for i, stmt := range prog.Statements {
 		switch s := stmt.(type) {
 		case *ast.CreateAgentStmt:
 			qn := s.Name.String()
@@ -54,11 +57,15 @@ func warnAgentDocumentsLeftUnset(ctx *ExecContext, prog *ast.Program, sc *script
 					readsSelected = 1
 				}
 			}
-			if readsSelected == 1 {
-				sc.warnings = append(sc.warnings, fmt.Sprintf(
-					"%s: agent %s is left with no SelectedModel: Agent Editor 2.2+ refuses to import it at startup "+
-						"(\"Model with name  is referenced but could not be found\"), and that stops the import of every agent. "+
-						"Add SelectedModel: '<model id>'", agentSelectedModelRule, qn))
+			if readsSelected != 1 {
+				continue
+			}
+			msg := fmt.Sprintf("%s: %s. Add SelectedModel: '<model id>'",
+				agentSelectedModelRule, agentSelectedModelMissing("is left with", qn, s.Model != nil))
+			if s.Model != nil {
+				errs = append(errs, fmt.Errorf("statement %d: %s", i+1, msg))
+			} else {
+				sc.warnings = append(sc.warnings, msg)
 			}
 		case *ast.AlterAgentStmt:
 			for k, v := range s.Sets {
@@ -96,6 +103,7 @@ func warnAgentDocumentsLeftUnset(ctx *ExecContext, prog *ast.Program, sc *script
 			svcHas[s.Name.String()] = false
 		}
 	}
+	return errs
 }
 
 // agentEditorReadsSelectedModel reports whether the project's

@@ -41,8 +41,12 @@ func leftUnsetWarnings(t *testing.T, commonsVersion string, storedHasValue bool,
 	}
 	ctx, _ := newMockCtx(t, withBackend(mb), withHierarchy(h))
 	sc := newScriptContext()
-	warnAgentDocumentsLeftUnset(ctx, parseMDL(t, src), sc)
-	return sc.warnings
+	errs := validateAgentDocumentsLeftUnset(ctx, parseMDL(t, src), sc)
+	out := append([]string(nil), sc.warnings...)
+	for _, err := range errs {
+		out = append(out, "ERROR "+err.Error())
+	}
+	return out
 }
 
 func assertLeftUnset(t *testing.T, got []string, want ...string) {
@@ -114,4 +118,23 @@ create or modify agent M.Stored ( UsageType: Task, SelectedModel: '', SystemProm
 func TestLeftUnset_AgentEditorBefore22(t *testing.T) {
 	got := leftUnsetWarnings(t, "1.1.0", true, "mdl 1;\n"+newAgent+"\n"+newSvc)
 	assertLeftUnset(t, got, "MDL-AGENT03: consumed mcp service M.NewSvc")
+}
+
+// ako/mxcli#2289: a create or modify that leaves an agent WITH a Model but no
+// selected model is Studio Pro's AE018, so it is an error, not a warning. The
+// stored-value carry still decides: a stored selected model is kept, and is
+// not reported.
+func TestLeftUnset_WithModelIsAnError(t *testing.T) {
+	withModel := `create or modify agent M.Stored ( UsageType: Task, Model: M.Model, SystemPrompt: 'x', UserPrompt: 'y' );`
+	assertLeftUnset(t, leftUnsetWarnings(t, "2.6.0", false, "mdl 1;\n"+withModel),
+		"ERROR statement 1: MDL-AGENT02: agent M.Stored")
+	if got := leftUnsetWarnings(t, "2.6.0", false, "mdl 1;\n"+withModel); !strings.Contains(got[0], "AE018") {
+		t.Errorf("%q, want it to name AE018", got[0])
+	}
+	// Control: the stored agent has one, which the statement keeps.
+	assertLeftUnset(t, leftUnsetWarnings(t, "2.6.0", true, "mdl 1;\n"+withModel))
+	// Control: no Model, still a warning.
+	assertLeftUnset(t, leftUnsetWarnings(t, "2.6.0", false, "mdl 1;\n"+newAgent), "MDL-AGENT02: agent M.New")
+	// Agent Editor before 2.2 does not read it.
+	assertLeftUnset(t, leftUnsetWarnings(t, "1.1.0", false, "mdl 1;\n"+withModel))
 }
