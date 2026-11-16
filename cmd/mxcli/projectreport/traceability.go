@@ -86,6 +86,9 @@ type TraceRequirement struct {
 	Anchors       []brain.AnchorResult `json:"anchors"`
 	Footprint     []string             `json:"footprint"`
 	FootprintNote string               `json:"footprintNote,omitempty"`
+	// FootprintApprox: an attribute anchor no microflow names, so the
+	// footprint is the microflows that create or change its entity.
+	FootprintApprox bool `json:"footprintApprox,omitempty"`
 	Tests         []string             `json:"tests"`
 	Journeys      []string             `json:"journeys"`
 	Decisions     []string             `json:"decisions"`
@@ -113,11 +116,11 @@ var specRef = regexp.MustCompile(`\(((?:slide|p\.|page|§)\s*[\w.-]+)\)\s*$`)
 // footprintKinds names, per anchor kind, which microflows implement it. A kind
 // not listed here (role, enumeration, constant, module) has no microflow
 // footprint, and the page says so rather than calling it untested.
-func footprint(q Querier, a brain.AnchorResult, mfModule map[string]string, g CallGraph) ([]string, error) {
+func footprint(q Querier, a brain.AnchorResult, mfModule map[string]string, g CallGraph) ([]string, bool, error) {
 	name := strings.TrimPrefix(a.Anchor, "@")
 	lit := strings.ReplaceAll(name, "'", "''")
 	var sql string
-	switch strings.ToLower(a.Kind) {
+	switch strings.ToLower(strings.ReplaceAll(a.Kind, " ", "_")) {
 	case "microflow":
 		// The microflow plus what it calls within its own module: helpers in
 		// other modules are other requirements' (or nobody's) work.
@@ -128,21 +131,52 @@ func footprint(q Querier, a brain.AnchorResult, mfModule map[string]string, g Ca
 				out = append(out, m)
 			}
 		}
-		return out, nil
-	case "page", "snippet", "workflow", "scheduled_event", "published_rest_service", "published_odata_service",
+		return out, false, nil
+	case "published_rest_service":
+		// A published operation's refs row is named "<Service> <resource>
+		// <METHOD> <path>", space-separated, so a name-prefix match finds none
+		// of them (ako/mxcli#2299). The operations table names the microflows
+		// directly; refs adds the service's own (authentication) microflow.
+		sql = `SELECT DISTINCT Microflow AS TargetName FROM published_rest_operations_data
+				WHERE ServiceQualifiedName = '` + lit + `' AND COALESCE(Microflow, '') != ''
+			UNION SELECT DISTINCT TargetName FROM refs WHERE TargetType = 'MICROFLOW' AND SourceName = '` + lit + `'`
+	case "page", "snippet", "workflow", "scheduled_event", "published_odata_service",
 		"published_rest_operation", "business_event_service", "rest_operation", "import_mapping", "export_mapping":
 		sql = `SELECT DISTINCT TargetName FROM refs WHERE TargetType = 'MICROFLOW'
-			AND (SourceName = '` + lit + `' OR SourceName LIKE '` + lit + `.%')`
+			AND (SourceName = '` + lit + `' OR SourceName LIKE '` + lit + `.%' OR SourceName LIKE '` + lit + ` %')`
+	case "java_action", "javascript_action":
+		// What implements a requirement anchored on a Java action is the
+		// microflows that call it.
+		sql = `SELECT DISTINCT SourceName AS TargetName FROM refs WHERE SourceType IN ('MICROFLOW', 'NANOFLOW')
+			AND RefKind = 'call' AND TargetName = '` + lit + `'`
 	case "entity":
 		sql = `SELECT DISTINCT r.SourceName AS TargetName FROM refs r WHERE r.SourceType = 'MICROFLOW' AND r.TargetName = '` + lit + `'
 			AND (r.RefKind IN ('create', 'change', 'delete', 'commit')
 				OR (r.RefKind = 'retrieve' AND EXISTS (SELECT 1 FROM entities e WHERE e.QualifiedName = '` + lit + `'
 					AND upper(COALESCE(e.EntityType, '')) LIKE '%VIEW%')))`
 	case "attribute", "association":
-		sql = `SELECT DISTINCT SourceName AS TargetName FROM refs WHERE SourceType = 'MICROFLOW' AND TargetName = '` + lit + `'`
+		out, err := refSources(q, `SELECT DISTINCT SourceName AS TargetName FROM refs WHERE SourceType = 'MICROFLOW' AND TargetName = '`+lit+`'`)
+		if err != nil || len(out) > 0 || strings.ToLower(a.Kind) != "attribute" {
+			return out, false, err
+		}
+		// An attribute used only inside an expression ($x/Attr) leaves no
+		// member ref. Fall back to the microflows that create or change its
+		// entity, and say the footprint is approximate.
+		entity := lit
+		if i := strings.LastIndexByte(entity, '.'); i > 0 {
+			entity = entity[:i]
+		}
+		out, err = refSources(q, `SELECT DISTINCT SourceName AS TargetName FROM refs WHERE SourceType = 'MICROFLOW'
+			AND RefKind IN ('create', 'change') AND TargetName = '`+entity+`'`)
+		return out, len(out) > 0, err
 	default:
-		return nil, nil
+		return nil, false, nil
 	}
+	out, err := refSources(q, sql)
+	return out, false, err
+}
+
+func refSources(q Querier, sql string) ([]string, error) {
 	rs, err := rows(q, sql)
 	if err != nil {
 		return nil, err
@@ -201,9 +235,16 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 			questions = append(questions, e)
 		} else {
 			decisions = append(decisions, e)
-			for _, v := range brain.Verdicts(e.Entry) {
-				verdicts[v.RequirementID] = append(verdicts[v.RequirementID], v)
+		}
+		// A verdict counts on an open question too: "Partly meets requirement
+		// `x` until answered" is how a requirement waiting on an outside
+		// answer is recorded, and `brain check` validates it there
+		// (ako/mxcli#2299).
+		for _, v := range brain.Verdicts(e.Entry) {
+			if e.Open {
+				v.Reason = "(open question) " + v.Reason
 			}
+			verdicts[v.RequirementID] = append(verdicts[v.RequirementID], v)
 		}
 	}
 
@@ -246,9 +287,9 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 		for _, v := range verdicts[r.ID] {
 			switch {
 			case v.Verdict == brain.VerdictChanges:
-				tr.Status, tr.StatusReason = StatusChanged, "decision "+v.EntryID+": "+v.Reason
+				tr.Status, tr.StatusReason = StatusChanged, verdictSource(v)
 			case v.Verdict == brain.VerdictPartly && tr.Status != StatusChanged:
-				tr.Status, tr.StatusReason = StatusPartial, "decision "+v.EntryID+": "+v.Reason
+				tr.Status, tr.StatusReason = StatusPartial, verdictSource(v)
 			}
 		}
 		// Footprint.
@@ -258,9 +299,12 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 			if a.State != brain.Resolved {
 				continue
 			}
-			ms, err := footprint(q, a, mfModule, g)
+			ms, approx, err := footprint(q, a, mfModule, g)
 			if err != nil {
 				return nil, err
+			}
+			if approx {
+				tr.FootprintApprox = true
 			}
 			if ms != nil || isFootprintKind(a.Kind) {
 				hasFootprintKind = true
@@ -382,9 +426,18 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 	return d, nil
 }
 
+// verdictSource names the entry a verdict came from, for the status reason.
+func verdictSource(v brain.VerdictRef) string {
+	if r, ok := strings.CutPrefix(v.Reason, "(open question) "); ok {
+		return "open question " + v.EntryID + ": " + r
+	}
+	return "decision " + v.EntryID + ": " + v.Reason
+}
+
 func isFootprintKind(kind string) bool {
 	switch strings.ToLower(kind) {
 	case "microflow", "page", "snippet", "workflow", "entity", "attribute", "association", "scheduled_event",
+		"java_action", "java action", "javascript_action", "javascript action",
 		"published_rest_service", "published_odata_service", "published_rest_operation":
 		return true
 	}
@@ -506,6 +559,9 @@ func RenderTraceability(env *Envelope, ann *Annotations) (Doc, error) {
 				status = joinNote("", n.Note, status)
 			}
 			impl := strings.Join(codeList(r.Footprint), ", ")
+			if r.FootprintApprox {
+				impl += " (approximate: no microflow names the attribute; these create or change its entity)"
+			}
 			if impl == "" {
 				impl = r.FootprintNote
 			}
