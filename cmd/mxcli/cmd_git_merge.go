@@ -67,6 +67,11 @@ the engine chokes on the conflicted state. Its result is copied back:
                      those units (a stale or hand-widened plan is refused).
                      Each planned unit is taken whole from its side, its
                      conflict marker cleared, and the .mpr index repaired.
+                     Whole means the other side's changes to that unit go
+                     too, not only the conflicting one: the review lists,
+                     per unit, what each choice drops that did not conflict
+                     (an entity only one side added), and --plan repeats it
+                     for the side it takes before committing.
                      Modified-on-both units only — added/deleted/moved
                      conflicts go to Studio Pro.
       --ours / --theirs   take one side of every conflicted unit
@@ -320,6 +325,7 @@ func mergeRun(mprPath, ref, message, strategy, plan string, push bool, runners m
 			// A failed side is reported, not dropped: skipping the report made
 			// "the diff crashed" read as "no details" (ako/mxcli#1981).
 			fmt.Fprintln(out, propertyReport(diffSide{oursJSON, d1}, diffSide{theirsJSON, d2}, manual))
+			fmt.Fprint(out, wholeUnitDropReport(diffSide{oursJSON, d1}, diffSide{theirsJSON, d2}, manual, nil))
 		}
 		// The abort below resets the index; what the human resolved and staged
 		// for the non-model files is recorded first, and --plan restores it
@@ -966,6 +972,17 @@ func applyPlan(root string, repo *gitNoteRepo, mprAbs, mprPath, ref, planPath, m
 		}
 	}
 
+	// Say what the whole-unit choices drop before they are applied: changes
+	// of the other side to the same unit that did not conflict (ako/mxcli#2325).
+	if runners.diff != nil {
+		base := filepath.Join(revs.baseDir, filepath.FromSlash(repo.MPRPath))
+		oursJSON := filepath.Join(revs.tmp, "ours-diff.json")
+		theirsJSON := filepath.Join(revs.tmp, "theirs-diff.json")
+		d1 := runners.diff(base, filepath.Join(revs.oursDir, filepath.FromSlash(repo.MPRPath)), oursJSON)
+		d2 := runners.diff(base, filepath.Join(revs.theirsDir, filepath.FromSlash(repo.MPRPath)), theirsJSON)
+		fmt.Fprint(out, wholeUnitDropReport(diffSide{oursJSON, d1}, diffSide{theirsJSON, d2}, open, take))
+	}
+
 	// The engine's result first, then each planned unit whole from its
 	// side's commit, its marker cleared. The hashes are rewritten from the
 	// files — files are the truth — and the gate refuses (and aborts) a
@@ -1055,4 +1072,103 @@ func realMxDiff(base, mine, outJSON string) error {
 		return fmt.Errorf("mx diff: %v: %s", err, strings.TrimSpace(string(b)))
 	}
 	return nil
+}
+
+// --- what a whole-unit choice drops (ako/mxcli#2325) -------------------------
+
+// unitChanges reads one side's mx diff into its top-level changes per unit:
+// the elements the side added, changed or removed ("Entity 'Shop.OursOnly'",
+// "Attribute 'Shop.Customer.Name'"). ok is false for a side whose diff failed
+// or cannot be read.
+func unitChanges(side diffSide) (changes map[string][]string, types map[string]string, ok bool) {
+	if side.err != nil {
+		return nil, nil, false
+	}
+	raw, err := os.ReadFile(side.path)
+	if err != nil {
+		return nil, nil, false
+	}
+	var d mxDiffFile
+	if err := json.Unmarshal(bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf")), &d); err != nil {
+		return nil, nil, false
+	}
+	changes, types = map[string][]string{}, map[string]string{}
+	for _, u := range d.UnitDifferences {
+		types[u.ID] = u.Type
+		for _, c := range u.ChangeDetails {
+			desc := c.ChangeDescription
+			if desc == "" {
+				desc = c.Property
+			}
+			if desc != "" {
+				changes[u.ID] = append(changes[u.ID], desc)
+			}
+		}
+	}
+	return changes, types, true
+}
+
+// onlyIn returns the entries of a that b does not have, in a's order.
+func onlyIn(a, b []string) []string {
+	in := map[string]bool{}
+	for _, x := range b {
+		in[x] = true
+	}
+	var out []string
+	for _, x := range a {
+		if !in[x] {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// wholeUnitDropReport says, per conflicted unit, what each "take" drops that
+// does not conflict: a plan takes a unit whole, from one side's commit, so
+// every change of the other side to that unit goes — not only the conflicting
+// element. The property report lists both sides' changes; nothing said that
+// "theirs" also discards an entity only ours added (ako/mxcli#2325). take, when
+// non-nil, limits the report to the side each unit's plan chose. Empty when
+// neither side's diff can be read or nothing would be dropped.
+func wholeUnitDropReport(ours, theirs diffSide, unitIDs []string, take map[string]string) string {
+	oc, ot, ok1 := unitChanges(ours)
+	tc, tt, ok2 := unitChanges(theirs)
+	if !ok1 || !ok2 {
+		return ""
+	}
+	var b strings.Builder
+	for _, id := range unitIDs {
+		typ := ot[id]
+		if typ == "" {
+			typ = tt[id]
+		}
+		label := shortCommit(id)
+		if typ != "" {
+			label += " (" + typ + ")"
+		}
+		dropsOurs := onlyIn(oc[id], tc[id])
+		dropsTheirs := onlyIn(tc[id], oc[id])
+		if (take == nil || take[id] == "theirs") && len(dropsOurs) > 0 {
+			fmt.Fprintf(&b, "  %s — \"take\": \"theirs\" also drops these changes of yours, which do not conflict:\n", label)
+			for _, c := range dropsOurs {
+				fmt.Fprintf(&b, "      %s\n", c)
+			}
+		}
+		if (take == nil || take[id] == "ours") && len(dropsTheirs) > 0 {
+			fmt.Fprintf(&b, "  %s — \"take\": \"ours\" also drops these changes of theirs, which do not conflict:\n", label)
+			for _, c := range dropsTheirs {
+				fmt.Fprintf(&b, "      %s\n", c)
+			}
+		}
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	head := "A plan takes each unit whole, from one side:\n"
+	if take != nil {
+		head = "Warning: the plan takes each unit whole, so it drops changes that did not conflict:\n"
+	}
+	return head + b.String() +
+		"  To keep both sides' changes, resolve the unit in Studio Pro (Version Control › Merge Changes Here), " +
+		"or re-apply the dropped changes after the merge.\n"
 }
