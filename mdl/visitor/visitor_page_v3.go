@@ -923,7 +923,16 @@ func parseWidgetPropertyV3(ctx parser.IWidgetPropertyV3Context, widget *ast.Widg
 		if xc := propCtx.XpathConstraint(); xc != nil {
 			widget.Properties["VisibleIf"] = buildConditionalExpression(xc) // MDL-DEPR081
 		} else if e := propCtx.Expression(); e != nil {
-			widget.Properties["VisibleIf"] = bareArgumentText(e)
+			text := bareArgumentText(e)
+			// `roles (Mod.A, …) and <condition>` is both settings at once:
+			// Studio Pro keeps the roles beside the condition, and both
+			// apply (ako/mxcli#2319). Stored whole, the text was an invalid
+			// expression and the roles were lost.
+			if roles, cond, ok := splitLeadingVisibleRoles(text); ok {
+				widget.Properties["VisibleRoles"] = roles
+				text = cond
+			}
+			widget.Properties["VisibleIf"] = text
 		} else if valCtx := propCtx.PropertyValueV3(); valCtx != nil {
 			widget.Properties["Visible"] = buildPropertyValueV3(valCtx)
 		}

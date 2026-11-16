@@ -208,6 +208,9 @@ func (pb *pageBuilder) attributeConditions(w *ast.WidgetV3, vw *ast.VisibleWhenV
 // condition on the same element (TestApp WorkflowCommons), so they never
 // replace it. Runs after applyConditionalSettings and applyVisibleWhen.
 func applyVisibleRoles(widget pages.Widget, w *ast.WidgetV3) error {
+	if err := refuseRolesInExpressions(w); err != nil {
+		return err
+	}
 	if len(widgetVisibleRoles(w)) == 0 {
 		return nil
 	}
@@ -313,4 +316,16 @@ func (pb *pageBuilder) getEnumerations() ([]*model.Enumeration, error) {
 		pb.execCache.enumerations = enums
 	}
 	return enums, nil
+}
+
+// refuseRolesInExpressions is MDL-WIDGET54 at exec: a `roles (…)` call left in
+// a widget expression would be stored as invalid expression text with the
+// role restriction lost (ako/mxcli#2319).
+func refuseRolesInExpressions(w *ast.WidgetV3) error {
+	for _, key := range expressionWidgetProps {
+		if expr, ok := lookupWidgetProp(w, key); ok && exprCallsRoles(expr) {
+			return mdlerrors.NewValidation(rolesInExpressionMessage(w.Type, w.Name, key))
+		}
+	}
+	return nil
 }
