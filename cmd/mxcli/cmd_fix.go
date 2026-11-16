@@ -151,5 +151,11 @@ func reportFix(out io.Writer, what string, res *docker.HarvestResult) {
 	for _, r := range res.Removed {
 		fmt.Fprintf(out, "  Note: the tool removed a unit this did not remove: %s\n", r)
 	}
+	if n := len(res.LeftAsStored); n > 0 {
+		fmt.Fprintf(out, "  Left as stored: %d unit(s) the tool re-saved that hold no widget (re-encoded only):\n", n)
+		for _, u := range res.LeftAsStored {
+			fmt.Fprintf(out, "    %s\n", u)
+		}
+	}
 	fmt.Fprintln(out, "\n  Next: 'mxcli docker check -p <project.mpr>'")
 }
