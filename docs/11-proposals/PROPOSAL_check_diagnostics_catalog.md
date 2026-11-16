@@ -64,11 +64,21 @@ Integration/REST/OData 129, Security 29, Workflows 15, Navigation 7.
 `CE`/`CW` codes** across ~24 `validate_*.go` files and ~30 lint rules — proof the approach
 works; the catalog just turns "port as we hit them" into an ordered backlog of ~1240 left.
 
-**There is no cheaper Mendix-native shortcut.** `mx check` (consistency only, no build)
-measured **~22 s** — *slower* than an incremental build — because both cold-start the .NET
-model engine + load the full `.mpr`. So mxcli's Go-native `check` is the **only** path under
-the ~18–60 s floor. That is the entire justification for porting rules into Go rather than
-shelling out to `mx check`.
+**Is there a cheaper Mendix-native shortcut?** Not established. `mx check` (consistency
+only, no build) was measured **once, at ~22 s** (project size and warm/cold state not
+recorded), *slower* than an incremental build, because both cold-start the .NET model
+engine and load the full `.mpr`. A later measurement on one small project (mxcli v0.32.0,
+Mendix 11.16.1, ako/mxcli#1258) gave `mxcli docker check` 7.6 s and Mendix CLI 2's
+`mendix check` (an in-process checker that emits CE codes such as CE0109/CE0844) 1.2 s.
+Two single-project numbers do not settle it, but they show 22 s is not a constant.
+`mendix check` also reported false errors on some real apps (tester report), so it is a
+candidate *pre-filter* for the harvest loop, not a replacement oracle: any finding must be
+confirmed against MxBuild before a rule is ported.
+
+The justification for a Go-native `check` therefore rests on more than speed: it needs no
+.NET runtime or mxbuild download, runs in the pre-write path before any model exists on
+disk, and can be wired into `exec`. A faster Mendix-native checker would change the cost of
+the *harvest loop*, not the case for porting.
 
 ## Extraction methodology
 
@@ -128,11 +138,14 @@ button, or a URL."*
 2. **Port by tier then frequency.** Tier A first (cheapest, highest hit-rate), Tier B behind
    the type-inference work, Tier C case-by-case, Tier D never. Route `CE`→`check` (hard),
    `CW`→`lint` (advisory) — severity is free from the prefix.
-3. **Harvest-against-the-oracle loop.** Use `mx check` (~22 s, the full 1318-code truth) as
-   an **offline oracle** over a corpus of deliberately-broken projects; diff its findings
+3. **Harvest-against-the-oracle loop.** Use `mx check` (the full 1318-code truth; ~22 s in
+   one measurement, see above) as an **offline oracle** over a corpus of deliberately-broken projects; diff its findings
    against `mxcli check`; the misses are the ranked backlog; port; re-run to confirm parity.
    This is the build tool for the porting effort, and reuses the "run mxbuild over broken
    projects and harvest output" fallback from the very first spike as a *deliberate* tool.
+   Open spike: run Mendix CLI 2's `mendix check` over the same fixtures as a fast
+   pre-filter and record its agreement with `mx check` per code (false-positive and
+   false-negative rate) before trusting it for anything.
 4. `PROPOSAL_check_mxbuild_gap_heuristics.md` is the first tactical instance; this proposal
    is the strategic program it fits into.
 
@@ -176,6 +189,10 @@ button, or a URL."*
    per-rule trigger predicate lives in Mendix's `.cs` (the `LOCATION` breadcrumb) and must
    be reverse-engineered per rule. The catalog gives the *target + message*, not the
    predicate — sizing must account for that.
-4. **Overlap with `PROPOSAL_check_mxbuild_gap_heuristics.md`.** Fold that proposal's 6 cases
+4. **Fast oracle.** Is Mendix CLI 2's `mendix check` accurate enough to be the
+   first-pass oracle, with `mx check` confirming only the codes it reports? Needs the
+   per-code agreement measurement above; cold/warm and project-size timings for all three
+   (`mx check`, `docker check`, `mendix check`) should be recorded alongside it.
+5. **Overlap with `PROPOSAL_check_mxbuild_gap_heuristics.md`.** Fold that proposal's 6 cases
    in as the first harvested batch, or keep it separate and cross-link? (Recommend: keep it
    as the tactical pilot; this proposal owns the methodology + backlog.)
