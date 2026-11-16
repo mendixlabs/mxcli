@@ -386,8 +386,11 @@ moduleSettingProperty
     ;
 
 // ALTER MODULE name SET ( Version: '…', ModuleType: app | addon )
+// SET DOCUMENTATION writes the module's documentation, which Mendix keeps on
+// the module's domain model (DomainModels$DomainModel.Documentation) — the
+// same property a doc comment before CREATE MODULE sets (ako/mxcli#2305).
 alterModuleSetStatement
-    : ALTER MODULE (qualifiedName | IDENTIFIER) SET moduleSettingsBody
+    : ALTER MODULE (qualifiedName | IDENTIFIER) SET (moduleSettingsBody | DOCUMENTATION STRING_LITERAL)
     ;
 
 // =============================================================================

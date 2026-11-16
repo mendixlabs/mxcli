@@ -29,6 +29,13 @@ func TestModuleSettings_Parse(t *testing.T) {
 		src:  "alter module Inventory set (Version: '1.0.0-rc.1+build.5');",
 		want: &ast.AlterModuleSetStmt{ModuleName: "Inventory", Settings: ast.ModuleSettingsClause{Version: str("1.0.0-rc.1+build.5")}},
 	}, {
+		// ako/mxcli#2305: the module's documentation, and '' to clear it.
+		src:  "alter module Inventory set documentation 'Stock levels and moves.';",
+		want: &ast.AlterModuleSetStmt{ModuleName: "Inventory", DocumentationSet: true, Documentation: "Stock levels and moves."},
+	}, {
+		src:  "alter module Inventory set documentation '';",
+		want: &ast.AlterModuleSetStmt{ModuleName: "Inventory", DocumentationSet: true},
+	}, {
 		// Control: no list states no setting, so a rerun keeps what is stored.
 		src:  "create or modify module Inventory;",
 		want: &ast.CreateModuleStmt{Name: "Inventory", CreateOrModify: true},

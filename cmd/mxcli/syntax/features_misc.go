@@ -1634,6 +1634,29 @@ alter module Inventory set (Version: '2.4.0');
 	})
 
 	Register(SyntaxFeature{
+		Path:    "module.documentation",
+		Summary: "A module's documentation: one sentence on what the module is for (shown by reports and Studio Pro)",
+		Keywords: []string{
+			"module documentation", "module description", "module purpose", "domain model documentation",
+			"doc comment", "describe module",
+		},
+		Syntax: `/** <documentation> */
+CREATE [OR MODIFY] MODULE <name>;
+ALTER MODULE <name> SET DOCUMENTATION '<documentation>';   -- '' clears it
+DESCRIBE MODULE <name>;   -- prints it as the doc comment
+-- Mendix keeps a module's documentation on its domain model
+-- (DomainModels$DomainModel.Documentation); CATALOG.MODULES.DomainModelDocumentation
+-- has it, and report map / report architecture show it as the module's purpose.
+-- A plain CREATE of an existing module leaves it unchanged; CREATE OR MODIFY sets it.
+-- Stating the stored text again writes nothing.`,
+		Example: `mdl 1;
+/** Shift swaps between colleagues: proposals, approval and the marketplace. */
+create or modify module Swaps;
+
+alter module Swaps set documentation 'Shift swaps between colleagues, with approval.';`,
+	})
+
+	Register(SyntaxFeature{
 		Path:     "module.jar-dependencies",
 		Features: []string{"modules/jar_dependencies", "modules/jar_dependency_exclusions"},
 		Summary:  "Manage Maven/JAR dependencies in a module's settings",
