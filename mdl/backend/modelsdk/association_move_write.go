@@ -11,6 +11,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/modelsdk/canon"
 	"github.com/mendixlabs/mxcli/modelsdk/codec"
 	"github.com/mendixlabs/mxcli/modelsdk/element"
 	genDm "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
@@ -425,10 +426,6 @@ func (b *Backend) MoveEntity(entity *domainmodel.Entity, sourceDMID, targetDMID 
 		}
 	}
 
-	if err := b.persistDM(sourceDMID, sourceDM); err != nil {
-		return nil, fmt.Errorf("MoveEntity: persist source: %w", err)
-	}
-
 	// Add the (rebuilt) entity to the target DM, carrying the identities the
 	// rebuild has no business re-minting — the same two carries UpdateEntity does,
 	// which MoveEntity never got (#657 for the entity, #1119 for its children).
@@ -450,8 +447,41 @@ func (b *Backend) MoveEntity(entity *domainmodel.Entity, sourceDMID, targetDMID 
 	// and the access rules' captions (ako/mxcli#801).
 	carryStoredEntity(ge, orig, entity)
 	targetDM.AddEntities(ge)
-	if err := b.persistDM(targetDMID, targetDM); err != nil {
-		return nil, fmt.Errorf("MoveEntity: persist target: %w", err)
+
+	// The move writes two units, and a failure between them lost the entity:
+	// removed from the source, refused by the target, in neither module
+	// (ako/mxcli#2323). A script that stops rolls the source back with the rest
+	// of the run, but `exec --continue-on-error` goes on to the next statement
+	// with the source written. So both units are checked against the refusals
+	// the write path makes on content before either is written, and a target
+	// write that fails anyway puts the source back as it was.
+	sourceContents, err := (&codec.Encoder{}).Encode(sourceDM)
+	if err != nil {
+		return nil, fmt.Errorf("MoveEntity: encode source: %w", err)
+	}
+	targetContents, err := (&codec.Encoder{}).Encode(targetDM)
+	if err != nil {
+		return nil, fmt.Errorf("MoveEntity: encode target: %w", err)
+	}
+	if err := refusedContents(sourceDMID, sourceContents); err != nil {
+		return nil, fmt.Errorf("MoveEntity: source: %w; nothing was written", err)
+	}
+	if err := refusedContents(targetDMID, targetContents); err != nil {
+		return nil, fmt.Errorf("MoveEntity: target: %w; nothing was written", err)
+	}
+	storedSource, err := b.reader.GetRawUnitBytes(string(sourceDMID))
+	if err != nil {
+		return nil, fmt.Errorf("MoveEntity: read source: %w", err)
+	}
+	if err := b.writer.UpdateRawUnit(string(sourceDMID), sourceContents); err != nil {
+		return nil, fmt.Errorf("MoveEntity: persist source: persist domain model %s: %w", sourceDMID, err)
+	}
+	if err := b.writer.UpdateRawUnit(string(targetDMID), targetContents); err != nil {
+		if rerr := b.writer.UpdateRawUnitPatch(string(sourceDMID), storedSource); rerr != nil {
+			return nil, fmt.Errorf("MoveEntity: persist target: persist domain model %s: %w; "+
+				"restoring the source domain model also failed, so the entity is in neither module: %v", targetDMID, err, rerr)
+		}
+		return nil, fmt.Errorf("MoveEntity: persist target: persist domain model %s: %w; the source domain model was restored", targetDMID, err)
 	}
 	// A cross-association in any OTHER module that names the moved entity is
 	// re-pointed; nothing else in the move rewrites that module's unit (#628).
@@ -459,4 +489,14 @@ func (b *Backend) MoveEntity(entity *domainmodel.Entity, sourceDMID, targetDMID 
 		return nil, fmt.Errorf("MoveEntity: re-point cross-associations: %w", err)
 	}
 	return converted, nil
+}
+
+// refusedContents is the refusal the write path makes on a unit's content
+// alone, before anything is stored (Writer.updateUnit): two elements sharing an
+// $ID, or a bare attribute reference.
+func refusedContents(unitID model.ID, contents []byte) error {
+	if err := canon.DuplicateElementIDError(string(unitID), contents); err != nil {
+		return err
+	}
+	return canon.BareAttributeRefError(string(unitID), contents)
 }
