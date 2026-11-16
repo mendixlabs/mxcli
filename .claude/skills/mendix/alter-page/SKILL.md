@@ -375,13 +375,13 @@ Replaces the target widget with one or more new widgets. The new widgets use the
 ### MOVE and WRAP - Rearrange Existing Widgets
 
 ```sql
+mdl 1;
 alter page MyModule.Order_Lines {
-  wrap dgLines in { dataview dvOrder (DataSource: $Order) { } }   -- named container | dataview | groupbox
-  move txtTitle into dvOrder;                                     -- or after / before a widget
+  wrap dgLines in { dataview dvOrder (DataSource: $Order) { } } move txtTitle into dvOrder;
 };
 ```
 
-Neither rebuilds the widget, so a legacy classic Data grid can be wrapped in a data view after an upgrade. A move into itself, or into a non-container, is refused.
+`wrap` takes a named container, dataview or groupbox; `move` goes `after`, `before` or `into`. Neither rebuilds the widget, so a legacy classic Data grid can be wrapped in a data view after an upgrade. A move into itself, or into a non-container, is refused.
 
 ### DataGrid Column Operations
 
