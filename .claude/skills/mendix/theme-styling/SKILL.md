@@ -11,12 +11,12 @@ description: "The SCSS workflow and its traps — where styling actually compile
 | lines | section |
 |---|---|
 | 24-43 | When to Use This Skill |
-| 44-297 | SCSS Compilation Chain |
-| 298-316 | CSS Hot-Reload Workflow |
-| 317-412 | Caveats |
-| 413-427 | Validation with `mxcli check -p` |
-| 428-436 | Checklist |
-| 437-439 | Default styling + runtime theme switching (`mxcli theme list/show/create/apply/remove/switcher`, `mxcli new --theme`) |
+| 44-306 | SCSS Compilation Chain |
+| 307-325 | CSS Hot-Reload Workflow |
+| 326-421 | Caveats |
+| 422-436 | Validation with `mxcli check -p` |
+| 437-445 | Checklist |
+| 446-448 | Default styling + runtime theme switching (`mxcli theme list/show/create/apply/remove/switcher`, `mxcli new --theme`) |
 
 <!-- /skill-index -->
 # Theme & Styling — SCSS Workflow and Caveats
