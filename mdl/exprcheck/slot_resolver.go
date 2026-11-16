@@ -37,8 +37,11 @@ var staticExpectations = map[string]SlotConstraint{
 	"SendEmailStmt.Port":          {Kind: KindInteger, AlsoAccepts: []TypeKind{KindLong}, Mxbuild: "CE9528 \"The expression for 'Server Port' should be of type Integer/Long\""},
 	"SendEmailStmt.Credential":    {Kind: KindString, Mxbuild: "CE9528 \"The expression for '…' should be of type String\""},
 	"SendEmailStmt.TemplateParam": {Kind: KindString},
-	"MfSetStmt.Value":             {Kind: KindUnknown, ResolveBy: "TargetVariable"},
-	"DeclareStmt.InitialValue":    {Kind: KindUnknown, ResolveBy: "DeclareType"},
+	// Resolved by the adapter, which hands the declared primitive type to the
+	// checker as Context.Target (checkTargetKind), not by a slot-path qualifier:
+	// DECLARE, SET and RETURN are typed by their own declaration.
+	"MfSetStmt.Value":          {Kind: KindUnknown, ResolveBy: "TargetVariable"},
+	"DeclareStmt.InitialValue": {Kind: KindUnknown, ResolveBy: "DeclareType"},
 }
 
 type defaultSlotResolver struct{}
