@@ -128,6 +128,13 @@ func runMarketplaceUpdate(cmd *cobra.Command, args []string) error {
 	if noBaseline {
 		fmt.Fprintf(out, "\n--no-baseline: skipping the local-edit check for %s.\n", moduleName)
 		fmt.Fprintln(out, "  Any local edits to this module will be discarded without being named.")
+		deps, derr := marketplace.SnapshotDependents(mprPath, moduleName, newBackendFactory())
+		if derr != nil {
+			return fmt.Errorf("find associations other modules own into %s: %w", moduleName, derr)
+		}
+		if drift, err = noBaselineGate(out, moduleName, deps, force, saveEdits); err != nil {
+			return err
+		}
 	} else {
 		base, berr := pickVersion(versions.Items, installedVersionID, installedVersion)
 		if berr != nil {
@@ -195,6 +202,29 @@ func runMarketplaceUpdate(cmd *cobra.Command, args []string) error {
 	// A new version can declare new managed Java dependencies (ako/mxcli#2028).
 	syncInstalledJarDependencies(out, mprPath)
 	return nil
+}
+
+// noBaselineGate is the part of the local-edit check --no-baseline can still
+// make: the associations other modules own that reach into the module. Finding
+// them needs no baseline, and the update deletes them all the same, so they
+// are saved, refused without --force and named in the report
+// (ako/mxcli#2368). Edits to the module itself stay unknown.
+func noBaselineGate(out io.Writer, module string, deps []marketplace.Element, force bool, saveEdits string) (*marketplace.Report, error) {
+	drift := &marketplace.Report{Module: module, Dependents: deps}
+	if len(deps) == 0 {
+		return drift, nil
+	}
+	if saveEdits != "" {
+		written, unsaved, err := marketplace.SaveEdits(saveEdits, drift)
+		if err != nil {
+			return nil, err
+		}
+		reportSavedEdits(out, saveEdits, written, unsaved)
+	}
+	if err := gateOnLocalEdits(out, drift, force, saveEdits); err != nil {
+		return nil, err
+	}
+	return drift, nil
 }
 
 // gateOnLocalEdits refuses an update that would destroy local work, unless the
@@ -343,7 +373,7 @@ func init() {
 	marketplaceUpdateCmd.Flags().String("save-edits", "", "write locally changed elements to this directory as re-executable MDL")
 	marketplaceUpdateCmd.Flags().Bool("force", false, "update even though local edits will be discarded")
 	marketplaceUpdateCmd.Flags().Bool("no-baseline", false,
-		"update without checking for local edits, when the installed version is no longer published")
+		"update without checking for local edits to the module, when the installed version is no longer published (associations other modules own into it are still checked)")
 	marketplaceUpdateCmd.Flags().String("profile", auth.ProfileDefault, "credential profile")
 
 	marketplaceCmd.AddCommand(marketplaceUpdateCmd)
