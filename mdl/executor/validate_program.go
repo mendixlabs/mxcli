@@ -46,6 +46,8 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// declares no variable (MDL063, #953). The script answers for the actions
 	// it creates; the project for the rest.
 	voids := newVoidCodeActions(prog, project)
+	// owner Both between an entity and itself or its generalization (CE0002).
+	violations = append(violations, ValidateAssociationOwnerBoth(prog)...)
 	for _, stmt := range prog.Statements {
 		// Check enumeration values for reserved words
 		if enumStmt, ok := stmt.(*ast.CreateEnumerationStmt); ok {
