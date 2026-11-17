@@ -22,7 +22,7 @@ import (
 // scheduler's jitter is small beside it, exits 0 and reports fixed counts,
 // except:
 //
-//	slowOn  a command line containing this sleeps first
+//	slowOn  a command line containing this sleeps first; "a|b" slows either
 //	failOn  a command line containing this exits non-zero
 //	writeOn a command line containing this rewrites a unit file with new bytes
 func fakeMxcli(t *testing.T, name, slowOn, failOn, writeOn string) string {
@@ -43,6 +43,14 @@ const fakeBase, fakeSlow = "0.03", "0.25"
 
 func fakeMxcliScript(t *testing.T, name, slowOn, failOn, writeOn, callLog, base, slow string) string {
 	t.Helper()
+	slowWhen := "false"
+	if slowOn != "" {
+		var alts []string
+		for _, alt := range strings.Split(slowOn, "|") {
+			alts = append(alts, fmt.Sprintf("match %q", alt))
+		}
+		slowWhen = strings.Join(alts, " || ")
+	}
 	script := fmt.Sprintf(`#!/bin/sh
 if [ "$1" = version ]; then echo "mxcli version %[1]s"; exit 0; fi
 match() { [ -n "$1" ] && case "$ARGS" in *"$1"*) return 0;; esac; return 1; }
@@ -59,14 +67,14 @@ if [ -n "$outdir" ]; then
   mkdir -p "$outdir/mprcontents" && echo mpr > "$outdir/App.mpr" && echo unit > "$outdir/mprcontents/unit.mxunit"
 fi
 sleep %[6]s
-if match %[2]q; then sleep %[7]s; fi
+if %[2]s; then sleep %[7]s; fi
 if match %[3]q; then echo "unknown statement" >&2; exit 3; fi
 if match %[4]q; then date +%%s%%N >> "$(dirname "$project")/mprcontents/unit.mxunit"; fi
 if [ -n "$MXCLI_STATS_FILE" ]; then
   echo '{"unit_file_reads":7,"writes_offered":2,"writes_written":1}' >> "$MXCLI_STATS_FILE"
 fi
 echo ok
-`, name, slowOn, failOn, writeOn, callLog, base, slow)
+`, name, slowWhen, failOn, writeOn, callLog, base, slow)
 	path := filepath.Join(t.TempDir(), name)
 	if err := writeExecutable(path, []byte(script)); err != nil {
 		t.Fatal(err)
@@ -296,7 +304,9 @@ func TestCopyProject_LeavesTheCachesBehind(t *testing.T) {
 func TestRun_RuntimeSessionRunsArmsInTurnAndAlwaysStops(t *testing.T) {
 	t.Parallel()
 	callLog := filepath.Join(t.TempDir(), "calls.log")
-	candidate := fakeMxcliLogging(t, "candidate", "", "", "", callLog)
+	// Both of hot-apply's commands sleep 300 ms more in the candidate, so the
+	// step can be checked against a floor that a stalled runner only raises.
+	candidate := fakeMxcliScript(t, "candidate", "single-edit.mdl|run wait", "", "", callLog, fakeBase, "0.3")
 	baseline := fakeMxcliLogging(t, "baseline", "", "entity-edit.mdl", "", callLog)
 	cfg := testConfig(t, candidate, baseline)
 	cfg.sizes, cfg.runtimeVersion, cfg.runtimeReps, cfg.pageCheck = nil, "11.13.0", 1, true
@@ -353,9 +363,12 @@ func TestRun_RuntimeSessionRunsArmsInTurnAndAlwaysStops(t *testing.T) {
 
 	if st := stepNamed(t, s, "hot-apply"); st.Baseline == nil {
 		t.Error("hot-apply ran before the baseline failed and has no baseline")
-	} else if one := stepNamed(t, s, "test-attach").Candidate.Wall.Median; st.Candidate.Wall.Median < 1.3*one {
-		// Two commands, the edit and the wait, measured as one step.
-		t.Errorf("hot-apply took %.0f ms against %.0f ms for a one-command step, want the two commands summed", st.Candidate.Wall.Median, one)
+	} else if got := st.Candidate.Wall.Median; got < 600 {
+		// Two commands, the edit and the wait, measured as one step: their two
+		// 300 ms delays sum to 600, where either alone is about 330. Comparing
+		// against another step's single sample failed on the nightly when that
+		// sample stalled (72 ms against 108).
+		t.Errorf("hot-apply took %.0f ms, want at least the 600 ms its two commands' delays sum to", got)
 	}
 	for _, name := range []string{"apply-entity", "stop", "test-cold"} {
 		if stepNamed(t, s, name).Baseline != nil {
