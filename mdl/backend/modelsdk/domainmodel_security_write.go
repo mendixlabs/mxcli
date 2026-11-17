@@ -52,11 +52,20 @@ func (b *Backend) AddEntityAccessRule(p backend.EntityAccessRuleParams) error {
 	var rule *genDm.AccessRule
 	for _, el := range ent.AccessRulesItems() {
 		r, ok := el.(*genDm.AccessRule)
+		// The same constraint written with other whitespace is the same rule
+		// (ako/mxcli#2355): matched byte for byte, a grant wrapped over two
+		// lines added a second, identical rule beside one stored on one line.
 		if ok && sameStringSet(r.ModuleRolesQualifiedNames(), p.RoleNames) &&
-			r.XPathConstraint() == p.XPathConstraint {
+			types.SameXPathConstraint(r.XPathConstraint(), p.XPathConstraint) {
 			rule = r
 			break
 		}
+	}
+	// A merged rule keeps its stored spelling, so a re-run that only formats
+	// the constraint differently writes nothing.
+	xpath := p.XPathConstraint
+	if rule != nil {
+		xpath = rule.XPathConstraint()
 	}
 
 	// Everything the matched rule already grants, so the write below widens it
@@ -98,7 +107,7 @@ func (b *Backend) AddEntityAccessRule(p backend.EntityAccessRuleParams) error {
 	if def := types.HigherAccessRights(p.DefaultMemberAccess, priorDefault); def != "" {
 		rule.SetDefaultMemberAccessRights(def)
 	}
-	rule.SetXPathConstraint(p.XPathConstraint)
+	rule.SetXPathConstraint(xpath)
 	for _, ma := range p.MemberAccesses {
 		m := genDm.NewMemberAccess()
 		assignID(m)
