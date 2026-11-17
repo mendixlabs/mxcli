@@ -136,6 +136,33 @@ MxBuild, Mendix CLI 2 (11.16 build), Linux x64, one clean project from `mxcli ne
   None is a check to port, and none is a CLI 2 false positive on a healthy project. Defining
   the missing entity also made `mendix check` raise CE8412 (the demo users' entity must be
   `System.User`): a result of the control, not of the project.
+- **MxBuild reports errors in stages; `mendix check` does not.** Measured on MxBuild 11.16.1
+  with six single defects and every ordered pair of them (30 documents, both orders) in one
+  project, plus a reference defect:
+
+  | stage | what is reported | what it hides |
+  |---|---|---|
+  | 0 | a reference that does not resolve (CE1613) | **every other error in every document**, a page's CE0149 included |
+  | 1 | a duplicate variable name (CE0111) | every other error in the same microflow |
+  | 2 | an undefined variable (CE0109) | the stage 3 group, in the same microflow |
+  | 3 | CE0117 (wrong type), CE0068 (return in a loop), CE0038 (declare without a value), CE0067 (no final return) | nothing: all four are reported together |
+
+  With one wrong-parameter call (CE1613) in 13 documents, MxBuild reported those 13 errors and
+  nothing from the other 36 documents; `mendix check` reported 115 errors in 50. Dropping the
+  reference defect made the undefined variable, the wrong type and the page's CE0149 appear
+  together. No pair differed by order, and no two defects share a code. `mendix check` reported
+  both defects in all 30 pair documents (judged by its own codes: CE0844 is its name for
+  MxBuild's CE0117). Not measured: Studio Pro itself (the same consistency checker, so likely
+  the same), documents other than microflows and pages, and the order among codes outside these
+  six. What follows from it:
+  - **Report every real error.** `mxcli check` reporting more than MxBuild is not a mismatch:
+    the rest are real, only hidden until the earlier stage is fixed. Copying the staging would
+    send an author through one fix-and-rebuild loop per stage.
+  - **One defect per fixture**, and a control with it removed. A fixture holding two defects
+    can look as if one is absent (the `captrack-19` rule stood down for exactly this reason).
+  - **The bug records skew early.** A later-stage code shows up in a report only after the
+    earlier ones were fixed, so the field ranking in `make diag-coverage` under-counts it.
+  - **Run the oracle on a project whose references resolve**, or stage 0 hides the rest.
 - **Conclusion.** `mendix check` works as a first-pass oracle: run it, then confirm any
   code it reports against `mx check` before porting. Run it on a project whose references
   resolve (no CE7710 / CE1613): on one that does not, it reports cascades MxBuild suppresses. It is a proprietary binary, so the
