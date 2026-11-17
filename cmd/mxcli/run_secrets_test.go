@@ -113,7 +113,7 @@ func TestDetachArgs_KeepsAFlagValueThatLooksLikeAFlag(t *testing.T) {
 // The refusal names a way that works: the runtime's database password does not
 // read PGPASSWORD, so suggesting it gave a run with the default password.
 func TestRestartSecretRefusal_SuggestsAReference(t *testing.T) {
-	msg := restartSecretRefusal("/abs/app.mpr")
+	msg := restartSecretRefusal("/abs/app.mpr", nil)
 	if strings.Contains(msg, "PGPASSWORD") {
 		t.Errorf("the refusal still suggests PGPASSWORD:\n%s", msg)
 	}

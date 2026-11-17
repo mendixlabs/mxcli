@@ -137,3 +137,32 @@ func hasRedactedArgs(args []string) bool {
 	}
 	return false
 }
+
+// redactedArgNames names each value of args that redactArgs replaced, as the
+// flag a user would change: "--db-password", "--constant Mod.Key",
+// "--runtime-setting DatabasePassword". run restart's refusal lists them
+// (ako/mxcli#2313): a run with one literal secret among several @env:
+// references read as "references are not replayed".
+func redactedArgNames(args []string) []string {
+	var out []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		flag, val, inline := a, "", false
+		if k := strings.Index(a, "="); strings.HasPrefix(a, "--") && k > 0 {
+			flag, val, inline = a[:k], a[k+1:], true
+		}
+		if !inline && i+1 < len(args) && (secretRunFlags[flag] || flag == "--constant" || flag == "--runtime-setting") {
+			i++
+			val = args[i]
+		}
+		switch {
+		case secretRunFlags[flag] && val == redactedValue:
+			out = append(out, flag)
+		case flag == "--constant" || flag == "--runtime-setting":
+			if name, v, ok := strings.Cut(val, "="); ok && v == redactedValue {
+				out = append(out, flag+" "+name)
+			}
+		}
+	}
+	return out
+}
