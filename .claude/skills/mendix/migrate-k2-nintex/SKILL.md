@@ -449,7 +449,7 @@ create microflow CRM.SUB_GetManager ($Employee: HR.Employee)
 returns HR.Employee as $Manager
 begin
   retrieve $Manager from HR.Employee
-    where [HR.Employee_Reports = $Employee];
+    where [HR.Employee_Reports = $Employee] first;
   return $Manager;
 end;
 ```
