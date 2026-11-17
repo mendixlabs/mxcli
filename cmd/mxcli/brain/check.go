@@ -151,6 +151,8 @@ type SliceProgress struct {
 	// Unanchored is requirements with no anchor at all. They cannot be
 	// measured, and are counted apart rather than silently called planned.
 	Unanchored int `json:"unanchored"`
+	// Milestone is the milestone the slice's frontmatter names, if any.
+	Milestone string `json:"milestone,omitempty"`
 }
 
 // Total is every requirement in the slice. Open questions are excluded: they
@@ -287,6 +289,7 @@ func Check(s *Store, r Resolver, shards []string) (Report, error) {
 			rep.Anchors += progress.anchors
 			rep.ResolvedN += progress.resolved
 			rep.Unverifiable += progress.unverifiable
+			progress.Milestone = s.SliceMilestone(SliceOf(shard))
 			rep.Slices = append(rep.Slices, progress.SliceProgress)
 			rep.Open = append(rep.Open, progress.open...)
 			rep.Requirements = append(rep.Requirements, progress.requirements...)

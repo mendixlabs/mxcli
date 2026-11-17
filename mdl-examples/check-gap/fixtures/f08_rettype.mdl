@@ -1,0 +1,2 @@
+mdl 1;
+create microflow Sp.F08 ($I: Sp.Item) returns String as $R begin return $I/Amount; end;

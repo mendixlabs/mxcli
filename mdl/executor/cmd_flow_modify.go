@@ -889,6 +889,10 @@ func withImplicitEnd(declared, stored []ast.MicroflowStatement, returnVar string
 
 // patchDiff accumulates the operations of one diff.
 type patchDiff struct {
+	// before is the declared statement before the run gap is diffing, nil at
+	// the start of a list: the statement whose @curve draws the connector
+	// into an inserted run (ako/mxcli#2311).
+	before  ast.MicroflowStatement
 	loc     *storedLocator
 	ops     []*ast.AlterFlowOperation
 	targets []mfmutator.Candidate
@@ -913,6 +917,10 @@ func (pd *patchDiff) statements(declared, stored []ast.MicroflowStatement) error
 		dEnd, sEnd := len(declared), len(stored)
 		if p < len(pairs) {
 			dEnd, sEnd = pairs[p][0], pairs[p][1]
+		}
+		pd.before = nil
+		if di > 0 {
+			pd.before = declared[di-1]
 		}
 		if err := pd.gap(declared[di:dEnd], stored, si, sEnd); err != nil {
 			return err
@@ -974,6 +982,7 @@ func (pd *patchDiff) gap(ins []ast.MicroflowStatement, stored []ast.MicroflowSta
 			return err
 		}
 		pd.add(op, c, ins)
+		pd.statedCurves(pd.ops[len(pd.ops)-1], ins)
 		return nil
 	}
 	if len(ins) == 1 && len(del) == 1 {
@@ -2150,4 +2159,24 @@ func patchSummary(ops []*ast.AlterFlowOperation, edited map[*ast.AlterFlowOperat
 		out = append(out, "set: "+strings.Join(set, ", "))
 	}
 	return strings.Join(out, "; ")
+}
+
+// statedCurves gives an insert the curves the script states for the two
+// connectors the splice draws: into the run, on the declared statement before
+// it, and out of it, on the run's last statement (ako/mxcli#2311). Only where
+// both ends are plain statements — an activity's @curve is its one outgoing
+// connector; a decision's or a loop's says nothing about the one at hand.
+// The splice drew those connectors with vectors of its own, and the next run
+// of the same script read the difference as a redrawn connector and refused.
+func (pd *patchDiff) statedCurves(op *ast.AlterFlowOperation, ins []ast.MicroflowStatement) {
+	if len(ins) == 0 || pd.before == nil || notPlainInBody(pd.before) != "" || notPlainInBody(ins[len(ins)-1]) != "" {
+		return
+	}
+	op.StatesCurves = true
+	if ann := statementAnnotations(pd.before); ann != nil {
+		op.InCurve = ann.Curve
+	}
+	if ann := statementAnnotations(ins[len(ins)-1]); ann != nil {
+		op.OutCurve = ann.Curve
+	}
 }

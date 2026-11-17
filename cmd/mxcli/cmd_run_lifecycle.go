@@ -181,7 +181,7 @@ shell.`,
 		// restart would hand the app the placeholder instead of the value. Say so
 		// before stopping anything.
 		if hasRedactedArgs(st.Args) {
-			fmt.Fprint(os.Stderr, restartSecretRefusal(projectPath))
+			fmt.Fprint(os.Stderr, restartSecretRefusal(projectPath, redactedArgNames(st.Args)))
 			os.Exit(runExitFailed)
 		}
 		if code := runStop(projectPath, os.Stdout); code != runExitOK {
@@ -218,13 +218,21 @@ func lifecycleProject(cmd *cobra.Command) string {
 // database password never reads (only --ensure-db's psql does): a run started
 // that way connected as the default password. A reference is what restart can
 // resolve again.
-func restartSecretRefusal(projectPath string) string {
+//
+// literal names the flags whose value was stored redacted (redactedArgNames):
+// a reference — @env:VAR, @file:path — is stored and replayed, so the
+// refusal says which values were not one (ako/mxcli#2313).
+func restartSecretRefusal(projectPath string, literal []string) string {
+	which := "a --constant value, --db-password, ..."
+	if len(literal) > 0 {
+		which = strings.Join(literal, ", ")
+	}
 	return fmt.Sprintf("cannot restart: this run was started with a secret written literally on the command line "+
-		"(a --constant value, --db-password, ...), and it is not stored.\n"+
-		"  Stop it and start it again with the secret as a reference, which is stored and resolved again on restart:\n"+
+		"(%s), and a literal secret is not stored. The values given as @env:VAR or @file:path are stored and replayed.\n"+
+		"  Stop it and start it again with each of those as a reference too:\n"+
 		"    mxcli run stop -p %s\n"+
-		"    mxcli run --local --detach -p %s --db-password @env:MX_DB_PASSWORD ...   (or @file:path)\n",
-		projectPath, projectPath)
+		"    mxcli run --local --detach -p %s --constant Module.Key=@env:VAR --db-password @env:MX_DB_PASSWORD ...   (or @file:path)\n",
+		which, projectPath, projectPath)
 }
 
 // --- detach ------------------------------------------------------------

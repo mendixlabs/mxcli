@@ -144,6 +144,14 @@ func Reconcile(contents, stored []byte, opts ...Option) (out []byte, unchanged b
 		contents = transplantIDs(contents, storedDoc)
 	}
 
+	// The translations of the texts the transplant paired, which the carry
+	// above could not pair: a Studio Pro flow's objects in another order, an
+	// unnamed activity's message, a source string the statement changed
+	// (ako/mxcli#2329).
+	if !o.contentsOwnTranslations {
+		contents = carryTranslationsByID(contents, stored)
+	}
+
 	// And the nested identity property the transplant does not cover: every
 	// Workflows$* element carries a PersistentId that both engines re-mint on
 	// every write, so without this a workflow document never equals itself and
@@ -206,6 +214,10 @@ func reconcileInPasses(contents, stored []byte, opts ...Option) (out []byte, unc
 	// reference with them.
 	if !o.contentsOwnElementIDs {
 		contents = transplantIDsInPasses(contents, stored)
+	}
+
+	if !o.contentsOwnTranslations {
+		contents = carryTranslationsByID(contents, stored)
 	}
 
 	// And the nested identity property the transplant does not cover: every

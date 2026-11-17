@@ -114,8 +114,8 @@ What each one does, precisely:
   orphaned `runtimelauncher` or mxbuild JVM is stopped too — including the leftovers of
   a run that was killed with `-9` (and its `--test-endpoint`, as on Windows, where the
   stop is always forced). Stopping when nothing runs is a no-op (exit 0).
-- **`run restart`** reuses the arguments recorded in the state file; to change a flag,
-  `run stop` and `--detach` again.
+- **`run restart`** reuses the recorded arguments (`@env:`/`@file:` secrets as references;
+  a literal one is refused, by flag name); to change a flag, `run stop` and `--detach` again.
 
 - **`.mxcli/run-local.json`** (ports, admin password — how `oql`, `log` and `constant set
   --apply` reach the app) is written when the app serves and removed only by the run

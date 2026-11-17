@@ -82,4 +82,12 @@ type AlterFlowOperation struct {
 	// in place, never replaced (mendixlabs/mxcli#1517). Set only by
 	// `create or modify`.
 	SetNotes bool
+	// StatesCurves, on an insert, says InCurve and OutCurve are the curves the
+	// script states for the connector into the inserted statements (on the
+	// statement before them) and the one out of them (on their last), nil
+	// meaning a straight line, as describe prints none for one. Set only by
+	// `create or modify`, whose declared flow is drawn whole; an `alter`
+	// insert states no curves (ako/mxcli#2311).
+	StatesCurves      bool
+	InCurve, OutCurve *FlowCurve
 }

@@ -1,0 +1,2 @@
+mdl 1;
+create microflow Sp.F07 ($B: Boolean) returns Boolean as $R begin if $B then return true; end if; end;

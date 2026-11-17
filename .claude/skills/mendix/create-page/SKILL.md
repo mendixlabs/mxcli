@@ -15,12 +15,12 @@ description: "CREATE PAGE syntax reference — parameters, variables, layouts, a
 | 47-222 | Syntax |
 | 223-293 | Basic Examples |
 | 294-318 | Modifying Existing Pages |
-| 319-431 | Conditional Visibility and Editability |
-| 432-601 | Known Limitations |
-| 602-610 | Tips |
-| 611-637 | Related Commands |
-| 638-662 | PLUGGABLEWIDGET Escape Hatch |
-| 663-666 | See Also |
+| 319-435 | Conditional Visibility and Editability |
+| 436-605 | Known Limitations |
+| 606-614 | Tips |
+| 615-641 | Related Commands |
+| 642-666 | PLUGGABLEWIDGET Escape Hatch |
+| 667-670 | See Also |
 
 <!-- /skill-index -->
 # CREATE PAGE - MDL Syntax Guide
@@ -388,6 +388,10 @@ create page MyModule.Request_Review (title: 'Review', layout: Atlas_Core.Atlas_D
     visible: false, visible: roles (MyModule.Manager))
 };
 ```
+
+`visible: roles (Mod.Role) and <condition>` is the same two settings in one line
+(both apply). `roles (…)` anywhere else in an expression is refused (MDL-WIDGET54):
+Mendix expressions have no roles function.
 
 
 > **`visible:`/`editable:` is a Mendix *expression*, not XPath** — a different

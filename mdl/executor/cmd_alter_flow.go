@@ -222,6 +222,11 @@ func (a *alterFlowContext) applyTo(ctx *ExecContext, mut backend.MicroflowMutato
 				return fail(inLoop("the fragment holds " + what))
 			}
 		}
+		// The connectors at the fragment's ends, as the script draws them
+		// (ako/mxcli#2311).
+		if op.StatesCurves {
+			frag.InCurve, frag.OutCurve = flowVectors(op.InCurve), flowVectors(op.OutCurve)
+		}
 		// A stated @position on the fragment is where it goes (ako/mxcli#818).
 		frag.Placed = firstStatementPlaced(op.Body)
 		if !frag.Placed && laterStatementPlaced(op.Body) {
@@ -1657,4 +1662,19 @@ func (a *alterFlowContext) checkDeclaredUnclashed(frag *backend.MicroflowFragmen
 		}
 	}
 	return nil
+}
+
+// flowVectors is a stated @curve as the two control vectors a flow stores; an
+// end it leaves out, and a statement with no @curve, is straight ("0;0").
+func flowVectors(c *ast.FlowCurve) *backend.FlowVectors {
+	end := func(p *ast.Position) string {
+		if p == nil {
+			return "0;0"
+		}
+		return fmt.Sprintf("%d;%d", p.X, p.Y)
+	}
+	if c == nil {
+		return &backend.FlowVectors{Origin: "0;0", Destination: "0;0"}
+	}
+	return &backend.FlowVectors{Origin: end(c.From), Destination: end(c.To)}
 }

@@ -93,7 +93,6 @@ var funcTable = map[string]funcSig{
 	"toLowerCase":  {args: []TypeKind{KindString}, ret: KindString},
 	"replaceAll":   {args: []TypeKind{KindString, KindString, KindString}, ret: KindString},
 	"replaceFirst": {args: []TypeKind{KindString, KindString, KindString}, ret: KindString},
-	"replace":      {args: []TypeKind{KindString, KindString, KindString}, ret: KindString},
 	"urlEncode":    {args: []TypeKind{KindString}, ret: KindString},
 	"urlDecode":    {args: []TypeKind{KindString}, ret: KindString},
 

@@ -1,0 +1,3 @@
+mdl 1;
+create non-persistent entity Sp.Np ( A: String(10) );
+create microflow Sp.F10 ($N: Sp.Np) returns Boolean as $R begin commit $N; return true; end;

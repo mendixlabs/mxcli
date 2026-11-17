@@ -10,6 +10,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/modelsdk/canon"
 )
 
 // # Editing an activity in place (ako/mxcli#1761)
@@ -69,15 +70,49 @@ func sameKind(d, stored bson.D) bool {
 // under it that pair up (carryPairs), put on at Bytes.
 func (m *Mutator) swapKeeping(g *graph, x *node, oc, d bson.D, id model.ID) error {
 	same := sameKind(d, x.doc)
+	if same {
+		d = carryTranslations(d, x.doc)
+	}
 	if err := m.swapInPlace(g, x, oc, d, id); err != nil {
 		return err
 	}
 	if same {
+		// The carried translations are the stored elements, still in the unit.
+		m.unmarkRemoved(d)
 		m.carryUnstated(d, x.doc)
 		carryPairs(d, x.doc, m.carried)
 		m.edited[x.id] = true
 	}
 	return nil
+}
+
+// carryTranslations returns d, the serialized replacement of stored, with the
+// languages of stored's texts that d does not write put back
+// (ako/mxcli#2327, mendixlabs/mxcli#1870). The statement writes one language
+// per text, and the splice saves as a patch, which canon does not carry
+// translations onto — so an edited show message kept only that language. The
+// carry is canon.CarryTranslations, the one a rebuild's write gets, applied to
+// the activity: it pairs texts by place, never overwrites a language the
+// statement wrote, and keeps a carried translation's stored $ID. On anything
+// it cannot read, d is returned as it is.
+func carryTranslations(d, stored bson.D) bson.D {
+	nb, err := bson.Marshal(d)
+	if err != nil {
+		return d
+	}
+	ob, err := bson.Marshal(stored)
+	if err != nil {
+		return d
+	}
+	out := canon.CarryTranslations(nb, ob)
+	if bytes.Equal(out, nb) {
+		return d
+	}
+	var carried bson.D
+	if bson.Unmarshal(out, &carried) != nil {
+		return d
+	}
+	return carried
 }
 
 // unstated are the properties, by element $Type, that MDL has no spelling for:

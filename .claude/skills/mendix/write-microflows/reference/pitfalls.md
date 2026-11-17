@@ -477,6 +477,12 @@ has 3 paths". Those change where the flow's paths end or meet; rebuild the flow
 deliberately (drop the microflow and create it in the same script) or edit it in Studio
 Pro. Inside a loop body a decision is the loop's to replace (§11).
 
+Make that rebuild a **one-time run**, not part of the script you re-run: a drop + create
+rewrites the flow every time it runs. Run it once, then keep the flow's final
+`create or modify` in the project script — the second run of that finds it unchanged.
+A refusal that says there is no room for new statements has a re-runnable fix of its
+own: leave out the `@position` of what comes after them, so it moves along.
+
 ### 16. A Message Template Is a String, Not an Expression With `with (…)`
 
 The text of a `log` message, a `send email` subject or body, a `show message` and a

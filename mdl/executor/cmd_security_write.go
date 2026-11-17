@@ -659,7 +659,45 @@ func execGrantEntityAccess(ctx *ExecContext, s *ast.GrantEntityAccessStmt) error
 		text:      text,
 		unchanged: fmt.Sprintf("entity access: %s.%s (%s)", s.Entity.Module, s.Entity.Name, strings.Join(roleNames, ", ")),
 	})
+	// Printed on a re-run too: an unchanged write leaves the overlap in place.
+	if w := grantOverlapWarning(entityQN, entity.AccessRules, roleNames, xpathConstraint); w != "" {
+		ctx.reportAccessRule(heldReport{notice: true, text: w})
+	}
 	return nil
+}
+
+// grantOverlapWarning is MDL-GRANT03 at exec (ako/mxcli#2320): the roles of a
+// grant that, beside the rule it writes, hold a rule on the entity of the other
+// kind — one with no constraint beside a constrained grant, or a constrained one
+// beside an unconstrained grant. Access rules add up, so the constraint limits
+// nothing. rules are the entity's rules as they were before the grant.
+func grantOverlapWarning(entityQN string, rules []*domainmodel.AccessRule, roleNames []string, xpath string) string {
+	constrained := strings.TrimSpace(xpath) != ""
+	want := map[string]bool{}
+	for _, r := range roleNames {
+		want[r] = true
+	}
+	hit := map[string]bool{}
+	for _, rule := range rules {
+		if (strings.TrimSpace(rule.XPathConstraint) != "") == constrained {
+			continue
+		}
+		for _, role := range rule.ModuleRoleNames {
+			if want[role] {
+				hit[role] = true
+			}
+		}
+	}
+	if len(hit) == 0 {
+		return ""
+	}
+	roles := make([]string, 0, len(hit))
+	for r := range hit {
+		roles = append(roles, r)
+	}
+	v := accessRuleOverlapViolation(0, entityQN, roles, constrained)
+	msg := strings.TrimPrefix(v.Message, "statement 0: ")
+	return fmt.Sprintf("Warning (%s): %s.\n  %s\n", v.RuleID, msg, v.Suggestion)
 }
 
 // execRevokeEntityAccess handles REVOKE roles ON Module.Entity [(rights...)].

@@ -84,7 +84,9 @@ func flowRefusal(d *flowDecl, why error) error {
 // rebuild the author means: drop the flow and create it in the same script.
 func deliberateRebuildAdvice(kind string) string {
 	return fmt.Sprintf("to rebuild the flow deliberately, drop the %s and create it in the same script "+
-		"(the drop's module-role grants carry to a create in the same script or session, not to one in a later run)", kind)
+		"(the drop's module-role grants carry to a create in the same script or session, not to one in a later run) — "+
+		"once, in a run of its own: a drop + create rewrites the flow on every run, so the script you keep should "+
+		"then hold the `create or modify` of the result, which a second run finds unchanged", kind)
 }
 
 // replaceBodyAdvice is what `create or modify` and `alter` both say about a

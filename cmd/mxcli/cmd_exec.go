@@ -62,6 +62,12 @@ mprcontents/) is restored; generated .java/.js source is not. With
 Pass "-" as the file to read the script from standard input, so MDL can be
 piped or written inline as a heredoc without a temporary file.
 
+Writers of one project run one at a time: a script that writes (and a -c that
+does) holds the project's lock, .mxcli/write.lock, for its whole run, and a
+second one waits up to 60 seconds for it. Past that it changes nothing and
+exits 75 ("try again"), naming the process that holds the lock. Scripts that
+only read take no lock.
+
 Example:
   mxcli exec setup.mdl
   mxcli exec -p app.mpr script.mdl
@@ -92,6 +98,20 @@ Example:
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading file: %v\n", err)
 			os.Exit(1)
+		}
+
+		// Writers of one project run one at a time: four in parallel all
+		// failed, each rolling back over the others (ako/mxcli#2326). A script
+		// that only reads takes no lock. Deferred before the executor's Close,
+		// so the lock is held until the last deferred write has landed.
+		if projectPath != "" {
+			if early, _ := visitor.Build(string(content)); early == nil || programWritesModel(early) {
+				release, code := acquireProjectWriteLock(projectPath, "exec "+filePath, os.Stderr)
+				if code != 0 {
+					os.Exit(code)
+				}
+				defer release()
+			}
 		}
 
 		// A watching dev loop is told when this script starts writing and when
