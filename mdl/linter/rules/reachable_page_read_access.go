@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/security"
 )
 
@@ -90,6 +91,7 @@ type reachModel struct {
 	entries      []string                       // menu pages and microflows
 	profileHomes map[string]string              // navigation profile -> its home page
 	roleHomes    map[string]map[string][]string // profile -> user role -> role-based home pages/microflows
+	ids          map[string]string              // page/snippet -> unit id
 }
 
 // Check reports, per page or snippet a user role reaches, each attribute or
@@ -111,7 +113,15 @@ func (r *ReachablePageReadAccessRule) Check(ctx *linter.LintContext) []linter.Vi
 	}
 	found := map[string]*finding{}
 	var order []string
-	note := func(doc, entity, member, userRole string) {
+	vis := newRoleVisibility(reader, m.ids)
+	note := func(doc, entity, member, userRole string, roles map[string]bool) {
+		target := member
+		if target == "" {
+			target = entity
+		}
+		if vis.hidden(doc, target, roles) {
+			return
+		}
 		k := doc + "\x00" + entity + "\x00" + member
 		f, ok := found[k]
 		if !ok {
@@ -141,7 +151,7 @@ func (r *ReachablePageReadAccessRule) Check(ctx *linter.LintContext) []linter.Vi
 			for _, e := range entities {
 				if !strings.HasPrefix(e, "System.") && !m.readsEntity(e, roles) && !blindEntity[e] {
 					blindEntity[e] = true
-					note(doc, e, "", ur.Name)
+					note(doc, e, "", ur.Name, roles)
 				}
 			}
 			for _, e := range m.edges[doc] {
@@ -162,7 +172,7 @@ func (r *ReachablePageReadAccessRule) Check(ctx *linter.LintContext) []linter.Vi
 					}
 				}
 				if !readable {
-					note(doc, candidates[0], e.target, ur.Name)
+					note(doc, candidates[0], e.target, ur.Name, roles)
 				}
 			}
 		}
@@ -388,6 +398,7 @@ func loadReachModel(ctx *linter.LintContext) *reachModel {
 		market: map[string]bool{}, views: map[string]map[string]bool{}, executes: map[string]map[string]bool{},
 		gen: map[string]string{}, reads: map[string]map[string]bool{}, members: map[string]map[string]bool{},
 		listed: map[string]map[string]bool{}, defaultRO: map[string]map[string]bool{}, roleHomes: map[string]map[string][]string{}, profileHomes: map[string]string{},
+		ids: map[string]string{},
 	}
 	query := func(q string, scan func(cols []string)) {
 		rows, err := ctx.Query(q)
@@ -415,14 +426,16 @@ func loadReachModel(ctx *linter.LintContext) *reachModel {
 		}
 	}
 	query(`SELECT Name, COALESCE(Source, '') FROM modules`, func(c []string) { m.market[c[0]] = c[1] != "" })
-	query(`SELECT QualifiedName, ModuleName FROM pages`, func(c []string) {
+	query(`SELECT QualifiedName, ModuleName, Id FROM pages`, func(c []string) {
 		m.module[c[0]] = c[1]
+		m.ids[c[0]] = c[2]
 		if m.views[c[0]] == nil {
 			m.views[c[0]] = map[string]bool{}
 		}
 	})
-	query(`SELECT QualifiedName, ModuleName FROM snippets`, func(c []string) {
+	query(`SELECT QualifiedName, ModuleName, Id FROM snippets`, func(c []string) {
 		m.module[c[0]] = c[1]
+		m.ids[c[0]] = c[2]
 		m.snippets[c[0]] = true
 	})
 	query(`SELECT QualifiedName FROM nanoflows`, func(c []string) {
@@ -489,6 +502,110 @@ func reachGrant(m map[string]map[string]bool, key, role string) {
 func reachAny(granted map[string]bool, roles []string) bool {
 	for _, r := range roles {
 		if granted[r] {
+			return true
+		}
+	}
+	return false
+}
+
+// roleVisibility answers whether everything a page or snippet shows of an
+// entity or attribute sits inside widgets a user role cannot see.
+//
+// ako/mxcli#2356: mxbuild does not check read access for a widget hidden from
+// the role by `Visible: roles (…)` (ConditionalVisibilitySettings.ModuleRoles),
+// so data inside a container visible only to administrators is no CE2729 for a
+// user role without that module role. The catalog's refs do not say which
+// widget a reference sits in, so the stored widget tree is read.
+type roleVisibility struct {
+	reader linter.LintReader
+	ids    map[string]string
+	units  map[string]map[string]any
+}
+
+func newRoleVisibility(reader linter.LintReader, ids map[string]string) *roleVisibility {
+	return &roleVisibility{reader: reader, ids: ids, units: map[string]map[string]any{}}
+}
+
+func (v *roleVisibility) unit(doc string) map[string]any {
+	if u, ok := v.units[doc]; ok {
+		return u
+	}
+	var u map[string]any
+	if id := v.ids[doc]; id != "" && v.reader != nil {
+		u, _ = v.reader.GetRawUnit(model.ID(id))
+	}
+	v.units[doc] = u
+	return u
+}
+
+// hidden reports whether every occurrence of target (an entity or attribute
+// qualified name) in doc is inside a widget whose role restriction excludes
+// all of roles. No occurrence found, or an unreadable unit, is not hidden: the
+// finding stands.
+func (v *roleVisibility) hidden(doc, target string, roles map[string]bool) bool {
+	u := v.unit(doc)
+	if u == nil {
+		return false
+	}
+	seen, visible := 0, false
+	var walk func(node any, hiddenAbove bool)
+	walk = func(node any, hiddenAbove bool) {
+		if visible {
+			return
+		}
+		switch n := node.(type) {
+		case map[string]any:
+			h := hiddenAbove || restrictsAway(n["ConditionalVisibilitySettings"], roles)
+			for _, val := range n {
+				walk(val, h)
+			}
+		case []any:
+			for _, val := range n {
+				walk(val, hiddenAbove)
+			}
+		case string:
+			if refersTo(n, target) {
+				seen++
+				if !hiddenAbove {
+					visible = true
+				}
+			}
+		}
+	}
+	walk(u, false)
+	return seen > 0 && !visible
+}
+
+// restrictsAway reports whether a ConditionalVisibilitySettings value limits
+// the widget to module roles of which roles holds none.
+func restrictsAway(settings any, roles map[string]bool) bool {
+	s, ok := settings.(map[string]any)
+	if !ok {
+		return false
+	}
+	list, _ := s["ModuleRoles"].([]any)
+	restricted := false
+	for _, r := range list {
+		name, ok := r.(string)
+		if !ok {
+			continue // the array's leading type marker
+		}
+		restricted = true
+		if roles[name] {
+			return false
+		}
+	}
+	return restricted
+}
+
+// refersTo reports whether a stored string names target, alone or as a step
+// of an association path ("Mod.Assoc/Mod.Entity").
+func refersTo(s, target string) bool {
+	if s == target {
+		return true
+	}
+	for _, step := range strings.Split(s, "/") {
+		if step == target {
 			return true
 		}
 	}

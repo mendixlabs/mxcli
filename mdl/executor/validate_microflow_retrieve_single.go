@@ -103,7 +103,25 @@ func (v *microflowValidator) checkRetrieveListAsObject(body []ast.MicroflowState
 						"of the list first (`$item = head($%s);`).", name, name))
 			}
 		},
-		nil,
+		func(s ast.MicroflowStatement) {
+			// `return $L` from a flow whose return type is not a list
+			// (ako/mxcli#2364): mxbuild reports CE0117 "Error(s) in
+			// expression." at the End event.
+			ret, ok := s.(*ast.ReturnStmt)
+			if !ok || v.returnType == nil || v.returnType.Type.Kind == ast.TypeListOf || v.returnType.Type.Kind == ast.TypeVoid {
+				return
+			}
+			ve, ok := ret.Value.(*ast.VariableExpr)
+			if !ok || !list[ve.Name] {
+				return
+			}
+			v.addViolation(retrieveListAsObjectRule, linter.SeverityError,
+				fmt.Sprintf("$%s was retrieved as a list (under `mdl 1;` `limit 1` is a list of one), "+
+					"but the %s returns %s, a single value — mxbuild rejects the return with CE0117 "+
+					"\"Error(s) in expression.\" at the End event.", ve.Name, v.docType, returnTypeName(v.returnType.Type)),
+				fmt.Sprintf("Retrieve the object with `retrieve $%s from … first;`, return `head($%s)`, "+
+					"or declare the return type as `list of …`.", ve.Name, ve.Name))
+		},
 		func(s ast.MicroflowStatement) {
 			for _, p := range statementProducedVars(s) {
 				delete(list, p.name)
@@ -236,4 +254,17 @@ func listUseOf(s ast.MicroflowStatement) (string, string) {
 		}
 	}
 	return "", ""
+}
+
+// returnTypeName names a declared return type for a message. A bare
+// `Module.Name` is parsed as an enumeration-or-entity reference, which
+// formatDataTypeForMDL does not name.
+func returnTypeName(dt ast.DataType) string {
+	switch {
+	case dt.EntityRef != nil:
+		return dt.EntityRef.String()
+	case dt.EnumRef != nil:
+		return dt.EnumRef.String()
+	}
+	return formatDataTypeForMDL(dt)
 }

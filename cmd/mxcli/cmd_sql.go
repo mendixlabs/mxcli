@@ -17,6 +17,11 @@ var sqlCmd = &cobra.Command{
 	Short: "Execute a SQL query against an external database",
 	Long: `Execute a SQL query against an external database (PostgreSQL, Oracle, SQL Server).
 
+A query runs read-only: a statement that is not a read (SELECT, WITH,
+EXPLAIN, SHOW, VALUES) is refused, and a read runs in a read-only transaction
+that is rolled back. Pass --write to change the database; the output then
+says how many rows the statement affected.
+
 Connection credentials are resolved in order:
   1. --dsn flag
   2. Environment variable MXCLI_SQL_<ALIAS>_DSN
@@ -59,6 +64,9 @@ Examples:
   # Describe a table
   mxcli sql --alias mydb --describe users
 
+  # Change data (refused without --write)
+  mxcli sql --alias mydb --write "DELETE FROM orders WHERE id = 42"
+
   # JSON output
   mxcli sql --alias mydb --json "SELECT * FROM orders"
 `,
@@ -72,6 +80,7 @@ Examples:
 		views, _ := cmd.Flags().GetBool("views")
 		functions, _ := cmd.Flags().GetBool("functions")
 		describe, _ := cmd.Flags().GetString("describe")
+		allowWrite, _ := cmd.Flags().GetBool("write")
 
 		// Default alias
 		if alias == "" {
@@ -134,12 +143,17 @@ Examples:
 				fmt.Fprintln(os.Stderr, "Error: query argument required (or use --tables / --views / --functions / --describe)")
 				os.Exit(1)
 			}
-			result, err = sqllib.Execute(ctx, conn, args[0])
+			result, err = sqllib.Run(ctx, conn, args[0], allowWrite)
 		}
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
+		}
+
+		if result.RowsAffected != nil {
+			fmt.Fprintf(os.Stdout, "%d row(s) affected\n", *result.RowsAffected)
+			return
 		}
 
 		if jsonOutput {
@@ -164,6 +178,7 @@ func init() {
 	sqlCmd.Flags().Bool("views", false, "List views")
 	sqlCmd.Flags().Bool("functions", false, "List functions and procedures")
 	sqlCmd.Flags().String("describe", "", "Describe the named table's or view's columns")
+	sqlCmd.Flags().Bool("write", false, "Allow statements that change the database (INSERT, UPDATE, DELETE, DDL); without it a query runs read-only")
 
 	rootCmd.AddCommand(sqlCmd)
 }

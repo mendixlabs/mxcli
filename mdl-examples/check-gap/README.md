@@ -20,3 +20,13 @@ committed; pass its path). Gated: needs mxbuild, so it is not part of `make test
 A fixture that `mxcli check -p` passes while `mx check` reports a code is a
 backlog item. Codes can differ between checkers for the same finding (CE1613 in
 mx is CE7710 in `mendix check`), so compare messages when a code differs.
+
+`run-parity.sh` compares what each checker reports for one defect at a time. To see what a
+checker HIDES when two defects share a document (MxBuild reports in stages; Mendix CLI 2 does
+not), use `scripts/maskmatrix`:
+
+    make mask-matrix ARGS="--project /tmp/clean/Spike.mpr \
+        --mx ~/.mxcli/mxbuild/11.16.1/modeler/mx [--mendix /path/to/mendix]"
+
+It writes every defect and every ordered pair into a copy of the project, checks once, and
+prints who hides whom, the stages that gives, and what an unresolved reference hides.

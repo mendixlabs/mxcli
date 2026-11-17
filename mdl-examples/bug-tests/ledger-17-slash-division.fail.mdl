@@ -12,6 +12,9 @@
 -- operator `/`), and the variable/variable form `$Dec / $Dec2` (which parses as a
 -- member-access path — the visitor preserves its `/ $` source so MDL045 sees it).
 --
+-- Measured on MxBuild 11.16.1 with every variable declared: each of the six statements
+-- below is CE0117 on its own activity, and the same microflow written with `div` is clean.
+--
 -- Usage (expected to FAIL check):
 --   mxcli check mdl-examples/bug-tests/ledger-17-slash-division.fail.mdl
 -- ============================================================================
@@ -22,6 +25,14 @@ create microflow MyModule.SlashDivision (
 )
 returns decimal
 begin
+  -- Every variable is declared on purpose: an undeclared one is CE0109, which MxBuild
+  -- reports first and which hides the CE0117 these statements exist to show.
+  declare $Bad decimal = 0;
+  declare $AlsoBad decimal = 0;
+  declare $VarVar decimal = 0;
+  declare $Embed1 decimal = 0;
+  declare $Embed2 decimal = 0;
+  declare $Embed3 decimal = 0;
   set $Bad = $Dec / 2;                 -- MDL045: use `div`
   set $AlsoBad = ($Dec + 1) / $Dec2;   -- MDL045: use `div`
   set $VarVar = $Dec / $Dec2;          -- MDL045: variable/variable form (finding #17)
