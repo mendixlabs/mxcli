@@ -41,13 +41,14 @@ func TestJavaScriptParameterName_MatchesMxbuild(t *testing.T) {
 }
 
 func TestGenerateJavaScriptSource_ParameterNamesAreLowerFirst(t *testing.T) {
-	src := GenerateJavaScriptSource("JS_Open", "return Url;",
+	src := strings.ReplaceAll(GenerateJavaScriptSource("JS_Open", "return Url;",
 		[]*JavaActionParameter{param("Url", &StringType{}), param("ReadOnly", &BooleanType{})},
-		&StringType{}, nil, "")
+		&StringType{}, nil, ""), "\r\n", "\n")
 
+	// Not marked required, so optional: `[name]`, as mxbuild writes it.
 	for _, want := range []string{
-		" * @param {string} url\n",
-		" * @param {boolean} readOnly\n",
+		" * @param {string} [url]\n",
+		" * @param {boolean} [readOnly]\n",
 		"export async function JS_Open(url, readOnly) {\n",
 	} {
 		if !strings.Contains(src, want) {
