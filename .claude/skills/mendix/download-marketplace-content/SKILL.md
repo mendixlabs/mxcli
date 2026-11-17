@@ -14,16 +14,16 @@ description: "The full lifecycle of Mendix Marketplace modules and widgets from 
 | 45-61 | Prerequisites: Authenticate |
 | 62-95 | Step 1 — Discover |
 | 96-105 | Step 2 — Download a `.mpk` to disk (optional) |
-| 106-225 | Step 3 — Install into a project |
-| 226-290 | Step 4 — Repair the model after the install (required, headless) |
-| 291-347 | Step 5 — Before updating: has the module been edited? |
-| 348-406 | Step 6 — Update an installed module |
-| 407-460 | Worked example: the agent-editor stack on a vanilla app |
-| 461-482 | Package a module of the project (`marketplace package`) |
-| 483-490 | Notes |
-| 491-494 | Platform authentication (`mxcli auth login/logout/status/list`) with PAT scheme for marketplace-api |
-| 495-498 | Marketplace download/install (`mxcli marketplace download/install`) — the content API now exposes a per-version downloadUrl (303→public CDN); install is type-aware (widget→widgets/, new module→`mx module-import`); existing-module updates are reported, not applied (entity-ID/local-edit safety — see PROPOSAL_marketplace_modules |
-| 499-503 | Marketplace drift detection (`mxcli marketplace diff <content-id> -p app.mpr [--to VERSION] [--json]`) |
+| 106-227 | Step 3 — Install into a project |
+| 228-292 | Step 4 — Repair the model after the install (required, headless) |
+| 293-349 | Step 5 — Before updating: has the module been edited? |
+| 350-408 | Step 6 — Update an installed module |
+| 409-462 | Worked example: the agent-editor stack on a vanilla app |
+| 463-484 | Package a module of the project (`marketplace package`) |
+| 485-492 | Notes |
+| 493-496 | Platform authentication (`mxcli auth login/logout/status/list`) with PAT scheme for marketplace-api |
+| 497-500 | Marketplace download/install (`mxcli marketplace download/install`) — the content API now exposes a per-version downloadUrl (303→public CDN); install is type-aware (widget→widgets/, new module→`mx module-import`); existing-module updates are reported, not applied (entity-ID/local-edit safety — see PROPOSAL_marketplace_modules |
+| 501-505 | Marketplace drift detection (`mxcli marketplace diff <content-id> -p app.mpr [--to VERSION] [--json]`) |
 
 <!-- /skill-index -->
 # Download, Install and Update Marketplace Content
@@ -221,7 +221,9 @@ version "6.0.0" not found; run 'mxcli marketplace versions <id>' to list availab
 
 `--force` does not help — it overrides a *finding*, and here there is no finding.
 `--no-baseline` accepts that the question cannot be answered and updates anyway.
-Commit first: local edits to that module go without being named.
+Commit first: local edits to that module go without being named. Associations
+other modules own into it are still found: the update refuses without `--force`
+and `--save-edits <dir>` saves them for replay.
 
 ## Step 4 — Repair the model after the install (required, headless)
 

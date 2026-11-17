@@ -3313,6 +3313,27 @@ func setRawWidgetPropertyMut(widget bson.D, propName string, value any) error {
 			return fmt.Errorf("widget does not support conditional visibility")
 		}
 		return nil
+	case "visibleroles":
+		// `visible: roles (…)`: "Visible for module roles", stored on the
+		// visibility node beside the condition, which it leaves as it is
+		// (ako/mxcli#2371). A by-name list: Studio Pro writes marker 1.
+		roles, ok := value.([]string)
+		if !ok || len(roles) == 0 {
+			return fmt.Errorf("VisibleRoles takes a list of module roles, got %T", value)
+		}
+		if _, has := bsonnav.DGet(widget, "ConditionalVisibilitySettings").(bson.D); !has {
+			if !setWidgetConditionalSettingMut(widget, "ConditionalVisibilitySettings",
+				"Forms$ConditionalVisibilitySettings", "", true) {
+				return fmt.Errorf("widget does not support conditional visibility")
+			}
+		}
+		list := bson.A{int32(1)}
+		for _, r := range roles {
+			list = append(list, r)
+		}
+		cvs := bsonnav.DGet(widget, "ConditionalVisibilitySettings").(bson.D)
+		bsonnav.DSet(cvs, "ModuleRoles", list)
+		return nil
 	case "editableif":
 		expr, _ := value.(string)
 		if !setWidgetConditionalSettingMut(widget, "ConditionalEditabilitySettings",

@@ -295,7 +295,7 @@ Without this, module install order silently decided which widget versions the pr
 
 ## When the installed version is no longer published
 
-`diff` and `update` both download the installed version to establish the local-edit baseline, so both fail when it has been unpublished — as NanoflowCommons 6.0.0 has, while a blank 11.13 app still ships it. `--force` does not help: it overrides a finding, and there is no finding to override. `mxcli marketplace update … --no-baseline` accepts that the question cannot be answered and updates anyway, discarding any local edits to that module without naming them.
+`diff` and `update` both download the installed version to establish the local-edit baseline, so both fail when it has been unpublished — as NanoflowCommons 6.0.0 has, while a blank 11.13 app still ships it. `--force` does not help: it overrides a finding, and there is no finding to override. `mxcli marketplace update … --no-baseline` accepts that the question cannot be answered and updates anyway, discarding any local edits to that module without naming them. Associations that *other* modules own into the module are still found, because that needs only the project: they are refused without `--force`, saved by `--save-edits`, and listed under "Removed from other modules" after the update.
 
 ## Why `diff` and `update` are slow, and what is cached
 

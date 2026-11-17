@@ -154,7 +154,7 @@ MxBuild, Mendix CLI 2 (11.16 build), Linux x64, one clean project from `mxcli ne
   both defects in all 30 pair documents (judged by its own codes: CE0844 is its name for
   MxBuild's CE0117). Not measured: Studio Pro itself (the same consistency checker, so likely
   the same), documents other than microflows and pages, and the order among codes outside these
-  six. What follows from it:
+  six. Reproduce it with `make mask-matrix` (`scripts/maskmatrix`). What follows from it:
   - **Report every real error.** `mxcli check` reporting more than MxBuild is not a mismatch:
     the rest are real, only hidden until the earlier stage is fixed. Copying the staging would
     send an author through one fix-and-rebuild loop per stage.

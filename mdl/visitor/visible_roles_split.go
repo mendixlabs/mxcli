@@ -12,6 +12,23 @@ import (
 var leadingVisibleRolesRe = regexp.MustCompile(
 	`(?is)^\s*roles\s*\(\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+(?:\s*,\s*[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)*)\s*\)\s+and\s+(.+?)\s*$`)
 
+// visibleRolesOnlyRe is `roles (Mod.A, Mod.B)` and nothing else.
+var visibleRolesOnlyRe = regexp.MustCompile(
+	`(?is)^\s*roles\s*\(\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+(?:\s*,\s*[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)*)\s*\)\s*$`)
+
+// splitVisibleRoles is splitLeadingVisibleRoles that also takes a bare
+// `roles (…)`, whose condition is empty. `alter page … set (visible: …)`
+// receives both as expression text (ako/mxcli#2371).
+func splitVisibleRoles(expr string) (roles []string, cond string, ok bool) {
+	if m := visibleRolesOnlyRe.FindStringSubmatch(expr); m != nil {
+		for _, r := range strings.Split(m[1], ",") {
+			roles = append(roles, strings.TrimSpace(r))
+		}
+		return roles, "", true
+	}
+	return splitLeadingVisibleRoles(expr)
+}
+
 // splitLeadingVisibleRoles splits `roles (…) and <condition>` into the role
 // names and the condition (ako/mxcli#2319). It declines when the condition
 // has a top-level `or`: `roles (A) and x or y` reads (roles and x) or y,
