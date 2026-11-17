@@ -99,6 +99,11 @@ type microflowValidator struct {
 	// excluded marks an @excluded document. mxbuild does not check one, so the
 	// #893 rules stand down for it — see skipCEGapRules.
 	excluded bool
+	// definedVars is every name the flow defines, lower-cased, and
+	// undefinedReported the names MDL098 has already reported (see
+	// validate_undefined_variable.go). Both are nil until initDefinedVariables.
+	definedVars       map[string]bool
+	undefinedReported map[string]bool
 	// fragment marks the body of an `alter microflow|nanoflow` operation: a
 	// piece of a stored flow, whose notes `@annotation(existing: '…')` can
 	// attach to (ako/mxcli#1695). Anything else states a whole flow.
@@ -123,6 +128,7 @@ func (v *microflowValidator) addViolation(ruleID string, severity linter.Severit
 
 // validate runs all checks on the microflow body.
 func (v *microflowValidator) validate(body []ast.MicroflowStatement) {
+	v.initDefinedVariables(body)
 	v.checkListOperationIterator(body)
 	v.checkRetrieveLimitOneAsList(body)
 	v.checkRetrieveListAsObject(body)
@@ -630,6 +636,7 @@ func (v *microflowValidator) checkExprFunctions(label string, expr ast.Expressio
 	if src == "" {
 		return
 	}
+	v.checkUndefinedVariables(label, src)
 	for _, u := range exprcheck.UnknownFunctionCalls(src) {
 		var suggestion string
 		if mendixAggregateFuncs[strings.ToLower(u.Name)] {
