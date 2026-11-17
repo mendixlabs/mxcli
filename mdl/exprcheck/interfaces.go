@@ -29,6 +29,13 @@ type Context struct {
 	// `[...]` predicate. Neither is valid in an expression, so it is off
 	// everywhere but parse_xpath (ako/mxcli#1439).
 	XPath bool
+
+	// Target is the primitive kind the whole expression must have, for a position
+	// that is typed by something other than the slot table: the variable a DECLARE
+	// introduces, the variable a SET assigns, the return type of the flow a RETURN
+	// leaves. The adapter resolves it from the declaration; KindUnknown (the zero
+	// value) means there is none, and only the six primitives are checked.
+	Target TypeKind
 }
 
 // IsSemanticEnabled reports whether Catalog and Slots are both wired so that

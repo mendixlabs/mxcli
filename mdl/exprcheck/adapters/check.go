@@ -22,6 +22,9 @@ type CheckAdapter struct {
 	// entities and kinds are set for the duration of one flow's walk.
 	entities exprcheck.EntityScope
 	kinds    exprcheck.Scope
+	// returnKind is the primitive type the flow under walk returns, or
+	// KindUnknown; a RETURN is checked against it.
+	returnKind exprcheck.TypeKind
 }
 
 // Option configures a CheckAdapter.
@@ -71,6 +74,7 @@ func (c *CheckAdapter) CheckMicroflow(stmt *ast.CreateMicroflowStmt) *Result {
 	if stmt == nil {
 		return r
 	}
+	c.returnKind = primitiveTarget(returnDataType(stmt.ReturnType))
 	c.walkFlow(stmt.Body, stmt.Parameters, stmt.Name.String(), r)
 	return r
 }
@@ -87,6 +91,7 @@ func (c *CheckAdapter) CheckNanoflow(stmt *ast.CreateNanoflowStmt) *Result {
 	if stmt == nil {
 		return r
 	}
+	c.returnKind = primitiveTarget(returnDataType(stmt.ReturnType))
 	c.walkFlow(stmt.Body, stmt.Parameters, stmt.Name.String(), r)
 	return r
 }
@@ -104,7 +109,7 @@ func (c *CheckAdapter) walkFlow(body []ast.MicroflowStatement, params []ast.Micr
 	scope := buildFlowScope(body, params, c.assoc)
 	c.entities = entityScope{vars: scope.entities, assoc: c.assoc}
 	c.kinds = kindScope(scope.kinds)
-	defer func() { c.entities, c.kinds = nil, nil }()
+	defer func() { c.entities, c.kinds, c.returnKind = nil, nil, exprcheck.KindUnknown }()
 	c.walkBodyWithScope(body, mf, scope.entities, r)
 }
 
@@ -123,11 +128,11 @@ func (c *CheckAdapter) walkBodyWithScope(body []ast.MicroflowStatement, mf strin
 		case *ast.ListOperationStmt:
 			c.checkListOperationCondition(n, mf, scope, r)
 		case *ast.ReturnStmt:
-			c.checkExpr(n.Value, "ReturnStmt.Value", mf, r)
+			c.checkExprAs(n.Value, "ReturnStmt.Value", mf, c.returnKind, r)
 		case *ast.DeclareStmt:
-			c.checkExpr(n.InitialValue, "DeclareStmt.InitialValue", mf, r)
+			c.checkExprAs(n.InitialValue, "DeclareStmt.InitialValue", mf, primitiveTarget(&n.Type), r)
 		case *ast.MfSetStmt:
-			c.checkExpr(n.Value, "MfSetStmt.Value", mf, r)
+			c.checkExprAs(n.Value, "MfSetStmt.Value", mf, c.setTargetKind(n.Target), r)
 		case *ast.LogStmt:
 			c.checkExpr(n.Message, "LogStmt.Message", mf, r)
 			// The template parameters were not walked at all, so a non-String
@@ -220,6 +225,13 @@ func (c *CheckAdapter) checkListOperationCondition(n *ast.ListOperationStmt, mf 
 }
 
 func (c *CheckAdapter) checkExpr(expr ast.Expression, slot, mf string, r *Result) {
+	c.checkExprAs(expr, slot, mf, exprcheck.KindUnknown, r)
+}
+
+// checkExprAs is checkExpr for a position whose type is declared elsewhere — a
+// DECLARE, a SET, a RETURN. target is the primitive kind the expression must
+// have, or KindUnknown when there is none to check against.
+func (c *CheckAdapter) checkExprAs(expr ast.Expression, slot, mf string, target exprcheck.TypeKind, r *Result) {
 	// The captured source can carry the trailing layout of the statement it was
 	// lifted from ("'Open'\n  "), which the lexer would then have to recover
 	// from. Trim before parsing rather than teaching every rule about it.
@@ -234,6 +246,7 @@ func (c *CheckAdapter) checkExpr(expr ast.Expression, slot, mf string, r *Result
 		Catalog:   c.catalog,
 		Entities:  c.entities,
 		Scope:     c.kinds,
+		Target:    target,
 	})
 	r.Hints = append(r.Hints, hints...)
 }
@@ -304,4 +317,53 @@ func (c *CheckAdapter) checkSendEmail(n *ast.SendEmailStmt, mf string, r *Result
 		c.checkExpr(n.Auth.Username, "SendEmailStmt.Credential", mf, r)
 		c.checkExpr(n.Auth.Password, "SendEmailStmt.Credential", mf, r)
 	}
+}
+
+// primitiveTarget is the kind an expression must have to be stored in, or
+// returned as, a value of type t — for the six primitives only. An enumeration,
+// an entity, a list or anything unusual is KindUnknown, which checks nothing:
+// those need the catalog, and a wrong answer here blocks a script that builds.
+// The mapping is exact on purpose (no AutoNumber, no Date): only the six
+// spellings measured on MxBuild are checked.
+func primitiveTarget(t *ast.DataType) exprcheck.TypeKind {
+	if t == nil || t.EntityRef != nil || t.EnumRef != nil {
+		return exprcheck.KindUnknown
+	}
+	switch t.Kind {
+	case ast.TypeString:
+		return exprcheck.KindString
+	case ast.TypeInteger:
+		return exprcheck.KindInteger
+	case ast.TypeLong:
+		return exprcheck.KindLong
+	case ast.TypeDecimal:
+		return exprcheck.KindDecimal
+	case ast.TypeBoolean:
+		return exprcheck.KindBoolean
+	case ast.TypeDateTime:
+		return exprcheck.KindDateTime
+	}
+	return exprcheck.KindUnknown
+}
+
+func returnDataType(rt *ast.MicroflowReturnType) *ast.DataType {
+	if rt == nil {
+		return nil
+	}
+	return &rt.Type
+}
+
+// setTargetKind is the declared primitive kind of the variable a SET assigns.
+// An attribute path (`$Order/Status`) is typed by the attribute, which the
+// CHANGE slots own, and a variable the scope cannot type is silence.
+func (c *CheckAdapter) setTargetKind(target string) exprcheck.TypeKind {
+	name := strings.TrimPrefix(target, "$")
+	if name == "" || strings.Contains(name, "/") || c.kinds == nil {
+		return exprcheck.KindUnknown
+	}
+	k, ok := c.kinds.Lookup(name)
+	if !ok {
+		return exprcheck.KindUnknown
+	}
+	return k
 }
