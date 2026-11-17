@@ -85,6 +85,7 @@ CREATE MICROFLOW Module.Name(
     $param: Module.Entity
 ) RETURNS Boolean AS $result
 BEGIN
+    DECLARE $result Boolean = false;
     -- activities here
 END;
 ```
