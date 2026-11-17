@@ -1,0 +1,27 @@
+mdl 1;
+-- NEGATIVE TEST — `mxcli check` must REFUSE this file (MDL-GRANT04), with no project.
+--
+-- A widget's `Visible: roles (…)` can name only module roles of its OWN
+-- module. A role of another module passed `mxcli check --references` and `exec`,
+-- and the build then reported
+--
+--   [CE0149] "Visibility needs to be updated, reselect roles in properties."
+--
+-- Measured on MxBuild 11.16.1 over 17 documents, one `mx check -j`: a container,
+-- a dynamic text, a layout-grid row, a navigation-list item, a tab page, a snippet
+-- container, a layout container and a widget inserted by `alter page` are each
+-- CE0149 for Administration.Administrator or for a role of a user-created module,
+-- and clean for a role of their own module. A list that mixes the two is CE0149.
+-- Whether the page may be VIEWED by the role does not matter, only the role's module.
+--
+-- The positive control, whose shapes must stay clean, is beside this file as
+-- visible-roles-cross-module.mdl.
+
+create module Wd;
+create module role Wd.Viewer;
+
+-- The one foreign role: the other three containers on this page are fine.
+create page Wd.Granted (Title: 'G', Layout: Atlas_Core.Atlas_Default) {
+  container cOwn (Visible: roles (Wd.Viewer)) { dynamictext t1 (Content: 'a') }
+  container cOtherModule (Visible: roles (Administration.Administrator)) { dynamictext t2 (Content: 'b') }
+};

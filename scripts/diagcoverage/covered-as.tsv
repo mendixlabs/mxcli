@@ -1,0 +1,11 @@
+# Codes mxcli covers under another name: a check that raises what MxBuild reports
+# under this code but does not say so in its message, so diag-coverage cannot see it.
+# Each line is `CODE<TAB>covered by<TAB>note`. Add one only with evidence: a measured
+# fixture that MxBuild rejects with this code and mxcli rejects too.
+#
+# CE0067 "The 'Return value' property is required": a flow with a return type and no
+# `as $R` whose path runs off the end (measured on MxBuild 11.16.1).
+CE0067	MDL003	missing return on a non-void flow; the message names no CE code
+# CE0844 "The expression is of type X but should be of type Y" is Mendix CLI 2's name
+# for what MxBuild 11.16.1 reports as CE0117: a declare, set or return of the wrong type.
+CE0844	E009	declare/set/return type check (checkTargetKind); MxBuild reports it as CE0117

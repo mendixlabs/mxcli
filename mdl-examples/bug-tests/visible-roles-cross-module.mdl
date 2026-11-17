@@ -1,0 +1,25 @@
+mdl 1;
+-- Positive control for visible-roles-cross-module.fail.mdl: a role of the
+-- widget's own module is clean on every widget shape, whether or not the role may
+-- view the page. `mxcli check` must pass this file.
+
+create module Wd;
+create module role Wd.Viewer;
+create module role Wd.Other;
+
+create page Wd.Granted (Title: 'G', Layout: Atlas_Core.Atlas_Default) {
+  container cOwnGranted (Visible: roles (Wd.Viewer)) { dynamictext t1 (Content: 'a') }
+  container cOwnNotGranted (Visible: roles (Wd.Other)) { dynamictext t2 (Content: 'b') }
+  container cTwoOwn (Visible: roles (Wd.Viewer, Wd.Other)) { dynamictext t3 (Content: 'c') }
+  navigationlist nl {
+    item (Action: close page, Visible: roles (Wd.Viewer)) { dynamictext t4 (Content: 'd') }
+  }
+  layoutgrid g {
+    row (Visible: roles (Wd.Viewer)) { column (desktopwidth: 12) { dynamictext t5 (Content: 'e') } }
+  }
+};
+grant view on page Wd.Granted to Wd.Viewer;
+
+create snippet Wd.S {
+  container c (Visible: roles (Wd.Viewer)) { dynamictext t (Content: 'a') }
+};
