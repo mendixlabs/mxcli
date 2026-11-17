@@ -36,7 +36,7 @@ GO_BUILD_FLAGS = -trimpath
 # Clean version for VS Code extension (must be valid semver: major.minor.patch)
 VSCE_VERSION = $(shell echo "$(VERSION)" | sed 's/^v//; s/-.*//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$$' || echo "0.0.0")
 
-.PHONY: build build-debug size release clean test ci-local test-mdl check-mdl check-skill-mdl check-conformance conformance-shrink gen-migration-reference check-migration-reference check-skill-pack-js check-findings check-wiki-pages digest-status check-tunnel-deps check-test-timeouts check-widget-versions test-integration test-integration-executor test-integration-roundtrip test-integration-parity test-integration-upgrade test-integration-other grammar completions sync-skills sync-skill-packs sync-commands sync-mods sync-lint-rules sync-changelog sync-all docs documentation docs-site docs-serve vscode-ext vscode-install source-tree sbom sbom-report lint lint-go lint-ts fmt fmt-check vet skill-index check-skill-index bench bench-trend
+.PHONY: build build-debug size release clean test ci-local test-mdl check-mdl check-skill-mdl check-conformance conformance-shrink gen-migration-reference check-migration-reference check-skill-pack-js check-findings check-wiki-pages digest-status diag-coverage check-tunnel-deps check-test-timeouts check-widget-versions test-integration test-integration-executor test-integration-roundtrip test-integration-parity test-integration-upgrade test-integration-other grammar completions sync-skills sync-skill-packs sync-commands sync-mods sync-lint-rules sync-changelog sync-all docs documentation docs-site docs-serve vscode-ext vscode-install source-tree sbom sbom-report lint lint-go lint-ts fmt fmt-check vet skill-index check-skill-index bench bench-trend
 
 # Helper: copy file only if content differs (avoids mtime updates that invalidate go build cache)
 # Usage: $(call copy-if-changed,src,dst)
@@ -355,6 +355,13 @@ check-skill-pack-js:
 		echo "  ok $$f"; \
 	done; \
 	[ $$found -eq 1 ] || echo "  (no skill-pack JS tests)"
+
+# Which of Mendix's consistency diagnostics (the codes mx check can raise) mxcli's check
+# names, ranked by how often bug reports hit the ones it does not. Needs a MxBuild
+# installed (`mxcli setup mxbuild -p app.mpr`); reads code IDs only. Advisory.
+#   make diag-coverage ARGS="--top 50"      make diag-coverage ARGS=--all
+diag-coverage:
+	@go run ./scripts/diagcoverage $(ARGS)
 
 # How far docs-wiki/bug-patterns/ has fallen behind the findings it digests.
 # Advisory, always exits 0 — see the header in the script for why.
