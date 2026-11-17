@@ -235,7 +235,7 @@ func catalogCurrent(ctx *ExecContext, mode string) bool {
 	if info.MprPath != "" && !catalog.SameMprPath(info.MprPath, ctx.MprPath) {
 		return false
 	}
-	if mt := getMprModTime(ctx); !mt.IsZero() && !info.MprModTime.IsZero() && info.MprModTime.Unix() != mt.Unix() {
+	if mt := getMprModTime(ctx); !mt.IsZero() && !info.MprModTime.IsZero() && !catalog.ModTimeUnchanged(info.MprModTime, mt) {
 		return false
 	}
 	return true
@@ -465,9 +465,10 @@ func isCacheValid(ctx *ExecContext, cachePath string, requiredMode string) (bool
 		return false, "MPR path changed"
 	}
 
-	// Check MPR modification time (compare Unix seconds to handle timezone/precision issues)
+	// Check MPR modification time, as an instant (a zone-independent, exact
+	// comparison; whole seconds missed a write in the second of the build).
 	currentModTime := getMprModTime(ctx)
-	if info.MprModTime.Unix() != currentModTime.Unix() {
+	if !catalog.ModTimeUnchanged(info.MprModTime, currentModTime) {
 		return false, "project file modified"
 	}
 
