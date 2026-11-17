@@ -4,6 +4,7 @@ package javaactions
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -53,7 +54,7 @@ func GenerateSource(moduleName, actionName string, userCode string, params []*Ja
 
 	sb.WriteString(fmt.Sprintf("package %s.actions;\n\n", moduleNameLower))
 
-	for _, imp := range completeImports(imports, params, returnType) {
+	for _, imp := range completeImports(withCoreImport(imports, userCode, extraCode), params, returnType) {
 		sb.WriteString(imp)
 		sb.WriteString("\n")
 	}
@@ -358,4 +359,66 @@ func lowerFirst(s string) string {
 		return s
 	}
 	return strings.ToLower(s[:1]) + s[1:]
+}
+
+// importCore is the Mendix runtime API's entry point, which nearly every
+// action body reaches for (Core.getConfiguration, Core.getLogger, …).
+const importCore = "import com.mendix.core.Core;"
+
+// coreUseRe is a use of the class Core: `Core.` as a word of its own.
+var coreUseRe = regexp.MustCompile(`(^|[^A-Za-z0-9_$.])Core\s*\.`)
+
+// withCoreImport returns imports with importCore appended when the user code
+// or the extra code uses Core and the list imports no Core of its own
+// (ako/mxcli#2310). Without it the file compiled only once the author added
+// the line: check, exec and docker check passed — mx check does not compile
+// Java — and the build failed with "cannot find symbol: variable Core".
+// mxbuild never drops an import it finds, so its regeneration keeps the line.
+func withCoreImport(imports []string, userCode, extraCode string) []string {
+	if !coreUseRe.MatchString(javaCodeOnly(userCode)) && !coreUseRe.MatchString(javaCodeOnly(extraCode)) {
+		return imports
+	}
+	for _, imp := range imports {
+		imp = strings.TrimSpace(imp)
+		if strings.HasSuffix(imp, ".Core;") || imp == "import com.mendix.core.*;" {
+			return imports
+		}
+	}
+	return append(append([]string(nil), imports...), importCore)
+}
+
+// javaCodeOnly is src with its comments and string and character literals
+// blanked, so a name inside one is not read as code.
+func javaCodeOnly(src string) string {
+	out := []byte(src)
+	for i := 0; i < len(out); i++ {
+		switch {
+		case out[i] == '/' && i+1 < len(out) && out[i+1] == '/':
+			for ; i < len(out) && out[i] != '\n'; i++ {
+				out[i] = ' '
+			}
+		case out[i] == '/' && i+1 < len(out) && out[i+1] == '*':
+			for ; i < len(out) && !(out[i] == '*' && i+1 < len(out) && out[i+1] == '/'); i++ {
+				out[i] = ' '
+			}
+			if i+1 < len(out) {
+				out[i], out[i+1] = ' ', ' '
+				i++
+			}
+		case out[i] == '"' || out[i] == '\'':
+			q := out[i]
+			out[i] = ' '
+			for i++; i < len(out) && out[i] != q; i++ {
+				if out[i] == '\\' && i+1 < len(out) {
+					out[i] = ' '
+					i++
+				}
+				out[i] = ' '
+			}
+			if i < len(out) {
+				out[i] = ' '
+			}
+		}
+	}
+	return string(out)
 }
