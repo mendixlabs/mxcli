@@ -348,6 +348,10 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// under --references, where it would only fire with -p (#836).
 	violations = append(violations, ValidateGrantRoles(prog)...)
 
+	// MDL-GRANT04: the same mistake in a widget's `Visible: roles (…)` — a role of
+	// another module than the document's is CE0149. Also needs no project.
+	violations = append(violations, ValidateVisibleRolesModule(prog)...)
+
 	// MDL-GRANT03: a role given a constrained and an unconstrained rule on one
 	// entity in this script — rules add up, so the constraint limits nothing
 	// (ako/mxcli#2320). The overlap with the project's rules is reported under

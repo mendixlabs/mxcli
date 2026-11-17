@@ -131,8 +131,10 @@ create page MyModule.Request_Review (Title: 'Review', Layout: Atlas_Core.Atlas_D
 };
 ```
 
-It is accepted on widgets, tab pages and navigation-list items. `mxcli check
---references` refuses a role the project (or the script, above the statement)
+It is accepted on widgets, tab pages and navigation-list items. The roles must be
+roles of the page's own module: a role of another module builds with CE0149
+("reselect roles") and `mxcli check` refuses it (MDL-GRANT04), whether or not the
+role may view the page. `mxcli check --references` refuses a role the project (or the script, above the statement)
 does not define. `alter page … set Visible` changes only the condition and keeps
 the stored roles.
 
