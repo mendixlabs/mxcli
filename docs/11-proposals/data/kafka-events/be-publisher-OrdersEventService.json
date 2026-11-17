@@ -1,0 +1,74 @@
+{
+ "$ID": "sDWw3K2G3ke4jw1vyj2JIg==",
+ "$Type": "BusinessEvents$BusinessEventService",
+ "Definition": {
+  "$ID": "2/8tIBboPUWydCebss/zmQ==",
+  "$Type": "BusinessEvents$BusinessEventDefinition",
+  "Channels": [
+   2,
+   {
+    "$ID": "2bj71HSNLEudbgOzYtmvkQ==",
+    "$Type": "BusinessEvents$Channel",
+    "ChannelName": "f2477dc90f714d69bb12df0df1ee9cce",
+    "Description": "",
+    "Messages": [
+     2,
+     {
+      "$ID": "/+scPugMmUmW6uX32NpN0w==",
+      "$Type": "BusinessEvents$Message",
+      "Attributes": [
+       2,
+       {
+        "$ID": "JihY/BScc0SL50ODkNrCmQ==",
+        "$Type": "BusinessEvents$MessageAttribute",
+        "AttributeName": "OrderId",
+        "AttributeType": {
+         "$ID": "05oJpqEDaU6kzm/E80XWKA==",
+         "$Type": "DomainModels$LongAttributeType"
+        },
+        "Description": "",
+        "EnumerationDefinition": null
+       },
+       {
+        "$ID": "27CIQFu2QkSPY2Oucs+0Zw==",
+        "$Type": "BusinessEvents$MessageAttribute",
+        "AttributeName": "CustomerId",
+        "AttributeType": {
+         "$ID": "jtLV1JnSgkS9t7FDt02oXg==",
+         "$Type": "DomainModels$LongAttributeType"
+        },
+        "Description": "",
+        "EnumerationDefinition": null
+       }
+      ],
+      "CanPublish": false,
+      "CanSubscribe": true,
+      "Description": "",
+      "MessageName": "OrderPlaceEvent"
+     }
+    ]
+   }
+  ],
+  "Description": "",
+  "EventNamePrefix": "",
+  "ServiceName": "OrdersEventService",
+  "Summary": ""
+ },
+ "Document": "",
+ "Documentation": "",
+ "Excluded": false,
+ "ExportLevel": "Hidden",
+ "Name": "OrdersEventService",
+ "OperationImplementations": [
+  2,
+  {
+   "$ID": "NkDp8wwM10S9QqbbMDIapA==",
+   "$Type": "BusinessEvents$ServiceOperation",
+   "Entity": "CdcPublish.PBE_OrderPlaceEvent",
+   "MessageName": "OrderPlaceEvent",
+   "Microflow": "",
+   "Operation": "publish"
+  }
+ ],
+ "SourceApi": null
+}

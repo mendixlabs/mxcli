@@ -1,0 +1,53 @@
+-- Captured with mxcli describe from TestApp commit 619864b (Mendix 11.16.1, Studio Pro-authored).
+-- NOT runnable as-is: the last statement shows the current describe defect for a consumer service.
+mdl 1;
+@Position(70, 100)
+create or modify persistent entity CdcPublish.Order (
+  OrderId: Long default 0,
+  CustomerName: String(200),
+  ProductName: String(200),
+  Price: Decimal default 0
+);
+
+grant create, delete, read *, write * on entity CdcPublish.Order to CdcPublish.User;
+@Position(380, 100)
+create or modify persistent entity CdcPublish.Customer (
+  CustomerId: Long default 0,
+  CustomerName: String(200),
+  Address: String(200)
+);
+
+grant create, delete, read *, write * on entity CdcPublish.Customer to CdcPublish.User;
+@Position(70, 250)
+create or modify non-persistent entity CdcPublish.PBE_OrderPlaceEvent extends BusinessEvents.PublishedBusinessEvent (
+  OrderId: Long default 0,
+  CustomerId: Long default 0
+);
+@Position(370, 310)
+create or modify persistent entity BusinessEventsClient.CBE_OrderPlaceEvent extends BusinessEvents.ConsumedBusinessEvent (
+  OrderId: Long default 0,
+  CustomerId: Long default 0
+);
+@anchor(from: (100, 46), to: (0, 67))
+create or modify association CdcPublish.Order_Customer
+from CdcPublish.Order to CdcPublish.Customer;
+create or modify microflow BusinessEventsClient.HandleBE_OrderPlaceEvent (
+  @position(100, 0)
+  $CBE_OrderPlaceEvent: BusinessEventsClient.CBE_OrderPlaceEvent
+)
+begin
+  @start(100, 200)
+  @position(700, 200)
+  return;
+end;
+create or modify business event service CdcPublish.OrdersEventService
+(
+  ServiceName: 'OrdersEventService',
+  EventNamePrefix: ''
+)
+{
+  message OrderPlaceEvent (OrderId: Long, CustomerId: Long) publish
+    entity CdcPublish.PBE_OrderPlaceEvent;
+};
+-- describe of the consumer service, today (defect: contract and subscription are dropped):
+create or modify business event service BusinessEventsClient.OrdersEventClient
