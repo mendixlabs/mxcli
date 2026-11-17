@@ -168,24 +168,11 @@ func (s *Snapshot) Keys() []ElementKey {
 // with the *same* engine is what makes the result meaningful.
 func SnapshotModule(mprPath, moduleName string, newBackend func() backend.FullBackend) (*Snapshot, error) {
 	var sink bytes.Buffer
-	exec := executor.New(&sink)
+	exec, err := openForSnapshot(mprPath, &sink, newBackend)
+	if err != nil {
+		return nil, err
+	}
 	defer exec.Close()
-	if newBackend != nil {
-		exec.SetBackendFactory(newBackend)
-	}
-
-	if err := exec.Execute(&ast.ConnectStmt{Path: mprPath}); err != nil {
-		return nil, fmt.Errorf("connect %s: %w", mprPath, err)
-	}
-
-	// The catalog is built lazily by the statements that need it, and the
-	// enumeration below reads it directly rather than through a statement, so
-	// build it explicitly. Fast mode is enough: the `objects` index it populates
-	// is exactly what this needs, and full mode additionally parses every
-	// activity and widget for cross-references nothing here uses.
-	if err := exec.Execute(&ast.RefreshCatalogStmt{}); err != nil {
-		return nil, fmt.Errorf("build catalog for %s: %w", mprPath, err)
-	}
 
 	rows, err := queryModuleObjects(exec, moduleName)
 	if err != nil {
@@ -206,14 +193,59 @@ func SnapshotModule(mprPath, moduleName string, newBackend func() backend.FullBa
 		snap.Elements[key] = describeElement(exec, &sink, row)
 	}
 
-	deps, err := queryDependentAssociations(exec, moduleName)
+	if snap.Dependents, err = dependents(exec, &sink, moduleName); err != nil {
+		return nil, err
+	}
+	return snap, nil
+}
+
+// SnapshotDependents captures only the associations other modules own that
+// reach into moduleName. It needs nothing but the project, so `update
+// --no-baseline` — which cannot build the baseline to find edits to the module
+// — still names, saves and gates on what the update deletes outside it
+// (ako/mxcli#2368).
+func SnapshotDependents(mprPath, moduleName string, newBackend func() backend.FullBackend) ([]Element, error) {
+	var sink bytes.Buffer
+	exec, err := openForSnapshot(mprPath, &sink, newBackend)
 	if err != nil {
 		return nil, err
 	}
-	for _, row := range deps {
-		snap.Dependents = append(snap.Dependents, describeElement(exec, &sink, row))
+	defer exec.Close()
+	return dependents(exec, &sink, moduleName)
+}
+
+func dependents(exec *executor.Executor, sink *bytes.Buffer, moduleName string) ([]Element, error) {
+	rows, err := queryDependentAssociations(exec, moduleName)
+	if err != nil {
+		return nil, err
 	}
-	return snap, nil
+	var out []Element
+	for _, row := range rows {
+		out = append(out, describeElement(exec, sink, row))
+	}
+	return out, nil
+}
+
+// openForSnapshot connects an executor writing to sink and builds its catalog.
+func openForSnapshot(mprPath string, sink *bytes.Buffer, newBackend func() backend.FullBackend) (*executor.Executor, error) {
+	exec := executor.New(sink)
+	if newBackend != nil {
+		exec.SetBackendFactory(newBackend)
+	}
+	if err := exec.Execute(&ast.ConnectStmt{Path: mprPath}); err != nil {
+		exec.Close()
+		return nil, fmt.Errorf("connect %s: %w", mprPath, err)
+	}
+	// The catalog is built lazily by the statements that need it, and the
+	// enumeration reads it directly rather than through a statement, so build
+	// it explicitly. Fast mode is enough: the `objects` index it populates is
+	// exactly what this needs, and full mode additionally parses every
+	// activity and widget for cross-references nothing here uses.
+	if err := exec.Execute(&ast.RefreshCatalogStmt{}); err != nil {
+		exec.Close()
+		return nil, fmt.Errorf("build catalog for %s: %w", mprPath, err)
+	}
+	return exec, nil
 }
 
 // moduleObject is one row of the enumeration.

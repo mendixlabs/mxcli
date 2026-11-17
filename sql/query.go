@@ -4,6 +4,7 @@ package sql
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 )
 
@@ -11,6 +12,8 @@ import (
 type QueryResult struct {
 	Columns []string
 	Rows    [][]any
+	// RowsAffected is set for a statement run as a write: the rows it changed.
+	RowsAffected *int64
 }
 
 // Execute runs a SQL query and returns the result.
@@ -20,7 +23,11 @@ func Execute(ctx context.Context, conn *Connection, query string) (*QueryResult,
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
 	defer rows.Close()
+	return scanRows(rows)
+}
 
+// scanRows reads every row of rows.
+func scanRows(rows *sql.Rows) (*QueryResult, error) {
 	cols, err := rows.Columns()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get columns: %w", err)

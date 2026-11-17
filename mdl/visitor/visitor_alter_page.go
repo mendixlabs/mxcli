@@ -104,6 +104,20 @@ func (b *Builder) buildAlterSet(ctx *parser.AlterSetContext) ast.AlterPageOperat
 			op.Properties[name] = value
 		}
 	}
+	// `visible: roles (…) [and <condition>]` is Studio Pro's "Visible for
+	// module roles", a setting of its own beside the condition, as CREATE PAGE
+	// reads it (ako/mxcli#2319). It reached here as the expression text, and
+	// was stored as an invalid expression (ako/mxcli#2371).
+	if text, ok := op.Properties["VisibleIf"].(string); ok {
+		if roles, cond, ok := splitVisibleRoles(text); ok {
+			op.Properties["VisibleRoles"] = roles
+			if cond == "" {
+				delete(op.Properties, "VisibleIf")
+			} else {
+				op.Properties["VisibleIf"] = cond
+			}
+		}
+	}
 	b.recordAlterPageSet(ctx)
 
 	return op
