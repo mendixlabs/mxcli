@@ -37,6 +37,7 @@ func validateNanoflowWith(stmt *ast.CreateNanoflowStmt, voids *voidCodeActions) 
 		excluded:   stmt.Excluded,
 		voids:      voids,
 	}
+	v.initDefinedVariables(stmt.Body)
 	v.walkExprFunctions(stmt.Body)
 	v.walkAnnotations(stmt.Body)
 	// MDL063 holds for a nanoflow too: its variable names are as flat as a
@@ -65,6 +66,10 @@ func validateNanoflowWith(stmt *ast.CreateNanoflowStmt, voids *voidCodeActions) 
 	// MDL-FLOW05: a nanoflow's flow is built by the same builder, so a statement
 	// after a return is dead there too (mendixlabs/mxcli#1491).
 	v.checkUnreachableStatements(stmt.Body)
+	// MDL097: `returns T as $R` with a path off the end and no $R. Measured on
+	// 11.16.1 in a nanoflow as in a microflow: CE0109 when $R is undefined, clean
+	// when it is declared at the top level.
+	v.checkReturnVariableDefined(stmt.Body)
 	// MDL049 / MDL094: a bare association path returned, or a loop over a path.
 	// Measured on 11.12.1, a nanoflow's return is CE0117 as a microflow's is,
 	// and its loop is built from the same AST (mendixlabs/mxcli#199).
