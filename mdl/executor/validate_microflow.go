@@ -169,6 +169,10 @@ func (v *microflowValidator) validate(body []ast.MicroflowStatement) {
 		}
 	}
 
+	// MDL097: the AS clause's exemption above holds only while $Var has a value
+	// where the flow ends. See validate_return_variable_defined.go.
+	v.checkReturnVariableDefined(body)
+
 	// Check 3: variable scope — detect variables declared inside branches but used after
 	v.checkBranchScoping(body)
 

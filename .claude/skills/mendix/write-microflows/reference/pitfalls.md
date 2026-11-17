@@ -578,6 +578,28 @@ A regex that ends in a lone backslash (`'\'`) builds and fails every time it run
 (`secondsBetween`, `minutesBetween`, …) return the absolute difference, whichever date
 comes first — compare the dates for the direction.
 
+### 21. `returns T as $R` Needs `$R` Defined Where the Flow Ends
+
+The `as $R` clause makes the end event return `$R`, so the body need not spell out a
+`return` — but only while `$R` has a value on the path that reaches the end. Declare it at
+the top level of the flow, or end every path with a `return`. Measured on MxBuild 11.16.1,
+microflow and nanoflow alike:
+
+- `$R` never defined and a path falls off the end — CE0109 "Undefined variable 'R'" (MDL097).
+- `$R` defined only inside an `if` branch or loop — CE0108, out of scope at the end event (MDL097).
+- `$R` declared at the top level — clean, even when the body falls off the end.
+
+```mdl
+mdl 1;
+create microflow Mod.IsEven ($N: Integer) returns Boolean as $Even
+begin
+  declare $Even Boolean = false;          -- top level: always has a value at the end
+  if $N mod 2 = 0 then
+    set $Even = true;
+  end if;
+end;
+```
+
 ## Implicit Variable Creation (CE0111 Duplicate Variable)
 
 These statements **implicitly create a new variable** with the name on the left side:
