@@ -37,6 +37,7 @@ func validateNanoflowWith(stmt *ast.CreateNanoflowStmt, voids *voidCodeActions) 
 		excluded:   stmt.Excluded,
 		voids:      voids,
 	}
+	v.initDefinedVariables(stmt.Body)
 	v.walkExprFunctions(stmt.Body)
 	v.walkAnnotations(stmt.Body)
 	// MDL063 holds for a nanoflow too: its variable names are as flat as a
