@@ -10,17 +10,18 @@ description: "Add, update, remove and audit a module's Maven/JAR dependencies in
 
 | lines | section |
 |---|---|
-| 34-44 | When to Use This Skill |
-| 45-56 | Listing Dependencies |
-| 57-65 | Describing a Dependency |
-| 66-103 | Adding a Dependency |
-| 104-116 | Updating a Dependency |
-| 117-131 | Managing Transitive Exclusions |
-| 132-139 | Removing a Dependency |
-| 140-155 | Jackson Version Gotcha |
-| 156-166 | After Adding a Dependency |
-| 167-177 | Coordinate Format |
-| 178-181 | Related Skills |
+| 35-45 | When to Use This Skill |
+| 46-57 | Listing Dependencies |
+| 58-66 | Describing a Dependency |
+| 67-104 | Adding a Dependency |
+| 105-117 | Updating a Dependency |
+| 118-132 | Managing Transitive Exclusions |
+| 133-140 | Removing a Dependency |
+| 141-156 | Jackson Version Gotcha |
+| 157-181 | A JDBC Driver or Native Library in the Runtime |
+| 182-192 | After Adding a Dependency |
+| 193-203 | Coordinate Format |
+| 204-207 | Related Skills |
 
 <!-- /skill-index -->
 # Managing Maven / JAR Dependencies
@@ -152,6 +153,31 @@ Pin to the version the Mendix runtime bundles to avoid classloader conflicts:
 ```bash
 ls ~/.mxcli/mxbuild/<runtime-version>/runtime/bundles/ | grep jackson
 ```
+
+## A JDBC Driver or Native Library in the Runtime
+
+A library that registers itself with the JVM can be on the class path and still
+not be found from a Java action. Reported building a SPARQL action on DuckDB
+(`org.duckdb:duckdb_jdbc` 2.0.0.1) in Mendix 11.16 (ako/mxcli#2314; not
+measured here):
+
+1. **`DriverManager` does not see a userlib driver.** `DriverManager.getConnection("jdbc:duckdb:")`
+   fails with `No suitable driver found`: the jar sits in the app's own class
+   loader, which `DriverManager` does not search. Instantiate the driver class
+   instead — `new org.duckdb.DuckDBDriver().connect("jdbc:duckdb:", new java.util.Properties())` —
+   the same for any JDBC driver a dependency brings.
+2. **DuckDB verifies an extension file against its core signing key.** A core
+   extension installs from a bundled file (`INSTALL '<path>'`); a community one
+   (`rdf`) is refused ("doesn't have a valid signature"), loading it by path is
+   refused too, and the failed `INSTALL` closes the statement. What works: run
+   `INSTALL rdf FROM community` once on a machine with network access, bundle the
+   installed `rdf.duckdb_extension` with its `.info` file, copy both into
+   `<extension_directory>/v<duckdb version>/<platform>/` (e.g. `v2.0.0/linux_amd64/`)
+   at runtime, then `LOAD rdf` by name.
+3. **Only a real build compiles Java.** `mxcli check` and `mxcli docker check`
+   (`mx check`) do not, so a mistake in the body shows in `mxcli test --local` or
+   `run --local` (`mxbuild --target=deploy`). `import com.mendix.core.Core;` is
+   added for you when the code uses `Core`; any other class needs its import line.
 
 ## After Adding a Dependency
 

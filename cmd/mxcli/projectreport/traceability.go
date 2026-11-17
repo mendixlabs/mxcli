@@ -90,9 +90,20 @@ type TraceRequirement struct {
 	// footprint is the microflows that create or change its entity.
 	FootprintApprox bool     `json:"footprintApprox,omitempty"`
 	Tests           []string `json:"tests"`
-	Journeys        []string `json:"journeys"`
-	Decisions       []string `json:"decisions"`
-	Questions       []string `json:"questions"`
+	// TestResults are Tests with the result each had in the JUnit file read
+	// (--junit or --run): passed, failed, error, skipped, or "not run" when
+	// none was read or the file has no result for it (ako/mxcli#2340). Tests
+	// keeps the names alone, for readers of the older field.
+	TestResults []TraceTestResult `json:"testResults,omitempty"`
+	Journeys    []string          `json:"journeys"`
+	Decisions   []string          `json:"decisions"`
+	Questions   []string          `json:"questions"`
+}
+
+// TraceTestResult is one test that reaches a requirement, with its result.
+type TraceTestResult struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
 }
 
 // TraceQuestion is an open question that bears on one or more requirements.
@@ -304,6 +315,11 @@ func CollectTraceability(q Querier, in TraceabilityInput) (*TraceabilityData, er
 			for _, t := range in.Evidence.Tests {
 				if intersects(t.Reached, fp) {
 					tr.Tests = append(tr.Tests, t.Name)
+					status := t.Status
+					if status == "" {
+						status = "not run"
+					}
+					tr.TestResults = append(tr.TestResults, TraceTestResult{Name: t.Name, Status: status})
 				}
 			}
 			for _, j := range in.Evidence.Journeys {
@@ -525,9 +541,9 @@ func RenderTraceability(env *Envelope, ann *Annotations) (Doc, error) {
 			if impl == "" {
 				impl = r.FootprintNote
 			}
-			t.Rows = append(t.Rows, []string{title, status, impl, strings.Join(r.Tests, "; "), strings.Join(r.Journeys, "; "),
+			t.Rows = append(t.Rows, []string{title, status, impl, testsCell(r), strings.Join(r.Journeys, "; "),
 				strings.Join(r.Decisions, "; "), strings.Join(r.Questions, "; ")})
-			t.Classes = append(t.Classes, []string{"", statusClass(r.Status), "", proofClass(r), proofClass(r), "", ""})
+			t.Classes = append(t.Classes, []string{"", statusClass(r.Status), "", testsClass(r), proofClass(r), "", ""})
 		}
 		doc.Sections = append(doc.Sections, Section{ID: fmt.Sprintf("m%d", i+1), Title: m.Name, Blocks: []Block{t}})
 	}
@@ -558,4 +574,33 @@ func bulletsOrNone(items []string) Block {
 		return Para{Text: "None."}
 	}
 	return Bullets{Items: items}
+}
+
+// testsCell lists a requirement's tests with the result of each that ran,
+// so "built, test failing" does not read as "built and proven"
+// (ako/mxcli#2340). A test with no result is listed by name alone.
+func testsCell(r TraceRequirement) string {
+	if len(r.TestResults) == 0 {
+		return strings.Join(r.Tests, "; ")
+	}
+	parts := make([]string, 0, len(r.TestResults))
+	for _, t := range r.TestResults {
+		if t.Status == "" || t.Status == "not run" {
+			parts = append(parts, t.Name)
+			continue
+		}
+		parts = append(parts, t.Name+" ("+t.Status+")")
+	}
+	return strings.Join(parts, "; ")
+}
+
+// testsClass is the tests cell's class: "bad" when a test reaching the
+// requirement failed or errored, else proofClass's.
+func testsClass(r TraceRequirement) string {
+	for _, t := range r.TestResults {
+		if t.Status == "failed" || t.Status == "error" {
+			return "bad"
+		}
+	}
+	return proofClass(r)
 }

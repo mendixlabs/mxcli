@@ -51,6 +51,61 @@ type OQLResult struct {
 // binds to 127.0.0.1 inside the container and is unreachable from DinD).
 // Set Direct=true to connect via HTTP directly (when the admin API is reachable).
 func ExecuteOQL(opts OQLOptions, query string) (*OQLResult, error) {
+	res, err := executeOQL(opts, query)
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "action not found") {
+		if v := runtimeVersion(m2eeOptionsFor(opts)); v != "" && majorVersion(v) > 0 && majorVersion(v) < 10 {
+			return nil, fmt.Errorf("OQL over the admin API needs Mendix 10 or later; this runtime is %s, which has no "+
+				"preview_execute_oql action, so no flag or restart makes it answer. Read its data from its database "+
+				"instead (tables are named module$entity)", v)
+		}
+	}
+	return res, err
+}
+
+// m2eeOptionsFor is the admin connection ExecuteOQL uses.
+func m2eeOptionsFor(opts OQLOptions) M2EEOptions {
+	return M2EEOptions{
+		Host:        opts.Host,
+		Port:        opts.Port,
+		Token:       opts.Token,
+		ProjectPath: opts.ProjectPath,
+		Direct:      opts.Direct,
+		Timeout:     10 * time.Second,
+	}
+}
+
+// runtimeVersion is the running runtime's version from the M2EE `about`
+// action, or "" when it cannot be read. Asked only once an OQL route is
+// missing: a Mendix 9 runtime has no preview_execute_oql, and the dev-flags
+// advice the missing action otherwise gets cannot help there
+// (ako/mxcli#2341, mendixlabs/mxcli#1879).
+func runtimeVersion(opts M2EEOptions) string {
+	resp, err := CallM2EE(opts, "about", nil)
+	if err != nil || resp.M2EEError() != "" {
+		return ""
+	}
+	var about struct {
+		Version string `json:"version"`
+	}
+	if json.Unmarshal(resp.RawFeedback, &about) != nil {
+		return ""
+	}
+	return about.Version
+}
+
+// majorVersion is the leading number of a version string, 0 when it has none.
+func majorVersion(v string) int {
+	n := 0
+	for _, c := range v {
+		if c < '0' || c > '9' {
+			break
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
+}
+
+func executeOQL(opts OQLOptions, query string) (*OQLResult, error) {
 	m2eeOpts := M2EEOptions{
 		Host:        opts.Host,
 		Port:        opts.Port,
