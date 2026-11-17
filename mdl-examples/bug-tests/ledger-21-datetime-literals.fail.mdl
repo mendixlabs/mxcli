@@ -11,6 +11,9 @@
 -- check time and points to the addDays()/addMonths() workaround (those DO take
 -- variables — step off a literal anchor date).
 --
+-- Measured on MxBuild 11.16.1 with the variable declared: the statement below is CE0117,
+-- and `dateTime(2026, 1, 15)` with literal arguments is clean.
+--
 -- Usage (expected to FAIL check):
 --   mxcli check mdl-examples/bug-tests/ledger-21-datetime-literals.fail.mdl
 -- ============================================================================
@@ -21,6 +24,9 @@ create microflow MyModule.DateTimeLiterals (
 )
 returns dateTime
 begin
+  -- Declared on purpose: an undeclared variable is CE0109, which MxBuild reports first
+  -- and which hides the CE0117 this statement exists to show.
+  declare $Bad dateTime = [%CurrentDateTime%];
   set $Bad = dateTime(2026, $Month, $Day);   -- MDL046: variable args
   return $Bad;
 end
