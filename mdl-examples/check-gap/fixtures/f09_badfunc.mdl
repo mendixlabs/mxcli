@@ -1,0 +1,2 @@
+mdl 1;
+create microflow Sp.F09 ($S: String) returns String as $R begin return replace($S, 'a', 'b'); end;

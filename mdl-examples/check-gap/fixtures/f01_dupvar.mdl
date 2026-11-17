@@ -1,0 +1,2 @@
+mdl 1;
+create microflow Sp.F01 () returns Integer as $R begin declare $X Integer = 1; declare $X Integer = 2; return $X; end;

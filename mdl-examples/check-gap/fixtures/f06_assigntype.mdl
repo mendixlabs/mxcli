@@ -1,0 +1,2 @@
+mdl 1;
+create microflow Sp.F06 () returns Integer as $R begin declare $X Integer = 'abc'; return $X; end;

@@ -64,11 +64,58 @@ Integration/REST/OData 129, Security 29, Workflows 15, Navigation 7.
 `CE`/`CW` codes** across ~24 `validate_*.go` files and ~30 lint rules — proof the approach
 works; the catalog just turns "port as we hit them" into an ordered backlog of ~1240 left.
 
-**There is no cheaper Mendix-native shortcut.** `mx check` (consistency only, no build)
-measured **~22 s** — *slower* than an incremental build — because both cold-start the .NET
-model engine + load the full `.mpr`. So mxcli's Go-native `check` is the **only** path under
-the ~18–60 s floor. That is the entire justification for porting rules into Go rather than
-shelling out to `mx check`.
+**Is there a cheaper Mendix-native shortcut?** Not established. `mx check` (consistency
+only, no build) was measured **once, at ~22 s** (project size and warm/cold state not
+recorded), *slower* than an incremental build, because both cold-start the .NET model
+engine and load the full `.mpr`. A later measurement on one small project (mxcli v0.32.0,
+Mendix 11.16.1, ako/mxcli#1258) gave `mxcli docker check` 7.6 s and Mendix CLI 2's
+`mendix check` (an in-process checker that emits CE codes such as CE0109/CE0844) 1.2 s.
+Two single-project numbers do not settle it, but they show 22 s is not a constant.
+`mendix check` also reported false errors on some real apps (tester report), so it is a
+candidate *pre-filter* for the harvest loop, not a replacement oracle: any finding must be
+confirmed against MxBuild before a rule is ported.
+
+The justification for a Go-native `check` therefore rests on more than speed: it needs no
+.NET runtime or mxbuild download, runs in the pre-write path before any model exists on
+disk, and can be wired into `exec`. A faster Mendix-native checker would change the cost of
+the *harvest loop*, not the case for porting.
+
+## Spike results: Mendix CLI 2 `mendix check` as a fast oracle (2026-11-16)
+
+Harness: `mdl-examples/check-gap/run-parity.sh` (fixtures beside it). Mendix 11.16.1
+MxBuild, Mendix CLI 2 (11.16 build), Linux x64, one clean project from `mxcli new`
+(0 errors on both checkers), single runs, no cold/warm split.
+
+| fixture | `mxcli check -p` | `mx check` (MxBuild) | `mendix check` (CLI 2) |
+|---|---|---|---|
+| duplicate variable | rejected | CE0111 | CE0111 |
+| wrong parameter name | rejected | CE1613 | CE0115, CE7710 |
+| undefined variable | **passed** | CE0109 | CE0109, CE7823 |
+| `DECLARE $X Integer = 'abc'` | **passed** | CE0117 | CE0844 |
+| branch with no return | **passed** | CE0109 | CE0109, CE7823 |
+| Decimal returned from String microflow | **passed** | CE0117 | CE0844 |
+| unknown function `replace` | **passed** | CE0117 | CE7811 |
+| commit of non-persistable entity (control) | passed | none | none |
+
+- **Detection.** Both Mendix checkers flag all 7 broken fixtures and agree on the control.
+  `mxcli check -p` misses 5 of 7, all Tier B (expression and flow typing).
+- **Speed.** `mendix check` 1.3-1.7 s, `mx check` 6.3-8.5 s on the clean project (one 18.3 s outlier on the first fixture of a later run, so run-to-run spread is wide; 4.0 s on
+  a 28-error project); `mxcli docker check` 7.5 s. None is near the 22 s above.
+- **More specific.** Where `mx check` reports the generic CE0117 "Error(s) in
+  expression", `mendix check` names the cause (CE0844 type mismatch, CE7811 unknown
+  function). That is the better porting target.
+- **Codes differ for the same finding.** On a 28-error project (`testdata/testapp-views`),
+  all 28 "... no longer exists" findings are CE1613 in `mx check` (11.14.0 and 11.16.1
+  alike) and CE7710 in `mendix check`. The harness must compare messages, not only codes.
+- **Unconfirmed extras.** On that project `mendix check` reports 34 errors to `mx
+  check`'s 28: 3x CE0136 (retrieve without entity), 2x CE0535 (grid column weights),
+  1x CE6083 (design property unsupported by theme). MxBuild 11.16.1 reports none of
+  them, so they stay unconfirmed. The CE0136 ones sit on retrieves whose entity no
+  longer exists, which `mx check` already reports as CE1613, so they look like
+  cascades rather than independent findings. No extras on the clean project.
+- **Conclusion.** `mendix check` works as a first-pass oracle: run it, then confirm any
+  code it reports against `mx check` before porting. It is a proprietary binary, so the
+  harness takes its path as an option and nothing is committed.
 
 ## Extraction methodology
 
@@ -128,11 +175,14 @@ button, or a URL."*
 2. **Port by tier then frequency.** Tier A first (cheapest, highest hit-rate), Tier B behind
    the type-inference work, Tier C case-by-case, Tier D never. Route `CE`→`check` (hard),
    `CW`→`lint` (advisory) — severity is free from the prefix.
-3. **Harvest-against-the-oracle loop.** Use `mx check` (~22 s, the full 1318-code truth) as
-   an **offline oracle** over a corpus of deliberately-broken projects; diff its findings
+3. **Harvest-against-the-oracle loop.** Use `mx check` (the full 1318-code truth; ~22 s in
+   one measurement, see above) as an **offline oracle** over a corpus of deliberately-broken projects; diff its findings
    against `mxcli check`; the misses are the ranked backlog; port; re-run to confirm parity.
    This is the build tool for the porting effort, and reuses the "run mxbuild over broken
    projects and harvest output" fallback from the very first spike as a *deliberate* tool.
+   Open spike: run Mendix CLI 2's `mendix check` over the same fixtures as a fast
+   pre-filter and record its agreement with `mx check` per code (false-positive and
+   false-negative rate) before trusting it for anything.
 4. `PROPOSAL_check_mxbuild_gap_heuristics.md` is the first tactical instance; this proposal
    is the strategic program it fits into.
 
@@ -176,6 +226,9 @@ button, or a URL."*
    per-rule trigger predicate lives in Mendix's `.cs` (the `LOCATION` breadcrumb) and must
    be reverse-engineered per rule. The catalog gives the *target + message*, not the
    predicate — sizing must account for that.
-4. **Overlap with `PROPOSAL_check_mxbuild_gap_heuristics.md`.** Fold that proposal's 6 cases
+4. **Fast oracle.** The spike above supports `mendix check` as a first-pass oracle with
+   `mx check` confirming. Still open: the 6 unconfirmed extras on a broken project, a
+   corpus larger than 8 fixtures, and cold/warm timings.
+5. **Overlap with `PROPOSAL_check_mxbuild_gap_heuristics.md`.** Fold that proposal's 6 cases
    in as the first harvested batch, or keep it separate and cross-link? (Recommend: keep it
    as the tactical pilot; this proposal owns the methodology + backlog.)
