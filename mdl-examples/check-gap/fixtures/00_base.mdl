@@ -1,0 +1,4 @@
+mdl 1;
+create module Sp;
+create persistent entity Sp.Item ( Name: String(100), Amount: Decimal, Qty: Integer );
+create microflow Sp.Helper ($Text: String) returns String as $R begin return $Text; end;
