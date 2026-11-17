@@ -60,9 +60,14 @@ Present identically in 11.6.3 and 11.12.1.
 Subsystem split (by source file): Microflows 364, Domain model 275, Pages/Widgets 248,
 Integration/REST/OData 129, Security 29, Workflows 15, Navigation 7.
 
-**mxcli already does ~6% of this by hand.** The source references **~77–81 distinct
-`CE`/`CW` codes** across ~24 `validate_*.go` files and ~30 lint rules — proof the approach
-works; the catalog just turns "port as we hit them" into an ordered backlog of ~1240 left.
+**mxcli already names a share of this by hand, and that share is computed, not quoted.**
+`make diag-coverage` (`scripts/diagcoverage/`) reads the code IDs from the installed MxBuild's
+`Mendix.Modeler.Texts.dll`, compares them with the codes named in mxcli's message strings and
+lint rules, and ranks the codes it does not name by how many bug-fix records
+(`.claude/skills/fix-issue/findings/`) hit them. A figure written here would be stale the next
+time anyone adds a check. "Named" is a proxy for "covered": a check that does not name its
+code is declared in `scripts/diagcoverage/covered-as.tsv`, with the fixture that shows it.
+The approach works; the catalog turns "port as we hit them" into an ordered backlog.
 
 **Is there a cheaper Mendix-native shortcut?** Not established. `mx check` (consistency
 only, no build) was measured **once, at ~22 s** (project size and warm/cold state not
@@ -190,6 +195,7 @@ button, or a URL."*
 
 | File | Change |
 |------|--------|
+| `scripts/diagcoverage/` | New (done): `make diag-coverage`, per-code coverage from the installed MxBuild, IDs only, ranked by bug-record frequency. No monodis. |
 | `scripts/extract-diagnostics-catalog.sh` | New: the reproducible extractor (stream DLL → `monodis --mresources` → parse+tier). Committed here. |
 | `sdk/versions/diagnostics-{version}.json` | Generated catalog data asset per version (IP decision pending). |
 | `mdl/linter/rules/`, `mdl/executor/validate_*.go` | Port Tier-A codes, prioritised by frequency; cite the `CE`/`CW` code in each. |
@@ -220,8 +226,11 @@ button, or a URL."*
    our own paraphrased messages**; (b) generate the full catalog **locally at build time**
    from the user's own licensed mxbuild (never committed); (c) confirm redistribution is
    permitted. Default: **(b)** — commit the extractor, not the corpus.
-2. **`monodis` dependency.** The extractor needs `mono-utils`. Alternatives: `ilspycmd`
-   (dotnet tool) or a small pure-Go PE manifest-resource reader to drop the mono dep.
+2. **`monodis` dependency.** The message extractor needs `mono-utils`. Alternatives:
+   `ilspycmd` (dotnet tool) or a small pure-Go PE manifest-resource reader to drop the mono
+   dep. The code IDs alone need none of it: the PO resources are plain ASCII in the DLL, so
+   `scripts/diagcoverage` finds them by scanning the bytes. Only the message text and the
+   tiering still need the extractor.
 3. **Tiering is heuristic.** The A/B/C/D split is keyword+subsystem-based; the real
    per-rule trigger predicate lives in Mendix's `.cs` (the `LOCATION` breadcrumb) and must
    be reverse-engineered per rule. The catalog gives the *target + message*, not the
