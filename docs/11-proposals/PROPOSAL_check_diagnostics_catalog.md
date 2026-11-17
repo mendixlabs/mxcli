@@ -112,14 +112,33 @@ MxBuild, Mendix CLI 2 (11.16 build), Linux x64, one clean project from `mxcli ne
 - **Codes differ for the same finding.** On a 28-error project (`testdata/testapp-views`),
   all 28 "... no longer exists" findings are CE1613 in `mx check` (11.14.0 and 11.16.1
   alike) and CE7710 in `mendix check`. The harness must compare messages, not only codes.
-- **Unconfirmed extras.** On that project `mendix check` reports 34 errors to `mx
-  check`'s 28: 3x CE0136 (retrieve without entity), 2x CE0535 (grid column weights),
-  1x CE6083 (design property unsupported by theme). MxBuild 11.16.1 reports none of
-  them, so they stay unconfirmed. The CE0136 ones sit on retrieves whose entity no
-  longer exists, which `mx check` already reports as CE1613, so they look like
-  cascades rather than independent findings. No extras on the clean project.
+- **The 6 extras are artifacts of a stripped project.** On `testdata/testapp-views/TestApp.mpr`
+  (a Studio Pro 11.14.0 project holding only `MyFirstModule` and `System`: no Atlas_Core, no
+  theme, no Administration module) `mendix check` reports 34 errors to MxBuild 11.16.1's 28.
+  The 28 "selected … no longer exists" findings are CE7710 in CLI 2 and CE1613 in MxBuild,
+  the same count. The 6 left over, classified by a control each:
+  - **3x CE0136** (retrieve without an entity) are a cascade of the unresolved entity
+    `Administration.Account`: they sit on the same three retrieve activities MxBuild reports
+    as CE1613. Defining the entity removes all three, and the retrieve errors with them.
+  - **2x CE0535** (grid column weights "add up to -1") are a cascade of the unresolved layout
+    `Atlas_Core.Atlas_TopBar`. The stored columns are identical to what mxcli writes for
+    `DesktopWidth: AutoFill` (Weight, TabletWeight, PhoneWeight and PreviewWidth all -1), and
+    that shape is clean in both checkers on a healthy project, in a theme-less project when
+    the layout resolves, and for a lone 6-wide column. Repointing the page at a layout that
+    exists clears both; CE6858 ("update Atlas UI to 2.4 to use Layout Grid on Native pages")
+    appears instead, for every page with a layout grid in a project without Atlas.
+  - **1x CE6083** (design property "Row gap" unsupported by the theme) survives the repoint,
+    and `mendix check` also raises it for a new page written into this project. MxBuild is
+    silent on all of them. It is clean in both checkers on a healthy project, where the Atlas
+    theme defines the property. The likely reason is that this project has no theme to
+    compare against (inferred, not measured). MxBuild does raise CE6083 for real projects:
+    10 bug-fix records name it.
+  None is a check to port, and none is a CLI 2 false positive on a healthy project. Defining
+  the missing entity also made `mendix check` raise CE8412 (the demo users' entity must be
+  `System.User`): a result of the control, not of the project.
 - **Conclusion.** `mendix check` works as a first-pass oracle: run it, then confirm any
-  code it reports against `mx check` before porting. It is a proprietary binary, so the
+  code it reports against `mx check` before porting. Run it on a project whose references
+  resolve (no CE7710 / CE1613): on one that does not, it reports cascades MxBuild suppresses. It is a proprietary binary, so the
   harness takes its path as an option and nothing is committed.
 
 ## Extraction methodology
@@ -236,8 +255,8 @@ button, or a URL."*
    be reverse-engineered per rule. The catalog gives the *target + message*, not the
    predicate — sizing must account for that.
 4. **Fast oracle.** The spike above supports `mendix check` as a first-pass oracle with
-   `mx check` confirming. Still open: the 6 unconfirmed extras on a broken project, a
-   corpus larger than 8 fixtures, and cold/warm timings.
+   `mx check` confirming. Still open: a corpus larger than 8 fixtures, and cold/warm
+   timings. The 6 extras on a broken project are classified above.
 5. **Overlap with `PROPOSAL_check_mxbuild_gap_heuristics.md`.** Fold that proposal's 6 cases
    in as the first harvested batch, or keep it separate and cross-link? (Recommend: keep it
    as the tactical pilot; this proposal owns the methodology + backlog.)
