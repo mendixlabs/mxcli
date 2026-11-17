@@ -518,7 +518,7 @@ func resolveViaCatalog(projectPath, name string) []string {
 
 // catalogMatchesProject reports whether the cached catalog was built from the
 // current project file and is still up to date — same MPR path and unchanged
-// modification time (Unix seconds, mirroring isCacheValid). Any read failure or
+// modification time (the same instant, mirroring isCacheValid). Any read failure or
 // mismatch is treated as "not fresh" so the caller live-scans (safe but slower).
 func catalogMatchesProject(cat *catalog.Catalog, projectPath string) bool {
 	info, err := cat.GetCacheInfo()
@@ -529,7 +529,7 @@ func catalogMatchesProject(cat *catalog.Catalog, projectPath string) bool {
 	if err != nil {
 		return false
 	}
-	if info.MprModTime.Unix() != fi.ModTime().Unix() {
+	if !catalog.ModTimeUnchanged(info.MprModTime, fi.ModTime()) {
 		return false
 	}
 	// Compare absolute paths when both resolve; a path mismatch means the cache

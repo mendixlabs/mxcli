@@ -782,3 +782,56 @@ func TestPartialViewsExposeSnapshotColumns(t *testing.T) {
 		t.Errorf("external_entities view unexpectedly exposes SourceBranch (drift from original schema)")
 	}
 }
+
+// A write that lands in the same second as the build that made the cache must
+// still make the cache stale: the modification time is compared as an instant,
+// not as whole seconds. A write one second later was always seen; one inside the
+// same second was answered from the stale catalog.
+func TestModTimeUnchanged(t *testing.T) {
+	base := time.Date(2026, 11, 17, 19, 25, 30, 250_000_000, time.UTC)
+	cases := []struct {
+		name            string
+		cached, current time.Time
+		want            bool
+	}{
+		{"same instant", base, base, true},
+		{"same instant, other zone", base, base.In(time.FixedZone("x", 3600)), true},
+		{"later in the same second", base, base.Add(300 * time.Millisecond), false},
+		{"earlier in the same second", base, base.Add(-200 * time.Millisecond), false},
+		{"one nanosecond later", base, base.Add(time.Nanosecond), false},
+		{"a second later", base, base.Add(time.Second), false},
+		// A cache written before sub-second times were kept holds whole seconds; it
+		// cannot tell whether the file changed inside that second, so it rebuilds once.
+		{"legacy whole-second cache against a fractional time", base.Truncate(time.Second), base, false},
+		{"legacy whole-second cache against a whole-second file", base.Truncate(time.Second), base.Truncate(time.Second), true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := ModTimeUnchanged(c.cached, c.current); got != c.want {
+				t.Errorf("ModTimeUnchanged(%v, %v) = %v, want %v", c.cached, c.current, got, c.want)
+			}
+		})
+	}
+}
+
+// The recorded time survives the round trip through the cache file to the
+// nanosecond; RFC3339 kept only whole seconds, which is what made the check above
+// impossible.
+func TestCacheInfoKeepsModTimeToTheNanosecond(t *testing.T) {
+	cat, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cat.Close()
+	mt := time.Date(2026, 11, 17, 19, 25, 30, 123_456_789, time.UTC)
+	if err := cat.SetCacheInfo("/p/app.mpr", mt, "11.8.0", "fast", time.Second); err != nil {
+		t.Fatal(err)
+	}
+	info, err := cat.GetCacheInfo()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ModTimeUnchanged(info.MprModTime, mt) {
+		t.Errorf("recorded %v, read back %v", mt, info.MprModTime)
+	}
+}
