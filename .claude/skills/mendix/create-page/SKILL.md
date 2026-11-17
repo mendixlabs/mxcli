@@ -15,12 +15,12 @@ description: "CREATE PAGE syntax reference — parameters, variables, layouts, a
 | 47-222 | Syntax |
 | 223-293 | Basic Examples |
 | 294-318 | Modifying Existing Pages |
-| 319-435 | Conditional Visibility and Editability |
-| 436-605 | Known Limitations |
-| 606-614 | Tips |
-| 615-641 | Related Commands |
-| 642-666 | PLUGGABLEWIDGET Escape Hatch |
-| 667-670 | See Also |
+| 319-440 | Conditional Visibility and Editability |
+| 441-610 | Known Limitations |
+| 611-619 | Tips |
+| 620-646 | Related Commands |
+| 647-671 | PLUGGABLEWIDGET Escape Hatch |
+| 672-675 | See Also |
 
 <!-- /skill-index -->
 # CREATE PAGE - MDL Syntax Guide
@@ -388,6 +388,11 @@ create page MyModule.Request_Review (title: 'Review', layout: Atlas_Core.Atlas_D
     visible: false, visible: roles (MyModule.Manager))
 };
 ```
+
+The roles must be roles of the page's, snippet's or layout's OWN module: a role of
+another module (`Administration.Administrator` on a page in `MyModule`) builds with
+CE0149 "reselect roles", and `check` refuses it (MDL-GRANT04). Whether the page may
+be viewed by the role does not matter, only the role's module.
 
 `visible: roles (Mod.Role) and <condition>` is the same two settings in one line
 (both apply). `roles (…)` anywhere else in an expression is refused (MDL-WIDGET54):
