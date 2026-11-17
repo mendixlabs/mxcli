@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 func write(t *testing.T, path, content string) {
@@ -207,7 +209,7 @@ func fakeRepo(t *testing.T) string {
 }
 
 func TestRunReport(t *testing.T) {
-	t.Setenv("HOME", fakeHome(t, "11.16.1"))
+	testutil.SetHome(t, fakeHome(t, "11.16.1"))
 	repo := fakeRepo(t)
 	var out, errOut bytes.Buffer
 	if err := run([]string{"--repo", repo}, &out, &errOut); err != nil {
@@ -227,7 +229,7 @@ func TestRunReport(t *testing.T) {
 }
 
 func TestRunAllAndJSON(t *testing.T) {
-	t.Setenv("HOME", fakeHome(t, "11.16.1"))
+	testutil.SetHome(t, fakeHome(t, "11.16.1"))
 	repo := fakeRepo(t)
 	var out bytes.Buffer
 	if err := run([]string{"--repo", repo, "--all"}, &out, os.Stderr); err != nil {
@@ -252,7 +254,7 @@ func TestRunAllAndJSON(t *testing.T) {
 }
 
 func TestRunRefusesANonRepo(t *testing.T) {
-	t.Setenv("HOME", fakeHome(t, "11.16.1"))
+	testutil.SetHome(t, fakeHome(t, "11.16.1"))
 	err := run([]string{"--repo", t.TempDir()}, &bytes.Buffer{}, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "go.mod") {
 		t.Errorf("a directory that is not the repository must be refused, got %v", err)
