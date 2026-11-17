@@ -532,3 +532,7 @@ func CachedMxPath(version string) string {
 func AnyCachedMxPath() string {
 	return anyCachedBinaryPath(mxBinaryNames())
 }
+
+// LocalMxForVersion is localMxForVersion: an installed or cached mx of exactly
+// version, or "".
+func LocalMxForVersion(version string) string { return localMxForVersion(version) }
