@@ -1,0 +1,83 @@
+{
+ "$ID": "yePm6oWQ8k+X7FfC7Bqg9g==",
+ "$Type": "DomainModels$DomainModel",
+ "Annotations": [
+  3
+ ],
+ "Associations": [
+  3
+ ],
+ "CrossAssociations": [
+  3
+ ],
+ "Documentation": "",
+ "Entities": [
+  3,
+  {
+   "$ID": "1DCqXigMB0C82GT3z28fFA==",
+   "$Type": "DomainModels$EntityImpl",
+   "AccessRules": [
+    3
+   ],
+   "Attributes": [
+    3,
+    {
+     "$ID": "/caVOFHrxEeSuls8GPDdqw==",
+     "$Type": "DomainModels$Attribute",
+     "Documentation": "",
+     "ExportLevel": "Hidden",
+     "GUID": "9icTbmoXhUCu0Acr5jn98A==",
+     "Name": "OrderId",
+     "NewType": {
+      "$ID": "aKBMh9hCc0u+ZageWmanGg==",
+      "$Type": "DomainModels$LongAttributeType"
+     },
+     "Value": {
+      "$ID": "YCfVGUiG7EOWZf1MDrpwfg==",
+      "$Type": "DomainModels$StoredValue",
+      "DefaultValue": "0"
+     }
+    },
+    {
+     "$ID": "eAA1wZ1p4UWh37DwxDaDIg==",
+     "$Type": "DomainModels$Attribute",
+     "Documentation": "",
+     "ExportLevel": "Hidden",
+     "GUID": "sv4zKikar0ibfoC1wdTFMg==",
+     "Name": "CustomerId",
+     "NewType": {
+      "$ID": "U0FqRsgivUyLgMGLUBTjUA==",
+      "$Type": "DomainModels$LongAttributeType"
+     },
+     "Value": {
+      "$ID": "e5o18n7sWkSX2IV5jnhCxw==",
+      "$Type": "DomainModels$StoredValue",
+      "DefaultValue": "0"
+     }
+    }
+   ],
+   "Documentation": "",
+   "Events": [
+    3
+   ],
+   "ExportLevel": "Hidden",
+   "GUID": "Ea5JHF1qKEi/LWBh+AHZOw==",
+   "Image": "",
+   "ImageData": "",
+   "Indexes": [
+    3
+   ],
+   "Location": "370;310",
+   "MaybeGeneralization": {
+    "$ID": "eaRTdhsMr0+d0/BOPv/Ocw==",
+    "$Type": "DomainModels$Generalization",
+    "Generalization": "BusinessEvents.ConsumedBusinessEvent"
+   },
+   "Name": "CBE_OrderPlaceEvent",
+   "Source": null,
+   "ValidationRules": [
+    3
+   ]
+  }
+ ]
+}

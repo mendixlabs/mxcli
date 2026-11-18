@@ -13,17 +13,17 @@ description: "Create and manage JSON structures, import mappings and export mapp
 | 33-110 | Key Concepts |
 | 111-122 | Export Mappings |
 | 123-187 | JSON Structures |
-| 188-229 | Message Definitions |
-| 230-393 | Import Mappings |
-| 394-491 | Export Mappings |
-| 492-509 | Starting a Mapping Below the Payload Root |
-| 510-593 | Microflow Actions |
-| 594-606 | Browse |
-| 607-654 | Export Workflow: PE → NPE → JSON |
-| 655-661 | Realistic Example: Countries REST API |
-| 662-685 | Placing Documents in Folders |
-| 686-701 | Documentation |
-| 702-716 | Common Mistakes |
+| 188-234 | Message Definitions |
+| 235-398 | Import Mappings |
+| 399-496 | Export Mappings |
+| 497-514 | Starting a Mapping Below the Payload Root |
+| 515-598 | Microflow Actions |
+| 599-611 | Browse |
+| 612-659 | Export Workflow: PE → NPE → JSON |
+| 660-666 | Realistic Example: Countries REST API |
+| 667-690 | Placing Documents in Folders |
+| 691-706 | Documentation |
+| 707-721 | Common Mistakes |
 
 <!-- /skill-index -->
 # JSON Structures, Import Mappings & Export Mappings
@@ -205,6 +205,11 @@ A bare name is an attribute; `Assoc/Module.Entity` is an association. **Name the
 target entity** — the stored cardinality follows the direction of traversal and
 the association's type, so a `Reference` gives a single object one way and a list
 the other, while a `ReferenceSet` is a list both ways.
+
+The association must also connect the entity the element sits under to the element's
+own entity (either direction; a generalization of either is fine). Any other one is
+CE0295 "Association '...' is not allowed"; `check` refuses it as MDL100, in import and
+export mappings alike.
 
 **Mendix 11.15 removed collections.** Each definition is its own document, and
 a mapping names it in two parts. The collection form is refused on 11.15, and

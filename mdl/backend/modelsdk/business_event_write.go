@@ -85,6 +85,10 @@ func (b *Backend) DeleteBusinessEventService(id model.ID) error {
 func businessEventServiceToGen(svc *model.BusinessEventService) element.Element {
 	g := newElem("BusinessEvents$BusinessEventService", string(svc.ID))
 	addStr(g, "Name", svc.Name)
+	// The producer's AsyncAPI contract, on a consumed service. Studio Pro writes
+	// the key on both roles — empty on a publisher — and canon completes it, but
+	// only an explicit write carries the text (ako/mxcli#2384 part B).
+	addStr(g, "Document", svc.Document)
 	addStr(g, "Documentation", svc.Documentation)
 	addBool(g, "Excluded", svc.Excluded)
 	addStr(g, "ExportLevel", orDefault(svc.ExportLevel, "Hidden"))

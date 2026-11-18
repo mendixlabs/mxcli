@@ -1,0 +1,32 @@
+mdl 1;
+-- Control for mapping-association-not-allowed.fail.mdl: the association connects the
+-- parent and the element's entity, directly and through generalizations. Builds with
+-- 0 errors on MxBuild 11.16.1 (measured: plain, element specialized, parent
+-- specialized, both specialized; import mapping likewise).
+create json structure MyFirstModule.JSON_Allowed sample '{"orderId": 1, "customer": {"name": "A"}}';
+create non-persistent entity MyFirstModule.AlRoot (OrderId: integer);
+create non-persistent entity MyFirstModule.AlSubRoot extends MyFirstModule.AlRoot (SubV: integer);
+create non-persistent entity MyFirstModule.AlCust (Name: string(50));
+create non-persistent entity MyFirstModule.AlSubCust extends MyFirstModule.AlCust (SubName: string(50));
+create association MyFirstModule.AlCust_AlRoot from MyFirstModule.AlCust to MyFirstModule.AlRoot owner both;
+
+create export mapping MyFirstModule.EMM_Al with json structure MyFirstModule.JSON_Allowed {
+  MyFirstModule.AlRoot {
+    orderId = OrderId,
+    MyFirstModule.AlCust_AlRoot/MyFirstModule.AlCust as customer { name = Name }
+  }
+};
+
+create export mapping MyFirstModule.EMM_AlBothSpecialized with json structure MyFirstModule.JSON_Allowed {
+  MyFirstModule.AlSubRoot {
+    orderId = OrderId,
+    MyFirstModule.AlCust_AlRoot/MyFirstModule.AlSubCust as customer { name = Name }
+  }
+};
+
+create import mapping MyFirstModule.IMM_Al with json structure MyFirstModule.JSON_Allowed {
+  create MyFirstModule.AlRoot {
+    OrderId = orderId,
+    create MyFirstModule.AlCust_AlRoot/MyFirstModule.AlCust = customer { Name = name }
+  }
+};

@@ -313,6 +313,11 @@ func odataValueText(val *parser.OdataPropertyValueContext) string {
 	if sl := val.STRING_LITERAL(); sl != nil {
 		return unquoteStringLit(sl)
 	}
+	// A $$…$$ block: a consumed business event service's AsyncAPI Contract
+	// (#2384 §5.1). Taken verbatim — it is YAML, and its own quoting is content.
+	if ds := val.DOLLAR_STRING(); ds != nil {
+		return unquoteDollarString(ds.GetText())
+	}
 	if nl := val.NUMBER_LITERAL(); nl != nil {
 		return nl.GetText()
 	}

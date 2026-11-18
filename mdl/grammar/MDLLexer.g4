@@ -552,6 +552,10 @@ TOOL: T O O L;
 KNOWLEDGE: K N O W L E D G E;
 BASES: B A S E S;
 CONSUMED: C O N S U M E D;
+// CONSUME must stay distinct from CONSUMED above: ANTLR's longest match keeps
+// `consumed` on CONSUMED whichever order they appear in, so this only adds the
+// shorter word. Body item of a consumed business event service (#2384 §5.1).
+CONSUME: C O N S U M E;
 MCP: M C P;
 STATICIMAGE: S T A T I C I M A G E;
 DYNAMICIMAGE: D Y N A M I C I M A G E;

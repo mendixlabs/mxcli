@@ -49,6 +49,7 @@ func validateNanoflowWith(stmt *ast.CreateNanoflowStmt, voids *voidCodeActions) 
 	// contains/find rewrite come from the parameters and the declares.
 	v.seedPrimitiveKinds(stmt.Parameters, stmt.Body)
 	v.checkDuplicateVariableNames(v.params, stmt.Body)
+	v.checkListOperandKinds(stmt.Body)
 	// A nanoflow's show message has the same ShowMessageType (mendixlabs/mxcli#1280).
 	v.checkShowMessageType(stmt.Body)
 	// MDL-TEMPLATE01: a nanoflow's log, show message and validation feedback

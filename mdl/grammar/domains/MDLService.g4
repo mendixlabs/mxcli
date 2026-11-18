@@ -306,6 +306,12 @@ createODataServiceStatement
 
 odataPropertyValue
     : STRING_LITERAL
+    // A $$…$$ block, for a value too long or too quote-laden for one literal:
+    // a consumed business event service's AsyncAPI `Contract:` (ako/mxcli#2384
+    // §5.1). The grammar accepts it on any key here; which keys may actually
+    // take it is the strict-property schema's business (textShapes), so an
+    // OData key still reports "expected a string".
+    | DOLLAR_STRING
     | NUMBER_LITERAL
     | TRUE
     | FALSE
@@ -417,10 +423,27 @@ odataHeaderEntry
 // BUSINESS EVENT SERVICE
 // =============================================================================
 
+// One statement, two documents. A PUBLISHED service declares its own messages
+// (`message … publish|subscribe`); a CONSUMED one names a contract in its
+// property list and binds events from it (`consume …`). Both shapes are
+// accepted here and told apart in the visitor, which refuses a statement that
+// mixes them — a parse error could not say which half to drop (#2384 §5.1).
 createBusinessEventServiceStatement
     : BUSINESS EVENT SERVICE ifNotExists? qualifiedName
       LPAREN odataPropertyAssignment (COMMA odataPropertyAssignment)* RPAREN
-      LBRACE businessEventMessageDef+ RBRACE
+      LBRACE (businessEventMessageDef | businessEventConsumeDef)+ RBRACE
+    ;
+
+// `consume <Message> entity … microflow …` binds one event of the contract to
+// the entity it is mapped onto and the microflow that handles it. It is spelled
+// CONSUME, not SUBSCRIBE: `message X (…) subscribe` already means "this app
+// consumes X of its *own* definition", and two spellings writing the same
+// ServiceOperation would be unreadable even though R11 keeps them unambiguous.
+businessEventConsumeDef
+    : CONSUME identifierOrKeyword
+      (ENTITY qualifiedName)?
+      (MICROFLOW qualifiedName)?
+      SEMICOLON
     ;
 
 businessEventMessageDef

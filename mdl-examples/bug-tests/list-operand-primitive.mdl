@@ -1,0 +1,23 @@
+mdl 1;
+-- Control for list-operand-primitive.fail.mdl: an Object or a List in the position
+-- where a primitive is refused, and the String function `contains($Hay, $Needle)`,
+-- which parses as the same node and builds as a Change Variable. Builds with 0 errors
+-- on MxBuild 11.16.1.
+create persistent entity MyFirstModule.LpItem (Name: string(20));
+
+create microflow MyFirstModule.LpUnionObject ($L: list of MyFirstModule.LpItem, $O: MyFirstModule.LpItem) begin
+  $R = UNION $L WITH $O;
+end;
+
+create microflow MyFirstModule.LpUnionList ($L: list of MyFirstModule.LpItem, $M: list of MyFirstModule.LpItem) begin
+  $R = UNION $L WITH $M;
+end;
+
+create microflow MyFirstModule.LpContainsObject ($L: list of MyFirstModule.LpItem, $O: MyFirstModule.LpItem) begin
+  $R = CONTAINS $O IN $L;
+end;
+
+create microflow MyFirstModule.LpStringContains ($Hay: string, $Needle: string) begin
+  declare $M boolean = false;
+  set $M = contains($Hay, $Needle);
+end;
