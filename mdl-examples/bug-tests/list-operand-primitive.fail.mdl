@@ -1,0 +1,37 @@
+mdl 1;
+-- NEGATIVE TEST — `mxcli check` must REFUSE this file (MDL101), with no project.
+--
+-- UNION, INTERSECT, SUBTRACT, EQUALS and CONTAINS take an Object or a List as
+-- the operand that is not the list. A variable of a primitive type there passed
+-- `check` and `exec`, was written as a list operation, and the build reported
+--
+--   [CE0023] "Selected variable 'X' must be of type Object or List."
+--
+-- Measured on MxBuild 11.16.1, microflows and nanoflows, for String, Integer,
+-- Long, Decimal, Boolean, DateTime and enumeration alike. An Object or a List in
+-- the same position is clean (see list-operand-primitive.mdl).
+create persistent entity MyFirstModule.LoItem (Name: string(20));
+
+create microflow MyFirstModule.LoUnionString ($L: list of MyFirstModule.LoItem, $X: string) begin
+  $R = UNION $L WITH $X;
+end;
+
+create microflow MyFirstModule.LoIntersectInteger ($L: list of MyFirstModule.LoItem, $X: integer) begin
+  $R = INTERSECT $L WITH $X;
+end;
+
+create microflow MyFirstModule.LoSubtractDecimal ($L: list of MyFirstModule.LoItem, $X: decimal) begin
+  $R = SUBTRACT $X FROM $L;
+end;
+
+create microflow MyFirstModule.LoEqualsBoolean ($L: list of MyFirstModule.LoItem, $X: boolean) begin
+  $R = EQUALS $L AND $X;
+end;
+
+create microflow MyFirstModule.LoContainsDateTime ($L: list of MyFirstModule.LoItem, $X: datetime) begin
+  $R = CONTAINS $X IN $L;
+end;
+
+create nanoflow MyFirstModule.LoUnionLong ($L: list of MyFirstModule.LoItem, $X: long) begin
+  $R = UNION $L WITH $X;
+end;
