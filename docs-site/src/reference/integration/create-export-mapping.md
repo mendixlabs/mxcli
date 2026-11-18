@@ -94,6 +94,7 @@ If `OR MODIFY` is specified and the mapping already exists, it is updated in pla
 
 `Assoc/module.ChildEntity AS alias`
 :   Maps associated objects to a nested JSON object or array using the named alias.
+    The association must connect the entity the element sits under to the element's own entity (in either direction; an end may be a generalization of either entity). Any other association is refused by `check` (MDL100) because Mendix reports CE0295 "Association '...' is not allowed".
 
 ## Examples
 
