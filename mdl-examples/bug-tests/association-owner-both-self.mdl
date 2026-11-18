@@ -1,0 +1,9 @@
+mdl 1;
+-- Control for association-owner-both-self.fail.mdl: the same shapes with another owner,
+-- and `owner both` between unrelated entities, all build with 0 errors on MxBuild 11.16.1.
+create entity MyFirstModule.OwnerBothC (Name: string(10));
+create entity MyFirstModule.OwnerBothD extends MyFirstModule.OwnerBothC (X: string(10));
+create entity MyFirstModule.OwnerBothE (Y: string(10));
+create association MyFirstModule.OwnerBothC_OwnerBothC from MyFirstModule.OwnerBothC to MyFirstModule.OwnerBothC type reference;
+create association MyFirstModule.OwnerBothD_OwnerBothC from MyFirstModule.OwnerBothD to MyFirstModule.OwnerBothC type referenceset;
+create association MyFirstModule.OwnerBothC_OwnerBothE from MyFirstModule.OwnerBothC to MyFirstModule.OwnerBothE type reference owner both;

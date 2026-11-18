@@ -666,7 +666,9 @@ func (c *Catalog) GetCacheInfo() (*CacheInfo, error) {
 	info.BuildMode, _ = c.GetMeta(MetaBuildMode)
 
 	if modTimeStr, _ := c.GetMeta(MetaMprModTime); modTimeStr != "" {
-		info.MprModTime, _ = time.Parse(time.RFC3339, modTimeStr)
+		// Parse accepts the fractional seconds RFC3339Nano writes, and a whole-second
+		// value written by an older mxcli.
+		info.MprModTime, _ = time.Parse(time.RFC3339Nano, modTimeStr)
 	}
 	if buildTimeStr, _ := c.GetMeta(MetaBuildTime); buildTimeStr != "" {
 		info.BuildTime, _ = time.Parse(time.RFC3339, buildTimeStr)
@@ -684,12 +686,26 @@ func (c *Catalog) GetCacheInfo() (*CacheInfo, error) {
 	return info, nil
 }
 
+// ModTimeUnchanged reports whether a project file still has the modification time
+// a cache recorded when it was built. It compares the instant exactly, to the
+// precision the file system reports.
+//
+// It used to compare whole seconds, so a write landing in the same second as the
+// build left the cache looking fresh and the next read answered from the catalog
+// as it was before the write (a test that reads, writes and reads again failed
+// about one run in six). The stored value is now kept to the nanosecond; a cache
+// written before that holds whole seconds and so never equals a fractional time,
+// which costs one rebuild per project and no wrong answer.
+func ModTimeUnchanged(cached, current time.Time) bool {
+	return cached.Equal(current)
+}
+
 // SetCacheInfo stores cache metadata after building.
 func (c *Catalog) SetCacheInfo(mprPath string, mprModTime time.Time, mendixVersion, buildMode string, buildDuration time.Duration) error {
 	if err := c.SetMeta(MetaMprPath, mprPath); err != nil {
 		return err
 	}
-	if err := c.SetMeta(MetaMprModTime, mprModTime.Format(time.RFC3339)); err != nil {
+	if err := c.SetMeta(MetaMprModTime, mprModTime.UTC().Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
 	if err := c.SetMeta(MetaMendixVersion, mendixVersion); err != nil {

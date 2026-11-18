@@ -1,0 +1,22 @@
+{
+ "$ID": "FDWQWXR2YkadD2ikKCOuLQ==",
+ "$Type": "BusinessEvents$BusinessEventService",
+ "Definition": null,
+ "Document": "asyncapi: 2.2.0\ninfo:\n  title: \"OrdersEventService\"\n  version: \"1.0.0\"\n  description: \"\"\n  x-summary: \"\"\n  x-mendix-generated: true\nchannels:\n  f2477dc90f714d69bb12df0df1ee9cce:\n    subscribe:\n      operationId: receiveOrderPlaceEventEvents\n      traits:\n      - $ref: '#/components/operationTraits/kafka'\n      message:\n        $ref: '#/components/messages/OrderPlaceEvent'\ncomponents:\n  messages:\n    OrderPlaceEvent:\n      name: OrderPlaceEvent\n      title: OrderPlaceEvent event\n      description: \"\"\n      contentType: application/json\n      traits:\n      - $ref: '#/components/messageTraits/commonHeaders'\n      payload:\n        $ref: '#/components/schemas/OrderPlaceEventPayload'\n  schemas:\n    OrderPlaceEventPayload:\n      type: object\n      properties:\n        OrderId:\n          type: integer\n          format: int64\n        CustomerId:\n          type: integer\n          format: int64\n  messageTraits:\n    commonHeaders:\n      name: cloudevents-headers\n      summary: \"\\r\\nMessage headers used by CloudEvents spec in binary content mode Kafka\\r\\nbinding (see\\r\\nhttps://github.com/cloudevents/spec/blob/v1.0.1/kafka-protocol-binding.md)\"\n      headers:\n        type: object\n        required:\n        - ce_specversion\n        - ce_id\n        - ce-source\n        - ce_type\n        properties:\n          ce_specversion:\n            type: string\n            enum:\n            - 1.0\n            description: \"The version of the CloudEvents specification which the event uses.\"\n          ce_id:\n            type: string\n            description: \"Identifies the event.\"\n            minLength: 1\n          ce_source:\n            type: string\n            format: uri-reference\n            description: \"Identifies the context in which an event happened.\"\n            minLength: 1\n          ce_type:\n            type: string\n            description: \"Describes the type of event related to the originating occurrence.\"\n            minLength: 1\n          ce_service:\n            type: string\n            description: \"Describes the service name in which this event was defined.\"\n          ce_subject:\n            type: string\n            description: \"Describes the subject of the event in the context of the event\\r\\nproducer (identified by source).\"\n          ce_time:\n            type: string\n            format: date-time\n            description: \"Timestamp of when the occurrence happened. Must adhere to RFC\\r\\n3339.\"\n          content-type:\n            type: string\n            enum:\n            - application/json\n  operationTraits:\n    kafka:\n      bindings:\n        kafka:\n          key:\n            type: string\n            description: \"Event Id\"\ndefaultContentType: application/json\n",
+ "Documentation": "",
+ "Excluded": false,
+ "ExportLevel": "Hidden",
+ "Name": "OrdersEventClient",
+ "OperationImplementations": [
+  2,
+  {
+   "$ID": "HaoHsjsuJ0OMRZfT4oHkBg==",
+   "$Type": "BusinessEvents$ServiceOperation",
+   "Entity": "BusinessEventsClient.CBE_OrderPlaceEvent",
+   "MessageName": "OrderPlaceEvent",
+   "Microflow": "BusinessEventsClient.HandleBE_OrderPlaceEvent",
+   "Operation": "subscribe"
+  }
+ ],
+ "SourceApi": null
+}
