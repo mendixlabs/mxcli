@@ -4,6 +4,7 @@ package executor
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
@@ -341,12 +342,64 @@ func describeBusinessEventService(ctx *ExecContext, name ast.QualifiedName) erro
 	return nil
 }
 
-// describeConsumedBusinessEventService writes a consumed service as MDL comments:
-// the subscriptions, and the stored AsyncAPI contract verbatim. The contract is
-// the irreplaceable part — its channel keys are the topics a subscriber binds to,
-// and nothing else in the model records them — so it is printed in full rather
-// than summarised.
+// describeConsumedBusinessEventService writes a consumed service.
+//
+// Since MDL can author this shape (ako/mxcli#2384 part B) the output is the
+// statement, with the contract inline as a $$…$$ block so it needs no side file
+// and re-executes anywhere. Two cases have no statement to write, and both fall
+// back to comments rather than emit something that would not round-trip:
+//
+//   - no contract stored — `consume` has nothing to take its event from, and
+//     mxbuild throws on a contractless consumer anyway;
+//   - a contract containing `$$` — DOLLAR_STRING is `'$$' .*? '$$'`, so the
+//     block would end early, and there is no escape for it.
 func describeConsumedBusinessEventService(ctx *ExecContext, moduleName string, svc *model.BusinessEventService) {
+	contract := svc.Document
+	switch {
+	case strings.TrimSpace(contract) == "":
+		describeConsumedAsComments(ctx, moduleName, svc,
+			"It stores no AsyncAPI contract, so there is no statement to write: a",
+			"consumed service without one makes mxbuild throw \"business events",
+			"service should have definitions\".")
+		return
+	case strings.Contains(contract, "$$"):
+		describeConsumedAsComments(ctx, moduleName, svc,
+			"Its AsyncAPI contract contains `$$`, which ends a $$…$$ block and has no",
+			"escape, so the contract cannot be written inline. Author this service with",
+			"ContractFile: '<path>' instead, using the contract printed below.")
+		return
+	}
+
+	if svc.Documentation != "" {
+		outputJavadoc(ctx.Output, svc.Documentation)
+	}
+	fmt.Fprintf(ctx.Output, "create or modify business event service %s.%s\n", moduleName, svc.Name)
+	// The stored text goes between the delimiters EXACTLY: unquoteDollarString
+	// returns everything between them, so a newline added for looks is a
+	// character the re-executed contract has and the stored one does not, and
+	// the round trip stops being a fixed point — describe → exec reported
+	// Modified on an unchanged service until this was byte-exact. The contract
+	// normally ends in a newline, which puts the closing $$ on its own line.
+	fmt.Fprintf(ctx.Output, "(\n  Contract: $$%s$$\n)\n{\n", svc.Document)
+	for _, op := range svc.OperationImplementations {
+		fmt.Fprintf(ctx.Output, "  consume %s", op.MessageName)
+		if op.Entity != "" {
+			fmt.Fprintf(ctx.Output, "\n    entity %s", op.Entity)
+		}
+		if op.Microflow != "" {
+			fmt.Fprintf(ctx.Output, "\n    microflow %s", op.Microflow)
+		}
+		fmt.Fprintf(ctx.Output, ";\n")
+	}
+	fmt.Fprintf(ctx.Output, "};\n")
+}
+
+// describeConsumedAsComments states a consumed service that cannot be written
+// as a statement: why not, its subscriptions, and the contract verbatim. The
+// contract is the irreplaceable part — its channel keys are the topics a
+// subscriber binds to, and nothing else in the model records them — so it is
+// printed in full rather than summarised.
+func describeConsumedAsComments(ctx *ExecContext, moduleName string, svc *model.BusinessEventService, why ...string) {
 	comment := func(format string, args ...any) {
 		line := fmt.Sprintf(format, args...)
 		if line == "" {
@@ -358,10 +411,9 @@ func describeConsumedBusinessEventService(ctx *ExecContext, moduleName string, s
 
 	comment("%s.%s is a CONSUMED business event service.", moduleName, svc.Name)
 	comment("")
-	comment("It stores no definition of its own: the producing app's AsyncAPI contract")
-	comment("and one subscription per event it handles. MDL cannot author this shape")
-	comment("yet, so what follows is a description and not a statement — there is")
-	comment("nothing here to re-run, and `create or modify` over it is refused.")
+	for _, line := range why {
+		comment("%s", line)
+	}
 
 	if svc.Documentation != "" {
 		comment("")
@@ -385,8 +437,7 @@ func describeConsumedBusinessEventService(ctx *ExecContext, moduleName string, s
 
 	comment("")
 	if strings.TrimSpace(svc.Document) == "" {
-		comment("Contract: none stored. mxbuild refuses a consumed service without one")
-		comment("(\"business events service should have definitions\").")
+		comment("Contract: none stored.")
 		return
 	}
 	comment("Contract (AsyncAPI, verbatim). Each key under `channels:` is the channel")
@@ -444,11 +495,14 @@ func createBusinessEventService(ctx *ExecContext, stmt *ast.CreateBusinessEventS
 			return mdlerrors.NewAlreadyExistsMsg("business event service", moduleName+"."+stmt.Name.Name, fmt.Sprintf("business event service already exists: %s.%s (use create or modify to update)", moduleName, stmt.Name.Name))
 		}
 		// Guard, don't drop (ADR-0005): a stored AsyncAPI contract marks a
-		// *consumed* service, and this statement can only build a published one.
-		// Rewriting would null the contract and every handler microflow with it —
-		// and the contract is the only record of the channel id a subscriber binds
-		// to, so nothing in the model could put it back (ako/mxcli#2381).
-		if strings.TrimSpace(existing.Document) != "" {
+		// *consumed* service, and a published-shaped statement would null it and
+		// every handler microflow with it — the contract being the only record of
+		// the channel id a subscriber binds to (ako/mxcli#2381).
+		//
+		// A guard has a lifecycle: now that MDL can express a consumer, a
+		// statement that names a contract is restating the document, not
+		// destroying it, and must pass. Only the published shape still refuses.
+		if strings.TrimSpace(existing.Document) != "" && !stmt.IsConsumer() {
 			return mdlerrors.NewValidationf(
 				"%s.%s stores an AsyncAPI contract (%d bytes) — the shape of a consumed "+
 					"business event service, which MDL cannot author yet. That contract holds the "+
@@ -499,6 +553,38 @@ func createBusinessEventService(ctx *ExecContext, stmt *ast.CreateBusinessEventS
 	// subscribers listen on, so minting a new one per run moved every topic of a
 	// deployed app and made an unchanged re-run a write.
 	carry := newBusinessEventIdentityCarry(existingSvc)
+
+	// A consumed service: the contract plus one subscription per `consume`.
+	// It has no Definition of its own — that is what tells the two roles apart
+	// in storage — so it is built and written here rather than below.
+	if stmt.IsConsumer() {
+		contract, err := resolveBusinessEventContract(ctx, stmt)
+		if err != nil {
+			return err
+		}
+		svc.Document = contract
+		svc.Definition = nil
+		for _, cons := range stmt.Consumes {
+			op := &model.ServiceOperation{
+				MessageName: cons.MessageName,
+				Operation:   "subscribe",
+				Entity:      cons.Entity,
+				Microflow:   cons.Microflow,
+			}
+			if storedOp := carry.operationFor(cons.MessageName); storedOp != nil {
+				op.ID = storedOp.ID
+				if op.Microflow == "" {
+					op.Microflow = storedOp.Microflow
+				}
+				if op.Entity == "" {
+					op.Entity = storedOp.Entity
+				}
+			}
+			op.TypeName = "BusinessEvents$ServiceOperation"
+			svc.OperationImplementations = append(svc.OperationImplementations, op)
+		}
+		return writeBusinessEventService(ctx, svc, stmt, moduleName, existingID, existingContainerID)
+	}
 	def := &model.BusinessEventDefinition{
 		ServiceName:     stmt.ServiceName,
 		EventNamePrefix: stmt.EventNamePrefix,
@@ -560,7 +646,13 @@ func createBusinessEventService(ctx *ExecContext, stmt *ast.CreateBusinessEventS
 
 	svc.Definition = def
 
-	// Write to project
+	return writeBusinessEventService(ctx, svc, stmt, moduleName, existingID, existingContainerID)
+}
+
+// writeBusinessEventService stores a built service, created or rewritten. Both
+// roles share it, so a consumer gets the same folder handling and the same
+// Created/Modified reporting as a publisher.
+func writeBusinessEventService(ctx *ExecContext, svc *model.BusinessEventService, stmt *ast.CreateBusinessEventServiceStmt, moduleName string, existingID, existingContainerID model.ID) error {
 	if existingID != "" {
 		if stmt.Folder == "" {
 			svc.ContainerID = existingContainerID
@@ -572,13 +664,40 @@ func createBusinessEventService(ctx *ExecContext, stmt *ast.CreateBusinessEventS
 			return err
 		}
 		ctx.ReportMutation("Modified", "business event service: %s.%s", moduleName, stmt.Name.Name)
-	} else {
-		if err := ctx.Backend.CreateBusinessEventService(svc); err != nil {
-			return mdlerrors.NewBackend("create business event service", err)
-		}
-		fmt.Fprintf(ctx.Output, "Created business event service: %s.%s\n", moduleName, stmt.Name.Name)
+		return nil
 	}
+	if err := ctx.Backend.CreateBusinessEventService(svc); err != nil {
+		return mdlerrors.NewBackend("create business event service", err)
+	}
+	fmt.Fprintf(ctx.Output, "Created business event service: %s.%s\n", moduleName, stmt.Name.Name)
 	return nil
+}
+
+// resolveBusinessEventContract returns the AsyncAPI text the statement names,
+// whether written inline or pointed at by a path.
+//
+// The text is what gets stored, so a ContractFile is read now and nothing
+// afterwards depends on the file: the same service re-executed on another
+// machine, or described and re-run, carries its own contract. An unreadable
+// file is an error rather than an empty contract — mxbuild throws
+// "business events service should have definitions" on one of those, which is a
+// far worse place to find out.
+func resolveBusinessEventContract(ctx *ExecContext, stmt *ast.CreateBusinessEventServiceStmt) (string, error) {
+	if stmt.ContractFile == "" {
+		return stmt.Contract, nil
+	}
+	path, err := ctx.ResolveScriptRelative(stmt.ContractFile)
+	if err != nil {
+		return "", mdlerrors.NewValidationf("ContractFile %q: %v", stmt.ContractFile, err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", mdlerrors.NewValidationf("ContractFile %q: %v", stmt.ContractFile, err)
+	}
+	if strings.TrimSpace(string(data)) == "" {
+		return "", mdlerrors.NewValidationf("ContractFile %q is empty: a consumed business event service without a contract makes mxbuild throw \"business events service should have definitions\"", stmt.ContractFile)
+	}
+	return string(data), nil
 }
 
 // dropBusinessEventService deletes a business event service.

@@ -664,7 +664,7 @@ keyword
     | STORE | STRUCTURE | STRUCTURES | VIEW
 
     // Agent editor
-    | AGENT | AGENTS | KNOWLEDGE | BASES | CONSUMED | MCP | TOOL
+    | AGENT | AGENTS | KNOWLEDGE | BASES | CONSUMED | CONSUME | MCP | TOOL
 
     // Workflow user task settings — words, so still usable as names
     | DECIDE | CONSENSUS | MAJORITY | MORE_KW | THAN | HALF | MOST | CHOSEN | THRESHOLD

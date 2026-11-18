@@ -11,12 +11,12 @@ description: "Define event-driven APIs over Kafka with Mendix business event ser
 | lines | section |
 |---|---|
 | 24-31 | When to Use This Skill |
-| 32-117 | Commands |
-| 118-133 | Message Definition Syntax |
-| 134-141 | Service Properties |
-| 142-148 | Operations |
-| 149-195 | Publishing Events from Microflows |
-| 196-208 | Checklist |
+| 32-146 | Commands |
+| 147-162 | Message Definition Syntax |
+| 163-170 | Service Properties |
+| 171-177 | Operations |
+| 178-224 | Publishing Events from Microflows |
+| 225-237 | Checklist |
 
 <!-- /skill-index -->
 # Business Events
@@ -59,9 +59,38 @@ consumed service shows 0 messages because its messages live in the contract, not
 definition — the kind is what makes that legible. `list business events` lists both
 roles' events with the **Channel** the broker derives the topic from.
 
-A **consumed** service is described as MDL comments — its subscriptions and the contract
-verbatim — not as a statement: MDL cannot author that shape yet, and `create or modify`
-over one is refused rather than allowed to destroy the contract (ako/mxcli#2381).
+### Author a Consumed Service
+
+A **consumed** service stores the producing app's AsyncAPI contract instead of a
+definition of its own, and binds events from it:
+
+```sql
+mdl 1;
+create or modify business event service Module.OrdersEventClient
+(
+  ContractFile: 'contracts/OrdersEventService.yaml'   -- or Contract: $$<yaml>$$
+)
+{
+  consume OrderPlaceEvent
+    entity Module.CBE_OrderPlaceEvent
+    microflow Module.HandleBE_OrderPlaceEvent;
+};
+```
+
+- Exactly one of `Contract:` / `ContractFile:`, and neither may be mixed with
+  `ServiceName`, `EventNamePrefix` or `message` — those are the published shape.
+- `ContractFile` is read when the script runs and stored **verbatim**, so nothing later
+  depends on the file. `describe` prints the `Contract:` form, which re-executes anywhere.
+- It is `consume`, not `subscribe`: `message X (…) subscribe` already means "this app
+  consumes X of its *own* definition". The stored `Operation` is `"subscribe"` either
+  way; only the keyword differs.
+- The consumed entity (`CBE_…`, extending `BusinessEvents.ConsumedBusinessEvent`) and the
+  handler microflow are ordinary MDL, declared before the service.
+- A service whose contract contains `$$` cannot be described inline — `$$…$$` has no
+  escape — so `describe` falls back to comments and tells you to use `ContractFile`.
+
+A published-shaped statement over a stored contract is still refused rather than allowed
+to destroy it (ako/mxcli#2381).
 
 ### Create a Business Event Service
 

@@ -263,12 +263,13 @@ func TestCreateOrModifyBusinessEventService_CarriesStoredHandlerMicroflow(t *tes
 // describe printed only `create or modify business event service M.X` for a
 // consumer — no property list, no body, no `;` — because the whole statement is
 // written inside `if found.Definition != nil`. `mxcli exec` of that output is a
-// parse error, so the round trip is broken and an LLM reading it learns nothing.
+// parse error, so the round trip was broken.
 //
-// Until the consumer form has a grammar (proposal part B), describe states the
-// contract and the subscriptions as comments: output that parses, and that says
-// why there is no statement.
-func TestDescribeBusinessEventService_ConsumerDescribesAsParseableComments(t *testing.T) {
+// Part B gave the shape a grammar, so describe now writes the statement. What
+// this test pins is the property the comment form was standing in for: the
+// output parses, and re-executing it restates the same service rather than
+// destroying its contract.
+func TestDescribeBusinessEventService_ConsumerDescribesAsParseableStatement(t *testing.T) {
 	for _, lang := range []langver.Version{langver.V0, langver.V1} {
 		mod := mkModule("M")
 		stored := storedConsumer(mod.ID)
@@ -292,24 +293,79 @@ func TestDescribeBusinessEventService_ConsumerDescribesAsParseableComments(t *te
 		if len(errs) > 0 {
 			t.Fatalf("mdl %d: consumer describe output does not parse: %v\n%s", lang, errs, src)
 		}
+		var stmt *ast.CreateBusinessEventServiceStmt
 		for _, s := range prog.Statements {
-			if _, ok := s.(*ast.CreateBusinessEventServiceStmt); ok {
-				t.Fatalf("mdl %d: consumer describe emitted a create statement; "+
-					"re-running it would destroy the contract (#2381)\n%s", lang, src)
+			if c, ok := s.(*ast.CreateBusinessEventServiceStmt); ok {
+				stmt = c
 			}
 		}
-		// What the reader needs is in there: the channel id (the topic), the
-		// subscription, its handler, and why no statement was written.
-		for _, want := range []string{
-			"f2477dc90f714d69bb12df0df1ee9cce",
-			"OrderPlaceEvent",
-			"M.CBE_OrderPlaceEvent",
-			"M.HandleBE_OrderPlaceEvent",
-		} {
-			if !strings.Contains(src, want) {
-				t.Errorf("mdl %d: consumer describe omits %q:\n%s", lang, want, src)
-			}
+		if stmt == nil {
+			t.Fatalf("mdl %d: no statement in consumer describe:\n%s", lang, src)
 		}
+		// The contract must come back byte-identical. A newline added inside the
+		// $$…$$ block for looks is a character the re-executed contract has and
+		// the stored one does not, and describe → exec then reports Modified on
+		// an unchanged service.
+		if stmt.Contract != storedContract {
+			t.Errorf("mdl %d: contract not byte-identical through the round trip\n got %q\nwant %q",
+				lang, stmt.Contract, storedContract)
+		}
+		if len(stmt.Consumes) != 1 {
+			t.Fatalf("mdl %d: re-parsed %d consume items, want 1\n%s", lang, len(stmt.Consumes), src)
+		}
+		got := stmt.Consumes[0]
+		if got.MessageName != "OrderPlaceEvent" ||
+			got.Entity != "M.CBE_OrderPlaceEvent" ||
+			got.Microflow != "M.HandleBE_OrderPlaceEvent" {
+			t.Errorf("mdl %d: subscription lost through the round trip: %+v", lang, got)
+		}
+	}
+}
+
+// Two consumers have no statement to write, and both have to fall back to
+// comments rather than emit something that cannot be re-executed.
+func TestDescribeBusinessEventService_ConsumerWithoutAStatementFallsBackToComments(t *testing.T) {
+	for _, tc := range []struct {
+		name, document, want string
+	}{
+		// DOLLAR_STRING is `'$$' .*? '$$'`, so an embedded $$ ends the block
+		// early and there is no escape for it.
+		{"contract containing $$", "asyncapi: 2.2.0\nsummary: a $$ b\n", "ContractFile"},
+		{"no contract at all", "", "no AsyncAPI contract"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mod := mkModule("M")
+			stored := storedConsumer(mod.ID)
+			stored.Document = tc.document
+			h := mkHierarchy(mod)
+			withContainer(h, stored.ContainerID, mod.ID)
+			mb := &mock.MockBackend{
+				IsConnectedFunc: func() bool { return true },
+				ListBusinessEventServicesFunc: func() ([]*model.BusinessEventService, error) {
+					return []*model.BusinessEventService{stored}, nil
+				},
+			}
+			ctx, buf := newMockCtx(t, withBackend(mb), withHierarchy(h))
+			assertNoError(t, describeBusinessEventService(ctx, ast.QualifiedName{Module: "M", Name: "OrdersEventClient"}))
+
+			src := langver.HeaderFor(langver.V1) + "\n" + buf.String()
+			prog, errs := visitor.Build(src)
+			if len(errs) > 0 {
+				t.Fatalf("fallback output does not parse: %v\n%s", errs, src)
+			}
+			for _, s := range prog.Statements {
+				if _, ok := s.(*ast.CreateBusinessEventServiceStmt); ok {
+					t.Fatalf("emitted a statement that cannot round-trip:\n%s", src)
+				}
+			}
+			if !strings.Contains(buf.String(), tc.want) {
+				t.Errorf("fallback does not say why there is no statement (want %q):\n%s", tc.want, buf.String())
+			}
+			// The subscriptions still have to be stated, whichever form is used.
+			if !strings.Contains(buf.String(), "M.HandleBE_OrderPlaceEvent") {
+				t.Errorf("fallback omits the handler:\n%s", buf.String())
+			}
+		})
 	}
 }
 
