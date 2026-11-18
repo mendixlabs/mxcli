@@ -203,56 +203,135 @@ func describeBusinessEventService(ctx *ExecContext, name ast.QualifiedName) erro
 		return mdlerrors.NewNotFound("business event service", name.String())
 	}
 
+	// A consumed service has no Definition of its own: it carries the producer's
+	// AsyncAPI contract and one subscription per event. MDL cannot author that
+	// shape yet, and emitting the statement header alone produced output that
+	// does not parse. Describe it as comments instead — a parseable description
+	// that states everything, and no statement to re-run (ako/mxcli#2381).
+	if found.Definition == nil {
+		describeConsumedBusinessEventService(ctx, foundModule, found)
+		return nil
+	}
+
 	// Output MDL CREATE statement
 	if found.Documentation != "" {
 		outputJavadoc(ctx.Output, found.Documentation)
 	}
 	fmt.Fprintf(ctx.Output, "create or modify business event service %s.%s\n", foundModule, found.Name)
 
-	if found.Definition != nil {
-		fmt.Fprintf(ctx.Output, "(\n")
-		fmt.Fprintf(ctx.Output, "  ServiceName: %s", mdlQuote(ctx, found.Definition.ServiceName))
-		fmt.Fprintf(ctx.Output, ",\n  EventNamePrefix: %s", mdlQuote(ctx, found.Definition.EventNamePrefix))
-		fmt.Fprintf(ctx.Output, "\n)\n")
+	fmt.Fprintf(ctx.Output, "(\n")
+	fmt.Fprintf(ctx.Output, "  ServiceName: %s", mdlQuote(ctx, found.Definition.ServiceName))
+	fmt.Fprintf(ctx.Output, ",\n  EventNamePrefix: %s", mdlQuote(ctx, found.Definition.EventNamePrefix))
+	fmt.Fprintf(ctx.Output, "\n)\n")
 
-		fmt.Fprintf(ctx.Output, "{\n")
+	fmt.Fprintf(ctx.Output, "{\n")
 
-		// Build operation map: messageName -> operation info
-		opMap := make(map[string]*model.ServiceOperation)
-		for _, op := range found.OperationImplementations {
-			opMap[op.MessageName] = op
-		}
-
-		// Output messages
-		for _, ch := range found.Definition.Channels {
-			for _, msg := range ch.Messages {
-				// Format attributes
-				var attrs []string
-				for _, a := range msg.Attributes {
-					attrs = append(attrs, fmt.Sprintf("%s: %s", a.AttributeName, a.AttributeType))
-				}
-
-				// Determine operation from OperationImplementations
-				opStr := "publish"
-				entityStr := ""
-				if op, ok := opMap[msg.MessageName]; ok {
-					if op.Operation == "subscribe" {
-						opStr = "subscribe"
-					}
-					if op.Entity != "" {
-						entityStr = fmt.Sprintf("\n    entity %s", op.Entity)
-					}
-				}
-
-				fmt.Fprintf(ctx.Output, "  message %s (%s) %s%s;\n",
-					msg.MessageName, strings.Join(attrs, ", "), opStr, entityStr)
-			}
-		}
-
-		fmt.Fprintf(ctx.Output, "};\n")
+	// Build operation map: messageName -> operation info
+	opMap := make(map[string]*model.ServiceOperation)
+	for _, op := range found.OperationImplementations {
+		opMap[op.MessageName] = op
 	}
 
+	// Output messages
+	for _, ch := range found.Definition.Channels {
+		for _, msg := range ch.Messages {
+			// Format attributes
+			var attrs []string
+			for _, a := range msg.Attributes {
+				attrs = append(attrs, fmt.Sprintf("%s: %s", a.AttributeName, a.AttributeType))
+			}
+
+			// Determine operation from OperationImplementations
+			opStr := "publish"
+			entityStr := ""
+			microflowStr := ""
+			if op, ok := opMap[msg.MessageName]; ok {
+				if op.Operation == "subscribe" {
+					opStr = "subscribe"
+				}
+				if op.Entity != "" {
+					entityStr = fmt.Sprintf("\n    entity %s", op.Entity)
+				}
+				// The grammar has `MICROFLOW qualifiedName` on the message
+				// rule; describe never printed it, so describe → exec
+				// unbound the handler (ako/mxcli#2381).
+				if op.Microflow != "" {
+					microflowStr = fmt.Sprintf("\n    microflow %s", op.Microflow)
+				}
+			}
+
+			fmt.Fprintf(ctx.Output, "  message %s (%s) %s%s%s;\n",
+				msg.MessageName, strings.Join(attrs, ", "), opStr, entityStr, microflowStr)
+		}
+	}
+
+	fmt.Fprintf(ctx.Output, "};\n")
+
 	return nil
+}
+
+// describeConsumedBusinessEventService writes a consumed service as MDL comments:
+// the subscriptions, and the stored AsyncAPI contract verbatim. The contract is
+// the irreplaceable part — its channel keys are the topics a subscriber binds to,
+// and nothing else in the model records them — so it is printed in full rather
+// than summarised.
+func describeConsumedBusinessEventService(ctx *ExecContext, moduleName string, svc *model.BusinessEventService) {
+	comment := func(format string, args ...any) {
+		line := fmt.Sprintf(format, args...)
+		if line == "" {
+			fmt.Fprintln(ctx.Output, "--")
+			return
+		}
+		fmt.Fprintf(ctx.Output, "-- %s\n", line)
+	}
+
+	comment("%s.%s is a CONSUMED business event service.", moduleName, svc.Name)
+	comment("")
+	comment("It stores no definition of its own: the producing app's AsyncAPI contract")
+	comment("and one subscription per event it handles. MDL cannot author this shape")
+	comment("yet, so what follows is a description and not a statement — there is")
+	comment("nothing here to re-run, and `create or modify` over it is refused.")
+
+	if svc.Documentation != "" {
+		comment("")
+		comment("Documentation:")
+		for _, line := range strings.Split(strings.ReplaceAll(svc.Documentation, "\r\n", "\n"), "\n") {
+			comment("  %s", line)
+		}
+	}
+
+	comment("")
+	if len(svc.OperationImplementations) == 0 {
+		comment("Subscriptions: none.")
+	} else {
+		comment("Subscriptions:")
+		for _, op := range svc.OperationImplementations {
+			comment("  %s (%s)", op.MessageName, orPlaceholder(op.Operation, "subscribe"))
+			comment("    entity     %s", orPlaceholder(op.Entity, "(none)"))
+			comment("    microflow  %s", orPlaceholder(op.Microflow, "(none)"))
+		}
+	}
+
+	comment("")
+	if strings.TrimSpace(svc.Document) == "" {
+		comment("Contract: none stored. mxbuild refuses a consumed service without one")
+		comment("(\"business events service should have definitions\").")
+		return
+	}
+	comment("Contract (AsyncAPI, verbatim). Each key under `channels:` is the channel")
+	comment("id the producer minted; the Kafka topic is derived from it, so this is the")
+	comment("only record of what a subscriber binds to:")
+	for _, line := range strings.Split(strings.ReplaceAll(strings.TrimRight(svc.Document, "\n"), "\r\n", "\n"), "\n") {
+		comment("  %s", line)
+	}
+}
+
+// orPlaceholder is value, or placeholder when value is empty.
+func orPlaceholder(value, placeholder string) string {
+	if value == "" {
+		return placeholder
+	}
+	return value
 }
 
 // createBusinessEventService creates a new business event service from an AST statement.
@@ -292,6 +371,23 @@ func createBusinessEventService(ctx *ExecContext, stmt *ast.CreateBusinessEventS
 	); ok {
 		if !stmt.CreateOrModify {
 			return mdlerrors.NewAlreadyExistsMsg("business event service", moduleName+"."+stmt.Name.Name, fmt.Sprintf("business event service already exists: %s.%s (use create or modify to update)", moduleName, stmt.Name.Name))
+		}
+		// Guard, don't drop (ADR-0005): a stored AsyncAPI contract marks a
+		// *consumed* service, and this statement can only build a published one.
+		// Rewriting would null the contract and every handler microflow with it —
+		// and the contract is the only record of the channel id a subscriber binds
+		// to, so nothing in the model could put it back (ako/mxcli#2381).
+		if strings.TrimSpace(existing.Document) != "" {
+			return mdlerrors.NewValidationf(
+				"%s.%s stores an AsyncAPI contract (%d bytes) — the shape of a consumed "+
+					"business event service, which MDL cannot author yet. That contract holds the "+
+					"channel id its subscribers bind to, and this statement can only build a "+
+					"published service, so applying it would destroy the contract and the handler "+
+					"microflow of every subscription, with no way to recover either from the model. "+
+					"Use `describe business event service %s.%s` to see what is stored; "+
+					"`drop business event service %s.%s` first if you do mean to replace it with a published one.",
+				moduleName, stmt.Name.Name, len(existing.Document),
+				moduleName, stmt.Name.Name, moduleName, stmt.Name.Name)
 		}
 		existingID = existing.ID
 		existingExcluded = existing.Excluded
@@ -379,7 +475,14 @@ func createBusinessEventService(ctx *ExecContext, stmt *ast.CreateBusinessEventS
 			Entity:      msgDef.Entity,
 			Microflow:   msgDef.Microflow,
 		}
-		op.ID = carry.operationID(msgDef.MessageName)
+		if storedOp := carry.operationFor(msgDef.MessageName); storedOp != nil {
+			op.ID = storedOp.ID
+			// A statement silent about the handler keeps the stored one, the
+			// way a silent doc comment does (#1018).
+			if op.Microflow == "" {
+				op.Microflow = storedOp.Microflow
+			}
+		}
 		op.TypeName = "BusinessEvents$ServiceOperation"
 		svc.OperationImplementations = append(svc.OperationImplementations, op)
 	}
@@ -520,16 +623,19 @@ func (c *businessEventIdentityCarry) channelFor(name string, ch *model.BusinessE
 	return s.message
 }
 
-// operationID is the $ID of the stored operation implementation for the named
-// message, handed out once, or "".
-func (c *businessEventIdentityCarry) operationID(messageName string) model.ID {
+// operationFor is the stored operation implementation for the named message,
+// handed out once, or nil. The caller takes its $ID, and its Microflow when the
+// statement is silent: MDL has `MICROFLOW qualifiedName` on the message rule, so
+// a rewrite that omits it is a partial statement, not a request to unbind the
+// handler (ako/mxcli#2381).
+func (c *businessEventIdentityCarry) operationFor(messageName string) *model.ServiceOperation {
 	key := strings.ToLower(messageName)
 	op, ok := c.ops[key]
 	if !ok {
-		return ""
+		return nil
 	}
 	delete(c.ops, key)
-	return op.ID
+	return op
 }
 
 // storedAttributeID is the $ID of the stored attribute named name, or "".
