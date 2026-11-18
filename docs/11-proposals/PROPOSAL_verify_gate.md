@@ -147,7 +147,7 @@ mxcli verify -p app.mpr [--base <git ref> | --baseline <file>]
     **count**, not a list.
   The lint stage therefore either keeps lint's own file and `Compare` and adapts
   the result, or `Finding` grows an `ID` and the matching rules are restated.
-  Phase 2 decides; it is not "reuse as is".
+  Step 2 decides; it is not "reuse as is".
 - `docker.Check(opts) error` (`cmd/mxcli/docker/check.go`) runs `mx` on a temporary
   copy and **writes free text** to `opts.Stdout`; it returns only an error.
   (`appErrorCount` is an unexported helper.) **There are no structured `mx check`
@@ -169,7 +169,7 @@ The key `(code, document, element path)` is only as good as `mx check`'s text. I
 `recheckCE0463` (`docker/check.go`): *"mx check's text output does not name a
 CE0463's page, so two same-named widgets on different pages print the same line;
 the lines are compared as counts."* For CE0463 the element identity is **not in
-the output**. Phase 1 must therefore classify each code the parser sees:
+the output**. Step 1 must therefore classify each code the parser sees:
 
 1. **Located** — the line names document and element (e.g. CE0109 on a microflow
    activity). Key = `(code, document, path)`; `resolved` is a list.
