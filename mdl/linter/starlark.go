@@ -1641,7 +1641,18 @@ func (r *StarlarkRule) builtinParseXPath(_ *starlark.Thread, _ *starlark.Builtin
 	parser := exprcheck.NewParser()
 	ctx := exprcheck.NewSyntaxContext("", "")
 	ctx.XPath = true
-	ast, _ := parser.Parse(inner, ctx)
+	ast, hs := parser.Parse(inner, ctx)
+	// A parse that stopped before the end (E014, trailing tokens) is a
+	// partial tree that looks whole; a rule over it judged a fragment of the
+	// constraint (ako/mxcli#2398). Hand the rule a recovered root instead.
+	for _, h := range hs {
+		if h.Code == "E014" {
+			return robustExprToStarlark(&exprcheck.RecoveredExpr{
+				SourceFragment: inner,
+				Reason:         "unexpected '" + h.YouWrote + "' after the expression: the constraint did not parse to its end",
+			}), nil
+		}
+	}
 	return robustExprToStarlark(ast), nil
 }
 
