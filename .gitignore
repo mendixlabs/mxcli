@@ -80,3 +80,11 @@ go-test-output.txt
 # Written next to any fixture a lint or catalog run opens, the same way the
 # unit-type index above is; testdata/expr-checker also ignores its own copy.
 **/testdata/**/.claude/skills/widgets/
+
+# mxcli's own working directory inside a top-level testdata fixture: catalog,
+# unit index and unit-contents cache, all written by any command that opens the
+# fixture. testdata/pedapp ignores its own; the others have no .gitignore.
+# Anchored at /testdata/ ON PURPOSE: modelsdk/mpr/testdata/v1-project/.mxcli/
+# holds a catalog.db that IS tracked, as a fixture, and a /**/ pattern would
+# shadow it.
+/testdata/*/.mxcli/
