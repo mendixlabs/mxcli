@@ -81,12 +81,13 @@ func PatchUnit(raw []byte, sourceLang, lang string, dict map[string]string, mode
 		return raw, stats
 	}
 
+	m := Dictionary(dict).matcher()
 	for _, t := range findTexts(doc) {
 		src := t.Source(sourceLang)
 		if src == "" {
 			continue
 		}
-		want, named := dict[src]
+		_, want, named := m.lookup(src)
 
 		if want != "" {
 			if t.setTranslation(lang, want) {

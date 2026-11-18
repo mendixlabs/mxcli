@@ -595,10 +595,21 @@ func parseIdentLed(s *Stream, ctx Context) (RobustExpr, []Hint) {
 	t := s.Consume()
 	name := t.Text
 	switch strings.ToLower(name) {
-	case "true":
-		return &BoolLit{baseNode: baseNode{P: t.Pos}, Value: true}, nil
-	case "false":
-		return &BoolLit{baseNode: baseNode{P: t.Pos}, Value: false}, nil
+	case "true", "false":
+		// XPath writes a Boolean as `true()` / `false()`. Returning the literal
+		// before the call check left `()` on the stream, so the parse ended
+		// there and dropped everything after it — `[A = false() or B]` read as
+		// `A = false` (ako/mxcli#2398).
+		if ctx.XPath && s.Peek().Kind == TokLParen {
+			mark := s.Mark()
+			s.Consume()
+			if s.Peek().Kind == TokRParen {
+				s.Consume()
+			} else {
+				s.Reset(mark)
+			}
+		}
+		return &BoolLit{baseNode: baseNode{P: t.Pos}, Value: strings.EqualFold(name, "true")}, nil
 	case "empty":
 		return &EmptyExpr{baseNode: baseNode{P: t.Pos}}, nil
 	case "null":
