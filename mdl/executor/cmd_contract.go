@@ -1284,7 +1284,7 @@ func createNavigationAssociations(
 				// not collide with any entity name (CE0065). When the OData
 				// nav property name collides with an existing entity, append
 				// a numeric suffix.
-				assocName := uniqueAssocName(np.Name, dm, existingAssocs)
+				assocName := uniqueAssocName(np.Name, parentEnt.Name, dm, existingAssocs)
 
 				assocType := domainmodel.AssociationTypeReference
 				if isMany {
@@ -1452,9 +1452,12 @@ func indexExistingAssociations(dm *domainmodel.DomainModel) (byName, byNav map[a
 }
 
 // uniqueAssocName returns a Mendix-safe association name for an OData nav
-// property. If the requested name collides with an existing entity name OR an
-// already-created association name, append a numeric suffix.
-func uniqueAssocName(base string, dm *domainmodel.DomainModel, existingAssocs map[assocKey]bool) string {
+// property: the nav property's own name, unless it collides with an entity or
+// an association already in the module (CE0065) — then `<Parent>_<NavProperty>`,
+// the Mendix convention, and a numeric suffix only if that is taken as well.
+// The suffix used to come first, so Product's nav `Category` became
+// `Category_2` beside the entity Category (ako/mxcli#2354).
+func uniqueAssocName(base, parent string, dm *domainmodel.DomainModel, existingAssocs map[assocKey]bool) string {
 	collides := func(name string) bool {
 		for _, ent := range dm.Entities {
 			if ent.Name == name {
@@ -1470,6 +1473,13 @@ func uniqueAssocName(base string, dm *domainmodel.DomainModel, existingAssocs ma
 	}
 	if !collides(base) {
 		return base
+	}
+	if parent != "" {
+		qualified := parent + "_" + base
+		if !collides(qualified) {
+			return qualified
+		}
+		base = qualified
 	}
 	for i := 2; i < 100; i++ {
 		candidate := fmt.Sprintf("%s_%d", base, i)
