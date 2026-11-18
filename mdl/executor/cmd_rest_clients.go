@@ -1006,9 +1006,12 @@ func convertOpenAPIToModel(parsed *openapi.ConsumedRestService, containerID mode
 			})
 		}
 		for _, q := range op.QueryParameters {
+			// No DataType: Rest$QueryParameter has none, so the import stores
+			// every query parameter as text, and the preview built from this
+			// model has to say what the import writes, not what the spec
+			// declares (ako/mxcli#2353).
 			modelOp.QueryParameters = append(modelOp.QueryParameters, &model.RestClientParameter{
-				Name:     q.Name,
-				DataType: q.DataType,
+				Name: q.Name,
 			})
 		}
 		for _, h := range op.Headers {

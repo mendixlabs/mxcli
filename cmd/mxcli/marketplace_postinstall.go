@@ -104,3 +104,22 @@ func printManualRepairs(out io.Writer, mprPath string, repairs []postInstallRepa
 	}
 	fmt.Fprintf(out, "      mxcli docker check -p %s\n", mprPath)
 }
+
+// repairReference runs on a freshly built reference project the repairs a
+// module install runs on the app, so `marketplace diff` compares like with
+// like. Without them every snippet whose stored widgets the repair rewrites
+// read as a local edit of an untouched module (ako/mxcli#2367). A failure is
+// an error: a half-repaired reference reports false edits, and must not be
+// cached.
+func repairReference(mprPath, mendixVer string) error {
+	mxPath, err := postInstallResolveMx(mendixVer)
+	if err != nil {
+		return fmt.Errorf("locate mx for Mendix %s to repair the reference: %w", mendixVer, err)
+	}
+	for _, r := range moduleRepairs {
+		if _, err := postInstallRunTool(mxPath, mprPath, r.subcommand, io.Discard, io.Discard); err != nil {
+			return fmt.Errorf("repair the reference project (%s, as install does on the app): %w", r.subcommand, err)
+		}
+	}
+	return nil
+}

@@ -242,6 +242,11 @@ func referenceFor(ctx context.Context, client *mp.Client, v *mp.Version,
 	if err != nil {
 		return "", "", "", err
 	}
+	// The app's copy of the module was repaired by install; the reference
+	// has to be too, or the repair's rewrites read as edits (ako/mxcli#2367).
+	if err := repairReference(mprPath, mendixVersion); err != nil {
+		return "", "", "", err
+	}
 	marketplace.CacheReference(v.VersionID, mendixVersion, refDir, mpkPath)
 	return mprPath, pkgModule, mpkPath, nil
 }
