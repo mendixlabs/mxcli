@@ -22,6 +22,7 @@ nothing else. This proposal covers the rest:
 | B | Author a consumed business event service (contract + subscriptions) | not possible |
 | C | Author a CDC service (sources, exposed attributes/associations, baseline) | not possible |
 | D | Run-configuration Kafka settings (`Settings$KafkaConfiguration`) | not possible |
+| E | Export a published service's contract to a file | not possible, for any service type |
 
 **Written to be built without Studio Pro.** Every BSON shape below was captured from
 a Studio Pro 11.16.1-authored project, and the raw units are committed under
@@ -57,6 +58,35 @@ entity, handler microflow)*. Topic, group, offsets and credentials are derived a
 from the module's constants and the contract's channel id. MDL needs no Kafka settings
 for business events. (The constants are already authorable with
 `alter settings constant @BusinessEvents.ServerUrl …`.)
+
+**The module must be started, and nothing in the model says so.** The consumers are
+created by the Java action `BusinessEvents.StartupBusinessEvents`, called from the app's
+after-startup microflow, with `BusinessEvents.BSd_ShutdownSubscribers` as the
+before-shutdown counterpart. Nothing calls `BusinessEvents.ConsumeBusinessEvent`. In the
+fixture:
+
+```
+AfterStartupMicroflow:   'CdcPublish.ASu_StartBusinessEvents'
+BeforeShutdownMicroflow: 'BusinessEvents.BSd_ShutdownSubscribers'
+
+create or modify microflow CdcPublish.ASu_StartBusinessEvents ()
+returns Boolean
+begin
+  call java action BusinessEvents.StartupBusinessEvents();
+  return true;
+end;
+```
+
+Both are authorable in MDL today, and the omission fails **silently**: the app boots, no
+consumer group is joined, no event arrives, and `mx check` is clean. Hence the startup
+check rule in §5.1. (This answers §9.5.)
+
+**Topic naming, and a dev-loop shortcut.** With no Event Broker config map the topic is
+`businessevents.<channel id>.<EventBrokerSpace>`, where `<channel id>` is the 32-hex
+`ChannelName` in the publisher's definition. Setting the `BusinessEvents.ChannelName`
+constant instead routes *every* message of the app to that one topic — simpler against a
+local broker, at the cost of one table for all messages. Either way mxcli cannot read a
+publisher's channel id today; see §5.4.
 
 ## 2. Fixtures
 
@@ -290,6 +320,14 @@ $$
   self-contained (design-mdl-syntax §3); a skill shows the three-statement recipe.
 - `create or modify` carries the operation `$ID`s by message name, as
   `businessEventIdentityCarry` already does for the publisher.
+- **Two spellings of `subscribe`.** Today's `message X (…) subscribe entity …` already
+  means "this app consumes X of its *own* definition" (`CanPublish: true`, plus a
+  `ServiceOperation` with `Operation: subscribe`) — Studio Pro's publisher editor has both
+  a Publish and a Subscribe table for exactly that, so one definition can do both. The
+  body item proposed here writes the *same* `ServiceOperation`, but against an imported
+  contract with `Definition: null`. The two are told apart only by which property key was
+  used, which R11 enforces — unambiguous to the parser, not to a reader. Either give the
+  contract-based form a distinct keyword, or have `describe` label which kind it is.
 
 **Check rules** (new `MDL-BE*` codes; mx does not catch these):
 
@@ -300,6 +338,7 @@ $$
 | entity shape | entity is persistent, `extends BusinessEvents.ConsumedBusinessEvent`, and has an attribute of the mapped type for each payload property |
 | handler shape | microflow has exactly one parameter, of the consumed entity |
 | module present | the `BusinessEvents` marketplace module is in the project |
+| module started | `BusinessEvents.StartupBusinessEvents` is reachable from the configured after-startup microflow (§1) — without it the app consumes nothing, silently, and every other check passes |
 
 ### 5.2 CDC service (part C)
 
@@ -329,6 +368,13 @@ describe change data capture service CdcPublish.OrdersCDCService;
   project name (see §10) and preserved on modify.
 - A member name resolves to an attribute or association of that entity (attributes win;
   ambiguity is a check error).
+- **`id` is implicit and must not be authored.** Studio Pro's editor lists `id (Long)` as
+  a checked, disabled row under every tracked entity, but it is *not* a stored property:
+  the fixture's `Order` shows six rows in the UI and holds five
+  (`OrderId, CustomerName, ProductName, Price, Order_Customer`), `Customer` four rows and
+  three. The object id reaches a consumer from the runtime's Debezium schema, not from the
+  model. Writing an `id` property would violate CLAUDE.md rule 4 (Studio Pro's exact
+  property set); accepting one in the member list is a check error.
 - **The baseline is computed, not authored.** After building the live sources, mxcli
   rebuilds `Baseline` so it is structurally equal to them (this is what Studio Pro's
   *accept changes* does) and sets the pointers. Version policy, since `mx check` ignores
@@ -341,6 +387,23 @@ describe change data capture service CdcPublish.OrdersCDCService;
   - unchanged sources keep their stored version and baseline element `$ID`s.
   The fixture is consistent with this (Order is 1.1 after its association was added;
   Customer 1.0; service 1.1), but the rule is inferred — §9.
+- **A major bump renames the topic.** Studio Pro's editor shows the topic beside the
+  revision, per entity:
+
+  ```
+  CdcPublish.Order     Order     1.1   cdc.TestApp.Order.1.{space}
+  CdcPublish.Customer  Customer  1.0   cdc.TestApp.Customer.1.{space}
+  ```
+
+  So the topic is `cdc.<AppName>.<ExposedName>.<Major>.<space>`: `AppName`, `ExposedName`
+  and the *major* are all topic components. A `major+1` therefore starts a **new topic**,
+  and downstream — a lake, a subscriber — that is a new table with no history; changing
+  `AppName` or an `ExposedName` does the same. `describe` should print the topic template
+  next to the revision, so this is as visible from MDL as it is in Studio Pro.
+- **`RENAME ENTITY` is a trap.** The entity's `GUID` survives a rename, so CDC keeps
+  working, but `ExposedName` was defaulted from the entity name and now disagrees with the
+  baseline → CE1585 → accepting the change is a rename → `major+1` → new topic. Renaming
+  an entity that a CDC service exposes deserves a check warning.
 - Gate: Mendix ≥ 11.10 (where `Baseline` was introduced and CE1585 enforces it). Below
   that, refuse with a message rather than guess the older shape.
 
@@ -363,6 +426,10 @@ Overlay rule (MODELSDK_ENGINE_ARCHITECTURE.md, "never invent a key"): write only
 the stored configuration already carries a `KafkaConfiguration` part; otherwise refuse
 with the Mendix version that introduced it.
 
+**Priority: lowest of the five.** A dev loop does not need it —
+`mxcli run --local --runtime-setting Kafka.BootstrapServers=…` already sets this per run.
+Part D is for the committed, shared model.
+
 ### 5.4 Read side (part A — do first)
 
 - **Defect today:** `describe business event service BusinessEventsClient.OrdersEventClient`
@@ -372,7 +439,18 @@ with the Mendix version that introduced it.
   round-trip is broken and an LLM reading it learns nothing. Fix with 5.1's describe
   form; until 5.1's grammar lands, print the contract and subscriptions as comments.
   Note `create or modify` of a *publisher* over an existing consumer must refuse, not
-  overwrite the contract.
+  overwrite the contract. **Measured** (ako/mxcli#2381): a hand-written `create or modify`
+  against the fixture's consumer drops `Document` (2696 chars → `""`) *and*
+  `OperationImplementations[0].Microflow`, and invents a `Definition`, while
+  `check --references` passes and `exec` reports success. The control is that the
+  publisher round-trips to `Unchanged` on the same build, so this is the property carry,
+  not general churn.
+- **A publisher's channel id cannot be read.** `show contract channels from <consumer>`
+  parses the cached contract and prints the 32-hex id; the same command on a *publisher*
+  errors ("no cached AsyncAPI contract … it may be a publisher"), although the id is
+  stored right there in `Definition.Channels[].ChannelName`. That id is the topic name
+  (§1), so it is what a downstream consumer or lake config needs. Surface it on the
+  publisher too — a read, not a design question.
 - `list business event services` gains a `Kind` column (published / consumed).
 - `list business event clients` (today: prints "not yet implemented") is removed or
   becomes a filter for consumed services — see §10.
@@ -380,6 +458,63 @@ with the Mendix version that introduced it.
   table), `RefKind`s for entity/attribute/association references so `show callers` /
   impact analysis see CDC exposure, and a row in `MDL_FEATURE_MATRIX.md`.
 - Catalog: bump `CatalogSchemaVersion`.
+
+### 5.5 Export a published service's contract (part E)
+
+mxcli has no export direction for any contract. `EXPORT` in the grammar is only
+`EXPORT MAPPING`, and every contract code path runs the import direction
+(`mdl/openapi/parser.go`, `mdl/types/edmx.go`, `mdl/types/asyncapi.go`; `show contract …`
+reads a *cached* document on a consumed service). Studio Pro exports all three published
+service types, so this is a gap against Studio Pro rather than a new idea:
+
+| Document | Studio Pro export actions | Where |
+|---|---|---|
+| `Rest$PublishedRestService` | `swagger.json` (OpenAPI 2), `openapi.json` (OpenAPI 3) | document context menu |
+| `ODataPublish$PublishedODataService2` | service feed XML, service feed JSON, `$metadata`, `openapi.json` (OpenAPI 3), GraphQL schema | context menu, and Settings → Export |
+| `BusinessEvents$BusinessEventService` (publisher) | AsyncAPI document, YAML or JSON | editor button "Export AsyncAPI Document" |
+| `ChangeDataCapture$EntityChangeDataCaptureService` | none | — |
+
+**Two mechanisms, decided per artifact.** The published OData Settings tab pairs each
+Export button with the URL it saves, which names the mechanism:
+
+- service feed → `<base>/odata/<path>/`
+- `$metadata` → `<base>/odata/<path>/$metadata`
+- OpenAPI → `<base>/odata-doc/odata/<path>/openapi.json` (note `odata-doc`, not `odata`)
+- GraphQL schema → an Export button with **no URL**
+
+So four of the five OData artifacts are fetched from a running app, and the GraphQL schema
+is rendered. AsyncAPI is rendered too — nothing serves it — which is why B2 exists and why
+this part cannot be done by fetching alone.
+
+Nothing caches these on the published side. `ODataPublish$PublishedContract` is in the
+metamodel with `Metadata`, `OpenApi` and `GraphQL` strings and looks like a free lunch; it
+is **not populated** — the fixture project's three published OData services have no
+`Contract` part at all. Do not build on it.
+
+Proposed surface, a CLI command rather than an MDL statement: it writes a file, it is a CI
+step, and `--format` / `-o` are awkward as MDL properties.
+
+```bash
+mxcli export contract Mod.Service [--format <f>] [-o file] [--from-running <url>]
+```
+
+- the valid `--format` set follows from the document type, defaulting to what Studio Pro's
+  editor button produces (`asyncapi` for a publisher, `openapi3` for REST and OData);
+- `asyncapi` and `graphql` render from the model; `metadata`, `openapi2`, `openapi3` and
+  the service feeds fetch, `--from-running` defaulting to a `run --local` instance;
+- AsyncAPI defaults to YAML, matching the fixture and Studio Pro's save dialog;
+  `--format asyncapi-json` for the other choice.
+
+**Why it is on this proposal's critical path.** §5.1's `ContractFrom:` only works when
+publisher and consumer live in the *same* project. Two apps — the case business events
+exist for — need app A's contract as a file that app B's script names in `ContractFile:`,
+and nothing in mxcli can produce that file. B2 builds the renderer; this exposes it.
+
+**Test it against mxbuild, not only the golden fixture.** §8's byte-equality test against
+`asyncapi-OrdersEventService.yaml` covers one message with one `Long` attribute. The test
+that matters for the two-app loop is: render from the fixture publisher → store as a
+consumer's `Document` → `mx check` → 0 errors, with the control that an empty render
+reproduces the `business events service should have definitions` exception (§6).
 
 ## 6. Measured `mx check` behaviour (mxbuild 11.16.1)
 
@@ -410,7 +545,7 @@ entities from `testapp-describe.mdl`), mutate with a few lines of Go over
 
 | Step | Files | Notes |
 |---|---|---|
-| A1 consumer describe/list | `mdl/executor/cmd_businessevents.go` | fix the lossy describe first; it is a data-loss bug on round-trip |
+| A1 consumer describe/list | `mdl/executor/cmd_businessevents.go` | fix the lossy describe first; it is a data-loss bug on round-trip (ako/mxcli#2381). Also surface the publisher's channel id (§5.4) |
 | A2 CDC read | new `mdl/backend/modelsdk/cdc_read.go`, `mdl/backend/service.go` (interface), mock, `mdl/executor/cmd_cdc.go`, catalog builder + tables, registry | gen types exist; add the 4 missing properties (§4) first so reads see them |
 | B1 grammar/AST | `MDLParser.g4` (`Contract`/`ContractFile`/`ContractFrom` keys, `DOLLAR_STRING` as a property value, `subscribe` body item), `ast_businessevents.go`, `visitor_businessevents.go` | |
 | B2 AsyncAPI renderer | new `mdl/businessevents/asyncapi.go` | golden test = `asyncapi-OrdersEventService.yaml`, byte-for-byte |
@@ -419,7 +554,8 @@ entities from `testapp-describe.mdl`), mutate with a few lines of Go over
 | C1 grammar/AST/visitor | new `ast_cdc.go`, `visitor_cdc.go` | |
 | C2 write | new `mdl/backend/modelsdk/cdc_write.go` | live sources + computed baseline + pointers; GUIDs read from the domain model; wire through `canon.Reconcile`; consider a `canon.identityFields` row (identity = `Entity` / `Attribute` / `Association` by name) |
 | C3 version policy | `cdc_write.go` | §5.2 |
-| D1 settings | settings overlay | §5.3 |
+| D1 settings | settings overlay | §5.3 — lowest priority |
+| E1 export contract | new `cmd/mxcli/cmd_export_contract.go`, reusing B2's renderer | §5.5; `asyncapi` and `graphql` render, the rest fetch from a running app |
 | docs | `docs-site/src/`, `cmd/mxcli/syntax/`, a skill `.claude/skills/mendix/business-events/SKILL.md` | the consumer recipe and the runtime facts in §1 |
 
 MCP backend: out of scope here. Studio Pro 11.16.1's PED has **no** create path for
@@ -444,11 +580,38 @@ so CDC over `--mcp` is likely feasible as a follow-up — it needs a live Studio
   (ADR-0008 conditional write; include a control that a real change does write).
 - **Describe round-trip:** describe → exec → describe is a fixed point for both
   documents; `mdl-examples/doctype-tests/` gets a consumer and a CDC script.
+- **Consumer clobber, with a control** (ako/mxcli#2381): `create or modify` over the
+  fixture consumer preserves `Document` and `ServiceOperation.Microflow`, or refuses;
+  the control is that the fixture *publisher* still round-trips to `Unchanged`, so the
+  test fails for the right reason.
+- **Startup rule, with a control:** a project whose after-startup microflow does not reach
+  `BusinessEvents.StartupBusinessEvents` fails the §5.1 rule, and the fixture (which wires
+  `CdcPublish.ASu_StartBusinessEvents`) passes it.
+- **`id` is not written:** the CDC writer emits five properties for `Order` and three for
+  `Customer` — no `id` — against an MDL member list that does not mention it, and rejects
+  one that does (§5.2).
+- **AsyncAPI renderer against mxbuild (part E):** render the fixture publisher's contract,
+  store it as a consumer's `Document`, `mx check` → 0 errors; control = an empty render
+  reproduces `business events service should have definitions` (§6).
 - **Integration (`-tags integration`):** each §6 variant as a test — the valid writes pass
   `mx check`; a writer forced to omit the baseline reproduces CE1585 (the control that
   proves the test detects the defect).
+- **Runtime (optional, Linux):** with a local Kafka-compatible broker (§9), produce an
+  event with the module's CloudEvents headers and assert the handler microflow ran — the
+  only test that proves an authored consumer actually consumes.
 
 ## 9. Needs Studio Pro later (not blocking)
+
+**What a local broker retires, and what it cannot.** DuckGraphLake
+(`github.com/ako/DuckGraphLake`) serves producers *and* consumers on a Kafka endpoint,
+tested against the Kafka Java client 4.0.1 — the Business Events module's own — with
+classic consumer groups, `OffsetCommit`/`OffsetFetch`, and MCP `produce` / `read_topic` /
+`list_groups`. An integration test can therefore inject an event carrying the headers the
+module expects (`ce_type`, `ce_source`, `ce_id`, `ce_specversion` 1.0,
+`content-type: application/json`) and assert the handler microflow ran, with **no second
+Mendix app and no Studio Pro**. That gives §8 a runtime check and retires item 5 below.
+It does **not** retire items 1–4: those are about what Studio Pro *writes*, which only a
+Studio Pro export can settle.
 
 1. AsyncAPI rendering of Integer, Decimal, Boolean, String, DateTime and Enumeration
    payload fields: add one attribute of each to `OrdersEventService`, export, diff
@@ -459,15 +622,19 @@ so CDC over `--mcp` is likely feasible as a follow-up — it needs a live Studio
 3. CDC `Type` for Integer/Boolean/DateTime/Enumeration/Binary/AutoNumber/HashString.
 4. Whether Studio Pro (not just mxbuild) opens a document with the pointers present but
    pointing at mxcli-minted baseline `$ID`s — expected yes; confirm once.
-5. What registers the subscriptions at startup: no microflow in the project calls
-   `BusinessEvents.ConsumeBusinessEvent`, and no 11.15 runtime jar references it by
-   name. Not needed to author the model; needed for the skill's troubleshooting section.
+5. ~~What registers the subscriptions at startup.~~ **Answered — see §1.**
+   `BusinessEvents.StartupBusinessEvents`, called from the after-startup microflow;
+   `ConsumeBusinessEvent` is never called. Verified against the fixture, which wires
+   `CdcPublish.ASu_StartBusinessEvents` as `AfterStartupMicroflow`. It is now a check
+   rule (§5.1), not an open question.
 
 ## 10. Open questions
 
 1. **`AppName`:** the fixture holds the project name (`TestApp`). Write the `.mpr`
    basename, or read it from somewhere authoritative (project settings)? Must satisfy
-   CE1577's pattern either way.
+   CE1577's pattern either way. Not cosmetic: it is the second segment of every topic the
+   service publishes to (§5.2), so getting it wrong publishes, silently, to topics nobody
+   is reading.
 2. **`list business event clients`:** remove it, or keep it as `list … services` filtered
    to consumed ones? (Recommendation: remove; one noun, a `Kind` column.)
 3. Should a service with `ContractFrom: X` also *create* the
