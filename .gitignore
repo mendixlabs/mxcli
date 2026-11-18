@@ -74,3 +74,9 @@ go-test-output.txt
 # MPR v2 unit-type index, written next to any project mxcli opens — including
 # the testdata/ fixtures tests open in place.
 **/.mxcli/unit-types.idx
+
+# Per-widget skill docs, derived from a project's widgets/*.mpk and rewritten by
+# `refresh catalog full` (executor.RegenerateWidgetDocs), not authored here.
+# Written next to any fixture a lint or catalog run opens, the same way the
+# unit-type index above is; testdata/expr-checker also ignores its own copy.
+**/testdata/**/.claude/skills/widgets/
