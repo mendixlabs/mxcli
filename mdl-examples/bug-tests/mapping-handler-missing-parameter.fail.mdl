@@ -14,7 +14,7 @@ mdl 1;
 create persistent entity MyFirstModule.HmFailRoot (Name: string(50));
 create persistent entity MyFirstModule.HmFailChild (Code: string(50));
 create association MyFirstModule.HmFailChild_HmFailRoot from MyFirstModule.HmFailChild to MyFirstModule.HmFailRoot type reference;
-create json structure MyFirstModule.JS_HmFail snippet '{"name": "n", "items": [{"code": "c", "idx": 1}]}';
+create json structure MyFirstModule.JS_HmFail sample '{"name": "n", "items": [{"code": "c", "idx": 1}]}';
 create microflow MyFirstModule.HmFailTwo ($A: integer, $B: integer) returns MyFirstModule.HmFailChild begin
   @start(100, 200)
   @position(400, 200)

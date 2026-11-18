@@ -6,7 +6,7 @@ mdl 1;
 create persistent entity MyFirstModule.HpOkRoot (Name: string(50));
 create persistent entity MyFirstModule.HpOkChild (Code: string(50));
 create association MyFirstModule.HpOkChild_HpOkRoot from MyFirstModule.HpOkChild to MyFirstModule.HpOkRoot type reference;
-create json structure MyFirstModule.JS_HpOk snippet '{"name": "n", "items": [{"code": "c", "idx": 1}]}';
+create json structure MyFirstModule.JS_HpOk sample '{"name": "n", "items": [{"code": "c", "idx": 1}]}';
 create microflow MyFirstModule.HpOkTwo ($A: integer, $B: integer) returns MyFirstModule.HpOkChild begin
   @start(100, 200)
   @position(400, 200)
