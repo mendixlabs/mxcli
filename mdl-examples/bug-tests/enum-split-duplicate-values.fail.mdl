@@ -1,0 +1,28 @@
+mdl 1;
+-- NEGATIVE TEST — `mxcli check` must REFUSE this file (MDL105), with no project.
+--
+-- An enumeration split that names the same value in two branches passed `check`
+-- and `exec`, and the build reported
+--
+--   [CE0771]   (one error per branch that repeats the value)
+--
+-- Measured on MxBuild 11.16.1, also when the repeat is inside a multi-value branch
+-- (`when R, G` and `when G`). Values are case-sensitive. See
+-- enum-split-values.mdl for the valid forms. The related errors — a value left
+-- out (CE0079) and a value the enumeration does not have (CE1613) — need the
+-- enumeration's members, so MDL106 reports them under `check -p`.
+create enumeration MyFirstModule.EsdColor (R 'R', G 'G', B 'B');
+create persistent entity MyFirstModule.EsdShape (C: Enumeration(MyFirstModule.EsdColor));
+
+create microflow MyFirstModule.EsdSameValueTwice ($S: MyFirstModule.EsdShape) returns Integer as $N
+begin
+  declare $N Integer = 0;
+  case $S/C
+    when R then set $N = 1;
+    when R then set $N = 2;
+    when G then set $N = 3;
+    when B then set $N = 4;
+    when (empty) then set $N = 5;
+  end case;
+  return $N;
+end;
