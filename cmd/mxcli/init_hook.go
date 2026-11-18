@@ -193,6 +193,9 @@ if [ ! -x "$MXCLI" ] || [ -n "$stale" ]; then
   else
     rm -f ./mxcli.download
     echo "Could not download mxcli from ${url}." >&2
+    case "$TAG" in
+      nightly-*) echo "  Only the most recent dated nightlies are kept; MXCLI_TAG=nightly fetches the current one." >&2 ;;
+    esac
     if [ ! -x "$MXCLI" ]; then
       echo "Fetch it manually, or set MXCLI_TAG to a released version." >&2
       exit 1
@@ -203,7 +206,15 @@ fi
 
 if older_than_stamp "$MXCLI"; then
   echo "WARNING: $MXCLI ($(bin_version "$MXCLI")) is still older than this project's tooling ($(stamp_field version))." >&2
-  echo "  Set MXCLI_TAG to $(stamp_field version) or newer (or 'nightly') and re-run this script." >&2
+  case "$(stamp_field version)" in
+    # A dated nightly is published under its own tag, but only the most recent
+    # ones are kept; 'nightly' always names the current build (ako/mxcli#2359).
+    nightly-*)
+      echo "  Re-run this script with MXCLI_TAG=$(stamp_field version) (dated nightlies are kept for the most recent builds only)," >&2
+      echo "  or with MXCLI_TAG=nightly for the current nightly." >&2 ;;
+    *)
+      echo "  Set MXCLI_TAG to $(stamp_field version) or newer (or 'nightly') and re-run this script." >&2 ;;
+  esac
 fi
 
 # Keep the project's tooling (skills, bundled lint rules, the mxcli section of
