@@ -11,7 +11,7 @@ related:
 # Proposal: `mxcli verify` — a staged gate with baseline comparison
 
 **Status:** Draft
-**Date:** 2026-11-16
+**Date:** 2026-11-16 (updated 2026-11-18)
 **Issue:** ako/mxcli#2333
 **Relates to:** ako/mxcli#1313 (`mx check` baseline), #1312 (`diff --mx-check`),
 #1258 (`check --full`), #2308 (`replace()` passes `check`, fails `mx check`)
@@ -35,7 +35,35 @@ gate must include `mx check`.
 heuristic each time `check` passes what `mx check` rejects) and
 `PROPOSAL_check_diagnostics_catalog.md`. `verify` fixes none of them. It exists so
 that the gap, whatever its size at any moment, cannot pass unnoticed: it makes the
-~8 s authoritative stage part of the loop. Closing the gap stays with `check`.
+~8 s authoritative stage part of the loop. Closing the gap stays with `check`, and
+that work is **step one and keeps going** regardless of this proposal: each `mx
+check` validation moved into `mxcli check` shrinks what only the slow stage can
+catch. It never reaches zero, which is why the gate keeps `mxcheck` as a stage.
+
+## Evidence that steps get skipped
+
+An external benchmark (mxbench.mecowhy.dev, 2026-11-17; summarised in a comment on
+#2333) built the same 111-story app nine times (three tools by three models).
+Its maintainability critique (microflows with overlapping actions, saves in a
+loop, no business key, unreachable template modules, over-wide entities, missing
+access rules) maps almost entirely onto **existing `lint` rules** (MPR008,
+CONV011, ARCH003, QUAL004, DESIGN001, SEC001 and others). None of it appears as a
+caught problem because no agent ran `mxcli lint`; three agents on three tools and
+three models each skipped a gate that was installed and correct. Two consequences
+for the design:
+
+- **A stage nothing invokes is indistinguishable from one that does not exist.**
+  Discoverability is part of the deliverable, not a follow-up (see Phasing).
+- **`lint` needs its baseline from the first release.** Run against an AI-built
+  app with no baseline, lint fires in the hundreds; a gate whose first run
+  reports 400 findings gets switched off.
+
+The same evidence bounds what the gate can promise. The benchmark's non-lint
+findings (a guest who can write a price, a look-up limit that resets with a new
+browser session, paying one order emptying the cart, a home page that overflows
+on a phone) need a model reader plus probing a running app. No static stage
+reaches them; only `smoke` and beyond can, and `verify` should say so rather than
+imply a clean result means "correct".
 
 ## Proposed behaviour
 
@@ -70,7 +98,7 @@ mxcli verify -p app.mpr [--base <git ref> | --baseline <file>]
   no runtime for a selected stage), so "gate failed" and "gate could not run" are
   never confused. When stages fail, the code is a **bitmask** (1 check, 2 lint,
   4 mxcheck, 8 build, 16 test, 32 smoke) offset so it cannot collide with 0 or 2
-  — exact encoding to be fixed in phase 2 — because with run-all as the default
+  — exact encoding to be fixed in step 2 — because with run-all as the default
   several stages can fail at once. The per-stage detail is always in the output;
   the code is only a summary. **Relation to existing codes:** `check` exits with a
   variable code (`cmd_check.go`) and `lint` exits 1. `verify`'s table is its own
@@ -119,7 +147,7 @@ mxcli verify -p app.mpr [--base <git ref> | --baseline <file>]
     **count**, not a list.
   The lint stage therefore either keeps lint's own file and `Compare` and adapts
   the result, or `Finding` grows an `ID` and the matching rules are restated.
-  Phase 2 decides; it is not "reuse as is".
+  Step 2 decides; it is not "reuse as is".
 - `docker.Check(opts) error` (`cmd/mxcli/docker/check.go`) runs `mx` on a temporary
   copy and **writes free text** to `opts.Stdout`; it returns only an error.
   (`appErrorCount` is an unexported helper.) **There are no structured `mx check`
@@ -141,7 +169,7 @@ The key `(code, document, element path)` is only as good as `mx check`'s text. I
 `recheckCE0463` (`docker/check.go`): *"mx check's text output does not name a
 CE0463's page, so two same-named widgets on different pages print the same line;
 the lines are compared as counts."* For CE0463 the element identity is **not in
-the output**. Phase 1 must therefore classify each code the parser sees:
+the output**. Step 1 must therefore classify each code the parser sees:
 
 1. **Located** — the line names document and element (e.g. CE0109 on a microflow
    activity). Key = `(code, document, path)`; `resolved` is a list.
@@ -152,7 +180,7 @@ the output**. Phase 1 must therefore classify each code the parser sees:
    delta, never a list, and `--format json` says so.
 
 The CE0463 stale/persisting labelling from the re-check must survive unchanged as
-a label on class 3 findings. The first question for phase 1 is the classification
+a label on class 3 findings. The first question for step 1 is the classification
 table (code → class), built from real `mx check` output; stability under rename
 or move (formerly the only question) applies only to class 1.
 
@@ -179,19 +207,34 @@ type Stage interface {
 
 ## Out of scope
 
-- Fixing findings; running stages in parallel (cost order + early stop is the point);
+- Fixing findings; running stages in parallel (stages run in cost order; `--fail-fast` is the CI mode);
   replacing `docker check`, `lint`, `test` or `playwright check`.
 - `check --full` (#1258): `mxcheck` stage calls `docker check` until it exists,
   then may be swapped or made optional.
 
 ## Phasing
 
-1. **Structured `mx check` findings** — parser + `docker.CheckFindings()`, tests
-   against recorded `mx` output fixtures. Standalone PR; unblocks #1313.
-2. **`mxcli verify`** with `check`, `lint`, `mxcheck`; `--baseline`,
-   `--update-baseline`, `--format`, exit-code table, `--fail-fast`.
-3. **`--base <git ref>`** via scratch export.
-4. **Opt-in `build`, `test`, `smoke` stages.**
+0. **Standing: close the `check` / `mx check` gap** per
+   `PROPOSAL_check_mxbuild_gap_heuristics.md`. Already under way (each validation
+   moved into `mxcli check` removes a class of late failures); independent of, and
+   not blocked by, the steps below.
+1. **Structured `mx check` findings**: parser + `docker.CheckFindings()`, tests
+   against recorded `mx` output fixtures. Standalone PR; unblocks the `mxcheck`
+   baseline, #1313 and #1312.
+2. **`mxcli verify`, first release**: stages `check`, `lint`, `mxcheck`;
+   `--format`, exit-code table, `--fail-fast`; and a **`lint` baseline from day
+   one** (`--baseline`, `--update-baseline`, reusing `mdl/linter/baseline.go`
+   through the adapter described above), so the first run on an existing project
+   reports only what is new. The `mxcheck` stage baselines once step 1 lands; until
+   then it reports all findings and says it is unbaselined.
+3. **Make `verify` the thing everything points at**: skills, `mxcli init` output
+   and the project `CLAUDE.md` guidance name `verify` as the single "did my change
+   break anything?" command, instead of listing six commands. Ships with step 2,
+   not after it. A guard test (in the style of `init_claudemd_gates_test.go`)
+   keeps the pointer from drifting.
+4. **`--base <git ref>`** via scratch export.
+5. **Opt-in `build`, `test`, `smoke` stages.** `smoke` is also the only stage that
+   can reach the runtime-only findings listed under Evidence.
 
 ## Testing
 
@@ -212,7 +255,7 @@ type Stage interface {
    `verify`, under a namespace.)
 2. **One baseline file or one per stage?** One file is simpler for agents;
    per-stage keeps `lint --baseline` files valid unchanged.
-3. **Code classification** (phase 1): which `mx check` codes are located,
+3. **Code classification** (step 1): which `mx check` codes are located,
    document-only, or unlocated, and is count-based matching acceptable for the
    unlocated ones?
 4. **`--base` for MPR v1** — extract via `git show` of the single `.mpr`, or require v2?
