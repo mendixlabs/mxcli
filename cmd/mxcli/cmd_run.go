@@ -131,7 +131,7 @@ Examples:
 			// the user should learn that before waiting out a runtime start.
 			if !docker.TunnelSupported() {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", docker.ErrTunnelUnsupported)
-				os.Exit(1)
+				exitProcess(1)
 			}
 			local = true
 			// Present a per-user hub API key to an authenticated hub (MXCLI_HUB_KEY
@@ -141,12 +141,12 @@ Examples:
 		}
 		if !local {
 			fmt.Fprintln(os.Stderr, "Error: only --local is supported for now (use 'mxcli docker run' for the container workflow)")
-			os.Exit(1)
+			exitProcess(1)
 		}
 		projectPath, _ := cmd.Flags().GetString("project")
 		if projectPath == "" {
 			fmt.Fprintln(os.Stderr, "Error: --project (-p) is required")
-			os.Exit(1)
+			exitProcess(1)
 		}
 		// MxBuild requires an absolute project path; resolve a relative -p here
 		// rather than surfacing MxBuild's raw "path should be an absolute path"
@@ -174,7 +174,7 @@ Examples:
 		secrets, err := resolveRunSecrets(cmd)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 		hubSecret := secrets["hub-secret"]
 
@@ -186,7 +186,7 @@ Examples:
 		listenAddr, _ := cmd.Flags().GetString("listen-addr")
 		if err := docker.ValidateListenAddr(listenAddr); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 
 		// --detach: start this same command as a background service and return
@@ -199,14 +199,14 @@ Examples:
 		if detach, _ := cmd.Flags().GetBool("detach"); detach && !detachedChild {
 			if setupOnly {
 				fmt.Fprintln(os.Stderr, "Error: --detach has nothing to do with --setup (which never boots the app)")
-				os.Exit(1)
+				exitProcess(1)
 			}
-			os.Exit(runDetach(projectPath, detachArgs(os.Args[1:], projectPath), os.Stdout))
+			exitProcess(runDetach(projectPath, detachArgs(os.Args[1:], projectPath), os.Stdout))
 		}
 		if !setupOnly {
 			if err := refuseIfRunning(projectPath); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
+				exitProcess(1)
 			}
 		}
 
@@ -220,7 +220,7 @@ Examples:
 		allowCall, _ := cmd.Flags().GetBool("allow-call")
 		if allowCall && !testEndpoint {
 			fmt.Fprintln(os.Stderr, "Error: --allow-call switches on a route of the test endpoint; it needs --test-endpoint")
-			os.Exit(1)
+			exitProcess(1)
 		}
 		if allowCall && hub != "" {
 			// The tunnel client reaches the app from loopback, so the endpoint's
@@ -268,12 +268,12 @@ Examples:
 		constantFlags, err := parseConstantFlags(constantArgs)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 		overrides, err := constantChainFor(projectPath, configuration, constantFlags)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 		reportConstantChain(os.Stdout, overrides)
 		reportJVMArgs(os.Stdout, overrides)
@@ -339,7 +339,7 @@ Examples:
 		if testEndpoint {
 			if setupOnly {
 				fmt.Fprintln(os.Stderr, "Error: --test-endpoint has nothing to do with --setup (which never boots the app)")
-				os.Exit(1)
+				exitProcess(1)
 			}
 			// Ignored before the endpoint's Java source exists, so a commit made
 			// while the app runs cannot pick it up (ako/mxcli#2033).
@@ -350,7 +350,7 @@ Examples:
 			hosted, err = testrunner.InstallHostedEndpoint(projectPath, allowCall, os.Stdout)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
+				exitProcess(1)
 			}
 			// Ctrl-C is the normal way to stop a dev loop, and it must not leave the
 			// endpoint in the project. RunLocal returns on SIGINT, so the deferred
@@ -425,7 +425,7 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			// os.Exit skips deferred calls, so remove explicitly here.
 			hosted.Remove()
-			os.Exit(1)
+			exitProcess(1)
 		}
 	},
 }

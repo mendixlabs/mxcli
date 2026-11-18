@@ -82,7 +82,7 @@ Exit codes: 0 running, 3 not running, 4 still starting.`,
   mxcli run status -p app.mpr || mxcli run --local --watch --detach -p app.mpr`,
 	Run: func(cmd *cobra.Command, args []string) {
 		projectPath := lifecycleProject(cmd)
-		os.Exit(runStatus(projectPath, os.Stdout))
+		exitProcess(runStatus(projectPath, os.Stdout))
 	},
 }
 
@@ -105,7 +105,7 @@ runs in.`,
 	Example: `  mxcli run stop -p app.mpr`,
 	Run: func(cmd *cobra.Command, args []string) {
 		projectPath := lifecycleProject(cmd)
-		os.Exit(runStop(projectPath, os.Stdout))
+		exitProcess(runStop(projectPath, os.Stdout))
 	},
 }
 
@@ -140,9 +140,9 @@ started without --watch never applies a change: wait says so and exits 1.`,
 		ready, _ := cmd.Flags().GetBool("ready")
 		since, _ := cmd.Flags().GetInt("since")
 		if ready {
-			os.Exit(runWaitReady(projectPath, timeout, os.Stdout))
+			exitProcess(runWaitReady(projectPath, timeout, os.Stdout))
 		}
-		os.Exit(runWait(projectPath, timeout, since, os.Stdout))
+		exitProcess(runWait(projectPath, timeout, since, os.Stdout))
 	},
 }
 
@@ -169,25 +169,25 @@ shell.`,
 		st, err := docker.ReadRunState(projectPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(runExitFailed)
+			exitProcess(runExitFailed)
 		}
 		noteForeignRunState(projectPath, os.Stderr)
 		if st == nil || len(st.Args) == 0 {
 			fmt.Fprintf(os.Stderr, "nothing to restart: no run of this project is recorded\n"+
 				"  start one: mxcli run --local --watch --detach -p %s\n", projectPath)
-			os.Exit(runExitNotRunning)
+			exitProcess(runExitNotRunning)
 		}
 		// Secrets given on the command line are not stored with the run, so a
 		// restart would hand the app the placeholder instead of the value. Say so
 		// before stopping anything.
 		if hasRedactedArgs(st.Args) {
 			fmt.Fprint(os.Stderr, restartSecretRefusal(projectPath, redactedArgNames(st.Args)))
-			os.Exit(runExitFailed)
+			exitProcess(runExitFailed)
 		}
 		if code := runStop(projectPath, os.Stdout); code != runExitOK {
-			os.Exit(code)
+			exitProcess(code)
 		}
-		os.Exit(runDetach(projectPath, st.Args, os.Stdout))
+		exitProcess(runDetach(projectPath, st.Args, os.Stdout))
 	},
 }
 
@@ -203,7 +203,7 @@ func lifecycleProject(cmd *cobra.Command) string {
 	projectPath, _ := cmd.Flags().GetString("project")
 	if projectPath == "" {
 		fmt.Fprintln(os.Stderr, "Error: --project (-p) is required")
-		os.Exit(runExitFailed)
+		exitProcess(runExitFailed)
 	}
 	if abs, err := filepath.Abs(projectPath); err == nil {
 		projectPath = abs
