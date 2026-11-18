@@ -1686,8 +1686,10 @@ func findInWidgetChildren(wDoc bson.D, widgetName string) *bsonWidgetResult {
 
 	// ControlBar
 	if controlBar := bsonnav.DGetDoc(wDoc, "ControlBar"); controlBar != nil {
-		if result := findInWidgetArray(controlBar, "Items", widgetName); result != nil {
-			return result
+		for _, key := range controlBarItemKeys {
+			if result := findInWidgetArray(controlBar, key, widgetName); result != nil {
+				return result
+			}
 		}
 	}
 	// Legacy DataGrid: Columns and the source's search bar (#1459).
@@ -2514,8 +2516,10 @@ func findNearestDSInChildren(wDoc bson.D, widgetName string, curDS bson.D) (bson
 		}
 	}
 	if controlBar := bsonnav.DGetDoc(wDoc, "ControlBar"); controlBar != nil {
-		if ds, found := findNearestDSInWidgets(controlBar, "Items", widgetName, curDS); found {
-			return ds, true
+		for _, key := range controlBarItemKeys {
+			if ds, found := findNearestDSInWidgets(controlBar, key, widgetName, curDS); found {
+				return ds, true
+			}
 		}
 	}
 	if strings.Contains(typeName, "CustomWidget") {
@@ -2716,7 +2720,9 @@ func collectWidgetScopeInChildren(wDoc bson.D, scope map[string]model.ID) {
 		collectWidgetScope(wDoc, "Items", scope)
 	}
 	if controlBar := bsonnav.DGetDoc(wDoc, "ControlBar"); controlBar != nil {
-		collectWidgetScope(controlBar, "Items", scope)
+		for _, key := range controlBarItemKeys {
+			collectWidgetScope(controlBar, key, scope)
+		}
 	}
 	for _, l := range legacyGridItemLists(wDoc) {
 		collectWidgetScope(l.doc, l.key, scope)

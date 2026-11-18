@@ -32,8 +32,19 @@ func legacyGridItemLists(wDoc bson.D) []namedItemList {
 	lists := []namedItemList{{wDoc, "Columns"}}
 	if ds := bsonnav.DGetDoc(wDoc, "DataSource"); ds != nil {
 		if sb := bsonnav.DGetDoc(ds, "SearchBar"); sb != nil {
-			lists = append(lists, namedItemList{sb, "Items"})
+			for _, key := range controlBarItemKeys {
+				lists = append(lists, namedItemList{sb, key})
+			}
 		}
 	}
 	return lists
 }
+
+// controlBarItemKeys are the keys a control bar or search bar holds its
+// buttons and fields under. Forms$GridControlBar.Items and
+// Forms$SearchBar.Items are STORED as `NewButtons` (the storage name, read from
+// OIDC SSO 2.3.2's Snip_Configuration; modelsdk/gen/keyaudit_test.go lists
+// both). Walking only `Items` left every real control-bar button and search
+// field "not found" (ako/mxcli#2382); `Items` stays for any shape that uses the
+// metamodel name.
+var controlBarItemKeys = []string{"NewButtons", "Items"}
