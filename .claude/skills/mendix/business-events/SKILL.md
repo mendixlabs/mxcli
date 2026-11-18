@@ -11,12 +11,12 @@ description: "Define event-driven APIs over Kafka with Mendix business event ser
 | lines | section |
 |---|---|
 | 24-31 | When to Use This Skill |
-| 32-101 | Commands |
-| 102-117 | Message Definition Syntax |
-| 118-125 | Service Properties |
-| 126-132 | Operations |
-| 133-179 | Publishing Events from Microflows |
-| 180-192 | Checklist |
+| 32-146 | Commands |
+| 147-162 | Message Definition Syntax |
+| 163-170 | Service Properties |
+| 171-177 | Operations |
+| 178-224 | Publishing Events from Microflows |
+| 225-237 | Checklist |
 
 <!-- /skill-index -->
 # Business Events
@@ -49,9 +49,48 @@ list business events;
 -- Filter messages by module
 list business events in MyModule;
 
--- Full MDL description (round-trippable)
+-- Full MDL description (round-trippable for a PUBLISHED service)
 describe business event service Module.ServiceName;
 ```
+
+`list business event services` has a **Kind** column: `published` (a definition of its
+own) or `consumed` (no definition, the producer's AsyncAPI contract cached instead). A
+consumed service shows 0 messages because its messages live in the contract, not in a
+definition — the kind is what makes that legible. `list business events` lists both
+roles' events with the **Channel** the broker derives the topic from.
+
+### Author a Consumed Service
+
+A **consumed** service stores the producing app's AsyncAPI contract instead of a
+definition of its own, and binds events from it:
+
+```sql
+mdl 1;
+create or modify business event service Module.OrdersEventClient
+(
+  ContractFile: 'contracts/OrdersEventService.yaml'   -- or Contract: $$<yaml>$$
+)
+{
+  consume OrderPlaceEvent
+    entity Module.CBE_OrderPlaceEvent
+    microflow Module.HandleBE_OrderPlaceEvent;
+};
+```
+
+- Exactly one of `Contract:` / `ContractFile:`, and neither may be mixed with
+  `ServiceName`, `EventNamePrefix` or `message` — those are the published shape.
+- `ContractFile` is read when the script runs and stored **verbatim**, so nothing later
+  depends on the file. `describe` prints the `Contract:` form, which re-executes anywhere.
+- It is `consume`, not `subscribe`: `message X (…) subscribe` already means "this app
+  consumes X of its *own* definition". The stored `Operation` is `"subscribe"` either
+  way; only the keyword differs.
+- The consumed entity (`CBE_…`, extending `BusinessEvents.ConsumedBusinessEvent`) and the
+  handler microflow are ordinary MDL, declared before the service.
+- A service whose contract contains `$$` cannot be described inline — `$$…$$` has no
+  escape — so `describe` falls back to comments and tells you to use `ContractFile`.
+
+A published-shaped statement over a stored contract is still refused rather than allowed
+to destroy it (ako/mxcli#2381).
 
 ### Create a Business Event Service
 
@@ -74,10 +113,16 @@ create business event service Module.CustomerEventsApi
 
 Preserves the existing UUID so other documents that reference this service remain valid.
 `OR REPLACE` is accepted as a synonym. Each message keeps its stored channel — the
-channel name is the Kafka topic subscribers listen on — matched by message name, so a
-re-run of an unchanged script reports `Unchanged`; only a new message gets a new
-(random) channel name. Renaming a message is a new channel. There is no MDL property to
-state a channel name, so two apps defining "the same" service get different topics.
+channel name is what the broker derives the Kafka topic from
+(`businessevents.<channel id>.<space>`) — matched by message name, so a re-run of an
+unchanged script reports `Unchanged`; only a new message gets a new (random) channel
+name. Renaming a message is a new channel.
+
+There is no MDL property to state a channel name, and that is correct: the producing app
+mints the id, and it reaches a consumer **inside the exported AsyncAPI contract**, not by
+both apps spelling the same string. Read it with `list business events` (Channel column)
+or `show contract channels from Module.Service`, which works on a publisher as well as a
+consumer.
 
 ```sql
 mdl 1;

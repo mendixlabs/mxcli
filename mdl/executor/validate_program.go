@@ -48,6 +48,10 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	voids := newVoidCodeActions(prog, project)
 	// owner Both between an entity and itself or its generalization (CE0002).
 	violations = append(violations, ValidateAssociationOwnerBoth(prog)...)
+	// A mapping element whose association does not connect it to its parent (CE0295).
+	violations = append(violations, ValidateMappingAssociations(prog, project)...)
+	// An alter that leaves a published OData attribute published as the wrong type (CE5016).
+	violations = append(violations, ValidatePublishedAttributeTypes(prog, project)...)
 	for _, stmt := range prog.Statements {
 		// Check enumeration values for reserved words
 		if enumStmt, ok := stmt.(*ast.CreateEnumerationStmt); ok {
@@ -417,6 +421,8 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// mapping's shape comes from the script, or the project when given
 	// (ako/mxcli#570).
 	violations = append(violations, ValidateImportMappingRange(prog, projectPath)...)
+	// A REST call declared to return a list from a mapping that returns one object (CE0243).
+	violations = append(violations, ValidateRestMappingResult(prog, projectPath)...)
 
 	// Flag a REST client operation whose Body/Response mapping clause has no
 	// `{ ... }` body — Mendix cannot reference a mapping document from an

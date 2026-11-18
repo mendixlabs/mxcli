@@ -1,0 +1,22 @@
+mdl 1;
+-- NEGATIVE TEST — `mxcli check` must REFUSE this file (MDL103), with no project.
+--
+-- `rest call … returns mapping M as list of E` over an import mapping whose root
+-- is ONE object. `check` and `exec` accepted it, and the build reported
+--
+--   [CE0243] "The mapping used to return a value of type 'List of E', but now
+--            returns a value of type 'E'."
+--
+-- Measured on MxBuild 11.16.1: an object-rooted mapping is clean `as E` and
+-- CE0243 `as list of E`; an array-rooted mapping is clean either way (binding one
+-- object out of a list is a real pattern). See rest-mapping-list-of-object-root.mdl.
+create non-persistent entity MyFirstModule.RmFailItem (Rid: integer, Name: string(50));
+create json structure MyFirstModule.JS_RmFailObj sample '{"id": 1, "name": "a"}';
+create import mapping MyFirstModule.IMM_RmFailObj with json structure MyFirstModule.JS_RmFailObj {
+  create MyFirstModule.RmFailItem { Rid = id, Name = name }
+};
+
+create microflow MyFirstModule.RmFailList ($Url: string) returns List of MyFirstModule.RmFailItem begin
+  $R = call rest service get $Url (Timeout: 30) returns mapping MyFirstModule.IMM_RmFailObj as list of MyFirstModule.RmFailItem on error rollback;
+  return $R;
+end;

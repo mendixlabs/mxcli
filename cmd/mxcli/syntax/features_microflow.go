@@ -530,7 +530,7 @@ func init() {
 			"reduce", "all", "any", "fold",
 			// A CE number in the cached `syntax --json` index leads an agent
 			// debugging the build error back to the right topic (issue #1002).
-			"$currentObject", "predicate", "CE0117", "CE0109", "MDL-LISTOP01",
+			"$currentObject", "predicate", "CE0117", "CE0109", "CE0023", "MDL101", "MDL-LISTOP01",
 			"contains", "equals", "by", "where", "MDL-DEPR003", "MDL-DEPR004", "MDL-V1-LIST",
 		},
 		Syntax: "$List = CREATE LIST OF Module.Entity;\n" +
@@ -565,6 +565,9 @@ func init() {
 			"--   RANGE $L LIMIT $Amount                   first $Amount\n" +
 			"--   RANGE $L OFFSET $Offset                  skip $Offset, take the rest\n" +
 			"-- RANGE with no bound is CE6520 at build time (mxcli check: MDL068).\n\n" +
+			"-- UNION, INTERSECT, SUBTRACT, EQUALS and CONTAINS take an Object or a List as\n" +
+			"-- the operand that is not the list; a String, Integer, Boolean or other\n" +
+			"-- primitive variable there is CE0023 at build time (mxcli check: MDL101).\n\n" +
 			"BY names a member and the value it must have; anything else goes after\n" +
 			"WHERE, which is evaluated once per item with the item bound to\n" +
 			"$currentObject -- the same variable the aggregate expressions use:\n\n" +

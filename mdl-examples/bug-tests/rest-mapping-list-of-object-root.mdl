@@ -1,0 +1,28 @@
+mdl 1;
+-- Control for rest-mapping-list-of-object-root.fail.mdl: every other combination of
+-- mapping root and declared result. Builds with 0 errors on MxBuild 11.16.1.
+create non-persistent entity MyFirstModule.RmOkItem (Rid: integer, Name: string(50));
+create json structure MyFirstModule.JS_RmOkObj sample '{"id": 1, "name": "a"}';
+create json structure MyFirstModule.JS_RmOkArr sample '[{"id": 1, "name": "a"}]';
+create import mapping MyFirstModule.IMM_RmOkObj with json structure MyFirstModule.JS_RmOkObj {
+  create MyFirstModule.RmOkItem { Rid = id, Name = name }
+};
+create import mapping MyFirstModule.IMM_RmOkArr with json structure MyFirstModule.JS_RmOkArr {
+  create MyFirstModule.RmOkItem { Rid = id, Name = name }
+};
+
+create microflow MyFirstModule.RmOkObjOne ($Url: string) returns MyFirstModule.RmOkItem begin
+  $R = call rest service get $Url (Timeout: 30) returns mapping MyFirstModule.IMM_RmOkObj as MyFirstModule.RmOkItem on error rollback;
+  return $R;
+end;
+
+create microflow MyFirstModule.RmOkArrList ($Url: string) returns List of MyFirstModule.RmOkItem begin
+  $R = call rest service get $Url (Timeout: 30) returns mapping MyFirstModule.IMM_RmOkArr as list of MyFirstModule.RmOkItem on error rollback;
+  return $R;
+end;
+
+-- Binding ONE object out of a list-rooted mapping is a real pattern.
+create microflow MyFirstModule.RmOkArrOne ($Url: string) returns MyFirstModule.RmOkItem begin
+  $R = call rest service get $Url (Timeout: 30) returns mapping MyFirstModule.IMM_RmOkArr as MyFirstModule.RmOkItem on error rollback;
+  return $R;
+end;
