@@ -535,9 +535,11 @@ Every mxcli invocation writes a session record naming its argv, so the shape of
 an agent's loop is already on disk. This reports it: which commands were run,
 how often, how long they took, and how many did not exit cleanly.
 
-A run that fails exits through os.Exit and writes no summary record, so it is
-counted as "did not close" rather than as a failure — the report says which it
-is measuring rather than presenting one as the other.
+A run that is killed, or that leaves through a bare os.Exit inside a command,
+writes no summary record, so it is counted as "did not close" rather than as a
+failure — the report says which it is measuring rather than presenting one as
+the other. The run commands (run, run status/stop/wait/restart) close their
+session on every exit.
 
 It counts mxcli PROCESSES, not model calls — one shell command can run several.
 Read it to find which command dominates a loop, and re-run it after a change to

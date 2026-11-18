@@ -96,7 +96,10 @@ func refCacheDir(versionID, mendixVersion string) (string, error) {
 // "f2" added javascriptsource/ and javasource/ (mendixlabs/mxcli#1441). Entries
 // with no prefix were model-only; they sit beside the new ones under ref/, are
 // never looked up again, and age out through pruneRefCache.
-const refEntryFormat = "f2"
+//
+// "f3" added widgets/, and a reference is now widget-repaired before it is
+// cached (ako/mxcli#2367).
+const refEntryFormat = "f3"
 
 // safeKey makes a path component out of a version string or UUID. Anything that
 // is not plainly alphanumeric becomes '-', so a malformed version from the API
@@ -303,7 +306,10 @@ func publishToCache(buildDir, cacheDir string) error {
 // but a reference built from a protected module's tree (moduletree.go) skips
 // module-import and keeps whatever format the blank project was created in.
 func isModelFile(rel string) bool {
-	for _, dir := range []string{"mprcontents", "javascriptsource", "javasource"} {
+	// widgets/ holds the pluggable widget definitions DESCRIBE renders a
+	// widget by; without them it falls back to the generic form, and every
+	// snippet with a pluggable widget read as edited (ako/mxcli#2367).
+	for _, dir := range []string{"mprcontents", "javascriptsource", "javasource", "widgets"} {
 		if rel == dir || strings.HasPrefix(rel, dir+string(filepath.Separator)) {
 			return true
 		}
