@@ -253,6 +253,9 @@ func init() {
 			"  WHEN (empty) THEN                  -- required (MDL056 / CE0079)\n" +
 			"    ...\n" +
 			"END CASE;                            -- no ELSE (MDL008)\n\n" +
+			"-- Every enumeration value needs a branch (CE0079; mxcli check -p: MDL106), a value\n" +
+			"-- the enumeration does not have is CE1613 (values are case-sensitive; MDL106), and\n" +
+			"-- one named in two branches is CE0771 (MDL105).\n\n" +
 			"CASE Module.Rule(Param = $Value)     -- a RULE returning an enumeration\n" +
 			"  WHEN Value1 THEN ...               -- same call syntax as IF on a rule;\n" +
 			"  WHEN (empty) THEN ...              -- with -p every value needs a branch\n" +

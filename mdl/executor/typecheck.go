@@ -70,6 +70,8 @@ func (e *Executor) TypeCheckProgram(prog *ast.Program) []linter.Violation {
 			out = append(out, adapter.CheckNanoflow(s).AsViolations()...)
 		}
 	}
+	// Enumeration splits against the members of the enumeration they split on.
+	out = append(out, enumSplitValueViolations(reader, prog)...)
 	return out
 }
 

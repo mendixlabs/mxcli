@@ -191,6 +191,8 @@ func (v *microflowValidator) validate(body []ast.MicroflowStatement) {
 	v.checkDuplicateVariableNames(v.params, body)
 	// CE0023: a primitive where UNION/INTERSECT/SUBTRACT/EQUALS/CONTAINS need an object or list.
 	v.checkListOperandKinds(body)
+	// CE0771: a value two branches of one enumeration split both name.
+	v.checkEnumSplitDuplicateValues(body)
 	// ako/mxcli#962: the other half of #953's void-call finding — the name is
 	// inert both ways, so reading it is CE0109. See validate_void_call_output.go.
 	v.checkVoidCallOutputUse(v.params, body)
