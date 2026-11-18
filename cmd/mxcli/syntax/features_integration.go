@@ -287,6 +287,9 @@ func init() {
 			"RETURNS MAPPING Module.IMM AS Module.E  -- apply an import mapping (single object)\n" +
 			"RETURNS MAPPING Module.IMM AS LIST OF Module.E\n" +
 			"RETURNS NOTHING                         -- ignore the response\n\n" +
+			"-- AS LIST OF needs a mapping whose root is an array: over an object-rooted\n" +
+			"-- mapping the build reports CE0243 (mxcli check: MDL103). AS Module.E is fine\n" +
+			"-- on either root (on an array it binds one object out of the list).\n\n" +
 			"-- The file document form takes a SPECIALIZATION of System.FileDocument.\n" +
 			"-- Mendix rejects the base type as a return type (CE0362), and MDL064\n" +
 			"-- reports that before the write. There is no matching form for an\n" +

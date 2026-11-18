@@ -421,6 +421,8 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// mapping's shape comes from the script, or the project when given
 	// (ako/mxcli#570).
 	violations = append(violations, ValidateImportMappingRange(prog, projectPath)...)
+	// A REST call declared to return a list from a mapping that returns one object (CE0243).
+	violations = append(violations, ValidateRestMappingResult(prog, projectPath)...)
 
 	// Flag a REST client operation whose Body/Response mapping clause has no
 	// `{ ... }` body — Mendix cannot reference a mapping document from an
