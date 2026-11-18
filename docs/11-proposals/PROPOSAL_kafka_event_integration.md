@@ -273,7 +273,7 @@ create or modify business event service BusinessEventsClient.OrdersEventClient
   ContractFrom: CdcPublish.OrdersEventService
 )
 {
-  subscribe OrderPlaceEvent
+  consume OrderPlaceEvent
     entity BusinessEventsClient.CBE_OrderPlaceEvent
     microflow BusinessEventsClient.HandleBE_OrderPlaceEvent;
 };
@@ -284,7 +284,7 @@ create business event service Orders.OrdersEventClient
   ContractFile: 'contracts/OrdersEventService.yaml'
 )
 {
-  subscribe OrderPlaceEvent entity Orders.CBE_OrderPlaceEvent microflow Orders.HandleBE_OrderPlaceEvent;
+  consume OrderPlaceEvent entity Orders.CBE_OrderPlaceEvent microflow Orders.HandleBE_OrderPlaceEvent;
 };
 
 -- what describe prints, whichever key created it
@@ -298,7 +298,7 @@ info:
 $$
 )
 {
-  subscribe OrderPlaceEvent entity Orders.CBE_OrderPlaceEvent microflow Orders.HandleBE_OrderPlaceEvent;
+  consume OrderPlaceEvent entity Orders.CBE_OrderPlaceEvent microflow Orders.HandleBE_OrderPlaceEvent;
 };
 ```
 
@@ -313,28 +313,37 @@ $$
   Java action's `extra code`); the property-list value rule needs to accept that token.
   `describe` always prints `Contract: $$ … $$`, so its output needs no files and
   round-trips. Check refuses a contract containing `$$` rather than escape it.
-- `subscribe <Message> entity … [microflow …]` writes one `ServiceOperation`.
+- `consume <Message> entity … [microflow …]` writes one `ServiceOperation`
+  (`Operation: "subscribe"` — see the keyword note below).
   The consumed entity and handler are ordinary MDL, declared before the service
   (`create persistent entity … extends BusinessEvents.ConsumedBusinessEvent (…)`,
   `create microflow …`). mxcli does not generate them implicitly — statements stay
   self-contained (design-mdl-syntax §3); a skill shows the three-statement recipe.
 - `create or modify` carries the operation `$ID`s by message name, as
   `businessEventIdentityCarry` already does for the publisher.
-- **Two spellings of `subscribe`.** Today's `message X (…) subscribe entity …` already
-  means "this app consumes X of its *own* definition" (`CanPublish: true`, plus a
-  `ServiceOperation` with `Operation: subscribe`) — Studio Pro's publisher editor has both
-  a Publish and a Subscribe table for exactly that, so one definition can do both. The
-  body item proposed here writes the *same* `ServiceOperation`, but against an imported
-  contract with `Definition: null`. The two are told apart only by which property key was
-  used, which R11 enforces — unambiguous to the parser, not to a reader. Either give the
-  contract-based form a distinct keyword, or have `describe` label which kind it is.
+- **The contract-based form is `consume`, not `subscribe`** (decided). Today's
+  `message X (…) subscribe entity …` already means "this app consumes X of its *own*
+  definition" (`CanPublish: true`, plus a `ServiceOperation` with `Operation: subscribe`)
+  — Studio Pro's publisher editor has both a Publish and a Subscribe table for exactly
+  that, so one definition can do both. Reusing `subscribe` for the contract form would
+  give two spellings that write the *same* `ServiceOperation` and differ only by which
+  property key was used: unambiguous to the parser, which R11 enforces, but not to a
+  reader. `consume` follows Mendix's own vocabulary for this side — the metamodel's
+  `ConsumedBusinessEventService` and `ConsumedBusinessEvent`, and the `CBE_` entity prefix
+  Studio Pro generates for it. **Only the MDL keyword differs**: the stored `Operation`
+  is `"subscribe"` either way (§3), so nothing about the BSON changes.
+  Lexing: the grammar already has a `CONSUMED` token (consumed OData/REST/MCP services)
+  but no `CONSUME`; add one, and ANTLR's longest-match keeps `consumed` resolving to the
+  existing token. Like every MDL keyword it stops being a bare identifier, so an
+  attribute or variable named `consume` needs quoting from then on — parser-level only,
+  not a platform-reserved name (CLAUDE.md, "Quoting Escapes Parser Keywords").
 
 **Check rules** (new `MDL-BE*` codes; mx does not catch these):
 
 | Rule | Condition |
 |---|---|
 | contract parses | the YAML is AsyncAPI 2.x with at least one channel (else mxbuild crashes) |
-| message exists | each `subscribe` names a message in `components.messages` (mx passes it, §6) |
+| message exists | each `consume` names a message in `components.messages` (mx passes it, §6) |
 | entity shape | entity is persistent, `extends BusinessEvents.ConsumedBusinessEvent`, and has an attribute of the mapped type for each payload property |
 | handler shape | microflow has exactly one parameter, of the consumed entity |
 | module present | the `BusinessEvents` marketplace module is in the project |
@@ -491,8 +500,9 @@ metamodel with `Metadata`, `OpenApi` and `GraphQL` strings and looks like a free
 is **not populated** — the fixture project's three published OData services have no
 `Contract` part at all. Do not build on it.
 
-Proposed surface, a CLI command rather than an MDL statement: it writes a file, it is a CI
-step, and `--format` / `-o` are awkward as MDL properties.
+**Decided: a CLI command, not an MDL statement.** It writes a file, it is a CI step (app
+A's pipeline emits the contract, app B's script names it in `ContractFile:`), and
+`--format` / `-o` are awkward as MDL properties.
 
 ```bash
 mxcli export contract Mod.Service [--format <f>] [-o file] [--from-running <url>]
@@ -547,7 +557,7 @@ entities from `testapp-describe.mdl`), mutate with a few lines of Go over
 |---|---|---|
 | A1 consumer describe/list | `mdl/executor/cmd_businessevents.go` | fix the lossy describe first; it is a data-loss bug on round-trip (ako/mxcli#2381). Also surface the publisher's channel id (§5.4) |
 | A2 CDC read | new `mdl/backend/modelsdk/cdc_read.go`, `mdl/backend/service.go` (interface), mock, `mdl/executor/cmd_cdc.go`, catalog builder + tables, registry | gen types exist; add the 4 missing properties (§4) first so reads see them |
-| B1 grammar/AST | `MDLParser.g4` (`Contract`/`ContractFile`/`ContractFrom` keys, `DOLLAR_STRING` as a property value, `subscribe` body item), `ast_businessevents.go`, `visitor_businessevents.go` | |
+| B1 grammar/AST | `MDLParser.g4` (`Contract`/`ContractFile`/`ContractFrom` keys, `DOLLAR_STRING` as a property value, `consume` body item), `ast_businessevents.go`, `visitor_businessevents.go` | |
 | B2 AsyncAPI renderer | new `mdl/businessevents/asyncapi.go` | golden test = `asyncapi-OrdersEventService.yaml`, byte-for-byte |
 | B3 write | `mdl/backend/modelsdk/business_event_write.go` | `Definition` null, `Document`, subscribe ops; identity carry by message name |
 | B4 check rules | `mdl/executor/validate_*` | §5.1 table |
