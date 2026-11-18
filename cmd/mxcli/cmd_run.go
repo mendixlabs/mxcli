@@ -277,6 +277,7 @@ Examples:
 		}
 		reportConstantChain(os.Stdout, overrides)
 		reportJVMArgs(os.Stdout, overrides)
+		appPort, adminPort = runPorts(os.Stdout, appPort, adminPort, overrides)
 
 		opts := docker.LocalRunOptions{
 			ProjectPath:        projectPath,
@@ -452,8 +453,8 @@ func init() {
 	runCmd.Flags().Bool("allow-call", false, "With --test-endpoint: let 'mxcli test --attach' run a test straight against this app, without injecting or building it, when every statement of the test is one the endpoint can execute. The endpoint then calls the microflows a test names and reads and writes data in a system context, so it is off unless asked for")
 	runCmd.Flags().Bool("ensure-db", false, "Provision the local Postgres + app database if missing (fresh-session bootstrap)")
 	runCmd.Flags().Bool("setup", false, "Prepare prerequisites (cache MxBuild+runtime, ensure DB) and exit without booting — for a SessionStart hook")
-	runCmd.Flags().Int("app-port", 0, "HTTP port for the app (default 8080)")
-	runCmd.Flags().Int("admin-port", 0, "M2EE admin API port (default 8090)")
+	runCmd.Flags().Int("app-port", 0, "HTTP port for the app (default: the configuration's, else 8080)")
+	runCmd.Flags().Int("admin-port", 0, "M2EE admin API port (default: the configuration's, else 8090)")
 	runCmd.Flags().String("listen-addr", "", "Address the app binds to (default 127.0.0.1, loopback only). Must be an IP address. Set 0.0.0.0 (or :: for IPv6 too) to reach the app from other machines on the network; the URLs it is reachable at are printed once it runs. If the app builds absolute URLs (SSO redirects, links in emails), pair it with a reachable root URL — an ApplicationRootUrl naming a real host in the model, or --runtime-setting ApplicationRootUrl=http://<host>:<port>/ — because the runtime does not derive one from this address (a warning says so). The M2EE admin API is unaffected and always stays on 127.0.0.1.")
 	runCmd.Flags().Int("serve-port", 0, "mxbuild --serve port (default 6543)")
 	runCmd.Flags().String("mxbuild-path", "", "Path to the mxbuild to build with, overriding resolution (Studio Pro's bundled mxbuild on macOS/Windows, the cached CDN download on Linux)")
