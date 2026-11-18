@@ -11,12 +11,12 @@ description: "Define event-driven APIs over Kafka with Mendix business event ser
 | lines | section |
 |---|---|
 | 24-31 | When to Use This Skill |
-| 32-146 | Commands |
-| 147-162 | Message Definition Syntax |
-| 163-170 | Service Properties |
-| 171-177 | Operations |
-| 178-224 | Publishing Events from Microflows |
-| 225-237 | Checklist |
+| 32-167 | Commands |
+| 168-183 | Message Definition Syntax |
+| 184-191 | Service Properties |
+| 192-198 | Operations |
+| 199-245 | Publishing Events from Microflows |
+| 246-258 | Checklist |
 
 <!-- /skill-index -->
 # Business Events
@@ -91,6 +91,27 @@ create or modify business event service Module.OrdersEventClient
 
 A published-shaped statement over a stored contract is still refused rather than allowed
 to destroy it (ako/mxcli#2381).
+
+### Two Apps: Export the Contract, Then Consume It
+
+The producing app mints the channel id and it reaches the consumer **inside the exported
+contract** — not by both apps spelling the same string. `export contract` writes the
+document Studio Pro's *Export AsyncAPI Document* button produces:
+
+```bash
+mxcli export contract CdcPublish.OrdersEventService -p appA.mpr -o contract.yaml
+```
+
+Then name that file in app B's script (`ContractFile: 'contract.yaml'`). Both apps then
+show the same Channel in `list business events`, which is what the broker derives the
+topic from.
+
+Only business event services export so far. A published OData or REST service's contract
+is served by the running app, so exporting one means fetching rather than rendering it.
+
+Payload types: only `Long` is measured against a Studio Pro export, so the renderer
+refuses the others rather than guess (#2384 §9.1) — export from Studio Pro and use
+`ContractFile:` for a service that uses them.
 
 ### Create a Business Event Service
 
