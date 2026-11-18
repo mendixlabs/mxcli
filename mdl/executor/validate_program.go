@@ -423,6 +423,8 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	violations = append(violations, ValidateImportMappingRange(prog, projectPath)...)
 	// A REST call declared to return a list from a mapping that returns one object (CE0243).
 	violations = append(violations, ValidateRestMappingResult(prog, projectPath)...)
+	// A custom object handler naming a parameter its microflow does not declare (CE1613).
+	violations = append(violations, ValidateMappingHandlerParams(prog, project)...)
 
 	// Flag a REST client operation whose Body/Response mapping clause has no
 	// `{ ... }` body — Mendix cannot reference a mapping document from an
