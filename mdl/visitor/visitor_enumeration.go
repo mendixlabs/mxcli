@@ -61,7 +61,9 @@ func (b *Builder) ExitAlterEnumerationAction(ctx *parser.AlterEnumerationActionC
 				}
 
 				if ctx.ADD() != nil && len(ids) >= 1 {
-					caption := ""
+					// No caption written: the value's name, as for `create
+					// enumeration` (ako/mxcli#2397).
+					caption := ids[0]
 					if ctx.STRING_LITERAL() != nil {
 						caption = unquoteStringLit(ctx.STRING_LITERAL())
 					}
