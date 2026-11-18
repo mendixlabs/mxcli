@@ -81,6 +81,11 @@ func StudioProLockFile(mprPath string) (string, time.Time) {
 	return "", time.Time{}
 }
 
+// CheckStudioProOpen is the guard for a command that writes many units in a
+// run that cannot stop half-way cleanly: it asks once, before the run starts,
+// so the refusal is one message and the project untouched (ako/mxcli#2366).
+func CheckStudioProOpen(mprPath string) error { return studioProOpenGuard(mprPath) }
+
 // studioProOpenGuard is called immediately before a write reaches storage.
 func studioProOpenGuard(mprPath string) error {
 	if AllowWritesWhileStudioProOpen || os.Getenv(AllowStudioProOpenEnv) == "1" {

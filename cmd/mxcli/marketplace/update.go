@@ -17,6 +17,7 @@ import (
 	modelsdk "github.com/mendixlabs/mxcli"
 	"github.com/mendixlabs/mxcli/internal/zipentry"
 	"github.com/mendixlabs/mxcli/mdl/backend"
+	"github.com/mendixlabs/mxcli/modelsdk/mpr"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -192,6 +193,13 @@ type SkippedFile struct {
 // on a copy, or hold a backup: this does not roll back.
 func PerformUpdate(mprPath, referenceMpr, targetMpk, moduleName, fromVersion, toVersion, toVersionID string,
 	newBackend func() backend.FullBackend) (*UpdateResult, error) {
+
+	// Studio Pro holding the project refuses every write; asked here, it is
+	// one refusal and an untouched project, not hundreds of refused writes
+	// and a "mid-update" warning (ako/mxcli#2366).
+	if err := mpr.CheckStudioProOpen(mprPath); err != nil {
+		return nil, fmt.Errorf("%w; %w", err, ErrUpdateNotStarted)
+	}
 
 	// Everything below the drop is only worth starting if it can finish. The
 	// inputs it reads after the drop are checked first, so a missing or
