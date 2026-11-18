@@ -829,7 +829,7 @@ func odataKeyPartToGen(kp *domainmodel.RemoteKeyPart) element.Element {
 	part := genRest.NewODataKeyPart()
 	part.SetEntityKeyPartName(kp.Name)
 	part.SetName(kp.RemoteName)
-	part.SetFilterable(true)
+	part.SetFilterable(!kp.NotFilterable)
 	part.SetRemoteType(kp.RemoteType)
 	t := attributeTypeToGen(kp.Type)
 	assignID(t)
