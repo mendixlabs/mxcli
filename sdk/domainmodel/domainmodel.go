@@ -129,6 +129,12 @@ type RemoteKeyPart struct {
 	RemoteName string // OData property name (often same as Name)
 	RemoteType string // OData EDM type, e.g. "Edm.String"
 	Type       AttributeType
+	// NotFilterable is true when the service says the key cannot be filtered on.
+	// A key part carries its own Filterable, which mxbuild compares with the
+	// service's (CE6630), so it is a model fact like the attribute's. The zero
+	// value keeps the historic filterable key, so code that builds a key part
+	// without a contract in hand is unchanged.
+	NotFilterable bool
 }
 
 // GetName returns the entity's name.
