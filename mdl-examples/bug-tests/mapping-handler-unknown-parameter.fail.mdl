@@ -1,0 +1,40 @@
+mdl 1;
+-- NEGATIVE TEST — `mxcli check` must REFUSE this file (MDL104), with no project.
+--
+-- An import mapping's custom object handler (`find … by M.MF ( P: member )`) that
+-- names a parameter the microflow does not declare. `check` and `exec` accepted it
+-- and wrote a handler whose parameter points at nothing; the build reported
+--
+--   [CE1613] "The selected parameter 'M.MF.P' no longer exists."
+--
+-- Measured on MxBuild 11.16.1: an unknown name and the right name in another case
+-- (names are case-sensitive) are both CE1613. A handler that leaves a parameter OUT is
+-- CE0277 instead — see mapping-handler-missing-parameter.fail.mdl, kept apart because
+-- CE1613 is an unresolved reference and hides every other error in the project.
+create persistent entity MyFirstModule.HpFailRoot (Name: string(50));
+create persistent entity MyFirstModule.HpFailChild (Code: string(50));
+create association MyFirstModule.HpFailChild_HpFailRoot from MyFirstModule.HpFailChild to MyFirstModule.HpFailRoot type reference;
+create json structure MyFirstModule.JS_HpFail sample '{"name": "n", "items": [{"code": "c", "idx": 1}]}';
+create microflow MyFirstModule.HpFailByIndex ($Index: integer) returns MyFirstModule.HpFailChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+
+create import mapping MyFirstModule.IMM_HpFailUnknown with json structure MyFirstModule.JS_HpFail {
+  create MyFirstModule.HpFailRoot {
+    Name = name,
+    find MyFirstModule.HpFailChild_HpFailRoot/MyFirstModule.HpFailChild by MyFirstModule.HpFailByIndex ( Nope: idx ) = items {
+      Code = code
+    }
+  }
+};
+
+create import mapping MyFirstModule.IMM_HpFailCase with json structure MyFirstModule.JS_HpFail {
+  create MyFirstModule.HpFailRoot {
+    Name = name,
+    find MyFirstModule.HpFailChild_HpFailRoot/MyFirstModule.HpFailChild by MyFirstModule.HpFailByIndex ( index: idx ) = items {
+      Code = code
+    }
+  }
+};

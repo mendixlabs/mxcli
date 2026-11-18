@@ -907,7 +907,7 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 			"  by calling this microflow. Parameter sources: parent (the enclosing\n" +
 			"  mapped object), parameter (the mapping's own input object),\n" +
 			"  parent(2) (an ancestor N levels up), or a member path (a value from\n" +
-			"  the payload). modelsdk engine only.\n\n" +
+			"  the payload). modelsdk engine only.\n    The handler must name EXACTLY the microflow's parameters, by their own\n    names (case-sensitive): an unknown name is CE1613, and leaving a parameter\n    out is CE0277 (mxcli check: MDL104).\n\n" +
 			"Value transform (Attr = Module.MF(jsonField)):\n" +
 			"  The value passes through a microflow on its way to the attribute.\n" +
 			"  The stored element carries only the microflow — its input IS the\n" +
