@@ -1,0 +1,38 @@
+mdl 1;
+-- Control for published-attribute-type-change.fail.mdl: an alter inside one EDM type
+-- (String(50) to String(80); Integer to Long are both Edm.Int64), and a type change
+-- followed by `create or modify published odata service`, which re-derives the
+-- published types. Builds with 0 errors on MxBuild 11.16.1.
+create persistent entity MyFirstModule.PaOk (
+  Code: integer unique error message 'u' required error message 'r',
+  Label: string(50),
+  Amount: decimal
+);
+
+create published odata service MyFirstModule.PaOkSvc (
+  path: 'odata/paok/', version: '1.0.0', ODataVersion: OData4,
+  namespace: 'MyFirstModule.PaOk', ServiceName: 'PaOkSvc', PublishAssociations: Yes,
+  Authentication: (basic, session)
+)
+{
+  publish entity MyFirstModule.PaOk as 'Items' (
+    ReadMode: source, InsertMode: not_supported, UpdateMode: not_supported, DeleteMode: not_supported
+  )
+  expose (Code as 'id' (KEY, Filterable, Sortable), Label, Amount);
+};
+
+alter entity MyFirstModule.PaOk modify attribute Label: string(80);
+alter entity MyFirstModule.PaOk modify attribute Code: long unique error message 'u' required error message 'r';
+alter entity MyFirstModule.PaOk modify attribute Amount: integer;
+
+create or modify published odata service MyFirstModule.PaOkSvc (
+  path: 'odata/paok/', version: '1.0.0', ODataVersion: OData4,
+  namespace: 'MyFirstModule.PaOk', ServiceName: 'PaOkSvc', PublishAssociations: Yes,
+  Authentication: (basic, session)
+)
+{
+  publish entity MyFirstModule.PaOk as 'Items' (
+    ReadMode: source, InsertMode: not_supported, UpdateMode: not_supported, DeleteMode: not_supported
+  )
+  expose (Code as 'id' (KEY, Filterable, Sortable), Label, Amount);
+};

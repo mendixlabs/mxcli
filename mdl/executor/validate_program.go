@@ -50,6 +50,8 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	violations = append(violations, ValidateAssociationOwnerBoth(prog)...)
 	// A mapping element whose association does not connect it to its parent (CE0295).
 	violations = append(violations, ValidateMappingAssociations(prog, project)...)
+	// An alter that leaves a published OData attribute published as the wrong type (CE5016).
+	violations = append(violations, ValidatePublishedAttributeTypes(prog, project)...)
 	for _, stmt := range prog.Statements {
 		// Check enumeration values for reserved words
 		if enumStmt, ok := stmt.(*ast.CreateEnumerationStmt); ok {
