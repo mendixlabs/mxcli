@@ -24,6 +24,48 @@ type TableSchema struct {
 	IsView  bool
 }
 
+// QualifiedName is how the table must be addressed in a generated query: the
+// schema it was discovered in, when one is known. A database reports no schema
+// for some drivers, and there the bare name is the address (ako/mxcli#2414).
+func (t *TableSchema) QualifiedName() string {
+	if t.Schema == "" {
+		return t.Name
+	}
+	return t.Schema + "." + t.Name
+}
+
+// tableAddresses is the address of every object a SHOW TABLES / SHOW VIEWS
+// result names. The readers go through it rather than reading the rows
+// themselves, so a schema cannot be dropped again without changing a function
+// a test covers (ako/mxcli#2414).
+func tableAddresses(rows [][]any) []string {
+	var out []string
+	for _, row := range rows {
+		if addr := qualifiedTableName(row); addr != "" {
+			out = append(out, addr)
+		}
+	}
+	return out
+}
+
+// qualifiedTableName is the address in a SHOW TABLES / SHOW VIEWS row, whose
+// columns are (table_schema, table_name). The schema is part of the address,
+// so dropping it leaves a name that cannot be selected from (ako/mxcli#2414).
+func qualifiedTableName(row []any) string {
+	if len(row) < 2 {
+		if len(row) == 1 {
+			return fmt.Sprintf("%v", row[0])
+		}
+		return ""
+	}
+	name := fmt.Sprintf("%v", row[1])
+	schema := fmt.Sprintf("%v", row[0])
+	if schema == "" {
+		return name
+	}
+	return schema + "." + name
+}
+
 // pkQuery returns the query to find primary key columns for a given table.
 var pkQuery = map[DriverName]string{
 	DriverPostgres: `SELECT a.attname
@@ -65,8 +107,14 @@ func ReadTableSchema(ctx context.Context, conn *Connection, tableName string, is
 		}
 	}
 
+	// tableName may be qualified, either because discovery qualified it or
+	// because the user wrote TABLES (sales.customers). The schema belongs in
+	// Schema and the bare name in Name: the name is what every Mendix entity
+	// and query is called after (ako/mxcli#2414).
+	schemaName, bareName := splitTableName(tableName)
 	schema := &TableSchema{
-		Name:   tableName,
+		Schema: schemaName,
+		Name:   bareName,
 		IsView: isView,
 	}
 
@@ -98,12 +146,8 @@ func ReadAllTableSchemas(ctx context.Context, conn *Connection) ([]*TableSchema,
 	}
 
 	var schemas []*TableSchema
-	for _, row := range result.Rows {
-		if len(row) < 2 {
-			continue
-		}
-		tableName := fmt.Sprintf("%v", row[1])
-		ts, err := ReadTableSchema(ctx, conn, tableName, false)
+	for _, addr := range tableAddresses(result.Rows) {
+		ts, err := ReadTableSchema(ctx, conn, addr, false)
 		if err != nil {
 			continue // skip tables that fail
 		}
@@ -120,12 +164,8 @@ func ReadAllViewSchemas(ctx context.Context, conn *Connection) ([]*TableSchema, 
 	}
 
 	var schemas []*TableSchema
-	for _, row := range result.Rows {
-		if len(row) < 2 {
-			continue
-		}
-		viewName := fmt.Sprintf("%v", row[1])
-		ts, err := ReadTableSchema(ctx, conn, viewName, true)
+	for _, addr := range tableAddresses(result.Rows) {
+		ts, err := ReadTableSchema(ctx, conn, addr, true)
 		if err != nil {
 			continue // skip views that fail
 		}
