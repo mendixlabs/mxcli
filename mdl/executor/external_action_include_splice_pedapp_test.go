@@ -42,7 +42,7 @@ end;`
 		}
 		return out.String()
 	}
-	const tree = " include associations (MyFirstModule.Quantity (MyFirstModule.Unit_2))"
+	const tree = " include associations (MyFirstModule.Quantity (MyFirstModule.QuantityParameterType_Unit))"
 	if err := agreeExec(t, exec, flow(tree)); err != nil {
 		t.Fatalf("create: %v\n%s", err, out.String())
 	}
