@@ -13,6 +13,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/catalog"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"github.com/mendixlabs/mxcli/sdk/security"
@@ -92,6 +93,71 @@ func (ctx *LintContext) FullMicroflow(id model.ID) (*microflows.Microflow, error
 		return nil, ctx.fullMFErr
 	}
 	return ctx.fullMFCache[id], nil
+}
+
+// DomainModels returns the domain model of every module, or nil when the
+// reader cannot supply them.
+//
+// Entity geometry (an entity's Location, and the members its drawn box is sized
+// from) is not in the catalog, so a rule that checks the diagram has to read
+// the model. This is an optional reader capability rather than a method on
+// LintReader: eight readers in the linter test packages implement that
+// interface and would each need a stub, while in production the reader is
+// always an mdl/backend Backend, whose interface declares ListDomainModels. So
+// the assertion holds wherever lint actually runs, and the same arrangement is
+// how JarFiles reaches Path().
+func (ctx *LintContext) DomainModels() []*domainmodel.DomainModel {
+	if ctx == nil || ctx.reader == nil {
+		return nil
+	}
+	r, ok := ctx.reader.(interface {
+		ListDomainModels() ([]*domainmodel.DomainModel, error)
+	})
+	if !ok {
+		return nil
+	}
+	dms, err := r.ListDomainModels()
+	if err != nil {
+		return nil
+	}
+	return dms
+}
+
+// OwnedModuleNamesByID maps the ID of every module the user actually owns to
+// its name — not System, and not downloaded from the Marketplace or installed
+// as a package. A domain model records only its containing module's ID, so a
+// rule that reads the model needs this both to name the module and to stay off
+// modules the user cannot edit.
+//
+// This is the Go counterpart of the notPlatformModule SQL fragment, and it has
+// to make the same two tests for the same reason. A rule that reads the MODEL
+// rather than the catalog does not get that WHERE clause for free, so it starts
+// out seeing every platform module — which is how MPR016, in its first run,
+// reported 41 System entities as overlapping, naming FileDocument and
+// HttpRequest just as QUAL002 once did. Filtering on Source alone does not
+// help: it is empty for System exactly as it is for the user's own modules,
+// which is why the ID test is here too.
+func (ctx *LintContext) OwnedModuleNamesByID() map[model.ID]string {
+	out := map[model.ID]string{}
+	if ctx == nil || ctx.reader == nil {
+		return out
+	}
+	mods, err := ctx.reader.ListModules()
+	if err != nil {
+		return out
+	}
+	for _, m := range mods {
+		if m == nil || string(m.ID) == systemModuleID {
+			continue
+		}
+		// The catalog's modules.Source is non-empty for exactly these two, and
+		// notPlatformModule requires it empty.
+		if m.FromAppStore || strings.TrimSpace(m.AppStoreGuid) != "" || m.PackageFile != "" {
+			continue
+		}
+		out[m.ID] = m.Name
+	}
+	return out
 }
 
 // Reader returns the LintReader, or nil if not set.

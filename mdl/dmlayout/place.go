@@ -20,10 +20,30 @@ type Rect struct {
 	X, Y, W, H int
 }
 
-// overlaps reports whether two boxes come closer than clearance.
-func (r Rect) overlaps(o Rect) bool {
+// TooClose reports whether two boxes come closer than clearance. This is the
+// predicate for PLACING: touching boxes are as unreadable as overlapping ones,
+// so a placer separates them.
+//
+// It is deliberately NOT the predicate for checking a stored model. Two boxes
+// 10px apart satisfy TooClose and do not overlap, so a lint rule that used this
+// would report an overlap that is not there — see Intersects.
+func (r Rect) TooClose(o Rect) bool {
 	return r.X < o.X+o.W+clearance && o.X < r.X+r.W+clearance &&
 		r.Y < o.Y+o.H+clearance && o.Y < r.Y+r.H+clearance
+}
+
+// Intersects reports whether two boxes actually cover each other, with no
+// clearance margin. This is the predicate for CHECKING a model that already
+// exists (linter rule MPR016): a finding has to be true, and "closer than I
+// would have placed them" is not an overlap.
+//
+// Both boxes are still estimates (see the package comment), so a finding of a
+// few pixels in one axis may not be visible in Studio Pro. The estimates are
+// generous rather than tight, which errs towards reporting; MPR016 therefore
+// reports a cluster rather than a pixel count, and the repair is idempotent.
+func (r Rect) Intersects(o Rect) bool {
+	return r.X < o.X+o.W && o.X < r.X+r.W &&
+		r.Y < o.Y+o.H && o.Y < r.Y+r.H
 }
 
 // EntityBox is the estimated box an entity occupies at its stored Location.
@@ -79,7 +99,7 @@ func obstacles(dm *domainmodel.DomainModel, skip *domainmodel.Entity) []Rect {
 
 func clear(r Rect, obs []Rect) bool {
 	for _, o := range obs {
-		if r.overlaps(o) {
+		if r.TooClose(o) {
 			return false
 		}
 	}

@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Lint `MPR016`: entities whose boxes cover each other on the domain model diagram** (ako/mxcli#2406) — the sibling of MPR008, which does this for microflow activities. The diagram is the first thing someone opening an unfamiliar app reads, and a box behind another box is a member list they never see; neither Studio Pro's check nor mxbuild reports it, because the model is valid. A pair is named as a pair, and a cluster that collides transitively is ONE finding however large — a model with every entity on one spot is 1 finding, not 325 pairs. The repair is the command the finding names, `mxcli layout --only-overlapping`.
+
+  Box geometry is `dmlayout`'s own estimator (an entity stores only its top-left `Location`; Studio Pro derives the box when it draws, so the size is estimated from the name and member list), so the rule and the placer agree by construction rather than by being kept in step. The PREDICATE is new and deliberately not the placer's: `Rect.TooClose` keeps boxes a 20px clearance apart, which is what placing needs, while a finding must be true — two entities 10px apart are badly laid out and do not overlap. `Rect.Intersects` has no margin, and a test pins the difference.
+
+  Measured: 0 findings on `testdata/pedapp` and `testdata/testapp-views`, and 0 on 24 entities of varied name length and attribute count (0 to 21) created with no `@position`, so `dmlayout`'s auto-placement, full `Plan` and `--only-overlapping` repair all satisfy the rule. Planted overlaps — a pair, a tall entity reaching the box below it, and a pile of four — are each reported, and `mxcli layout --only-overlapping` takes the project back to 0 by moving 5 of 10 entities. Platform modules are skipped: a rule that reads the model does not inherit the catalog's `notPlatformModule` filter, and before that was added the rule reported 41 System entities (`LintContext.OwnedModuleNamesByID` is the Go counterpart of that SQL).
+
 ### Fixed
 
 - **Nightly builds can be pinned and rolled back** (ako/mxcli#2359) — only a rolling `nightly` release existed, so the dated version `mxcli --version` prints could not be downloaded, and the bootstrap script's advice to set `MXCLI_TAG` to it gave a 404. Each nightly is now also published under its dated tag, the 30 most recent are kept, and the bootstrap script's advice for a nightly stamp names that tag and `MXCLI_TAG=nightly` as the way to the current build.
