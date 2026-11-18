@@ -12,7 +12,7 @@ import (
 // a caption was stored with an empty one — `create enumeration M.Color (Red)`
 // and `alter enumeration M.Color add value Blue` both gave a drop-down option
 // with no text, and mx check said nothing. Studio Pro fills a new value's
-// caption from its name; so does mxcli. A caption written as '' stays empty.
+// caption from its name; so does mxcli. An explicitly empty caption stays empty.
 func TestEnumValueCaptionDefaultsToName_Issue2397(t *testing.T) {
 	prog, errs := Build(`create enumeration M.Color ( Red, Green 'Green!', Grey '' );
 alter enumeration M.Color add value Blue;
