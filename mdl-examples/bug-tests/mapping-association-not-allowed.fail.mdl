@@ -1,0 +1,42 @@
+mdl 1;
+-- NEGATIVE TEST — `mxcli check` must REFUSE this file (MDL100), with no project.
+--
+-- An object mapping element's association must connect the entity it sits under
+-- to its own entity. Written otherwise, `check` and `exec` accept it and the
+-- build reports
+--
+--   [CE0295] "Association '...' is not allowed."
+--
+-- Measured on MxBuild 11.16.1, export AND import mappings, each of: the
+-- association touches neither entity, touches only the parent, touches only the
+-- element's entity. The matching pair is clean (see
+-- mapping-association-not-allowed.mdl).
+create json structure MyFirstModule.JSON_NotAllowed sample '{"orderId": 1, "customer": {"name": "A"}}';
+create non-persistent entity MyFirstModule.NaRoot (OrderId: integer);
+create non-persistent entity MyFirstModule.NaCust (Name: string(50));
+create non-persistent entity MyFirstModule.NaOther (Name: string(50));
+create non-persistent entity MyFirstModule.NaOther2 (Name: string(50));
+create association MyFirstModule.NaOther_NaOther2 from MyFirstModule.NaOther to MyFirstModule.NaOther2;
+create association MyFirstModule.NaCust_NaOther from MyFirstModule.NaCust to MyFirstModule.NaOther;
+create association MyFirstModule.NaCust_NaRoot from MyFirstModule.NaCust to MyFirstModule.NaRoot owner both;
+
+create export mapping MyFirstModule.EMM_NaNeither with json structure MyFirstModule.JSON_NotAllowed {
+  MyFirstModule.NaRoot {
+    orderId = OrderId,
+    MyFirstModule.NaOther_NaOther2/MyFirstModule.NaCust as customer { name = Name }
+  }
+};
+
+create export mapping MyFirstModule.EMM_NaParentOnly with json structure MyFirstModule.JSON_NotAllowed {
+  MyFirstModule.NaRoot {
+    orderId = OrderId,
+    MyFirstModule.NaCust_NaRoot/MyFirstModule.NaOther as customer { name = Name }
+  }
+};
+
+create import mapping MyFirstModule.IMM_NaChildOnly with json structure MyFirstModule.JSON_NotAllowed {
+  create MyFirstModule.NaRoot {
+    OrderId = orderId,
+    create MyFirstModule.NaCust_NaOther/MyFirstModule.NaCust = customer { Name = name }
+  }
+};

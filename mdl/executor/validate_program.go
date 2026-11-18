@@ -48,6 +48,8 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	voids := newVoidCodeActions(prog, project)
 	// owner Both between an entity and itself or its generalization (CE0002).
 	violations = append(violations, ValidateAssociationOwnerBoth(prog)...)
+	// A mapping element whose association does not connect it to its parent (CE0295).
+	violations = append(violations, ValidateMappingAssociations(prog, project)...)
 	for _, stmt := range prog.Statements {
 		// Check enumeration values for reserved words
 		if enumStmt, ok := stmt.(*ast.CreateEnumerationStmt); ok {
