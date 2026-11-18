@@ -1,0 +1,58 @@
+mdl 1;
+-- ============================================================================
+-- Consumed business event service (ako/mxcli#2384 part B).
+--
+-- In Mendix 11 both roles are the same BusinessEvents$BusinessEventService
+-- document. A PUBLISHED one declares its own messages; a CONSUMED one stores
+-- the producing app's AsyncAPI contract and binds events from it. The two are
+-- mutually exclusive — see 13-business-events-examples.mdl for the published
+-- shape.
+--
+-- The contract travels with the statement: `Contract:` holds it inline as a
+-- $$…$$ block (it is YAML, so its own quoting is content), and `ContractFile:`
+-- reads a path relative to the script and stores the text verbatim, so nothing
+-- afterwards depends on the file still being there.
+--
+-- `describe` prints the Contract form, which re-executes anywhere and is a
+-- fixed point: describe -> exec reports Unchanged on an untouched service.
+-- ============================================================================
+
+create or modify business event service MyFirstModule.OrdersEventClient
+(
+  Contract: $$asyncapi: 2.2.0
+info:
+  title: "OrdersEventService"
+  version: "1.0.0"
+  x-mendix-generated: true
+channels:
+  f2477dc90f714d69bb12df0df1ee9cce:
+    subscribe:
+      operationId: receiveOrderPlaceEventEvents
+      message:
+        $ref: '#/components/messages/OrderPlaceEvent'
+components:
+  messages:
+    OrderPlaceEvent:
+      name: OrderPlaceEvent
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/OrderPlaceEventPayload'
+  schemas:
+    OrderPlaceEventPayload:
+      type: object
+      properties:
+        OrderId:
+          type: integer
+          format: int64
+$$
+)
+{
+  -- CONSUME, not SUBSCRIBE: `message X (…) subscribe` already means "this app
+  -- consumes X of its own definition". The stored Operation is "subscribe"
+  -- either way; only the MDL keyword differs.
+  consume OrderPlaceEvent
+    entity MyFirstModule.CBE_OrderPlaceEvent
+    microflow MyFirstModule.HandleBE_OrderPlaceEvent;
+};
+
+drop business event service MyFirstModule.OrdersEventClient;

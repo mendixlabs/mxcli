@@ -313,6 +313,7 @@ var mdlGeneratedKeywords = []protocol.CompletionItem{
 	{Label: "KNOWLEDGE", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
 	{Label: "BASES", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
 	{Label: "CONSUMED", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
+	{Label: "CONSUME", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
 	{Label: "MCP", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
 	{Label: "STATICIMAGE", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},
 	{Label: "DYNAMICIMAGE", Kind: protocol.CompletionItemKindKeyword, Detail: "Widget keyword"},

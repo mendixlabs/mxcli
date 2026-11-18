@@ -642,14 +642,23 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 
 	Register(SyntaxFeature{
 		Path:    "business-events.create",
-		Summary: "Create and drop business event service definitions with messages",
+		Summary: "Create and drop business event services — published (messages) and consumed (a contract plus subscriptions)",
 		Keywords: []string{
 			"create business event", "drop business event",
 			"message", "publish", "subscribe", "entity",
 			"event name prefix",
+			"consume", "contract", "contractfile", "asyncapi", "consumed",
 		},
-		Syntax:  "CREATE [OR MODIFY] BUSINESS EVENT SERVICE Module.Name\n(\n  ServiceName: 'Name',\n  EventNamePrefix: ''\n)\n{\n  MESSAGE EventName (Attr: Type, ...) PUBLISH|SUBSCRIBE\n    ENTITY Module.PBE_Entity;\n};\n\nDROP BUSINESS EVENT SERVICE Module.Name;",
-		Example: "mdl 1;\nCREATE BUSINESS EVENT SERVICE Module.CustomerEventsApi\n(\n  ServiceName: 'CustomerEventsApi',\n  EventNamePrefix: ''\n)\n{\n  MESSAGE CustomerChangedEvent (CustomerId: Long) PUBLISH\n    ENTITY Module.PBE_CustomerChangedEvent;\n};\n\nDROP BUSINESS EVENT SERVICE Module.CustomerEventsApi;",
+		Syntax: "-- PUBLISHED: declares its own messages.\n" +
+			"CREATE [OR MODIFY] BUSINESS EVENT SERVICE Module.Name\n(\n  ServiceName: 'Name',\n  EventNamePrefix: ''\n)\n{\n  MESSAGE EventName (Attr: Type, ...) PUBLISH|SUBSCRIBE\n    ENTITY Module.PBE_Entity [MICROFLOW Module.Handler];\n};\n\n" +
+			"-- CONSUMED: names the producer's AsyncAPI contract and binds events from it.\n" +
+			"-- Exactly one of Contract / ContractFile; neither may be mixed with\n" +
+			"-- ServiceName, EventNamePrefix or MESSAGE.\n" +
+			"CREATE [OR MODIFY] BUSINESS EVENT SERVICE Module.Name\n(\n  Contract: $$<asyncapi yaml>$$ | ContractFile: 'path/to/contract.yaml'\n)\n{\n  CONSUME EventName\n    ENTITY Module.CBE_Entity\n    MICROFLOW Module.HandleBE_Event;\n};\n\n" +
+			"DROP BUSINESS EVENT SERVICE Module.Name;",
+		Example: "mdl 1;\nCREATE BUSINESS EVENT SERVICE Module.CustomerEventsApi\n(\n  ServiceName: 'CustomerEventsApi',\n  EventNamePrefix: ''\n)\n{\n  MESSAGE CustomerChangedEvent (CustomerId: Long) PUBLISH\n    ENTITY Module.PBE_CustomerChangedEvent;\n};\n\n" +
+			"-- The consuming app, from the contract the producer exported:\n" +
+			"CREATE BUSINESS EVENT SERVICE Module.CustomerEventsClient\n(\n  ContractFile: 'contracts/CustomerEventsApi.yaml'\n)\n{\n  CONSUME CustomerChangedEvent\n    ENTITY Module.CBE_CustomerChangedEvent\n    MICROFLOW Module.HandleBE_CustomerChangedEvent;\n};\n\nDROP BUSINESS EVENT SERVICE Module.CustomerEventsApi;",
 		SeeAlso: []string{"business-events"},
 	})
 

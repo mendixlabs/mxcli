@@ -205,6 +205,11 @@ var businessEventServiceSchema = propSchema{on: "a business event service", keys
 	{"ServiceName", []propShape{shapeString}},
 	{"EventNamePrefix", []propShape{shapeString}},
 	{"Folder", []propShape{shapeString}},
+	// A consumed service names the producer's AsyncAPI contract instead
+	// (#2384 §5.1). Contract carries the document, usually as a $$…$$ block
+	// since it is YAML; ContractFile a path to it.
+	{"Contract", textShapes},
+	{"ContractFile", []propShape{shapeString}},
 }}
 
 // The model visitor reads each value by one alternative only: a Provider
@@ -439,6 +444,8 @@ func odataPropertyShape(pc *parser.OdataPropertyAssignmentContext) propShape {
 	switch {
 	case v.STRING_LITERAL() != nil:
 		return shapeString
+	case v.DOLLAR_STRING() != nil:
+		return shapeDollar
 	case v.NUMBER_LITERAL() != nil:
 		return shapeNumber
 	case v.TRUE() != nil || v.FALSE() != nil:
