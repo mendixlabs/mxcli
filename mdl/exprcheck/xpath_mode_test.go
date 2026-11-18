@@ -4,6 +4,7 @@ package exprcheck
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -52,5 +53,59 @@ func TestExpressionModeKeepsRejectingEntityRootedPaths(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no E014 for an entity-rooted path in an expression: %+v", hs)
+	}
+}
+
+// An XPath writes a Boolean as true() or false(). The parse used to end at the
+// '(' and drop the rest of the constraint (mendixlabs/mxcli#1894).
+func TestXPathModeParsesBooleanFunctions(t *testing.T) {
+	for _, src := range []string{
+		`IsConfidential = false() or Mod.Report_Owner = '[%CurrentUser%]'`,
+		`Mod.Report_Owner = '[%CurrentUser%]' or IsConfidential = false()`,
+		`IsConfidential = true() and (IsAssigned = false() or Mod.Report_Owner = '[%CurrentUser%]')`,
+	} {
+		ctx := NewSyntaxContext("", "")
+		ctx.XPath = true
+		expr, hs := NewParser().Parse(src, ctx)
+		for _, h := range hs {
+			if h.Code == "E014" {
+				t.Errorf("%s: trailing tokens left: %+v", src, h)
+			}
+		}
+		bin, ok := expr.(*BinExpr)
+		if !ok {
+			t.Errorf("%s: root = %T, want *BinExpr", src, expr)
+			continue
+		}
+		if op := strings.ToLower(bin.Op); op != "or" && op != "and" {
+			t.Errorf("%s: root op = %q, want the top-level or/and", src, bin.Op)
+		}
+	}
+}
+
+// true() is a Boolean literal, not a call: the empty argument list is part of it.
+func TestXPathModeBooleanFunctionIsALiteral(t *testing.T) {
+	ctx := NewSyntaxContext("", "")
+	ctx.XPath = true
+	expr, _ := NewParser().Parse(`Active = true()`, ctx)
+	bin, ok := expr.(*BinExpr)
+	if !ok {
+		t.Fatalf("root = %T, want *BinExpr", expr)
+	}
+	if lit, ok := bin.R.(*BoolLit); !ok || !lit.Value {
+		t.Errorf("right = %#v, want BoolLit true", bin.R)
+	}
+}
+
+// Control: a microflow expression writes true and false without parentheses,
+// so false() there stays an error.
+func TestExpressionModeKeepsRejectingBooleanFunctions(t *testing.T) {
+	_, hs := NewParser().Parse(`$X = false() or $Y`, NewSyntaxContext("", ""))
+	found := false
+	for _, h := range hs {
+		found = found || h.Code == "E014"
+	}
+	if !found {
+		t.Errorf("no E014 for false() in an expression: %+v", hs)
 	}
 }

@@ -595,10 +595,21 @@ func parseIdentLed(s *Stream, ctx Context) (RobustExpr, []Hint) {
 	t := s.Consume()
 	name := t.Text
 	switch strings.ToLower(name) {
-	case "true":
-		return &BoolLit{baseNode: baseNode{P: t.Pos}, Value: true}, nil
-	case "false":
-		return &BoolLit{baseNode: baseNode{P: t.Pos}, Value: false}, nil
+	case "true", "false":
+		// An XPath writes a Boolean as true() or false(). Without consuming the
+		// empty argument list the parse ended at its '(' and everything after it
+		// was lost: [IsConfidential = false() or Mod.Report_Owner = '[%CurrentUser%]']
+		// came out as just the first comparison (mendixlabs/mxcli#1894).
+		if ctx.XPath && s.Peek().Kind == TokLParen {
+			mark := s.Mark()
+			s.Consume()
+			if s.Peek().Kind == TokRParen {
+				s.Consume()
+			} else {
+				s.Reset(mark)
+			}
+		}
+		return &BoolLit{baseNode: baseNode{P: t.Pos}, Value: strings.EqualFold(name, "true")}, nil
 	case "empty":
 		return &EmptyExpr{baseNode: baseNode{P: t.Pos}}, nil
 	case "null":

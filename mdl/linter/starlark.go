@@ -1641,7 +1641,15 @@ func (r *StarlarkRule) builtinParseXPath(_ *starlark.Thread, _ *starlark.Builtin
 	parser := exprcheck.NewParser()
 	ctx := exprcheck.NewSyntaxContext("", "")
 	ctx.XPath = true
-	ast, _ := parser.Parse(inner, ctx)
+	ast, hs := parser.Parse(inner, ctx)
+	// Tokens left after the parse (E014) mean the tree covers only part of the
+	// constraint. Returning it as is let a rule judge a fragment as if it were
+	// the whole XPath (mendixlabs/mxcli#1894); a recovered root says so instead.
+	for _, h := range hs {
+		if h.Code == "E014" {
+			return robustExprToStarlark(&exprcheck.RecoveredExpr{SourceFragment: inner, Reason: h.Problem}), nil
+		}
+	}
 	return robustExprToStarlark(ast), nil
 }
 

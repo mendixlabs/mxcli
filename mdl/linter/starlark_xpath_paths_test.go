@@ -137,3 +137,46 @@ def check():
 		t.Errorf("count_not = %+v, want 2", vs)
 	}
 }
+
+// "parse_xpath silently drops everything after an XPath true() or false()"
+// (mendixlabs/mxcli#1894): both branches of the or come back, in either order.
+func TestParseXPathBooleanFunctions(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{`[IsConfidential = false() or Mod.Report_Owner = '[%CurrentUser%]']`,
+			`((IsConfidential = <bool>) OR (Mod.Report_Owner = '[%CurrentUser%]'))`},
+		{`[Mod.Report_Owner = '[%CurrentUser%]' or IsConfidential = false()]`,
+			`((Mod.Report_Owner = '[%CurrentUser%]') OR (IsConfidential = <bool>))`},
+		{`[Active = true() and (Mod.A/Mod.E/Name = 'x')]`,
+			`((Active = <bool>) AND ((Mod.A/Mod.E/Name = 'x')))`},
+	} {
+		vs, _ := runSrc(t, lintCtx(t), renderXPath+`
+def check():
+    return [violation(message = render(parse_xpath(`+"\""+escapeStarlark(tc.in)+"\""+`)))]
+`)
+		if len(vs) != 1 || vs[0].Message != tc.want {
+			var got []string
+			for _, v := range vs {
+				got = append(got, v.Message)
+			}
+			t.Errorf("parse_xpath(%s) renders %v, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// A constraint the parser cannot read to the end comes back as one recovered
+// node holding the whole source, as the write-lint-rules skill says, not as a
+// partial tree a rule would take for the whole XPath (mendixlabs/mxcli#1894).
+func TestParseXPathTrailingTokensAreRecovered(t *testing.T) {
+	vs, _ := runSrc(t, lintCtx(t), `
+def check():
+    n = parse_xpath("[Name = 'x' 'y']")
+    return [violation(message = n.kind + "|" + n.source)]
+`)
+	if len(vs) != 1 || vs[0].Message != "recovered|Name = 'x' 'y'" {
+		var got []string
+		for _, v := range vs {
+			got = append(got, v.Message)
+		}
+		t.Errorf("parse_xpath with trailing tokens gives %v, want a recovered root with the whole source", got)
+	}
+}
