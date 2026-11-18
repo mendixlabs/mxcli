@@ -1835,7 +1835,15 @@ func parseAsyncAPIContract(ctx *ExecContext, name ast.QualifiedName) (*types.Asy
 		svcQN := modName + "." + svc.Name
 
 		if svc.Document == "" {
-			return nil, svcQN, mdlerrors.NewValidationf("no cached AsyncAPI contract for %s. This service has no Document field (it may be a publisher, not a consumer)", svcQN)
+			// A publisher caches no contract — Studio Pro renders one on export
+			// and stores nothing. Its channels and messages are in the stored
+			// Definition, though, and the channel id there is the topic other
+			// apps bind to, so project the definition rather than refusing the
+			// read (ako/mxcli#2381, #2384 §5.4).
+			if doc := contractFromDefinition(svc); doc != nil {
+				return doc, svcQN, nil
+			}
+			return nil, svcQN, mdlerrors.NewValidationf("no AsyncAPI contract for %s: it has neither a cached contract (a consumed service) nor a definition (a published one)", svcQN)
 		}
 
 		doc, err := types.ParseAsyncAPI(svc.Document)
@@ -1847,6 +1855,52 @@ func parseAsyncAPIContract(ctx *ExecContext, name ast.QualifiedName) (*types.Asy
 	}
 
 	return nil, "", mdlerrors.NewNotFound("business event service", name.Module+"."+name.Name)
+}
+
+// contractFromDefinition projects a published business event service's stored
+// definition into the shape the contract readers expect. It is a view of what is
+// stored, not a rendering of the AsyncAPI document Studio Pro exports: only the
+// values the model actually holds are filled in, and OperationID is left empty
+// because a publisher stores none (Studio Pro mints `receive<Message>Events` at
+// export time, which is the renderer's business — #2384 part E).
+//
+// OperationType follows AsyncAPI 2's direction, which is the *other* app's point
+// of view: a message this service publishes is one others `subscribe` to, which
+// is what Studio Pro writes and what CanSubscribe records.
+func contractFromDefinition(svc *model.BusinessEventService) *types.AsyncAPIDocument {
+	if svc == nil || svc.Definition == nil {
+		return nil
+	}
+	doc := &types.AsyncAPIDocument{
+		Title:      svc.Definition.ServiceName,
+		DocVersion: "1.0.0",
+	}
+	for _, ch := range svc.Definition.Channels {
+		for _, msg := range ch.Messages {
+			op := "publish"
+			if msg.CanSubscribe {
+				op = "subscribe"
+			}
+			doc.Channels = append(doc.Channels, &types.AsyncAPIChannel{
+				Name:          ch.ChannelName,
+				OperationType: op,
+				MessageRef:    msg.MessageName,
+			})
+			m := &types.AsyncAPIMessage{
+				Name:        msg.MessageName,
+				Description: msg.Description,
+				ContentType: "application/json",
+			}
+			for _, a := range msg.Attributes {
+				m.Properties = append(m.Properties, &types.AsyncAPIProperty{
+					Name: a.AttributeName,
+					Type: a.AttributeType,
+				})
+			}
+			doc.Messages = append(doc.Messages, m)
+		}
+	}
+	return doc
 }
 
 // asyncTypeString formats an AsyncAPI property type for display.

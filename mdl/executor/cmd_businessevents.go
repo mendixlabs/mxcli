@@ -48,7 +48,7 @@ func listBusinessEventServices(ctx *ExecContext, inModule string) error {
 	}
 
 	type row struct {
-		module, qualifiedName, name            string
+		module, qualifiedName, name, kind      string
 		msgCount, publishCount, subscribeCount int
 	}
 	var rows []row
@@ -57,7 +57,7 @@ func listBusinessEventServices(ctx *ExecContext, inModule string) error {
 		modID := h.FindModuleID(svc.ContainerID)
 		moduleName := h.GetModuleName(modID)
 		qn := moduleName + "." + svc.Name
-		r := row{module: moduleName, qualifiedName: qn, name: svc.Name}
+		r := row{module: moduleName, qualifiedName: qn, name: svc.Name, kind: businessEventServiceKind(svc)}
 
 		if svc.Definition != nil {
 			for _, ch := range svc.Definition.Channels {
@@ -77,13 +77,35 @@ func listBusinessEventServices(ctx *ExecContext, inModule string) error {
 	}
 
 	result := &TableResult{
-		Columns: []string{"Module", "QualifiedName", "Service", "Messages", "Publish", "Subscribe"},
+		Columns: []string{"Module", "QualifiedName", "Service", "Kind", "Messages", "Publish", "Subscribe"},
 		Summary: fmt.Sprintf("(%d business event services)", len(filtered)),
 	}
 	for _, r := range rows {
-		result.Rows = append(result.Rows, []any{r.module, r.qualifiedName, r.name, r.msgCount, r.publishCount, r.subscribeCount})
+		result.Rows = append(result.Rows, []any{r.module, r.qualifiedName, r.name, r.kind, r.msgCount, r.publishCount, r.subscribeCount})
 	}
 	return writeResult(ctx, result)
+}
+
+// businessEventServiceKind tells the two roles of
+// BusinessEvents$BusinessEventService apart. Studio Pro stores a *published*
+// service as a Definition with an empty Document, and a *consumed* one the other
+// way round: no Definition, and the producing app's AsyncAPI contract in
+// Document. Without this the list reads as a contradiction — a consumer shows 0
+// messages and 1 subscribe, because its messages live in the contract and never
+// in a Definition.
+func businessEventServiceKind(svc *model.BusinessEventService) string {
+	hasContract := strings.TrimSpace(svc.Document) != ""
+	switch {
+	case hasContract && svc.Definition == nil:
+		return "consumed"
+	case !hasContract && svc.Definition != nil:
+		return "published"
+	case hasContract:
+		// Both: not a shape Studio Pro writes. Say so rather than pick one.
+		return "mixed"
+	default:
+		return "empty"
+	}
 }
 
 // listBusinessEventClients displays a table of all business event client documents.
@@ -109,8 +131,8 @@ func listBusinessEvents(ctx *ExecContext, inModule string) error {
 	}
 
 	type row struct {
-		service, message, operation, entity string
-		attrs                               int
+		service, message, channel, operation, entity string
+		attrs                                        int
 	}
 	var rows []row
 
@@ -139,14 +161,36 @@ func listBusinessEvents(ctx *ExecContext, inModule string) error {
 						entityStr = op.Entity
 					}
 					rows = append(rows, row{
-						service:   svcQN,
-						message:   msg.MessageName,
+						service: svcQN,
+						message: msg.MessageName,
+						// The channel name is the topic the broker derives
+						// (`businessevents.<channel id>.<space>`), so it is what a
+						// subscriber in another app — or a lake's topic config —
+						// has to agree on.
+						channel:   ch.ChannelName,
 						operation: opStr,
 						entity:    entityStr,
 						attrs:     len(msg.Attributes),
 					})
 				}
 			}
+			continue
+		}
+
+		// A consumed service has no Definition: its events are the subscriptions,
+		// and their channels live in the cached contract. Without this branch the
+		// list reported only what the app publishes and silently omitted
+		// everything it consumes.
+		channels, attrCounts := consumedContractIndex(svc.Document)
+		for _, op := range svc.OperationImplementations {
+			rows = append(rows, row{
+				service:   svcQN,
+				message:   op.MessageName,
+				channel:   channels[op.MessageName],
+				operation: strings.ToUpper(op.Operation),
+				entity:    op.Entity,
+				attrs:     attrCounts[op.MessageName],
+			})
 		}
 	}
 
@@ -160,13 +204,40 @@ func listBusinessEvents(ctx *ExecContext, inModule string) error {
 	}
 
 	result := &TableResult{
-		Columns: []string{"Service", "Message", "Operation", "Entity", "Attributes"},
+		Columns: []string{"Service", "Message", "Channel", "Operation", "Entity", "Attributes"},
 		Summary: fmt.Sprintf("(%d business events)", len(rows)),
 	}
 	for _, r := range rows {
-		result.Rows = append(result.Rows, []any{r.service, r.message, r.operation, r.entity, r.attrs})
+		result.Rows = append(result.Rows, []any{r.service, r.message, r.channel, r.operation, r.entity, r.attrs})
 	}
 	return writeResult(ctx, result)
+}
+
+// consumedContractIndex reads a consumed service's cached AsyncAPI contract and
+// returns, per message name, its channel id and its payload property count. A
+// contract that is absent or does not parse yields empty maps: the caller still
+// lists the subscriptions, just without the channel, because an unreadable
+// contract is no reason to hide what the app subscribes to.
+func consumedContractIndex(contract string) (channels map[string]string, attrCounts map[string]int) {
+	channels, attrCounts = map[string]string{}, map[string]int{}
+	if strings.TrimSpace(contract) == "" {
+		return channels, attrCounts
+	}
+	doc, err := types.ParseAsyncAPI(contract)
+	if err != nil {
+		return channels, attrCounts
+	}
+	for _, ch := range doc.Channels {
+		if ch.MessageRef != "" {
+			if _, seen := channels[ch.MessageRef]; !seen {
+				channels[ch.MessageRef] = ch.Name
+			}
+		}
+	}
+	for _, m := range doc.Messages {
+		attrCounts[m.Name] = len(m.Properties)
+	}
+	return channels, attrCounts
 }
 
 // describeBusinessEventService outputs the full MDL description of a business event service.
