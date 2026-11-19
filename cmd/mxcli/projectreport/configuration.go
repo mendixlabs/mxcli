@@ -410,8 +410,9 @@ func RenderConfiguration(env *Envelope, ann *Annotations) (Doc, error) {
 		}
 	}
 	doc := Doc{Title: "Configuration", Subtitle: "What each environment must supply, and what the model fixes"}
-	doc.Lede = fmt.Sprintf("%d constants to set per environment, %d scheduled events to switch on or off, %d locations fixed in the model.",
-		need[NeedMustSet]+need[NeedOverride], len(d.Scheduled), countFixed(d.Endpoints))
+	doc.Lede = fmt.Sprintf("%s to set per environment, %s to switch on or off, %s fixed in the model.",
+		count(need[NeedMustSet]+need[NeedOverride], "constant", "constants"), count(len(d.Scheduled), "scheduled event", "scheduled events"),
+		count(countFixed(d.Endpoints), "location", "locations"))
 	doc.Stats = []Stat{
 		{Label: "constants to set", Value: fmt.Sprint(need[NeedMustSet] + need[NeedOverride]), Note: fmt.Sprintf("of %d", len(d.Constants)), Status: statusIf(false, need[NeedOverride] > 0)},
 		{Label: "fixed local or test locations", Value: fmt.Sprint(fixedBad), Status: statusIf(fixedBad > 0, false)},
@@ -590,4 +591,12 @@ func countFixed(es []ConfigEndpoint) int {
 		}
 	}
 	return n
+}
+
+// count is "1 thing" or "n things".
+func count(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
 }
