@@ -732,9 +732,21 @@ func RenderArchitecture(env *Envelope, ann *Annotations) (Doc, error) {
 
 	// 9. Unused.
 	ut := Table{Columns: []string{"Document", "Type", "Verdict", "Why"}}
+	// The key is the qualified name. A key without the module
+	// (`unused:FaultProbe`) silently matched nothing (ako/mxcli#2443); it
+	// applies when one unused document has that name, and is ambiguous
+	// otherwise, so it is left to show as an annotation that matched nothing.
+	shortCount := map[string]int{}
+	for _, u := range d.Unused {
+		shortCount[shortName(u.Name)]++
+	}
 	for _, u := range d.Unused {
 		verdict, why := u.Verdict, u.Reason
-		if n, ok := ann.Get("unused:" + u.Name); ok {
+		n, ok := ann.Get("unused:" + u.Name)
+		if !ok && shortCount[shortName(u.Name)] == 1 {
+			n, ok = ann.Get("unused:" + shortName(u.Name))
+		}
+		if ok {
 			verdict, why = nonEmpty(n.Status, verdict), joinNote("", n.Note, why)
 		}
 		cls := map[string]string{"unused": "warn", "verify": "info", "used": "ok"}[verdict]
@@ -742,7 +754,7 @@ func RenderArchitecture(env *Envelope, ann *Annotations) (Doc, error) {
 		ut.Classes = append(ut.Classes, []string{"", "", cls, ""})
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "unused", Title: "Unused documents",
-		Intro: "Documents of a kind that should be referenced if used, with no inbound reference. \"verify\" means the graph cannot see the way it may be used; check before deleting. Annotate `unused:<Name>`.", Blocks: []Block{ut}})
+		Intro: "Documents of a kind that should be referenced if used, with no inbound reference. \"verify\" means the graph cannot see the way it may be used; check before deleting. Annotate `unused:<Module.Name>` (the module may be left out when the name is unique).", Blocks: []Block{ut}})
 
 	return Frame(env, ann, doc), nil
 }

@@ -142,3 +142,28 @@ func TestTraceabilityGlanceAndTileStatus(t *testing.T) {
 		t.Error("the built tile is warn while not every requirement is built")
 	}
 }
+
+// ako/mxcli#2443: an unused-document annotation without the module applies
+// when the name is unique; an ambiguous one still shows as matching nothing.
+func TestUnusedAnnotationWithoutModule(t *testing.T) {
+	d := ArchitectureData{Unused: []UnusedDoc{
+		{Name: "Shop.FaultProbe", Type: "page", Module: "Shop", Verdict: "verify"},
+		{Name: "Shop.Dup", Type: "page", Module: "Shop", Verdict: "unused"},
+		{Name: "Core.Dup", Type: "page", Module: "Core", Verdict: "unused"},
+	}}
+	env, _ := NewEnvelope("architecture", "Shop", "now", "t", d, ArchitectureMethod, ArchitectureLimits, nil)
+	ann := &Annotations{Items: map[string]Note{
+		"unused:FaultProbe": {Status: "used", Note: "reached by URL"},
+		"unused:Dup":        {Status: "used"},
+	}}
+	doc, err := RenderArchitecture(env, ann)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var md bytes.Buffer
+	_ = RenderMarkdown(&md, doc)
+	mustContain(t, md.String(), "| `Shop.FaultProbe` | page | used | reached by URL |", "Annotations that matched nothing", "`unused:Dup`")
+	if strings.Contains(md.String(), "`unused:FaultProbe`") {
+		t.Error("the unique short key applied, so it is not listed as matching nothing")
+	}
+}
