@@ -135,6 +135,22 @@ func refuseAmbiguousTable(ctx context.Context, conn *Connection, table string) e
 	if schema != "" {
 		return nil
 	}
+	holders := schemasHolding(ctx, conn, name)
+	if len(holders) < 2 {
+		return nil
+	}
+	var names []string
+	for _, h := range holders {
+		names = append(names, h+"."+name)
+	}
+	return fmt.Errorf("%s is in more than one schema: name one of %s", name, strings.Join(names, ", "))
+}
+
+// schemasHolding is every schema that has a table or view of this (bare) name,
+// in order. Empty when the lookup is not possible or finds nothing, so a caller
+// must treat "no answer" and "not there" alike: DescribeTable is the one that
+// reports a missing object.
+func schemasHolding(ctx context.Context, conn *Connection, name string) []string {
 	var q string
 	switch conn.Driver {
 	case DriverOracle:
@@ -145,14 +161,16 @@ func refuseAmbiguousTable(ctx context.Context, conn *Connection, table string) e
 		q = "SELECT DISTINCT table_schema FROM information_schema.columns WHERE table_name = " + sqlString(name) + " ORDER BY 1"
 	}
 	res, err := Execute(ctx, conn, q)
-	if err != nil || len(res.Rows) < 2 {
+	if err != nil {
 		return nil
 	}
-	var names []string
+	var out []string
 	for _, r := range res.Rows {
-		names = append(names, fmt.Sprintf("%v.%s", r[0], name))
+		if len(r) > 0 {
+			out = append(out, fmt.Sprintf("%v", r[0]))
+		}
 	}
-	return fmt.Errorf("%s is in more than one schema: name one of %s", name, strings.Join(names, ", "))
+	return out
 }
 
 // columnsFilter is the information_schema filter for table, qualified by its
