@@ -12,10 +12,10 @@ description: "Provision a Mendix project in a repo that has none — interview, 
 |---|---|
 | 23-43 | When to Use This Skill |
 | 44-134 | Step 0 — interview, and WAIT for the answers |
-| 135-268 | Provision |
-| 269-338 | If this is a solution (several apps in one repo) |
-| 339-398 | Then propose the model — do not build it yet |
-| 399-462 | After bootstrap — the inner loop |
+| 135-270 | Provision |
+| 271-340 | If this is a solution (several apps in one repo) |
+| 341-400 | Then propose the model — do not build it yet |
+| 401-463 | After bootstrap — the inner loop |
 
 <!-- /skill-index -->
 # Bootstrap a Mendix App in an Empty Repo
@@ -218,16 +218,18 @@ drop the `./` if it came pre-installed on `PATH`.
 8. **Boot and verify:** `./mxcli run --local --watch --detach -p <AppName>.mpr` returns
    once the app answers (or prints why the boot failed, exit 1) — report its one line.
    Manage it with `./mxcli run status|wait|stop`, never `nohup`, poll loops or `pkill`.
-9. **Take the quality baseline** — run the two gates that score the project, on the
-   blank app, before any of your own work is in it:
+9. **Take the quality baseline** — on the blank app, before any of your own work is
+   in it, record what the template ships with and score it:
 
    ```bash
-   ./mxcli lint -p <AppName>.mpr
+   ./mxcli verify -p <AppName>.mpr --update-baseline   # lint + mx check baselines
    ./mxcli report -p <AppName>.mpr --format markdown
    ```
 
-   Report the warning count and the six category scores, and put them in
-   `FINDINGS.md` with the date. This is the only moment the numbers mean "what the
+   `verify --update-baseline` writes `verify-baseline/` next to the `.mpr`. **Commit
+   it** — it is what every later `verify` compares against, and a fresh clone or a
+   reaped session without it reports every finding as new. Report the warning count
+   and the six category scores, and put them in `FINDINGS.md` with the date. This is the only moment the numbers mean "what the
    template ships with" — afterwards every figure is yours plus the template's, and
    there is nothing to subtract. A blank app is **not** expected to score zero
    warnings; knowing which ones it starts with is what stops you chasing them later.
@@ -417,9 +419,8 @@ right, then run the gates once over the result. The whole list after every edit 
 ```bash
 ./mxcli check change.mdl -p <AppName>.mpr --references   # syntax + references (~2s)
 ./mxcli exec change.mdl -p <AppName>.mpr                 # apply
-./mxcli lint -p <AppName>.mpr                            # rules (~3s)
+./mxcli verify -p <AppName>.mpr                          # lint + mx check, new findings only (~10s)
 ./mxcli report -p <AppName>.mpr                          # scored quality report
-./mxcli docker check -p <AppName>.mpr                    # mxbuild, the slow one (~25s)
 ./mxcli test tests/ -p <AppName>.mpr --local             # microflow tests (~30s cold, ~2s warm)
 ./mxcli run --local --watch --detach -p <AppName>.mpr    # the app, in the background; then `run wait`
 ```

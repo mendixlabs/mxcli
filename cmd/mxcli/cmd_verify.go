@@ -34,7 +34,7 @@ Every selected stage runs, so one result carries every stage's findings; use
 mxcli check cannot yet predict everything it rejects, so a project that passes
 check and lint can still fail mxcheck.
 
-Baselines live in --baseline-dir (default .mxcli/verify next to the project):
+Baselines live in --baseline-dir (default verify-baseline/ next to the project):
 lint.json is a ` + "`mxcli lint --baseline`" + ` file, mxcheck.json records mx check's
 findings by their element IDs. Without one, every finding is reported as new and
 the stage says so. Record the current state with --update-baseline (commit the
@@ -72,7 +72,7 @@ func init() {
 	verifyCmd.Flags().Bool("fail-fast", false, "Stop at the first stage that fails instead of running every stage")
 	verifyCmd.Flags().String("fail-on", "error", "Lowest severity of a new finding that fails the gate: error or warning")
 	verifyCmd.Flags().Bool("strict", false, "Also fail on unmasked mx check findings (errors an earlier baseline error was hiding)")
-	verifyCmd.Flags().String("baseline-dir", "", "Where the baselines live (default .mxcli/verify next to the project)")
+	verifyCmd.Flags().String("baseline-dir", "", "Where the baselines live (default verify-baseline/ next to the project)")
 	verifyCmd.Flags().Bool("update-baseline", false, "Record the current lint and mx check findings as the baseline instead of comparing")
 	verifyCmd.Flags().String("mxbuild-path", "", "Path to MxBuild/Mendix installation (used to find mx)")
 	verifyCmd.Flags().StringP("format", "f", "text", "Output format: text, json")
@@ -108,7 +108,7 @@ func runVerify(cmd *cobra.Command, scripts []string) int {
 		return usage("%v", err)
 	}
 	if baselineDir == "" {
-		baselineDir = filepath.Join(filepath.Dir(projectPath), ".mxcli", "verify")
+		baselineDir = defaultVerifyBaselineDir(projectPath)
 	}
 
 	skip := map[string]string{}
@@ -136,6 +136,15 @@ func runVerify(cmd *cobra.Command, scripts []string) int {
 		verify.WriteText(os.Stdout, res)
 	}
 	return res.Exit
+}
+
+// defaultVerifyBaselineDir is where the baselines live unless --baseline-dir says
+// otherwise. It is deliberately NOT under .mxcli/: `mxcli init` git-ignores that
+// directory (it holds machine-local state such as constants), and a baseline that
+// is not committed is gone with the next fresh clone or reaped session, after
+// which every run reports every finding as new.
+func defaultVerifyBaselineDir(projectPath string) string {
+	return filepath.Join(filepath.Dir(projectPath), "verify-baseline")
 }
 
 type verifyRunner struct {
