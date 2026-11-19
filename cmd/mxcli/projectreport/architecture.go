@@ -664,6 +664,20 @@ func RenderArchitecture(env *Envelope, ann *Annotations) (Doc, error) {
 		ht.Rows = append(ht.Rows, []string{m.Name, m.Purpose, fmt.Sprint(m.Layer), fmt.Sprint(m.Documents), fmt.Sprint(m.Internal),
 			fmt.Sprint(m.ExternalOut), fmt.Sprint(m.ExternalIn), coh, fmt.Sprint(m.FanIn), fmt.Sprint(m.FanOut), note})
 		ht.Classes = append(ht.Classes, []string{"", "", "num", "num", "num", "num", "num", cls, "num", "num", ""})
+		var bar *Bar
+		if m.Cohesion >= 0 {
+			st := ""
+			switch cls {
+			case "warn":
+				st = "warn"
+			case "num":
+				if m.Cohesion >= 60 {
+					st = "good"
+				}
+			}
+			bar = &Bar{Pct: m.Cohesion, Status: st}
+		}
+		ht.Bars = append(ht.Bars, []*Bar{nil, nil, nil, nil, nil, nil, nil, bar, nil, nil, nil})
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "health", Title: "Module health",
 		Intro:  "Purpose is the module's documentation (`alter module <Name> set documentation '…'`). Low cohesion is flagged only where nothing explains it. A shell, an admin UI or an adapter is low-cohesion by design; annotate `module:<Name>` to explain another.",
@@ -810,7 +824,7 @@ func contextsSection(d ArchitectureData, ann *Annotations) Section {
 		t.Rows = append(t.Rows, row)
 		t.Heat = append(t.Heat, append(heat, 0))
 	}
-	s.Blocks = append(s.Blocks, t)
+	s.Blocks = append(s.Blocks, contextComposition(d, ann, mods), t)
 	var split []string
 	for _, m := range mods {
 		if spread[m] > 1 {
@@ -900,4 +914,54 @@ func joinNote(status, note, derived string) string {
 		s += " (" + derived + ")"
 	}
 	return s
+}
+
+// contextComposition draws each cluster as one bar split by the modules its
+// documents come from: a cluster that is one colour is one module's context,
+// one of many colours spans modules (ako/mxcli#2443). The modules with the
+// most clustered documents get their own colour, the rest share "other".
+func contextComposition(d ArchitectureData, ann *Annotations, mods []string) Stacked {
+	totals := map[string]int{}
+	for _, c := range d.Communities {
+		for _, mc := range c.Modules {
+			totals[mc.Module] += mc.Count
+		}
+	}
+	ranked := append([]string(nil), mods...)
+	sort.SliceStable(ranked, func(i, j int) bool { return totals[ranked[i]] > totals[ranked[j]] })
+	const slots = 7
+	slot := map[string]int{}
+	var legend []StackKey
+	for i, m := range ranked {
+		if i >= slots || totals[m] == 0 {
+			break
+		}
+		slot[m] = len(legend)
+		legend = append(legend, StackKey{Label: m, Color: fmt.Sprintf("s%d", len(legend)+1)})
+	}
+	other := -1
+	for _, m := range ranked {
+		if _, ok := slot[m]; !ok && totals[m] > 0 {
+			other = len(legend)
+			legend = append(legend, StackKey{Label: "other modules", Color: "none"})
+			break
+		}
+	}
+	st := Stacked{Caption: "What each cluster is made of", Legend: legend}
+	for _, c := range d.Communities {
+		label := c.Label
+		if n, ok := ann.Get(c.Key); ok {
+			label = nonEmpty(n.Name, label)
+		}
+		parts := make([]int, len(legend))
+		for _, mc := range c.Modules {
+			if i, ok := slot[mc.Module]; ok {
+				parts[i] += mc.Count
+			} else if other >= 0 {
+				parts[other] += mc.Count
+			}
+		}
+		st.Rows = append(st.Rows, StackRow{Label: label, Parts: parts, Value: fmt.Sprintf("%d documents", c.Size)})
+	}
+	return st
 }

@@ -171,3 +171,33 @@ func TestSnippetCallIsNotADomainDependency(t *testing.T) {
 		t.Errorf("navigation edges = %+v", d.NavigationEdges)
 	}
 }
+
+// Cohesion is drawn as a meter, and each cluster as a bar split by module
+// (ako/mxcli#2443).
+func TestArchitectureCohesionBarsAndClusterComposition(t *testing.T) {
+	d := ArchitectureData{
+		Modules:             []ModuleHealth{{Name: "Sales", Cohesion: 72}, {Name: "Billing", Cohesion: 20}, {Name: "Empty", Cohesion: -1}},
+		CommunitiesComputed: true,
+		Communities: []Community{
+			{Key: "cluster:Sales.Order", Label: "Order", Size: 10, Modules: []ModuleCount{{"Sales", 7}, {"Billing", 3}}},
+			{Key: "cluster:Billing.Invoice", Label: "Invoice", Size: 4, Modules: []ModuleCount{{"Billing", 4}}},
+		},
+	}
+	env, err := NewEnvelope("architecture", "App", "now", "test", d, ArchitectureMethod, ArchitectureLimits, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := RenderArchitecture(env, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var html bytes.Buffer
+	if err := RenderHTML(&html, doc); err != nil {
+		t.Fatal(err)
+	}
+	out := html.String()
+	mustContain(t, out, "What each cluster is made of", `class="meter good"`, `class="meter warn"`)
+	if strings.Count(out, `class="meter`) != 2 {
+		t.Errorf("want a meter for the two modules with a cohesion, not for n/a: %d", strings.Count(out, `class="meter`))
+	}
+}
