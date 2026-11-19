@@ -1,0 +1,86 @@
+mdl 1;
+-- CONTROL for mapping-handler-param-type-mismatch.fail.mdl: every pairing of a handler's
+-- JSON member and microflow parameter that MxBuild 11.16.1 builds clean. A String parameter
+-- takes any member; a Decimal parameter also takes an Integer; the rest take their own type.
+create persistent entity MyFirstModule.HtRoot (Name: string(50));
+create persistent entity MyFirstModule.HtChild (Code: string(50));
+create association MyFirstModule.HtChild_HtRoot from MyFirstModule.HtChild to MyFirstModule.HtRoot type reference;
+create json structure MyFirstModule.JS_Ht sample '{"name": "n", "items": [{"code": "c", "idx": 1, "d": 1.5, "b": true, "dt": "2020-01-01T00:00:00Z"}]}';
+create microflow MyFirstModule.StrParam ($P: string) returns MyFirstModule.HtChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+create microflow MyFirstModule.DecParam ($P: decimal) returns MyFirstModule.HtChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+create microflow MyFirstModule.IntParam ($P: integer) returns MyFirstModule.HtChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+create microflow MyFirstModule.LongParam ($P: long) returns MyFirstModule.HtChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+create microflow MyFirstModule.DtParam ($P: datetime) returns MyFirstModule.HtChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+create microflow MyFirstModule.BoolParam ($P: boolean) returns MyFirstModule.HtChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+create import mapping MyFirstModule.IMM_StrFromInt with json structure MyFirstModule.JS_Ht {
+  create MyFirstModule.HtRoot {
+    Name = name,
+    find MyFirstModule.HtChild_HtRoot/MyFirstModule.HtChild by MyFirstModule.StrParam ( P: idx ) = items { Code = code }
+  }
+};
+create import mapping MyFirstModule.IMM_StrFromDt with json structure MyFirstModule.JS_Ht {
+  create MyFirstModule.HtRoot {
+    Name = name,
+    find MyFirstModule.HtChild_HtRoot/MyFirstModule.HtChild by MyFirstModule.StrParam ( P: dt ) = items { Code = code }
+  }
+};
+create import mapping MyFirstModule.IMM_DecFromInt with json structure MyFirstModule.JS_Ht {
+  create MyFirstModule.HtRoot {
+    Name = name,
+    find MyFirstModule.HtChild_HtRoot/MyFirstModule.HtChild by MyFirstModule.DecParam ( P: idx ) = items { Code = code }
+  }
+};
+create import mapping MyFirstModule.IMM_DecFromDec with json structure MyFirstModule.JS_Ht {
+  create MyFirstModule.HtRoot {
+    Name = name,
+    find MyFirstModule.HtChild_HtRoot/MyFirstModule.HtChild by MyFirstModule.DecParam ( P: d ) = items { Code = code }
+  }
+};
+create import mapping MyFirstModule.IMM_IntFromInt with json structure MyFirstModule.JS_Ht {
+  create MyFirstModule.HtRoot {
+    Name = name,
+    find MyFirstModule.HtChild_HtRoot/MyFirstModule.HtChild by MyFirstModule.IntParam ( P: idx ) = items { Code = code }
+  }
+};
+create import mapping MyFirstModule.IMM_LongFromInt with json structure MyFirstModule.JS_Ht {
+  create MyFirstModule.HtRoot {
+    Name = name,
+    find MyFirstModule.HtChild_HtRoot/MyFirstModule.HtChild by MyFirstModule.LongParam ( P: idx ) = items { Code = code }
+  }
+};
+create import mapping MyFirstModule.IMM_DtFromDt with json structure MyFirstModule.JS_Ht {
+  create MyFirstModule.HtRoot {
+    Name = name,
+    find MyFirstModule.HtChild_HtRoot/MyFirstModule.HtChild by MyFirstModule.DtParam ( P: dt ) = items { Code = code }
+  }
+};
+create import mapping MyFirstModule.IMM_BoolFromBool with json structure MyFirstModule.JS_Ht {
+  create MyFirstModule.HtRoot {
+    Name = name,
+    find MyFirstModule.HtChild_HtRoot/MyFirstModule.HtChild by MyFirstModule.BoolParam ( P: b ) = items { Code = code }
+  }
+};

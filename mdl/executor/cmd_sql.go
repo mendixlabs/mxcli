@@ -212,6 +212,12 @@ func execSQLGenerateConnector(ctx *ExecContext, s *ast.SQLGenerateConnectorStmt)
 		return err
 	}
 
+	// An object the listing named and the generator could not read is reported,
+	// not dropped: nothing downstream can notice its absence (ako/mxcli#2422).
+	for _, skip := range result.SkippedObjects {
+		fmt.Fprintf(ctx.Output, "-- warning: skipped object the database listed: %s\n", skip)
+	}
+
 	// Report skipped columns
 	for _, skip := range result.SkippedCols {
 		fmt.Fprintf(ctx.Output, "-- warning: skipped unmappable column: %s\n", skip)

@@ -1,0 +1,39 @@
+mdl 1;
+-- NEGATIVE TEST — `mxcli check` must REFUSE this file (MDL107), with no project.
+--
+-- A custom object handler (`find … by M.MF ( P: member )`) that feeds a JSON member to a
+-- microflow parameter of an incompatible type. `check` and `exec` accepted it, and the
+-- build reported
+--
+--   [CE0282] "The microflow parameter 'P' is of type 'Integer'. It does not match the
+--            specified type 'String'."
+--
+-- Measured on MxBuild 11.16.1, one mapping per project: an Integer parameter fed a String,
+-- Decimal, Boolean or DateTime member, a Decimal parameter fed a String member, and so on —
+-- see mapping-handler-types.mdl for the pairings that build clean.
+create persistent entity MyFirstModule.HtRoot (Name: string(50));
+create persistent entity MyFirstModule.HtChild (Code: string(50));
+create association MyFirstModule.HtChild_HtRoot from MyFirstModule.HtChild to MyFirstModule.HtRoot type reference;
+create json structure MyFirstModule.JS_Ht sample '{"name": "n", "items": [{"code": "c", "idx": 1, "d": 1.5, "b": true, "dt": "2020-01-01T00:00:00Z"}]}';
+create microflow MyFirstModule.IntParam ($P: integer) returns MyFirstModule.HtChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+create microflow MyFirstModule.BoolParam ($P: boolean) returns MyFirstModule.HtChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+create import mapping MyFirstModule.IMM_IntFromString with json structure MyFirstModule.JS_Ht {
+  create MyFirstModule.HtRoot {
+    Name = name,
+    find MyFirstModule.HtChild_HtRoot/MyFirstModule.HtChild by MyFirstModule.IntParam ( P: code ) = items { Code = code }
+  }
+};
+create import mapping MyFirstModule.IMM_BoolFromInteger with json structure MyFirstModule.JS_Ht {
+  create MyFirstModule.HtRoot {
+    Name = name,
+    find MyFirstModule.HtChild_HtRoot/MyFirstModule.HtChild by MyFirstModule.BoolParam ( P: idx ) = items { Code = code }
+  }
+};
