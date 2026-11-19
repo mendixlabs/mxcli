@@ -10,11 +10,11 @@ description: "Produce and read the scored quality report (mxcli report): every l
 
 | lines | section |
 |---|---|
-| 29-40 | Run it |
-| 41-56 | Before trusting the number |
-| 57-76 | Reading the score |
-| 77-97 | Accepting a finding |
-| 98-104 | Related |
+| 29-48 | Run it |
+| 49-72 | Before trusting the number |
+| 73-92 | Reading the score |
+| 93-113 | Accepting a finding |
+| 114-120 | Related |
 
 <!-- /skill-index -->
 # Quality Report
@@ -36,7 +36,15 @@ mxcli report -p app.mpr --format json -o docs/quality.json   # for CI, or to com
 mxcli report -p app.mpr --modules Sales,Billing
 ```
 
-It builds a full catalog first, so the first run on a project takes a while.
+It builds a full catalog first, so the first run on a project takes a while. It also
+runs Mendix's own consistency check (`mx check`) on a temporary copy of the project;
+the project on disk is not changed.
+
+```bash
+mxcli setup mxbuild -p app.mpr                       # once: mx for the project's Mendix version
+mxcli report -p app.mpr --mx-check-results check.txt # reuse saved 'mxcli docker check' output
+mxcli report -p app.mpr --no-mx-check                # lint only; the report says it did not check
+```
 
 ## Before trusting the number
 
@@ -50,9 +58,17 @@ It builds a full catalog first, so the first run on a project takes a while.
   security level, demo users, user-role mappings — are left out (they are about no
   one module). Use both: the full run for the project's settings, the scoped run
   for the code the team owns.
-- **Does it build?** The score does not include Mendix's own consistency check.
-  A project with CE errors can score well. Run `mxcli docker check -p app.mpr` as
-  well (ako/mxcli#2423 tracks putting it in the report).
+- **Does it build?** Read the **Builds** line above the score first. `no` means
+  `mx check` found consistency errors, and a project with errors cannot be deployed,
+  whatever it scores: the check's findings are not in the score, because no
+  category weight can express "does not build". `not checked` means there was no mx
+  for the project's version (or `--no-mx-check`); it never means clean. `unknown`
+  means mx's output could not be read in full. JSON has `builds` (true/false, absent
+  when not checked). The check covers the whole project, also under `--modules`.
+- **Hundreds of one code** is usually one cause: a theme that lacks a design
+  property (CE6083), or widget packages newer than the pages (CE0463, which
+  `mxcli docker check` labels and `mxcli fix widgets` clears). The page groups the
+  findings by code; `--format json` lists each one.
 
 ## Reading the score
 

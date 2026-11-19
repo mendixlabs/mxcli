@@ -39,7 +39,11 @@ func (f *MarkdownReportFormatter) FormatReport(report *Report, w io.Writer) erro
 	if len(report.Modules) > 0 {
 		fmt.Fprintf(w, "**Modules:** %s (findings outside these modules are not scored)  \n", strings.Join(report.Modules, ", "))
 	}
+	if report.Consistency != nil {
+		fmt.Fprintf(w, "**Builds:** %s  \n", report.Consistency.Verdict())
+	}
 	fmt.Fprintf(w, "**Overall Score:** %s %.0f/100\n\n", scoreBar(report.OverallScore), report.OverallScore)
+	writeConsistencyMarkdown(w, report.Consistency, report.Modules)
 
 	// Summary
 	fmt.Fprintf(w, "## Summary\n\n")
@@ -128,14 +132,18 @@ type JSONReportFormatter struct{}
 
 // JSONReport is the JSON output structure for a report.
 type JSONReport struct {
-	ProjectName  string          `json:"projectName"`
-	Date         string          `json:"date"`
-	Modules      []string        `json:"modules,omitempty"`
-	OverallScore float64         `json:"overallScore"`
-	Accepted     int             `json:"accepted,omitempty"`
-	Summary      JSONSummary     `json:"summary"`
-	Categories   []CategoryScore `json:"categories"`
-	Violations   []JSONViolation `json:"violations"`
+	ProjectName  string   `json:"projectName"`
+	Date         string   `json:"date"`
+	Modules      []string `json:"modules,omitempty"`
+	OverallScore float64  `json:"overallScore"`
+	Accepted     int      `json:"accepted,omitempty"`
+	// Builds is the consistency check's verdict: true or false, or absent
+	// when the check was not run (ako/mxcli#2423).
+	Builds      *bool             `json:"builds,omitempty"`
+	Consistency *ConsistencyCheck `json:"consistency,omitempty"`
+	Summary     JSONSummary       `json:"summary"`
+	Categories  []CategoryScore   `json:"categories"`
+	Violations  []JSONViolation   `json:"violations"`
 	// RuleFailures are rules that could not run; excluded from the score and
 	// the summary (ako/mxcli#952).
 	RuleFailures []JSONViolation `json:"ruleFailures,omitempty"`
@@ -162,7 +170,12 @@ func (f *JSONReportFormatter) FormatReport(report *Report, w io.Writer) error {
 			Warnings: report.Summary.Warnings,
 			Infos:    report.Summary.Infos,
 		},
-		Categories: report.Categories,
+		Categories:  report.Categories,
+		Consistency: report.Consistency,
+	}
+	if c := report.Consistency; c != nil && c.Ran && c.Incomplete == "" {
+		b := c.Errors == 0
+		jr.Builds = &b
 	}
 
 	for _, v := range report.Violations {
@@ -243,8 +256,16 @@ func (f *HTMLReportFormatter) FormatReport(report *Report, w io.Writer) error {
 	} else if report.OverallScore < 75 {
 		scoreClass = "score-ok"
 	}
+	if report.Consistency != nil {
+		buildClass := "severity-info"
+		if report.Consistency.Errors > 0 {
+			buildClass = "severity-error"
+		}
+		fmt.Fprintf(w, "<p class='meta'><strong>Builds:</strong> <span class='%s'>%s</span></p>\n", buildClass, html.EscapeString(report.Consistency.Verdict()))
+	}
 	fmt.Fprintf(w, "<p class='overall'>Overall Score: <span class='score-bar'><span class='score-fill %s' style='width: %.0f%%'></span></span> %.0f/100</p>\n",
 		scoreClass, report.OverallScore, report.OverallScore)
+	writeConsistencyHTML(w, report.Consistency, report.Modules)
 
 	// Summary
 	fmt.Fprintf(w, "<h2>Summary</h2>\n<table>\n")

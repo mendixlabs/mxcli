@@ -9,6 +9,29 @@ The `mxcli report` command generates a scored best practices report for a Mendix
 mxcli report -p app.mpr
 ```
 
+## Does It Build?
+
+The report runs Mendix's own consistency check (`mx check`) on a temporary copy of
+the project and puts its verdict above the score:
+
+| Builds | Meaning |
+|---|---|
+| `yes` | `mx check` found no errors |
+| `no — N consistency error(s)` | the project cannot be deployed, whatever it scores |
+| `not checked` | no mx for the project's Mendix version, or `--no-mx-check` |
+| `unknown` | mx's output could not be read in full |
+
+The check's findings are listed under **Consistency Check**, grouped by code (a
+stale theme or widget set gives hundreds of one code), and are not part of the
+score. They cover the whole project, also with `--modules`.
+
+```bash
+mxcli setup mxbuild -p app.mpr                          # mx for the project's version, once
+mxcli report -p app.mpr --mx-check-results check.txt    # read saved 'mxcli docker check' output
+mxcli report -p app.mpr --mxbuild-path /opt/mxbuild     # a specific mxbuild
+mxcli report -p app.mpr --no-mx-check                   # lint only
+```
+
 ## Scoring Selected Modules
 
 ```bash
@@ -100,18 +123,26 @@ mxcli report -p app.mpr --format json --output report.json
 Use the JSON format to fail CI pipelines when scores drop below a threshold:
 
 ```bash
-# Fail when the overall score is below 70. The score has one decimal (e.g. 82.5),
+# Fail when the project does not build, or when the overall score is below 70. The score has one decimal (e.g. 82.5),
 # so compare in jq: the shell's -lt only takes integers.
 mxcli report -p app.mpr --format json -o quality.json
+jq -e '.builds == true' quality.json > /dev/null || {
+  echo "The project does not build, or mx check did not run: $(jq -r '.consistency.notRun // .consistency.incomplete // "consistency errors"' quality.json)"
+  exit 1
+}
 jq -e '.overallScore >= 70' quality.json > /dev/null || {
   echo "Quality score $(jq .overallScore quality.json) is below threshold 70"
   exit 1
 }
 ```
 
-The `report-quality` skill covers how the score is computed, what it leaves out
-(Mendix's own consistency check; the bundled Starlark rules when the project has no
-`.claude/lint-rules/`), and how to accept an intended finding in the project brain.
+`.builds` is absent when the check was not run, so `== true` also fails a CI run
+that has no mx for the project's version: run `mxcli setup mxbuild -p app.mpr`
+first in the pipeline.
+
+The `report-quality` skill covers how the score is computed, what it leaves out (the
+bundled Starlark rules when the project has no `.claude/lint-rules/`), and how to
+accept an intended finding in the project brain.
 
 For reports that answer one question instead of scoring — architecture, tests,
 security, performance, traceability and the software map — see
