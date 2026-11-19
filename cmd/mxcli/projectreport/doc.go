@@ -155,6 +155,17 @@ func (Table) isBlock()   {}
 func (Figure) isBlock()  {}
 func (Stacked) isBlock() {}
 func (Card) isBlock()    {}
+func (Cards) isBlock()   {}
+
+// Cards is a grid of linked panels: the overview's one per report.
+type Cards struct{ Items []LinkCard }
+
+// LinkCard is one report on the overview: where it is, its verdict, its
+// headline tiles. Missing says why it was not generated.
+type LinkCard struct {
+	Title, Href, Lede, Missing string
+	Stats                      []Stat
+}
 
 // ---------------------------------------------------------------- markdown
 
@@ -256,6 +267,21 @@ func writeMarkdownBlock(b *strings.Builder, bl Block) {
 			b.WriteString("| " + strings.Join(cells, " | ") + " |\n")
 		}
 		b.WriteString("\n")
+	case Cards:
+		for _, c := range v.Items {
+			if c.Missing != "" {
+				fmt.Fprintf(b, "### %s\n\nNot generated: %s\n\n", c.Title, c.Missing)
+				continue
+			}
+			fmt.Fprintf(b, "### [%s](%s)\n\n", c.Title, c.Href)
+			if c.Lede != "" {
+				fmt.Fprintf(b, "%s\n\n", c.Lede)
+			}
+			for _, s := range c.Stats {
+				fmt.Fprintf(b, "- %s: %s\n", s.Label, s.Value)
+			}
+			b.WriteString("\n")
+		}
 	case Card:
 		head := "**" + v.Title + "**"
 		if v.Tag != "" {
@@ -446,6 +472,31 @@ func writeHTMLBlock(b *strings.Builder, bl Block) {
 		b.WriteString("</tbody></table></div>\n")
 	case Stacked:
 		writeStackedHTML(b, v)
+	case Cards:
+		b.WriteString("<div class=\"cards\">")
+		for _, c := range v.Items {
+			if c.Missing != "" {
+				fmt.Fprintf(b, "<article class=\"rcard missing\"><h3>%s</h3><p class=\"intro\">Not generated: %s</p></article>", esc(c.Title), inline(c.Missing))
+				continue
+			}
+			fmt.Fprintf(b, "<article class=\"rcard\"><h3><a href=\"%s\">%s</a></h3>", esc(c.Href), esc(c.Title))
+			if c.Lede != "" {
+				fmt.Fprintf(b, "<p>%s</p>", inline(c.Lede))
+			}
+			if len(c.Stats) > 0 {
+				b.WriteString("<div class=\"minis\">")
+				for _, s := range c.Stats {
+					cls := "mini"
+					if s.Status != "" {
+						cls += " " + esc(s.Status)
+					}
+					fmt.Fprintf(b, "<div class=\"%s\"><span class=\"v\">%s</span><span class=\"l\">%s</span></div>", cls, esc(s.Value), esc(s.Label))
+				}
+				b.WriteString("</div>")
+			}
+			fmt.Fprintf(b, "<a class=\"open\" href=\"%s\">Open report →</a></article>", esc(c.Href))
+		}
+		b.WriteString("</div>\n")
 	case Card:
 		st := v.Status
 		if st == "" {
@@ -635,6 +686,14 @@ td.info{background:var(--infobg);color:var(--info)}td.muted{color:var(--muted)}t
 .status{display:block;font:600 12px/1 var(--body);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px}
 .status.good{color:var(--good)}.status.warn{color:var(--warn)}.status.bad{color:var(--bad)}.status.none{color:var(--muted)}
 figure{margin:10px 0 16px;overflow-x:auto}figcaption{color:var(--muted);font-size:13px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:18px}
+.rcard{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:16px 18px;display:grid;gap:10px;align-content:start}
+.rcard h3{font:700 19px/1.2 var(--mono);margin:0}.rcard h3 a{color:var(--fg);text-decoration:none}.rcard p{margin:0;color:var(--muted)}
+.rcard.missing{border-style:dashed}.rcard .open{font-weight:600;font-size:14px}
+.minis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.mini{border:1px solid var(--line);border-radius:4px;padding:8px 10px;display:grid;gap:2px}
+.mini .v{font:600 17px/1.15 var(--mono);font-variant-numeric:tabular-nums}.mini .l{color:var(--muted);font-size:12.5px}
+.mini.good{border-left:3px solid var(--good)}.mini.warn{border-left:3px solid var(--warn)}.mini.bad{border-left:3px solid var(--bad)}
 footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:12px}
 svg text{fill:var(--fg);font:11px var(--mono)}svg .muted{fill:var(--muted)}
 `

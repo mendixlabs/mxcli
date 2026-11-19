@@ -44,6 +44,15 @@ type reportKindSpec struct {
 	flags func(cmd *cobra.Command)
 }
 
+// reportKinds is every kind newReportKindCmd made, with its command, so
+// `report all` can run each with its own flag defaults.
+var reportKinds = map[string]reportKind{}
+
+type reportKind struct {
+	spec reportKindSpec
+	cmd  *cobra.Command
+}
+
 func newReportKindCmd(spec reportKindSpec) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     spec.name,
@@ -65,6 +74,7 @@ func newReportKindCmd(spec reportKindSpec) *cobra.Command {
 	if spec.flags != nil {
 		spec.flags(cmd)
 	}
+	reportKinds[spec.name] = reportKind{spec: spec, cmd: cmd}
 	return cmd
 }
 

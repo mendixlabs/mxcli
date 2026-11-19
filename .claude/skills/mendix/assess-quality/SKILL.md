@@ -10,15 +10,15 @@ description: "Write a full quality assessment of a Mendix project: the mxcli rep
 
 | lines | section |
 |---|---|
-| 31-54 | Step 1: Run the reports |
-| 55-209 | Step 2: Manual review |
-| 210-216 | Step 3: Write the assessment |
-| 217-219 | Summary |
-| 220-231 | Measured |
-| 232-234 | Reviewed by hand |
-| 235-237 | Recommendations |
-| 238-242 | Not assessed |
-| 243-249 | Sources |
+| 31-58 | Step 1: Run the reports |
+| 59-213 | Step 2: Manual review |
+| 214-220 | Step 3: Write the assessment |
+| 221-223 | Summary |
+| 224-235 | Measured |
+| 236-238 | Reviewed by hand |
+| 239-241 | Recommendations |
+| 242-246 | Not assessed |
+| 247-253 | Sources |
 
 <!-- /skill-index -->
 # Assess Mendix Project Quality
@@ -29,6 +29,10 @@ manual review below: whether names say what a flow does, whether the folder and 
 structure make sense, whether error handling is designed or accidental.
 
 ## Step 1: Run the reports
+
+`mxcli report all -p app.mpr -o docs/reports` runs every report below into one folder
+with an overview page (add `--against <deployed>` for the release report, `--journeys`
+and `--spans` for performance). Or run them one by one:
 
 | Question | Report | Skill |
 |---|---|---|

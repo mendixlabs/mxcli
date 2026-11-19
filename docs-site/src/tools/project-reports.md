@@ -15,6 +15,21 @@ the kinds below answer specific questions instead of scoring.
 | `release` | What does deploying this model do to the data already in production? |
 | `dependencies` | What does the app stand on, and is it current and safe? |
 
+## All reports at once
+
+```bash
+mxcli report all -p app.mpr -o docs/reports
+mxcli report all -p app.mpr -o docs/reports --against v1.4.0 --journeys journeys.jsonl --spans spans.jsonl
+```
+
+Writes every kind into one folder — `<kind>.html` and `<kind>.json`, the scored report
+as `quality.html` — and `index.html`, an overview with a card per report: its verdict
+and headline numbers, linked. Every page links the others. A `<kind>-annotations.yaml`
+in the folder is applied to that kind. Performance runs with `--journeys`/`--spans`
+and release with `--against`; a kind that cannot run is listed on the overview with
+the reason, and a `<kind>.json` left in the folder by an earlier run is linked instead.
+`--offline` asks no online source, `--skip` leaves kinds out.
+
 ## Shared shape
 
 Every kind collects data first and renders a page from that data second:
