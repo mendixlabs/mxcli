@@ -14,16 +14,16 @@ description: "Create and manage JSON structures, import mappings and export mapp
 | 111-122 | Export Mappings |
 | 123-187 | JSON Structures |
 | 188-234 | Message Definitions |
-| 235-398 | Import Mappings |
-| 399-496 | Export Mappings |
-| 497-514 | Starting a Mapping Below the Payload Root |
-| 515-598 | Microflow Actions |
-| 599-611 | Browse |
-| 612-659 | Export Workflow: PE → NPE → JSON |
-| 660-666 | Realistic Example: Countries REST API |
-| 667-690 | Placing Documents in Folders |
-| 691-706 | Documentation |
-| 707-721 | Common Mistakes |
+| 235-400 | Import Mappings |
+| 401-498 | Export Mappings |
+| 499-516 | Starting a Mapping Below the Payload Root |
+| 517-600 | Microflow Actions |
+| 601-613 | Browse |
+| 614-661 | Export Workflow: PE → NPE → JSON |
+| 662-668 | Realistic Example: Countries REST API |
+| 669-692 | Placing Documents in Folders |
+| 693-708 | Documentation |
+| 709-723 | Common Mistakes |
 
 <!-- /skill-index -->
 # JSON Structures, Import Mappings & Export Mappings
@@ -389,7 +389,9 @@ create import mapping Module.IMM_Embed
 
 Using `parameter` without declaring one is refused — the build reports it as
 CE0279. The declared entity must match the microflow's parameter type, which the
-build checks as CE0282.
+build checks as CE0282. A handler's `P: member` is checked the same way: a
+String parameter takes any member, a Decimal parameter also an Integer, a Long
+parameter an Integer, and every other type only its own (CE0282, `check` MDL107).
 
 The **activity** that calls such a mapping passes the object in its settings
 list, `(Parameter: $Obj)` — see "Settings" under Import from Mapping below.
