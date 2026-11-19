@@ -117,6 +117,9 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 
 	// Render with the navigation between the pages that exist.
 	nav := []projectreport.NavLink{{Label: "Overview", Href: "index.html"}}
+	if !skip["readiness"] {
+		nav = append(nav, projectreport.NavLink{Label: projectreport.KindLabel("readiness"), Href: "readiness.html"})
+	}
 	for _, p := range pages {
 		if p.missing == "" {
 			nav = append(nav, projectreport.NavLink{Label: projectreport.KindLabel(p.kind), Href: p.kind + ".html"})
@@ -185,6 +188,16 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 		}
 		card.Stats = firstStats(p.doc.Stats, 4)
 		cards = append(cards, card)
+	}
+
+	// Readiness rolls the pages up, so it is written last and shown first.
+	if !skip["readiness"] {
+		fmt.Fprintln(log, "report readiness ...")
+		card, err := writeReadiness(cmd, dir, project, pages, navFor("readiness"))
+		if err != nil {
+			return err
+		}
+		cards = append([]projectreport.LinkCard{card}, cards...)
 	}
 
 	index := projectreport.Doc{
@@ -275,6 +288,7 @@ func writeFileWith(path string, write func(io.Writer) error) error {
 func init() {
 	reportAllCmd.Flags().StringP("project", "p", "", "Path to the .mpr file")
 	reportAllCmd.Flags().StringP("output", "o", "", "Folder to write the reports into (created if needed)")
+	reportAllCmd.Flags().String("milestone", "", "Readiness: the milestone being released, whose unbuilt requirements block")
 	reportAllCmd.Flags().StringSlice("exclude-docs", nil, "Architecture: name globs of documents to leave out (generated code, probes, fixtures)")
 	reportAllCmd.Flags().Bool("offline", false, "Ask no online source (dependencies: no Marketplace, no vulnerability lookup)")
 	reportAllCmd.Flags().String("against", "", "The deployed revision or .mpr, for the release report")
@@ -282,4 +296,64 @@ func init() {
 	reportAllCmd.Flags().String("spans", "", "Span files, for the performance and tests reports")
 	reportAllCmd.Flags().StringSlice("skip", nil, "Kinds to leave out (e.g. --skip map,dependencies)")
 	reportCmd.AddCommand(reportAllCmd)
+}
+
+// writeReadiness rolls the generated pages up into readiness.json and
+// readiness.html, signed off with readiness-annotations.yaml from the folder.
+func writeReadiness(cmd *cobra.Command, dir, project string, pages []reportPage, nav []projectreport.NavLink) (projectreport.LinkCard, error) {
+	card := projectreport.LinkCard{Title: projectreport.KindLabel("readiness"), Href: "readiness.html"}
+	envs := map[string]*projectreport.Envelope{}
+	var quality *linter.JSONReport
+	for _, p := range pages {
+		switch {
+		case p.quality != nil:
+			q, err := qualityJSON(p.quality)
+			if err != nil {
+				return card, err
+			}
+			quality = q
+		case p.env != nil:
+			envs[p.kind] = p.env
+		}
+	}
+	ann := map[string]*projectreport.Annotations{}
+	for _, k := range projectreport.ReadinessKinds {
+		a, err := projectreport.LoadAnnotations(existing(filepath.Join(dir, k+"-annotations.yaml")))
+		if err != nil {
+			return card, fmt.Errorf("%s annotations: %w", k, err)
+		}
+		ann[k] = a
+	}
+	in, err := projectreport.ReadinessInputFrom(envs, quality, ann)
+	if err != nil {
+		return card, err
+	}
+	signOff, err := projectreport.LoadAnnotations(existing(filepath.Join(dir, "readiness-annotations.yaml")))
+	if err != nil {
+		return card, fmt.Errorf("readiness annotations: %w", err)
+	}
+	in.SignOff = signOff
+	in.Milestone, _ = cmd.Flags().GetString("milestone")
+	in.BudgetMs = 1000
+	if rk, ok := reportKinds["readiness"]; ok {
+		in.BudgetMs, _ = rk.cmd.Flags().GetFloat64("budget-ms")
+	}
+	env, err := projectreport.NewEnvelope("readiness", project, reportNow(), version, projectreport.ComputeReadiness(in),
+		projectreport.ReadinessMethod, projectreport.ReadinessLimits, nil)
+	if err != nil {
+		return card, err
+	}
+	if err := writeFileWith(filepath.Join(dir, "readiness.json"), env.WriteJSON); err != nil {
+		return card, err
+	}
+	doc, err := projectreport.RenderReadiness(env, signOff)
+	if err != nil {
+		return card, err
+	}
+	doc.Nav = nav
+	if err := writeFileWith(filepath.Join(dir, "readiness.html"), func(w io.Writer) error { return projectreport.RenderHTML(w, doc) }); err != nil {
+		return card, err
+	}
+	card.Lede, card.Stats = doc.Lede, firstStats(doc.Stats, 4)
+	return card, nil
 }

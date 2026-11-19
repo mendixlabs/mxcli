@@ -15,6 +15,7 @@ the kinds below answer specific questions instead of scoring.
 | `release` | What does deploying this model do to the data already in production? |
 | `dependencies` | What does the app stand on, and is it current and safe? |
 | `configuration` | What must each environment supply, and what does the model fix so no environment can change it? |
+| `readiness` | Taken together, is it ready for production — what blocks, what is a risk, what was not assessed? |
 
 ## All reports at once
 
@@ -29,7 +30,9 @@ and headline numbers, linked. Every page links the others. A `<kind>-annotations
 in the folder is applied to that kind. Performance runs with `--journeys`/`--spans`
 and release with `--against`; a kind that cannot run is listed on the overview with
 the reason, and a `<kind>.json` left in the folder by an earlier run is linked instead.
-`--offline` asks no online source, `--skip` leaves kinds out.
+`--offline` asks no online source, `--skip` leaves kinds out. The folder also gets
+`readiness.html`, first on the overview: the go/no-go roll-up of all the others
+(`--milestone` names the milestone being released).
 
 ## Shared shape
 
@@ -265,11 +268,28 @@ report does not read them. Sign items off with `constant:<Name>`,
 `scheduled:<Name>` or `published:<Name>`, status `done`, and a note naming the
 environment.
 
+## readiness
+
+One go/no-go page rolled up from the other reports, with its verdict rule stated:
+**blocking** (consistency errors, a release that destroys data, a high or critical
+vulnerability, a location fixed to localhost or a test host, a literal credential, an
+open high security finding, a failing test or journey, an unbuilt requirement of the
+milestone being released), **risks**, **accepted** (with what accepts each), the
+administrator's checklist, which reports were assessed, and what no model report
+covers. A report that was not given, or could not check, is "not assessed", and keeps
+the verdict at "not assessed in full" — never "ready".
+
+```bash
+mxcli report readiness --dir docs/reports --milestone M2 -o docs/reports/readiness.html
+```
+
+Sign a blocking item off with `readiness:<key>`, status `signed off`, and a note.
+
 ## Skills
 
 Each kind has a skill with the judgement the command cannot make and the traps found
 building the reports by hand: `report-architecture`, `report-tests`,
 `report-security`, `report-performance`, `report-traceability`, `report-map`,
-`report-release`, `report-dependencies`, `report-configuration`.
+`report-release`, `report-dependencies`, `report-configuration`, `report-readiness`.
 The scored report has `report-quality`, and `assess-quality` combines all of them
 with the manual review no rule can do.

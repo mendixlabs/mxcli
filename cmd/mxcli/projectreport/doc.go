@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"regexp"
 	"strings"
 )
 
@@ -648,8 +649,25 @@ func inline(s string) string {
 		if i%2 == 1 {
 			b.WriteString("`")
 		}
-		b.WriteString(esc(p))
+		b.WriteString(pageLinks(p))
 	}
+	return b.String()
+}
+
+// pageLink is a markdown link to another report page in the same folder.
+// Only a relative .html name qualifies: annotation text is written by people,
+// so a URL with a scheme (javascript:, https:) stays plain text.
+var pageLink = regexp.MustCompile(`\[([^\]]+)\]\(([A-Za-z0-9._-]+\.html(?:#[A-Za-z0-9_-]+)?)\)`)
+
+func pageLinks(s string) string {
+	var b strings.Builder
+	last := 0
+	for _, m := range pageLink.FindAllStringSubmatchIndex(s, -1) {
+		b.WriteString(esc(s[last:m[0]]))
+		b.WriteString(`<a href="` + esc(s[m[4]:m[5]]) + `">` + esc(s[m[2]:m[3]]) + `</a>`)
+		last = m[1]
+	}
+	b.WriteString(esc(s[last:]))
 	return b.String()
 }
 

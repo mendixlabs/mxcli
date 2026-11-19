@@ -10,15 +10,15 @@ description: "Write a full quality assessment of a Mendix project: the mxcli rep
 
 | lines | section |
 |---|---|
-| 31-59 | Step 1: Run the reports |
-| 60-214 | Step 2: Manual review |
-| 215-221 | Step 3: Write the assessment |
-| 222-224 | Summary |
-| 225-236 | Measured |
-| 237-239 | Reviewed by hand |
-| 240-242 | Recommendations |
-| 243-247 | Not assessed |
-| 248-254 | Sources |
+| 31-60 | Step 1: Run the reports |
+| 61-215 | Step 2: Manual review |
+| 216-222 | Step 3: Write the assessment |
+| 223-225 | Summary |
+| 226-237 | Measured |
+| 238-240 | Reviewed by hand |
+| 241-243 | Recommendations |
+| 244-248 | Not assessed |
+| 249-255 | Sources |
 
 <!-- /skill-index -->
 # Assess Mendix Project Quality
@@ -46,6 +46,7 @@ and `--spans` for performance). Or run them one by one:
 | What does the next deploy do to production data? | `mxcli report release --against <deployed>` | `report-release` |
 | Are its dependencies current and safe? | `mxcli report dependencies` | `report-dependencies` |
 | What must each environment supply? | `mxcli report configuration` | `report-configuration` |
+| Taken together: go or no-go? | `mxcli report readiness` (also written by `report all`) | `report-readiness` |
 | Does it build? | `mxcli report` (its **Builds** line), or `mxcli docker check` | `report-quality`, `/validate-project` |
 
 Read each report's skill before interpreting it — every one has traps (the quality

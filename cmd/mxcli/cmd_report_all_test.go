@@ -3,6 +3,7 @@
 package main
 
 import (
+	"github.com/mendixlabs/mxcli/cmd/mxcli/projectreport"
 	"io"
 	"os"
 	"path/filepath"
@@ -40,7 +41,7 @@ func TestReportAllWritesEveryPageAndAnOverview(t *testing.T) {
 	if err := runReportAll(reportAllCmd, filepath.Join(work, "app", "PedApp.mpr"), out, map[string]bool{"map": true}, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{"index.html", "quality.html", "quality.json", "architecture.html", "security.html", "security.json", "dependencies.html", "configuration.html", "configuration.json", "tests.html"} {
+	for _, f := range []string{"index.html", "quality.html", "quality.json", "architecture.html", "security.html", "security.json", "dependencies.html", "configuration.html", "configuration.json", "tests.html", "readiness.html", "readiness.json"} {
 		if _, err := os.Stat(filepath.Join(out, f)); err != nil {
 			t.Errorf("missing %s", f)
 		}
@@ -54,6 +55,30 @@ func TestReportAllWritesEveryPageAndAnOverview(t *testing.T) {
 		if !strings.Contains(string(index), want) {
 			t.Errorf("index lacks %q", want)
 		}
+	}
+	// The readiness card leads the overview, and the page can be rebuilt
+	// from the folder alone.
+	if i, j := strings.Index(string(index), `href="readiness.html"`), strings.Index(string(index), `href="quality.html"`); i < 0 || j < 0 || i > j {
+		t.Error("the readiness card comes first")
+	}
+	rk := reportKinds["readiness"]
+	_ = rk.cmd.Flags().Set("dir", out)
+	t.Cleanup(func() { _ = rk.cmd.Flags().Set("dir", "") })
+	env, err := rk.spec.collect(rk.cmd, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rd projectreport.ReadinessData
+	if err := env.Decode(&rd); err != nil {
+		t.Fatal(err)
+	}
+	assessed := map[string]bool{}
+	for _, s := range rd.Sources {
+		assessed[s.Kind] = s.Assessed
+	}
+	// Offline, no mx check, no deployed revision: never "ready".
+	if rd.Verdict == projectreport.VerdictReady || assessed["release"] || !assessed["configuration"] {
+		t.Errorf("readiness from the folder: verdict %q, assessed %v", rd.Verdict, assessed)
 	}
 	sec, _ := os.ReadFile(filepath.Join(out, "security.html"))
 	if !strings.Contains(string(sec), `aria-current="page">Security</a>`) || !strings.Contains(string(sec), "Reviewed by hand on Tuesday.") {
