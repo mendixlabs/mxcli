@@ -31,8 +31,8 @@ func toPascalCase(s string) string {
 		return s
 	}
 
-	// Handle already-PascalCase names (no underscores, starts with upper)
-	if !strings.Contains(s, "_") && !strings.Contains(s, "-") {
+	// Handle already-PascalCase names (no separators, starts with upper)
+	if !strings.ContainsAny(s, "_- .") {
 		// Just capitalize first letter
 		runes := []rune(s)
 		runes[0] = unicode.ToUpper(runes[0])
@@ -42,7 +42,10 @@ func toPascalCase(s string) string {
 	var b strings.Builder
 	capitalize := true
 	for _, r := range s {
-		if r == '_' || r == '-' || r == ' ' {
+		// A dot separates words here. Left in, a table named after a Kafka
+		// topic produced `ENTITY LakeSql.LocalCdc.cdcpublish.customer.1.local`,
+		// which is not a Mendix name at all (ako/mxcli#2422).
+		if r == '_' || r == '-' || r == ' ' || r == '.' {
 			capitalize = true
 			continue
 		}

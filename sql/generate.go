@@ -26,6 +26,11 @@ type GenerateResult struct {
 	TableCount    int
 	ViewCount     int
 	SkippedCols   []string // "table.column: type" for unmappable columns
+	// SkippedObjects is every listed object the generator could not read, as
+	// "address: reason". An object the listing names and the output omits is
+	// invisible downstream, so it is reported rather than dropped
+	// (ako/mxcli#2422).
+	SkippedObjects []string
 }
 
 // GenerateConnector discovers schema and generates complete MDL for a Mendix Database Connector.
@@ -39,7 +44,7 @@ func GenerateConnector(ctx context.Context, cfg *GenerateConfig) (*GenerateResul
 	// (ako/mxcli#2415).
 	if cfg.Tables == nil && cfg.Views == nil {
 		var err error
-		schemas, err = ReadAllSchemas(ctx, cfg.Conn)
+		schemas, result.SkippedObjects, err = readListed(ctx, cfg.Conn, false)
 		if err != nil {
 			return nil, fmt.Errorf("reading tables: %w", err)
 		}
