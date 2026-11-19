@@ -811,24 +811,29 @@ func RenderSecurity(env *Envelope, ann *Annotations) (Doc, error) {
 		Intro:  "User role × persistent app entity. R read, W write, C create, D delete; then the widest read: own rows, via user, filtered, or all (no constraint). `all` is right for reference data and admin roles and wrong almost anywhere else.",
 		Blocks: []Block{gt, xt}})
 
-	// Flows.
-	flt := Table{Columns: []string{"Microflow", "Roles", "Object parameters", "Entity access", "Risk", "Triage", "Verdict"}}
-	for _, f := range d.Flows {
-		key := "flow:" + f.Name
-		verdict := ""
-		if n, ok := ann.Get(key); ok {
-			verdict = joinNote(n.Status, n.Note, "")
-		} else if f.Risk != "ok" && f.Risk != "low" {
-			verdict = "`" + key + "`"
+	// Flows, one table per set of entities they take: the question "what
+	// stops a caller substituting another Order" is asked once per entity, so
+	// the flows that share the answer sit together (ako/mxcli#2443).
+	var fbl []Block
+	for _, g := range groupFlows(d.Flows) {
+		flt := Table{Caption: g.caption(), Columns: []string{"Microflow", "Roles", "Object parameters", "Entity access", "Risk", "Triage", "Verdict"}}
+		for _, f := range g.flows {
+			key := "flow:" + f.Name
+			verdict := ""
+			if n, ok := ann.Get(key); ok {
+				verdict = joinNote(n.Status, n.Note, "")
+			} else if f.Risk != "ok" && f.Risk != "low" {
+				verdict = "`" + key + "`"
+			}
+			ea := "off"
+			if f.ApplyEntityAccess {
+				ea = "on"
+			}
+			flt.Rows = append(flt.Rows, []string{"`" + f.Name + "`", strings.Join(f.Roles, ", "), strings.Join(codeList(f.Params), ", "), ea, f.Risk, f.Triage, verdict})
+			flt.Classes = append(flt.Classes, []string{"", "", "", "", sevClass(f.Risk), "", ""})
 		}
-		ea := "off"
-		if f.ApplyEntityAccess {
-			ea = "on"
-		}
-		flt.Rows = append(flt.Rows, []string{"`" + f.Name + "`", strings.Join(f.Roles, ", "), strings.Join(codeList(f.Params), ", "), ea, f.Risk, f.Triage, verdict})
-		flt.Classes = append(flt.Classes, []string{"", "", "", "", sevClass(f.Risk), "", ""})
+		fbl = append(fbl, flt)
 	}
-	fbl := []Block{flt}
 	if !d.SourceIndexed {
 		fbl = append([]Block{Callout{Kind: "warn", Text: "Microflow bodies were not indexed, so no flow can be seen to check its caller. Run without `--no-source`."}}, fbl...)
 	}
@@ -893,4 +898,72 @@ func sevClass(s string) string {
 		return "ok"
 	}
 	return ""
+}
+
+// flowGroup is the callable flows that take the same persistent entities.
+type flowGroup struct {
+	takes string
+	flows []CallableFlow
+	worst int
+}
+
+func (g flowGroup) caption() string {
+	n := map[string]int{}
+	for _, f := range g.flows {
+		n[f.Risk]++
+	}
+	noun := "flows"
+	if len(g.flows) == 1 {
+		noun = "flow"
+	}
+	c := fmt.Sprintf("Takes %s · %d %s", g.takes, len(g.flows), noun)
+	for _, r := range []string{"high", "medium"} {
+		if n[r] > 0 {
+			c += fmt.Sprintf(" · %d %s", n[r], r)
+		}
+	}
+	return c
+}
+
+// groupFlows groups flows by the entities of their object parameters, the
+// group with the worst risk first, then by entity.
+func groupFlows(flows []CallableFlow) []flowGroup {
+	byKey := map[string]*flowGroup{}
+	var keys []string
+	for _, f := range flows {
+		var ents []string
+		for _, p := range f.Params {
+			if _, t, ok := strings.Cut(p, ": "); ok {
+				_, ent, _ := strings.Cut(t, ":") // Object:Shop.Order, List:Shop.Order
+				ents = appendUnique(ents, "`"+ent+"`")
+			}
+		}
+		sort.Strings(ents)
+		k := strings.Join(ents, " + ")
+		g := byKey[k]
+		if g == nil {
+			g = &flowGroup{takes: k}
+			byKey[k] = g
+			keys = append(keys, k)
+		}
+		g.flows = append(g.flows, f)
+		if r := riskRank(f.Risk); r > g.worst {
+			g.worst = r
+		}
+	}
+	out := make([]flowGroup, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, *byKey[k])
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].worst != out[j].worst {
+			return out[i].worst > out[j].worst
+		}
+		return out[i].takes < out[j].takes
+	})
+	return out
+}
+
+func riskRank(r string) int {
+	return map[string]int{"high": 3, "medium": 2, "low": 1}[r]
 }

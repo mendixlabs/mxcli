@@ -242,3 +242,28 @@ func TestCallableFlowFollowsSubMicroflows(t *testing.T) {
 		t.Errorf("ACT_Archive writes through SUB_Commit: risk %q, writes %v via %q (%s)", fl.Risk, fl.Writes, fl.WritesVia, fl.Triage)
 	}
 }
+
+// Callable flows are grouped by what they take, the riskiest group first.
+func TestCallableFlowsGroupedByWhatTheyTake(t *testing.T) {
+	f := securityFixture(t)
+	d, err := CollectSecurity(f.cat, SecurityInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, _ := NewEnvelope("security", "Shop", "now", "test", d, SecurityMethod, SecurityLimits, nil)
+	doc, err := RenderSecurity(env, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var md bytes.Buffer
+	_ = RenderMarkdown(&md, doc)
+	out := md.String()
+	order := strings.Index(out, "**Takes `Shop.Order` · 2 flows · 1 high**")
+	customer := strings.Index(out, "**Takes `Shop.Customer` · 1 flow · 1 high**")
+	if order < 0 || customer < 0 {
+		t.Fatalf("want one captioned table per parameter entity:\n%s", out[strings.Index(out, "Client-callable"):])
+	}
+	if customer > order {
+		t.Error("groups with the same worst risk are ordered by entity")
+	}
+}
