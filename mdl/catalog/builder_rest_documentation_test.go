@@ -28,3 +28,21 @@ func TestPublishedRestServiceDocumentationReachesCatalog_Issue1510(t *testing.T)
 		t.Errorf("undocumented service: got %v, want one empty Documentation", rows)
 	}
 }
+
+// A published REST service's authentication reaches the catalog, as a
+// published OData service's does, so `report configuration` can say which
+// services need callers set up (ako/mxcli#2426).
+func TestPublishedRestServiceAuthenticationReachesCatalog(t *testing.T) {
+	svc := oneService()
+	svc.AuthenticationTypes = []string{"Basic", "Session"}
+	cat := restFixture(t, svc)
+	rows := queryRows(t, cat, `SELECT AuthenticationTypes FROM published_rest_services WHERE QualifiedName = 'Sales.OrdersApi'`)
+	if len(rows) != 1 || rows[0][0] != "Basic, Session" {
+		t.Errorf("AuthenticationTypes = %v, want \"Basic, Session\"", rows)
+	}
+	// Control: a service without authentication stays empty.
+	rows = queryRows(t, restFixture(t, oneService()), `SELECT AuthenticationTypes FROM published_rest_services`)
+	if len(rows) != 1 || rows[0][0] != "" {
+		t.Errorf("no authentication: got %v, want one empty value", rows)
+	}
+}

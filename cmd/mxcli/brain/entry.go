@@ -30,6 +30,10 @@ type Kind string
 const (
 	KindDecision    Kind = "decision"
 	KindRequirement Kind = "requirement"
+	// KindQuestion is how a listing reports an open question. It is not
+	// stored: an open question is a decision (or a slice's entry) with OPEN
+	// on its metadata line, and EntryKind reads it as a decision.
+	KindQuestion Kind = "question"
 )
 
 // Entry is one recorded piece of project knowledge.

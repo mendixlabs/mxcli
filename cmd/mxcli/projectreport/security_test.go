@@ -51,6 +51,8 @@ func securityFixture(t *testing.T) *fixture {
 	f.permission("Shop.User", "ENTITY", "Shop.Order", "READ", "[Shop.Order_Customer = '[%CurrentUser%]']")
 	f.permission("Shop.Admin", "ENTITY", "Shop.Order", "READ", "")
 	f.permission("Shop.Admin", "ENTITY", "Shop.Order", "WRITE", "")
+	f.permission("Shop.Admin", "ENTITY", "Shop.Order", "DELETE", "")
+	f.permission("Shop.User", "ENTITY", "Shop.Customer", "CREATE", "")
 	// Acts for "me", taken from the page: the substitution the prototype proved.
 	f.microflow("Shop.ACT_Subscribe", true, "")
 	f.param("Shop.ACT_Subscribe", "Customer", "Object:Shop.Customer")
@@ -61,10 +63,10 @@ func securityFixture(t *testing.T) *fixture {
 	f.param("Shop.ACT_Cancel", "Order", "Object:Shop.Order")
 	f.permission("Shop.User", "MICROFLOW", "Shop.ACT_Cancel", "EXECUTE", "")
 	f.source("Shop.ACT_Cancel", "if $Order/Shop.Order_Customer = $currentUser then ... end")
-	// Entity access off and it writes.
+	// Entity access off, it writes, and the role may read every order.
 	f.microflow("Shop.ACT_Delete", false, "")
 	f.param("Shop.ACT_Delete", "Order", "Object:Shop.Order")
-	f.permission("Shop.User", "MICROFLOW", "Shop.ACT_Delete", "EXECUTE", "")
+	f.permission("Shop.Admin", "MICROFLOW", "Shop.ACT_Delete", "EXECUTE", "")
 	f.ref("Shop.ACT_Delete", "MICROFLOW", "Shop.Order", "ENTITY", "delete")
 
 	f.constant("Shop.EncryptionKey", "String", "q8Zr0d5m3l9xS2tVb6wYcA==", false)
@@ -106,14 +108,16 @@ func TestSecurityReview(t *testing.T) {
 	if _, ok := ids["constant-secret:Shop.LocalStorageKey"]; ok {
 		t.Error("a storage key name is not a secret")
 	}
-	var order GridRow
+	grid := map[string]GridRow{}
 	for _, g := range d.Grid {
-		if g.Entity == "Shop.Order" {
-			order = g
-		}
+		grid[g.Entity] = g
 	}
-	if order.Access["User"] != "R via user" || order.Access["Admin"] != "RW all" {
+	// Create and delete are their own letters, not folded into W.
+	if order := grid["Shop.Order"]; order.Access["User"] != "R via user" || order.Access["Admin"] != "RWD all" {
 		t.Errorf("grid for Shop.Order = %v", order.Access)
+	}
+	if c := grid["Shop.Customer"]; c.Access["User"] != "C" {
+		t.Errorf("grid for Shop.Customer = %v, want User C (create only)", c.Access)
 	}
 
 	// A fixed finding no longer counts as open; its status shows.
@@ -198,4 +202,119 @@ func TestSecurityLintVerdictComesFromTheBrain(t *testing.T) {
 	var md bytes.Buffer
 	_ = RenderMarkdown(&md, doc)
 	mustContain(t, md.String(), "| SEC001 | warning | 2 |  | accepted (brain d1, d2) |", "1 of 2 accepted (brain d3)")
+}
+
+// What a flow does through its sub-microflows counts, but only on the
+// entities it takes: a sub that checks the caller on the same entity is a
+// check to confirm, and a write in a sub is a write (ako/mxcli#2443). A toast
+// helper stamping the caller on a Toast, or creating the caller's own cart
+// line, says nothing about the object the client passed in (both seen on
+// ako/PizzaV1, where they turned 19 flows "ok").
+func TestCallableFlowFollowsSubMicroflows(t *testing.T) {
+	f := securityFixture(t)
+	f.entity("Shop.Toast", "PERSISTENT", "")
+	f.entity("Shop.Line", "PERSISTENT", "")
+	// Checks the caller on Order through a sub.
+	f.microflow("Shop.DS_Info", true, "")
+	f.param("Shop.DS_Info", "Order", "Object:Shop.Order")
+	f.permission("Shop.User", "MICROFLOW", "Shop.DS_Info", "EXECUTE", "")
+	f.call("Shop.DS_Info", "Shop.SUB_Current")
+	f.microflow("Shop.SUB_Current", true, "")
+	f.source("Shop.SUB_Current", "retrieve $Mine from Shop.Order where Shop.Order_Customer = '[%CurrentUser%]';")
+	f.ref("Shop.SUB_Current", "MICROFLOW", "Shop.Order_Customer", "ASSOCIATION", "xpath")
+	// Its sub checks the caller on a Toast only, and it creates its own Line.
+	f.microflow("Shop.ACT_Note", false, "")
+	f.param("Shop.ACT_Note", "Order", "Object:Shop.Order")
+	f.permission("Shop.User", "MICROFLOW", "Shop.ACT_Note", "EXECUTE", "")
+	f.call("Shop.ACT_Note", "Shop.SUB_Toast")
+	f.ref("Shop.ACT_Note", "MICROFLOW", "Shop.Line", "ENTITY", "create")
+	f.microflow("Shop.SUB_Toast", true, "")
+	f.source("Shop.SUB_Toast", "$T = create Shop.Toast (Toast_Owner = [%CurrentUser%]);")
+	f.ref("Shop.SUB_Toast", "MICROFLOW", "Shop.Toast", "ENTITY", "create")
+	// Entity access off, writes the Order only through a sub, for a role
+	// that reads every order.
+	f.microflow("Shop.ACT_Archive", false, "")
+	f.param("Shop.ACT_Archive", "Order", "Object:Shop.Order")
+	f.permission("Shop.Admin", "MICROFLOW", "Shop.ACT_Archive", "EXECUTE", "")
+	// The same for a role that reads only its own orders: the read rule
+	// bounds what can be substituted.
+	f.microflow("Shop.ACT_Reorder", false, "")
+	f.param("Shop.ACT_Reorder", "Order", "Object:Shop.Order")
+	f.permission("Shop.User", "MICROFLOW", "Shop.ACT_Reorder", "EXECUTE", "")
+	f.call("Shop.ACT_Reorder", "Shop.SUB_Commit")
+	f.call("Shop.ACT_Archive", "Shop.SUB_Commit")
+	f.microflow("Shop.SUB_Commit", false, "")
+	f.ref("Shop.SUB_Commit", "MICROFLOW", "Shop.Order", "ENTITY", "commit")
+
+	d, err := CollectSecurity(f.cat, SecurityInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]CallableFlow{}
+	for _, fl := range d.Flows {
+		got[fl.Name] = fl
+	}
+	if fl := got["Shop.DS_Info"]; fl.Risk != "low" || fl.CheckedBy != "Shop.SUB_Current" || !strings.Contains(fl.Triage, "confirm") {
+		t.Errorf("DS_Info: a sub checks the caller on Order: risk %q, checkedBy %q (%s)", fl.Risk, fl.CheckedBy, fl.Triage)
+	}
+	if fl := got["Shop.ACT_Note"]; fl.CheckedBy != "" || fl.Writes || fl.Risk != "medium" {
+		t.Errorf("ACT_Note: a Toast check and its own Line are not about the Order: risk %q, checkedBy %q, writes %v (%s)", fl.Risk, fl.CheckedBy, fl.Writes, fl.Triage)
+	}
+	if fl := got["Shop.ACT_Archive"]; fl.Risk != "high" || !fl.Writes || fl.WritesVia != "Shop.SUB_Commit" {
+		t.Errorf("ACT_Archive writes the Order through SUB_Commit: risk %q, writes %v via %q (%s)", fl.Risk, fl.Writes, fl.WritesVia, fl.Triage)
+	}
+	if fl := got["Shop.ACT_Reorder"]; fl.Risk != "medium" || !strings.Contains(fl.Triage, "limited to what the granted roles read (via user)") {
+		t.Errorf("ACT_Reorder: a narrow read rule bounds the substitution: risk %q (%s)", fl.Risk, fl.Triage)
+	}
+}
+
+// Callable flows are grouped by what they take, the riskiest group first.
+func TestCallableFlowsGroupedByWhatTheyTake(t *testing.T) {
+	f := securityFixture(t)
+	d, err := CollectSecurity(f.cat, SecurityInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, _ := NewEnvelope("security", "Shop", "now", "test", d, SecurityMethod, SecurityLimits, nil)
+	doc, err := RenderSecurity(env, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var md bytes.Buffer
+	_ = RenderMarkdown(&md, doc)
+	out := md.String()
+	order := strings.Index(out, "**Takes `Shop.Order` · 2 flows · 1 high**")
+	customer := strings.Index(out, "**Takes `Shop.Customer` · 1 flow · 1 high**")
+	if order < 0 || customer < 0 {
+		t.Fatalf("want one captioned table per parameter entity:\n%s", out[strings.Index(out, "Client-callable"):])
+	}
+	if customer > order {
+		t.Error("groups with the same worst risk are ordered by entity")
+	}
+}
+
+// The settings section shows every switch and constant default, also the
+// fine ones, and never prints a default that looks like a secret.
+func TestSecuritySettingsAndDefaults(t *testing.T) {
+	f := securityFixture(t)
+	d, err := CollectSecurity(f.cat, SecurityInput{Settings: SecuritySettings{Known: true, Level: "CheckEverything", StrictMode: true, PasswordMinLength: 12}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, _ := NewEnvelope("security", "Shop", "now", "test", d, SecurityMethod, SecurityLimits, nil)
+	doc, err := RenderSecurity(env, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var md bytes.Buffer
+	_ = RenderMarkdown(&md, doc)
+	out := md.String()
+	mustContain(t, out, "## Settings and defaults",
+		"| Security level | Production | entity access rules are enforced |",
+		"| Strict mode | on |", "| Anonymous access | off |",
+		"| `Shop.LocalStorageKey` | String | `shop-cart` | yes |",
+		"| `Shop.EncryptionKey` | String | •••• (24 characters) |")
+	if strings.Contains(out, "q8Zr0d5m3l9xS2tVb6wYcA==") {
+		t.Error("a key-like default must not be printed")
+	}
 }

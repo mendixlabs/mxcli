@@ -7,6 +7,13 @@ package catalog
 //
 // History:
 //
+//	49 (constant base URL, published REST authentication):
+//	    consumed_rest_services gains BaseUrlConstant, the constant a REST
+//	    client reads its base URL from; BaseUrl held only a literal, so a
+//	    client configured per environment read as having no base URL at all.
+//	    published_rest_services gains AuthenticationTypes, as
+//	    published_odata_services has (ako/mxcli#2426). Without the bump a
+//	    cached catalog lacks the columns and `report configuration` fails.
 //	48 (workflow activities): new workflow_activities table, one row per
 //	    activity of a workflow — boundary-event paths and event sub-processes
 //	    included — with its kind and the microflow, page or workflow each of
@@ -262,7 +269,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "48"
+const CatalogSchemaVersion = "49"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -1294,6 +1301,7 @@ func (c *Catalog) createTables() error {
 			ModuleName TEXT,
 			Folder TEXT,
 			BaseUrl TEXT,
+			BaseUrlConstant TEXT,
 			AuthScheme TEXT,
 			OperationCount INTEGER DEFAULT 0,
 			Documentation TEXT,
@@ -1335,6 +1343,7 @@ func (c *Catalog) createTables() error {
 			ResourceCount INTEGER DEFAULT 0,
 			OperationCount INTEGER DEFAULT 0,
 			Documentation TEXT,
+			AuthenticationTypes TEXT,
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,

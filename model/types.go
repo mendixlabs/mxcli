@@ -915,14 +915,18 @@ type PublishedRestOperationParameter struct {
 // ConsumedRestService represents a Rest$ConsumedRestService document.
 type ConsumedRestService struct {
 	BaseElement
-	ContainerID    ID                     `json:"containerId"`
-	Name           string                 `json:"name"`
-	Documentation  string                 `json:"documentation,omitempty"`
-	Excluded       bool                   `json:"excluded,omitempty"`
-	BaseUrl        string                 `json:"baseUrl"`
-	Authentication *RestAuthentication    `json:"authentication,omitempty"`
-	Operations     []*RestClientOperation `json:"operations,omitempty"`
-	OpenApiContent string                 `json:"openApiContent,omitempty"` // raw spec text (stored in OpenApiFile.Content BSON field)
+	ContainerID   ID     `json:"containerId"`
+	Name          string `json:"name"`
+	Documentation string `json:"documentation,omitempty"`
+	Excluded      bool   `json:"excluded,omitempty"`
+	BaseUrl       string `json:"baseUrl"`
+	// BaseUrlConstant is the constant the base URL is read from, when the
+	// service takes it from one instead of a literal (Rest$ConstantValue);
+	// BaseUrl is then empty.
+	BaseUrlConstant string                 `json:"baseUrlConstant,omitempty"`
+	Authentication  *RestAuthentication    `json:"authentication,omitempty"`
+	Operations      []*RestClientOperation `json:"operations,omitempty"`
+	OpenApiContent  string                 `json:"openApiContent,omitempty"` // raw spec text (stored in OpenApiFile.Content BSON field)
 }
 
 // GetName returns the service's name.

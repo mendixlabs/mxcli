@@ -137,6 +137,8 @@ type JSONReport struct {
 	Modules      []string `json:"modules,omitempty"`
 	OverallScore float64  `json:"overallScore"`
 	Accepted     int      `json:"accepted,omitempty"`
+	// AcceptedByRule is Accepted per rule id (ako/mxcli#2427).
+	AcceptedByRule map[string]int `json:"acceptedByRule,omitempty"`
 	// Builds is the consistency check's verdict: true or false, or absent
 	// when the check was not run (ako/mxcli#2423).
 	Builds      *bool             `json:"builds,omitempty"`
@@ -159,11 +161,12 @@ type JSONSummary struct {
 
 func (f *JSONReportFormatter) FormatReport(report *Report, w io.Writer) error {
 	jr := JSONReport{
-		ProjectName:  report.ProjectName,
-		Date:         report.Date,
-		Modules:      report.Modules,
-		OverallScore: report.OverallScore,
-		Accepted:     report.Accepted,
+		ProjectName:    report.ProjectName,
+		Date:           report.Date,
+		Modules:        report.Modules,
+		OverallScore:   report.OverallScore,
+		Accepted:       report.Accepted,
+		AcceptedByRule: report.AcceptedByRule,
 		Summary: JSONSummary{
 			Total:    report.Summary.Total,
 			Errors:   report.Summary.Errors,

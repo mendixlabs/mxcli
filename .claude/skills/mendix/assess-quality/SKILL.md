@@ -10,15 +10,15 @@ description: "Write a full quality assessment of a Mendix project: the mxcli rep
 
 | lines | section |
 |---|---|
-| 31-54 | Step 1: Run the reports |
-| 55-209 | Step 2: Manual review |
-| 210-216 | Step 3: Write the assessment |
-| 217-219 | Summary |
-| 220-231 | Measured |
-| 232-234 | Reviewed by hand |
-| 235-237 | Recommendations |
-| 238-242 | Not assessed |
-| 243-249 | Sources |
+| 31-60 | Step 1: Run the reports |
+| 61-215 | Step 2: Manual review |
+| 216-222 | Step 3: Write the assessment |
+| 223-225 | Summary |
+| 226-237 | Measured |
+| 238-240 | Reviewed by hand |
+| 241-243 | Recommendations |
+| 244-248 | Not assessed |
+| 249-255 | Sources |
 
 <!-- /skill-index -->
 # Assess Mendix Project Quality
@@ -29,6 +29,10 @@ manual review below: whether names say what a flow does, whether the folder and 
 structure make sense, whether error handling is designed or accidental.
 
 ## Step 1: Run the reports
+
+`mxcli report all -p app.mpr -o docs/reports` runs every report below into one folder
+with an overview page (add `--against <deployed>` for the release report, `--journeys`
+and `--spans` for performance). Or run them one by one:
 
 | Question | Report | Skill |
 |---|---|---|
@@ -41,6 +45,8 @@ structure make sense, whether error handling is designed or accidental.
 | What is in it, for someone new? | `mxcli report map` | `report-map` |
 | What does the next deploy do to production data? | `mxcli report release --against <deployed>` | `report-release` |
 | Are its dependencies current and safe? | `mxcli report dependencies` | `report-dependencies` |
+| What must each environment supply? | `mxcli report configuration` | `report-configuration` |
+| Taken together: go or no-go? | `mxcli report readiness` (also written by `report all`) | `report-readiness` |
 | Does it build? | `mxcli report` (its **Builds** line), or `mxcli docker check` | `report-quality`, `/validate-project` |
 
 Read each report's skill before interpreting it — every one has traps (the quality
