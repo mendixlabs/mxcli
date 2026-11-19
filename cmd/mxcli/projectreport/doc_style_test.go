@@ -4,6 +4,7 @@ package projectreport
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -64,11 +65,56 @@ func TestQualityDocBarsHaveAFill(t *testing.T) {
 	r.Consistency = &linter.ConsistencyCheck{Ran: true, Errors: 2, Findings: []linter.ConsistencyFinding{
 		{Severity: "error", Code: "CE0117", Message: "x", Module: "Shop", Document: "Microflow 'A'"},
 		{Severity: "error", Code: "CE0117", Message: "x", Module: "Shop", Document: "Microflow 'B'"}}}
-	h := htmlOf(t, QualityDoc(r, "Shop", r.Date, "1.0"))
+	h := htmlOf(t, QualityDoc(r, "Shop", r.Date, "1.0", nil))
 	for _, want := range []string{`<div class="meter good"><i style="width:90.0%"></i>`, `.meter.good i{background:var(--good)}`,
 		"Shop · Quality score · 2026-11-19", "It does not build", "Does it build?", "CE0117", "SEC001"} {
 		if !strings.Contains(h, want) {
 			t.Errorf("quality page lacks %s", want)
 		}
+	}
+}
+
+// ako/mxcli#2443: the scored page explains its number — weights and what each
+// category costs the headline, the penalty against the floor, the points each
+// rule's fixes would gain (scored again without them), and a verdict per rule.
+func TestQualityDocExplainsTheScore(t *testing.T) {
+	var vs []linter.Violation
+	add := func(rule string, sev linter.Severity, n int, module string) {
+		for i := 0; i < n; i++ {
+			vs = append(vs, linter.Violation{RuleID: rule, Severity: sev, Message: "m", Location: linter.Location{Module: module, DocumentName: "D"}})
+		}
+	}
+	add("MPR006", linter.SeverityInfo, 120, "Shop")   // Quality: 120 points, past the floor
+	add("MPR002", linter.SeverityWarning, 40, "Core") // Quality too: 120 points on its own
+	add("SEC001", linter.SeverityError, 2, "Shop")    // Security: 80
+	r := linter.BuildReport("Shop", "2026-11-19 10:00:00", vs)
+	r.AcceptedByRule = map[string]int{"SEC001": 1, "SEC013": 1}
+	d := QualityDoc(r, "Shop", r.Date, "1.0", &Annotations{Items: map[string]Note{"rule:MPR002": {Status: "by design", Note: "placeholder flows"}}})
+	var md bytes.Buffer
+	_ = RenderMarkdown(&md, d)
+	m := md.String()
+	for _, want := range []string{
+		"MPR006 × 120", "fixing them all gains nothing: Quality stays past the floor",
+		"240 · 140 past", // 120 info + 40 warnings × 3
+		"by design: placeholder flows", "accepted in the brain", "`SEC013`",
+		"Fix `SEC001` (2 finding(s), Security): +",
+	} {
+		if !strings.Contains(m, want) {
+			t.Errorf("quality page lacks %q", want)
+		}
+	}
+	if strings.Contains(m, "Fix `MPR002`") || strings.Contains(m, "Fix `MPR006`") {
+		t.Error("a rule with a verdict, or whose fixes gain nothing, is not recommended")
+	}
+	// The gain is what scoring again without the rule's findings gives.
+	var rest []linter.Violation
+	for _, v := range vs {
+		if v.RuleID != "SEC001" {
+			rest = append(rest, v)
+		}
+	}
+	want := linter.BuildReport("Shop", r.Date, rest).OverallScore - r.OverallScore
+	if !strings.Contains(m, fmt.Sprintf("| `SEC001` | Security | error | 2 | 1 | %.1f |", want)) {
+		t.Errorf("SEC001 row should gain %.1f:\n%s", want, m)
 	}
 }

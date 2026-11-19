@@ -67,6 +67,7 @@ mappings) are left out, and the report names the selection.
 		projectPath, _ := cmd.Flags().GetString("project")
 		format := resolveFormat(cmd, "markdown")
 		outputPath, _ := cmd.Flags().GetString("output")
+		annPath, _ := cmd.Flags().GetString("annotations")
 		if projectPath == "" {
 			fmt.Fprintln(os.Stderr, "Error: --project (-p) is required")
 			os.Exit(1)
@@ -101,7 +102,12 @@ mappings) are left out, and the report names the selection.
 		if format == "html" {
 			// The scored report's page is the shared look every report kind
 			// uses (ako/mxcli#2443); markdown and JSON stay the linter's.
-			doc := projectreport.QualityDoc(report, projectName, report.Date, version)
+			ann, err := projectreport.LoadAnnotations(annPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading annotations: %v\n", err)
+				os.Exit(1)
+			}
+			doc := projectreport.QualityDoc(report, projectName, report.Date, version, ann)
 			if err := projectreport.RenderHTML(writer, doc); err != nil {
 				fmt.Fprintf(os.Stderr, "Error formatting report: %v\n", err)
 				os.Exit(1)
@@ -207,6 +213,12 @@ func buildScoredReport(cmd *cobra.Command, projectPath string, reportProgress io
 	)
 	report.Modules = moduleFilter
 	report.Accepted = len(acceptances.accepted)
+	if len(acceptances.accepted) > 0 {
+		report.AcceptedByRule = map[string]int{}
+		for _, a := range acceptances.accepted {
+			report.AcceptedByRule[a.Violation.RuleID]++
+		}
+	}
 	// Whether it builds, from Mendix's own check (ako/mxcli#2423).
 	consistency, err := reportConsistency(cmd, projectPath, os.Stderr)
 	if err != nil {

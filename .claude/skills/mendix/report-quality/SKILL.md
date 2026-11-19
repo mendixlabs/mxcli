@@ -12,9 +12,9 @@ description: "Produce and read the scored quality report (mxcli report): every l
 |---|---|
 | 29-48 | Run it |
 | 49-72 | Before trusting the number |
-| 73-92 | Reading the score |
-| 93-113 | Accepting a finding |
-| 114-120 | Related |
+| 73-98 | Reading the score |
+| 99-119 | Accepting a finding |
+| 120-126 | Related |
 
 <!-- /skill-index -->
 # Quality Report
@@ -89,6 +89,12 @@ Two consequences:
 The **Detailed Findings** table is what to work through: the rule, its severity, where,
 and why. `mxcli lint -p app.mpr` gives the same findings for one module or one
 document (`--modules`, `--documents`) while fixing them.
+
+The HTML page (`--format html`) does this arithmetic for you: each category's weight
+and what it costs the headline, its penalty against the floor, and per rule the points
+fixing it would gain — so "fix the most frequent rule" can be checked before anyone
+does it (on one app, 94 findings of one rule gained nothing, because their category
+stayed past the floor). `--annotations` with `rule:<ID>` gives a rule a verdict.
 
 ## Accepting a finding
 

@@ -141,7 +141,11 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 		}
 		switch {
 		case p.quality != nil:
-			doc := projectreport.QualityDoc(p.quality, project, p.quality.Date, version)
+			ann, err := projectreport.LoadAnnotations(existing(filepath.Join(dir, "quality-annotations.yaml")))
+			if err != nil {
+				return fmt.Errorf("quality annotations: %w", err)
+			}
+			doc := projectreport.QualityDoc(p.quality, project, p.quality.Date, version, ann)
 			doc.Nav = navFor(p.kind)
 			p.doc = &doc
 			if err := writeFileWith(filepath.Join(dir, "quality.json"), func(w io.Writer) error {
