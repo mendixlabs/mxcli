@@ -126,3 +126,35 @@ func TestInlineLinksOnlyToReportPages(t *testing.T) {
 		t.Errorf("only relative .html pages are linked: %s", got)
 	}
 }
+
+// A report that was given its inputs but failed says "failed: <why>", not
+// "not given": the evidence exists and broke, which calls for a different
+// action than evidence never collected (ako/mxcli#2452).
+func TestReadinessSaysFailedNotNotGiven(t *testing.T) {
+	in := everythingGiven()
+	in.Tests = nil
+	in.Performance = nil
+	in.Failed = map[string]string{"tests": "the test run failed: docker up: exit status 1"}
+	d := ComputeReadiness(in)
+	note := map[string]string{}
+	for _, s := range d.Sources {
+		note[s.Kind] = s.Note
+	}
+	if note["tests"] != "failed: the test run failed: docker up: exit status 1" {
+		t.Errorf("tests note = %q", note["tests"])
+	}
+	if !strings.HasPrefix(note["performance"], "not given") {
+		t.Errorf("performance was not given: %q", note["performance"])
+	}
+
+	// Given, rendered, but without test results: the report's own warning says why.
+	in = everythingGiven()
+	in.Tests.HasResults = false
+	in.Warnings = map[string][]string{"tests": {"Test results file `out/junit.xml` does not exist: no test results were read."}}
+	d = ComputeReadiness(in)
+	for _, s := range d.Sources {
+		if s.Kind == "tests" && (s.Assessed || !strings.Contains(s.Note, "out/junit.xml` does not exist")) {
+			t.Errorf("tests source = %+v", s)
+		}
+	}
+}

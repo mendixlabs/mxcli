@@ -80,6 +80,10 @@ type reportPage struct {
 	env     *projectreport.Envelope // nil for the scored report
 	quality *linter.Report
 	missing string
+	// failed is set when the kind was given its inputs and still could not
+	// run; missing then says why. Readiness reports it as failed, not as
+	// not given (ako/mxcli#2452).
+	failed bool
 }
 
 func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]bool, log io.Writer) error {
@@ -94,7 +98,7 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 		if kind == "quality" {
 			r, _, err := buildScoredReport(reportCmd, projectPath, io.Discard)
 			if err != nil {
-				p.missing = err.Error()
+				p.missing, p.failed = err.Error(), true
 			} else {
 				p.quality = r
 			}
@@ -117,7 +121,7 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 		}
 		env, err := rk.spec.collect(rk.cmd, projectPath)
 		if err != nil {
-			p.missing = err.Error()
+			p.missing, p.failed = err.Error(), true
 		} else {
 			p.env = env
 		}
@@ -385,6 +389,12 @@ func writeReadiness(cmd *cobra.Command, dir, project string, pages []reportPage,
 	in, err := projectreport.ReadinessInputFrom(envs, quality, ann)
 	if err != nil {
 		return card, err
+	}
+	in.Failed = map[string]string{}
+	for _, p := range pages {
+		if p.failed {
+			in.Failed[p.kind] = p.missing
+		}
 	}
 	signOff, err := projectreport.LoadAnnotations(existing(filepath.Join(dir, "readiness-annotations.yaml")))
 	if err != nil {

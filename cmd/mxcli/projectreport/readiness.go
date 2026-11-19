@@ -32,6 +32,11 @@ type ReadinessInput struct {
 	// SignOff is the readiness page's own annotations: readiness:<key> with
 	// status "signed off" moves a blocking item to Accepted.
 	SignOff *Annotations
+	// Failed names the reports that were given their inputs but could not
+	// run, with why; Warnings are each report's own warnings. Both turn a
+	// "not given" into what actually happened (ako/mxcli#2452).
+	Failed   map[string]string
+	Warnings map[string][]string
 	// Milestone, when set, makes its unbuilt requirements blocking.
 	Milestone string
 	// BudgetMs is the server time a journey step may take; 0 means none.
@@ -111,6 +116,13 @@ func ComputeReadiness(in ReadinessInput) *ReadinessData {
 		d.Accepted = append(d.Accepted, ReadinessItem{Key: key, Source: src, Text: text, Note: note})
 	}
 	source := func(kind string, given, decides bool, note string) {
+		switch {
+		case !given && in.Failed[kind] != "":
+			// Given, and broke: a different action than evidence never collected.
+			note = "failed: " + firstLine(in.Failed[kind])
+		case note != "" && len(in.Warnings[kind]) > 0:
+			note += " — " + firstLine(in.Warnings[kind][0])
+		}
 		d.Sources = append(d.Sources, ReadinessSource{Kind: kind, Assessed: given && note == "", Decides: decides, Note: note})
 	}
 	resolved := func(kind, key string) (Note, bool) {
@@ -484,7 +496,12 @@ var ReadinessKinds = []string{"quality", "release", "dependencies", "configurati
 // ReadinessInputFrom decodes the other reports' envelopes. A kind missing
 // from envs stays nil: not given.
 func ReadinessInputFrom(envs map[string]*Envelope, quality *linter.JSONReport, ann map[string]*Annotations) (ReadinessInput, error) {
-	in := ReadinessInput{Quality: quality, Annotations: ann}
+	in := ReadinessInput{Quality: quality, Annotations: ann, Warnings: map[string][]string{}}
+	for kind, env := range envs {
+		if env != nil && len(env.Warnings) > 0 {
+			in.Warnings[kind] = env.Warnings
+		}
+	}
 	var errs []string
 	note := func(err error) {
 		if err != nil {
