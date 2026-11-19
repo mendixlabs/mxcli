@@ -54,7 +54,9 @@ Exit codes:
           (18 = lint failed, 22 = lint and mxcheck failed)
 
 --format json prints one document: a list of stages with status, duration and
-the new findings of each, and the exit code.
+every new finding of each, and the exit code. The text output lists only the new
+findings that fail the gate at --fail-on and counts the rest by severity, with the
+command that accepts them.
 
 Examples:
   mxcli verify -p app.mpr --update-baseline     # record the current state
@@ -133,7 +135,7 @@ func runVerify(cmd *cobra.Command, scripts []string) int {
 			return verify.ExitUsage
 		}
 	} else {
-		verify.WriteText(os.Stdout, res)
+		verify.WriteText(os.Stdout, res, failOn)
 	}
 	return res.Exit
 }

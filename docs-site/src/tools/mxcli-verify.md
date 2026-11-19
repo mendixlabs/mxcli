@@ -32,7 +32,14 @@ says so.
 
 Every selected stage runs, so one result carries every stage's findings. `--fail-fast` stops at
 the first stage that fails. `--fail-on warning` makes a new warning fail a stage (the default is
-errors). `--format json` prints one document with each stage's status, duration and new findings.
+errors). `--format json` prints one document with each stage's status, duration and every new finding.
+
+The text output lists only the new findings that would fail the gate at `--fail-on`, and counts the
+rest by severity. A baseline taken on a blank app leaves most of a built app's lint findings "new"
+(documentation, access-rule notes); listing them would bury the one that matters. When there are
+any, the output ends with the command that accepts them, scoped to the stages that have them
+(`--stages lint --update-baseline`), because `--update-baseline` records every selected stage.
+Review them first: re-recording is how a finding becomes accepted.
 
 ## Exit codes
 
