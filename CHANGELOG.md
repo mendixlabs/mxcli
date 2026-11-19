@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A freshly built catalog is one database again, so an iterator no longer fails while its neighbours work** (ako/mxcli#2417) — on a run that built the catalog rather than loading it, `lint` could report `could not read the catalog for AttributesFor: no such table: attributes` while `Entities` returned rows in the same run on the same handle, and the next identical run was correct. `catalog.New()` opened `:memory:`, where **every connection is its own separate, empty database**, and `sql.Open` hands back a pool — so the schema landed on one connection and a query the pool served on another saw nothing. Which iterator broke was pool timing, which is why it reproduced on one project and not another. The in-memory catalog now uses a uniquely named shared-cache DSN with one pinned connection, so every pooled connection sees the same database. Measured: the first `lint` of a fresh project reports what the second always did, and reverting only the DSN brings the old error back.
+
+  Two knock-on fixes. A fresh catalog's snapshot `ObjectCount` was counted as **0**, because `updateSnapshotCount` read through the pool while the build transaction was open and so could not see the rows that transaction had just written; it now reads through the transaction. And `foreign_keys` was set with `Exec`, which reaches only the one pooled connection it runs on, so the pragma was off for most queries — on both the in-memory and the file path. It now rides in the DSN, as the busy timeout already did for exactly this reason.
+
+  Not the fix, recorded because it looks like one: pinning the pool to a single connection also makes the catalog one database and **deadlocks**. The readers nest — `Entities()` yields from an open cursor while the loop body calls `AttributesFor()` — so the inner read waits forever for the connection the outer cursor holds, and a lint run that took seconds hung past 600s.
+
 ### Added
 
 - **Lint `MPR017`: a Boolean flag a decision tests but which can only ever hold one value** (ako/mxcli#2403) — the branch it guards is unreachable, and the flow reads as though it has a safety interlock when it has none. Nothing else reports it: the model is valid and the build is clean.
