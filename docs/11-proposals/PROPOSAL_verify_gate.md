@@ -328,7 +328,7 @@ type Stage interface {
 2. **`mxcli verify`, first release** (implemented): stages `check`, `lint`,
    `mxcheck`; `--format text|json`, the exit-code table, `--fail-fast`,
    `--fail-on`, `--strict`; and a **`lint` baseline from day one**. Baselines live
-   in `--baseline-dir` (default `.mxcli/verify` next to the project): `lint.json`
+   in `--baseline-dir` (default `verify-baseline/` next to the project, not `.mxcli/`, which `mxcli init` git-ignores: a baseline that is not committed is gone with the next fresh clone): `lint.json`
    is a plain `mxcli lint --baseline` file (so existing ones stay valid) and
    `mxcheck.json` records mx check's findings by element ID, with the checker and
    mx version, which a run must match. `lint` and `check` run as subprocesses of
@@ -336,16 +336,20 @@ type Stage interface {
    refactored. Checked on real MxBuild 11.16.1: a new defect fails (exit 20), an
    accepted one does not, a stage 0 fix is unmasked, a same-flow uncovered error
    is new.
-3. **Make `verify` the thing everything points at**: skills, `mxcli init` output
-   and the project `CLAUDE.md` guidance name `verify` as the single "did my change
-   break anything?" command. **Not in the first release, and a decision is
-   needed:** `projectGates` is the definition of done in every generated
-   `CLAUDE.md`. Adding `verify` as a seventh gate runs lint and `mx check` twice
-   and puts the file 77 bytes over its test-enforced budget; the alternative is
-   for `verify` to *replace* the `lint` and `docker check` gates, which changes
-   every project's default and needs `bootstrap-app` to record the baselines at
-   provisioning. Either way the gate tests (`init_claudemd_gates_test.go`) already
-   keep the three descriptions in step.
+3. **Make `verify` the thing everything points at** (implemented). `projectGates`,
+   the definition of done in every generated `CLAUDE.md`, now lists `verify` **in
+   place of** the separate `lint` and `docker check` gates, which it runs. Adding it
+   as a seventh gate would have run both twice and put the file over its
+   test-enforced byte budget. `report` stays: `verify` reports what is new, not how
+   good the project is. The bootstrap skill (step 9) records the baselines with
+   `verify --update-baseline` on the blank app, next to the existing quality
+   baseline, and says to commit `verify-baseline/`; the docs page and a new
+   `mxcli verify` page say the same, and `init_claudemd_gates_test.go` keeps the
+   three descriptions in step. The generated `CLAUDE.md` does not explain how to
+   record a baseline: a stage without one says so in its own output. The default
+   baseline directory moved from `.mxcli/verify` to `verify-baseline/` because
+   `mxcli init` git-ignores `.mxcli/`; an ignored baseline is lost on the next fresh
+   clone or reaped session.
 4. **`--base <git ref>`** via scratch export.
 5. **Opt-in `build`, `test`, `smoke` stages.** `smoke` is also the only stage that
    can reach the runtime-only findings listed under Evidence.
@@ -391,5 +395,10 @@ type Stage interface {
 9. **`mendix check` pre-stage:** worth a flag now, or defer until its
    false-positive rate is measured on real projects?
 10. **Default stage set** — `mxcheck` costs ~8 s once per run and is on by default.
-11. **Step 3:** add `verify` as a seventh gate, or replace `lint` and `docker check`
-    with it (see Phasing)?
+11. ~~Step 3: add `verify` as a seventh gate, or replace `lint` and `docker check`?~~
+    **Settled:** it replaces them (see Phasing).
+12. **Existing projects.** A project initialised before this change has the old gate
+    list in its `CLAUDE.md` and no `verify-baseline/`. Does `mxcli init` re-run (or
+    a new command) offer to update the list, and should the first `verify` on a
+    project with no baseline refuse with a pointer instead of reporting everything
+    as new?
