@@ -37,7 +37,7 @@ const mappingHandlerParamRule = "MDL104"
 // A microflow that cannot be found — not the script's, not the project's, or no
 // project — is not judged: exec already refuses one it cannot find, and an
 // unanswered question is not "no". A parameter's TYPE against the member it is
-// fed is a different error (CE0282) and is not judged here.
+// fed is a different error (CE0282), judged by MDL107.
 //
 // This is NOT CE0281 ("Unknown value element … selected for parameter"), which the
 // same construct raises for a MEMBER that is not in the JSON structure: exec
