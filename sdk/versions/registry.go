@@ -446,3 +446,40 @@ type FeatureStatus struct {
 func (e *FeatureEntry) DisplayName() string {
 	return strings.ReplaceAll(strings.ReplaceAll(e.Name, "_", " "), "  ", " ")
 }
+
+// Release lines, as the registry records them per major version.
+const (
+	LineLTS     = "LTS"
+	LineMTS     = "MTS"
+	LineMonthly = "monthly"
+	LineUnknown = "unknown"
+)
+
+// ReleaseLine says which release line v is on: an LTS or MTS minor recorded in
+// the registry, or a monthly release. It is unknown for a major the registry
+// does not know, and for one whose LTS and MTS lines it does not record (it
+// would otherwise call every release of it monthly). The registry has no
+// support dates, so this never says whether a line is still supported.
+func (r *Registry) ReleaseLine(v SemVer) (kind, line string) {
+	minor := fmt.Sprintf("%d.%d", v.Major, v.Minor)
+	for _, s := range r.specs {
+		if s.Major != v.Major {
+			continue
+		}
+		for _, l := range s.LTSVersions {
+			if l == minor {
+				return LineLTS, minor
+			}
+		}
+		for _, l := range s.MTSVersions {
+			if l == minor {
+				return LineMTS, minor
+			}
+		}
+		if len(s.LTSVersions) == 0 && len(s.MTSVersions) == 0 {
+			return LineUnknown, minor
+		}
+		return LineMonthly, minor
+	}
+	return LineUnknown, minor
+}

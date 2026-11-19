@@ -30,6 +30,7 @@ For reports that answer one question rather than score, use a kind:
   mxcli report traceability   requirements per milestone: built, partial, proven
   mxcli report map            interactive guide: modules, data, flows, page flows, index
   mxcli report release        what deploying this model does to production data
+  mxcli report dependencies   Mendix release line, Marketplace modules, widgets, Java library vulnerabilities
 
 Output formats:
   - markdown (default): Human-readable Markdown with tables and progress bars
