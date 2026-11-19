@@ -18,7 +18,7 @@ import (
 // Performance and release need inputs (journeys, a deployed revision) and run
 // only when they are given; an earlier run's JSON in the folder is linked
 // instead.
-var reportAllKinds = []string{"quality", "architecture", "security", "dependencies", "tests", "traceability", "performance", "release", "map"}
+var reportAllKinds = []string{"quality", "architecture", "security", "configuration", "dependencies", "tests", "traceability", "performance", "release", "map"}
 
 var reportAllCmd = &cobra.Command{
 	Use:   "all",

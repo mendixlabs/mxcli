@@ -14,6 +14,7 @@ the kinds below answer specific questions instead of scoring.
 | `map` | What does the app contain, and how does it fit together? (an interactive guide) |
 | `release` | What does deploying this model do to the data already in production? |
 | `dependencies` | What does the app stand on, and is it current and safe? |
+| `configuration` | What must each environment supply, and what does the model fix so no environment can change it? |
 
 ## All reports at once
 
@@ -244,11 +245,31 @@ not be checked — no token, `--offline`, a jar without coordinates — is said 
 never shown as up to date or clean. Annotate `vuln:<id>` with status `accepted`, and
 why, for an advisory that does not apply.
 
+## configuration
+
+What each environment must supply, read from the model, as a checklist an
+administrator signs off: constants with no default or a placeholder, constants whose
+default points at localhost, a private address or a test host, scheduled events to
+switch on or off, and published services whose callers need accounts. Below it, what
+the model fixes so that no environment can change it — a REST client or REST call
+location written as a literal localhost, private or test-host URL, a credential
+written as a literal — and what runs by itself: scheduled events and the lifecycle
+microflows with what they write and call.
+
+```bash
+mxcli report configuration -p app.mpr -o configuration.html
+```
+
+The actual production values live in the deployment portal or the pipeline; the
+report does not read them. Sign items off with `constant:<Name>`,
+`scheduled:<Name>` or `published:<Name>`, status `done`, and a note naming the
+environment.
+
 ## Skills
 
 Each kind has a skill with the judgement the command cannot make and the traps found
 building the reports by hand: `report-architecture`, `report-tests`,
 `report-security`, `report-performance`, `report-traceability`, `report-map`,
-`report-release`, `report-dependencies`.
+`report-release`, `report-dependencies`, `report-configuration`.
 The scored report has `report-quality`, and `assess-quality` combines all of them
 with the manual review no rule can do.

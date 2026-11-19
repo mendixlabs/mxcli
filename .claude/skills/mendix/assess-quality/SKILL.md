@@ -10,15 +10,15 @@ description: "Write a full quality assessment of a Mendix project: the mxcli rep
 
 | lines | section |
 |---|---|
-| 31-58 | Step 1: Run the reports |
-| 59-213 | Step 2: Manual review |
-| 214-220 | Step 3: Write the assessment |
-| 221-223 | Summary |
-| 224-235 | Measured |
-| 236-238 | Reviewed by hand |
-| 239-241 | Recommendations |
-| 242-246 | Not assessed |
-| 247-253 | Sources |
+| 31-59 | Step 1: Run the reports |
+| 60-214 | Step 2: Manual review |
+| 215-221 | Step 3: Write the assessment |
+| 222-224 | Summary |
+| 225-236 | Measured |
+| 237-239 | Reviewed by hand |
+| 240-242 | Recommendations |
+| 243-247 | Not assessed |
+| 248-254 | Sources |
 
 <!-- /skill-index -->
 # Assess Mendix Project Quality
@@ -45,6 +45,7 @@ and `--spans` for performance). Or run them one by one:
 | What is in it, for someone new? | `mxcli report map` | `report-map` |
 | What does the next deploy do to production data? | `mxcli report release --against <deployed>` | `report-release` |
 | Are its dependencies current and safe? | `mxcli report dependencies` | `report-dependencies` |
+| What must each environment supply? | `mxcli report configuration` | `report-configuration` |
 | Does it build? | `mxcli report` (its **Builds** line), or `mxcli docker check` | `report-quality`, `/validate-project` |
 
 Read each report's skill before interpreting it — every one has traps (the quality

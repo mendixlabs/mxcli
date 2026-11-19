@@ -40,7 +40,7 @@ func TestReportAllWritesEveryPageAndAnOverview(t *testing.T) {
 	if err := runReportAll(reportAllCmd, filepath.Join(work, "app", "PedApp.mpr"), out, map[string]bool{"map": true}, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{"index.html", "quality.html", "quality.json", "architecture.html", "security.html", "security.json", "dependencies.html", "tests.html"} {
+	for _, f := range []string{"index.html", "quality.html", "quality.json", "architecture.html", "security.html", "security.json", "dependencies.html", "configuration.html", "configuration.json", "tests.html"} {
 		if _, err := os.Stat(filepath.Join(out, f)); err != nil {
 			t.Errorf("missing %s", f)
 		}
