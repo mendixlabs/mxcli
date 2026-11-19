@@ -716,7 +716,7 @@ func appendUnique(xs []string, s string) []string {
 var SecurityMethod = []string{
 	"A review of the model, read from the mxcli catalog (`refresh catalog full` and `source`) and the project security settings. Nothing ran against the app.",
 	"Who can read what: each user role's module roles (`CATALOG.ROLE_MAPPINGS`) joined to entity access rules (`CATALOG.PERMISSIONS`). A rule's XPath is classified as own rows (`[System.owner = '[%CurrentUser%]']`), via user (any other path to the current user), filtered (a constraint not about the user) or all (no constraint); a cell shows the widest.",
-	"Client-callable flows: microflows granted to a user role that take a persistent object or list. A flow checks its caller when its body (`CATALOG.SOURCE`) uses `$currentUser` or `[%CurrentUser%]`.",
+	"Client-callable flows: microflows granted to a user role that take a persistent object or list. A flow checks its caller when its body (`CATALOG.SOURCE`), or a sub-microflow it calls, uses `$currentUser` or `[%CurrentUser%]`; it writes when it or a sub-microflow changes, creates, deletes or commits an object.",
 	"Unsafe defaults: string constants whose default (or a committed configuration value) looks like key material — base64 of 16/24/32/64 bytes, a 128/192/256-bit hex string, a PEM block — or that are named like a secret; boolean constants named like test switches that default to `true`; the security level, demo users, guest access, strict mode and password policy.",
 	"Lint security rules are grouped per rule with a verdict slot, so the score is explained rather than alarming.",
 }
@@ -724,7 +724,7 @@ var SecurityMethod = []string{
 var SecurityLimits = []string{
 	"This is a model review, not a penetration test. Hosting (HTTPS, headers, TLS), Marketplace module vulnerabilities, rate limiting and the deployment's own constant values are not covered.",
 	"Object parameters versus association values: an object parameter is a plain id, so a caller can substitute any object it may read; a forged association value is rejected by the runtime (\"Hash is invalid\"), and with strict mode `mx.data.get` is refused. Only the first is flagged here — confirm a flagged flow before fixing it.",
-	"A caller check is detected by name (`$currentUser`); a check through a sub-microflow or a Java action is not seen, and such a flow is shown as trusting its caller.",
+	"A caller check is detected by name (`$currentUser`), in the flow or a sub-microflow it calls; whether that check constrains the object the page passed in is not proven, so a flow checked through a sub names it. A check in a Java action is not seen, and such a flow is shown as trusting its caller.",
 	"Access through Java actions, OQL datasets, published services' own authentication and nanoflows is not analysed.",
 	"Demo accounts: dropping a demo user from the model does not delete its account from an existing database, and the runtime does not reactivate a deactivated demo account. Check each environment's database.",
 }
