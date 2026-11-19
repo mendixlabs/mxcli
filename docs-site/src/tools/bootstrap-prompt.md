@@ -75,8 +75,9 @@ a longer prompt.
    is no status column to maintain.
 5. **Commits, then boots and verifies** — HTTP 200 at `http://localhost:8080/`, plus
    an optional `run --hub` preview URL.
-6. **Takes the quality baseline** — `mxcli lint` and the scored `mxcli report` on the
-   blank app, recorded in `FINDINGS.md`. This is the only moment those numbers mean
+6. **Takes the quality baseline** — `mxcli verify --update-baseline` (the lint and
+   `mx check` baselines, committed as `verify-baseline/`) and the scored
+   `mxcli report` on the blank app, recorded in `FINDINGS.md`. This is the only moment those numbers mean
    "what the template ships with"; afterwards every figure is yours plus the
    template's, with nothing to subtract. See [mxcli report](mxcli-report.md) for how to
    read the six category scores.
@@ -201,15 +202,15 @@ time, and was the dominant cost in a measured agent session.
 ```bash
 ./mxcli check change.mdl -p <AppName>.mpr --references   # syntax + references (~2s)
 ./mxcli exec change.mdl -p <AppName>.mpr                 # apply
-./mxcli lint -p <AppName>.mpr                            # rules (~3s)
+./mxcli verify -p <AppName>.mpr                          # lint + mx check, new findings only (~10s)
 ./mxcli report -p <AppName>.mpr                          # scored quality report
-./mxcli docker check -p <AppName>.mpr                    # mxbuild, the slow one (~25s)
 ./mxcli test tests/ -p <AppName>.mpr --local             # microflow tests (~30s cold, ~2s warm)
 ./mxcli run --local --watch --detach -p <AppName>.mpr    # the app, in the background; then `run wait`
 ```
 
-Each buys something the one above it cannot: [`lint`](mxcli-lint.md) and
-[`report`](mxcli-report.md) score the model that `check` only proved was well-formed,
+Each buys something the one above it cannot: [`verify`](mxcli-verify.md) runs
+[`lint`](mxcli-lint.md) and `mx check` against the baselines taken at bootstrap and reports
+only what the change made worse, [`report`](mxcli-report.md) scores the model that `check` only proved was well-formed,
 [`test`](testing.md) proves behaviour that a clean build does not, and the running app
 is the only thing that proves how a page renders. `report`'s six category scores are
 comparable against the baseline taken at bootstrap — a score that fell is a finding.

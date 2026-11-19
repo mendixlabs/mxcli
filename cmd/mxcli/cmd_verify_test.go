@@ -137,3 +137,23 @@ func TestVerifyOutputContract(t *testing.T) {
 		}
 	}
 }
+
+// The baselines have to be committed to be any use: a fresh clone, or a reaped
+// cloud session, starts with none, and every run then reports every finding as
+// new. So the default location must not be one the generated .gitignore hides.
+func TestDefaultVerifyBaselineDirIsNotGitIgnored(t *testing.T) {
+	dir := defaultVerifyBaselineDir(filepath.Join("proj", "App.mpr"))
+	if got := filepath.Base(dir); got != "verify-baseline" || filepath.Base(filepath.Dir(dir)) != "proj" {
+		t.Fatalf("default dir = %q", dir)
+	}
+	for _, line := range strings.Split(mendixGitignore, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		pattern := strings.Trim(line, "/")
+		if pattern == "verify-baseline" || pattern == "*" || strings.HasPrefix(pattern, "verify") {
+			t.Errorf(".gitignore pattern %q hides the default baseline directory", line)
+		}
+	}
+}
