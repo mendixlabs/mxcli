@@ -52,6 +52,12 @@ project and is not counted as new. Run `lint` where the project's rules and conf
 re-record with `--update-baseline` if the change is intended. A baseline recorded before this was added
 still works: the rules it holds findings for must have run.
 
+The advice follows the cause. A rule that did not run needs the project's rules and config where `lint`
+runs. A rule that ran into an error (a built-in rule can) usually runs on a second attempt, and the
+stage shows the rule's own message. `--update-baseline` refuses (exit 2) while a rule cannot run, because
+the baseline would hold none of that rule's findings and a re-record is what the failing run suggests:
+run it again first.
+
 ## Exit codes
 
 | Code | Meaning |

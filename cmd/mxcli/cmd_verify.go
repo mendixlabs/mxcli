@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -194,6 +195,15 @@ func (v *verifyRunner) lint() (verify.Outcome, error) {
 		note = "no lint baseline (" + lintBaseline + "): every finding is reported as new; record one with --update-baseline"
 	}
 	stdout, stderr, err := v.sub(args...)
+	if v.update {
+		// lint refuses (exit 2) to record a baseline while a rule cannot run: it
+		// would hold none of that rule's findings. Say so, instead of reporting a
+		// baseline that was not written as recorded.
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && ee.ExitCode() == 2 {
+			return verify.Outcome{}, fmt.Errorf("the lint baseline was not recorded: %s", verifyRefusal(stderr))
+		}
+	}
 	findings, bl, perr := parseReport(verify.StageLint, stdout)
 	if perr != nil {
 		return verify.Outcome{}, fmt.Errorf("mxcli lint produced no readable report: %v%s", perr, verifyTail(stderr, err))
@@ -296,6 +306,9 @@ type lintBaselineJSON struct {
 	RuleFailures  []string `json:"ruleFailures"`
 	NewRules      []string `json:"newRules"`
 	ConfigChanged bool     `json:"configChanged"`
+	// failureMessages is each failed rule's own message, read from the violations
+	// (not part of lint's output object).
+	failureMessages map[string]string
 }
 
 // incomplete says why the comparison cannot be trusted, or "" when it can. A
@@ -317,22 +330,73 @@ func (b *lintBaselineJSON) incomplete() string {
 		}
 	}
 	var parts []string
+	var advice []string
 	if len(notRun) > 0 {
 		parts = append(parts, fmt.Sprintf("%s did not run (not installed, disabled or filtered out)", verifyShortList(notRun, 6)))
+		advice = append(advice, "run lint where the project's rules and config are installed")
 	}
 	if len(b.RuleFailures) > 0 {
-		parts = append(parts, fmt.Sprintf("%s could not run", verifyShortList(b.RuleFailures, 6)))
+		var fs []string
+		for _, id := range b.RuleFailures {
+			if m := b.failureMessages[id]; m != "" {
+				fs = append(fs, m)
+			} else {
+				fs = append(fs, id+" could not run")
+			}
+		}
+		parts = append(parts, strings.Join(fs, "; "))
+		advice = append(advice, "a rule that ran into an error usually runs on a second attempt, so run verify again, and report the rule if it keeps failing")
 	}
 	if b.NotChecked > 0 {
 		parts = append(parts, fmt.Sprintf("%d baseline finding(s) of those rules are not checked, not fixed", b.NotChecked))
 	}
 	if b.ConfigChanged {
 		parts = append(parts, "the lint configuration differs from the one the baseline was recorded under")
+		advice = append(advice, "re-record with --update-baseline if the change is intended")
 	}
 	if len(parts) == 0 {
 		return ""
 	}
-	return strings.Join(parts, "; ") + ". Run lint where the project's rules and config are installed, or re-record with --update-baseline if the change is intended"
+	if len(advice) == 0 {
+		return strings.Join(parts, "; ")
+	}
+	return strings.Join(parts, "; ") + ". " + strings.ToUpper(advice[0][:1]) + advice[0][1:] + verifyMoreAdvice(advice[1:])
+}
+
+// verifyMoreAdvice appends further advice sentences, if any.
+func verifyMoreAdvice(more []string) string {
+	var out string
+	for _, a := range more {
+		out += "; or " + a
+	}
+	return out
+}
+
+// verifyLast keeps the last n bytes of s, where a command says what went wrong.
+func verifyLast(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return "..." + s[len(s)-n:]
+}
+
+// verifyRefusal is the reason lint gave for refusing, from its stderr: the line
+// that says the baseline was not recorded and the rule messages under it.
+func verifyRefusal(stderr []byte) string {
+	var keep []string
+	for _, l := range strings.Split(string(stderr), "\n") {
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "Error: the baseline was not recorded") {
+			t = strings.TrimPrefix(t, "Error: the baseline was not recorded: ")
+			keep = append(keep, t)
+		} else if len(keep) > 0 && t != "" {
+			keep = append(keep, t)
+		}
+	}
+	if len(keep) == 0 {
+		return verifyLast(strings.TrimSpace(string(stderr)), 400)
+	}
+	return strings.Join(keep, " ")
 }
 
 func verifyShortList(ids []string, n int) string {
@@ -359,6 +423,12 @@ func parseReport(stage string, data []byte) ([]verify.Finding, *lintBaselineJSON
 	out := []verify.Finding{}
 	for _, v := range j.Violations {
 		if v.RuleFailure {
+			if j.Baseline != nil {
+				if j.Baseline.failureMessages == nil {
+					j.Baseline.failureMessages = map[string]string{}
+				}
+				j.Baseline.failureMessages[v.RuleID] = v.Message
+			}
 			continue
 		}
 		out = append(out, verify.Finding{

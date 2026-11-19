@@ -116,6 +116,8 @@ failed) reports those findings as "not checked", never as fixed, and says which
 rules; a changed configuration is reported too. Run lint where the rules and the
 config are installed, or re-record with --update-baseline if the change is
 intended. mxcli verify turns either into an error (exit 2) instead of a pass.
+--update-baseline refuses (exit 2) while a rule cannot run: the baseline would hold
+none of its findings.
 
 --documents scopes a run to named documents, so a structural question about one
 microflow costs a fraction of a project-wide lint and needs no baseline diff to
@@ -342,6 +344,21 @@ modules, and findings that are not about those documents are not reported.
 		configFingerprint := cfg.Fingerprint(excludeModules)
 		var baselineReport *linter.BaselineReport
 		if updateBaseline {
+			// A rule that ran into an error reports nothing, so recording now would
+			// replace the baseline with one that holds none of its findings and does
+			// not list it as a rule that ran: the next run that can run it would
+			// report every one as new, and a re-record is what the failing run's own
+			// message suggests. Refuse instead of writing a worse baseline.
+			if len(failedRules) > 0 {
+				fmt.Fprintf(os.Stderr, "Error: the baseline was not recorded: %s could not run, so it would hold none of their findings.\n", shortList(failedRules, 8))
+				for _, v := range violations {
+					if v.RuleFailure {
+						fmt.Fprintf(os.Stderr, "  %s\n", v.Message)
+					}
+				}
+				fmt.Fprintln(os.Stderr, "  A rule that ran into an error usually runs on a second attempt; run the command again, and report the rule if it keeps failing.")
+				os.Exit(2)
+			}
 			if err := linter.WriteBaselineWith(baselinePath, violations, linter.BaselineMeta{Rules: ranRules, Config: configFingerprint}); err != nil {
 				fmt.Fprintf(os.Stderr, "Error writing lint baseline: %v\n", err)
 				os.Exit(1)
@@ -353,9 +370,6 @@ modules, and findings that are not about those documents are not reported.
 				}
 			}
 			fmt.Fprintf(os.Stderr, "Recorded %d finding(s) from %d rule(s) in the lint baseline %s\n", recorded, len(ranRules), baselinePath)
-			if len(failedRules) > 0 {
-				fmt.Fprintf(os.Stderr, "Warning: %s could not run, so the baseline holds none of their findings; a later run that can run them reports every one as new.\n", strings.Join(failedRules, ", "))
-			}
 		} else if baseline != nil {
 			cmp := baseline.CompareRun(violations, linter.RunInfo{Known: true, Ran: ranRules, Failed: failedRules, Config: configFingerprint, Scoped: scoped})
 			violations = cmp.New

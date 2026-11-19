@@ -198,3 +198,51 @@ func TestParseReportKeepsRuleFailuresOutOfTheFindings(t *testing.T) {
 		t.Error("no baseline must not be incomplete")
 	}
 }
+
+// The advice follows the cause. A rule that is not installed needs the rules and
+// config where lint runs; a rule that ran into an error (MPR017 is built in) needs
+// a second attempt, and the rule's own message; only a changed config suggests
+// re-recording.
+func TestIncompleteAdviceMatchesTheCause(t *testing.T) {
+	notRun := (&lintBaselineJSON{RulesNotRun: []string{"SEC007"}, NotChecked: 2}).incomplete()
+	if !strings.Contains(notRun, "installed") || strings.Contains(notRun, "second attempt") || strings.Contains(strings.ToLower(notRun), "re-record") {
+		t.Errorf("a rule that did not run:\n%s", notRun)
+	}
+	failed := (&lintBaselineJSON{RulesNotRun: []string{"MPR017"}, RuleFailures: []string{"MPR017"}, NotChecked: 3,
+		failureMessages: map[string]string{"MPR017": "MPR017 could not run: read 35 entities but could not read their attributes"}}).incomplete()
+	for _, want := range []string{"read 35 entities but could not read their attributes", "second attempt", "3 baseline finding(s) of those rules are not checked"} {
+		if !strings.Contains(failed, want) {
+			t.Errorf("a rule that failed lacks %q:\n%s", want, failed)
+		}
+	}
+	for _, not := range []string{"installed", "did not run", "re-record"} {
+		if strings.Contains(strings.ToLower(failed), not) {
+			t.Errorf("a rule that failed must not say %q (it is built in and ran):\n%s", not, failed)
+		}
+	}
+	cfg := (&lintBaselineJSON{ConfigChanged: true}).incomplete()
+	if !strings.Contains(strings.ToLower(cfg), "re-record") || strings.Contains(cfg, "installed") || strings.Contains(cfg, "second attempt") {
+		t.Errorf("a changed config:\n%s", cfg)
+	}
+}
+
+// lint refuses to record a baseline while a rule cannot run (exit 2); verify says
+// so, with the rule's message, instead of reporting a baseline that was not written.
+func TestVerifyRefusal(t *testing.T) {
+	stderr := "Connected to: x\nError: the baseline was not recorded: MPR017 could not run, so it would hold none of their findings.\n" +
+		"  MPR017 could not run: read 5 entities but could not read their attributes\n" +
+		"  A rule that ran into an error usually runs on a second attempt; run the command again.\n"
+	got := verifyRefusal([]byte(stderr))
+	for _, want := range []string{"MPR017 could not run, so it would hold none of their findings.", "read 5 entities", "second attempt"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("refusal lacks %q: %s", want, got)
+		}
+	}
+	if strings.Contains(got, "Connected to") || strings.Contains(got, "Error:") {
+		t.Errorf("refusal carries unrelated output: %s", got)
+	}
+	// Unrecognised stderr falls back to its last lines, never to nothing.
+	if got := verifyRefusal([]byte("boom")); got != "boom" {
+		t.Errorf("fallback = %q", got)
+	}
+}
