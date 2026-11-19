@@ -271,21 +271,20 @@ func collectAttributeFacts(ctx *linter.LintContext) (map[string]*attrFacts, stri
 			byName[a.Name] = append(byName[a.Name], qn)
 		}
 	}
-	// No attributes readable. If the project genuinely has no entities that is
-	// simply nothing to check; but entities WITH no readable attributes means
-	// the attribute read failed, and this rule must then say so rather than
-	// report a clean run.
+	// No attributes readable. A project with no entities is simply nothing to
+	// check; entities WITH no readable attributes means the attribute read
+	// failed, and this rule then says so rather than reporting a clean run.
 	//
-	// It is not hypothetical: on a freshly built catalog ctx.AttributesFor
-	// fails with "no such table: attributes" (ako/mxcli#2417) while entities
-	// and activities resolve, and the context stops answering afterwards. Left
-	// silent, this rule reported NOTHING on a project that provably has the
-	// defect, which is indistinguishable from a pass.
+	// The specific bug this was written for is fixed (ako/mxcli#2417: an
+	// in-memory catalog gave each pooled connection its own empty database, so
+	// AttributesFor could fail while Entities succeeded in the same run), and
+	// the advice it used to carry -- re-run to use the cached catalog -- is
+	// gone with it. The check itself stays: it is the invariant, not the
+	// workaround. A rule that cannot read its input must not be able to report
+	// a pass, whatever the next reason for an unreadable catalog turns out to be.
 	if len(byName) == 0 {
 		if entities > 0 {
-			return nil, fmt.Sprintf("read %d entities but no attributes "+
-				"(ako/mxcli#2417: AttributesFor fails on a freshly built catalog); "+
-				"re-run to use the cached catalog", entities)
+			return nil, fmt.Sprintf("read %d entities but could not read their attributes", entities)
 		}
 		return facts, ""
 	}

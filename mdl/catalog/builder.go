@@ -832,9 +832,19 @@ func (b *Builder) buildSnapshotRecord() error {
 }
 
 func (b *Builder) updateSnapshotCount() {
-	// Count total objects
+	// Counted through the TRANSACTION, not the pool (ako/mxcli#2417).
+	//
+	// Two reasons. It runs while the build's transaction is open, so a pool
+	// query needs a second connection: against an in-memory catalog, where
+	// every connection is its own database, that read saw an empty one and the
+	// count came back 0; with the pool pinned to one connection it deadlocked
+	// outright, waiting for the connection the transaction holds.
+	//
+	// And the transaction is the right scope anyway: the rows being counted are
+	// the ones this build just wrote and has not committed, which a pool query
+	// cannot see by definition.
 	var count int
-	row := b.catalog.db.QueryRow(`
+	rows, err := b.txQuery(`
 		SELECT COUNT(*) FROM (
 			SELECT Id FROM modules
 			UNION ALL SELECT Id FROM entities
@@ -846,7 +856,15 @@ func (b *Builder) updateSnapshotCount() {
 			UNION ALL SELECT Id FROM workflows
 		)
 	`)
-	row.Scan(&count)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	if rows.Next() {
+		if err := rows.Scan(&count); err != nil {
+			return
+		}
+	}
 	b.snapshot.ObjectCount = count
 }
 
