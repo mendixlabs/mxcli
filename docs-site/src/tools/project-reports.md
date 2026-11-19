@@ -176,3 +176,5 @@ report's unused list.
 Each kind has a skill with the judgement the command cannot make and the traps found
 building the reports by hand: `report-architecture`, `report-tests`,
 `report-security`, `report-performance`, `report-traceability`, `report-map`.
+The scored report has `report-quality`, and `assess-quality` combines all of them
+with the manual review no rule can do.

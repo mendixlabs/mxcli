@@ -22,7 +22,7 @@ description: "Query the project as a dependency graph to assess the blast radius
 | 300-331 | Use Case 8: Monolith-to-Multi-App Planning |
 | 332-347 | Topological Layer Reference |
 | 348-367 | Quick Reference: Which Table Answers What |
-| 368-373 | Related Skills |
+| 368-374 | Related Skills |
 
 <!-- /skill-index -->
 # Graph Analysis: Impact Assessment & Architecture Evaluation
@@ -367,7 +367,8 @@ Elements at the same layer can be parallelised safely. A microflow calling somet
 
 ## Related Skills
 
-- [assess-quality](../assess-quality/SKILL.md) — Full quality assessment including lint, report scores, and manual review guidelines
+- [assess-quality](../assess-quality/SKILL.md) — Full quality assessment: the reports plus the manual review no rule can do
+- [report-quality](../report-quality/SKILL.md) — The scored quality report and how to read it
 - [organize-project](../organize-project/SKILL.md) — MOVE command and folder structure
 - [write-lint-rules](../write-lint-rules/SKILL.md) — Encoding a layering policy as an enforced Starlark rule
 - [odata-data-sharing](../odata-data-sharing/SKILL.md) — Publishing entities for cross-app access

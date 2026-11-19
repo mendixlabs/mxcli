@@ -30,4 +30,4 @@ Traditional migrations require deep Mendix expertise and manual work in Studio P
 | [Transformation](transformation.md) | Map source elements to Mendix, plan module structure | Assessment output as input |
 | [Generation](generation.md) | Generate domain model, microflows, pages, security | `generate-domain-model`, `write-microflows`, `create-page`, `manage-security` |
 | [Data Migration](data-migration.md) | Import data from source databases | `demo-data`, `database-connections` |
-| [Validation and Handoff](validation.md) | Test, lint, and hand off to Studio Pro | `check-syntax`, `assess-quality` |
+| [Validation and Handoff](validation.md) | Test, lint, and hand off to Studio Pro | `check-syntax`, `report-quality`, `assess-quality` |

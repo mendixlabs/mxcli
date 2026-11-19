@@ -100,13 +100,19 @@ mxcli report -p app.mpr --format json --output report.json
 Use the JSON format to fail CI pipelines when scores drop below a threshold:
 
 ```bash
-# Check if overall score is above 70
-SCORE=$(mxcli report -p app.mpr --format json | jq '.overallScore')
-if [ "$SCORE" -lt 70 ]; then
-  echo "Quality score $SCORE is below threshold 70"
+# Fail when the overall score is below 70. The score has one decimal (e.g. 82.5),
+# so compare in jq: the shell's -lt only takes integers.
+mxcli report -p app.mpr --format json -o quality.json
+jq -e '.overallScore >= 70' quality.json > /dev/null || {
+  echo "Quality score $(jq .overallScore quality.json) is below threshold 70"
   exit 1
-fi
+}
 ```
 
+The `report-quality` skill covers how the score is computed, what it leaves out
+(Mendix's own consistency check; the bundled Starlark rules when the project has no
+`.claude/lint-rules/`), and how to accept an intended finding in the project brain.
+
 For reports that answer one question instead of scoring — architecture, tests,
-security, performance and traceability — see [Project Reports](project-reports.md).
+security, performance, traceability and the software map — see
+[Project Reports](project-reports.md).
