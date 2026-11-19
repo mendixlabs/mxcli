@@ -52,6 +52,12 @@ recommendations:
 Marketplace modules, `System` and the test runner's `MxTest` are outside the app
 unless `--include-marketplace`; `--modules` and `--exclude` choose by hand.
 
+Every HTML page — the scored `mxcli report` too — shares one look: a line naming the
+project, report and date above the title, the verdict as a lede, headline tiles whose
+edge shows their status, bars in tables, findings as cards, and numbers in a
+fixed-width face. It follows the system's light or dark setting; add
+`data-theme="light"` or `"dark"` to the page's `<html>` element to force one.
+
 ## architecture
 
 Layered module map (domain dependencies only — menus, layouts and page links are

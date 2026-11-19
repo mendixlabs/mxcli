@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mendixlabs/mxcli/cmd/mxcli/projectreport"
 	"github.com/mendixlabs/mxcli/mdl/linter"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 	"github.com/spf13/cobra"
@@ -188,7 +189,15 @@ mappings) are left out, and the report names the selection.
 			writer = os.Stdout
 		}
 
-		if err := formatter.FormatReport(report, writer); err != nil {
+		if format == "html" {
+			// The scored report's page is the shared look every report kind
+			// uses (ako/mxcli#2443); markdown and JSON stay the linter's.
+			doc := projectreport.QualityDoc(report, projectName, report.Date, version)
+			if err := projectreport.RenderHTML(writer, doc); err != nil {
+				fmt.Fprintf(os.Stderr, "Error formatting report: %v\n", err)
+				os.Exit(1)
+			}
+		} else if err := formatter.FormatReport(report, writer); err != nil {
 			fmt.Fprintf(os.Stderr, "Error formatting report: %v\n", err)
 			os.Exit(1)
 		}
