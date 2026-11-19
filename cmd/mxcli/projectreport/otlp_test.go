@@ -4,6 +4,7 @@ package projectreport
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/binary"
 	"net/http"
 	"os"
@@ -126,5 +127,30 @@ func TestReadSpansTypedAttrsAndTimeKeys(t *testing.T) {
 	log := &JourneyLog{Records: []JourneyRecord{{Journey: "j", Start: "1970-01-01T00:00:00.000000001Z", End: "1970-01-01T00:00:00.004Z"}}}
 	if n := SpansInWindows(spans, log); n != 1 {
 		t.Errorf("spans in windows = %d, want 1 (the second starts after the window)", n)
+	}
+}
+
+// A gzipped span file is read like the plain one, also inside a directory:
+// span exports are large and usually kept compressed (ako/mxcli#2452,
+// after-spans.jsonl.gz failed with "invalid character '\x1f'").
+func TestReadSpansGzip(t *testing.T) {
+	dir := t.TempDir()
+	line := `{"traceId":"t","spanId":"s1","name":"Microflow Shop.A","start":1,"end":2}` + "\n"
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	_, _ = zw.Write([]byte(line))
+	_ = zw.Close()
+	gz := filepath.Join(dir, "spans.jsonl.gz")
+	if err := os.WriteFile(gz, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{gz, dir} {
+		spans, err := ReadSpans([]string{p})
+		if err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+		if len(spans) != 1 || spans[0].Name != "Microflow Shop.A" {
+			t.Errorf("%s: spans = %+v", p, spans)
+		}
 	}
 }
