@@ -28,10 +28,11 @@ type TableSchema struct {
 // schema it was discovered in, when one is known. A database reports no schema
 // for some drivers, and there the bare name is the address (ako/mxcli#2414).
 func (t *TableSchema) QualifiedName() string {
+	name := quoteIdent(t.Name)
 	if t.Schema == "" {
-		return t.Name
+		return name
 	}
-	return t.Schema + "." + t.Name
+	return quoteIdent(t.Schema) + "." + name
 }
 
 // tableAddresses is the address of every object a SHOW TABLES / SHOW VIEWS
@@ -77,16 +78,18 @@ func discoveredObjects(rows [][]any) []discoveredObject {
 func qualifiedTableName(row []any) string {
 	if len(row) < 2 {
 		if len(row) == 1 {
-			return fmt.Sprintf("%v", row[0])
+			return quoteIdent(fmt.Sprintf("%v", row[0]))
 		}
 		return ""
 	}
-	name := fmt.Sprintf("%v", row[1])
+	// Quoted, so the address can be split back into the same two parts: a
+	// listed name may contain dots of its own (ako/mxcli#2422).
+	name := quoteIdent(fmt.Sprintf("%v", row[1]))
 	schema := fmt.Sprintf("%v", row[0])
 	if schema == "" {
 		return name
 	}
-	return schema + "." + name
+	return quoteIdent(schema) + "." + name
 }
 
 // pkQuery returns the query to find primary key columns for a given table.
@@ -180,35 +183,45 @@ func ReadTableSchema(ctx context.Context, conn *Connection, tableName string, is
 // On SQL Server the listing itself is restricted to base tables, so no views
 // come back; name them in a VIEWS clause there.
 func ReadAllSchemas(ctx context.Context, conn *Connection) ([]*TableSchema, error) {
-	return readListed(ctx, conn, false)
+	schemas, _, err := readListed(ctx, conn, false)
+	return schemas, err
 }
 
-// readListed reads the listed objects, optionally only the base tables.
-func readListed(ctx context.Context, conn *Connection, tablesOnly bool) ([]*TableSchema, error) {
+// readListed reads the listed objects, optionally only the base tables. Its
+// second return is every listed object it could not read, as "address: reason".
+// Dropping those silently is what hid ako/mxcli#2422 and the ambiguous-name
+// half of ako/mxcli#2414: an object the listing names and the output omits is
+// invisible to everything downstream, so the caller has to be able to say so.
+func readListed(ctx context.Context, conn *Connection, tablesOnly bool) ([]*TableSchema, []string, error) {
 	result, err := ShowTables(ctx, conn)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var schemas []*TableSchema
+	var (
+		schemas []*TableSchema
+		skipped []string
+	)
 	for _, o := range discoveredObjects(result.Rows) {
 		if tablesOnly && o.isView {
 			continue
 		}
 		ts, err := ReadTableSchema(ctx, conn, o.address, o.isView)
 		if err != nil {
-			continue // skip objects that fail
+			skipped = append(skipped, fmt.Sprintf("%s: %v", o.address, err))
+			continue
 		}
 		ts.IsView = o.isView
 		schemas = append(schemas, ts)
 	}
-	return schemas, nil
+	return schemas, skipped, nil
 }
 
 // ReadAllTableSchemas reads schemas for the connection's base tables. A view is
 // not a table: handing one back here is what let a view named in a VIEWS clause
 // be generated twice (ako/mxcli#2415). Use ReadAllSchemas for everything.
 func ReadAllTableSchemas(ctx context.Context, conn *Connection) ([]*TableSchema, error) {
-	return readListed(ctx, conn, true)
+	schemas, _, err := readListed(ctx, conn, true)
+	return schemas, err
 }
 
 // ReadAllViewSchemas reads schemas for all user views from the connection.
