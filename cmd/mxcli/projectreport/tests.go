@@ -150,7 +150,33 @@ type TestsData struct {
 	// UnknownCalls are microflows a test calls that the catalog does not
 	// have — renamed or deleted since the test was written.
 	UnknownCalls []string `json:"unknownCalls,omitempty"`
+	// Startup and Scheduled are the app microflows that run without a test,
+	// apart: what the after-startup (and shutdown, health check) flows reach,
+	// and what scheduled events reach.
+	Startup   []string `json:"startup,omitempty"`
+	Scheduled []string `json:"scheduled,omitempty"`
+	// GapKinds groups the microflows reached by nothing by what kind of
+	// microflow they are, so a gap that needs a test is not lost among seed
+	// data and dead code.
+	GapKinds []GapKind `json:"gapKinds,omitempty"`
 }
+
+// GapKind is the unreached microflows of one kind.
+type GapKind struct {
+	Kind       string   `json:"kind"`
+	Microflows []string `json:"microflows"`
+}
+
+// Gap kinds, in the order the page shows them.
+const (
+	GapCallable   = "callable by a role"
+	GapSub        = "called by other logic"
+	GapSeed       = "seed or demo data"
+	GapUnreferred = "no reference in the model"
+)
+
+// seedName is how seed, demo and sample-data microflows are usually named.
+var seedName = regexp.MustCompile(`(?i)(seed|demo|sample|testdata|test_data|mock|fixture|dummy)`)
 
 // TestInfo is one microflow test with its result and reach.
 type TestInfo struct {
@@ -339,6 +365,24 @@ func CollectTests(q Querier, in TestsInput) (*TestsData, error) {
 		roots = append(roots, r["Microflow"])
 	}
 	startup := setOf(g.Closure(roots))
+	startupOnly := setOf(g.Closure(in.StartupFlows))
+	referenced := map[string]bool{}
+	rr, err := rows(q, `SELECT DISTINCT TargetName FROM refs WHERE TargetType = 'MICROFLOW'`)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rr {
+		referenced[r["TargetName"]] = true
+	}
+	granted := map[string]bool{}
+	gr, err := rows(q, `SELECT DISTINCT ElementName FROM permissions WHERE ElementType = 'MICROFLOW' AND AccessType = 'EXECUTE'`)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range gr {
+		granted[r["ElementName"]] = true
+	}
+	kinds := map[string][]string{}
 
 	cov := map[string]*ModuleCoverage{}
 	gaps := map[string][]string{}
@@ -360,9 +404,24 @@ func CollectTests(q Querier, in TestsInput) (*TestsData, error) {
 			cat, c.JourneysOnly = ReachJourneys, c.JourneysOnly+1
 		case startup[name]:
 			cat, c.Startup = ReachStartup, c.Startup+1
+			if startupOnly[name] {
+				d.Startup = append(d.Startup, name)
+			} else {
+				d.Scheduled = append(d.Scheduled, name)
+			}
 		default:
 			c.Neither++
 			gaps[mod] = append(gaps[mod], name)
+			k := GapSub
+			switch {
+			case seedName.MatchString(shortName(name)):
+				k = GapSeed
+			case granted[name]:
+				k = GapCallable
+			case !referenced[name]:
+				k = GapUnreferred
+			}
+			kinds[k] = append(kinds[k], name)
 		}
 		d.Reach[name] = cat
 	}
@@ -383,6 +442,11 @@ func CollectTests(q Querier, in TestsInput) (*TestsData, error) {
 			d.Gaps = append(d.Gaps, ModuleGaps{Module: m, Microflows: gaps[m]})
 		}
 	}
+	for _, k := range []string{GapCallable, GapSub, GapSeed, GapUnreferred} {
+		if len(kinds[k]) > 0 {
+			d.GapKinds = append(d.GapKinds, GapKind{Kind: k, Microflows: kinds[k]})
+		}
+	}
 	return d, nil
 }
 
@@ -392,7 +456,8 @@ var TestsMethod = []string{
 	"Microflow test results and per-test assertion counts come from `mxcli test --junit` (the `assertions` property), run by this command with `--run` or read from `--junit`.",
 	"Static reach: the microflows each `.test.mdl`/`.test.md` test calls (`call microflow` and its setups), plus everything those call in turn through the catalog's `call` references.",
 	"Runtime reach: with `--journeys`, every `Microflow <name>` span that starts inside a journey's time window counts as executed by that journey. This is measured, not estimated — the app was running with `run --local --trace-otlp` into the span collector.",
-	"\"Startup or scheduled\" is the after-startup, before-shutdown and health-check microflows and every scheduled event's microflow, with what they call. Those run without a test and are not counted as gaps.",
+	"\"Startup or scheduled\" is the after-startup, before-shutdown and health-check microflows and every scheduled event's microflow, with what they call. Those run without a test and are not counted as gaps; the page lists the two apart.",
+	"Gaps by kind: *callable by a role* has a microflow EXECUTE grant; *seed or demo data* is named like it (seed, demo, sample, mock, fixture, dummy); *no reference in the model* has no `CATALOG.REFS` row pointing at it; the rest are *called by other logic*.",
 	"The app is the project's own modules; Marketplace modules, `System` and `MxTest` are outside.",
 }
 
@@ -508,9 +573,13 @@ func RenderTests(env *Envelope, ann *Annotations) (Doc, error) {
 		jt.Rows = append(jt.Rows, []string{j.Name, j.Status, fmt.Sprint(len(j.Checks)), fmt.Sprint(len(j.Executed)), what})
 		jt.Classes = append(jt.Classes, []string{"", statusClass(j.Status), "num", "num", ""})
 	}
+	jb := []Block{jt}
+	if ot := onlyJourneyTable(d); len(ot.Rows) > 0 {
+		jb = append(jb, ot)
+	}
 	doc.Sections = append(doc.Sections, Section{ID: "journeys", Title: "Browser journeys",
 		Intro:  "What each journey checks is taken from the journey script's own check messages, not written from its name — prose written from a name drifts from what the script verifies. Annotate `journey:<name>` to add context.",
-		Blocks: []Block{jt}})
+		Blocks: jb})
 
 	// Gaps.
 	gt := Table{Columns: []string{"Module", "Microflows reached by neither", "Verdict", "Key"}}
@@ -522,9 +591,34 @@ func RenderTests(env *Envelope, ann *Annotations) (Doc, error) {
 		}
 		gt.Rows = append(gt.Rows, []string{g.Module, strings.Join(codeList(g.Microflows), ", "), verdict, "`" + key + "`"})
 	}
+	var gb []Block
+	if len(d.GapKinds) > 0 {
+		kt := Table{Caption: "By kind", Columns: []string{"Kind", "Microflows", "Which"}}
+		for _, k := range d.GapKinds {
+			kt.Rows = append(kt.Rows, []string{k.Kind, fmt.Sprint(len(k.Microflows)), strings.Join(codeList(k.Microflows), ", ")})
+			kt.Classes = append(kt.Classes, []string{"", "num", ""})
+		}
+		gb = append(gb, kt)
+		gt.Caption = "By module"
+	}
+	gb = append(gb, gt)
+	if len(d.Startup)+len(d.Scheduled) > 0 {
+		rt := Table{Caption: "Runs without a test (not a gap)", Columns: []string{"Run by", "Microflows", "Which"}}
+		for _, r := range []struct {
+			by  string
+			mfs []string
+		}{{"startup, shutdown or health check", d.Startup}, {"a scheduled event", d.Scheduled}} {
+			if len(r.mfs) > 0 {
+				rt.Rows = append(rt.Rows, []string{r.by, fmt.Sprint(len(r.mfs)), strings.Join(codeList(r.mfs), ", ")})
+				rt.Classes = append(rt.Classes, []string{"", "num", ""})
+			}
+		}
+		gb = append(gb, rt)
+	}
 	doc.Sections = append(doc.Sections, Section{ID: "gaps", Title: "Gaps",
-		Intro:  "Microflows no test and no journey reaches, by module. Not every gap deserves a test: give each group a verdict with `--annotations` (e.g. `needs a test`, `admin only`, `dead — remove`).",
-		Blocks: []Block{gt}})
+		Intro: "Microflows no test and no journey reaches. Not every gap deserves a test: one a user role may call usually does, seed data usually does not, and one with no reference in the model is dead code — or called from Java, which the model does not show. " +
+			"Give each module a verdict with `--annotations` (e.g. `needs a test`, `admin only`, `dead — remove`).",
+		Blocks: gb})
 	return Frame(env, ann, doc), nil
 }
 
@@ -550,4 +644,32 @@ func statusClass(s string) string {
 		return "warn"
 	}
 	return ""
+}
+
+// onlyJourneyTable lists, per journey, the app microflows it runs that no
+// other journey and no microflow test reaches: what is lost if that journey
+// is dropped or starts failing (ako/mxcli#2443).
+func onlyJourneyTable(d TestsData) Table {
+	t := Table{Caption: "What only one journey runs", Columns: []string{"Journey", "Only it runs", "Which"}}
+	runs := map[string]int{}
+	for _, j := range d.Journeys {
+		for _, m := range j.Executed {
+			runs[m]++
+		}
+	}
+	for _, j := range d.Journeys {
+		var only []string
+		for _, m := range j.Executed {
+			if runs[m] == 1 && d.Reach[m] == ReachJourneys {
+				only = append(only, m)
+			}
+		}
+		if len(only) == 0 {
+			continue
+		}
+		sort.Strings(only)
+		t.Rows = append(t.Rows, []string{j.Name, fmt.Sprint(len(only)), strings.Join(codeList(only), ", ")})
+		t.Classes = append(t.Classes, []string{"", "num", ""})
+	}
+	return t
 }
