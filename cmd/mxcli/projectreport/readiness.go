@@ -412,11 +412,11 @@ func RenderReadiness(env *Envelope, ann *Annotations) (Doc, error) {
 	doc.Lede = fmt.Sprintf("Verdict: %s. %d blocking, %d risk(s), %d accepted; %d of %d reports not assessed in full.",
 		d.Verdict, len(d.Blocking), len(d.Risks), len(d.Accepted), notAssessed, len(d.Sources))
 	doc.Stats = []Stat{
-		{Label: "verdict", Value: d.Verdict, Status: status},
-		{Label: "blocking", Value: fmt.Sprint(len(d.Blocking)), Status: statusIf(len(d.Blocking) > 0, false)},
-		{Label: "risks", Value: fmt.Sprint(len(d.Risks)), Status: statusIf(false, len(d.Risks) > 0)},
-		{Label: "accepted", Value: fmt.Sprint(len(d.Accepted))},
-		{Label: "not assessed", Value: fmt.Sprint(notAssessed), Status: statusIf(false, notAssessed > 0)},
+		{Label: "verdict", Value: d.Verdict, Status: status, Note: "by the rule under Blocking"},
+		{Label: "blocking", Value: fmt.Sprint(len(d.Blocking)), Status: statusIf(len(d.Blocking) > 0, false), Note: "any one makes it not ready"},
+		{Label: "risks", Value: fmt.Sprint(len(d.Risks)), Status: statusIf(false, len(d.Risks) > 0), Note: "decide, or accept on their report"},
+		{Label: "accepted", Value: fmt.Sprint(len(d.Accepted)), Note: "recorded decisions and verdicts"},
+		{Label: "not assessed", Value: fmt.Sprint(notAssessed), Status: statusIf(false, notAssessed > 0), Note: fmt.Sprintf("of %d reports: never counted as passing", len(d.Sources))},
 	}
 
 	items := func(xs []ReadinessItem, empty string, withKey bool) Block {
@@ -449,7 +449,9 @@ func RenderReadiness(env *Envelope, ann *Annotations) (Doc, error) {
 		Section{ID: "blocking", Title: "Blocking", Intro: intro, Blocks: []Block{items(d.Blocking, "Nothing blocking was found in the reports that were read.", true)}},
 		Section{ID: "risks", Title: "Risks", Intro: "Not blocking on their own; each is a decision to take, or to record as accepted on its report.",
 			Blocks: []Block{items(d.Risks, "No risks were found in the reports that were read.", false)}},
-		Section{ID: "accepted", Title: "Accepted", Intro: "Visible, not hidden: each accepted item with the decision or verdict that accepts it.",
+		Section{ID: "accepted", Title: "Accepted", Intro: "Visible, not hidden: each accepted item with the decision or verdict that accepts it. " +
+			"Only recorded acceptances count: a verdict on the item's own report (`--annotations`), a lint finding accepted by a brain decision captured with `mxcli brain capture --accepts <RULE>:<why>`, or a sign-off here. " +
+			"A decision written only as prose in the brain is not read as accepting anything.",
 			Blocks: []Block{items(d.Accepted, "Nothing is accepted.", false)}},
 	)
 	admin := []Block{items(d.Admin, "The model asks nothing of an environment.", false)}

@@ -109,7 +109,10 @@ func TestReadinessBlockingItems(t *testing.T) {
 	}
 	var html bytes.Buffer
 	_ = RenderHTML(&html, doc)
-	mustContain(t, html.String(), `<a href="release.html">Release</a>`, "readiness:vuln:GHSA-1", "A penetration test", "not ready")
+	mustContain(t, html.String(), `<a href="release.html">Release</a>`, "readiness:vuln:GHSA-1", "A penetration test", "not ready",
+		// a reader with many prose decisions should not think they were not read (ako/mxcli#2451)
+		"A decision written only as prose in the brain is not read as accepting anything",
+		"any one makes it not ready")
 }
 
 // A link in a cell is rendered only to a report page in the same folder:
