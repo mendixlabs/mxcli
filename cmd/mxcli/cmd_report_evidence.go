@@ -91,7 +91,15 @@ func collectEvidence(cmd *cobra.Command, projectPath string, withTests bool) (*e
 				ev.warnings = append(ev.warnings, "`mxcli test` did not finish cleanly: "+err.Error())
 			}
 		}
-		if junit != "" {
+		switch _, statErr := os.Stat(junit); {
+		case junit == "":
+		case os.IsNotExist(statErr):
+			// A --run that failed before writing it, or `report all` handing
+			// on the file a failed run should have written: the report still
+			// stands on its journeys, without test results, and says so
+			// (ako/mxcli#2452).
+			ev.warnings = append(ev.warnings, fmt.Sprintf("Test results file `%s` does not exist: no test results were read.", junit))
+		default:
 			res, err := projectreport.ReadJUnit(junit)
 			if err != nil {
 				return nil, err
