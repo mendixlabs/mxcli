@@ -1,0 +1,22 @@
+{
+  "serialization_version": 1,
+  "errors": [
+    {
+      "code": "CE0117",
+      "message": "Error(s) in expression.",
+      "locations": [
+        {
+          "module-id": "1b5e1ab0-ec94-411f-8f4c-dd5e0febbcd9",
+          "module-name": "Sp",
+          "document-name": "Microflow 'F08'",
+          "element-name": "End event",
+          "element-id": "6ea0946e-4b62-48ea-a9b5-ffb2f73cec7b",
+          "unit-id": "c6917576-1558-4e91-9f6e-9a37b9c41d66"
+        }
+      ]
+    }
+  ],
+  "warnings": [],
+  "deprecations": [],
+  "total-problems": 1
+}
