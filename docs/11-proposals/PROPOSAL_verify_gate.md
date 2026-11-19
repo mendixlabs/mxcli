@@ -11,7 +11,7 @@ related:
 # Proposal: `mxcli verify` — a staged gate with baseline comparison
 
 **Status:** Draft
-**Date:** 2026-11-16 (updated 2026-11-19)
+**Date:** 2026-11-16 (updated 2026-11-20)
 **Issue:** ako/mxcli#2333
 **Relates to:** ako/mxcli#1313 (`mx check` baseline), #1312 (`diff --mx-check`),
 #1258 (`check --full`), #2308 (`replace()` passes `check`, fails `mx check`)
@@ -68,24 +68,31 @@ imply a clean result means "correct".
 ## Proposed behaviour
 
 ```
-mxcli verify -p app.mpr [script.mdl...] [--base <git ref>]
-                        [--stages check,lint,mxcheck,build,test,smoke]
+mxcli verify -p app.mpr [script.mdl...] [--apply] [--through <stage>]
+                        [--stages check,exec,lint,mxcheck,test,report]
                         [--fail-fast] [--fail-on error|warning] [--strict]
                         [--baseline-dir <dir>] [--update-baseline]
                         [--format text|json]
 ```
 
-**First release (step 2, implemented):** stages `check`, `lint`, `mxcheck`;
-`--base`, `build`, `test`, `smoke` and `--format sarif` are later steps.
+**Implemented (steps 2 and 3):** stages `check`, `lint`, `mxcheck`; `--stages`,
+`--fail-fast`, `--fail-on`, `--strict`, baselines, `--format text|json`.
+**Designed here, not yet built (steps 4 and 5):** `--apply`, `--through` and the
+`exec`, `test` and `report` stages (see "How far one call goes"). `--base`,
+`build`, `smoke` and `--format sarif` come later.
 
 | Stage | Reuses | Default | Cost |
 |-------|--------|---------|------|
 | `check` | `mxcli check <scripts> -p` on the **script files given as arguments**; skipped (and reported skipped) without any. `check` has no project-wide mode | on with scripts | ~0.2 s |
+| `exec` | `mxcli exec <scripts>`; **only with `--apply`**, and only after `check` passed. The one stage that writes the project | with `--apply` | ~1–2 s |
 | `lint` | `mxcli lint --format json` against its own baseline file | on | ~0.2–0.9 s |
-| `mxcheck` | `docker.CheckFindings` (`mx check --json` on a copy) | on | ~8 s |
-| `build` | `run --local` build/boot | opt-in | 30–60 s |
-| `test` | `test --local` | opt-in | ~24 s |
-| `smoke` | `playwright check --role X` | opt-in | ~24 s |
+| `mxcheck` | `docker.CheckFindings` (`mx check --json` on a copy) | on | ~8–10 s |
+| `test` | `mxcli test --local` on the suites given or `tests/` | opt-in | ~30 s cold, ~2 s warm |
+| `report` | `mxcli report` as one summary line; **informational, never fails the gate** | opt-in | not measured |
+| `build` | `run --local` build/boot | later | 30–60 s |
+| `smoke` | `playwright check --role X` | later | ~24 s |
+
+The stages in pipeline order are `check`, `exec`, `lint`, `mxcheck`, `test`, `report`.
 
 - Stages run in cost order. **Default: run every selected stage** and report all
   new findings in one result. The consumer is an agent, and stopping at the first
@@ -102,7 +109,7 @@ mxcli verify -p app.mpr [script.mdl...] [--base <git ref>]
   new and says so (`note`), so a first run is honest, not silently green.
 - **Exit code** (a contract, printed in `--help`): `0` nothing new; `1` usage
   error; `2` a stage could not run (no `mx`, ...) and nothing failed; **`16` plus
-  one bit per failed stage** (1 `check`, 2 `lint`, 4 `mxcheck`) when a stage
+  one bit per failed stage** (1 `check`, 2 `lint`, 4 `mxcheck`; later 8 `exec`, 16 `test`) when a stage
   failed, so `18` is lint, `22` is lint and mxcheck, and a failure can never be
   read as "could not run" or as a usage error. When one stage failed and another
   could not run, the failure code wins (it is the actionable one) and the
@@ -130,6 +137,60 @@ mxcli verify -p app.mpr [script.mdl...] [--base <git ref>]
   has no place for per-stage durations or "could not run"; the JSON is a
   projection of the same internal findings and the SARIF writer is its second
   rendering.
+
+### How far one call goes
+
+The point of `verify` is fewer tool calls: an agent following the generated gate
+list makes about six (`check`, `exec`, `verify`, `report`, `test`, `run`), each
+re-reading the conversation. `verify` as first released folds only `lint` and
+`mx check` together, so it saves one. The saving is in the **front** of the
+pipeline (`check` then `exec`) and the **back** (`test`, `report`). It must not
+become mandatory: the full pipeline on every edit is the cost the generated
+`CLAUDE.md` already tells agents to avoid ("once per change, not per edit"), and
+`test` alone is ~30 s cold. **The caller says how far the pipeline runs.**
+
+- **`--through <stage>`** runs every stage up to and including `<stage>`, in
+  pipeline order. `--through exec` is `check` and `exec` in one call;
+  `--through mxcheck` adds `lint` and `mx check`; `--through test` adds the
+  microflow tests; `--through report` adds the score line. `--stages` remains for
+  an explicit set (`--stages lint`), and the two are mutually exclusive.
+- **Defaults stay cheap.** Without scripts the default is `lint,mxcheck`, as
+  today. With `--apply` it is `--through mxcheck`. `test` and `report` never run
+  unless asked for, and neither is ever part of a default.
+- **Applying a script is explicit.** `verify` is read-only today and stays so
+  without `--apply`. With it, `check` runs first and **`exec` runs only if `check`
+  passed**; nothing is written otherwise. `exec` already refuses what `check`
+  rejects and writes nothing when it refuses, and `verify` relies on that rather
+  than adding its own rollback.
+- **Stages are no longer independent from `check` to `exec`**, so the run-all rule
+  gets a dependency rule. A stage that needs the change to be applied is skipped,
+  with the reason in its `note`, when the change was not: `check` fails → `exec` and
+  everything after it is skipped (*nothing was written*); `exec` fails → `lint`,
+  `mxcheck` and `test` are skipped, because they would describe the project
+  without the change. From `lint` on, the rule is unchanged: every selected stage
+  runs and one result carries all the findings. `test` is skipped when `mxcheck`
+  found new errors, because the app does not build.
+- **Without `--apply`, scripts are checked but not applied**, and `lint` and
+  `mxcheck` describe the project **without** them. That is what the first release
+  does and it is easy to misread as "the script passed everything"; the output now
+  says so (`script not applied: lint and mxcheck describe the project without it`)
+  and the JSON carries `applied: false`.
+- **`report` is a summary, not a gate.** It prints the overall score and the six
+  category scores on one line and never changes the exit code. There is no
+  baseline for scores yet (bootstrap writes them into `FINDINGS.md` by hand), so
+  it does not compare; see the open question.
+- **Exit codes** keep their meaning. The new stages take the next bits: `exec` 8,
+  `test` 16, with 32 reserved for `smoke`; `report` has none. `check` 1, `lint` 2
+  and `mxcheck` 4 do not change, so `18` is still "lint failed".
+- **What the agent runs.** Iterating: `verify --apply s.mdl --through exec` (or
+  plain `exec`). Finishing a change: `verify --apply s.mdl` (through `mxcheck`).
+  Finishing a slice: `verify --apply s.mdl --through test`. `run` stays a separate
+  command: it starts a long-lived process, which is not a verdict.
+
+A scratch-copy variant (`--dry-run`: apply to a copy and judge that, writing
+nothing) answers "would this break anything?" without touching the project, using
+the mechanism `check` and `diff` already have. It costs a copy and an `exec`, and
+is left to an open question.
 
 ### Baseline sources
 
@@ -350,9 +411,16 @@ type Stage interface {
    baseline directory moved from `.mxcli/verify` to `verify-baseline/` because
    `mxcli init` git-ignores `.mxcli/`; an ignored baseline is lost on the next fresh
    clone or reaped session.
-4. **`--base <git ref>`** via scratch export.
-5. **Opt-in `build`, `test`, `smoke` stages.** `smoke` is also the only stage that
-   can reach the runtime-only findings listed under Evidence.
+4. **`--apply` and `--through`, with the `exec` stage** (next). `check` →
+   `exec` → `lint` → `mxcheck` in one call, the dependency rule above, the
+   `applied` field and the "script not applied" note. The note and the `applied`
+   field also ship for scripts given without `--apply`, since that misreading
+   exists today. This is the step that cuts the call count.
+5. **`test` stage and the `report` summary line**, both reached only by
+   `--through test` / `--through report` or `--stages`.
+6. **`--base <git ref>`** via scratch export.
+7. **`build` and `smoke` stages.** `smoke` is also the only stage that can reach
+   the runtime-only findings listed under Evidence.
 
 ## Testing
 
@@ -368,6 +436,11 @@ type Stage interface {
 - Reader: golden `mx check --json` files from real runs (committed under `cmd/mxcli/docker/testdata/mxcheck/`), the same defect in two microflows (two keys), a clean control, a lost-finding control for `Verify`, and an integration test against a real `mx`.
 - Control (per CLAUDE.md): a "nothing new" test paired with one that injects a
   finding and must fail.
+- Pipeline: `check` fails → the project is byte-identical afterwards and every later
+  stage is skipped with its reason (**control:** the same script with the defect
+  removed applies and reaches `mxcheck`); `exec` refused → `lint`/`mxcheck`/`test`
+  skipped; `--through` stops where asked and runs nothing after it; the defaults
+  never include `test` or `report`; `report` never changes the exit code.
 - Output purity row in `json_output_purity_test.go`; exit-code table incl. several failing stages at once and "could not run".
 - Executor-level orchestration with stub stages (same seam style as
   `mxCheckCmd`); integration (`-tags integration`) for real `mx`.
@@ -402,3 +475,16 @@ type Stage interface {
     a new command) offer to update the list, and should the first `verify` on a
     project with no baseline refuse with a pointer instead of reporting everything
     as new?
+13. **`exec` that fails partway.** `exec` refuses atomically when its pre-flight
+    fails, but is not transactional once statements run (`check`'s own help says
+    so). Should `verify --apply` snapshot the project and restore it when `exec`
+    fails midway, or report it and leave the state to the caller?
+14. **`--dry-run`.** A scratch-copy pre-flight that writes nothing, next to
+    `--apply`, or only one of them?
+15. **`report` in the gate.** Informational line only, or should the scores get a
+    machine baseline (recorded by `--update-baseline`) so a score that fell is a
+    finding, as the bootstrap skill says it should be?
+16. **The generated gate list.** Once `--apply` exists, should `CLAUDE.md` replace
+    `check`, `exec` and `verify` with one line (`verify --apply <script>`), or keep
+    them separate until there is evidence an agent uses the long form well? The
+    file is near its test-enforced byte budget.
