@@ -41,7 +41,8 @@ one record per journey, which performance would read as one step per journey.
 Writes every kind into one folder — `<kind>.html` and `<kind>.json`, the scored report
 as `quality.html` — and `index.html`, an overview with a card per report: its verdict
 and headline numbers, linked. Every page links the others. A `<kind>-annotations.yaml`
-in the folder is applied to that kind. Performance runs with `--perf-journeys`/`--perf-spans`
+in the folder — or in `--annotations-dir`, for a project that keeps them elsewhere —
+is applied to that kind, and the overview names the annotation files it read. Performance runs with `--perf-journeys`/`--perf-spans`
 and release with `--against`; a kind that cannot run is listed on the overview with
 the reason, and a `<kind>.json` left in the folder by an earlier run is linked instead.
 `--offline` asks no online source, `--skip` leaves kinds out. The folder also gets

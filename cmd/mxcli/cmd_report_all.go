@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/projectreport"
@@ -30,7 +31,8 @@ links the others.
 
 Each kind writes <kind>.html and <kind>.json (re-render with
 'mxcli report <kind> --from <dir>/<kind>.json'). A <kind>-annotations.yaml in
-the folder is applied to that kind's page.
+the folder (or in --annotations-dir) is applied to that kind's page; the
+overview names the annotation files it read.
 
 Inputs go to the kinds they are for:
   --journeys, --spans        the functional journeys: tests and traceability
@@ -88,6 +90,21 @@ type reportPage struct {
 
 func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]bool, log io.Writer) error {
 	passThrough(cmd, dir, skip)
+	// Annotations come from --annotations-dir, else the output folder. Which
+	// files were read is said on the overview: a project keeping them
+	// elsewhere otherwise saw "0 accepted" and no hint why (ako/mxcli#2452).
+	annDir, _ := cmd.Flags().GetString("annotations-dir")
+	if annDir == "" {
+		annDir = dir
+	}
+	annRead := map[string]bool{}
+	annPath := func(kind string) string {
+		p := existing(filepath.Join(annDir, kind+"-annotations.yaml"))
+		if p != "" {
+			annRead[filepath.Base(p)] = true
+		}
+		return p
+	}
 	var pages []reportPage
 	for _, kind := range reportAllKinds {
 		if skip[kind] {
@@ -157,7 +174,7 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 		}
 		switch {
 		case p.quality != nil:
-			ann, err := projectreport.LoadAnnotations(existing(filepath.Join(dir, "quality-annotations.yaml")))
+			ann, err := projectreport.LoadAnnotations(annPath("quality"))
 			if err != nil {
 				return fmt.Errorf("quality annotations: %w", err)
 			}
@@ -170,7 +187,7 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 				return err
 			}
 		default:
-			ann, err := projectreport.LoadAnnotations(existing(filepath.Join(dir, p.kind+"-annotations.yaml")))
+			ann, err := projectreport.LoadAnnotations(annPath(p.kind))
 			if err != nil {
 				return fmt.Errorf("%s annotations: %w", p.kind, err)
 			}
@@ -206,7 +223,7 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 	// Readiness rolls the pages up, so it is written last and shown first.
 	if !skip["readiness"] {
 		fmt.Fprintln(log, "report readiness ...")
-		card, err := writeReadiness(cmd, dir, project, pages, navFor("readiness"))
+		card, err := writeReadiness(cmd, dir, project, pages, navFor("readiness"), annPath)
 		if err != nil {
 			return err
 		}
@@ -217,8 +234,9 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 		Title: project + " reports", Project: project, Kind: "Overview", Generated: reportNow(), Mxcli: version,
 		Lede: "Every report on how the app is built and how it holds up. Each card is one report's verdict and headline numbers; " +
 			"each page also has its data as JSON, to re-render with annotations (`mxcli report <kind> --from <kind>.json`).",
-		Nav:      navFor("index"),
-		Sections: []projectreport.Section{{ID: "reports", Title: "Reports", Blocks: []projectreport.Block{projectreport.Cards{Items: cards}}}},
+		Nav: navFor("index"),
+		Sections: []projectreport.Section{{ID: "reports", Title: "Reports", Blocks: []projectreport.Block{projectreport.Cards{Items: cards},
+			projectreport.Para{Text: annotationsLine(annDir, annRead)}}}},
 	}
 	index.Nav[0].Current = true
 	if err := writeFileWith(filepath.Join(dir, "index.html"), func(w io.Writer) error { return projectreport.RenderHTML(w, index) }); err != nil {
@@ -321,6 +339,19 @@ func firstStats(s []projectreport.Stat, n int) []projectreport.Stat {
 	return s
 }
 
+// annotationsLine says which annotation files the pages were rendered with.
+func annotationsLine(annDir string, read map[string]bool) string {
+	if len(read) == 0 {
+		return "No annotation files (`<kind>-annotations.yaml`) were found in `" + annDir + "`: no verdicts, names or sign-offs were applied. Point --annotations-dir at the folder that holds them."
+	}
+	names := make([]string, 0, len(read))
+	for n := range read {
+		names = append(names, "`"+n+"`")
+	}
+	sort.Strings(names)
+	return "Annotations read from `" + annDir + "`: " + strings.Join(names, ", ") + "."
+}
+
 func existing(path string) string {
 	if _, err := os.Stat(path); err == nil {
 		return path
@@ -343,6 +374,7 @@ func writeFileWith(path string, write func(io.Writer) error) error {
 func init() {
 	reportAllCmd.Flags().StringP("project", "p", "", "Path to the .mpr file")
 	reportAllCmd.Flags().StringP("output", "o", "", "Folder to write the reports into (created if needed)")
+	reportAllCmd.Flags().String("annotations-dir", "", "Folder holding <kind>-annotations.yaml (default: the output folder)")
 	reportAllCmd.Flags().String("milestone", "", "Readiness: the milestone being released, whose unbuilt requirements block")
 	reportAllCmd.Flags().StringSlice("exclude-docs", nil, "Architecture: name globs of documents to leave out (generated code, probes, fixtures)")
 	reportAllCmd.Flags().Bool("offline", false, "Ask no online source (dependencies: no Marketplace, no vulnerability lookup)")
@@ -362,7 +394,7 @@ func init() {
 
 // writeReadiness rolls the generated pages up into readiness.json and
 // readiness.html, signed off with readiness-annotations.yaml from the folder.
-func writeReadiness(cmd *cobra.Command, dir, project string, pages []reportPage, nav []projectreport.NavLink) (projectreport.LinkCard, error) {
+func writeReadiness(cmd *cobra.Command, dir, project string, pages []reportPage, nav []projectreport.NavLink, annPath func(string) string) (projectreport.LinkCard, error) {
 	card := projectreport.LinkCard{Title: projectreport.KindLabel("readiness"), Href: "readiness.html"}
 	envs := map[string]*projectreport.Envelope{}
 	var quality *linter.JSONReport
@@ -380,7 +412,7 @@ func writeReadiness(cmd *cobra.Command, dir, project string, pages []reportPage,
 	}
 	ann := map[string]*projectreport.Annotations{}
 	for _, k := range projectreport.ReadinessKinds {
-		a, err := projectreport.LoadAnnotations(existing(filepath.Join(dir, k+"-annotations.yaml")))
+		a, err := projectreport.LoadAnnotations(annPath(k))
 		if err != nil {
 			return card, fmt.Errorf("%s annotations: %w", k, err)
 		}
@@ -396,7 +428,7 @@ func writeReadiness(cmd *cobra.Command, dir, project string, pages []reportPage,
 			in.Failed[p.kind] = p.missing
 		}
 	}
-	signOff, err := projectreport.LoadAnnotations(existing(filepath.Join(dir, "readiness-annotations.yaml")))
+	signOff, err := projectreport.LoadAnnotations(annPath("readiness"))
 	if err != nil {
 		return card, fmt.Errorf("readiness annotations: %w", err)
 	}
