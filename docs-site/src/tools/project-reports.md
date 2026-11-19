@@ -85,6 +85,8 @@ in a constant, placed in a layout, named in text).
 
 ```bash
 mxcli report architecture -p app.mpr -o architecture.html
+# leave generated code, probes and fixtures out of every figure (name globs)
+mxcli report architecture -p app.mpr --exclude-docs 'Shop.FaultProbe*,RestClient.*' -o architecture.html
 ```
 
 ## tests

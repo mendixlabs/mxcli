@@ -5,6 +5,7 @@ package projectreport
 import (
 	"fmt"
 	"math"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -29,6 +30,11 @@ type ArchitectureOptions struct {
 	// microflows. Project settings are not a source in the refs table, so
 	// without these the after-startup microflow reads as unused.
 	SettingsMicroflows []string
+	// ExcludeDocs are name globs (path.Match against the qualified name, e.g.
+	// "Shop.FaultProbe*", "RestClient.*") for documents to leave out:
+	// generated code, probes and fixtures that would otherwise dominate the
+	// clusters, hubs and unused list (ako/mxcli#2443).
+	ExcludeDocs []string
 }
 
 // ArchitectureData is the collected architecture report.
@@ -51,6 +57,22 @@ type ArchitectureData struct {
 	Bridges                       []Asset     `json:"bridges"`
 	Hotspots                      []Hotspot   `json:"hotspots"`
 	Unused                        []UnusedDoc `json:"unused"`
+	// ExcludeDocs are the patterns given, and ExcludedDocs how many app
+	// documents they matched.
+	ExcludeDocs  []string `json:"excludeDocs,omitempty"`
+	ExcludedDocs int      `json:"excludedDocs,omitempty"`
+}
+
+// docFilter reports whether a qualified name matches one of the patterns.
+type docFilter []string
+
+func (f docFilter) out(name string) bool {
+	for _, p := range f {
+		if ok, _ := path.Match(p, name); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ModuleHealth is one app module's size and coupling.
@@ -156,7 +178,8 @@ func CollectArchitecture(q Querier, opt ArchitectureOptions) (*ArchitectureData,
 	if err != nil {
 		return nil, err
 	}
-	d := &ArchitectureData{Scope: scope, NavigationKinds: NavigationKinds}
+	d := &ArchitectureData{Scope: scope, NavigationKinds: NavigationKinds, ExcludeDocs: opt.ExcludeDocs}
+	excl := docFilter(opt.ExcludeDocs)
 	app := setOf(scope.App)
 	known := setOf(append(append([]string{}, scope.App...), scope.Outside...))
 	nav := setOf(NavigationKinds)
@@ -168,6 +191,9 @@ func CollectArchitecture(q Querier, opt ArchitectureOptions) (*ArchitectureData,
 	}
 	refs := make([]refRow, 0, len(rs))
 	for _, r := range rs {
+		if excl.out(r["SourceName"]) || excl.out(r["TargetName"]) {
+			continue
+		}
 		refs = append(refs, refRow{r["SourceName"], r["SourceType"], r["TargetName"], r["TargetType"], r["RefKind"]})
 	}
 
@@ -308,6 +334,21 @@ func CollectArchitecture(q Querier, opt ArchitectureOptions) (*ArchitectureData,
 		}
 		docs[r["ModuleName"]][r["ObjectType"]] = atoi(r["N"])
 	}
+	if len(excl) > 0 {
+		names, err := rows(q, `SELECT ModuleName, ObjectType, QualifiedName FROM objects
+			WHERE ModuleName != '' AND ObjectType NOT IN ('MODULE', 'ATTRIBUTE', 'ASSOCIATION', 'ENUMERATION_VALUE')`)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range names {
+			if excl.out(r["QualifiedName"]) && docs[r["ModuleName"]] != nil {
+				docs[r["ModuleName"]][r["ObjectType"]]--
+				if app[r["ModuleName"]] {
+					d.ExcludedDocs++
+				}
+			}
+		}
+	}
 	fanIn, fanOut := map[string]map[string]bool{}, map[string]map[string]bool{}
 	for _, e := range d.DomainEdges {
 		if fanOut[e.From] == nil {
@@ -354,37 +395,60 @@ func CollectArchitecture(q Querier, opt ArchitectureOptions) (*ArchitectureData,
 		return d.Modules[i].Name < d.Modules[j].Name
 	})
 
-	if err := collectCommunities(q, d, app); err != nil {
+	if err := collectCommunities(q, d, app, excl); err != nil {
 		return nil, err
 	}
 	appList := sqlList(scope.App)
-	top := fmt.Sprint(opt.Top)
+	// Over-fetch when excluding, so the top list is still full after filtering.
+	top := fmt.Sprint(opt.Top * (1 + 4*min(len(excl), 1)))
 	gn, err := rows(q, `SELECT Asset, COALESCE(ObjectType, '') AS ObjectType, ModuleName, InDegree, OutDegree, Degree,
 		COALESCE(Betweenness, 0) AS Betweenness FROM graph_god_nodes WHERE ModuleName IN (`+appList+`)
 		ORDER BY Degree DESC, Asset LIMIT `+top)
 	if err != nil {
 		return nil, err
 	}
-	d.GodNodes = toAssets(gn)
+	d.GodNodes = trimAssets(toAssets(gn), excl, opt.Top)
 	br, err := rows(q, `SELECT Asset, COALESCE(ObjectType, '') AS ObjectType, ModuleName, InDegree, OutDegree, Degree,
 		COALESCE(Betweenness, 0) AS Betweenness FROM graph_god_nodes WHERE ModuleName IN (`+appList+`)
 		AND COALESCE(Betweenness, 0) > 0 ORDER BY Betweenness DESC, Asset LIMIT `+top)
 	if err != nil {
 		return nil, err
 	}
-	d.Bridges = toAssets(br)
+	d.Bridges = trimAssets(toAssets(br), excl, opt.Top)
 	hs, err := rows(q, `SELECT Entity, UsedByFlows, COALESCE(AcrossModules, '') AS AcrossModules FROM graph_entity_hotspots
 		WHERE substr(Entity, 1, instr(Entity, '.') - 1) IN (`+appList+`) ORDER BY UsedByFlows DESC, Entity LIMIT `+top)
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range hs {
+		if excl.out(r["Entity"]) || len(d.Hotspots) >= opt.Top {
+			continue
+		}
 		d.Hotspots = append(d.Hotspots, Hotspot{Entity: r["Entity"], Flows: atoi(r["UsedByFlows"]), Modules: r["AcrossModules"]})
 	}
 	if d.Unused, err = collectUnused(q, appList, opt.SettingsMicroflows); err != nil {
 		return nil, err
 	}
+	if len(excl) > 0 {
+		kept := d.Unused[:0]
+		for _, u := range d.Unused {
+			if !excl.out(u.Name) {
+				kept = append(kept, u)
+			}
+		}
+		d.Unused = kept
+	}
 	return d, nil
+}
+
+func trimAssets(as []Asset, excl docFilter, top int) []Asset {
+	var out []Asset
+	for _, a := range as {
+		if !excl.out(a.Name) && len(out) < top {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 func toAssets(rs []map[string]string) []Asset {
@@ -419,7 +483,7 @@ func moduleRole(name string, h *ModuleHealth, docs map[string]int) (string, stri
 	return "", ""
 }
 
-func collectCommunities(q Querier, d *ArchitectureData, app map[string]bool) error {
+func collectCommunities(q Querier, d *ArchitectureData, app map[string]bool, excl docFilter) error {
 	rs, err := rows(q, `SELECT c.AssetName, c.ModuleName, c.CommunityId, COALESCE(gc.PageRank, 0) AS PageRank
 		FROM communities c LEFT JOIN graph_centrality_data gc ON gc.AssetName = c.AssetName
 		ORDER BY c.CommunityId, PageRank DESC, c.AssetName`)
@@ -430,7 +494,7 @@ func collectCommunities(q Querier, d *ArchitectureData, app map[string]bool) err
 	byID := map[string]*Community{}
 	var order []string
 	for _, r := range rs {
-		if !app[r["ModuleName"]] {
+		if !app[r["ModuleName"]] || excl.out(r["AssetName"]) {
 			continue
 		}
 		id := r["CommunityId"]
@@ -634,6 +698,12 @@ func RenderArchitecture(env *Envelope, ann *Annotations) (Doc, error) {
 			Figure{SVG: layeredMapSVG(d.Modules, d.DomainEdges), Caption: "Domain dependencies between app modules, highest layer at the top.",
 				Fallback: strings.Join(layersMD, "  \n")},
 		}})
+
+	if len(d.ExcludeDocs) > 0 {
+		doc.Sections[0].Blocks = append([]Block{Callout{Kind: "info", Text: fmt.Sprintf(
+			"%d app documents matching %s are left out of every figure on this page (`--exclude-docs`).",
+			d.ExcludedDocs, strings.Join(codeList(d.ExcludeDocs), ", "))}}, doc.Sections[0].Blocks...)
+	}
 
 	// 2. Health.
 	ht := Table{Columns: []string{"Module", "Purpose", "Layer", "Documents", "Internal refs", "Outbound", "Inbound", "Cohesion", "Fan-in", "Fan-out", "Role / note"}}

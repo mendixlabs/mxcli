@@ -218,6 +218,11 @@ func passThrough(cmd *cobra.Command) {
 		set(k, "journeys")
 		set(k, "spans")
 	}
+	if ex, _ := cmd.Flags().GetStringSlice("exclude-docs"); len(ex) > 0 {
+		if rk, ok := reportKinds["architecture"]; ok {
+			_ = rk.cmd.Flags().Set("exclude-docs", strings.Join(ex, ","))
+		}
+	}
 	if off, _ := cmd.Flags().GetBool("offline"); off {
 		if rk, ok := reportKinds["dependencies"]; ok {
 			_ = rk.cmd.Flags().Set("offline", "true")
@@ -270,6 +275,7 @@ func writeFileWith(path string, write func(io.Writer) error) error {
 func init() {
 	reportAllCmd.Flags().StringP("project", "p", "", "Path to the .mpr file")
 	reportAllCmd.Flags().StringP("output", "o", "", "Folder to write the reports into (created if needed)")
+	reportAllCmd.Flags().StringSlice("exclude-docs", nil, "Architecture: name globs of documents to leave out (generated code, probes, fixtures)")
 	reportAllCmd.Flags().Bool("offline", false, "Ask no online source (dependencies: no Marketplace, no vulnerability lookup)")
 	reportAllCmd.Flags().String("against", "", "The deployed revision or .mpr, for the release report")
 	reportAllCmd.Flags().String("journeys", "", "Journey log, for the performance and tests reports")
