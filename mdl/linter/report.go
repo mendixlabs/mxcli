@@ -26,6 +26,9 @@ type Report struct {
 	// They are not scored and not in Summary: an accepted finding is a
 	// decision, not an open problem (ako/mxcli#2304).
 	Accepted int `json:"accepted,omitempty"`
+	// Consistency is Mendix's own consistency check (mx check); nil when the
+	// caller did not ask for it (ako/mxcli#2423).
+	Consistency *ConsistencyCheck `json:"consistency,omitempty"`
 }
 
 // CategoryScore tracks the score for a lint category.

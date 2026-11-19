@@ -39,7 +39,7 @@ structure make sense, whether error handling is designed or accidental.
 | Is it fast enough at production volume? | `mxcli report performance` | `report-performance` |
 | Was the specification built? | `mxcli report traceability` | `report-traceability` |
 | What is in it, for someone new? | `mxcli report map` | `report-map` |
-| Does it build? | `mxcli docker check -p app.mpr` | `/validate-project` command |
+| Does it build? | `mxcli report` (its **Builds** line), or `mxcli docker check` | `report-quality`, `/validate-project` |
 
 Read each report's skill before interpreting it — every one has traps (the quality
 score counts Marketplace modules unless scoped; the security report treats intended
@@ -218,7 +218,7 @@ only where the benefit is clear.
 ## Measured
 | Area | Result | Source |
 |---|---|---|
-| Builds | [clean / N errors, M warnings] | mxcli docker check |
+| Builds | [yes / no: N errors by code / not checked] | mxcli report (Builds line) |
 | Quality score | [X/100; lowest category and why] | mxcli report |
 | Architecture | [cycles, coupling hotspots, dead code] | report architecture |
 | Security | [open high findings; flows that trust the caller] | report security |
