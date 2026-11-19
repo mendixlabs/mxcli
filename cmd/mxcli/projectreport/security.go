@@ -82,7 +82,7 @@ type Finding struct {
 // GridRow is one entity's access per user role.
 type GridRow struct {
 	Entity string            `json:"entity"`
-	Access map[string]string `json:"access"` // user role → "R all", "RW own", …
+	Access map[string]string `json:"access"` // user role → "R all", "RWCD own", …
 }
 
 // XPathRule is a distinct access-rule constraint with its classification.
@@ -256,8 +256,8 @@ func CollectSecurity(q Querier, in SecurityInput) (*SecurityData, error) {
 		return nil, err
 	}
 	type acc struct {
-		read  string
-		write bool
+		read                  string
+		write, create, delete bool
 	}
 	grid := map[string]map[string]*acc{} // entity → user role → access
 	readClass := map[string]map[string]string{}
@@ -284,8 +284,12 @@ func CollectSecurity(q Querier, in SecurityInput) (*SecurityData, error) {
 					a.read = cls
 					readClass[ent][role] = cls
 				}
-			default:
+			case "WRITE":
 				a.write = true
+			case "CREATE":
+				a.create = true
+			case "DELETE":
+				a.delete = true
 			}
 		}
 		if p["XPath"] != "" {
@@ -306,11 +310,17 @@ func CollectSecurity(q Querier, in SecurityInput) (*SecurityData, error) {
 	for _, e := range gridEnts {
 		row := GridRow{Entity: e, Access: map[string]string{}}
 		for role, a := range grid[e] {
-			cell := "R"
-			if a.read == "" {
-				cell = "W"
-			} else if a.write {
-				cell = "RW"
+			// R, W, C, D in that order: create and delete are what a
+			// substituted or forged object costs most, so they are not folded
+			// into "write" (ako/mxcli#2443).
+			cell := ""
+			for _, l := range []struct {
+				on     bool
+				letter string
+			}{{a.read != "", "R"}, {a.write, "W"}, {a.create, "C"}, {a.delete, "D"}} {
+				if l.on {
+					cell += l.letter
+				}
 			}
 			if a.read != "" {
 				cell += " " + a.read
@@ -798,7 +808,7 @@ func RenderSecurity(env *Envelope, ann *Annotations) (Doc, error) {
 		xt.Rows = append(xt.Rows, []string{"`" + x.Entity + "`", "`" + x.XPath + "`", x.Class, strings.Join(x.Roles, ", ")})
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "grid", Title: "Who can read what",
-		Intro:  "User role × persistent app entity. R read, W write; then the widest read: own rows, via user, filtered, or all (no constraint). `all` is right for reference data and admin roles and wrong almost anywhere else.",
+		Intro:  "User role × persistent app entity. R read, W write, C create, D delete; then the widest read: own rows, via user, filtered, or all (no constraint). `all` is right for reference data and admin roles and wrong almost anywhere else.",
 		Blocks: []Block{gt, xt}})
 
 	// Flows.

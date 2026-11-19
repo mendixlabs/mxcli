@@ -51,6 +51,8 @@ func securityFixture(t *testing.T) *fixture {
 	f.permission("Shop.User", "ENTITY", "Shop.Order", "READ", "[Shop.Order_Customer = '[%CurrentUser%]']")
 	f.permission("Shop.Admin", "ENTITY", "Shop.Order", "READ", "")
 	f.permission("Shop.Admin", "ENTITY", "Shop.Order", "WRITE", "")
+	f.permission("Shop.Admin", "ENTITY", "Shop.Order", "DELETE", "")
+	f.permission("Shop.User", "ENTITY", "Shop.Customer", "CREATE", "")
 	// Acts for "me", taken from the page: the substitution the prototype proved.
 	f.microflow("Shop.ACT_Subscribe", true, "")
 	f.param("Shop.ACT_Subscribe", "Customer", "Object:Shop.Customer")
@@ -106,14 +108,16 @@ func TestSecurityReview(t *testing.T) {
 	if _, ok := ids["constant-secret:Shop.LocalStorageKey"]; ok {
 		t.Error("a storage key name is not a secret")
 	}
-	var order GridRow
+	grid := map[string]GridRow{}
 	for _, g := range d.Grid {
-		if g.Entity == "Shop.Order" {
-			order = g
-		}
+		grid[g.Entity] = g
 	}
-	if order.Access["User"] != "R via user" || order.Access["Admin"] != "RW all" {
+	// Create and delete are their own letters, not folded into W.
+	if order := grid["Shop.Order"]; order.Access["User"] != "R via user" || order.Access["Admin"] != "RWD all" {
 		t.Errorf("grid for Shop.Order = %v", order.Access)
+	}
+	if c := grid["Shop.Customer"]; c.Access["User"] != "C" {
+		t.Errorf("grid for Shop.Customer = %v, want User C (create only)", c.Access)
 	}
 
 	// A fixed finding no longer counts as open; its status shows.
