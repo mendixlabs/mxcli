@@ -7,11 +7,13 @@ package catalog
 //
 // History:
 //
-//	49 (constant base URL): consumed_rest_services gains BaseUrlConstant, the
-//	    constant a REST client reads its base URL from; BaseUrl held only a
-//	    literal, so a client configured per environment read as having no
-//	    base URL at all (ako/mxcli#2426). Without the bump a cached catalog
-//	    lacks the column and `report configuration` fails on it.
+//	49 (constant base URL, published REST authentication):
+//	    consumed_rest_services gains BaseUrlConstant, the constant a REST
+//	    client reads its base URL from; BaseUrl held only a literal, so a
+//	    client configured per environment read as having no base URL at all.
+//	    published_rest_services gains AuthenticationTypes, as
+//	    published_odata_services has (ako/mxcli#2426). Without the bump a
+//	    cached catalog lacks the columns and `report configuration` fails.
 //	48 (workflow activities): new workflow_activities table, one row per
 //	    activity of a workflow — boundary-event paths and event sub-processes
 //	    included — with its kind and the microflow, page or workflow each of
@@ -1341,6 +1343,7 @@ func (c *Catalog) createTables() error {
 			ResourceCount INTEGER DEFAULT 0,
 			OperationCount INTEGER DEFAULT 0,
 			Documentation TEXT,
+			AuthenticationTypes TEXT,
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,

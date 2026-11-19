@@ -139,8 +139,8 @@ func (b *Builder) buildPublishedRestServices() error {
 	svcStmt, err := b.tx.Prepare(`
 		INSERT INTO published_rest_services_data (Id, Name, QualifiedName, ModuleName, Folder,
 			Path, Version, ServiceName, ResourceCount, OperationCount, Documentation,
-			ProjectId, SnapshotId)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			AuthenticationTypes, ProjectId, SnapshotId)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -192,6 +192,7 @@ func (b *Builder) buildPublishedRestServices() error {
 			len(svc.Resources),
 			opCount,
 			svc.Documentation, // was always "", so QUAL002 could never close (mendixlabs/mxcli#1510)
+			strings.Join(svc.AuthenticationTypes, ", "),
 			projectID, snapshotID,
 		)
 		if err != nil {
