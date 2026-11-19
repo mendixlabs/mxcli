@@ -103,8 +103,12 @@ type CallableFlow struct {
 	ChecksCaller      bool     `json:"checksCaller"`
 	TakesUser         bool     `json:"takesUser"`
 	Writes            bool     `json:"writes"`
-	Risk              string   `json:"risk"` // high | medium | low | ok
-	Triage            string   `json:"triage"`
+	// CheckedBy is the sub-microflow that checks the caller when the flow
+	// does not do it in its own body; WritesVia the one that writes.
+	CheckedBy string `json:"checkedBy,omitempty"`
+	WritesVia string `json:"writesVia,omitempty"`
+	Risk      string `json:"risk"` // high | medium | low | ok
+	Triage    string `json:"triage"`
 }
 
 // LintRule is one security lint rule's findings, grouped.
@@ -385,6 +389,14 @@ func collectCallableFlows(q Querier, d *SecurityData, app map[string]bool, userR
 	for _, w := range wr {
 		writes[w["SourceName"]] = true
 	}
+	// What a flow does through its sub-microflows counts too: a flow that
+	// commits through a sub was labelled as reading only, and one whose sub
+	// retrieves the caller's own cart ([%CurrentUser%]) was flagged as
+	// trusting the caller (ako/mxcli#2443, Shop.DS_Info_Line on ako/PizzaV1).
+	calls, err := LoadCallGraph(q)
+	if err != nil {
+		return err
+	}
 	var names []string
 	for n := range roles {
 		names = append(names, n)
@@ -416,6 +428,17 @@ func collectCallableFlows(q Querier, d *SecurityData, app map[string]bool, userR
 			continue
 		}
 		f.ChecksCaller = callerCheck.MatchString(body[name])
+		for _, callee := range calls.Closure([]string{name}) {
+			if callee == name {
+				continue
+			}
+			if !f.ChecksCaller && f.CheckedBy == "" && callerCheck.MatchString(body[callee]) {
+				f.ChecksCaller, f.CheckedBy = true, callee
+			}
+			if !f.Writes && writes[callee] {
+				f.Writes, f.WritesVia = true, callee
+			}
+		}
 		widest := ""
 		for _, ent := range paramEnts {
 			for _, r := range f.Roles {
@@ -427,10 +450,15 @@ func collectCallableFlows(q Querier, d *SecurityData, app map[string]bool, userR
 		switch {
 		case f.TakesUser && !f.ChecksCaller:
 			f.Risk, f.Triage = "high", "acts for a user the page supplies: an object parameter is a plain id, so any user the caller may read can be substituted. Use $currentUser in the body instead"
+		case f.ChecksCaller && f.CheckedBy != "":
+			f.Risk, f.Triage = "ok", "checks the caller through `"+f.CheckedBy+"` ($currentUser / [%CurrentUser%]) — confirm that check constrains the object it acts on"
 		case f.ChecksCaller:
 			f.Risk, f.Triage = "ok", "checks the caller in its own body ($currentUser / [%CurrentUser%])"
 		case !f.ApplyEntityAccess && f.Writes:
 			f.Risk, f.Triage = "high", "changes an object the client chose, with entity access off: no access rule stops a substituted id"
+			if f.WritesVia != "" {
+				f.Triage += " (it writes through `" + f.WritesVia + "`)"
+			}
 		case !f.ApplyEntityAccess:
 			f.Risk, f.Triage = "medium", "reads an object the client chose, with entity access off"
 		case widest == AccessAll:

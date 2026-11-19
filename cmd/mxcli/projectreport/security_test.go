@@ -199,3 +199,42 @@ func TestSecurityLintVerdictComesFromTheBrain(t *testing.T) {
 	_ = RenderMarkdown(&md, doc)
 	mustContain(t, md.String(), "| SEC001 | warning | 2 |  | accepted (brain d1, d2) |", "1 of 2 accepted (brain d3)")
 }
+
+// What a flow does through its sub-microflows counts: a check on the caller in
+// a sub is still a check, and a commit in a sub is still a write
+// (ako/mxcli#2443 — Shop.DS_Info_Line was flagged high on ako/PizzaV1 though it
+// takes the caller's own cart through a sub).
+func TestCallableFlowFollowsSubMicroflows(t *testing.T) {
+	f := securityFixture(t)
+	// Checks the caller through a sub.
+	f.microflow("Shop.DS_Info", true, "")
+	f.param("Shop.DS_Info", "Order", "Object:Shop.Order")
+	f.permission("Shop.User", "MICROFLOW", "Shop.DS_Info", "EXECUTE", "")
+	f.source("Shop.DS_Info", "call microflow Shop.SUB_Current();")
+	f.ref("Shop.DS_Info", "MICROFLOW", "Shop.SUB_Current", "MICROFLOW", "call")
+	f.ref("Shop.DS_Info", "MICROFLOW", "Shop.Order", "ENTITY", "change")
+	f.microflow("Shop.SUB_Current", true, "")
+	f.source("Shop.SUB_Current", "retrieve $Cart from Shop.Order where Shop.Order_Customer = '[%CurrentUser%]';")
+	// Entity access off, writes only through a sub.
+	f.microflow("Shop.ACT_Archive", false, "")
+	f.param("Shop.ACT_Archive", "Order", "Object:Shop.Order")
+	f.permission("Shop.User", "MICROFLOW", "Shop.ACT_Archive", "EXECUTE", "")
+	f.ref("Shop.ACT_Archive", "MICROFLOW", "Shop.SUB_Commit", "MICROFLOW", "call")
+	f.microflow("Shop.SUB_Commit", false, "")
+	f.ref("Shop.SUB_Commit", "MICROFLOW", "Shop.Order", "ENTITY", "commit")
+
+	d, err := CollectSecurity(f.cat, SecurityInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]CallableFlow{}
+	for _, fl := range d.Flows {
+		got[fl.Name] = fl
+	}
+	if fl := got["Shop.DS_Info"]; fl.Risk != "ok" || fl.CheckedBy != "Shop.SUB_Current" {
+		t.Errorf("DS_Info checks the caller through SUB_Current: risk %q, checkedBy %q (%s)", fl.Risk, fl.CheckedBy, fl.Triage)
+	}
+	if fl := got["Shop.ACT_Archive"]; fl.Risk != "high" || !fl.Writes || fl.WritesVia != "Shop.SUB_Commit" {
+		t.Errorf("ACT_Archive writes through SUB_Commit: risk %q, writes %v via %q (%s)", fl.Risk, fl.Writes, fl.WritesVia, fl.Triage)
+	}
+}

@@ -11,11 +11,11 @@ description: "Produce and triage the security review (mxcli report security): wh
 | lines | section |
 |---|---|
 | 32-38 | Run it |
-| 39-60 | Triage a client-callable flow |
-| 61-74 | Unsafe defaults |
-| 75-82 | Live probes (only on a local app, only undone through the app) |
-| 83-106 | Statuses |
-| 107-110 | Related |
+| 39-62 | Triage a client-callable flow |
+| 63-76 | Unsafe defaults |
+| 77-84 | Live probes (only on a local app, only undone through the app) |
+| 85-108 | Statuses |
+| 109-112 | Related |
 
 <!-- /skill-index -->
 # Security Report
@@ -45,10 +45,12 @@ The client passes that object as a **plain id**. Work through each one:
    caller may read can be substituted. Measured on a running app: a subscription was
    created for another user this way. Fix: derive the user in the body
    (`$currentUser`), never take it from the page.
-2. **Does it check the caller in its own body?** (`$currentUser`,
-   `[%CurrentUser%]`) — then it holds, provided the check is on the object it acts on.
+2. **Does it check the caller?** (`$currentUser`, `[%CurrentUser%]`, in its own body
+   or in a sub-microflow it calls — the report names that sub) — then it holds,
+   provided the check is on the object it acts on. A sub that fetches the caller's
+   own cart does not protect a different object the page passed in.
 3. **Entity access off and it writes?** Nothing stops a substituted id. Turn entity
-   access on or add the check.
+   access on or add the check. A write in a sub-microflow counts.
 4. **Relies on access rules?** Then it is as safe as the parameter entity's read
    rule for the granted roles. `all` means any id works.
 
