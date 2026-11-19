@@ -47,7 +47,7 @@ func TestJavaLibrariesReadCoordinates(t *testing.T) {
 		"META-INF/maven/commons-io/commons-io/pom.properties": "#generated\nversion=2.6\ngroupId=commons-io\nartifactId=commons-io\n",
 	})
 	writeZip(t, filepath.Join(dir, "userlib", "fat-client-1.0.jar"), map[string]string{
-		"META-INF/maven/org.shaded/inner/pom.properties":   "groupId=org.shaded\nartifactId=inner\nversion=9.9\n",
+		"META-INF/maven/org.shaded/inner/pom.properties":    "groupId=org.shaded\nartifactId=inner\nversion=9.9\n",
 		"META-INF/maven/com.acme/fat-client/pom.properties": "groupId=com.acme\nartifactId=fat-client\nversion=1.0\n",
 	})
 	writeZip(t, filepath.Join(dir, "vendorlib", "helper-3.1.jar"), map[string]string{"x.class": ""})
