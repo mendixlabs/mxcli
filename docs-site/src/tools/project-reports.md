@@ -12,6 +12,7 @@ the kinds below answer specific questions instead of scoring.
 | `performance` | Where does time go in the main journeys at production volume, and did a fix help? |
 | `traceability` | Is each requirement in the specification built, and what proves it? |
 | `map` | What does the app contain, and how does it fit together? (an interactive guide) |
+| `release` | What does deploying this model do to the data already in production? |
 
 ## Shared shape
 
@@ -171,10 +172,37 @@ Entry points include two kinds of reference the catalog records for this: `by_na
 the flow a call placed in it). Both also keep such flows off the architecture
 report's unused list.
 
+## release
+
+Compares the model with the one that is deployed and lists, for every persistent
+entity, attribute and association, what the deploy does to stored data: **destroys**
+(a table or column dropped), **verify** (handled in a way that has not been measured),
+**migrates** (renamed under the same GUID, rows kept) and **adds**.
+
+```bash
+mxcli report release -p app.mpr --against v1.4.0 -o release.html
+mxcli report release -p app.mpr --against /backups/deployed/App.mpr --format json -o release.json
+```
+
+The runtime keys the database on each element's `GUID`, not its name, so the models
+are paired by GUID. A model can be valid, pass `mx check` and build, and still drop a
+table on the next deploy: an entity removed, made non-persistent, or given a new GUID
+under its old name; an attribute removed, made calculated, or given a new GUID (its
+column is recreated and every row gets the model default). A rename under the same
+GUID keeps the data. Type changes, shorter strings, changed association types or
+ends and changed generalizations are listed as **verify**: what the runtime does
+with them has not been measured.
+
+`--against` is a git revision of the project (a tag, a branch, a commit; the project
+may sit in a subdirectory of the repository) or the path of a `.mpr`. A drop that is
+intended is annotated `release:<kind>:<name>` with status `accepted`, and the
+verdict then counts it apart.
+
 ## Skills
 
 Each kind has a skill with the judgement the command cannot make and the traps found
 building the reports by hand: `report-architecture`, `report-tests`,
-`report-security`, `report-performance`, `report-traceability`, `report-map`.
+`report-security`, `report-performance`, `report-traceability`, `report-map`,
+`report-release`.
 The scored report has `report-quality`, and `assess-quality` combines all of them
 with the manual review no rule can do.

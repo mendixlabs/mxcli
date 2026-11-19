@@ -10,15 +10,15 @@ description: "Write a full quality assessment of a Mendix project: the mxcli rep
 
 | lines | section |
 |---|---|
-| 31-52 | Step 1: Run the reports |
-| 53-207 | Step 2: Manual review |
-| 208-214 | Step 3: Write the assessment |
-| 215-217 | Summary |
-| 218-229 | Measured |
-| 230-232 | Reviewed by hand |
-| 233-235 | Recommendations |
-| 236-240 | Not assessed |
-| 241-247 | Sources |
+| 31-53 | Step 1: Run the reports |
+| 54-208 | Step 2: Manual review |
+| 209-215 | Step 3: Write the assessment |
+| 216-218 | Summary |
+| 219-230 | Measured |
+| 231-233 | Reviewed by hand |
+| 234-236 | Recommendations |
+| 237-241 | Not assessed |
+| 242-248 | Sources |
 
 <!-- /skill-index -->
 # Assess Mendix Project Quality
@@ -39,6 +39,7 @@ structure make sense, whether error handling is designed or accidental.
 | Is it fast enough at production volume? | `mxcli report performance` | `report-performance` |
 | Was the specification built? | `mxcli report traceability` | `report-traceability` |
 | What is in it, for someone new? | `mxcli report map` | `report-map` |
+| What does the next deploy do to production data? | `mxcli report release --against <deployed>` | `report-release` |
 | Does it build? | `mxcli report` (its **Builds** line), or `mxcli docker check` | `report-quality`, `/validate-project` |
 
 Read each report's skill before interpreting it — every one has traps (the quality
