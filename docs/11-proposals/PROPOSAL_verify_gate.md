@@ -11,7 +11,7 @@ related:
 # Proposal: `mxcli verify` — a staged gate with baseline comparison
 
 **Status:** Draft
-**Date:** 2026-11-16 (updated 2026-11-18)
+**Date:** 2026-11-16 (updated 2026-11-19)
 **Issue:** ako/mxcli#2333
 **Relates to:** ako/mxcli#1313 (`mx check` baseline), #1312 (`diff --mx-check`),
 #1258 (`check --full`), #2308 (`replace()` passes `check`, fails `mx check`)
@@ -91,7 +91,7 @@ mxcli verify -p app.mpr [--base <git ref> | --baseline <file>]
   reruns. `--fail-fast` stops at the first stage with new findings, for CI.
   Opt-in stages (`build`, `test`, `smoke`) are still skipped unless selected, and
   are skipped when an earlier stage failed, since they need a model that builds.
-- Findings are classified **new / resolved / pre-existing** against the baseline,
+- Findings are classified **new / resolved / pre-existing** against the baseline (`mxcheck` adds **unmasked** and **hidden**, see the staging section),
   keyed by `(code, document, element path)` — never by message text or line
   number, which drift between runs (the problem #1313 describes).
 - **Exit code:** 0 when nothing is new; 2 when the gate could not run (no `mx`,
@@ -132,7 +132,16 @@ mxcli verify -p app.mpr [--base <git ref> | --baseline <file>]
 2. `--base <git ref>` — run the same stages on a scratch export of that ref, then
    compare. Roughly doubles `mxcheck` cost; results are cacheable per commit.
 
-## Existing pieces and gaps (checked against `main` at `ecdd9b7c`)
+## Existing pieces and gaps (checked against `main` at `ecdd9b7c`; see also the update below)
+
+**Update 2026-11-19.** Since this section was written, `main` gained about twenty
+`check` validations (step 0: MDL097/MDL098, the `replace()` fix, DECLARE/SET/RETURN
+type checks, and others), the `mdl-examples/check-gap/` parity harness,
+`scripts/diagcoverage` and `scripts/maskmatrix`. None of it parses `mx check`
+output into findings: the harness compares codes in shell and `diagcoverage` reads
+only the code catalog, so **step 1 is still needed**. What the work adds is
+fixtures to build the parser's golden files from, and two measurements that change
+the design (next two sections).
 
 - `mdl/linter/baseline.go` has `WriteBaseline`/`LoadBaseline`/`Compare`, but it is
   **not reusable as is** against the `Finding` below:
@@ -163,6 +172,74 @@ mxcli verify -p app.mpr [--base <git ref> | --baseline <file>]
   Playwright test scripts). `mxcli verify` next to `mxcli playwright verify` is the
   ordinary noun-under-a-namespace case, not a collision of two top-level commands.
 
+## MxBuild reports in stages: new, resolved and unmasked
+
+Measured in `PROPOSAL_check_diagnostics_catalog.md` (MxBuild 11.16.1, six defects
+and every ordered pair, `make mask-matrix`): `mx check` does not report every
+error, it reports the earliest stage that has any.
+
+| stage | reported | hides |
+|---|---|---|
+| 0 | an unresolved reference (CE1613) | every other error in every document |
+| 1 | a duplicate variable (CE0111) | every other error in the same microflow |
+| 2 | an undefined variable (CE0109) | the stage 3 group, in the same microflow |
+| 3 | CE0117, CE0068, CE0038, CE0067 | nothing |
+
+For a baseline diff this is a correctness problem, in both directions:
+
+- **False "new".** The baseline has a stage 1 error in microflow `M.F`. The change
+  fixes it, and a stage 3 error that was always there appears. A plain diff blames
+  the change for it.
+- **False "resolved".** The change introduces a stage 0 error. Every other finding
+  in the project disappears from the report and a plain diff calls them all
+  resolved.
+
+So `verify` classifies the `mxcheck` stage's findings into four states, not three:
+
+| state | meaning |
+|---|---|
+| **new** | in the report, not in the baseline, and the baseline was not hiding it |
+| **unmasked** | new in the report, but the baseline had an earlier-stage finding in a scope that hides it (same document for stages 1 and 2, anywhere for stage 0). It may be old; the report cannot tell |
+| **resolved** | in the baseline, absent from the report, and nothing in the report hides it |
+| **hidden** | in the baseline, absent from the report, and the report has a finding that hides it. Not resolved |
+
+Rules that follow:
+
+- `unmasked` is reported with the finding that hid it, and **does not fail the gate
+  by default** (it is most likely pre-existing). `--strict` makes it fail, for
+  teams that would rather pay a second pass. The text output states how many
+  findings the staging may still be holding back.
+- A new stage 0 or earlier-stage finding always fails the gate, and the `hidden`
+  count is printed next to it so a reader does not read "400 resolved".
+- Each finding carries its **stage** (the classification table of step 1 gets a
+  stage column). A code not in the measured set is treated as stage 3 (hides
+  nothing, hidden by earlier stages): the conservative reading for `unmasked`, and
+  recorded as a limit until `maskmatrix` covers more codes. The measurement covers
+  microflows and pages only.
+- The `check` stage (`mxcli check`) and `lint` do not stage: `mxcli check`
+  deliberately reports every real error (the catalog proposal's "report every real
+  error" rule), so new, resolved and unchanged are exact there.
+- Staging is the main reason to run `check` first and `mxcheck` second: the more
+  `mxcli check` reports, the less the slow stage can hide.
+
+## An optional fast `mxcheck` pre-stage: Mendix CLI 2
+
+The same spike measured Mendix CLI 2's `mendix check` at 1.3 to 1.7 s against 6 to
+8.5 s for `mx check`, with no staging. It is proprietary (never committed, path
+supplied by the user) and gave false errors on some real apps, so it cannot be the
+authoritative stage. Design consequences:
+
+- `mxcheck` keeps `mx check` as the authority. `--mxcheck-with mendix` (name open)
+  runs `mendix check` as an **advisory pre-stage**: its findings are reported and
+  never gate on their own; anything that would gate must be confirmed by `mx check`.
+- Codes differ between the checkers for one finding (CE1613 in `mx` is CE7710 in
+  `mendix check`), and it reports more errors in a project whose references do not
+  resolve. A finding therefore records its **checker**, and a baseline is only
+  compared with findings from the same checker. A baseline file records the
+  checker and its version, and a mismatch is an error, not a diff.
+- Off by default; revisit once there is evidence about its false-positive rate on
+  real projects.
+
 ## Finding identity: for which codes can the key be built at all?
 
 The key `(code, document, element path)` is only as good as `mx check`'s text. In
@@ -189,7 +266,10 @@ or move (formerly the only question) applies only to class 1.
 New package `cmd/mxcli/verify/` (orchestrator, no business logic):
 
 ```go
-type Finding struct { Stage, Code, Document, DocumentID, Path, Message string }
+type Finding struct {
+    Stage, Checker, Code, Document, DocumentID, Path, Message string
+    MxStage int // MxBuild report stage 0-3 for `mxcheck` findings, else -1
+}
 type Stage interface {
     Name() string
     Run(ctx context.Context, p Project) ([]Finding, error)
@@ -219,13 +299,15 @@ type Stage interface {
    moved into `mxcli check` removes a class of late failures); independent of, and
    not blocked by, the steps below.
 1. **Structured `mx check` findings**: parser + `docker.CheckFindings()`, tests
-   against recorded `mx` output fixtures. Standalone PR; unblocks the `mxcheck`
-   baseline, #1313 and #1312.
+   against recorded `mx` output, built from the `mdl-examples/check-gap/`
+   fixtures. Includes the code classification table with its **stage** column.
+   Standalone PR; unblocks the `mxcheck` baseline, #1313 and #1312.
 2. **`mxcli verify`, first release**: stages `check`, `lint`, `mxcheck`;
    `--format`, exit-code table, `--fail-fast`; and a **`lint` baseline from day
    one** (`--baseline`, `--update-baseline`, reusing `mdl/linter/baseline.go`
    through the adapter described above), so the first run on an existing project
-   reports only what is new. The `mxcheck` stage baselines once step 1 lands; until
+   reports only what is new. The `mxcheck` stage baselines once step 1 lands, with the four-state
+   classification above; until
    then it reports all findings and says it is unbaselined.
 3. **Make `verify` the thing everything points at**: skills, `mxcli init` output
    and the project `CLAUDE.md` guidance name `verify` as the single "did my change
@@ -240,6 +322,12 @@ type Stage interface {
 
 - Unit: finding key normalisation per class (located / document-only / unlocated) (same finding, different line/message → same
   key); classification new/resolved/pre-existing; default run-all vs `--fail-fast`.
+- Staging: for each stage pair from `maskmatrix`, a fixture diff classified
+  unmasked (not new) when the baseline hid it and hidden (not resolved) when the
+  change introduces the hiding finding; **control:** the same finding with no
+  hiding baseline finding must be new and must fail the gate.
+- Checker identity: a baseline from one checker compared against the other is an
+  error.
 - Parser: golden `mx check` outputs (CE0109, CE0844, CE7811, CE0463 labelled).
 - Control (per CLAUDE.md): a "nothing new" test paired with one that injects a
   finding and must fail.
@@ -262,5 +350,13 @@ type Stage interface {
 5. **Should `check` stage fail on warnings,** or only errors?
 6. **Exit-code encoding** — bitmask offsets, and whether to align with `check`'s
    and `lint`'s existing codes.
-7. **Default stage set** — with run-all as the default, `mxcheck` costs ~8 s once
+7. **Unmasked policy.** Non-failing by default with `--strict`, or the other way
+   round? Failing wastes a pass on findings that are usually old; not failing can
+   let a change that introduced a hidden error through.
+8. **Staging coverage.** The measurement covers six codes in microflows and
+   pages. How far must `maskmatrix` be extended before `unmasked` is trusted
+   beyond them?
+9. **`mendix check` pre-stage:** worth a flag now, or defer until its
+   false-positive rate is measured on real projects?
+10. **Default stage set** — with run-all as the default, `mxcheck` costs ~8 s once
    per iteration; is on-by-default accepted?
