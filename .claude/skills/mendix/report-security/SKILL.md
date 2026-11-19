@@ -11,11 +11,11 @@ description: "Produce and triage the security review (mxcli report security): wh
 | lines | section |
 |---|---|
 | 32-38 | Run it |
-| 39-62 | Triage a client-callable flow |
-| 63-76 | Unsafe defaults |
-| 77-84 | Live probes (only on a local app, only undone through the app) |
-| 85-108 | Statuses |
-| 109-112 | Related |
+| 39-63 | Triage a client-callable flow |
+| 64-82 | Unsafe defaults |
+| 83-90 | Live probes (only on a local app, only undone through the app) |
+| 91-114 | Statuses |
+| 115-118 | Related |
 
 <!-- /skill-index -->
 # Security Report
@@ -38,8 +38,9 @@ mxcli report security --from docs/security/sec.json --annotations docs/security/
 
 ## Triage a client-callable flow
 
-The page lists every microflow a user role may call that takes a persistent object.
-The client passes that object as a **plain id**. Work through each one:
+The page lists every microflow a user role may call that takes a persistent object,
+one table per entity they take (the riskiest first). The client passes that object
+as a **plain id**. Work through each one:
 
 1. **Does it take the acting user (or "me") as a parameter?** Then any user the
    caller may read can be substituted. Measured on a running app: a subscription was
@@ -61,6 +62,11 @@ mode `mx.data.get` is refused. A flow that only receives objects through
 associations of an object it already checks is not exposed the same way.
 
 ## Unsafe defaults
+
+The **Settings and defaults** section lists every security setting and every app
+constant's committed default, also the ones that are fine — a default that looks
+like a secret is masked, never printed. The findings below are the ones it flags.
+What a deployment overrides is not in the model; ask whoever runs the environments.
 
 - **A constant whose default looks like key material** (base64 of 16/32 bytes, hex
   keys, PEM) is committed in git with the model. "Override in every environment" in

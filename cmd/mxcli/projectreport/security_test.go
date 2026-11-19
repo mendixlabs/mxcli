@@ -267,3 +267,29 @@ func TestCallableFlowsGroupedByWhatTheyTake(t *testing.T) {
 		t.Error("groups with the same worst risk are ordered by entity")
 	}
 }
+
+// The settings section shows every switch and constant default, also the
+// fine ones, and never prints a default that looks like a secret.
+func TestSecuritySettingsAndDefaults(t *testing.T) {
+	f := securityFixture(t)
+	d, err := CollectSecurity(f.cat, SecurityInput{Settings: SecuritySettings{Known: true, Level: "CheckEverything", StrictMode: true, PasswordMinLength: 12}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, _ := NewEnvelope("security", "Shop", "now", "test", d, SecurityMethod, SecurityLimits, nil)
+	doc, err := RenderSecurity(env, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var md bytes.Buffer
+	_ = RenderMarkdown(&md, doc)
+	out := md.String()
+	mustContain(t, out, "## Settings and defaults",
+		"| Security level | Production | entity access rules are enforced |",
+		"| Strict mode | on |", "| Anonymous access | off |",
+		"| `Shop.LocalStorageKey` | String | `shop-cart` | yes |",
+		"| `Shop.EncryptionKey` | String | •••• (24 characters) |")
+	if strings.Contains(out, "q8Zr0d5m3l9xS2tVb6wYcA==") {
+		t.Error("a key-like default must not be printed")
+	}
+}

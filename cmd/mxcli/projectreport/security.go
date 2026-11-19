@@ -68,6 +68,20 @@ type SecurityData struct {
 	// flow can be seen to check its caller.
 	SourceIndexed bool       `json:"sourceIndexed"`
 	LintRules     []LintRule `json:"lintRules"`
+	// Constants are the app modules' constants with their committed default:
+	// what an environment runs with when nobody overrides it.
+	Constants []ConstantDefault `json:"constants,omitempty"`
+}
+
+// ConstantDefault is one constant and the default the model commits.
+type ConstantDefault struct {
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Default string `json:"default"` // masked when it looks like a secret
+	Masked  bool   `json:"masked,omitempty"`
+	Exposed bool   `json:"exposedToClient,omitempty"`
+	// Configs are the run configurations that set a value of their own.
+	Configs []string `json:"configs,omitempty"`
 }
 
 // Finding is one security finding.
@@ -536,6 +550,14 @@ func collectUnsafeDefaults(q Querier, d *SecurityData, scope Scope) error {
 				}
 			}
 		}
+		cd := ConstantDefault{Name: name, Type: c["DataType"], Default: val, Exposed: exposed}
+		if (dt == "string" || dt == "") && val != "" && (LooksLikeKeyMaterial(val) || (looksSecretNamed(short) && !placeholder(val))) {
+			cd.Default, cd.Masked = fmt.Sprintf("•••• (%d characters)", len(val)), true
+		}
+		for _, cv := range cfg[name] {
+			cd.Configs = appendUnique(cd.Configs, cv[0])
+		}
+		d.Constants = append(d.Constants, cd)
 		if (dt == "boolean") && strings.EqualFold(strings.TrimSpace(val), "true") && testishName.MatchString(short) {
 			d.Findings = append(d.Findings, Finding{ID: "constant-testmode:" + name, Severity: "medium",
 				Title:  "Constant `" + name + "` switches on test behaviour by default",
@@ -841,6 +863,15 @@ func RenderSecurity(env *Envelope, ann *Annotations) (Doc, error) {
 		Intro:  "Microflows a user role may call that take a persistent object. The page passes the object as a plain id, so the question is what stops a caller substituting another one: a check in the flow's own body, or access rules on the parameter's entity.",
 		Blocks: fbl})
 
+	// Settings and defaults: every switch the findings judge, also the ones
+	// that are fine, so a reader sees the whole configuration rather than
+	// only what went wrong (ako/mxcli#2443).
+	if sb := settingsBlocks(d); len(sb) > 0 {
+		doc.Sections = append(doc.Sections, Section{ID: "settings", Title: "Settings and defaults",
+			Intro:  "The project's security settings and every app constant's committed default: what an environment runs with when nobody overrides it. A deployment can override constants (and the cloud portal some settings), which this model review cannot see.",
+			Blocks: sb})
+	}
+
 	// Lint.
 	lt := Table{Columns: []string{"Rule", "Severity", "Findings", "Examples", "Verdict"}}
 	for _, r := range d.LintRules {
@@ -966,4 +997,96 @@ func groupFlows(flows []CallableFlow) []flowGroup {
 
 func riskRank(r string) int {
 	return map[string]int{"high": 3, "medium": 2, "low": 1}[r]
+}
+
+// settingsBlocks renders the security settings and the constants' defaults.
+func settingsBlocks(d SecurityData) []Block {
+	var out []Block
+	if s := d.Settings; s.Known {
+		t := Table{Caption: "Project security", Columns: []string{"Setting", "Value", "Verdict"}}
+		add := func(name, value, verdict, cls string) {
+			t.Rows = append(t.Rows, []string{name, value, verdict})
+			t.Classes = append(t.Classes, []string{"", "", cls})
+		}
+		switch s.Level {
+		case "CheckEverything":
+			add("Security level", levelName(s), "entity access rules are enforced", "ok")
+		default:
+			add("Security level", levelName(s), "access rules are not enforced", "bad")
+		}
+		switch {
+		case s.Level != "CheckEverything":
+			add("Strict mode", onOff(s.StrictMode), "applies at Production level only", "")
+		case s.StrictMode:
+			add("Strict mode", "on", "the client API retrieves only what pages show", "ok")
+		default:
+			add("Strict mode", "off", "the client API may retrieve anything the role reads", "warn")
+		}
+		demo := onOff(s.DemoUsersEnabled)
+		if s.DemoUsersEnabled {
+			demo += fmt.Sprintf(" (%d)", len(s.DemoUsers))
+		}
+		switch {
+		case s.DemoUsersEnabled && len(s.DemoUsers) > 0:
+			add("Demo users", demo, "see the finding: accounts stay in the database", "bad")
+		default:
+			add("Demo users", demo, "", "ok")
+		}
+		if s.GuestAccess {
+			add("Anonymous access", "on, role `"+s.GuestRole+"`", "everything that role reads and calls is public", "warn")
+		} else {
+			add("Anonymous access", "off", "", "ok")
+		}
+		if s.AdminUser != "" {
+			add("Administrator", "`"+s.AdminUser+"`, role `"+s.AdminRole+"`", "set its password per environment", "")
+		}
+		switch {
+		case s.PasswordMinLength == 0:
+			add("Minimum password length", "not set", "", "")
+		case s.PasswordMinLength < 8:
+			add("Minimum password length", fmt.Sprint(s.PasswordMinLength), "short: require at least 12, or use single sign-on", "warn")
+		default:
+			add("Minimum password length", fmt.Sprint(s.PasswordMinLength), "", "ok")
+		}
+		out = append(out, t)
+	}
+	if len(d.Constants) > 0 {
+		flagged := map[string]string{}
+		for _, f := range d.Findings {
+			for _, p := range []string{"constant-secret:", "constant-testmode:"} {
+				if strings.HasPrefix(f.ID, p) {
+					flagged[strings.TrimPrefix(f.ID, p)] = f.Severity
+				}
+			}
+		}
+		t := Table{Caption: "Constants", Columns: []string{"Constant", "Type", "Default", "Exposed to client", "Set by configuration", "Verdict"}}
+		for _, c := range d.Constants {
+			def := "`" + c.Default + "`"
+			switch {
+			case c.Masked:
+				def = c.Default
+			case c.Default == "":
+				def = "(empty)"
+			}
+			exp := ""
+			if c.Exposed {
+				exp = "yes"
+			}
+			verdict, cls := "", ""
+			if sev, ok := flagged[c.Name]; ok {
+				verdict, cls = "see findings", sevClass(sev)
+			}
+			t.Rows = append(t.Rows, []string{"`" + c.Name + "`", c.Type, def, exp, strings.Join(c.Configs, ", "), verdict})
+			t.Classes = append(t.Classes, []string{"", "", "", "", "", cls})
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+func onOff(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
 }
