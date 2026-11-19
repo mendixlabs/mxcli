@@ -521,6 +521,33 @@ func writeHTMLBlock(b *strings.Builder, bl Block) {
 	}
 }
 
+// statusIf is a tile status: "bad" when bad, else "warn" when warn, else
+// "good".
+func statusIf(bad, warn bool) string {
+	switch {
+	case bad:
+		return "bad"
+	case warn:
+		return "warn"
+	}
+	return "good"
+}
+
+// passStatus is a tile status for "passed of total": none when nothing ran.
+func passStatus(ran bool, passed, total int) string {
+	if !ran || total == 0 {
+		return ""
+	}
+	return statusIf(passed < total, false)
+}
+
+func vulnStatus(checked bool, blocking int) string {
+	if !checked {
+		return "warn"
+	}
+	return statusIf(blocking > 0, false)
+}
+
 // numericColumn reports whether every row marks column ci "num", so its
 // heading is right-aligned over its numbers.
 func numericColumn(t Table, ci int) bool {

@@ -606,9 +606,9 @@ func RenderArchitecture(env *Envelope, ann *Annotations) (Doc, error) {
 	doc.Stats = []Stat{
 		{Label: "app modules", Value: fmt.Sprint(len(d.Modules)), Note: fmt.Sprintf("%d outside", len(d.Scope.Outside))},
 		{Label: "layers", Value: fmt.Sprint(maxLayer + 1)},
-		{Label: "domain cycles", Value: fmt.Sprint(len(d.Cycles)), Note: fmt.Sprintf("%d modules; %d with navigation counted", modsInCycles, d.ModulesInCyclesWithNavigation)},
+		{Label: "domain cycles", Value: fmt.Sprint(len(d.Cycles)), Status: statusIf(len(d.Cycles) > 0, false), Note: fmt.Sprintf("%d modules; %d with navigation counted", modsInCycles, d.ModulesInCyclesWithNavigation)},
 		{Label: "clusters", Value: fmt.Sprint(len(d.Communities))},
-		{Label: "unused documents", Value: fmt.Sprint(len(d.Unused)), Note: fmt.Sprintf("%d to verify", verify)},
+		{Label: "unused documents", Value: fmt.Sprint(len(d.Unused)), Note: fmt.Sprintf("%d to verify", verify), Status: statusIf(false, verify > 0)},
 	}
 
 	// 1. Map.

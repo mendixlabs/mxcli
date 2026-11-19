@@ -158,11 +158,11 @@ func RenderDependencies(env *Envelope, ann *Annotations) (Doc, error) {
 		}
 	}
 	doc.Stats = []Stat{
-		{Label: "Mendix", Value: d.MendixVersion, Note: lineNote(d)},
-		{Label: "Marketplace modules", Value: fmt.Sprint(len(d.Modules)), Note: checkedNote(d.MarketplaceChecked, fmt.Sprintf("%d behind", behind))},
+		{Label: "Mendix", Value: d.MendixVersion, Note: lineNote(d), Status: statusIf(false, d.Line == "monthly")},
+		{Label: "Marketplace modules", Value: fmt.Sprint(len(d.Modules)), Note: checkedNote(d.MarketplaceChecked, fmt.Sprintf("%d behind", behind)), Status: statusIf(false, !d.MarketplaceChecked || behind > 0)},
 		{Label: "widget packages", Value: fmt.Sprint(len(d.Widgets))},
 		{Label: "Java libraries", Value: fmt.Sprint(len(d.Libraries)), Note: checkedNote(d.VulnChecked, fmt.Sprintf("%d with known vulnerabilities", vulnLibs))},
-		{Label: "high/critical vulnerabilities", Value: countOrDash(d.VulnChecked, blocking)},
+		{Label: "high/critical vulnerabilities", Value: countOrDash(d.VulnChecked, blocking), Status: vulnStatus(d.VulnChecked, blocking)},
 	}
 
 	var head []Block

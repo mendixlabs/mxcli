@@ -715,10 +715,10 @@ func RenderSecurity(env *Envelope, ann *Annotations) (Doc, error) {
 	}
 	doc := Doc{Title: "Security review", Subtitle: "What protects the data, what does not, and what to fix"}
 	doc.Stats = []Stat{
-		{Label: "open high findings", Value: fmt.Sprint(open["high"])},
-		{Label: "open medium findings", Value: fmt.Sprint(open["medium"])},
-		{Label: "client-callable flows", Value: fmt.Sprint(len(d.Flows)), Note: fmt.Sprintf("%d to triage", risky)},
-		{Label: "security level", Value: levelName(d.Settings)},
+		{Label: "open high findings", Value: fmt.Sprint(open["high"]), Status: statusIf(open["high"] > 0, false)},
+		{Label: "open medium findings", Value: fmt.Sprint(open["medium"]), Status: statusIf(false, open["medium"] > 0)},
+		{Label: "client-callable flows", Value: fmt.Sprint(len(d.Flows)), Note: fmt.Sprintf("%d to triage", risky), Status: statusIf(false, risky > 0)},
+		{Label: "security level", Value: levelName(d.Settings), Status: statusIf(d.Settings.Known && d.Settings.Level != "CheckEverything", false)},
 	}
 
 	// Findings.

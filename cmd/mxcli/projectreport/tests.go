@@ -431,11 +431,11 @@ func RenderTests(env *Envelope, ann *Annotations) (Doc, error) {
 		testsValue = fmt.Sprintf("%d (not run)", len(d.Tests))
 	}
 	doc.Stats = []Stat{
-		{Label: "microflow tests passed", Value: testsValue, Note: fmt.Sprintf("%d checks", checks)},
-		{Label: "journeys passed", Value: fmt.Sprintf("%d/%d", jPassed, len(d.Journeys)), Note: fmt.Sprintf("%d checks", jChecks)},
+		{Label: "microflow tests passed", Value: testsValue, Note: fmt.Sprintf("%d checks", checks), Status: passStatus(d.HasResults, passed, len(d.Tests))},
+		{Label: "journeys passed", Value: fmt.Sprintf("%d/%d", jPassed, len(d.Journeys)), Note: fmt.Sprintf("%d checks", jChecks), Status: passStatus(d.HasJourneys, jPassed, len(d.Journeys))},
 		{Label: "microflows reached", Value: pct(reached, d.Microflows), Note: fmt.Sprintf("%d of %d", reached, d.Microflows)},
 		{Label: "startup or scheduled only", Value: fmt.Sprint(d.Totals.Startup)},
-		{Label: "reached by neither", Value: fmt.Sprint(d.Totals.Neither)},
+		{Label: "reached by neither", Value: fmt.Sprint(d.Totals.Neither), Status: statusIf(false, d.Totals.Neither > 0)},
 	}
 	var pre []Block
 	if d.HasJourneys {

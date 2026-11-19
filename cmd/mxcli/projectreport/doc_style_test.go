@@ -118,3 +118,27 @@ func TestQualityDocExplainsTheScore(t *testing.T) {
 		t.Errorf("SEC001 row should gain %.1f:\n%s", want, m)
 	}
 }
+
+// ako/mxcli#2443: traceability opens with stacked bars per milestone and per
+// epic, and the tiles carry a status.
+func TestTraceabilityGlanceAndTileStatus(t *testing.T) {
+	d := TraceabilityData{HasTests: true, Milestones: []TraceMilestone{
+		{Name: "M1", Requirements: []TraceRequirement{
+			{ID: "a", Slice: "01-accounts", Status: StatusBuilt, Tests: []string{"T"}},
+			{ID: "b", Slice: "01-accounts", Status: StatusBuilt},
+			{ID: "c", Slice: "02-orders", Status: StatusPartial}}},
+		{Name: "M2", Requirements: []TraceRequirement{{ID: "d", Slice: "03-pay", Status: StatusNotBuilt}}},
+	}}
+	env, _ := NewEnvelope("traceability", "Shop", "2026-11-19 10:00", "t", d, TraceabilityMethod, TraceabilityLimits, nil)
+	doc, err := RenderTraceability(env, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var md bytes.Buffer
+	_ = RenderMarkdown(&md, doc)
+	mustContain(t, md.String(), "## At a glance", "| M1 | 1 | 1 | 1 | 0 | 2/3 built |", "| M2 | 0 | 0 | 0 | 1 | 0/1 built |", "| 02-orders | 0 | 0 | 1 | 0 | 0/1 built |")
+	h := htmlOf(t, doc)
+	if !strings.Contains(h, `<div class="kpi warn"><span class="v">2</span><span class="l">built</span>`) {
+		t.Error("the built tile is warn while not every requirement is built")
+	}
+}
