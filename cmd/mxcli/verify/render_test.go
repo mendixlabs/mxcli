@@ -82,12 +82,33 @@ func TestWriteTextNoHintWhenNothingIsQuiet(t *testing.T) {
 // Accepting the quiet findings of one stage must not also record the others:
 // --update-baseline records every selected stage, so the hint names only the stage.
 func TestWriteTextHintNamesOnlyTheStagesWithQuietFindings(t *testing.T) {
-	r := Run(Options{Project: "App.mpr", Stages: AllStages, Skip: map[string]string{StageCheck: "no scripts given"}}, map[string]Stage{
+	r := Run(Options{Project: "App.mpr", Stages: readOnly, Skip: map[string]string{StageCheck: "no scripts given"}}, map[string]Stage{
 		StageLint:    ok(Outcome{New: manyInfos(2)}),
 		StageMxCheck: ok(Outcome{PreExisting: 1}),
 	})
 	out := textOf(r, "error")
 	if !strings.Contains(out, "--stages lint --update-baseline") || strings.Contains(out, "mxcheck --update-baseline") || strings.Contains(out, "lint,mxcheck") {
 		t.Errorf("the hint must scope --update-baseline to lint:\n%s", out)
+	}
+}
+
+// A stage nobody asked for is not a line in the text output (the JSON lists it),
+// but a stage skipped for a reason the reader needs is.
+func TestWriteTextOmitsUnselectedStagesOnly(t *testing.T) {
+	r := Run(Options{Project: "App.mpr", Stages: []string{StageCheck, StageLint}, Skip: map[string]string{StageCheck: "no scripts given"}},
+		map[string]Stage{StageLint: ok(Outcome{})})
+	out := textOf(r, "error")
+	if strings.Contains(out, "mxcheck") || strings.Contains(out, "exec") {
+		t.Errorf("unselected stages are listed:\n%s", out)
+	}
+	if !strings.Contains(out, "no scripts given") {
+		t.Errorf("a stage skipped for a reason must still be listed:\n%s", out)
+	}
+	var b bytes.Buffer
+	if err := WriteJSON(&b, r); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), `"name": "mxcheck"`) {
+		t.Error("the JSON must keep every stage")
 	}
 }

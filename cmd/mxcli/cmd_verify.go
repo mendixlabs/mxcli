@@ -23,14 +23,29 @@ var verifyCmd = &cobra.Command{
 	Use:   "verify [script.mdl...]",
 	Short: "One gate: check, lint and mx check, reporting only what a change made worse",
 	Long: `Run the checks that answer "did my change break anything?" in one command, in
-cost order, and report only the findings that are new against a baseline.
+pipeline order, and report only the findings that are new against a baseline.
 
   check     mxcli check on the scripts given as arguments (skipped without any)
+  exec      apply the scripts; only with --apply, and only if check passed
   lint      mxcli lint on the project, against its baseline
   mxcheck   mx check on a copy of the project, against its baseline
 
-Every selected stage runs, so one result carries every stage's findings; use
---fail-fast to stop at the first stage that fails. mx check is the authority:
+You say how far it runs. --through <stage> runs every stage up to and including
+that one (--through exec is check and exec in one call); --stages names an explicit
+set. Without either it runs lint and mxcheck (check too, if scripts are given), and
+with --apply it runs through mxcheck.
+
+Scripts are applied only with --apply. Without it they are checked and not
+applied, so lint and mxcheck describe the project WITHOUT them, and the result
+says so. With --apply a failed check writes nothing and skips everything after it,
+and a script exec refuses skips lint and mxcheck (they would judge a project
+without the change). Several scripts are checked as one ordered set, as
+"mxcli check" does, and applied in order; exec is not transactional across files,
+so a failure part-way leaves the earlier ones applied, and the finding says how far
+it got.
+
+From lint on, every selected stage runs, so one result carries every stage's
+findings; use --fail-fast to stop at the first stage that fails. mx check is the authority:
 mxcli check cannot yet predict everything it rejects, so a project that passes
 check and lint can still fail mxcheck.
 
@@ -50,8 +65,8 @@ Exit codes:
   0       nothing new
   1       usage error
   2       a stage could not run (no mx, ...), and nothing failed
-  16+bits a stage failed; the bits say which: 1 check, 2 lint, 4 mxcheck
-          (18 = lint failed, 22 = lint and mxcheck failed)
+  16+bits a stage failed; the bits say which: 1 check, 2 lint, 4 mxcheck, 8 exec
+          (18 = lint failed, 22 = lint and mxcheck failed, 24 = exec refused)
 
 --format json prints one document: a list of stages with status, duration and
 every new finding of each, and the exit code. The text output lists only the new
@@ -61,7 +76,9 @@ command that accepts them.
 Examples:
   mxcli verify -p app.mpr --update-baseline     # record the current state
   mxcli verify -p app.mpr                       # lint + mx check against it
-  mxcli verify -p app.mpr script.mdl            # also check the script
+  mxcli verify -p app.mpr script.mdl            # also check the script (not applied)
+  mxcli verify -p app.mpr --apply script.mdl    # check, exec, lint, mx check in one call
+  mxcli verify -p app.mpr --apply script.mdl --through exec   # check and exec only
   mxcli verify -p app.mpr --stages lint --format json
 `,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -70,7 +87,9 @@ Examples:
 }
 
 func init() {
-	verifyCmd.Flags().StringSlice("stages", verify.AllStages, "Stages to run: check, lint, mxcheck")
+	verifyCmd.Flags().StringSlice("stages", nil, "Stages to run, as an explicit set: check, exec, lint, mxcheck (default: lint and mxcheck, and with --apply check and exec first)")
+	verifyCmd.Flags().String("through", "", "Run every stage up to and including this one, in pipeline order: check, exec, lint, mxcheck")
+	verifyCmd.Flags().Bool("apply", false, "Apply the scripts: check them, and only if they pass, exec them, then run lint and mxcheck on the result. Writes the project")
 	verifyCmd.Flags().Bool("fail-fast", false, "Stop at the first stage that fails instead of running every stage")
 	verifyCmd.Flags().String("fail-on", "error", "Lowest severity of a new finding that fails the gate: error or warning")
 	verifyCmd.Flags().Bool("strict", false, "Also fail on unmasked mx check findings (errors an earlier baseline error was hiding)")
@@ -85,6 +104,8 @@ func runVerify(cmd *cobra.Command, scripts []string) int {
 	projectPath, _ := cmd.Flags().GetString("project")
 	format := resolveFormat(cmd, "text")
 	stagesFlag, _ := cmd.Flags().GetStringSlice("stages")
+	through, _ := cmd.Flags().GetString("through")
+	apply, _ := cmd.Flags().GetBool("apply")
 	failFast, _ := cmd.Flags().GetBool("fail-fast")
 	failOn, _ := cmd.Flags().GetString("fail-on")
 	strict, _ := cmd.Flags().GetBool("strict")
@@ -105,9 +126,12 @@ func runVerify(cmd *cobra.Command, scripts []string) int {
 	if failOn != "error" && failOn != "warning" {
 		return usage("--fail-on takes error or warning, not %q", failOn)
 	}
-	stages, err := verify.ParseStages(stagesFlag)
+	stages, err := verifyStageSelection(stagesFlag, cmd.Flags().Changed("stages"), through, apply, len(scripts) > 0)
 	if err != nil {
 		return usage("%v", err)
+	}
+	if apply && update {
+		return usage("--apply and --update-baseline cannot be combined: apply the change, review it, then record the baseline")
 	}
 	if baselineDir == "" {
 		baselineDir = defaultVerifyBaselineDir(projectPath)
@@ -117,6 +141,9 @@ func runVerify(cmd *cobra.Command, scripts []string) int {
 	if len(scripts) == 0 {
 		skip[verify.StageCheck] = "no scripts given"
 	}
+	if !apply {
+		skip[verify.StageExec] = "scripts are only applied with --apply"
+	}
 	self, err := os.Executable()
 	if err != nil {
 		return usage("cannot locate this executable: %v", err)
@@ -124,8 +151,10 @@ func runVerify(cmd *cobra.Command, scripts []string) int {
 	vr := &verifyRunner{self: self, project: projectPath, baselineDir: baselineDir, update: update, mxbuildPath: mxbuildPath, scripts: scripts}
 	res := verify.Run(verify.Options{
 		Project: projectPath, Stages: stages, FailFast: failFast, FailOn: failOn, Strict: strict, Skip: skip,
+		Apply: apply, ScriptsGiven: len(scripts) > 0,
 	}, map[string]verify.Stage{
 		verify.StageCheck:   vr.check,
+		verify.StageExec:    vr.exec,
 		verify.StageLint:    vr.lint,
 		verify.StageMxCheck: vr.mxcheck,
 	})
@@ -149,6 +178,40 @@ func defaultVerifyBaselineDir(projectPath string) string {
 	return filepath.Join(filepath.Dir(projectPath), "verify-baseline")
 }
 
+// verifyStageSelection turns --stages, --through and --apply into the stage list.
+// --through says how far the pipeline runs and --stages names an explicit set; they
+// are two ways to answer the same question, so giving both is an error. Defaults
+// stay cheap: lint and mxcheck, and with --apply check and exec in front.
+func verifyStageSelection(stages []string, stagesSet bool, through string, apply, scripts bool) ([]string, error) {
+	if stagesSet && through != "" {
+		return nil, fmt.Errorf("--stages and --through both say which stages run; give one")
+	}
+	if apply && !scripts {
+		return nil, fmt.Errorf("--apply needs the script files to apply, e.g. `mxcli verify -p app.mpr --apply change.mdl`")
+	}
+	var sel []string
+	var err error
+	switch {
+	case through != "":
+		sel, err = verify.Through(strings.ToLower(strings.TrimSpace(through)))
+	case stagesSet:
+		sel, err = verify.ParseStages(stages)
+	case apply:
+		sel, err = verify.Through(verify.StageMxCheck)
+	default:
+		sel = []string{verify.StageCheck, verify.StageLint, verify.StageMxCheck}
+	}
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range sel {
+		if s == verify.StageExec && !apply {
+			return nil, fmt.Errorf("the exec stage writes the project and only runs with --apply")
+		}
+	}
+	return sel, nil
+}
+
 type verifyRunner struct {
 	self, project, baselineDir, mxbuildPath string
 	update                                  bool
@@ -168,6 +231,9 @@ func (v *verifyRunner) sub(args ...string) (stdout, stderr []byte, err error) {
 }
 
 func (v *verifyRunner) check() (verify.Outcome, error) {
+	if len(v.scripts) > 1 {
+		return v.checkSet()
+	}
 	args := append([]string{"check"}, v.scripts...)
 	args = append(args, "-p", v.project, "--format", "json")
 	stdout, stderr, err := v.sub(args...)
@@ -176,6 +242,58 @@ func (v *verifyRunner) check() (verify.Outcome, error) {
 		return verify.Outcome{}, fmt.Errorf("mxcli check produced no readable report: %v%s", perr, verifyTail(stderr, err))
 	}
 	return verify.Outcome{New: findings}, nil
+}
+
+// exec applies the scripts, one `mxcli exec` per file in the order given (exec
+// takes a single file). It stops at the first file that fails: exec is not
+// transactional across files, so what the earlier ones wrote stays, and the
+// finding says how far it got. Each exec runs the same checks as `mxcli check`
+// before it writes, and writes nothing when they fail.
+func (v *verifyRunner) exec() (verify.Outcome, error) {
+	for i, script := range v.scripts {
+		stdout, stderr, err := v.sub("exec", script, "-p", v.project)
+		if err == nil {
+			os.Stderr.Write(stdout) // what it created or changed: progress, not part of the result
+			continue
+		}
+		if _, isExit := err.(*exec.ExitError); !isExit {
+			return verify.Outcome{}, fmt.Errorf("could not run mxcli exec: %v", err)
+		}
+		msg := fmt.Sprintf("%s was not applied", script)
+		if i > 0 {
+			msg += fmt.Sprintf(" (%d of %d scripts were applied before it and stay applied)", i, len(v.scripts))
+		}
+		if d := strings.TrimSpace(string(stdout) + "\n" + string(stderr)); d != "" {
+			msg += ":\n" + verifyTailText(d, 1200)
+		}
+		return verify.Outcome{New: []verify.Finding{{
+			Stage: verify.StageExec, Code: "EXEC", Severity: "error", Document: script,
+			Message: msg, Key: "exec\x00" + script, MxStage: -1,
+		}}}, nil
+	}
+	return verify.Outcome{Applied: true, Note: fmt.Sprintf("applied %d script(s)", len(v.scripts))}, nil
+}
+
+// checkSet checks several scripts as the ordered set `mxcli check` makes of them
+// (each file sees what the earlier ones create, and nothing is written), which
+// is what exec will do. `check` writes JSON only for a single script, so a set
+// that does not pass is one finding carrying check's own output rather than one
+// finding per violation.
+func (v *verifyRunner) checkSet() (verify.Outcome, error) {
+	args := append([]string{"check"}, v.scripts...)
+	args = append(args, "-p", v.project)
+	stdout, stderr, err := v.sub(args...)
+	if err == nil {
+		return verify.Outcome{Note: fmt.Sprintf("%d scripts checked as one set", len(v.scripts))}, nil
+	}
+	if _, isExit := err.(*exec.ExitError); !isExit {
+		return verify.Outcome{}, fmt.Errorf("could not run mxcli check: %v", err)
+	}
+	text := verifyCleanCheckText(string(stdout) + "\n" + string(stderr))
+	return verify.Outcome{New: []verify.Finding{{
+		Stage: verify.StageCheck, Code: "CHECK", Severity: "error", Document: strings.Join(v.scripts, ", "),
+		Message: "the script set did not pass check:\n" + verifyTailText(text, 1500), Key: "check-set\x00" + strings.Join(v.scripts, "\x00"), MxStage: -1,
+	}}, Note: "several scripts: reported as text (check writes JSON for one script only)"}, nil
 }
 
 func (v *verifyRunner) lint() (verify.Outcome, error) {
@@ -311,6 +429,37 @@ func parseLintBaselineSummary(stderr string) (preExisting int, ok bool) {
 func verifyFileExists(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && !st.IsDir()
+}
+
+var verifyAnsiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// verifyCleanCheckText reduces the text output of `mxcli check` on a script set to
+// what says what is wrong: it drops the colour codes, the progress lines and the
+// per-file "passed" lines, and keeps the violations and the one-line verdicts.
+func verifyCleanCheckText(s string) string {
+	s = verifyAnsiRe.ReplaceAllString(s, "")
+	var keep []string
+	for _, l := range strings.Split(s, "\n") {
+		t := strings.TrimSpace(l)
+		switch {
+		case t == "", strings.HasPrefix(t, "✓"), strings.HasPrefix(t, "Checking syntax"),
+			strings.HasPrefix(t, "Connected to"), strings.HasPrefix(t, "Validating references"),
+			strings.HasPrefix(t, "(Note:"), strings.HasPrefix(t, "Building catalog"),
+			strings.HasPrefix(t, "Keeping the existing"), strings.HasPrefix(t, "WARNING: This is a vibe-coded"),
+			strings.HasPrefix(t, "Check passed"), strings.HasPrefix(t, "-----"):
+			continue
+		}
+		keep = append(keep, t)
+	}
+	return strings.Join(keep, "\n")
+}
+
+// verifyTailText keeps the end of s, where a command says what went wrong.
+func verifyTailText(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return "..." + s[len(s)-n:]
 }
 
 func verifyTail(stderr []byte, err error) string {
