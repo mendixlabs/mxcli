@@ -102,6 +102,9 @@ type checkJSON struct {
 
 // CheckReport is the parsed result of one `mx check --json` run.
 type CheckReport struct {
+	// MxPath is the mx binary that produced the report, so a caller can record
+	// which checker (and version) a baseline belongs to.
+	MxPath   string
 	Findings []CheckFinding
 	// Declared is the total mx printed, HasDeclared false when it printed none.
 	Declared    int
@@ -221,5 +224,6 @@ func CheckFindings(opts CheckOptions, kinds CheckKinds) (CheckReport, error) {
 	if err != nil {
 		return CheckReport{}, err
 	}
+	report.MxPath = mxPath
 	return report, runErr
 }
