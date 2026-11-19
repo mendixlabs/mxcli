@@ -13,6 +13,7 @@ the kinds below answer specific questions instead of scoring.
 | `traceability` | Is each requirement in the specification built, and what proves it? |
 | `map` | What does the app contain, and how does it fit together? (an interactive guide) |
 | `release` | What does deploying this model do to the data already in production? |
+| `dependencies` | What does the app stand on, and is it current and safe? |
 
 ## Shared shape
 
@@ -198,11 +199,33 @@ may sit in a subdirectory of the repository) or the path of a `.mpr`. A drop tha
 intended is annotated `release:<kind>:<name>` with status `accepted`, and the
 verdict then counts it apart.
 
+## dependencies
+
+What the app stands on, and whether it is current and safe: the Mendix version and
+its release line (LTS, MTS or a monthly release); the Marketplace modules with their
+newest compatible and newest published versions; the pluggable widgets in `widgets/`;
+and the jars in `userlib/` and `vendorlib/` with the known vulnerabilities of that
+version, worst first, and the version to upgrade to.
+
+```bash
+mxcli report dependencies -p app.mpr -o dependencies.html
+mxcli report dependencies -p app.mpr --offline        # no online source asked
+```
+
+A Marketplace module is identified by the version UUID it records (`AppStoreGuid`),
+not by its name or version number, which collide across content; a version the
+Marketplace no longer publishes is said as such. Comparing with published versions
+needs a Marketplace token (`mxcli auth login`). A jar's Maven coordinates come from its
+own `pom.properties`; vulnerabilities come from [OSV](https://osv.dev). Whatever could
+not be checked — no token, `--offline`, a jar without coordinates — is said per item,
+never shown as up to date or clean. Annotate `vuln:<id>` with status `accepted`, and
+why, for an advisory that does not apply.
+
 ## Skills
 
 Each kind has a skill with the judgement the command cannot make and the traps found
 building the reports by hand: `report-architecture`, `report-tests`,
 `report-security`, `report-performance`, `report-traceability`, `report-map`,
-`report-release`.
+`report-release`, `report-dependencies`.
 The scored report has `report-quality`, and `assess-quality` combines all of them
 with the manual review no rule can do.
