@@ -1,0 +1,22 @@
+{
+  "serialization_version": 1,
+  "errors": [
+    {
+      "code": "CE0117",
+      "message": "Error(s) in expression.",
+      "locations": [
+        {
+          "module-id": "2245e1df-c521-4097-8c6f-6e4338b89ee0",
+          "module-name": "Sp",
+          "document-name": "Microflow 'F06'",
+          "element-name": "Create variable activity 'Create Integer/Long variable'",
+          "element-id": "d2ca8f45-a346-4389-971c-192978cdab16",
+          "unit-id": "0ddb128d-2278-4bb6-ad13-3d7ead1b9ac3"
+        }
+      ]
+    }
+  ],
+  "warnings": [],
+  "deprecations": [],
+  "total-problems": 1
+}

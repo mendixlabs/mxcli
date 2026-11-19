@@ -26,6 +26,11 @@ type GenerateResult struct {
 	TableCount    int
 	ViewCount     int
 	SkippedCols   []string // "table.column: type" for unmappable columns
+	// SkippedObjects is every listed object the generator could not read, as
+	// "address: reason". An object the listing names and the output omits is
+	// invisible downstream, so it is reported rather than dropped
+	// (ako/mxcli#2422).
+	SkippedObjects []string
 }
 
 // GenerateConnector discovers schema and generates complete MDL for a Mendix Database Connector.
@@ -33,9 +38,17 @@ func GenerateConnector(ctx context.Context, cfg *GenerateConfig) (*GenerateResul
 	var schemas []*TableSchema
 	result := &GenerateResult{}
 
-	// Discover tables
-	if cfg.Tables != nil {
-		// Specific tables
+	// Either clause scopes the whole command. Treating an absent TABLES as
+	// "every table" while VIEWS named a few generated the lot and then the
+	// named views on top, so a view came out twice under one entity name
+	// (ako/mxcli#2415).
+	if cfg.Tables == nil && cfg.Views == nil {
+		var err error
+		schemas, result.SkippedObjects, err = readListed(ctx, cfg.Conn, false)
+		if err != nil {
+			return nil, fmt.Errorf("reading tables: %w", err)
+		}
+	} else {
 		for _, t := range cfg.Tables {
 			ts, err := ReadTableSchema(ctx, cfg.Conn, t, false)
 			if err != nil {
@@ -43,18 +56,6 @@ func GenerateConnector(ctx context.Context, cfg *GenerateConfig) (*GenerateResul
 			}
 			schemas = append(schemas, ts)
 		}
-	} else {
-		// All tables
-		var err error
-		schemas, err = ReadAllTableSchemas(ctx, cfg.Conn)
-		if err != nil {
-			return nil, fmt.Errorf("reading tables: %w", err)
-		}
-	}
-	result.TableCount = len(schemas)
-
-	// Discover views
-	if cfg.Views != nil {
 		for _, v := range cfg.Views {
 			ts, err := ReadTableSchema(ctx, cfg.Conn, v, true)
 			if err != nil {
@@ -63,7 +64,18 @@ func GenerateConnector(ctx context.Context, cfg *GenerateConfig) (*GenerateResul
 			ts.IsView = true
 			schemas = append(schemas, ts)
 		}
-		result.ViewCount = len(cfg.Views)
+	}
+
+	// One object, one entity. Naming it in both clauses, or under two
+	// spellings of its address, is a request for it once -- two entities of one
+	// name is not a model Mendix can load.
+	schemas = dedupeByAddress(schemas)
+	for _, ts := range schemas {
+		if ts.IsView {
+			result.ViewCount++
+		} else {
+			result.TableCount++
+		}
 	}
 
 	if len(schemas) == 0 {
@@ -218,6 +230,23 @@ type columnMapping struct {
 }
 
 // driverToMendixType maps our driver to the Mendix Database Connector TYPE string.
+// dedupeByAddress keeps the first reading of each object, comparing addresses
+// without case: the clause spells a name as the user typed it, the listing as
+// the database stores it.
+func dedupeByAddress(schemas []*TableSchema) []*TableSchema {
+	seen := make(map[string]bool, len(schemas))
+	out := schemas[:0:0]
+	for _, ts := range schemas {
+		key := strings.ToLower(ts.QualifiedName())
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, ts)
+	}
+	return out
+}
+
 func driverToMendixType(driver DriverName) string {
 	switch driver {
 	case DriverPostgres:

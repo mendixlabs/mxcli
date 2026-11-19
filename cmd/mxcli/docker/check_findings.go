@@ -4,136 +4,59 @@ package docker
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
-	"regexp"
-	"strconv"
+	"os"
+	"sort"
 	"strings"
 )
 
-// A CheckFinding is one diagnostic line of `mx check`, parsed. It is the unit a
-// baseline compares (PROPOSAL_verify_gate.md): the text of `mx check` is not
-// stable between runs, so a caller compares Keys and counts, never lines.
-//
-// mx check prints one line per finding:
-//
-//	[error] [CE0117] "Error(s) in expression." at Microflow 'ACT_X'
+// A CheckFinding is one problem `mx check` reports. It is the unit a baseline
+// compares (PROPOSAL_verify_gate.md): the text of `mx check` is not stable
+// between runs and does not identify the document (two microflows with the same
+// defect print the same line), so findings are read from `mx check --json`,
+// which names the module, document, element and unit by name and by ID.
 type CheckFinding struct {
-	Severity string // "error", "warning" or "deprecation", as mx prints it
-	Code     string // "CE0117"
-	Message  string // the quoted text; display only, never part of the Key
-	Location string // text after `" at `, or "" when the line names none
-	Kind     string // "Microflow", "Data grid 2", ... (the Location before its quoted name)
-	Name     string // the quoted name in Location; "" when empty or absent
-	Class    LocationClass
-	Stage    int // MxBuild report stage 0..3, see StageOf
-	Line     string
+	Severity  string // "error", "warning" or "deprecation": the JSON list it came from
+	Code      string // "CE0109"
+	Message   string // display only, never part of the Key
+	Locations []CheckLocation
+	Stage     int // MxBuild report stage 0..3, see StageOf
 }
 
-// LocationClass says how much of "which element" a finding's text carries,
-// which decides how a baseline can match it (PROPOSAL_verify_gate.md,
-// "Finding identity").
-type LocationClass int
+// CheckLocation is where a finding is. IDs are what a baseline matches on; the
+// names are for a reader and change when an element is renamed.
+type CheckLocation struct {
+	ModuleName   string `json:"module-name"`
+	DocumentName string `json:"document-name"` // "Microflow 'F05'"
+	ElementName  string `json:"element-name"`  // "End event"
+	ElementID    string `json:"element-id"`
+	UnitID       string `json:"unit-id"`
+	ModuleID     string `json:"module-id"`
+}
 
-const (
-	// Located: the line names the kind and name of the element.
-	Located LocationClass = iota
-	// DocumentOnly: the line names a document, not the element in it.
-	DocumentOnly
-	// Unlocated: the line names nothing that identifies it. Matched as a count
-	// per distinct line, as recheckCE0463 already does.
-	Unlocated
-)
-
-func (c LocationClass) String() string {
-	switch c {
-	case Located:
-		return "located"
-	case DocumentOnly:
-		return "document-only"
-	default:
-		return "unlocated"
+// Identified says whether the finding names an element by ID. One without a
+// location (a project-level finding, such as the runtime settings) has nothing
+// to key on but its code, so a baseline matches it by count per Key.
+func (f CheckFinding) Identified() bool {
+	for _, l := range f.Locations {
+		if l.ElementID != "" || l.UnitID != "" {
+			return true
+		}
 	}
+	return false
 }
 
-// Key is what a baseline matches on: severity, code and location, never the
-// message. For an Unlocated finding the location is the whole line's text, so
-// the same line repeated is the same key and the caller counts it.
+// Key is what a baseline matches on: severity, code and the IDs of every
+// location, never the message or a name. Two findings with the same Key are the
+// same finding repeated, and a baseline compares how many of them there are.
 func (f CheckFinding) Key() string {
-	return f.Severity + "\x00" + f.Code + "\x00" + f.Class.String() + "\x00" + f.Location
-}
-
-var findingRe = regexp.MustCompile(`^\[(error|warning|deprecation)\]\s+\[(C[EWD]\d+)\]\s+"`)
-
-// locationRe splits "Microflow 'ACT_X'" into kind and name.
-var locationRe = regexp.MustCompile(`^(.*?)\s*'(.*)'$`)
-
-// ParseCheckOutput reads the diagnostics out of `mx check` output. Lines that
-// are not findings (banners, the closing "The app contains: N errors.") are
-// skipped. A finding the parser cannot split still counts: its Message is the
-// rest of the line.
-func ParseCheckOutput(output string) []CheckFinding {
-	var out []CheckFinding
-	for _, raw := range strings.Split(output, "\n") {
-		line := strings.TrimSpace(strings.TrimRight(raw, "\r"))
-		m := findingRe.FindStringSubmatchIndex(line)
-		if m == nil {
-			continue
-		}
-		f := CheckFinding{Severity: line[m[2]:m[3]], Code: line[m[4]:m[5]], Line: line}
-		rest := line[m[1]:] // after the opening quote
-		if i := strings.LastIndex(rest, `" at `); i >= 0 {
-			f.Message, f.Location = rest[:i], strings.TrimSpace(rest[i+len(`" at `):])
-		} else {
-			f.Message = strings.TrimSuffix(rest, `"`)
-		}
-		if lm := locationRe.FindStringSubmatch(f.Location); lm != nil {
-			f.Kind, f.Name = strings.TrimSpace(lm[1]), lm[2]
-		} else {
-			f.Kind = f.Location
-		}
-		f.Class = classify(f)
-		f.Stage = StageOf(f.Code)
-		out = append(out, f)
+	var ids []string
+	for _, l := range f.Locations {
+		ids = append(ids, l.UnitID+"/"+l.ElementID)
 	}
-	return out
-}
-
-// unlocatedCodes are codes whose text does not name the element, so two
-// same-named elements on different documents print the same line. CE0463 does
-// not name its page (docker/check.go, recheckCE0463).
-var unlocatedCodes = map[string]bool{"CE0463": true}
-
-// documentKinds are the kinds whose name is a document, so the line says which
-// document but not what in it. A kind not listed names an element (a widget,
-// an activity) and counts as Located. The list is the measured set, not a
-// claim of completeness: an unlisted document kind errs towards Located.
-var documentKinds = map[string]bool{
-	"Microflow":              true,
-	"Nanoflow":               true,
-	"Page":                   true,
-	"Snippet":                true,
-	"Layout":                 true,
-	"Domain model of module": true,
-	"Enumeration":            true,
-	"Workflow":               true,
-	"Java action":            true,
-	"Rule":                   true,
-	"Constant":               true,
-	"Import mapping":         true,
-	"Export mapping":         true,
-	"Published REST service": true,
-	"Consumed REST service":  true,
-}
-
-func classify(f CheckFinding) LocationClass {
-	switch {
-	case unlocatedCodes[f.Code], f.Location == "", f.Name == "":
-		return Unlocated
-	case documentKinds[f.Kind]:
-		return DocumentOnly
-	default:
-		return Located
-	}
+	sort.Strings(ids)
+	return f.Severity + "\x00" + f.Code + "\x00" + strings.Join(ids, ",")
 }
 
 // mxStages is MxBuild's report stage per code, as measured in
@@ -160,59 +83,111 @@ func StageOf(code string) int {
 	return 3
 }
 
-var appErrorsRe = regexp.MustCompile(`The app contains: (\d+) errors?\.`)
+// checkJSONVersion is the `serialization_version` this reader understands.
+const checkJSONVersion = 1
 
-// CheckReport is the parsed result of one `mx check` run.
+type checkJSONProblem struct {
+	Code      string          `json:"code"`
+	Message   string          `json:"message"`
+	Locations []CheckLocation `json:"locations"`
+}
+
+type checkJSON struct {
+	Version      int                `json:"serialization_version"`
+	Errors       []checkJSONProblem `json:"errors"`
+	Warnings     []checkJSONProblem `json:"warnings"`
+	Deprecations []checkJSONProblem `json:"deprecations"`
+	Total        *int               `json:"total-problems"`
+}
+
+// CheckReport is the parsed result of one `mx check --json` run.
 type CheckReport struct {
 	Findings []CheckFinding
-	// Declared is the error count mx printed on its closing line; HasDeclared
-	// is false when that line is absent (mx did not complete).
+	// Declared is the total mx printed, HasDeclared false when it printed none.
 	Declared    int
 	HasDeclared bool
 }
 
-// Errors counts the findings of severity error.
-func (r CheckReport) Errors() int {
+// Count returns the findings of one severity.
+func (r CheckReport) Count(severity string) int {
 	n := 0
 	for _, f := range r.Findings {
-		if f.Severity == "error" {
+		if f.Severity == severity {
 			n++
 		}
 	}
 	return n
 }
 
-// Verify cross-checks the parse against the count mx printed. A mismatch means
-// the parser lost lines (or mx changed its format), and a baseline built from it
-// would silently hide findings, so a caller must not treat the report as
-// complete.
+// Verify cross-checks the findings against the total mx declared. A mismatch
+// means a list this reader does not know about (or a format change), and a
+// baseline built from it would silently omit findings, so a caller must not
+// treat the report as complete.
 func (r CheckReport) Verify() error {
 	if !r.HasDeclared {
-		return fmt.Errorf("mx check did not print its closing error count; the report may be incomplete")
+		return fmt.Errorf("mx check --json did not declare a total; the report may be incomplete")
 	}
-	if got := r.Errors(); got != r.Declared {
-		return fmt.Errorf("parsed %d errors but mx check reported %d; the output format may have changed", got, r.Declared)
+	if len(r.Findings) != r.Declared {
+		return fmt.Errorf("read %d findings but mx check declared %d; the output format may have changed",
+			len(r.Findings), r.Declared)
 	}
 	return nil
 }
 
-// ParseCheckReport parses output and reads mx's own error count.
-func ParseCheckReport(output string) CheckReport {
-	r := CheckReport{Findings: ParseCheckOutput(output)}
-	if m := appErrorsRe.FindStringSubmatch(output); m != nil {
-		if n, err := strconv.Atoi(m[1]); err == nil {
-			r.Declared, r.HasDeclared = n, true
+// ParseCheckJSON reads the file `mx check --json <path>` writes. It refuses a
+// serialization_version it has not seen rather than guess at its fields.
+func ParseCheckJSON(data []byte) (CheckReport, error) {
+	var j checkJSON
+	if err := json.Unmarshal(data, &j); err != nil {
+		return CheckReport{}, fmt.Errorf("read mx check json: %w", err)
+	}
+	if j.Version != checkJSONVersion {
+		return CheckReport{}, fmt.Errorf("mx check json has serialization_version %d; this reader understands %d",
+			j.Version, checkJSONVersion)
+	}
+	var r CheckReport
+	add := func(severity string, ps []checkJSONProblem) {
+		for _, p := range ps {
+			r.Findings = append(r.Findings, CheckFinding{
+				Severity: severity, Code: p.Code, Message: p.Message,
+				Locations: p.Locations, Stage: StageOf(p.Code),
+			})
 		}
 	}
-	return r
+	add("error", j.Errors)
+	add("warning", j.Warnings)
+	add("deprecation", j.Deprecations)
+	if j.Total != nil {
+		r.Declared, r.HasDeclared = *j.Total, true
+	}
+	return r, nil
 }
 
-// CheckFindings runs `mx check` on a temporary copy of the project and returns
-// its parsed report. It checks the project as stored (no update-widgets), never
-// modifies it, and returns the report together with mx's own exit error, which
-// is non-zero whenever the project has errors: a non-nil error is not a failure
-// to run unless the report is empty and Verify fails.
-func CheckFindings(opts CheckOptions) (CheckReport, error) {
+// CheckKinds selects the findings beyond errors, which mx always reports.
+type CheckKinds struct {
+	Warnings, Deprecations, BestPractice bool
+}
+
+func (k CheckKinds) args(jsonPath string) []string {
+	args := []string{"-j", jsonPath}
+	if k.Warnings {
+		args = append(args, "-w")
+	}
+	if k.Deprecations {
+		args = append(args, "-d")
+	}
+	if k.BestPractice {
+		args = append(args, "-b")
+	}
+	return args
+}
+
+// CheckFindings runs `mx check --json` on a temporary copy of the project and
+// returns the parsed report. It checks the project as stored (no
+// update-widgets) and never modifies it. mx exits non-zero whenever it finds
+// anything, so a run error is returned alongside the report; it is a failure to
+// run only when the report is empty and Verify fails.
+func CheckFindings(opts CheckOptions, kinds CheckKinds) (CheckReport, error) {
 	projectVersion := ""
 	if opts.ProjectPath != "" {
 		if reader, err := openReadOnly(opts.ProjectPath); err == nil {
@@ -224,7 +199,27 @@ func CheckFindings(opts CheckOptions) (CheckReport, error) {
 	if err != nil {
 		return CheckReport{}, err
 	}
+	// The report goes outside the temporary copy, which MxCheckOnCopy removes.
+	f, err := os.CreateTemp("", "mxcheck-*.json")
+	if err != nil {
+		return CheckReport{}, err
+	}
+	jsonPath := f.Name()
+	f.Close()
+	defer os.Remove(jsonPath)
+
 	var out, errOut bytes.Buffer
-	runErr := MxCheckOnCopy(mxPath, opts.ProjectPath, nil, &out, &errOut)
-	return ParseCheckReport(out.String() + "\n" + errOut.String()), runErr
+	runErr := MxCheckOnCopy(mxPath, opts.ProjectPath, kinds.args(jsonPath), &out, &errOut)
+	data, readErr := os.ReadFile(jsonPath)
+	if readErr != nil || len(bytes.TrimSpace(data)) == 0 {
+		if runErr != nil {
+			return CheckReport{}, fmt.Errorf("mx check wrote no json report: %w\n%s", runErr, strings.TrimSpace(errOut.String()))
+		}
+		return CheckReport{}, fmt.Errorf("mx check wrote no json report")
+	}
+	report, err := ParseCheckJSON(data)
+	if err != nil {
+		return CheckReport{}, err
+	}
+	return report, runErr
 }

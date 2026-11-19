@@ -137,11 +137,12 @@ mxcli verify -p app.mpr [--base <git ref> | --baseline <file>]
 **Update 2026-11-19.** Since this section was written, `main` gained about twenty
 `check` validations (step 0: MDL097/MDL098, the `replace()` fix, DECLARE/SET/RETURN
 type checks, and others), the `mdl-examples/check-gap/` parity harness,
-`scripts/diagcoverage` and `scripts/maskmatrix`. None of it parses `mx check`
-output into findings: the harness compares codes in shell and `diagcoverage` reads
-only the code catalog, so **step 1 is still needed**. What the work adds is
-fixtures to build the parser's golden files from, and two measurements that change
-the design (next two sections).
+`scripts/diagcoverage` and `scripts/maskmatrix`. None of it read `mx check`
+output into findings (the harness compares codes in shell, `diagcoverage` reads
+only the code catalog); step 1 (`docker.ParseCheckJSON`) now does, from
+`mx check --json`. The work also supplied the fixtures for its golden files and
+two measurements that change the design (next sections). The gaps listed below
+predate step 1 and the `docker.Check` one is closed for the stage's purposes.
 
 - `mdl/linter/baseline.go` has `WriteBaseline`/`LoadBaseline`/`Compare`, but it is
   **not reusable as is** against the `Finding` below:
@@ -211,8 +212,7 @@ Rules that follow:
   findings the staging may still be holding back.
 - A new stage 0 or earlier-stage finding always fails the gate, and the `hidden`
   count is printed next to it so a reader does not read "400 resolved".
-- Each finding carries its **stage** (the classification table of step 1 gets a
-  stage column). A code not in the measured set is treated as stage 3 (hides
+- Each finding carries its **stage** (`StageOf`, from the measured table). A code not in the measured set is treated as stage 3 (hides
   nothing, hidden by earlier stages): the conservative reading for `unmasked`, and
   recorded as a limit until `maskmatrix` covers more codes. The measurement covers
   microflows and pages only.
@@ -240,26 +240,37 @@ authoritative stage. Design consequences:
 - Off by default; revisit once there is evidence about its false-positive rate on
   real projects.
 
-## Finding identity: for which codes can the key be built at all?
+## Finding identity: read `mx check --json`, not its text
 
-The key `(code, document, element path)` is only as good as `mx check`'s text. In
-`recheckCE0463` (`docker/check.go`): *"mx check's text output does not name a
-CE0463's page, so two same-named widgets on different pages print the same line;
-the lines are compared as counts."* For CE0463 the element identity is **not in
-the output**. Step 1 must therefore classify each code the parser sees:
+An earlier draft keyed findings on `(code, document, element path)` parsed from
+the text, and asked for which codes that could be built. Run against real MxBuild
+11.16.1 (the `mdl-examples/check-gap/` fixtures; the output is committed as
+`cmd/mxcli/docker/testdata/mxcheck/`), the premise was wrong:
 
-1. **Located** — the line names document and element (e.g. CE0109 on a microflow
-   activity). Key = `(code, document, path)`; `resolved` is a list.
-2. **Document-only** — names the document but not the element. Key =
-   `(code, document)` with multiplicity; matching is by count per key.
-3. **Unlocated** — names neither (CE0463). Fallback: **count-based matching per
-   distinct line**, exactly as `recheckCE0463` does today; `resolved` is a count
-   delta, never a list, and `--format json` says so.
+- **The text never names the document of a flow element.** A finding reads
+  `[error] [CE0109] "Undefined variable 'Nope'." at End event`. The same defect in
+  two microflows prints two identical lines. A default caption such as `Create
+  variable activity 'Create Integer/Long variable'` is not unique either. No
+  classification table over the text can fix that.
+- **`mx check --json <path>` carries the identity.** Each problem has
+  `module-name`, `document-name` (`Microflow 'F05'`), `element-name`,
+  `element-id` and `unit-id`, and the two microflows above differ in both IDs. The
+  IDs were identical across two runs and a copy of the project. `-w -d -b` add
+  warnings, deprecations and best-practice findings (a fresh project already has
+  16 warnings and 1 deprecation); the file declares `total-problems`, which the
+  reader checks against what it read.
 
-The CE0463 stale/persisting labelling from the re-check must survive unchanged as
-a label on class 3 findings. The first question for step 1 is the classification
-table (code → class), built from real `mx check` output; stability under rename
-or move (formerly the only question) applies only to class 1.
+So the `mxcheck` stage **reads the JSON** and keys a finding on severity, code and
+the `(unit-id, element-id)` of its locations; names and messages are display only
+and may change without making a finding new. A finding with no location (the
+runtime-settings deprecation) has nothing to key on but its code and is matched by
+count, as `recheckCE0463` does today.
+
+Not yet measured: a CE0463 (the widget case that motivated the count fallback)
+could not be produced in the spike, so whether its JSON carries IDs is **open**.
+`recheckCE0463` keeps its text-based comparison until it is. Stability of the IDs
+across a Studio Pro module update or an `mxcli` rewrite is also unmeasured; they
+are `$ID`s, which `canon` carries across writes but Studio Pro renumbers.
 
 ## Design
 
@@ -276,9 +287,9 @@ type Stage interface {
 }
 ```
 
-- `Finding.Key()` is **per class** (see Finding identity): `Stage + Code + Document + Path` for located findings, down to count-per-line for unlocated ones. The lint stage's key additionally uses `ID` when present, as `baselineKey` does. Message is display only except where a stage's existing matcher (lint `Compare`) uses it, and then that is stated.
-- Shared **`mx check` output parser** (`docker.ParseCheckOutput`) producing
-  `[]Finding` from `mx` lines (`ERROR [CE0109] "…" at Microflow 'M.F', Activity …`).
+- `Finding.Key()` is built from IDs (see Finding identity): `Stage + Code + UnitID/ElementID`, by count for a finding with no location. The lint stage's key additionally uses `ID` when present, as `baselineKey` does. Message is display only except where a stage's existing matcher (lint `Compare`) uses it, and then that is stated.
+- Shared **`mx check --json` reader** (`docker.ParseCheckJSON`, `docker.CheckFindings`)
+  producing `[]Finding` with module, document and element IDs.
   Also unblocks #1313 and #1312; lands as its own PR.
 - Baseline file is versioned JSON, sorted for stable diffs, one section per stage
   (lint reuses its existing format inside it or keeps its own file — see questions).
@@ -298,17 +309,18 @@ type Stage interface {
    `PROPOSAL_check_mxbuild_gap_heuristics.md`. Already under way (each validation
    moved into `mxcli check` removes a class of late failures); independent of, and
    not blocked by, the steps below.
-1. **Structured `mx check` findings**: parser + `docker.CheckFindings()`, tests
-   against recorded `mx` output, built from the `mdl-examples/check-gap/`
-   fixtures. Includes the code classification table with its **stage** column.
-   Standalone PR; unblocks the `mxcheck` baseline, #1313 and #1312.
+1. **Structured `mx check` findings** (done): `docker.ParseCheckJSON` and
+   `docker.CheckFindings`, reading `mx check --json`, with golden files from a real
+   run of the `mdl-examples/check-gap/` fixtures and a control (no defect). An
+   earlier text parser was replaced because the text does not identify the
+   document (see Finding identity). Remaining: a CE0463 golden file, and wiring the
+   `mxcheck` stage to it in step 2.
 2. **`mxcli verify`, first release**: stages `check`, `lint`, `mxcheck`;
    `--format`, exit-code table, `--fail-fast`; and a **`lint` baseline from day
    one** (`--baseline`, `--update-baseline`, reusing `mdl/linter/baseline.go`
    through the adapter described above), so the first run on an existing project
-   reports only what is new. The `mxcheck` stage baselines once step 1 lands, with the four-state
-   classification above; until
-   then it reports all findings and says it is unbaselined.
+   reports only what is new. The `mxcheck` stage reads `mx check --json` (step 1, done) and baselines with the
+   four-state classification above.
 3. **Make `verify` the thing everything points at**: skills, `mxcli init` output
    and the project `CLAUDE.md` guidance name `verify` as the single "did my change
    break anything?" command, instead of listing six commands. Ships with step 2,
@@ -320,15 +332,15 @@ type Stage interface {
 
 ## Testing
 
-- Unit: finding key normalisation per class (located / document-only / unlocated) (same finding, different line/message → same
-  key); classification new/resolved/pre-existing; default run-all vs `--fail-fast`.
+- Unit: finding keys are IDs, not text (same finding, different message or name → same
+  key; same text, different element → different key); classification new/resolved/pre-existing; default run-all vs `--fail-fast`.
 - Staging: for each stage pair from `maskmatrix`, a fixture diff classified
   unmasked (not new) when the baseline hid it and hidden (not resolved) when the
   change introduces the hiding finding; **control:** the same finding with no
   hiding baseline finding must be new and must fail the gate.
 - Checker identity: a baseline from one checker compared against the other is an
   error.
-- Parser: golden `mx check` outputs (CE0109, CE0844, CE7811, CE0463 labelled).
+- Reader: golden `mx check --json` files from real runs (committed under `cmd/mxcli/docker/testdata/mxcheck/`), the same defect in two microflows (two keys), a clean control, a lost-finding control for `Verify`, and an integration test against a real `mx`.
 - Control (per CLAUDE.md): a "nothing new" test paired with one that injects a
   finding and must fail.
 - Output purity row in `json_output_purity_test.go`; exit-code table incl. several failing stages at once and "could not run".
@@ -343,9 +355,8 @@ type Stage interface {
    `verify`, under a namespace.)
 2. **One baseline file or one per stage?** One file is simpler for agents;
    per-stage keeps `lint --baseline` files valid unchanged.
-3. **Code classification** (step 1): which `mx check` codes are located,
-   document-only, or unlocated, and is count-based matching acceptable for the
-   unlocated ones?
+3. **ID stability.** Are `unit-id` / `element-id` stable across a Studio Pro
+   module update and an `mxcli` rewrite, and does a CE0463's JSON carry them?
 4. **`--base` for MPR v1** — extract via `git show` of the single `.mpr`, or require v2?
 5. **Should `check` stage fail on warnings,** or only errors?
 6. **Exit-code encoding** — bitmask offsets, and whether to align with `check`'s
