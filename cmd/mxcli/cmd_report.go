@@ -45,6 +45,14 @@ Examples:
   mxcli report -p app.mpr --format markdown --output report.md
   mxcli report -p app.mpr --modules Sales,Orders
 
+The report also runs Mendix's own consistency check (mx check) on a temporary
+copy of the project and states above the score whether the project builds: a
+project with consistency errors cannot be deployed, whatever it scores. It needs
+mx for the project's Mendix version ('mxcli setup mxbuild -p app.mpr'); without
+it the report says the check was not run, never that the project is clean.
+--mx-check-results reads the JSON report of an earlier 'mx check <app.mpr> -j
+<file>' instead, and --no-mx-check skips it.
+
 --modules scores only the named modules — a project's own modules, without the
 Marketplace and platform modules beside them. Only findings located in a
 selected module count; project-wide findings (project security, user-role
@@ -154,6 +162,13 @@ mappings) are left out, and the report names the selection.
 		)
 		report.Modules = moduleFilter
 		report.Accepted = len(acceptances.accepted)
+		// Whether it builds, from Mendix's own check (ako/mxcli#2423).
+		consistency, err := reportConsistency(cmd, projectPath, os.Stderr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		report.Consistency = consistency
 
 		// Format and output
 		formatter := linter.GetReportFormatter(format)
