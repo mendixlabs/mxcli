@@ -17,9 +17,14 @@ import (
 // project with consistency errors cannot be deployed and could still score
 // well.
 
-// reportMxCheck runs `mx check` on a copy of the project. A seam for tests,
-// which have no mx.
+// reportMxCheck runs `mx check --json` on a copy of the project. A seam for
+// tests, which have no mx.
 var reportMxCheck = docker.CheckFindings
+
+// reportCheckKinds asks mx for warnings and deprecations as well as errors:
+// the report lists them, without scoring them. Best-practice findings are left
+// to the lint rules.
+var reportCheckKinds = docker.CheckKinds{Warnings: true, Deprecations: true}
 
 // reportConsistency runs the check, or reads saved results, or says why it was
 // not run. Only an unreadable results file the user named is an error: a
@@ -33,15 +38,19 @@ func reportConsistency(cmd *cobra.Command, projectPath string, progress io.Write
 		if err != nil {
 			return nil, fmt.Errorf("--mx-check-results: %w", err)
 		}
-		return consistencyFrom(docker.ParseCheckReport(string(b)), "results file "+path), nil
+		rep, err := docker.ParseCheckJSON(b)
+		if err != nil {
+			return nil, fmt.Errorf("--mx-check-results %s: %w (it takes the file 'mx check <app.mpr> -j <file>' writes)", path, err)
+		}
+		return consistencyFrom(rep, "results file "+path), nil
 	}
 	mxbuild, _ := cmd.Flags().GetString("mxbuild-path")
 	fmt.Fprintln(progress, "Running mx check on a temporary copy of the project (--no-mx-check skips it)...")
-	rep, runErr := reportMxCheck(docker.CheckOptions{ProjectPath: projectPath, MxBuildPath: mxbuild})
+	rep, runErr := reportMxCheck(docker.CheckOptions{ProjectPath: projectPath, MxBuildPath: mxbuild}, reportCheckKinds)
 	if runErr != nil && len(rep.Findings) == 0 && !rep.HasDeclared {
 		// mx was not found, or did not get as far as checking.
 		return &linter.ConsistencyCheck{NotRun: fmt.Sprintf("%v. 'mxcli setup mxbuild -p %s' sets up the project's Mendix version; "+
-			"--mx-check-results reads the output of an earlier 'mx check' or 'mxcli docker check'.", runErr, projectPath)}, nil
+			"--mx-check-results reads the JSON report of an earlier 'mx check <app.mpr> -j <file>'.", runErr, projectPath)}, nil
 	}
 	return consistencyFrom(rep, "mx check"), nil
 }
@@ -58,7 +67,12 @@ func consistencyFrom(rep docker.CheckReport, source string) *linter.ConsistencyC
 		case "deprecation":
 			c.Deprecations++
 		}
-		c.Findings = append(c.Findings, linter.ConsistencyFinding{Severity: f.Severity, Code: f.Code, Message: f.Message, Location: f.Location})
+		cf := linter.ConsistencyFinding{Severity: f.Severity, Code: f.Code, Message: f.Message}
+		if len(f.Locations) > 0 {
+			l := f.Locations[0]
+			cf.Module, cf.Document, cf.Element = l.ModuleName, l.DocumentName, l.ElementName
+		}
+		c.Findings = append(c.Findings, cf)
 	}
 	if err := rep.Verify(); err != nil {
 		c.Incomplete = err.Error()
@@ -68,6 +82,6 @@ func consistencyFrom(rep docker.CheckReport, source string) *linter.ConsistencyC
 
 func init() {
 	reportCmd.Flags().Bool("no-mx-check", false, "Do not run Mendix's consistency check (mx check); the report then says whether the project builds is unknown")
-	reportCmd.Flags().String("mx-check-results", "", "Read the output of an earlier 'mx check' or 'mxcli docker check' from this file instead of running it")
+	reportCmd.Flags().String("mx-check-results", "", "Read the JSON report of an earlier 'mx check <app.mpr> -j <file>' instead of running the check")
 	reportCmd.Flags().String("mxbuild-path", "", "Path to the mxbuild whose mx runs the check, overriding resolution by the project's Mendix version")
 }

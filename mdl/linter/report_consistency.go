@@ -42,7 +42,24 @@ type ConsistencyFinding struct {
 	Severity string `json:"severity"` // error | warning | deprecation
 	Code     string `json:"code"`     // CE0117, CW…, CD…
 	Message  string `json:"message"`
-	Location string `json:"location,omitempty"`
+	// Module, Document ("Microflow 'ACT_X'") and Element ("End event") say
+	// where; a project-level finding has none.
+	Module   string `json:"module,omitempty"`
+	Document string `json:"document,omitempty"`
+	Element  string `json:"element,omitempty"`
+}
+
+// where is the finding's document, "Module: Microflow 'ACT_X'", or "" for a
+// project-level finding.
+func (f ConsistencyFinding) where() string {
+	switch {
+	case f.Module != "" && f.Document != "":
+		return f.Module + ": " + f.Document
+	case f.Document != "":
+		return f.Document
+	default:
+		return f.Module
+	}
 }
 
 // Verdict is the one-line answer to "does it build?".
@@ -93,7 +110,7 @@ type ConsistencyGroup struct {
 	Code      string
 	Count     int
 	Message   string   // the first finding's; they differ only in detail
-	Locations []string // the first few distinct ones
+	Locations []string // the first few distinct documents
 	More      int      // distinct locations not listed
 }
 
@@ -118,10 +135,10 @@ func (c *ConsistencyCheck) Groups() []ConsistencyGroup {
 		}
 		g := &out[i]
 		g.Count++
-		if f.Location != "" && !seen[k][f.Location] {
-			seen[k][f.Location] = true
+		if loc := f.where(); loc != "" && !seen[k][loc] {
+			seen[k][loc] = true
 			if len(g.Locations) < maxGroupLocations {
-				g.Locations = append(g.Locations, f.Location)
+				g.Locations = append(g.Locations, loc)
 			} else {
 				g.More++
 			}
@@ -190,7 +207,7 @@ func writeConsistencyMarkdown(w io.Writer, c *ConsistencyCheck, modules []string
 	for _, h := range c.hints() {
 		fmt.Fprintf(w, "%s\n\n", h)
 	}
-	fmt.Fprintf(w, "Every finding is in `--format json`; `mxcli docker check -p <app.mpr>` prints them with mx's own wording.\n\n")
+	fmt.Fprintf(w, "Every finding, with its element, is in `--format json`; `mxcli docker check -p <app.mpr>` prints them with mx's own wording.\n\n")
 }
 
 func writeConsistencyHTML(w io.Writer, c *ConsistencyCheck, modules []string) {

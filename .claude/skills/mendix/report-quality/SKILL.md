@@ -42,7 +42,7 @@ the project on disk is not changed.
 
 ```bash
 mxcli setup mxbuild -p app.mpr                       # once: mx for the project's Mendix version
-mxcli report -p app.mpr --mx-check-results check.txt # reuse saved 'mxcli docker check' output
+mxcli report -p app.mpr --mx-check-results check.json  # the file 'mx check <copy>.mpr -j check.json -w -d' wrote
 mxcli report -p app.mpr --no-mx-check                # lint only; the report says it did not check
 ```
 

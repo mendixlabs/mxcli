@@ -14,14 +14,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const mxCheckWithErrors = `Checking app...
-[error] [CE0117] "Error(s) in expression." at Microflow 'ACT_X'
-[warning] [CW0702] "Unused variable." at Microflow 'ACT_Y'
-[deprecation] [CD0001] "Deprecated widget." at Page 'Home'
-The app contains: 1 error.
-`
-
-const mxCheckClean = "Checking app...\nThe app contains: 0 errors.\n"
+// mx check --json output, as recorded in docker/testdata/mxcheck.
+func mxCheckJSON(t *testing.T, name string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("docker", "testdata", "mxcheck", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
 
 func consistencyCmd(t *testing.T, flags map[string]string) *cobra.Command {
 	t.Helper()
@@ -37,37 +38,51 @@ func consistencyCmd(t *testing.T, flags map[string]string) *cobra.Command {
 	return c
 }
 
-func stubMxCheck(t *testing.T, output string, err error) *docker.CheckOptions {
+type mxCheckCall struct {
+	opts  docker.CheckOptions
+	kinds docker.CheckKinds
+}
+
+func stubMxCheck(t *testing.T, rep docker.CheckReport, err error) *mxCheckCall {
 	t.Helper()
 	orig := reportMxCheck
 	t.Cleanup(func() { reportMxCheck = orig })
-	var got docker.CheckOptions
-	reportMxCheck = func(opts docker.CheckOptions) (docker.CheckReport, error) {
-		got = opts
-		if output == "" {
-			return docker.CheckReport{}, err
-		}
-		return docker.ParseCheckReport(output), err
+	got := &mxCheckCall{}
+	reportMxCheck = func(opts docker.CheckOptions, kinds docker.CheckKinds) (docker.CheckReport, error) {
+		got.opts, got.kinds = opts, kinds
+		return rep, err
 	}
-	return &got
+	return got
 }
 
-// ako/mxcli#2423: the scored report runs mx check and says whether the
-// project builds.
+func parsedCheck(t *testing.T, name string) docker.CheckReport {
+	t.Helper()
+	rep, err := docker.ParseCheckJSON(mxCheckJSON(t, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rep
+}
+
+// ako/mxcli#2423: the scored report runs mx check, warnings and deprecations
+// included, and says whether the project builds.
 func TestReportConsistencyRunsMxCheck(t *testing.T) {
-	opts := stubMxCheck(t, mxCheckWithErrors, errors.New("exit status 1"))
+	call := stubMxCheck(t, parsedCheck(t, "f05_undef_all_kinds.json"), errors.New("exit status 1"))
 	c, err := reportConsistency(consistencyCmd(t, map[string]string{"mxbuild-path": "/opt/mxbuild"}), "app.mpr", io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.Ran || c.Errors != 1 || c.Warnings != 1 || c.Deprecations != 1 || c.Builds() || c.Incomplete != "" {
-		t.Errorf("errors found: %+v", c)
+	if !c.Ran || c.Errors != 1 || c.Warnings != 16 || c.Deprecations != 1 || c.Builds() || c.Incomplete != "" {
+		t.Errorf("errors found: ran=%v %d/%d/%d incomplete=%q", c.Ran, c.Errors, c.Warnings, c.Deprecations, c.Incomplete)
 	}
-	if opts.ProjectPath != "app.mpr" || opts.MxBuildPath != "/opt/mxbuild" {
-		t.Errorf("mx check got %+v", *opts)
+	if call.opts.ProjectPath != "app.mpr" || call.opts.MxBuildPath != "/opt/mxbuild" || !call.kinds.Warnings || !call.kinds.Deprecations {
+		t.Errorf("mx check got %+v", *call)
+	}
+	if f := c.Findings[0]; f.Module == "" || !strings.Contains(f.Document, "'") {
+		t.Errorf("a finding keeps its module and document: %+v", f)
 	}
 
-	stubMxCheck(t, mxCheckClean, nil)
+	stubMxCheck(t, parsedCheck(t, "f10_clean.json"), nil)
 	c, _ = reportConsistency(consistencyCmd(t, nil), "app.mpr", io.Discard)
 	if !c.Builds() || c.Verdict() != "yes" {
 		t.Errorf("clean project: %+v", c)
@@ -75,10 +90,10 @@ func TestReportConsistencyRunsMxCheck(t *testing.T) {
 }
 
 // No mx is a report that says the check did not run and how to run it, never a
-// clean one; and output whose error count disagrees with mx's own is not
+// clean one; and findings that disagree with mx's declared total are not
 // "builds".
 func TestReportConsistencyNeverCleanWhenUnknown(t *testing.T) {
-	stubMxCheck(t, "", errors.New("mx not found; specify --mxbuild-path"))
+	stubMxCheck(t, docker.CheckReport{}, errors.New("mx not found; specify --mxbuild-path"))
 	c, err := reportConsistency(consistencyCmd(t, nil), "app.mpr", io.Discard)
 	if err != nil {
 		t.Fatal(err)
@@ -87,16 +102,11 @@ func TestReportConsistencyNeverCleanWhenUnknown(t *testing.T) {
 		t.Errorf("no mx: %+v", c)
 	}
 
-	// mx stopped before its closing count: one error seen, the rest unknown.
-	stubMxCheck(t, `[error] [CE0117] "x" at Microflow 'A'`+"\n", errors.New("signal: killed"))
-	c, _ = reportConsistency(consistencyCmd(t, nil), "app.mpr", io.Discard)
-	if !c.Ran || c.Errors != 1 || c.Incomplete == "" {
-		t.Errorf("cut short: %+v", c)
-	}
-	stubMxCheck(t, "The app contains: 2 errors.\n", errors.New("exit status 1"))
+	short := docker.CheckReport{Declared: 2, HasDeclared: true}
+	stubMxCheck(t, short, errors.New("exit status 1"))
 	c, _ = reportConsistency(consistencyCmd(t, nil), "app.mpr", io.Discard)
 	if c.Builds() || c.Incomplete == "" || !strings.HasPrefix(c.Verdict(), "unknown") {
-		t.Errorf("count mismatch must not read as building: %+v", c)
+		t.Errorf("a total the findings do not add up to must not read as building: %+v", c)
 	}
 }
 
@@ -104,10 +114,13 @@ func TestReportConsistencyResultsFileAndSkip(t *testing.T) {
 	called := false
 	orig := reportMxCheck
 	t.Cleanup(func() { reportMxCheck = orig })
-	reportMxCheck = func(docker.CheckOptions) (docker.CheckReport, error) { called = true; return docker.CheckReport{}, nil }
+	reportMxCheck = func(docker.CheckOptions, docker.CheckKinds) (docker.CheckReport, error) {
+		called = true
+		return docker.CheckReport{}, nil
+	}
 
-	path := filepath.Join(t.TempDir(), "check.txt")
-	if err := os.WriteFile(path, []byte("Using mx: /x/mx\n"+mxCheckWithErrors), 0644); err != nil {
+	path := filepath.Join(t.TempDir(), "check.json")
+	if err := os.WriteFile(path, mxCheckJSON(t, "f01_dupvar.json"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	c, err := reportConsistency(consistencyCmd(t, map[string]string{"mx-check-results": path}), "app.mpr", io.Discard)
@@ -116,6 +129,11 @@ func TestReportConsistencyResultsFileAndSkip(t *testing.T) {
 	}
 	if _, err := reportConsistency(consistencyCmd(t, map[string]string{"mx-check-results": path + ".missing"}), "app.mpr", io.Discard); err == nil {
 		t.Error("a results file that cannot be read is an error, not a clean check")
+	}
+	text := filepath.Join(t.TempDir(), "check.txt")
+	_ = os.WriteFile(text, []byte("[error] [CE0117] \"x\" at Microflow 'A'\nThe app contains: 1 error.\n"), 0644)
+	if _, err := reportConsistency(consistencyCmd(t, map[string]string{"mx-check-results": text}), "app.mpr", io.Discard); err == nil || !strings.Contains(err.Error(), "-j") {
+		t.Errorf("printed mx check output is refused, saying which file it takes: %v", err)
 	}
 	c, _ = reportConsistency(consistencyCmd(t, map[string]string{"no-mx-check": "true"}), "app.mpr", io.Discard)
 	if c.Ran || !strings.Contains(c.NotRun, "--no-mx-check") {

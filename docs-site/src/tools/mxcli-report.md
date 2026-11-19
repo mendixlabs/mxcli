@@ -21,13 +21,16 @@ the project and puts its verdict above the score:
 | `not checked` | no mx for the project's Mendix version, or `--no-mx-check` |
 | `unknown` | mx's output could not be read in full |
 
-The check's findings are listed under **Consistency Check**, grouped by code (a
-stale theme or widget set gives hundreds of one code), and are not part of the
-score. They cover the whole project, also with `--modules`.
+The check's errors, warnings and deprecations are listed under **Consistency
+Check**, grouped by code with the documents they are in (a stale theme or widget
+set gives hundreds of one code), and are not part of the score. They cover the
+whole project, also with `--modules`. `mx` writes into the project it checks, so
+the report runs it on a temporary copy; run `mx check` yourself only on a copy
+too.
 
 ```bash
 mxcli setup mxbuild -p app.mpr                          # mx for the project's version, once
-mxcli report -p app.mpr --mx-check-results check.txt    # read saved 'mxcli docker check' output
+mxcli report -p app.mpr --mx-check-results check.json   # the JSON 'mx check <app.mpr> -j check.json -w -d' wrote
 mxcli report -p app.mpr --mxbuild-path /opt/mxbuild     # a specific mxbuild
 mxcli report -p app.mpr --no-mx-check                   # lint only
 ```

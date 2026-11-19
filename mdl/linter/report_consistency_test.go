@@ -24,12 +24,12 @@ func renderReport(t *testing.T, format string, c *ConsistencyCheck) string {
 // rules (none fire here), and the report must still say it does not build.
 func TestReportSaysAProjectWithConsistencyErrorsDoesNotBuild(t *testing.T) {
 	c := &ConsistencyCheck{Ran: true, Source: "mx check", Errors: 1, Warnings: 1, Findings: []ConsistencyFinding{
-		{Severity: "error", Code: "CE0117", Message: "Error(s) in expression.", Location: "Microflow 'ACT_X'"},
-		{Severity: "warning", Code: "CW0001", Message: "a <b>warning</b> | with a pipe", Location: "Page 'P'"},
+		{Severity: "error", Code: "CE0117", Message: "Error(s) in expression.", Module: "Shop", Document: "Microflow 'ACT_X'", Element: "Change object"},
+		{Severity: "warning", Code: "CW0001", Message: "a <b>warning</b> | with a pipe", Module: "Shop", Document: "Page 'P'"},
 	}}
 	md := renderReport(t, "markdown", c)
 	for _, want := range []string{"**Builds:** no — 1 consistency error(s)", "100/100", "## Consistency Check",
-		"The project does not build", "| error | CE0117 | 1 | Error(s) in expression. | Microflow 'ACT_X' |", `with a pipe`} {
+		"The project does not build", "| error | CE0117 | 1 | Error(s) in expression. | Shop: Microflow 'ACT_X' |", `with a pipe`} {
 		if !strings.Contains(md, want) {
 			t.Errorf("markdown lacks %q:\n%s", want, md)
 		}
@@ -88,15 +88,15 @@ func TestReportNeverCallsAnUncheckedProjectClean(t *testing.T) {
 // largest first, with a few locations; JSON keeps every finding.
 func TestConsistencyFindingsAreGroupedByCode(t *testing.T) {
 	c := &ConsistencyCheck{Ran: true}
-	add := func(sev, code, loc string, n int) {
+	add := func(sev, code, doc string, n int) {
 		for i := 0; i < n; i++ {
-			c.Findings = append(c.Findings, ConsistencyFinding{Severity: sev, Code: code, Message: "m " + code, Location: loc})
+			c.Findings = append(c.Findings, ConsistencyFinding{Severity: sev, Code: code, Message: "m " + code, Module: "M", Document: doc, Element: "e"})
 		}
 	}
 	add("warning", "CW0001", "Page 'A'", 50)
-	add("error", "CE0463", "Image 'image1'", 3)
+	add("error", "CE0463", "Page 'Home'", 3)
 	for i := 0; i < 8; i++ {
-		add("error", "CE6083", "Layout grid row "+string(rune('a'+i)), 2)
+		add("error", "CE6083", "Page 'P"+string(rune('a'+i))+"'", 2)
 	}
 	c.Errors = 19
 	gs := c.Groups()

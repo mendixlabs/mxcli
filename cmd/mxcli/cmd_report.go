@@ -50,7 +50,8 @@ copy of the project and states above the score whether the project builds: a
 project with consistency errors cannot be deployed, whatever it scores. It needs
 mx for the project's Mendix version ('mxcli setup mxbuild -p app.mpr'); without
 it the report says the check was not run, never that the project is clean.
---mx-check-results reads saved output instead, and --no-mx-check skips it.
+--mx-check-results reads the JSON report of an earlier 'mx check <app.mpr> -j
+<file>' instead, and --no-mx-check skips it.
 
 --modules scores only the named modules — a project's own modules, without the
 Marketplace and platform modules beside them. Only findings located in a
