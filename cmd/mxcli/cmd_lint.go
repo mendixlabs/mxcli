@@ -518,6 +518,8 @@ func builtinLintRules() []linter.Rule {
 		rules.NewSecurityLevelIgnoresRulesRule(), // SEC013 - security level Off/Prototype ignores the project's rules
 		rules.NewOverlappingActivitiesRule(),     // MPR008 - requires BSON inspection
 		rules.NewLoopChildContainmentRule(),      // MPR011 - requires BSON inspection
+		rules.NewOverlappingEntitiesRule(),       // MPR016 - reads entity geometry from the domain model
+		rules.NewFixedGuardAttributeRule(),       // MPR017 - a Boolean guard with one reachable value
 		rules.NewNoCommitInLoopRule(),            // CONV011-CONV014 - require BSON inspection
 		rules.NewExclusiveSplitCaptionRule(),
 		rules.NewErrorHandlingOnCallsRule(),

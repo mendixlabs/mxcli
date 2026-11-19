@@ -70,6 +70,15 @@ func GenerateConnector(ctx context.Context, cfg *GenerateConfig) (*GenerateResul
 		return nil, fmt.Errorf("no tables or views found")
 	}
 
+	renderConnector(cfg, schemas, result)
+	return result, nil
+}
+
+// renderConnector writes the MDL for schemas that have already been discovered.
+// It is separate from discovery so the emitted text — in particular how a table
+// is addressed in a generated query (ako/mxcli#2414) — can be tested without a
+// database.
+func renderConnector(cfg *GenerateConfig, schemas []*TableSchema, result *GenerateResult) *GenerateResult {
 	// Generate MDL in two parts: executable (constants + entities) and connection reference
 	var exec strings.Builder // constants + entities (parseable by mxcli)
 	var conn strings.Builder // DATABASE CONNECTION definition (reference)
@@ -144,7 +153,10 @@ func GenerateConnector(ctx context.Context, cfg *GenerateConfig) (*GenerateResul
 			entityName: entityName,
 			columns:    ts.Columns,
 			mappings:   mappings,
-			tableName:  ts.Name,
+			// The address, not the Mendix name: a query that selects FROM the
+			// bare name fails on any database that keeps the object outside the
+			// connection's search path (ako/mxcli#2414).
+			tableName: ts.QualifiedName(),
 		})
 	}
 
@@ -197,7 +209,7 @@ func GenerateConnector(ctx context.Context, cfg *GenerateConfig) (*GenerateResul
 	result.ExecutableMDL = exec.String()
 	result.ConnectionMDL = conn.String()
 	result.MDL = exec.String() + "-- Database Connection (create in Studio Pro or configure via Database Connector module)\n" + conn.String()
-	return result, nil
+	return result
 }
 
 type columnMapping struct {

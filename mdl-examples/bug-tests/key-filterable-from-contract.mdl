@@ -1,0 +1,34 @@
+mdl 1;
+-- CE6630 on an external entity's KEY: "'Code' is marked Filterable=False in the OData
+-- service, but True in the app."
+--
+-- An external entity's remote key (Rest$ODataKey) holds a key part that carries its
+-- own Filterable, which mxbuild compares with the service's, besides the attribute's
+-- own flag. `create external entities from` set the attribute's flag from the contract
+-- but wrote the key part true every time, so a service that does not allow filtering
+-- on its key -- the whole set not filterable, or NonFilterableProperties naming the key
+-- -- imported into an app that failed to build, one CE6630 per such entity.
+--
+-- Measured on MxBuild 11.16.1, one contract and one project per case: 13 capability
+-- shapes (no annotation, whole set not sortable / not filterable, the label or the key
+-- in NonSortableProperties / NonFilterableProperties, TopSupported, SkipSupported,
+-- CountRestrictions, Insert/Update/DeleteRestrictions). Eleven built clean before the
+-- fix; the two that did not were the two above. All thirteen build with 0 errors now.
+--
+-- MetadataUrl is relative to the APP's directory, so copy the contract there first:
+--   mkdir -p /path/to/app/mdl-examples/bug-tests/contracts
+--   cp mdl-examples/bug-tests/contracts/key-filterable-metadata.xml \
+--      /path/to/app/mdl-examples/bug-tests/contracts/
+--   mxcli exec mdl-examples/bug-tests/key-filterable-from-contract.mdl -p /path/to/app/app.mpr
+
+create module KeyFilt;
+
+create constant KeyFilt.SvcUrl ( Type: string, DefaultValue: 'https://example.invalid/odata/' );
+
+create consumed odata service KeyFilt.Client (
+  ODataVersion: OData4,
+  MetadataUrl: './mdl-examples/bug-tests/contracts/key-filterable-metadata.xml',
+  ServiceUrl: '@KeyFilt.SvcUrl'
+);
+
+create external entities from KeyFilt.Client into KeyFilt;

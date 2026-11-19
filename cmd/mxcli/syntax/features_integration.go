@@ -491,10 +491,17 @@ func init() {
 		Summary: "Auto-generate Database Connector MDL from external database schema",
 		Keywords: []string{
 			"generate connector", "database connector",
-			"constants", "non-persistent entity", "jdbc",
+			"constants", "non-persistent entity", "jdbc", "schema",
 		},
-		Syntax:  "SQL <alias> GENERATE CONNECTOR INTO Module\n  [TABLES (t1, t2)]\n  [VIEWS (v1, v2)]\n  [EXEC];",
-		Example: "SQL source GENERATE CONNECTOR INTO HRModule;\nSQL source GENERATE CONNECTOR INTO HRModule TABLES (employees, departments) EXEC;",
+		Syntax: "SQL <alias> GENERATE CONNECTOR INTO Module\n" +
+			"  [TABLES (t1, schema.t2)]\n" +
+			"  [VIEWS (v1, schema.v2)]\n" +
+			"  [EXEC];\n" +
+			"  -- A name may be schema-qualified, and must be where two\n" +
+			"  -- schemas hold the same one. Each generated QUERY selects\n" +
+			"  -- FROM the schema the object was discovered in, so it runs\n" +
+			"  -- wherever the connection's search path points.",
+		Example: "SQL source GENERATE CONNECTOR INTO HRModule;\nSQL source GENERATE CONNECTOR INTO HRModule TABLES (employees, hr.departments) EXEC;",
 		SeeAlso: []string{"sql", "sql.connect"},
 	})
 
@@ -907,7 +914,7 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 			"  by calling this microflow. Parameter sources: parent (the enclosing\n" +
 			"  mapped object), parameter (the mapping's own input object),\n" +
 			"  parent(2) (an ancestor N levels up), or a member path (a value from\n" +
-			"  the payload). modelsdk engine only.\n\n" +
+			"  the payload). modelsdk engine only.\n    The handler must name EXACTLY the microflow's parameters, by their own\n    names (case-sensitive): an unknown name is CE1613, and leaving a parameter\n    out is CE0277 (mxcli check: MDL104).\n\n" +
 			"Value transform (Attr = Module.MF(jsonField)):\n" +
 			"  The value passes through a microflow on its way to the attribute.\n" +
 			"  The stored element carries only the microflow — its input IS the\n" +

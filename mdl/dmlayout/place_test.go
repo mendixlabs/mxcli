@@ -27,12 +27,12 @@ func overlapping(dm *domainmodel.DomainModel) []string {
 	var hits []string
 	for i, a := range dm.Entities {
 		for _, b := range dm.Entities[i+1:] {
-			if EntityBox(a).overlaps(EntityBox(b)) {
+			if EntityBox(a).TooClose(EntityBox(b)) {
 				hits = append(hits, a.Name+"/"+b.Name)
 			}
 		}
 		for _, an := range dm.Annotations {
-			if EntityBox(a).overlaps(AnnotationBox(an)) {
+			if EntityBox(a).TooClose(AnnotationBox(an)) {
 				hits = append(hits, a.Name+"/annotation")
 			}
 		}

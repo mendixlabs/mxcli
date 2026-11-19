@@ -48,6 +48,10 @@ type constantChain struct {
 	// the chain because they come from the one configuration choice and the one
 	// project read; a second read would cost a second open of the project.
 	JVMArgs []string
+	// AppPort and AdminPort are the configuration's HTTP and admin ports, 0
+	// where it sets none; the --app-port and --admin-port flags override them
+	// (ako/mxcli#2365).
+	AppPort, AdminPort int
 }
 
 // parseConstantFlags turns repeated `--constant Module.Name=value` into a map.
@@ -231,6 +235,7 @@ func resolveConstantChain(ps *model.ProjectSettings, want string, flags, machine
 			return constantChain{}, err
 		}
 		chain.JVMArgs = args
+		chain.AppPort, chain.AdminPort = chosen.HttpPortNumber, chosen.ServerPortNumber
 	}
 
 	var unknown []string

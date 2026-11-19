@@ -51,6 +51,20 @@ type AssociationProperty struct {
 	element.Base
 	exposedName *property.Primitive[string]
 	association *property.ByNameRef[element.Element]
+	// versionedProperty is hand-added (#2384 §4): the intra-unit pointer to this
+	// property's frozen counterpart in Baseline.
+	versionedProperty *property.ByIdRef[element.Element]
+}
+
+// VersionedPropertyRefID is the $ID of this property's frozen counterpart in
+// the service's Baseline.
+func (o *AssociationProperty) VersionedPropertyRefID() element.ID {
+	return o.versionedProperty.RefID()
+}
+
+// SetVersionedPropertyID sets the pointer to the baseline property.
+func (o *AssociationProperty) SetVersionedPropertyID(id element.ID) {
+	o.versionedProperty.SetID(id)
 }
 
 // ExposedName returns the value of the exposedName property.
@@ -75,6 +89,14 @@ func (o *AssociationProperty) SetAssociationQualifiedName(v string) {
 
 // InitFromRaw populates lazy-decoded property holders from raw BSON.
 func (o *AssociationProperty) InitFromRaw(raw bson.Raw) {
+	if val, err := raw.LookupErr("VersionedPropertyPointer"); err == nil {
+		if s, ok := val.StringValueOK(); ok {
+			o.versionedProperty.SetFromDecode(element.ID(s))
+		} else if _, bdata, bok := val.BinaryOK(); bok {
+			o.versionedProperty.SetFromDecode(element.ID(codec.BinaryToUUID(bdata)))
+		}
+	}
+
 	o.exposedName.Init(raw)
 	if val, err := raw.LookupErr("Association"); err == nil {
 		if s, ok := val.StringValueOK(); ok {
@@ -91,6 +113,20 @@ type AttributeProperty struct {
 	element.Base
 	exposedName *property.Primitive[string]
 	attribute   *property.ByNameRef[element.Element]
+	// versionedProperty is hand-added (#2384 §4): the intra-unit pointer to this
+	// property's frozen counterpart in Baseline.
+	versionedProperty *property.ByIdRef[element.Element]
+}
+
+// VersionedPropertyRefID is the $ID of this property's frozen counterpart in
+// the service's Baseline.
+func (o *AttributeProperty) VersionedPropertyRefID() element.ID {
+	return o.versionedProperty.RefID()
+}
+
+// SetVersionedPropertyID sets the pointer to the baseline property.
+func (o *AttributeProperty) SetVersionedPropertyID(id element.ID) {
+	o.versionedProperty.SetID(id)
 }
 
 // ExposedName returns the value of the exposedName property.
@@ -115,6 +151,14 @@ func (o *AttributeProperty) SetAttributeQualifiedName(v string) {
 
 // InitFromRaw populates lazy-decoded property holders from raw BSON.
 func (o *AttributeProperty) InitFromRaw(raw bson.Raw) {
+	if val, err := raw.LookupErr("VersionedPropertyPointer"); err == nil {
+		if s, ok := val.StringValueOK(); ok {
+			o.versionedProperty.SetFromDecode(element.ID(s))
+		} else if _, bdata, bok := val.BinaryOK(); bok {
+			o.versionedProperty.SetFromDecode(element.ID(codec.BinaryToUUID(bdata)))
+		}
+	}
+
 	o.exposedName.Init(raw)
 	if val, err := raw.LookupErr("Attribute"); err == nil {
 		if s, ok := val.StringValueOK(); ok {
@@ -129,6 +173,12 @@ func (o *AttributeProperty) InitFromRaw(raw bson.Raw) {
 
 type EntityChangeDataCaptureService struct {
 	element.Base
+	// appName is hand-added (ako/mxcli#2384 §4): it is the second segment of
+	// every topic this service publishes to —
+	// cdc.<AppName>.<ExposedName>.<Major>.<space> — so a service written without
+	// it publishes where nobody is listening, and mxbuild reports CE1577 on an
+	// empty one.
+	appName       *property.Primitive[string]
 	name          *property.Primitive[string]
 	documentation *property.Primitive[string]
 	excluded      *property.Primitive[bool]
@@ -139,6 +189,16 @@ type EntityChangeDataCaptureService struct {
 }
 
 // Name returns the value of the name property.
+// AppName returns the value of the appName property.
+func (o *EntityChangeDataCaptureService) AppName() string {
+	return o.appName.Get()
+}
+
+// SetAppName sets the value of the appName property.
+func (o *EntityChangeDataCaptureService) SetAppName(v string) {
+	o.appName.Set(v)
+}
+
 func (o *EntityChangeDataCaptureService) Name() string {
 	return o.name.Get()
 }
@@ -215,6 +275,7 @@ func (o *EntityChangeDataCaptureService) SetBaseline(v element.Element) {
 
 // InitFromRaw populates lazy-decoded property holders from raw BSON.
 func (o *EntityChangeDataCaptureService) InitFromRaw(raw bson.Raw) {
+	o.appName.Init(raw)
 	o.name.Init(raw)
 	o.documentation.Init(raw)
 	o.excluded.Init(raw)
@@ -243,6 +304,11 @@ type EntityChangeSource struct {
 	entity      *property.ByNameRef[element.Element]
 	exposedName *property.Primitive[string]
 	properties  *property.PartList[element.Element]
+	// versionedSource is hand-added (#2384 §4): the intra-unit pointer from the
+	// live source to its frozen counterpart in Baseline. mxbuild does not
+	// validate it, but Studio Pro writes it and the two halves are only
+	// relatable through it.
+	versionedSource *property.ByIdRef[element.Element]
 }
 
 // EntityQualifiedName returns the value of the entity property.
@@ -253,6 +319,17 @@ func (o *EntityChangeSource) EntityQualifiedName() string {
 // SetEntityQualifiedName sets the value of the entity property.
 func (o *EntityChangeSource) SetEntityQualifiedName(v string) {
 	o.entity.SetQualifiedName(v)
+}
+
+// VersionedSourceRefID is the $ID of this source's frozen counterpart in the
+// service's Baseline.
+func (o *EntityChangeSource) VersionedSourceRefID() element.ID {
+	return o.versionedSource.RefID()
+}
+
+// SetVersionedSourceID sets the pointer to the baseline source.
+func (o *EntityChangeSource) SetVersionedSourceID(id element.ID) {
+	o.versionedSource.SetID(id)
 }
 
 // ExposedName returns the value of the exposedName property.
@@ -282,6 +359,14 @@ func (o *EntityChangeSource) RemoveProperties(index int) {
 
 // InitFromRaw populates lazy-decoded property holders from raw BSON.
 func (o *EntityChangeSource) InitFromRaw(raw bson.Raw) {
+	if val, err := raw.LookupErr("VersionedSourcePointer"); err == nil {
+		if s, ok := val.StringValueOK(); ok {
+			o.versionedSource.SetFromDecode(element.ID(s))
+		} else if _, bdata, bok := val.BinaryOK(); bok {
+			o.versionedSource.SetFromDecode(element.ID(codec.BinaryToUUID(bdata)))
+		}
+	}
+
 	if val, err := raw.LookupErr("Entity"); err == nil {
 		if s, ok := val.StringValueOK(); ok {
 			o.entity.SetFromDecode(s)
@@ -384,8 +469,12 @@ func (o *VersionedEntityChangeDataCaptureService) InitFromRaw(raw bson.Raw) {
 
 type VersionedEntityChangeSource struct {
 	element.Base
-	version     *property.Part[element.Element]
-	entityGuid  *property.Primitive[string]
+	version *property.Part[element.Element]
+	// entityGuid is the DATABASE's identity for the exposed entity —
+	// mendixsystem$entity.id holds it verbatim — stored as BSON binary. Same
+	// defect as VersionedProperty.propertyGuid: as a string primitive it read
+	// back empty.
+	entityGuid  *property.ByIdRef[element.Element]
 	exposedName *property.Primitive[string]
 	properties  *property.PartList[element.Element]
 }
@@ -402,12 +491,12 @@ func (o *VersionedEntityChangeSource) SetVersion(v element.Element) {
 
 // EntityGuid returns the value of the entityGuid property.
 func (o *VersionedEntityChangeSource) EntityGuid() string {
-	return o.entityGuid.Get()
+	return string(o.entityGuid.RefID())
 }
 
 // SetEntityGuid sets the value of the entityGuid property.
 func (o *VersionedEntityChangeSource) SetEntityGuid(v string) {
-	o.entityGuid.Set(v)
+	o.entityGuid.SetID(element.ID(v))
 }
 
 // ExposedName returns the value of the exposedName property.
@@ -440,7 +529,13 @@ func (o *VersionedEntityChangeSource) InitFromRaw(raw bson.Raw) {
 	if child, err := codec.DecodeChild(raw, "Version"); err == nil {
 		o.version.SetFromDecode(child)
 	}
-	o.entityGuid.Init(raw)
+	if val, err := raw.LookupErr("EntityGuid"); err == nil {
+		if s, ok := val.StringValueOK(); ok {
+			o.entityGuid.SetFromDecode(element.ID(s))
+		} else if _, bdata, bok := val.BinaryOK(); bok {
+			o.entityGuid.SetFromDecode(element.ID(codec.BinaryToUUID(bdata)))
+		}
+	}
 	o.exposedName.Init(raw)
 	if children, err := codec.DecodeChildren(raw, "Properties"); err == nil {
 		for _, child := range children {
@@ -455,19 +550,38 @@ func (o *VersionedEntityChangeSource) InitFromRaw(raw bson.Raw) {
 
 type VersionedProperty struct {
 	element.Base
-	propertyGuid *property.Primitive[string]
-	exposedName  *property.Primitive[string]
-	propType     *property.Enum[string]
+	// propertyGuid is the DATABASE's identity for the attribute or association
+	// this exposes — mendixsystem$attribute.id holds it verbatim. It is stored
+	// as BSON binary, so it is a ByIdRef and not a string primitive: read
+	// through DecodeString it came back EMPTY on every Studio Pro-authored
+	// document, silently (CLAUDE.md, "A GUID Is the Database's Identity").
+	propertyGuid *property.ByIdRef[element.Element]
+	// associatedEntityGuid is hand-added (#2384 §4): for an association it is
+	// the GUID of the TO entity, and for an attribute the all-zero GUID.
+	associatedEntityGuid *property.ByIdRef[element.Element]
+	exposedName          *property.Primitive[string]
+	propType             *property.Enum[string]
 }
 
 // PropertyGuid returns the value of the propertyGuid property.
 func (o *VersionedProperty) PropertyGuid() string {
-	return o.propertyGuid.Get()
+	return string(o.propertyGuid.RefID())
 }
 
 // SetPropertyGuid sets the value of the propertyGuid property.
 func (o *VersionedProperty) SetPropertyGuid(v string) {
-	o.propertyGuid.Set(v)
+	o.propertyGuid.SetID(element.ID(v))
+}
+
+// AssociatedEntityGuid is the GUID of the TO entity for an association
+// property, or the all-zero GUID for an attribute.
+func (o *VersionedProperty) AssociatedEntityGuid() string {
+	return string(o.associatedEntityGuid.RefID())
+}
+
+// SetAssociatedEntityGuid sets the associatedEntityGuid property.
+func (o *VersionedProperty) SetAssociatedEntityGuid(v string) {
+	o.associatedEntityGuid.SetID(element.ID(v))
 }
 
 // ExposedName returns the value of the exposedName property.
@@ -492,7 +606,20 @@ func (o *VersionedProperty) SetType(v string) {
 
 // InitFromRaw populates lazy-decoded property holders from raw BSON.
 func (o *VersionedProperty) InitFromRaw(raw bson.Raw) {
-	o.propertyGuid.Init(raw)
+	if val, err := raw.LookupErr("PropertyGuid"); err == nil {
+		if s, ok := val.StringValueOK(); ok {
+			o.propertyGuid.SetFromDecode(element.ID(s))
+		} else if _, bdata, bok := val.BinaryOK(); bok {
+			o.propertyGuid.SetFromDecode(element.ID(codec.BinaryToUUID(bdata)))
+		}
+	}
+	if val, err := raw.LookupErr("AssociatedEntityGuid"); err == nil {
+		if s, ok := val.StringValueOK(); ok {
+			o.associatedEntityGuid.SetFromDecode(element.ID(s))
+		} else if _, bdata, bok := val.BinaryOK(); bok {
+			o.associatedEntityGuid.SetFromDecode(element.ID(codec.BinaryToUUID(bdata)))
+		}
+	}
 	o.exposedName.Init(raw)
 	if val, err := raw.LookupErr("Type"); err == nil {
 		if s, ok := val.StringValueOK(); ok {
@@ -515,7 +642,9 @@ func initAssociationProperty() *AssociationProperty {
 	o.exposedName.Bind(&o.Base, 0)
 	o.association = property.NewByNameRef[element.Element]("Association", "DomainModels$AssociationBase")
 	o.association.Bind(&o.Base, 1)
-	o.SetProperties([]element.Property{o.exposedName, o.association})
+	o.versionedProperty = property.NewByIdRef[element.Element]("VersionedPropertyPointer")
+	o.versionedProperty.Bind(&o.Base, 2)
+	o.SetProperties([]element.Property{o.exposedName, o.association, o.versionedProperty})
 	return o
 }
 
@@ -538,7 +667,9 @@ func initAttributeProperty() *AttributeProperty {
 	o.exposedName.Bind(&o.Base, 0)
 	o.attribute = property.NewByNameRef[element.Element]("Attribute", "DomainModels$Attribute")
 	o.attribute.Bind(&o.Base, 1)
-	o.SetProperties([]element.Property{o.exposedName, o.attribute})
+	o.versionedProperty = property.NewByIdRef[element.Element]("VersionedPropertyPointer")
+	o.versionedProperty.Bind(&o.Base, 2)
+	o.SetProperties([]element.Property{o.exposedName, o.attribute, o.versionedProperty})
 	return o
 }
 
@@ -571,7 +702,9 @@ func initEntityChangeDataCaptureService() *EntityChangeDataCaptureService {
 	o.serviceName.Bind(&o.Base, 5)
 	o.baseline = property.NewPart[element.Element]("Baseline")
 	o.baseline.Bind(&o.Base, 6)
-	o.SetProperties([]element.Property{o.name, o.documentation, o.excluded, o.exportLevel, o.sources, o.serviceName, o.baseline})
+	o.appName = property.NewPrimitive[string]("AppName", property.DecodeString)
+	o.appName.Bind(&o.Base, 7)
+	o.SetProperties([]element.Property{o.name, o.documentation, o.excluded, o.exportLevel, o.sources, o.serviceName, o.baseline, o.appName})
 	return o
 }
 
@@ -596,7 +729,9 @@ func initEntityChangeSource() *EntityChangeSource {
 	o.exposedName.Bind(&o.Base, 1)
 	o.properties = property.NewPartList[element.Element]("Properties")
 	o.properties.Bind(&o.Base, 2)
-	o.SetProperties([]element.Property{o.entity, o.exposedName, o.properties})
+	o.versionedSource = property.NewByIdRef[element.Element]("VersionedSourcePointer")
+	o.versionedSource.Bind(&o.Base, 3)
+	o.SetProperties([]element.Property{o.entity, o.exposedName, o.properties, o.versionedSource})
 	return o
 }
 
@@ -663,7 +798,7 @@ func initVersionedEntityChangeSource() *VersionedEntityChangeSource {
 	o.SetTypeName("ChangeDataCapture$VersionedEntityChangeSource")
 	o.version = property.NewPart[element.Element]("Version")
 	o.version.Bind(&o.Base, 0)
-	o.entityGuid = property.NewPrimitive[string]("EntityGuid", property.DecodeString)
+	o.entityGuid = property.NewByIdRef[element.Element]("EntityGuid")
 	o.entityGuid.Bind(&o.Base, 1)
 	o.exposedName = property.NewPrimitive[string]("ExposedName", property.DecodeString)
 	o.exposedName.Bind(&o.Base, 2)
@@ -688,13 +823,15 @@ func NewVersionedEntityChangeSource() *VersionedEntityChangeSource {
 func initVersionedProperty() *VersionedProperty {
 	o := &VersionedProperty{}
 	o.SetTypeName("ChangeDataCapture$VersionedProperty")
-	o.propertyGuid = property.NewPrimitive[string]("PropertyGuid", property.DecodeString)
+	o.propertyGuid = property.NewByIdRef[element.Element]("PropertyGuid")
 	o.propertyGuid.Bind(&o.Base, 0)
 	o.exposedName = property.NewPrimitive[string]("ExposedName", property.DecodeString)
 	o.exposedName.Bind(&o.Base, 1)
 	o.propType = property.NewEnum[string]("Type")
 	o.propType.Bind(&o.Base, 2)
-	o.SetProperties([]element.Property{o.propertyGuid, o.exposedName, o.propType})
+	o.associatedEntityGuid = property.NewByIdRef[element.Element]("AssociatedEntityGuid")
+	o.associatedEntityGuid.Bind(&o.Base, 3)
+	o.SetProperties([]element.Property{o.propertyGuid, o.exposedName, o.propType, o.associatedEntityGuid})
 	return o
 }
 

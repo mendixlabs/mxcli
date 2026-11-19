@@ -741,6 +741,20 @@ func walkWidget(w map[string]any, parentID string, depth int) []rawWidgetInfo {
 		}
 	}
 
+	// A legacy grid's control-bar buttons are named widgets `alter page`
+	// addresses; their list is STORED as `NewButtons` (the storage name of
+	// Forms$GridControlBar.Items), so `show widgets` listed none of them
+	// (ako/mxcli#2382).
+	if cb, ok := w["ControlBar"].(map[string]any); ok {
+		for _, key := range []string{"NewButtons", "Items"} {
+			for _, b := range getBsonArrayElements(cb[key]) {
+				if bMap, ok := b.(map[string]any); ok {
+					result = append(result, walkWidget(bMap, childParent, childDepth)...)
+				}
+			}
+		}
+	}
+
 	// Handle DataView/ListView footer widgets
 	footerWidgets := getBsonArrayElements(w["FooterWidgets"])
 	for _, fw := range footerWidgets {

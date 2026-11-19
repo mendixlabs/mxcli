@@ -36,6 +36,7 @@ func OutOfScope(p Project, sourceLang string, scope Scope, dict Dictionary) ([]s
 		return nil, fmt.Errorf("list units: %w", err)
 	}
 	missed := map[string]bool{}
+	m := dict.matcher()
 	for _, u := range units {
 		if u == nil || scope.includes(u.ID) {
 			continue
@@ -45,8 +46,8 @@ func OutOfScope(p Project, sourceLang string, scope Scope, dict Dictionary) ([]s
 			continue // a unit that cannot be read contributes nothing
 		}
 		for _, e := range CollectFromUnit(raw, sourceLang) {
-			if _, named := dict[e.Source]; named {
-				missed[e.Source] = true
+			if key, _, named := m.lookup(e.Source); named {
+				missed[key] = true
 			}
 		}
 	}

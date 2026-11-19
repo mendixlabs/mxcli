@@ -12,6 +12,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/marketplace"
 	"github.com/mendixlabs/mxcli/internal/auth"
+	"github.com/mendixlabs/mxcli/modelsdk/mpr"
 	"github.com/spf13/cobra"
 )
 
@@ -109,6 +110,11 @@ func runMarketplaceUpdate(cmd *cobra.Command, args []string) error {
 	if installedVersion == target {
 		fmt.Fprintf(out, "%s is already at %s; nothing to do.\n", moduleName, target)
 		return nil
+	}
+	// Before downloading and building two reference projects: with Studio Pro
+	// holding the project, every write would be refused (ako/mxcli#2366).
+	if err := mpr.CheckStudioProOpen(mprPath); err != nil {
+		return fmt.Errorf("%w\nNothing was changed. Close the project in Studio Pro and re-run the update", err)
 	}
 
 	// Refuse a target the project's Mendix cannot import, before building two

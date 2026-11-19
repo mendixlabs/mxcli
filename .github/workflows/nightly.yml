@@ -434,9 +434,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      # One version string for the binaries and the dated release that carries
+      # them: `mxcli --version` prints it, `mxcli init` stamps it into a
+      # project, and the bootstrap script can then download exactly that build.
+      - name: Compute nightly version
+        if: steps.check.outputs.skip != 'true'
+        id: version
+        run: echo "version=nightly-$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Build release binaries
         if: steps.check.outputs.skip != 'true'
-        run: VERSION=nightly-$(date -u +%Y%m%d)-$(git rev-parse --short HEAD) make release
+        run: VERSION=${{ steps.version.outputs.version }} make release
 
       - name: Generate changelog
         if: steps.check.outputs.skip != 'true'
@@ -478,3 +486,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           NOTES: ${{ steps.changelog.outputs.body }}
+
+      # The rolling `nightly` tag moves every night, so the build a project was
+      # made with could not be fetched again: no rollback, and the bootstrap
+      # script's "set MXCLI_TAG to <stamp>" downloaded a 404 (ako/mxcli#2359).
+      # Each nightly is also published under its dated tag — the version
+      # `mxcli --version` prints — and the newest KEEP of those are kept.
+      - name: Publish dated nightly
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          if ! gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release create "$VERSION" \
+              --prerelease \
+              --latest=false \
+              --target "$(git rev-parse HEAD)" \
+              --title "Nightly $(date -u +%Y-%m-%d) ($VERSION)" \
+              --notes "$NOTES" \
+              bin/mxcli-*
+          fi
+          gh release list --limit 200 --json tagName,createdAt \
+            -q '.[] | select(.tagName | test("^nightly-[0-9]{8}-")) | [.createdAt, .tagName] | @tsv' |
+            sort -r | tail -n +$((KEEP + 1)) | cut -f2 |
+            while read -r old; do
+              gh release delete "$old" --cleanup-tag -y || true
+            done
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ steps.changelog.outputs.body }}
+          VERSION: ${{ steps.version.outputs.version }}
+          KEEP: '30'

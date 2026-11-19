@@ -89,6 +89,12 @@ Two more consequences:
 ### Navigation properties become associations
 
 Each navigation property whose target is also imported becomes an association.
+It is named after the navigation property. When that name is already an entity
+or an association in the module — a `Category` navigation beside the entity
+`Category` — it is named `<Parent>_<NavigationProperty>` (`Product_Category`),
+and only if that is taken too does a number follow (`Product_Category_2`). A
+re-import recognises the associations it made by their navigation property, not
+their name, so an existing name is never changed.
 A navigation property with a `Partner` is one end of a bidirectional
 relationship, and Mendix does not accept its ends as separate associations
 (`CE6618` "Navigation '…' is not available in the OData service"):
