@@ -500,7 +500,10 @@ func init() {
 			"  -- A name may be schema-qualified, and must be where two\n" +
 			"  -- schemas hold the same one. Each generated QUERY selects\n" +
 			"  -- FROM the schema the object was discovered in, so it runs\n" +
-			"  -- wherever the connection's search path points.",
+			"  -- wherever the connection's search path points.\n" +
+			"  -- Either clause scopes the whole command: with neither, every\n" +
+			"  -- table and view is generated; with either, only what it names.\n" +
+			"  -- An object named twice is generated once.",
 		Example: "SQL source GENERATE CONNECTOR INTO HRModule;\nSQL source GENERATE CONNECTOR INTO HRModule TABLES (employees, hr.departments) EXEC;",
 		SeeAlso: []string{"sql", "sql.connect"},
 	})
