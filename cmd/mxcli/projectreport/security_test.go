@@ -63,10 +63,10 @@ func securityFixture(t *testing.T) *fixture {
 	f.param("Shop.ACT_Cancel", "Order", "Object:Shop.Order")
 	f.permission("Shop.User", "MICROFLOW", "Shop.ACT_Cancel", "EXECUTE", "")
 	f.source("Shop.ACT_Cancel", "if $Order/Shop.Order_Customer = $currentUser then ... end")
-	// Entity access off and it writes.
+	// Entity access off, it writes, and the role may read every order.
 	f.microflow("Shop.ACT_Delete", false, "")
 	f.param("Shop.ACT_Delete", "Order", "Object:Shop.Order")
-	f.permission("Shop.User", "MICROFLOW", "Shop.ACT_Delete", "EXECUTE", "")
+	f.permission("Shop.Admin", "MICROFLOW", "Shop.ACT_Delete", "EXECUTE", "")
 	f.ref("Shop.ACT_Delete", "MICROFLOW", "Shop.Order", "ENTITY", "delete")
 
 	f.constant("Shop.EncryptionKey", "String", "q8Zr0d5m3l9xS2tVb6wYcA==", false)
@@ -204,26 +204,45 @@ func TestSecurityLintVerdictComesFromTheBrain(t *testing.T) {
 	mustContain(t, md.String(), "| SEC001 | warning | 2 |  | accepted (brain d1, d2) |", "1 of 2 accepted (brain d3)")
 }
 
-// What a flow does through its sub-microflows counts: a check on the caller in
-// a sub is still a check, and a commit in a sub is still a write
-// (ako/mxcli#2443 — Shop.DS_Info_Line was flagged high on ako/PizzaV1 though it
-// takes the caller's own cart through a sub).
+// What a flow does through its sub-microflows counts, but only on the
+// entities it takes: a sub that checks the caller on the same entity is a
+// check to confirm, and a write in a sub is a write (ako/mxcli#2443). A toast
+// helper stamping the caller on a Toast, or creating the caller's own cart
+// line, says nothing about the object the client passed in (both seen on
+// ako/PizzaV1, where they turned 19 flows "ok").
 func TestCallableFlowFollowsSubMicroflows(t *testing.T) {
 	f := securityFixture(t)
-	// Checks the caller through a sub.
+	f.entity("Shop.Toast", "PERSISTENT", "")
+	f.entity("Shop.Line", "PERSISTENT", "")
+	// Checks the caller on Order through a sub.
 	f.microflow("Shop.DS_Info", true, "")
 	f.param("Shop.DS_Info", "Order", "Object:Shop.Order")
 	f.permission("Shop.User", "MICROFLOW", "Shop.DS_Info", "EXECUTE", "")
-	f.source("Shop.DS_Info", "call microflow Shop.SUB_Current();")
-	f.ref("Shop.DS_Info", "MICROFLOW", "Shop.SUB_Current", "MICROFLOW", "call")
-	f.ref("Shop.DS_Info", "MICROFLOW", "Shop.Order", "ENTITY", "change")
+	f.call("Shop.DS_Info", "Shop.SUB_Current")
 	f.microflow("Shop.SUB_Current", true, "")
-	f.source("Shop.SUB_Current", "retrieve $Cart from Shop.Order where Shop.Order_Customer = '[%CurrentUser%]';")
-	// Entity access off, writes only through a sub.
+	f.source("Shop.SUB_Current", "retrieve $Mine from Shop.Order where Shop.Order_Customer = '[%CurrentUser%]';")
+	f.ref("Shop.SUB_Current", "MICROFLOW", "Shop.Order_Customer", "ASSOCIATION", "xpath")
+	// Its sub checks the caller on a Toast only, and it creates its own Line.
+	f.microflow("Shop.ACT_Note", false, "")
+	f.param("Shop.ACT_Note", "Order", "Object:Shop.Order")
+	f.permission("Shop.User", "MICROFLOW", "Shop.ACT_Note", "EXECUTE", "")
+	f.call("Shop.ACT_Note", "Shop.SUB_Toast")
+	f.ref("Shop.ACT_Note", "MICROFLOW", "Shop.Line", "ENTITY", "create")
+	f.microflow("Shop.SUB_Toast", true, "")
+	f.source("Shop.SUB_Toast", "$T = create Shop.Toast (Toast_Owner = [%CurrentUser%]);")
+	f.ref("Shop.SUB_Toast", "MICROFLOW", "Shop.Toast", "ENTITY", "create")
+	// Entity access off, writes the Order only through a sub, for a role
+	// that reads every order.
 	f.microflow("Shop.ACT_Archive", false, "")
 	f.param("Shop.ACT_Archive", "Order", "Object:Shop.Order")
-	f.permission("Shop.User", "MICROFLOW", "Shop.ACT_Archive", "EXECUTE", "")
-	f.ref("Shop.ACT_Archive", "MICROFLOW", "Shop.SUB_Commit", "MICROFLOW", "call")
+	f.permission("Shop.Admin", "MICROFLOW", "Shop.ACT_Archive", "EXECUTE", "")
+	// The same for a role that reads only its own orders: the read rule
+	// bounds what can be substituted.
+	f.microflow("Shop.ACT_Reorder", false, "")
+	f.param("Shop.ACT_Reorder", "Order", "Object:Shop.Order")
+	f.permission("Shop.User", "MICROFLOW", "Shop.ACT_Reorder", "EXECUTE", "")
+	f.call("Shop.ACT_Reorder", "Shop.SUB_Commit")
+	f.call("Shop.ACT_Archive", "Shop.SUB_Commit")
 	f.microflow("Shop.SUB_Commit", false, "")
 	f.ref("Shop.SUB_Commit", "MICROFLOW", "Shop.Order", "ENTITY", "commit")
 
@@ -235,11 +254,17 @@ func TestCallableFlowFollowsSubMicroflows(t *testing.T) {
 	for _, fl := range d.Flows {
 		got[fl.Name] = fl
 	}
-	if fl := got["Shop.DS_Info"]; fl.Risk != "ok" || fl.CheckedBy != "Shop.SUB_Current" {
-		t.Errorf("DS_Info checks the caller through SUB_Current: risk %q, checkedBy %q (%s)", fl.Risk, fl.CheckedBy, fl.Triage)
+	if fl := got["Shop.DS_Info"]; fl.Risk != "low" || fl.CheckedBy != "Shop.SUB_Current" || !strings.Contains(fl.Triage, "confirm") {
+		t.Errorf("DS_Info: a sub checks the caller on Order: risk %q, checkedBy %q (%s)", fl.Risk, fl.CheckedBy, fl.Triage)
+	}
+	if fl := got["Shop.ACT_Note"]; fl.CheckedBy != "" || fl.Writes || fl.Risk != "medium" {
+		t.Errorf("ACT_Note: a Toast check and its own Line are not about the Order: risk %q, checkedBy %q, writes %v (%s)", fl.Risk, fl.CheckedBy, fl.Writes, fl.Triage)
 	}
 	if fl := got["Shop.ACT_Archive"]; fl.Risk != "high" || !fl.Writes || fl.WritesVia != "Shop.SUB_Commit" {
-		t.Errorf("ACT_Archive writes through SUB_Commit: risk %q, writes %v via %q (%s)", fl.Risk, fl.Writes, fl.WritesVia, fl.Triage)
+		t.Errorf("ACT_Archive writes the Order through SUB_Commit: risk %q, writes %v via %q (%s)", fl.Risk, fl.Writes, fl.WritesVia, fl.Triage)
+	}
+	if fl := got["Shop.ACT_Reorder"]; fl.Risk != "medium" || !strings.Contains(fl.Triage, "limited to what the granted roles read (via user)") {
+		t.Errorf("ACT_Reorder: a narrow read rule bounds the substitution: risk %q (%s)", fl.Risk, fl.Triage)
 	}
 }
 

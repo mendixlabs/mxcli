@@ -117,8 +117,9 @@ type CallableFlow struct {
 	ChecksCaller      bool     `json:"checksCaller"`
 	TakesUser         bool     `json:"takesUser"`
 	Writes            bool     `json:"writes"`
-	// CheckedBy is the sub-microflow that checks the caller when the flow
-	// does not do it in its own body; WritesVia the one that writes.
+	// CheckedBy is a sub-microflow that checks the caller on an entity the
+	// flow takes, when the flow does not check in its own body; WritesVia the
+	// sub that writes such an entity.
 	CheckedBy string `json:"checkedBy,omitempty"`
 	WritesVia string `json:"writesVia,omitempty"`
 	Risk      string `json:"risk"` // high | medium | low | ok
@@ -405,18 +406,28 @@ func collectCallableFlows(q Querier, d *SecurityData, app map[string]bool, userR
 	for _, s := range src {
 		body[s["QualifiedName"]] = s["SourceText"]
 	}
-	wr, err := rows(q, `SELECT DISTINCT SourceName FROM refs WHERE SourceType = 'MICROFLOW' AND RefKind IN ('change', 'delete', 'commit', 'create')`)
+	// What each microflow writes and what it touches, by entity. "Changes
+	// an object the client chose" is about the parameter's entity: a flow
+	// that takes a Product and creates the caller's own cart line does not
+	// change what the client chose (Shop.DS_Info_Line on ako/PizzaV1).
+	wr, err := rows(q, `SELECT DISTINCT SourceName, TargetName FROM refs WHERE SourceType = 'MICROFLOW' AND RefKind IN ('change', 'delete', 'commit', 'create')`)
 	if err != nil {
 		return err
 	}
-	writes := map[string]bool{}
+	writes := map[string][]string{}
 	for _, w := range wr {
-		writes[w["SourceName"]] = true
+		writes[w["SourceName"]] = append(writes[w["SourceName"]], w["TargetName"])
+	}
+	tr, err := rows(q, `SELECT DISTINCT SourceName, TargetName FROM refs WHERE SourceType = 'MICROFLOW'`)
+	if err != nil {
+		return err
+	}
+	touches := map[string][]string{}
+	for _, t := range tr {
+		touches[t["SourceName"]] = append(touches[t["SourceName"]], t["TargetName"])
 	}
 	// What a flow does through its sub-microflows counts too: a flow that
-	// commits through a sub was labelled as reading only, and one whose sub
-	// retrieves the caller's own cart ([%CurrentUser%]) was flagged as
-	// trusting the caller (ako/mxcli#2443, Shop.DS_Info_Line on ako/PizzaV1).
+	// commits through a sub was labelled as reading only (ako/mxcli#2443).
 	calls, err := LoadCallGraph(q)
 	if err != nil {
 		return err
@@ -430,7 +441,7 @@ func collectCallableFlows(q Querier, d *SecurityData, app map[string]bool, userR
 		if !app[moduleOf(name)] {
 			continue
 		}
-		f := CallableFlow{Name: name, Roles: roles[name], ApplyEntityAccess: applyEA[name], Writes: writes[name]}
+		f := CallableFlow{Name: name, Roles: roles[name], ApplyEntityAccess: applyEA[name]}
 		sort.Strings(f.Roles)
 		var paramEnts []string
 		for _, p := range pOf[name] {
@@ -452,14 +463,18 @@ func collectCallableFlows(q Querier, d *SecurityData, app map[string]bool, userR
 			continue
 		}
 		f.ChecksCaller = callerCheck.MatchString(body[name])
+		f.Writes = anyOnEntity(writes[name], paramEnts)
 		for _, callee := range calls.Closure([]string{name}) {
 			if callee == name {
 				continue
 			}
-			if !f.ChecksCaller && f.CheckedBy == "" && callerCheck.MatchString(body[callee]) {
-				f.ChecksCaller, f.CheckedBy = true, callee
+			// A sub's check on the caller counts only when the sub works with
+			// an entity the flow takes: a toast helper that stamps the caller
+			// on a Toast says nothing about the Cart passed in.
+			if !f.ChecksCaller && f.CheckedBy == "" && callerCheck.MatchString(body[callee]) && anyOnEntity(touches[callee], paramEnts) {
+				f.CheckedBy = callee
 			}
-			if !f.Writes && writes[callee] {
+			if !f.Writes && anyOnEntity(writes[callee], paramEnts) {
 				f.Writes, f.WritesVia = true, callee
 			}
 		}
@@ -474,15 +489,29 @@ func collectCallableFlows(q Querier, d *SecurityData, app map[string]bool, userR
 		switch {
 		case f.TakesUser && !f.ChecksCaller:
 			f.Risk, f.Triage = "high", "acts for a user the page supplies: an object parameter is a plain id, so any user the caller may read can be substituted. Use $currentUser in the body instead"
-		case f.ChecksCaller && f.CheckedBy != "":
-			f.Risk, f.Triage = "ok", "checks the caller through `"+f.CheckedBy+"` ($currentUser / [%CurrentUser%]) — confirm that check constrains the object it acts on"
 		case f.ChecksCaller:
 			f.Risk, f.Triage = "ok", "checks the caller in its own body ($currentUser / [%CurrentUser%])"
-		case !f.ApplyEntityAccess && f.Writes:
-			f.Risk, f.Triage = "high", "changes an object the client chose, with entity access off: no access rule stops a substituted id"
+		case !f.ApplyEntityAccess && f.Writes && widest == AccessAll:
+			f.Risk, f.Triage = "high", "changes an object the client chose, with entity access off, and the granted roles may read every object of its entity: any id can be passed and nothing stops the change"
 			if f.WritesVia != "" {
 				f.Triage += " (it writes through `" + f.WritesVia + "`)"
 			}
+			if f.CheckedBy != "" {
+				f.Triage += "; `" + f.CheckedBy + "` checks the caller on the same entity — if that check covers the object passed in, this is a false alarm"
+			}
+		case !f.ApplyEntityAccess && f.Writes:
+			// The client can only pass an object its role may read, so the
+			// read rule bounds what can be substituted even with entity access
+			// off in the flow (ako/PizzaV1's review: "only the guest's own rows").
+			f.Risk, f.Triage = "medium", "changes an object the client chose, with entity access off: a substituted id is limited to what the granted roles read ("+nonEmpty(widest, "no read rule")+"), so it relies on that read rule"
+			if f.WritesVia != "" {
+				f.Triage += " (it writes through `" + f.WritesVia + "`)"
+			}
+			if f.CheckedBy != "" {
+				f.Triage += "; `" + f.CheckedBy + "` checks the caller on the same entity — if that check covers the object passed in, this is a false alarm"
+			}
+		case f.CheckedBy != "":
+			f.Risk, f.Triage = "low", "a sub-microflow, `"+f.CheckedBy+"`, checks the caller on the same entity — confirm it constrains the object passed in, not only the caller's own"
 		case !f.ApplyEntityAccess:
 			f.Risk, f.Triage = "medium", "reads an object the client chose, with entity access off"
 		case widest == AccessAll:
@@ -738,7 +767,7 @@ func appendUnique(xs []string, s string) []string {
 var SecurityMethod = []string{
 	"A review of the model, read from the mxcli catalog (`refresh catalog full` and `source`) and the project security settings. Nothing ran against the app.",
 	"Who can read what: each user role's module roles (`CATALOG.ROLE_MAPPINGS`) joined to entity access rules (`CATALOG.PERMISSIONS`). A rule's XPath is classified as own rows (`[System.owner = '[%CurrentUser%]']`), via user (any other path to the current user), filtered (a constraint not about the user) or all (no constraint); a cell shows the widest.",
-	"Client-callable flows: microflows granted to a user role that take a persistent object or list. A flow checks its caller when its body (`CATALOG.SOURCE`), or a sub-microflow it calls, uses `$currentUser` or `[%CurrentUser%]`; it writes when it or a sub-microflow changes, creates, deletes or commits an object.",
+	"Client-callable flows: microflows granted to a user role that take a persistent object or list. A flow checks its caller when its body (`CATALOG.SOURCE`) uses `$currentUser` or `[%CurrentUser%]`; a sub-microflow it calls that does so on an entity the flow takes is named as a check to confirm. A flow writes when it or a sub-microflow changes, creates, deletes or commits an entity it takes. With entity access off, a write is high only when the granted roles read every object of that entity: the client can pass only what it may read.",
 	"Unsafe defaults: string constants whose default (or a committed configuration value) looks like key material — base64 of 16/24/32/64 bytes, a 128/192/256-bit hex string, a PEM block — or that are named like a secret; boolean constants named like test switches that default to `true`; the security level, demo users, guest access, strict mode and password policy.",
 	"Lint security rules are grouped per rule with a verdict slot, so the score is explained rather than alarming.",
 }
@@ -1089,4 +1118,18 @@ func onOff(b bool) string {
 		return "on"
 	}
 	return "off"
+}
+
+// anyOnEntity reports whether a target names one of the entities, one of
+// their members ("Shop.Cart.Total") or an association named after them
+// ("Shop.Cart_Owner", Mendix's default naming).
+func anyOnEntity(targets, ents []string) bool {
+	for _, t := range targets {
+		for _, e := range ents {
+			if t == e || strings.HasPrefix(t, e+".") || strings.HasPrefix(t, e+"_") {
+				return true
+			}
+		}
+	}
+	return false
 }
