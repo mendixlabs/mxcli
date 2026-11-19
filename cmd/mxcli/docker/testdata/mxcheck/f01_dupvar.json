@@ -1,0 +1,22 @@
+{
+  "serialization_version": 1,
+  "errors": [
+    {
+      "code": "CE0111",
+      "message": "Duplicate variable name 'X'.",
+      "locations": [
+        {
+          "module-id": "a7b26067-8ce2-4841-b1fb-4180ab9ee886",
+          "module-name": "Sp",
+          "document-name": "Microflow 'F01'",
+          "element-name": "Create variable activity 'Create Integer/Long variable'",
+          "element-id": "82de161a-0a36-4fc1-89e0-d3f74f7ef044",
+          "unit-id": "7c6de221-9a5a-4fba-b952-149302ae85b7"
+        }
+      ]
+    }
+  ],
+  "warnings": [],
+  "deprecations": [],
+  "total-problems": 1
+}

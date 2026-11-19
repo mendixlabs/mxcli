@@ -1,0 +1,22 @@
+{
+  "serialization_version": 1,
+  "errors": [
+    {
+      "code": "CE1613",
+      "message": "The selected parameter 'Sp.Helper.Wrong' no longer exists.",
+      "locations": [
+        {
+          "module-id": "9aed1f7d-e017-4aa8-b6c7-0eb988a9d8c6",
+          "module-name": "Sp",
+          "document-name": "Microflow 'F02'",
+          "element-name": "Property 'Parameter' of call microflow activity 'Helper'",
+          "element-id": "b83b2d08-143f-4e80-befb-556f0640cd4f",
+          "unit-id": "c457ea06-b527-485e-85be-b04d5ee30490"
+        }
+      ]
+    }
+  ],
+  "warnings": [],
+  "deprecations": [],
+  "total-problems": 1
+}
