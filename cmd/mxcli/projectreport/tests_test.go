@@ -87,12 +87,13 @@ func TestGapKindsAndWhatOnlyOneJourneyRuns(t *testing.T) {
 	f := newFixture(t)
 	f.module("Shop", "")
 	for _, m := range []string{"Shop.ACT_Pay", "Shop.SUB_Total", "Shop.ACT_Order", "Shop.Seed_Pizzas", "Shop.Old",
-		"Shop.Startup", "Shop.Scheduled", "Shop.Shared", "Shop.OnlyOrder"} {
+		"Shop.Startup", "Shop.SEED_Orders", "Shop.Scheduled", "Shop.Shared", "Shop.OnlyOrder"} {
 		f.microflow(m, true, "")
 	}
 	f.permission("Shop.User", "MICROFLOW", "Shop.ACT_Pay", "EXECUTE", "")
 	f.permission("Shop.User", "MICROFLOW", "Shop.ACT_Order", "EXECUTE", "")
 	f.call("Shop.ACT_Order", "Shop.SUB_Total")
+	f.call("Shop.Startup", "Shop.SEED_Orders")
 	f.exec(`INSERT INTO scheduled_events_data (Id, Name, QualifiedName, ModuleName, Microflow) VALUES ('se', 'Nightly', 'Shop.Nightly', 'Shop', 'Shop.Scheduled')`)
 
 	t0 := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
@@ -126,7 +127,7 @@ func TestGapKindsAndWhatOnlyOneJourneyRuns(t *testing.T) {
 	if !reflect.DeepEqual(kinds, want) {
 		t.Errorf("gap kinds = %v\nwant %v", kinds, want)
 	}
-	if !reflect.DeepEqual(d.Startup, []string{"Shop.Startup"}) || !reflect.DeepEqual(d.Scheduled, []string{"Shop.Scheduled"}) {
+	if !reflect.DeepEqual(d.Startup, []string{"Shop.SEED_Orders", "Shop.Startup"}) || !reflect.DeepEqual(d.Scheduled, []string{"Shop.Scheduled"}) {
 		t.Errorf("startup %v, scheduled %v", d.Startup, d.Scheduled)
 	}
 
@@ -138,7 +139,11 @@ func TestGapKindsAndWhatOnlyOneJourneyRuns(t *testing.T) {
 	var md bytes.Buffer
 	_ = RenderMarkdown(&md, doc)
 	mustContain(t, md.String(), "| Order | 1 | `Shop.OnlyOrder` |", "| a scheduled event | 1 | `Shop.Scheduled` |",
-		"| seed or demo data | 1 | `Shop.Seed_Pizzas` |")
+		"| seed or demo data | 1 | `Shop.Seed_Pizzas` |",
+		// seed data run at startup gets its own row
+		"| startup, shutdown or health check | 1 | `Shop.Startup` |", "| seed or demo data, at startup | 1 | `Shop.SEED_Orders` |",
+		// the module table counts per kind: callable, other logic, seed, no reference
+		"| Shop | 2 | 1 | 1 | 1 |")
 	if strings.Contains(md.String(), "| Browse | 1 | `") {
 		t.Error("Browse runs nothing no other journey runs, so it has no row")
 	}

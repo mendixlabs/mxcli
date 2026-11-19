@@ -581,35 +581,69 @@ func RenderTests(env *Envelope, ann *Annotations) (Doc, error) {
 		Intro:  "What each journey checks is taken from the journey script's own check messages, not written from its name — prose written from a name drifts from what the script verifies. Annotate `journey:<name>` to add context.",
 		Blocks: jb})
 
-	// Gaps.
+	// Gaps. With kinds known, the module table counts per kind and the
+	// names are listed once, by kind; otherwise it lists the names.
+	var gb []Block
 	gt := Table{Columns: []string{"Module", "Microflows reached by neither", "Verdict", "Key"}}
+	kindOf := map[string]string{}
+	var kinds []string
+	for _, k := range d.GapKinds {
+		kinds = append(kinds, k.Kind)
+		for _, m := range k.Microflows {
+			kindOf[m] = k.Kind
+		}
+	}
+	if len(kinds) > 0 {
+		gt = Table{Caption: "By module", Columns: append(append([]string{"Module"}, kinds...), "Verdict", "Key")}
+	}
 	for _, g := range d.Gaps {
 		verdict := ""
 		key := "gap:" + g.Module
 		if n, ok := ann.Get(key); ok {
 			verdict = joinNote(n.Status, n.Note, "")
 		}
-		gt.Rows = append(gt.Rows, []string{g.Module, strings.Join(codeList(g.Microflows), ", "), verdict, "`" + key + "`"})
+		if len(kinds) == 0 {
+			gt.Rows = append(gt.Rows, []string{g.Module, strings.Join(codeList(g.Microflows), ", "), verdict, "`" + key + "`"})
+			continue
+		}
+		n := map[string]int{}
+		for _, m := range g.Microflows {
+			n[kindOf[m]]++
+		}
+		row, cls := []string{g.Module}, []string{""}
+		for _, k := range kinds {
+			row, cls = append(row, cellCount(n[k])), append(cls, "num")
+		}
+		gt.Rows = append(gt.Rows, append(row, verdict, "`"+key+"`"))
+		gt.Classes = append(gt.Classes, append(cls, "", ""))
 	}
-	var gb []Block
-	if len(d.GapKinds) > 0 {
+	if len(kinds) > 0 {
 		kt := Table{Caption: "By kind", Columns: []string{"Kind", "Microflows", "Which"}}
 		for _, k := range d.GapKinds {
 			kt.Rows = append(kt.Rows, []string{k.Kind, fmt.Sprint(len(k.Microflows)), strings.Join(codeList(k.Microflows), ", ")})
 			kt.Classes = append(kt.Classes, []string{"", "num", ""})
 		}
 		gb = append(gb, kt)
-		gt.Caption = "By module"
 	}
 	gb = append(gb, gt)
 	if len(d.Startup)+len(d.Scheduled) > 0 {
+		// Seed data loaded at startup is usually most of this list (184 of
+		// 218 on ako/PizzaV1), so it gets its own row, and a long row is cut.
+		var startup, seed []string
+		for _, m := range d.Startup {
+			if seedName.MatchString(shortName(m)) {
+				seed = append(seed, m)
+			} else {
+				startup = append(startup, m)
+			}
+		}
 		rt := Table{Caption: "Runs without a test (not a gap)", Columns: []string{"Run by", "Microflows", "Which"}}
 		for _, r := range []struct {
 			by  string
 			mfs []string
-		}{{"startup, shutdown or health check", d.Startup}, {"a scheduled event", d.Scheduled}} {
+		}{{"startup, shutdown or health check", startup}, {"seed or demo data, at startup", seed}, {"a scheduled event", d.Scheduled}} {
 			if len(r.mfs) > 0 {
-				rt.Rows = append(rt.Rows, []string{r.by, fmt.Sprint(len(r.mfs)), strings.Join(codeList(r.mfs), ", ")})
+				rt.Rows = append(rt.Rows, []string{r.by, fmt.Sprint(len(r.mfs)), cappedList(r.mfs, 24)})
 				rt.Classes = append(rt.Classes, []string{"", "num", ""})
 			}
 		}
@@ -672,4 +706,13 @@ func onlyJourneyTable(d TestsData) Table {
 		t.Classes = append(t.Classes, []string{"", "num", ""})
 	}
 	return t
+}
+
+// cappedList lists names as code, the first max of them and a count of the
+// rest; the JSON has them all.
+func cappedList(names []string, max int) string {
+	if len(names) <= max {
+		return strings.Join(codeList(names), ", ")
+	}
+	return strings.Join(codeList(names[:max]), ", ") + fmt.Sprintf(" … and %d more (all in the JSON)", len(names)-max)
 }
