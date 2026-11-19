@@ -1,0 +1,36 @@
+{
+  "serialization_version": 1,
+  "errors": [
+    {
+      "code": "CE0109",
+      "message": "Undefined variable 'Nope'.",
+      "locations": [
+        {
+          "module-id": "fec11de2-45bc-4f34-8747-6c2876c30c31",
+          "module-name": "Sp",
+          "document-name": "Microflow 'A'",
+          "element-name": "End event",
+          "element-id": "2f4214f6-fdf0-487f-bef2-b6f53397892a",
+          "unit-id": "e3936f55-e0a5-4925-837d-01703b9aee19"
+        }
+      ]
+    },
+    {
+      "code": "CE0109",
+      "message": "Undefined variable 'Nope'.",
+      "locations": [
+        {
+          "module-id": "fec11de2-45bc-4f34-8747-6c2876c30c31",
+          "module-name": "Sp",
+          "document-name": "Microflow 'B'",
+          "element-name": "End event",
+          "element-id": "7bce67dc-c225-42b7-b280-09b26004f9b0",
+          "unit-id": "8f2fd632-74fe-4d5c-99fd-abe7d482ff03"
+        }
+      ]
+    }
+  ],
+  "warnings": [],
+  "deprecations": [],
+  "total-problems": 2
+}

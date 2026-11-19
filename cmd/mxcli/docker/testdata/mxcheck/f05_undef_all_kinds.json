@@ -1,0 +1,253 @@
+{
+  "serialization_version": 1,
+  "errors": [
+    {
+      "code": "CE0109",
+      "message": "Undefined variable 'Nope'.",
+      "locations": [
+        {
+          "module-id": "eb9312a5-53fc-4290-9527-dcb445b6a024",
+          "module-name": "Sp",
+          "document-name": "Microflow 'F05'",
+          "element-name": "End event",
+          "element-id": "389d91af-39cb-4e5c-8dd1-4e4864cc05c8",
+          "unit-id": "edda7090-416b-4db5-ba81-aada9115570c"
+        }
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "code": "CW0055",
+      "message": "No 'On click' action specified.",
+      "locations": [
+        {
+          "module-id": "0e80ce99-3bb6-4e88-bd3e-a1dafd3a33bf",
+          "module-name": "Atlas_Core",
+          "document-name": "Menu 'Tablet_Menu'",
+          "element-name": "Menu item",
+          "element-id": "59cfb12a-0e84-4389-b89d-f48e154b8711",
+          "unit-id": "139b69e0-8cad-4068-810c-a51a1a118c5e"
+        }
+      ]
+    },
+    {
+      "code": "CW0055",
+      "message": "No 'On click' action specified.",
+      "locations": [
+        {
+          "module-id": "0e80ce99-3bb6-4e88-bd3e-a1dafd3a33bf",
+          "module-name": "Atlas_Core",
+          "document-name": "Menu 'Tablet_Menu'",
+          "element-name": "Menu item",
+          "element-id": "00803845-4eaf-429a-8dfc-a191dbedf1c1",
+          "unit-id": "139b69e0-8cad-4068-810c-a51a1a118c5e"
+        }
+      ]
+    },
+    {
+      "code": "CW0055",
+      "message": "No 'On click' action specified.",
+      "locations": [
+        {
+          "module-id": "0e80ce99-3bb6-4e88-bd3e-a1dafd3a33bf",
+          "module-name": "Atlas_Core",
+          "document-name": "Menu 'Tablet_Menu'",
+          "element-name": "Menu item",
+          "element-id": "c56a8f99-7b88-4f61-a77f-4ad031a6228b",
+          "unit-id": "139b69e0-8cad-4068-810c-a51a1a118c5e"
+        }
+      ]
+    },
+    {
+      "code": "CW0055",
+      "message": "No 'On click' action specified.",
+      "locations": [
+        {
+          "module-id": "0e80ce99-3bb6-4e88-bd3e-a1dafd3a33bf",
+          "module-name": "Atlas_Core",
+          "document-name": "Menu 'Tablet_Menu'",
+          "element-name": "Menu item",
+          "element-id": "4493978e-f5e5-4122-922c-831e1c4606f5",
+          "unit-id": "139b69e0-8cad-4068-810c-a51a1a118c5e"
+        }
+      ]
+    },
+    {
+      "code": "CE0635",
+      "message": "Widgets used in a page template should not contain references to other documents",
+      "locations": [
+        {
+          "module-id": "eb218b30-f187-4700-bcb6-2150e51c222c",
+          "module-name": "Atlas_Web_Content",
+          "document-name": "Page template 'Tablet_Login'",
+          "element-name": "Nanoflow of action button 'actionButton3'",
+          "element-id": "14731960-063c-4fac-a3e9-6130783a69ea",
+          "unit-id": "ec6cea43-013e-4e12-b582-eea26db381be"
+        }
+      ]
+    },
+    {
+      "code": "CE0635",
+      "message": "Widgets used in a page template should not contain references to other documents",
+      "locations": [
+        {
+          "module-id": "eb218b30-f187-4700-bcb6-2150e51c222c",
+          "module-name": "Atlas_Web_Content",
+          "document-name": "Page template 'Tablet_Login'",
+          "element-name": "Attribute of text 'text2'",
+          "element-id": "d5bf11f9-f38d-47e9-b4f1-1675e1c3ef8a",
+          "unit-id": "ec6cea43-013e-4e12-b582-eea26db381be"
+        }
+      ]
+    },
+    {
+      "code": "CE0635",
+      "message": "Widgets used in a page template should not contain references to other documents",
+      "locations": [
+        {
+          "module-id": "eb218b30-f187-4700-bcb6-2150e51c222c",
+          "module-name": "Atlas_Web_Content",
+          "document-name": "Page template 'Tablet_Login'",
+          "element-name": "Expression of text 'text2'",
+          "element-id": "d5bf11f9-f38d-47e9-b4f1-1675e1c3ef8a",
+          "unit-id": "ec6cea43-013e-4e12-b582-eea26db381be"
+        }
+      ]
+    },
+    {
+      "code": "CE0635",
+      "message": "Widgets used in a page template should not contain references to other documents",
+      "locations": [
+        {
+          "module-id": "eb218b30-f187-4700-bcb6-2150e51c222c",
+          "module-name": "Atlas_Web_Content",
+          "document-name": "Page template 'Tablet_Login'",
+          "element-name": "Nanoflow of data view 'dataView1'",
+          "element-id": "576328bf-fdf7-4018-9e9f-1e50a7d65a22",
+          "unit-id": "ec6cea43-013e-4e12-b582-eea26db381be"
+        }
+      ]
+    },
+    {
+      "code": "CW0263",
+      "message": "Empty template. [English, United States]",
+      "locations": [
+        {
+          "module-id": "eb218b30-f187-4700-bcb6-2150e51c222c",
+          "module-name": "Atlas_Web_Content",
+          "document-name": "Nanoflow 'ACT_Login'",
+          "element-name": "Validation feedback activity 'Show validation message on member Username of LoginContext'",
+          "element-id": "534cd30f-f1e1-461e-b614-8d04ce6d74bb",
+          "unit-id": "e011257a-9a48-4eb1-9784-01eb32254977"
+        }
+      ]
+    },
+    {
+      "code": "CW0263",
+      "message": "Empty template. [English, United States]",
+      "locations": [
+        {
+          "module-id": "eb218b30-f187-4700-bcb6-2150e51c222c",
+          "module-name": "Atlas_Web_Content",
+          "document-name": "Nanoflow 'ACT_Login'",
+          "element-name": "Validation feedback activity 'Show validation message on member Password of LoginContext'",
+          "element-id": "908179c7-775d-4125-816a-95d73e5fe8aa",
+          "unit-id": "e011257a-9a48-4eb1-9784-01eb32254977"
+        }
+      ]
+    },
+    {
+      "code": "CW0055",
+      "message": "No 'On click' action specified.",
+      "locations": [
+        {
+          "module-id": "0e80ce99-3bb6-4e88-bd3e-a1dafd3a33bf",
+          "module-name": "Atlas_Core",
+          "document-name": "Menu 'Phone_Menu'",
+          "element-name": "Menu item",
+          "element-id": "7c8453cd-e738-4a81-a3ed-58af75d1b67f",
+          "unit-id": "05b4a901-e7fc-40a5-9380-7a27c8924f68"
+        }
+      ]
+    },
+    {
+      "code": "CW0055",
+      "message": "No 'On click' action specified.",
+      "locations": [
+        {
+          "module-id": "0e80ce99-3bb6-4e88-bd3e-a1dafd3a33bf",
+          "module-name": "Atlas_Core",
+          "document-name": "Menu 'Phone_Menu'",
+          "element-name": "Menu item",
+          "element-id": "ce19400e-df53-41ec-b3f2-92edf09a74d3",
+          "unit-id": "05b4a901-e7fc-40a5-9380-7a27c8924f68"
+        }
+      ]
+    },
+    {
+      "code": "CW0055",
+      "message": "No 'On click' action specified.",
+      "locations": [
+        {
+          "module-id": "0e80ce99-3bb6-4e88-bd3e-a1dafd3a33bf",
+          "module-name": "Atlas_Core",
+          "document-name": "Menu 'Phone_Menu'",
+          "element-name": "Menu item",
+          "element-id": "ac9672c9-e4f8-4d88-a4e1-1fb860b4187b",
+          "unit-id": "05b4a901-e7fc-40a5-9380-7a27c8924f68"
+        }
+      ]
+    },
+    {
+      "code": "CW0055",
+      "message": "No 'On click' action specified.",
+      "locations": [
+        {
+          "module-id": "0e80ce99-3bb6-4e88-bd3e-a1dafd3a33bf",
+          "module-name": "Atlas_Core",
+          "document-name": "Menu 'Phone_Menu'",
+          "element-name": "Menu item",
+          "element-id": "40cd400c-7e6d-4fd4-9c0f-19f3b1fffc37",
+          "unit-id": "05b4a901-e7fc-40a5-9380-7a27c8924f68"
+        }
+      ]
+    },
+    {
+      "code": "CE0582",
+      "message": "Widget static image is not supported in React client. Right-click this error to convert it to an alternative widget type.",
+      "locations": [
+        {
+          "module-id": "eb218b30-f187-4700-bcb6-2150e51c222c",
+          "module-name": "Atlas_Web_Content",
+          "document-name": "Page template 'Detail_Timeline'",
+          "element-name": "Static image 'image6'",
+          "element-id": "87954738-a1ca-4983-9236-92d25dd4a7ec",
+          "unit-id": "23a822d9-94fd-44ed-98bc-7f7b9f7bd425"
+        }
+      ]
+    },
+    {
+      "code": "CE4271",
+      "message": "Version '6.0.0' of the module 'NanoflowCommons' is not compatible with this Mendix version. Visit the Marketplace to check for updates of 'Nanoflow Commons'.",
+      "locations": []
+    }
+  ],
+  "deprecations": [
+    {
+      "code": "CW2512",
+      "message": "Java versions below 25 are deprecated for deployment.",
+      "locations": [
+        {
+          "module-id": "",
+          "module-name": "-",
+          "document-name": "Settings",
+          "element-name": "Runtime settings",
+          "element-id": "239a8165-5256-533c-b055-300e409a5001",
+          "unit-id": "4e70063d-53e1-477a-ab92-6b763330c293"
+        }
+      ]
+    }
+  ],
+  "total-problems": 18
+}
