@@ -104,7 +104,9 @@ func ComputeReadiness(in ReadinessInput) *ReadinessData {
 		}
 		d.Blocking = append(d.Blocking, it)
 	}
-	risk := func(src, key, text string) { d.Risks = append(d.Risks, ReadinessItem{Key: key, Source: src, Text: text}) }
+	risk := func(src, key, text string) {
+		d.Risks = append(d.Risks, ReadinessItem{Key: key, Source: src, Text: text})
+	}
 	accept := func(src, key, text, note string) {
 		d.Accepted = append(d.Accepted, ReadinessItem{Key: key, Source: src, Text: text, Note: note})
 	}
