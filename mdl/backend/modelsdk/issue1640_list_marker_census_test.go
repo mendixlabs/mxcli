@@ -22,29 +22,88 @@ import (
 // Studio Pro-authored fixtures: a document Studio Pro wrote must be a fixed
 // point of the normalization.
 
+// studioProFixture is one Studio Pro-authored fixture this census reads.
+type studioProFixture struct {
+	root string
+	// minUnits guards against reading a truncated fixture. Per root, not over
+	// the total: a single floor over both made the census fail when the
+	// optional submodule was absent, which is the same all-or-nothing the skip
+	// below exists to avoid.
+	minUnits int
+	// skipIfMissing is the remedy printed when an OPTIONAL fixture is absent.
+	// Empty for a committed fixture, which must always be present.
+	skipIfMissing string
+}
+
+// studioProFixtures are the roots the census holds the marker registrations
+// against. A document Studio Pro wrote must be a fixed point of the
+// normalization, so these have to be Studio Pro-authored, not mxcli-written.
+var studioProFixtures = []studioProFixture{
+	{
+		// ako/TestApp, pinned as the git submodule testdata/testapp. Not
+		// committed, so a plain `git clone` does not have it.
+		root:     "../../../testdata/testapp/TestApp/mprcontents",
+		minUnits: 800,
+		skipIfMissing: "the TestApp fixture is a git submodule that is not initialised; " +
+			"run `git submodule update --init testdata/testapp` to include it in the census",
+	},
+	{
+		// Committed, so never skipped: it is what keeps this census meaningful
+		// when the submodule is absent.
+		root:     "../../../testdata/pedapp/mprcontents",
+		minUnits: 300,
+	},
+}
+
 // studioProUnits lists the .mxunit files of the Studio Pro-authored fixtures.
+//
+// An absent OPTIONAL fixture skips that root rather than failing the test
+// (ako/mxcli#2413). It used to walk straight into filepath.WalkDir's lstat
+// error and t.Fatal, so on any clone without submodules `make ci-local` could
+// not pass — and .claude/skills/steward/SKILL.md tells every contributor to run
+// it before each push. A pre-existing failure was then indistinguishable from
+// one just caused, which cost a real session its time. mdl/roundtrip already
+// skips this same fixture, with this same remedy, so the two now agree.
+//
+// Under CI it FAILS instead of skipping. A skip that can hide the test
+// everywhere is how an integration test came to have only ever skipped
+// (ako/mxcli#808), and this census is the only thing holding canon's list
+// marker registrations against Studio Pro-authored documents. CI checks the
+// submodule out (`submodules: true` in .github/workflows/push-test.yml), so an
+// absence there is a regression in the workflow, not a developer's clone.
 func studioProUnits(t *testing.T) []string {
 	t.Helper()
 	var out []string
-	for _, root := range []string{
-		"../../../testdata/testapp/TestApp/mprcontents",
-		"../../../testdata/pedapp/mprcontents",
-	} {
-		err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	for _, f := range studioProFixtures {
+		if f.skipIfMissing != "" {
+			if _, err := os.Stat(f.root); err != nil {
+				if os.Getenv("CI") != "" {
+					t.Fatalf("%s is missing under CI, which checks submodules out: %v", f.root, err)
+				}
+				t.Logf("skipping %s: %s", f.root, f.skipIfMissing)
+				continue
+			}
+		}
+		n := 0
+		err := filepath.WalkDir(f.root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
 			if !d.IsDir() && strings.HasSuffix(p, ".mxunit") {
 				out = append(out, p)
+				n++
 			}
 			return nil
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
+		if n < f.minUnits {
+			t.Fatalf("found only %d units under %s (want at least %d)", n, f.root, f.minUnits)
+		}
 	}
-	if len(out) < 1000 {
-		t.Fatalf("found only %d fixture units", len(out))
+	if len(out) == 0 {
+		t.Fatal("no fixture units found at all")
 	}
 	return out
 }
