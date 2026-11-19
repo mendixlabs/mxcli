@@ -15,8 +15,8 @@ description: "Measure an app's main journeys at production volume and produce th
 | 70-87 | 3. Measure |
 | 88-98 | 4. Before and after — fairly |
 | 99-104 | 5. Restore |
-| 105-119 | Reading it |
-| 120-123 | Related |
+| 105-127 | Reading it |
+| 128-131 | Related |
 
 <!-- /skill-index -->
 # Performance Report
@@ -103,6 +103,14 @@ and the auto_explain settings, restart Postgres. The page lists what was changed
 cannot check that you restored it.
 
 ## Reading it
+
+- **A step's numbers are its own requests.** The report counts the traces rooted in an
+  HTTP request to the app that start inside the step's window. Background work in the
+  same window — queued tasks, scheduled events, the task queue's polling — is listed apart
+  ("Background work ran during some steps"), not added to server or database time. Before
+  this, a simulator's 1.5 s queued tick made one step read 4.9 s instead of 0.3 s. If the
+  page warns that no span carries HTTP request attributes, the collector did not record
+  the runtime's request spans, and every span in the window is counted again.
 
 - **JIT can dominate a "slow query".** 171 of 197 ms was JIT compiling a plan whose
   scan took 28 ms. The plans table flags JIT ≥ 30% of the time: raise
