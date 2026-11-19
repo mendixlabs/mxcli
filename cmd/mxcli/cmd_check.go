@@ -540,6 +540,12 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 		// mdl 0, and an alter whose patch fails is refused under both. They
 		// run the verdict exec and diff run, so the three agree.
 		projectViolations := exec.CheckEntityMemberDrops(prog)
+		// MDL108 (MxBuild CE1613/CE0161): a drop of an attribute, entity or
+		// association that a microflow, nanoflow, page or snippet still uses.
+		// exec applied it with at most a warning and the project stopped
+		// building (ako/mxcli#2456). Opens the full catalog, and only for a
+		// script that has such a drop.
+		projectViolations = append(projectViolations, exec.CheckDroppedMemberReferences(prog)...)
 		// MDL-ODATA10: a call external action argument whose stored Associations
 		// to include a create or modify keeps because the statement does not
 		// write the clause (ako/mxcli#1914) — the omitted-clause warning exec
@@ -585,7 +591,7 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 			if len(flowReport.Unpredicted) > 0 {
 				flows = "no predicted flow change exec would refuse"
 			}
-			fmt.Printf("✓ Expression types OK, no unstated member drops, %s, no used flow left without access, no entity-access call mismatch\n", flows)
+			fmt.Printf("✓ Expression types OK, no unstated member drops, no drop of a member still in use, %s, no used flow left without access, no entity-access call mismatch\n", flows)
 		}
 		// A flow change whose verdict depends on what earlier statements
 		// create is not predicted; say so rather than let the line above
