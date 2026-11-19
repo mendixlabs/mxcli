@@ -157,3 +157,44 @@ func TestDefaultVerifyBaselineDirIsNotGitIgnored(t *testing.T) {
 		}
 	}
 }
+
+// What `lint --format json --baseline` prints when the project's custom rules were
+// not installed (recorded shape from a real run): the findings of the rules that
+// did not run are "not checked", and the report names them.
+const lintJSONRulesMissing = `{
+  "violations": [
+    {"ruleId": "SEC013", "severity": "warning", "message": "Security level is Off", "document": "ProjectSecurity", "documentType": "security"},
+    {"ruleId": "MPR017", "severity": "warning", "message": "MPR017 could not run: read 5 entities but could not read their attributes", "document": "", "documentType": "", "ruleFailure": true}
+  ],
+  "baseline": {"path": "lint.json", "new": 1, "unchanged": 3, "fixed": 0, "notChecked": 60,
+    "rulesNotRun": ["ARCH001", "CONV001", "SEC007"], "ruleFailures": ["MPR017"], "configChanged": true},
+  "summary": {"total": 2, "errors": 0, "warnings": 2, "infos": 0, "hints": 0}
+}`
+
+func TestParseReportKeepsRuleFailuresOutOfTheFindings(t *testing.T) {
+	fs, bl, err := parseReport("lint", []byte(lintJSONRulesMissing))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fs) != 1 || fs[0].Code != "SEC013" {
+		t.Errorf("findings = %+v; a rule that could not run is not a finding about the project", fs)
+	}
+	if bl == nil || bl.Unchanged != 3 || bl.NotChecked != 60 {
+		t.Fatalf("baseline = %+v", bl)
+	}
+	msg := bl.incomplete()
+	for _, want := range []string{"ARCH001, CONV001, SEC007 did not run", "MPR017 could not run", "60 baseline finding(s) of those rules are not checked, not fixed", "configuration differs", "re-record"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("incomplete() lacks %q:\n%s", want, msg)
+		}
+	}
+	// The control: a complete comparison says nothing, and neither does no baseline.
+	_, ok, _ := parseReport("lint", []byte(`{"violations": [], "baseline": {"new": 0, "unchanged": 5, "fixed": 2}}`))
+	if ok.incomplete() != "" {
+		t.Errorf("a complete comparison was flagged: %q", ok.incomplete())
+	}
+	var none *lintBaselineJSON
+	if none.incomplete() != "" {
+		t.Error("no baseline must not be incomplete")
+	}
+}

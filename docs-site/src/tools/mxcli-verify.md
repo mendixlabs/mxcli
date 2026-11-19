@@ -41,6 +41,17 @@ any, the output ends with the command that accepts them, scoped to the stages th
 (`--stages lint --update-baseline`), because `--update-baseline` records every selected stage.
 Review them first: re-recording is how a finding becomes accepted.
 
+## When lint cannot vouch for its result
+
+The lint baseline records which rules ran and a fingerprint of the lint configuration. If a later run
+did not run a rule the baseline holds findings for (a CI checkout without `.claude/lint-rules/`, a
+disabled rule, a rule that failed with "could not run"), or the configuration differs, `lint` reports
+those findings as **not checked**, never as fixed, and `verify` stops with an error (exit 2) naming
+the rules instead of passing. A finding about a rule that could not run is not a finding about the
+project and is not counted as new. Run `lint` where the project's rules and config are installed, or
+re-record with `--update-baseline` if the change is intended. A baseline recorded before this was added
+still works: the rules it holds findings for must have run.
+
 ## Exit codes
 
 | Code | Meaning |
