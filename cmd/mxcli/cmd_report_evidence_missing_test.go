@@ -4,6 +4,7 @@ package main
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -36,5 +37,27 @@ func TestMissingJUnitIsAWarningNotAFailure(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("the page says the results file is missing: %v", ev.warnings)
+	}
+}
+
+// --local reaches `mxcli test`, so its no-Docker hint can be followed from a
+// report (ako/mxcli#2452), and is not passed twice.
+func TestRunLocalReachesMxcliTest(t *testing.T) {
+	args := mxcliTestArgs("App.mpr", []string{"tests/"}, "out/junit.xml", nil, true)
+	if !slices.Contains(args, "--local") {
+		t.Errorf("--local is passed on: %v", args)
+	}
+	args = mxcliTestArgs("App.mpr", []string{"tests/"}, "out/junit.xml", []string{"--local"}, true)
+	n := 0
+	for _, a := range args {
+		if a == "--local" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("--local once: %v", args)
+	}
+	if slices.Contains(mxcliTestArgs("App.mpr", nil, "j.xml", nil, false), "--local") {
+		t.Error("without --local, Docker is used")
 	}
 }

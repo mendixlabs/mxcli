@@ -105,13 +105,17 @@ func TestReportAllHandsEachReportItsOwnInputs(t *testing.T) {
 // traceability, which runs after it, reads that file instead of running them
 // again.
 func TestReportAllRunWritesResultsForTraceability(t *testing.T) {
-	evidence := []string{"journeys", "spans", "junit", "tests", "run", "test-arg"}
+	evidence := []string{"journeys", "spans", "junit", "tests", "run", "test-arg", "local"}
 	resetFlags(t, reportAllCmd, evidence...)
 	for _, k := range []string{"tests", "traceability"} {
 		resetFlags(t, reportKinds[k].cmd, evidence...)
 	}
 	_ = reportAllCmd.Flags().Set("run", "true")
+	_ = reportAllCmd.Flags().Set("local", "true")
 	passThrough(reportAllCmd, "out", nil)
+	if local, _ := reportKinds["tests"].cmd.Flags().GetBool("local"); !local {
+		t.Error("report all --local reaches the tests report")
+	}
 	if run, _ := reportKinds["tests"].cmd.Flags().GetBool("run"); !run {
 		t.Error("tests runs the microflow tests")
 	}

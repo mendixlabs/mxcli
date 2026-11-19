@@ -9,6 +9,7 @@ import (
 	osexec "os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -27,7 +28,8 @@ func evidenceFlags(cmd *cobra.Command, withTests bool) {
 		cmd.Flags().StringSlice("tests", nil, "Test files or directories (.test.mdl / .test.md); default: tests/ beside the project")
 		cmd.Flags().String("junit", "", "Read microflow test results from this JUnit file (as `mxcli test --junit` writes it)")
 		cmd.Flags().Bool("run", false, "Run the microflow tests first (`mxcli test <tests> --junit …`), then report")
-		cmd.Flags().StringArray("test-arg", nil, "Extra argument for `mxcli test` with --run (repeatable), e.g. --test-arg=--local")
+		cmd.Flags().StringArray("test-arg", nil, "Extra argument for `mxcli test` with --run (repeatable)")
+		cmd.Flags().Bool("local", false, "With --run: run the tests on mxcli's own runtime, no Docker daemon needed (`mxcli test --local`)")
 	}
 	cmd.Flags().String("journeys", "", "Journey log (JSONL): one record per journey or step with its time window")
 	cmd.Flags().StringSlice("spans", nil, "Span files or directories from `mxcli report collect-spans` (JSONL, OTLP JSON or .pb)")
@@ -87,8 +89,13 @@ func collectEvidence(cmd *cobra.Command, projectPath string, withTests bool) (*e
 				defer os.Remove(junit)
 			}
 			extra, _ := cmd.Flags().GetStringArray("test-arg")
-			if err := runMxcliTest(projectPath, paths, junit, extra); err != nil {
-				ev.warnings = append(ev.warnings, "`mxcli test` did not finish cleanly: "+err.Error())
+			local, _ := cmd.Flags().GetBool("local")
+			if err := runMxcliTest(mxcliTestArgs(projectPath, paths, junit, extra, local)); err != nil {
+				msg := "`mxcli test` did not finish cleanly: " + err.Error()
+				if !local {
+					msg += " (without a Docker daemon, add --local to run on mxcli's own runtime)"
+				}
+				ev.warnings = append(ev.warnings, msg)
 			}
 		}
 		switch _, statErr := os.Stat(junit); {
@@ -149,14 +156,24 @@ func collectEvidence(cmd *cobra.Command, projectPath string, withTests bool) (*e
 
 // runMxcliTest runs this binary's own `test` command, so the report uses
 // exactly the runner (and flags) a user would.
-func runMxcliTest(projectPath string, paths []string, junit string, extra []string) error {
+// mxcliTestArgs is the `mxcli test` command line --run uses. --local is the
+// report's own flag, because `mxcli test`'s no-Docker hint names --local and a
+// report has no other way to pass it that the hint would point at
+// (ako/mxcli#2452).
+func mxcliTestArgs(projectPath string, paths []string, junit string, extra []string, local bool) []string {
+	args := append([]string{"test"}, paths...)
+	args = append(args, "-p", projectPath, "--junit", junit)
+	if local && !slices.Contains(extra, "--local") {
+		args = append(args, "--local")
+	}
+	return append(args, extra...)
+}
+
+func runMxcliTest(args []string) error {
 	self, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	args := append([]string{"test"}, paths...)
-	args = append(args, "-p", projectPath, "--junit", junit)
-	args = append(args, extra...)
 	fmt.Fprintf(os.Stderr, "Running: mxcli %s\n", strings.Join(args, " "))
 	c := osexec.Command(self, args...)
 	c.Stdout, c.Stderr = os.Stderr, os.Stderr

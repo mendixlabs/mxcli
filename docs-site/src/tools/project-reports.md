@@ -31,7 +31,7 @@ Each input goes to the reports it is for:
 | Flags | Feed | What |
 |---|---|---|
 | `--journeys`, `--spans` | tests, traceability | the functional journeys and the spans they exported |
-| `--junit`, `--tests`, `--run` | tests, traceability | microflow test results; `--run` runs the tests once and writes `junit.xml` into the folder |
+| `--junit`, `--tests`, `--run` | tests, traceability | microflow test results; `--run` runs the tests once and writes `junit.xml` into the folder (`--local`: on mxcli's own runtime, no Docker) |
 | `--perf-journeys`, `--perf-spans` | performance | a measured performance run, one record per step |
 | `--against` | release | the deployed revision or `.mpr` |
 

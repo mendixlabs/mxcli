@@ -35,7 +35,8 @@ the folder is applied to that kind's page.
 Inputs go to the kinds they are for:
   --journeys, --spans        the functional journeys: tests and traceability
   --junit, --tests, --run    microflow test results: tests and traceability
-                             (--run writes <folder>/junit.xml)
+                             (--run writes <folder>/junit.xml; --local runs
+                             them without Docker)
   --perf-journeys,           a performance run, one record per step:
   --perf-spans               performance only
   --against                  the deployed revision or .mpr: release
@@ -274,6 +275,7 @@ func passThrough(cmd *cobra.Command, dir string, skip map[string]bool) {
 	if run, _ := cmd.Flags().GetBool("run"); run && !skip["tests"] {
 		set("tests", "run")
 		set("tests", "test-arg")
+		set("tests", "local")
 		if len(values("junit")) == 0 && dir != "" {
 			junit := filepath.Join(dir, "junit.xml")
 			fwd("tests", "junit", "junit", []string{junit})
@@ -347,6 +349,7 @@ func init() {
 	reportAllCmd.Flags().String("junit", "", "Microflow test results (JUnit, as `mxcli test --junit` writes it), for the tests and traceability reports")
 	reportAllCmd.Flags().Bool("run", false, "Run the microflow tests first; the results go to <folder>/junit.xml for tests and traceability")
 	reportAllCmd.Flags().StringArray("test-arg", nil, "With --run: extra argument for `mxcli test` (repeatable)")
+	reportAllCmd.Flags().Bool("local", false, "With --run: run the tests on mxcli's own runtime, no Docker daemon needed")
 	reportAllCmd.Flags().String("perf-journeys", "", "Journey log of a performance run (one record per step), for the performance report")
 	reportAllCmd.Flags().StringSlice("perf-spans", nil, "Span files of the performance run, for the performance report")
 	reportAllCmd.Flags().StringSlice("skip", nil, "Kinds to leave out (e.g. --skip map,dependencies)")
