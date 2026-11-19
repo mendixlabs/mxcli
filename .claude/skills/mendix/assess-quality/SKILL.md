@@ -10,15 +10,15 @@ description: "Write a full quality assessment of a Mendix project: the mxcli rep
 
 | lines | section |
 |---|---|
-| 31-64 | Step 1: Run the reports |
-| 65-219 | Step 2: Manual review |
-| 220-226 | Step 3: Write the assessment |
-| 227-229 | Summary |
-| 230-241 | Measured |
-| 242-244 | Reviewed by hand |
-| 245-247 | Recommendations |
-| 248-252 | Not assessed |
-| 253-259 | Sources |
+| 31-115 | Step 1: Run the reports |
+| 116-270 | Step 2: Manual review |
+| 271-277 | Step 3: Write the assessment |
+| 278-280 | Summary |
+| 281-292 | Measured |
+| 293-295 | Reviewed by hand |
+| 296-298 | Recommendations |
+| 299-303 | Not assessed |
+| 304-310 | Sources |
 
 <!-- /skill-index -->
 # Assess Mendix Project Quality
@@ -61,6 +61,57 @@ not report them again.
 
 The rules behind these reports are listed by `mxcli lint -p app.mpr --list-rules`.
 This skill does not repeat them: the guidelines below are the ones no rule checks.
+
+### Questions across reports (DuckDB, optional)
+
+Each page answers its own question; some questions cross two reports. Every report's
+data is in the folder as `<kind>.json` (`{kind, …, data: {…}}`), so an external DuckDB
+session can join them — and the catalog — with no export. mxcli does not embed DuckDB;
+this is a reviewer's tool, run from the reports folder, everything read-only:
+
+```sql
+-- duckdb, in docs/reports (after `mxcli report all`)
+ATTACH '../../.mxcli/catalog.db' AS cat (TYPE sqlite, READ_ONLY);   -- optional: the model
+CREATE VIEW security     AS SELECT data FROM read_json_auto('security.json');
+CREATE VIEW traceability AS SELECT data FROM read_json_auto('traceability.json');
+CREATE VIEW performance  AS SELECT data FROM read_json_auto('performance.json', maximum_object_size = 256000000);
+-- tests.reach is an object keyed by microflow name: read it as JSON
+CREATE VIEW reach AS
+  SELECT k AS microflow, json_extract_string(j, '$.data.reach."' || k || '"') AS reach
+  FROM (SELECT json AS j FROM read_json_objects('tests.json')), unnest(json_keys(j, '$.data.reach')) AS t(k);
+```
+
+Three questions no single page answers:
+
+```sql
+-- callable flows at medium or high risk that no test or journey reaches
+SELECT f.name, f.risk
+FROM (SELECT unnest(data.flows) AS f FROM security) JOIN reach r ON r.microflow = f.name
+WHERE f.risk IN ('high', 'medium') AND r.reach = 'neither' ORDER BY f.risk, f.name;
+
+-- the slowest microflows of the performance run: tested? how big?
+SELECT m.name, round(sum(m.ms)) AS ms, any_value(r.reach) AS reach,
+       (SELECT count(*) FROM cat.activities a WHERE a.MicroflowQualifiedName = m.name) AS activities
+FROM (SELECT unnest(s.topMicroflows) AS m FROM (SELECT unnest(data.steps) AS s FROM performance))
+LEFT JOIN reach r ON r.microflow = m.name
+GROUP BY m.name ORDER BY ms DESC LIMIT 10;
+
+-- requirements built but proven by nothing, and how much of their footprint runs at all
+SELECT r.id, r.title, len(r.footprint) AS footprint,
+       count(x.microflow) FILTER (WHERE x.reach <> 'neither') AS reached
+FROM (SELECT unnest(m.requirements) AS r FROM (SELECT unnest(data.milestones) AS m FROM traceability))
+LEFT JOIN reach x ON list_contains(r.footprint, x.microflow)
+WHERE r.status = 'built' AND coalesce(len(r.tests), 0) + coalesce(len(r.journeys), 0) = 0
+GROUP BY ALL ORDER BY footprint DESC;
+```
+
+On ako/PizzaV1 the second query showed that activity count does not predict cost: a
+7-activity data source cost 159 ms, a 223-activity sub-microflow 188 ms — and the
+slowest four had no test. Traps: an empty list is `null` in the JSON (use
+`coalesce(len(…), 0)`, not `len(…) = 0`); the performance file is large (raise
+`maximum_object_size`); `ATTACH … TYPE sqlite` downloads DuckDB's sqlite extension once.
+A finding from such a query belongs in the assessment with the query that produced it,
+so the next reviewer can re-run it.
 
 ## Step 2: Manual review
 
