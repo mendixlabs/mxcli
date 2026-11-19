@@ -10,11 +10,11 @@ description: "Produce and read the readiness report (mxcli report readiness): on
 
 | lines | section |
 |---|---|
-| 27-41 | Run it |
-| 42-51 | The verdict |
-| 52-61 | Accepting and signing off |
-| 62-67 | Never skip |
-| 68-71 | Related |
+| 27-43 | Run it |
+| 44-53 | The verdict |
+| 54-63 | Accepting and signing off |
+| 64-69 | Never skip |
+| 70-73 | Related |
 
 <!-- /skill-index -->
 # Readiness Report
@@ -28,7 +28,9 @@ or could not check, is **not assessed** — never passing.
 
 ```bash
 # usual: report all writes readiness.html with the others, first on the overview
-mxcli report all -p app.mpr -o docs/reports --against v1.4.0 --milestone M2
+mxcli report all -p app.mpr -o docs/reports --against v1.4.0 --milestone M2 \
+  --journeys journeys.jsonl --spans spans.jsonl --junit results.xml \
+  --perf-journeys perf.jsonl --perf-spans perf-spans.jsonl
 # re-roll from that folder, e.g. after signing items off
 mxcli report readiness --dir docs/reports --milestone M2 -o docs/reports/readiness.html
 # without a folder: runs the reports that need no input (release, performance not assessed)

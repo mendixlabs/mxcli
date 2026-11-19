@@ -10,15 +10,15 @@ description: "Write a full quality assessment of a Mendix project: the mxcli rep
 
 | lines | section |
 |---|---|
-| 31-60 | Step 1: Run the reports |
-| 61-215 | Step 2: Manual review |
-| 216-222 | Step 3: Write the assessment |
-| 223-225 | Summary |
-| 226-237 | Measured |
-| 238-240 | Reviewed by hand |
-| 241-243 | Recommendations |
-| 244-248 | Not assessed |
-| 249-255 | Sources |
+| 31-64 | Step 1: Run the reports |
+| 65-219 | Step 2: Manual review |
+| 220-226 | Step 3: Write the assessment |
+| 227-229 | Summary |
+| 230-241 | Measured |
+| 242-244 | Reviewed by hand |
+| 245-247 | Recommendations |
+| 248-252 | Not assessed |
+| 253-259 | Sources |
 
 <!-- /skill-index -->
 # Assess Mendix Project Quality
@@ -31,8 +31,12 @@ structure make sense, whether error handling is designed or accidental.
 ## Step 1: Run the reports
 
 `mxcli report all -p app.mpr -o docs/reports` runs every report below into one folder
-with an overview page (add `--against <deployed>` for the release report, `--journeys`
-and `--spans` for performance). Or run them one by one:
+with an overview page. Give it the evidence, each to the reports it is for:
+`--journeys`/`--spans` (the functional journeys) and `--junit` or `--run` (microflow
+test results) feed tests and traceability; `--perf-journeys`/`--perf-spans` (a
+performance run, one record per step) feed performance; `--against <deployed>` feeds
+release. Without test results the readiness verdict stays "not assessed in full".
+Or run them one by one:
 
 | Question | Report | Skill |
 |---|---|---|

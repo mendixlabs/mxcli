@@ -12,6 +12,7 @@ import (
 	"github.com/mendixlabs/mxcli/cmd/mxcli/projectreport"
 	"github.com/mendixlabs/mxcli/mdl/linter"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // reportAllKinds is the order of the overview and of the links between pages.
@@ -31,16 +32,23 @@ Each kind writes <kind>.html and <kind>.json (re-render with
 'mxcli report <kind> --from <dir>/<kind>.json'). A <kind>-annotations.yaml in
 the folder is applied to that kind's page.
 
-Kinds that need inputs run only when given them:
-  performance   --journeys <log> and --spans <files>
-  release       --against <deployed revision or .mpr>
+Inputs go to the kinds they are for:
+  --journeys, --spans        the functional journeys: tests and traceability
+  --junit, --tests, --run    microflow test results: tests and traceability
+                             (--run writes <folder>/junit.xml)
+  --perf-journeys,           a performance run, one record per step:
+  --perf-spans               performance only
+  --against                  the deployed revision or .mpr: release
+
+Performance and release run only when given their inputs.
 A kind that cannot run is listed on the overview with the reason; a
 <kind>.json already in the folder from an earlier run is linked instead.
 
 --offline asks no online source (dependencies: no Marketplace, no
 vulnerability lookup). --skip leaves kinds out.`,
 	Example: `  mxcli report all -p app.mpr -o docs/reports
-  mxcli report all -p app.mpr -o docs/reports --against v1.4.0 --journeys journeys.jsonl --spans spans.jsonl
+  mxcli report all -p app.mpr -o docs/reports --against v1.4.0 --journeys journeys.jsonl --spans spans.jsonl --junit results.xml
+  mxcli report all -p app.mpr -o docs/reports --run --perf-journeys perf.jsonl --perf-spans perf-spans.jsonl
   mxcli report all -p app.mpr -o docs/reports --offline --skip map`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -74,7 +82,7 @@ type reportPage struct {
 }
 
 func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]bool, log io.Writer) error {
-	passThrough(cmd)
+	passThrough(cmd, dir, skip)
 	var pages []reportPage
 	for _, kind := range reportAllKinds {
 		if skip[kind] {
@@ -215,21 +223,62 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 	return nil
 }
 
-// passThrough gives the kinds the inputs `report all` was given.
-func passThrough(cmd *cobra.Command) {
-	set := func(kind, flag string) {
-		v, err := cmd.Flags().GetString(flag)
-		if err != nil || v == "" {
+// passThrough gives the kinds the inputs `report all` was given, each to the
+// kinds it is for (ako/mxcli#2451):
+//   - the functional evidence — the journey log and its spans, the microflow
+//     test sources and results — to tests AND traceability: traceability
+//     proves requirements from exactly that evidence;
+//   - the performance run's own log and spans to performance only. A
+//     functional log has one record per journey, which performance would read
+//     as one "step" per journey, each over any step budget;
+//   - --run runs the tests once, in the tests report, which writes the results
+//     to <dir>/junit.xml for traceability to read after it.
+func passThrough(cmd *cobra.Command, dir string, skip map[string]bool) {
+	values := func(from string) []string {
+		f := cmd.Flags().Lookup(from)
+		if f == nil || !f.Changed {
+			return nil
+		}
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			return sv.GetSlice()
+		}
+		return []string{f.Value.String()}
+	}
+	fwd := func(kind, from, to string, vals []string) {
+		rk, ok := reportKinds[kind]
+		if !ok || len(vals) == 0 {
 			return
 		}
-		if rk, ok := reportKinds[kind]; ok && rk.cmd.Flags().Lookup(flag) != nil {
-			_ = rk.cmd.Flags().Set(flag, v)
+		f := rk.cmd.Flags().Lookup(to)
+		if f == nil {
+			return
 		}
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			_ = sv.Replace(vals)
+		} else {
+			_ = f.Value.Set(vals[0])
+		}
+		f.Changed = true
 	}
+	set := func(kind, flag string) { fwd(kind, flag, flag, values(flag)) }
+
 	set("release", "against")
-	for _, k := range []string{"performance", "tests"} {
+	for _, k := range []string{"tests", "traceability"} {
 		set(k, "journeys")
 		set(k, "spans")
+		set(k, "tests")
+		set(k, "junit")
+	}
+	fwd("performance", "perf-journeys", "journeys", values("perf-journeys"))
+	fwd("performance", "perf-spans", "spans", values("perf-spans"))
+	if run, _ := cmd.Flags().GetBool("run"); run && !skip["tests"] {
+		set("tests", "run")
+		set("tests", "test-arg")
+		if len(values("junit")) == 0 && dir != "" {
+			junit := filepath.Join(dir, "junit.xml")
+			fwd("tests", "junit", "junit", []string{junit})
+			fwd("traceability", "junit", "junit", []string{junit})
+		}
 	}
 	if ex, _ := cmd.Flags().GetStringSlice("exclude-docs"); len(ex) > 0 {
 		if rk, ok := reportKinds["architecture"]; ok {
@@ -248,8 +297,8 @@ func needsInput(cmd *cobra.Command, kind string) string {
 	get := func(f string) string { v, _ := cmd.Flags().GetString(f); return v }
 	switch kind {
 	case "performance":
-		if get("journeys") == "" {
-			return "needs a journey log: run with --journeys <log> --spans <files>, or 'mxcli report performance' into this folder"
+		if get("perf-journeys") == "" {
+			return "needs a performance run: --perf-journeys <log> --perf-spans <files>, or 'mxcli report performance' into this folder"
 		}
 	case "release":
 		if get("against") == "" {
@@ -292,8 +341,14 @@ func init() {
 	reportAllCmd.Flags().StringSlice("exclude-docs", nil, "Architecture: name globs of documents to leave out (generated code, probes, fixtures)")
 	reportAllCmd.Flags().Bool("offline", false, "Ask no online source (dependencies: no Marketplace, no vulnerability lookup)")
 	reportAllCmd.Flags().String("against", "", "The deployed revision or .mpr, for the release report")
-	reportAllCmd.Flags().String("journeys", "", "Journey log, for the performance and tests reports")
-	reportAllCmd.Flags().String("spans", "", "Span files, for the performance and tests reports")
+	reportAllCmd.Flags().String("journeys", "", "Functional journey log, for the tests and traceability reports")
+	reportAllCmd.Flags().StringSlice("spans", nil, "Span files of the functional journeys, for the tests and traceability reports")
+	reportAllCmd.Flags().StringSlice("tests", nil, "Microflow test files or directories, for the tests and traceability reports (default: tests/ beside the project)")
+	reportAllCmd.Flags().String("junit", "", "Microflow test results (JUnit, as `mxcli test --junit` writes it), for the tests and traceability reports")
+	reportAllCmd.Flags().Bool("run", false, "Run the microflow tests first; the results go to <folder>/junit.xml for tests and traceability")
+	reportAllCmd.Flags().StringArray("test-arg", nil, "With --run: extra argument for `mxcli test` (repeatable)")
+	reportAllCmd.Flags().String("perf-journeys", "", "Journey log of a performance run (one record per step), for the performance report")
+	reportAllCmd.Flags().StringSlice("perf-spans", nil, "Span files of the performance run, for the performance report")
 	reportAllCmd.Flags().StringSlice("skip", nil, "Kinds to leave out (e.g. --skip map,dependencies)")
 	reportCmd.AddCommand(reportAllCmd)
 }

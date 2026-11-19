@@ -50,7 +50,7 @@ func TestReportAllWritesEveryPageAndAnOverview(t *testing.T) {
 		t.Error("--skip map leaves the map out")
 	}
 	index, _ := os.ReadFile(filepath.Join(out, "index.html"))
-	for _, want := range []string{`<a href="security.html">Security</a>`, "needs a journey log", "needs the deployed revision",
+	for _, want := range []string{`<a href="security.html">Security</a>`, "needs a performance run", "needs the deployed revision",
 		`aria-current="page">Overview</a>`, "Not generated"} {
 		if !strings.Contains(string(index), want) {
 			t.Errorf("index lacks %q", want)
