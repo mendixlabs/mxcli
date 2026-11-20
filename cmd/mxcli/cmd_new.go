@@ -333,8 +333,23 @@ Examples:
 		fmt.Println("  1. Open the project folder in VS Code")
 		fmt.Println("  2. Reopen in Dev Container when prompted")
 		fmt.Printf("  3. Run './mxcli -p %s' to start working\n", filepath.Base(mprPath))
+		fmt.Print(firstStudioProOpenNote)
 	},
 }
+
+// firstStudioProOpenNote says up front what the first Studio Pro open may do.
+// The template mx ships can be a one-time conversion behind the Studio Pro of
+// the same version: Studio Pro 11.16.1 appends UseMeToSetupNodeConversion and
+// adds a Projects$SetupSettings unit that `mx create-project` and `mx convert`
+// 11.16.1 never write (ako/mxcli#2467). Copying it into the project would mean
+// shadowing Studio Pro's template per version, so it is said, not done: that
+// first conversion is Studio Pro's, and committing it on its own keeps it out
+// of the diff of the first real change.
+const firstStudioProOpenNote = `
+Note: the first time Studio Pro opens this project it may convert it once
+(mx's template can be a conversion behind Studio Pro). Commit that conversion
+on its own, before other changes.
+`
 
 // reportFirstBuildFailure reports a failed first build and says whether it is
 // fatal to `mxcli new`.
