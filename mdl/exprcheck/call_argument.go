@@ -210,3 +210,60 @@ func callArgFix(want TypeKind, wantRef string, got TypeKind) string {
 	}
 	return "Pass an expression of type " + callArgTypeName(want, wantRef) + "."
 }
+
+// checkMemberKind compares a create/change member's value with the type of
+// the attribute it is assigned to (ako/mxcli#2464, mendixlabs/mxcli#1909).
+//
+// The expectations table resolves `ChangeItem.Value` / `CreateItem.Value`
+// "AttributeOf:Parent", and the adapter appends the attribute to the slot, but
+// nothing compared the two — so `change $O (Code = $I)` with an Integer for a
+// String attribute passed check and exec and failed the build with CE0117
+// "Error(s) in expression". Measured on mxbuild 11.12.6, a member converts as
+// a call argument does: Integer into Decimal or Long, the same enumeration,
+// `empty` anywhere; Integer into String, String into Integer, Decimal into
+// Integer, a number into Boolean and another enumeration are CE0117 — so the
+// call-argument predicate decides. An enumeration given a string literal is
+// E001's case and is left to it.
+func checkMemberKind(expr RobustExpr, ctx Context) []Hint {
+	if ctx.Catalog == nil {
+		return nil
+	}
+	base, qual := splitSlotQual(ctx.SlotPath)
+	if (base != "ChangeItem.Value" && base != "CreateItem.Value") || qual == "" {
+		return nil
+	}
+	entity, attr := splitEntityAttr(qual)
+	if entity == "" || attr == "" {
+		return nil
+	}
+	want, ok := ctx.Catalog.AttributeKind(entity, attr)
+	if !ok || want == KindUnknown || want == KindAny {
+		return nil
+	}
+	wantRef, _ := ctx.Catalog.AttributeEnumQN(entity, attr)
+	got := argKind(expr, ctx)
+	gotEnum := exprEnumQN(expr, ctx)
+	if gotEnum != "" {
+		got = KindEnumeration
+	}
+	if want == KindEnumeration && got == KindString {
+		return nil // E001 reports a string given to an enumeration
+	}
+	if callArgAccepted(want, wantRef, got, gotEnum) {
+		return nil
+	}
+	wantName := callArgTypeName(want, wantRef)
+	gotName := callArgTypeName(got, gotEnum)
+	return []Hint{{
+		Code:     "E009",
+		Slug:     "slot-type-mismatch",
+		Severity: hints.SeverityError,
+		Where:    hintsLocation(ctx, expr.Pos()),
+		YouWrote: attr + " = <" + gotName + ">",
+		Problem: "Attribute " + attr + " of " + entity + " is " + withArticle(wantName) +
+			", but the value assigned to it is " + withArticle(gotName) + ". Mendix converts a member " +
+			"value only from Integer or Long to Decimal (and between Integer and Long); anything else is " +
+			"CE0117 \"Error(s) in expression\" at the activity.",
+		Fix: callArgFix(want, wantRef, got),
+	}}
+}

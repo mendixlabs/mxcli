@@ -109,6 +109,16 @@ new. A run scoped with --modules, --documents or --rules sees only part of the
 project: it reports new findings but not how many were fixed, and cannot update
 the baseline.
 
+A baseline also records which rules ran and a fingerprint of the lint
+configuration. A later run in which a rule the baseline holds findings for did not
+run (the project's .claude/lint-rules/ is missing, the rule is disabled, or it
+failed) reports those findings as "not checked", never as fixed, and says which
+rules; a changed configuration is reported too. Run lint where the rules and the
+config are installed, or re-record with --update-baseline if the change is
+intended. mxcli verify turns either into an error (exit 2) instead of a pass.
+--update-baseline refuses (exit 2) while a rule cannot run: the baseline would hold
+none of its findings.
+
 --documents scopes a run to named documents, so a structural question about one
 microflow costs a fraction of a project-wide lint and needs no baseline diff to
 see what is new. It narrows the document iterators and implies the documents'
@@ -235,7 +245,8 @@ modules, and findings that are not about those documents are not reported.
 
 		// Load lint config file and apply (excludedModules, rule severity/enabled overrides).
 		// Config ExcludeModules merges with --exclude flag values.
-		if cfg, configPath := applyLintConfig(lint, projectDir, os.Stderr); cfg != nil {
+		cfg, configPath := applyLintConfig(lint, projectDir, os.Stderr)
+		if cfg != nil {
 			if len(cfg.ExcludeModules) > 0 {
 				merged := append(excludeModules, cfg.ExcludeModules...)
 				ctx.SetExcludedModules(merged)
@@ -326,27 +337,86 @@ modules, and findings that are not about those documents are not reported.
 
 		// Baseline: record the findings, or keep only the new ones. On stderr,
 		// so the summary cannot corrupt --format json/sarif.
+		// Which rules ran, and under which configuration: a baseline records
+		// both, because a finding whose rule did not run is "not checked", not
+		// "fixed" (ako/mxcli#2454, #2455).
+		ranRules, failedRules := lint.RulesRun()
+		configFingerprint := cfg.Fingerprint(excludeModules)
+		var baselineReport *linter.BaselineReport
 		if updateBaseline {
-			if err := linter.WriteBaseline(baselinePath, violations); err != nil {
+			// A rule that ran into an error reports nothing, so recording now would
+			// replace the baseline with one that holds none of its findings and does
+			// not list it as a rule that ran: the next run that can run it would
+			// report every one as new, and a re-record is what the failing run's own
+			// message suggests. Refuse instead of writing a worse baseline.
+			if len(failedRules) > 0 {
+				fmt.Fprintf(os.Stderr, "Error: the baseline was not recorded: %s could not run, so it would hold none of their findings.\n", shortList(failedRules, 8))
+				for _, v := range violations {
+					if v.RuleFailure {
+						fmt.Fprintf(os.Stderr, "  %s\n", v.Message)
+					}
+				}
+				fmt.Fprintln(os.Stderr, "  A rule that ran into an error usually runs on a second attempt; run the command again, and report the rule if it keeps failing.")
+				os.Exit(2)
+			}
+			if err := linter.WriteBaselineWith(baselinePath, violations, linter.BaselineMeta{Rules: ranRules, Config: configFingerprint}); err != nil {
 				fmt.Fprintf(os.Stderr, "Error writing lint baseline: %v\n", err)
 				os.Exit(1)
 			}
-			fmt.Fprintf(os.Stderr, "Recorded %d finding(s) in the lint baseline %s\n", len(violations), baselinePath)
+			recorded := 0
+			for _, v := range violations {
+				if !v.RuleFailure {
+					recorded++
+				}
+			}
+			fmt.Fprintf(os.Stderr, "Recorded %d finding(s) from %d rule(s) in the lint baseline %s\n", recorded, len(ranRules), baselinePath)
 		} else if baseline != nil {
-			cmp := baseline.Compare(violations)
+			allBySeverity := severityCounts(violations)
+			cmp := baseline.CompareRun(violations, linter.RunInfo{Known: true, Ran: ranRules, Failed: failedRules, Config: configFingerprint, Scoped: scoped})
 			violations = cmp.New
-			if scoped {
+			newFindings := 0
+			for _, v := range cmp.New {
+				if !v.RuleFailure {
+					newFindings++
+				}
+			}
+			switch {
+			case scoped:
 				fmt.Fprintf(os.Stderr, "Lint baseline %s: %d new, %d already known (a scoped run: fixed findings are not counted)\n",
-					baselinePath, len(cmp.New), cmp.Unchanged)
-			} else {
+					baselinePath, newFindings, cmp.Unchanged)
+			case cmp.NotChecked > 0:
+				fmt.Fprintf(os.Stderr, "Lint baseline %s: %d new, %d already known, %d fixed, %d not checked\n",
+					baselinePath, newFindings, cmp.Unchanged, cmp.Fixed, cmp.NotChecked)
+			default:
 				fmt.Fprintf(os.Stderr, "Lint baseline %s: %d new, %d already known, %d fixed\n",
-					baselinePath, len(cmp.New), cmp.Unchanged, cmp.Fixed)
+					baselinePath, newFindings, cmp.Unchanged, cmp.Fixed)
+			}
+			if !scoped {
+				if len(cmp.RulesNotRun) > 0 {
+					fmt.Fprintf(os.Stderr, "Warning: %d finding(s) of %s are NOT checked: the baseline holds them but the rule(s) did not run (not installed, disabled, or failed). They are not fixed.\n",
+						cmp.NotChecked, shortList(cmp.RulesNotRun, 8))
+				}
+				if cmp.ConfigChanged {
+					fmt.Fprintln(os.Stderr, "Warning: the lint configuration differs from the one the baseline was recorded under, so what the rules report may differ; re-record with --update-baseline if the change is intended.")
+				}
+				if len(cmp.NewRules) > 0 {
+					fmt.Fprintf(os.Stderr, "Note: %s ran and are not in the baseline's recorded rules; all their findings are reported as new.\n", shortList(cmp.NewRules, 8))
+				}
+			}
+			baselineReport = &linter.BaselineReport{
+				Path: baselinePath, New: newFindings, Unchanged: cmp.Unchanged, Fixed: cmp.Fixed, NotChecked: cmp.NotChecked,
+				UnchangedBySeverity: knownBySeverity(allBySeverity, severityCounts(cmp.New)),
+				RulesNotRun:         cmp.RulesNotRun, RuleFailures: cmp.RuleFailures, NewRules: cmp.NewRules, ConfigChanged: cmp.ConfigChanged,
+				Scoped: scoped,
 			}
 		}
 
 		// Output results
 		outputFormat := linter.OutputFormat(format)
 		formatter := linter.GetFormatter(outputFormat, useColor)
+		if jf, ok := formatter.(*linter.JSONFormatter); ok {
+			jf.Baseline = baselineReport
+		}
 		if err := formatter.Format(violations, os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "Error formatting output: %v\n", err)
 			os.Exit(1)
@@ -399,6 +469,39 @@ modules, and findings that are not about those documents are not reported.
 			os.Exit(1)
 		}
 	},
+}
+
+// severityCounts counts findings about the project by severity name; a rule
+// failure is about the rule and is not counted.
+func severityCounts(vs []linter.Violation) map[string]int {
+	out := map[string]int{}
+	for _, v := range vs {
+		if !v.RuleFailure {
+			out[v.Severity.String()]++
+		}
+	}
+	return out
+}
+
+// knownBySeverity is what the run found minus what is new: the findings the
+// baseline already had, by severity.
+func knownBySeverity(all, fresh map[string]int) map[string]int {
+	out := map[string]int{}
+	for sev, n := range all {
+		if k := n - fresh[sev]; k > 0 {
+			out[sev] = k
+		}
+	}
+	return out
+}
+
+// shortList joins ids, keeping the first n: a baseline can miss dozens of rules
+// (a checkout without the project's custom rules), and the JSON output has them all.
+func shortList(ids []string, n int) string {
+	if len(ids) <= n {
+		return strings.Join(ids, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(ids[:n], ", "), len(ids)-n)
 }
 
 // catalogRefreshCommand maps the required catalog depth to the MDL refresh
@@ -520,6 +623,8 @@ func builtinLintRules() []linter.Rule {
 		rules.NewLoopChildContainmentRule(),      // MPR011 - requires BSON inspection
 		rules.NewOverlappingEntitiesRule(),       // MPR016 - reads entity geometry from the domain model
 		rules.NewFixedGuardAttributeRule(),       // MPR017 - a Boolean guard with one reachable value
+		rules.NewModelNameInLiteralRule(),        // MPR018 - a model element named in a string literal
+		rules.NewUnindexedConstraintRule(),       // MPR019 - an XPath-filtered attribute with no leading index
 		rules.NewNoCommitInLoopRule(),            // CONV011-CONV014 - require BSON inspection
 		rules.NewExclusiveSplitCaptionRule(),
 		rules.NewErrorHandlingOnCallsRule(),

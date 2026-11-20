@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"gopkg.in/yaml.v3"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -99,10 +100,20 @@ type projectGate struct {
 	Command string
 }
 
-// projectGates is the ordered, cheapest-first gate list. Adding one here adds
-// it to every generated CLAUDE.md, and requires naming it in the bootstrap
-// skill and docs page too.
-var projectGates = []projectGate{
+// The gate list is one of two, chosen by whether the project has recorded the
+// baselines `mxcli verify` compares against (hasVerifyBaseline). `verify` is
+// lint and mx check against those baselines, so without them it reports every
+// finding the project already had as new: on a project that has errors it fails
+// on the whole backlog. A project therefore keeps the separate `lint` and
+// `docker check` gates until it has a baseline, and gets `verify` in their place
+// once it has one. The choice is made each time the file is generated, and the
+// session-start bootstrap generates it every session, so a project moves to
+// `verify` when someone records the baselines and not when mxcli is upgraded.
+
+// classicGates is the ordered, cheapest-first gate list for a project without
+// verify baselines. Adding a gate to either list requires naming it in the
+// bootstrap skill and the docs page too (allProjectGates).
+var classicGates = []projectGate{
 	{"check script.mdl -p %s", "syntax + references, no apply (~2s)", "mxcli check", "check"},
 	{"exec script.mdl -p %s", "apply", "mxcli exec", "exec"},
 	{"lint -p %s", "rules (~3s)", "mxcli lint", "lint"},
@@ -115,16 +126,68 @@ var projectGates = []projectGate{
 	{"run --local --watch --detach -p %s", "the app, backgrounded; then `run wait`/`status`/`stop`", "mxcli run --local", "run"},
 }
 
+// verifyGates is the list for a project that has recorded its verify baselines:
+// verify runs lint and mx check against them, so it replaces both gates.
+var verifyGates = []projectGate{
+	{"check script.mdl -p %s", "syntax + references, no apply (~2s)", "mxcli check", "check"},
+	{"exec script.mdl -p %s", "apply", "mxcli exec", "exec"},
+	// verify is lint and mx check in one run, against the baselines recorded at
+	// bootstrap, so it reports what the change made worse and not the backlog.
+	{"verify -p %s", "lint + mx check, new findings only (~10s)", "mxcli verify", "verify"},
+	{"report -p %s", "scored quality report", "mxcli report", "report"},
+	{"test tests/ -p %s --local", "microflow tests (~30s cold, ~2s warm)", "mxcli test", "test"},
+	{"run --local --watch --detach -p %s", "the app, backgrounded; then `run wait`/`status`/`stop`", "mxcli run --local", "run"},
+}
+
+// verifyBaselineDir is where `mxcli verify` keeps its baselines, next to the .mpr.
+const verifyBaselineDir = "verify-baseline"
+
+// hasVerifyBaseline reports whether the project in projectDir has recorded the
+// lint baseline `mxcli verify` needs from its first run. "" (no directory known)
+// is a project without one.
+func hasVerifyBaseline(projectDir string) bool {
+	if projectDir == "" {
+		return false
+	}
+	st, err := os.Stat(filepath.Join(projectDir, verifyBaselineDir, "lint.json"))
+	return err == nil && !st.IsDir()
+}
+
+// projectGatesFor is the gate list for the project in projectDir.
+func projectGatesFor(projectDir string) []projectGate {
+	if hasVerifyBaseline(projectDir) {
+		return verifyGates
+	}
+	return classicGates
+}
+
+// allProjectGates is every gate either list can publish, deduplicated by Ref, in
+// first-seen order. The bootstrap skill and the docs page describe both lists, so
+// they are held to all of it.
+func allProjectGates() []projectGate {
+	var out []projectGate
+	seen := map[string]bool{}
+	for _, list := range [][]projectGate{classicGates, verifyGates} {
+		for _, g := range list {
+			if !seen[g.Ref] {
+				seen[g.Ref] = true
+				out = append(out, g)
+			}
+		}
+	}
+	return out
+}
+
 // renderProjectGates writes the gate list as aligned shell lines, comments in
 // one column.
 //
 // The single longest command (the detached run) overhangs the column instead of
 // setting it: every byte of padding is paid on every gate line in every
 // session, and aligning to that one line pushed all seven comments right.
-func renderProjectGates(mprPath string) string {
-	lines := make([]string, len(projectGates))
+func renderProjectGates(gates []projectGate, mprPath string) string {
+	lines := make([]string, len(gates))
 	longest, width := 0, 0
-	for i, g := range projectGates {
+	for i, g := range gates {
 		lines[i] = "./mxcli " + fmt.Sprintf(g.Cmd, mprPath)
 		switch n := len(lines[i]); {
 		case n > longest:
@@ -134,7 +197,7 @@ func renderProjectGates(mprPath string) string {
 		}
 	}
 	var sb strings.Builder
-	for i, g := range projectGates {
+	for i, g := range gates {
 		sb.WriteString(lines[i])
 		if pad := width - len(lines[i]); pad > 0 {
 			sb.WriteString(strings.Repeat(" ", pad))
@@ -155,7 +218,17 @@ func projectDisplayName(dir, mprFile string) string {
 	return filepath.Base(dir)
 }
 
+// generateClaudeMD is the CLAUDE.md for a project whose directory is not known: it
+// has no verify baseline to look for, so it publishes the classic gate list.
 func generateClaudeMD(projectName, mprFile string) string {
+	return generateClaudeMDIn("", projectName, mprFile)
+}
+
+// generateClaudeMDIn is generateClaudeMD for the project in projectDir, whose gate
+// list follows whether it has recorded its verify baselines (projectGatesFor).
+func generateClaudeMDIn(projectDir, projectName, mprFile string) string {
+	gates := projectGatesFor(projectDir)
+	verifyMode := hasVerifyBaseline(projectDir)
 	mprPath := mprFile
 	if mprPath == "" {
 		mprPath = "<project>.mpr"
@@ -230,7 +303,7 @@ func generateClaudeMD(projectName, mprFile string) string {
 	// Ordered cheapest-first on purpose: each one is only worth paying for
 	// once the one above it is clean.
 	//
-	// The list is projectGates rather than literal lines because the same set
+	// The list is a gate list (projectGatesFor) rather than literal lines because the same set
 	// has to appear in the bootstrap procedure (the skill) and on the docs
 	// page that describes it. Three hand-kept copies is how `test` came to be
 	// in two of them and absent from the one that is re-read every session.
@@ -242,11 +315,17 @@ func generateClaudeMD(projectName, mprFile string) string {
 	w("statement and not a file write. Iterate with " + bt + "exec" + bt + ", then run the gates once over the\n")
 	w("result: the whole list after every edit proves nothing the one run at the end does not.\n\n")
 	w(bt3 + "bash\n")
-	w(renderProjectGates(mprPath))
+	w(renderProjectGates(gates, mprPath))
 	w(bt3 + "\n\n")
-	w("**" + bt + "lint" + bt + " printing no errors is not a pass** — read the warning count, and read\n")
-	w(bt + "report" + bt + "'s score. A green " + bt + "check" + bt + " proves nothing about behaviour or about how\n")
-	w("a page renders: logic needs " + bt + "test" + bt + ", and anything visual needs the app actually running.\n\n")
+	if verifyMode {
+		w("**" + bt + "verify" + bt + " reports what is new, not what is good** — read the pre-existing count it\n")
+		w("prints and " + bt + "report" + bt + "'s score. A green " + bt + "check" + bt + " proves nothing about behaviour or about how\n")
+		w("a page renders: logic needs " + bt + "test" + bt + ", and anything visual needs the app actually running.\n\n")
+	} else {
+		w("**" + bt + "lint" + bt + " printing no errors is not a pass** — read the warning count, and read\n")
+		w(bt + "report" + bt + "'s score. A green " + bt + "check" + bt + " proves nothing about behaviour or about how\n")
+		w("a page renders: logic needs " + bt + "test" + bt + ", and anything visual needs the app actually running.\n\n")
+	}
 	w("Set " + bt + "mx" + bt + " up once with " + bt + "./mxcli setup mxbuild -p " + mprPath + bt + ". To call it directly,\n")
 	w("name the version — " + bt + "~/.mxcli/mxbuild/<version>/modeler/mx" + bt + " — because a " + bt + "*" + bt + " glob\n")
 	w("breaks the moment two are cached.\n\n")

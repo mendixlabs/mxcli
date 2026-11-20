@@ -1165,6 +1165,14 @@ func formatAction(
 					valueStr = describeExpr(ctx, v.Argument)
 				case *microflows.EntityTypeCodeActionParameterValue:
 					valueStr = v.Entity
+				case *microflows.NanoflowParameterValue:
+					// Printed, so describe → exec keeps it: left out, an
+					// edit of the call dropped every nanoflow argument
+					// (ako/mxcli#2450).
+					valueStr = v.Nanoflow
+					if valueStr == "" {
+						valueStr = "empty"
+					}
 				}
 			}
 			if valueStr != "" {

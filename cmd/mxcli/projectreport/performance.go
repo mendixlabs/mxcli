@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"regexp"
 	"sort"
@@ -34,22 +35,35 @@ type PerformanceData struct {
 	Plans             []Plan      `json:"plans,omitempty"`
 	Candidates        []Candidate `json:"candidates,omitempty"`
 	CandidatesChecked bool        `json:"candidatesChecked"`
+	// Attribution is how spans were given to steps: AttributionRequests, or
+	// AttributionWindow when the spans carry no HTTP request attributes.
+	Attribution string `json:"attribution,omitempty"`
 }
 
 // StepStats is one journey step, measured as the median of its warm runs.
 type StepStats struct {
-	Journey       string       `json:"journey"`
-	Step          string       `json:"step"`
-	Runs          int          `json:"runs"`
-	WarmRuns      int          `json:"warmRuns"`
-	BrowserMs     float64      `json:"browserMs"`
-	ServerMs      float64      `json:"serverMs"`
+	Journey   string  `json:"journey"`
+	Step      string  `json:"step"`
+	Runs      int     `json:"runs"`
+	WarmRuns  int     `json:"warmRuns"`
+	BrowserMs float64 `json:"browserMs"`
+	ServerMs  float64 `json:"serverMs"`
+	// The spread of the warm runs behind each median: a difference inside it
+	// is run-to-run noise, not a change (ako/mxcli#2443).
+	BrowserMin    float64      `json:"browserMin,omitempty"`
+	BrowserMax    float64      `json:"browserMax,omitempty"`
+	ServerMin     float64      `json:"serverMin,omitempty"`
+	ServerMax     float64      `json:"serverMax,omitempty"`
 	DBMs          float64      `json:"dbMs"`
 	Queries       int          `json:"queries"`
 	TopMicroflows []NameMs     `json:"topMicroflows,omitempty"`
 	Statements    []Statement  `json:"statements,omitempty"`
 	WindowMs      float64      `json:"windowMs"`
 	Flame         []FlameEntry `json:"flame,omitempty"`
+	// BackgroundMs is work that ran inside the step's window but not for its
+	// requests — queued tasks, scheduled events, the task queue's polling. It
+	// is not in ServerMs, DBMs or Queries (ako/mxcli#2443).
+	BackgroundMs float64 `json:"backgroundMs,omitempty"`
 }
 
 func (s StepStats) key() string { return s.Journey + " / " + s.Step }
@@ -106,6 +120,11 @@ func CollectPerformance(in PerformanceInput) (*PerformanceData, error) {
 	}
 	d := &PerformanceData{Database: in.Journeys.Database, Notes: in.Journeys.Notes, Plans: in.Plans,
 		Candidates: in.Candidates, CandidatesChecked: in.Candidates != nil}
+	idx := indexSpans(in.Spans)
+	d.Attribution = AttributionRequests
+	if !idx.hasRequestsCached() {
+		d.Attribution = AttributionWindow
+	}
 	type group struct {
 		journey, step string
 		recs          []JourneyRecord
@@ -134,16 +153,16 @@ func CollectPerformance(in PerformanceInput) (*PerformanceData, error) {
 			warm = recs[1:]
 		}
 		type run struct {
-			browser, server, db float64
-			queries             int
-			spans               []Span
-			s, e                int64
+			browser, server, db, background float64
+			queries                         int
+			spans                           []Span
+			s, e                            int64
 		}
 		var runs []run
 		for _, r := range warm {
 			s, e := r.window()
-			sp := spansIn(in.Spans, s, e)
-			rr := run{s: s, e: e, spans: sp, browser: r.BrowserMs}
+			sp, bg := idx.stepSpans(s, e)
+			rr := run{s: s, e: e, spans: sp, browser: r.BrowserMs, background: rootUnionMs(bg)}
 			if rr.browser == 0 {
 				rr.browser = float64(e-s) / 1e6
 			}
@@ -157,11 +176,15 @@ func CollectPerformance(in PerformanceInput) (*PerformanceData, error) {
 			runs = append(runs, rr)
 		}
 		st := StepStats{Journey: g.journey, Step: g.step, Runs: len(recs), WarmRuns: len(warm)}
-		var bs, ss, ds, qs []float64
+		var bs, ss, ds, qs, gs []float64
 		for _, r := range runs {
 			bs, ss, ds, qs = append(bs, r.browser), append(ss, r.server), append(ds, r.db), append(qs, float64(r.queries))
+			gs = append(gs, r.background)
 		}
 		st.BrowserMs, st.ServerMs, st.DBMs, st.Queries = round1(median(bs)), round1(median(ss)), round1(median(ds)), int(median(qs)+0.5)
+		st.BackgroundMs = round1(median(gs))
+		st.BrowserMin, st.BrowserMax = minMax(bs)
+		st.ServerMin, st.ServerMax = minMax(ss)
 		// The representative run is the one closest to the median server time.
 		rep := 0
 		for i, r := range runs {
@@ -205,6 +228,121 @@ func CollectPerformance(in PerformanceInput) (*PerformanceData, error) {
 		}
 	}
 	return d, nil
+}
+
+// Attribution says how spans were given to steps.
+const (
+	// AttributionRequests: the traces rooted in an HTTP request to the app
+	// that starts inside the step's window.
+	AttributionRequests = "requests"
+	// AttributionWindow: every span that starts inside the window. Used only
+	// when no span is recognisable as an HTTP request (a collector that does
+	// not record the request attributes).
+	AttributionWindow = "window"
+)
+
+// spanIndex groups spans by trace and finds each trace's roots, so a step can
+// take the traces its own requests started and leave out the rest. Taking
+// every span in the window counted background work: on ako/PizzaV1 the
+// simulator's queued clock tick (a 1.5 s sleep) added up to 1.6 s of "server
+// time" to whichever step it happened to overlap (ako/mxcli#2443).
+type spanIndex struct {
+	all     []Span
+	traces  map[string][]Span
+	roots   []Span
+	appPort string
+	// reqKnown caches hasRequests: 0 unknown, 1 yes, 2 no.
+	reqKnown int
+}
+
+func indexSpans(spans []Span) *spanIndex {
+	x := &spanIndex{all: spans, traces: map[string][]Span{}}
+	ids := map[string]map[string]bool{}
+	for _, s := range spans {
+		x.traces[s.TraceID] = append(x.traces[s.TraceID], s)
+		if ids[s.TraceID] == nil {
+			ids[s.TraceID] = map[string]bool{}
+		}
+		ids[s.TraceID][s.SpanID] = true
+	}
+	ports := map[string]int{}
+	for _, s := range spans {
+		if s.ParentID == "" || !ids[s.TraceID][s.ParentID] {
+			x.roots = append(x.roots, s)
+			if httpMethod(s) != "" && s.Attrs["server.port"] != "" {
+				ports[s.Attrs["server.port"]]++
+			}
+		}
+	}
+	// The app port is the one most requests go to; the runtime's admin port
+	// (m2ee) gets a handful from tooling.
+	best := 0
+	for p, n := range ports {
+		if n > best || (n == best && p < x.appPort) {
+			x.appPort, best = p, n
+		}
+	}
+	return x
+}
+
+func httpMethod(s Span) string {
+	if m := s.Attrs["http.request.method"]; m != "" {
+		return m
+	}
+	return s.Attrs["http.method"]
+}
+
+// isRequest reports whether a root span is an HTTP request to the app.
+func (x *spanIndex) isRequest(root Span) bool {
+	if httpMethod(root) == "" {
+		return false
+	}
+	p := root.Attrs["server.port"]
+	return p == "" || x.appPort == "" || p == x.appPort
+}
+
+func (x *spanIndex) hasRequests() bool {
+	for _, r := range x.roots {
+		if x.isRequest(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// stepSpans returns the spans of the traces whose request root starts inside
+// [s, e] — whole traces, also where a child outlasts the window — and the
+// other roots that start inside it, which are background work. Without any
+// request root in the data it falls back to every span in the window.
+func (x *spanIndex) stepSpans(s, e int64) (own, background []Span) {
+	if !x.hasRequestsCached() {
+		return spansIn(x.all, s, e), nil
+	}
+	seen := map[string]bool{}
+	for _, r := range x.roots {
+		if r.Start < s || r.Start > e {
+			continue
+		}
+		if !x.isRequest(r) {
+			background = append(background, r)
+			continue
+		}
+		if !seen[r.TraceID] {
+			seen[r.TraceID] = true
+			own = append(own, x.traces[r.TraceID]...)
+		}
+	}
+	return own, background
+}
+
+func (x *spanIndex) hasRequestsCached() bool {
+	if x.reqKnown == 0 {
+		x.reqKnown = 2
+		if x.hasRequests() {
+			x.reqKnown = 1
+		}
+	}
+	return x.reqKnown == 1
 }
 
 func spansIn(spans []Span, s, e int64) []Span {
@@ -405,6 +543,26 @@ func flame(spans []Span, windowStart int64, limit int) []FlameEntry {
 	return out
 }
 
+// minMax is the smallest and largest value, rounded as the medians are.
+func minMax(xs []float64) (float64, float64) {
+	if len(xs) == 0 {
+		return 0, 0
+	}
+	lo, hi := xs[0], xs[0]
+	for _, x := range xs[1:] {
+		lo, hi = math.Min(lo, x), math.Max(hi, x)
+	}
+	return round1(lo), round1(hi)
+}
+
+// withRange is a median with the spread of its runs, when there is one.
+func withRange(med, lo, hi float64) string {
+	if hi <= lo {
+		return ms(med)
+	}
+	return ms(med) + " (" + ms(lo) + "–" + ms(hi) + ")"
+}
+
 func median(xs []float64) float64 {
 	if len(xs) == 0 {
 		return 0
@@ -562,8 +720,8 @@ func CollectCandidates(q Querier, scope Scope) ([]Candidate, error) {
 // ---------------------------------------------------------------- render
 
 var PerformanceMethod = []string{
-	"Each journey step is the time window its journey log record gives: from the action until its last `/xas/` request answered and nothing new started for a short quiet period (the journey script decides). Every span that starts inside the window belongs to the step.",
-	"Browser time is the record's `browserMs` (or the window length). Server time is the union of the step's root spans — concurrent requests are not counted twice. Database time and query count are the database spans (`db.system` / `db.statement`) in the window.",
+	"Each journey step is the time window its journey log record gives: from the action until its last `/xas/` request answered and nothing new started for a short quiet period (the journey script decides). A step's work is the traces rooted in an HTTP request to the app (the port most requests go to) that starts inside the window — the whole trace, also where it outlasts the window. Other work that starts inside it — queued tasks, scheduled events, the task queue's polling — is background and is shown apart, not counted.",
+	"Browser time is the record's `browserMs` (or the window length). Server time is the union of the step's request roots — concurrent requests are not counted twice. Database time and query count are the database spans (`db.system` / `db.statement`) in those traces.",
 	"Each step ran several times; the first run warms caches and the JIT and is not counted. Figures are the median of the warm runs; the flame chart and statements are from the run closest to the median.",
 	"Plans come from Postgres `auto_explain` in JSON format (`--plans <postgres log>`), with the JIT block reported next to the plan.",
 	"Before/after compares against `--baseline`, an earlier performance report of the same journeys on the same seed.",
@@ -605,7 +763,7 @@ func RenderPerformance(env *Envelope, ann *Annotations) (Doc, error) {
 		{Label: "steps measured", Value: fmt.Sprint(len(d.Steps))},
 		{Label: "server time, all steps", Value: fmt.Sprintf("%.0f ms", server)},
 		{Label: "database time", Value: fmt.Sprintf("%.0f ms", db), Note: fmt.Sprintf("%d queries", queries)},
-		{Label: "plans dominated by JIT", Value: fmt.Sprint(jit), Note: fmt.Sprintf("of %d", len(d.Plans))},
+		jitStat(jit, len(d.Plans)),
 	}
 	var env0 []Block
 	if d.Database != "" {
@@ -615,6 +773,18 @@ func RenderPerformance(env *Envelope, ann *Annotations) (Doc, error) {
 	}
 	if len(d.Notes) > 0 {
 		env0 = append(env0, Para{Text: "Changes made for the measurement (and restored afterwards):"}, Bullets{Items: d.Notes})
+	}
+	if d.Attribution == AttributionWindow {
+		env0 = append(env0, Callout{Kind: "warn", Text: "No span carries HTTP request attributes (`http.request.method`), so each step counts every span that starts in its window, background work included. A collector that records the runtime's request spans lets the report count only the step's own requests."})
+	}
+	var bgSteps []string
+	for _, s := range d.Steps {
+		if s.BackgroundMs >= 1 {
+			bgSteps = append(bgSteps, fmt.Sprintf("%s: %s ms", s.key(), ms(s.BackgroundMs)))
+		}
+	}
+	if len(bgSteps) > 0 {
+		env0 = append(env0, Para{Text: "Background work ran during some steps — queued tasks, scheduled events, polling. It is not in their server or database time:"}, Bullets{Items: bgSteps})
 	}
 
 	// Steps table, with before/after when there is a baseline.
@@ -627,9 +797,17 @@ func RenderPerformance(env *Envelope, ann *Annotations) (Doc, error) {
 		note := ""
 		if n, ok := ann.Get("step:" + s.key()); ok {
 			note = joinNote(n.Status, n.Note, "")
+			if n.Finding != "" {
+				// The finding's name, not its ID: the ID often starts the note
+				// already ("F2: index on …"), and the name says more in a row.
+				f, _ := ann.Peek("finding:" + n.Finding)
+				rest := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(n.Note), n.Finding+":"))
+				note = joinNote("finding "+n.Finding+" — "+nonEmpty(f.Name, n.Finding), rest, "")
+			}
 		}
 		if len(d.Baseline) == 0 {
-			st.Rows = append(st.Rows, []string{s.key(), fmt.Sprintf("%d (%d warm)", s.Runs, s.WarmRuns), ms(s.BrowserMs), ms(s.ServerMs), ms(s.DBMs), fmt.Sprint(s.Queries), note})
+			st.Rows = append(st.Rows, []string{s.key(), fmt.Sprintf("%d (%d warm)", s.Runs, s.WarmRuns), withRange(s.BrowserMs, s.BrowserMin, s.BrowserMax),
+				withRange(s.ServerMs, s.ServerMin, s.ServerMax), ms(s.DBMs), fmt.Sprint(s.Queries), note})
 			st.Classes = append(st.Classes, []string{"", "num", "num", "num", "num", "num", ""})
 			continue
 		}
@@ -639,16 +817,20 @@ func RenderPerformance(env *Envelope, ann *Annotations) (Doc, error) {
 			st.Classes = append(st.Classes, []string{"", "num", "num", "num", "num", ""})
 			continue
 		}
-		st.Rows = append(st.Rows, []string{s.key(), arrow(b.BrowserMs, s.BrowserMs), arrow(b.ServerMs, s.ServerMs), arrow(b.DBMs, s.DBMs),
+		st.Rows = append(st.Rows, []string{s.key(), withRange(b.BrowserMs, b.BrowserMin, b.BrowserMax) + " → " + withRange(s.BrowserMs, s.BrowserMin, s.BrowserMax),
+			withRange(b.ServerMs, b.ServerMin, b.ServerMax) + " → " + withRange(s.ServerMs, s.ServerMin, s.ServerMax), arrow(b.DBMs, s.DBMs),
 			fmt.Sprintf("%d → %d", b.Queries, s.Queries), note})
 		st.Classes = append(st.Classes, []string{"", deltaClass(b.BrowserMs, s.BrowserMs), deltaClass(b.ServerMs, s.ServerMs), deltaClass(b.DBMs, s.DBMs),
 			deltaClass(float64(b.Queries), float64(s.Queries)), ""})
 	}
-	intro := "Median of the warm runs per step."
+	intro := "Median of the warm runs per step, with their min–max: a difference inside that spread is run-to-run noise."
 	if len(d.Baseline) > 0 {
-		intro = "Before → after, median of the warm runs. Baseline generated " + d.BaselineGenerated + "."
+		intro = "Before → after, median of the warm runs with their min–max. Baseline generated " + d.BaselineGenerated + "."
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "steps", Title: "Journey steps", Intro: intro, Blocks: append(env0, st)})
+	if fs := findingsSection(d, base, ann); fs != nil {
+		doc.Sections = append(doc.Sections, *fs)
+	}
 
 	// Per-step detail: flame chart, microflows, statements.
 	for _, s := range d.Steps {
@@ -675,7 +857,7 @@ func RenderPerformance(env *Envelope, ann *Annotations) (Doc, error) {
 			bl = append(bl, sq)
 		}
 		if len(bl) == 0 {
-			bl = append(bl, Para{Text: "No spans fell inside this step's window."})
+			bl = append(bl, Para{Text: "No request of this step was traced inside its window."})
 		}
 		doc.Sections = append(doc.Sections, Section{ID: "", Title: "Step: " + s.key(), Blocks: bl})
 	}
@@ -742,4 +924,87 @@ func deltaClass(before, after float64) string {
 		return "bad"
 	}
 	return "num"
+}
+
+// findingsSection groups the steps by the finding that explains them
+// (ako/mxcli#2443): a finding is annotated `finding:<ID>` (name: its title,
+// status, note: what was found and done), and each step it targets names it
+// with `step:<journey / step>` and `finding: <ID>`. One card per finding, with
+// its steps' before → after, so a fix is read with the numbers that prove it.
+func findingsSection(d PerformanceData, base map[string]StepStats, ann *Annotations) *Section {
+	if ann == nil || len(ann.Items) == 0 {
+		return nil
+	}
+	var ids []string
+	for k := range ann.Items {
+		if id, ok := strings.CutPrefix(k, "finding:"); ok {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	sort.Strings(ids)
+	targets := map[string][]string{}
+	for _, s := range d.Steps {
+		n, ok := ann.Peek("step:" + s.key())
+		if !ok || n.Finding == "" {
+			continue
+		}
+		line := s.key() + ": server " + ms(s.ServerMs) + " ms, DB " + ms(s.DBMs) + " ms, " + fmt.Sprintf("%d queries", s.Queries)
+		if b, ok := base[s.key()]; ok {
+			// Each change with the same signal the table gives: one inside the
+			// run-to-run spread is not the fix's effect (ako/mxcli#2475).
+			line = s.key() + ": server " + arrow(b.ServerMs, s.ServerMs) + " ms" + noise(b.ServerMs, s.ServerMs, b.ServerMin, b.ServerMax, s.ServerMin, s.ServerMax) +
+				", DB " + arrow(b.DBMs, s.DBMs) + " ms" + noise(b.DBMs, s.DBMs, 0, 0, 0, 0) +
+				fmt.Sprintf(", %d → %d queries", b.Queries, s.Queries)
+		}
+		targets[n.Finding] = append(targets[n.Finding], line)
+	}
+	var blocks []Block
+	for _, id := range ids {
+		n, _ := ann.Get("finding:" + id)
+		// fixed, open, or a decision not to change it: accepted, intended,
+		// by design (as the other annotation kinds take).
+		status := map[string]string{"fixed": "good", "open": "warn", "accepted": "none", "intended": "none", "by design": "none"}[strings.ToLower(n.Status)]
+		c := Card{Tag: id, Status: status, StatusText: nonEmpty(n.Status, "open"), Title: nonEmpty(n.Name, id)}
+		if n.Note != "" {
+			c.Paras = append(c.Paras, n.Note)
+		}
+		if ts := targets[id]; len(ts) > 0 {
+			c.Paras = append(c.Paras, "Steps: "+strings.Join(ts, "; ")+".")
+		} else if strings.EqualFold(n.Scope, "background") {
+			c.Paras = append(c.Paras, "Background work: no journey step runs it.")
+		} else {
+			c.Paras = append(c.Paras, "No step names this finding (`step:<journey / step>` with `finding: "+id+"`).")
+		}
+		blocks = append(blocks, c)
+	}
+	return &Section{ID: "findings", Title: "Findings",
+		Intro:  "What was found and done, each with the steps it targets. Write them in the annotations: `finding:<ID>` (name, status — fixed, open, accepted, intended or by design —, note, and `scope: background` for work no step runs) and `finding: <ID>` on each `step:<journey / step>`.",
+		Blocks: blocks}
+}
+
+// noise marks a change that is not one: inside the run-to-run spread when
+// both runs have one, else under the table's 20 % threshold.
+func noise(before, after, bLo, bHi, aLo, aHi float64) string {
+	if bHi > bLo && aHi > aLo {
+		if aLo <= bHi && bLo <= aHi {
+			return " (within the run-to-run spread)"
+		}
+		return ""
+	}
+	if deltaClass(before, after) == "num" {
+		return " (no clear change)"
+	}
+	return ""
+}
+
+// jitStat is the JIT tile; without plans it says none were read rather than
+// "0 of 0".
+func jitStat(jit, plans int) Stat {
+	if plans == 0 {
+		return Stat{Label: "plans dominated by JIT", Value: "–", Note: "no plans read (no Postgres log given)"}
+	}
+	return Stat{Label: "plans dominated by JIT", Value: fmt.Sprint(jit), Note: fmt.Sprintf("of %d", plans)}
 }

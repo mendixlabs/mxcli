@@ -11,11 +11,11 @@ description: "Produce and triage the security review (mxcli report security): wh
 | lines | section |
 |---|---|
 | 32-38 | Run it |
-| 39-60 | Triage a client-callable flow |
-| 61-74 | Unsafe defaults |
-| 75-82 | Live probes (only on a local app, only undone through the app) |
-| 83-106 | Statuses |
-| 107-110 | Related |
+| 39-69 | Triage a client-callable flow |
+| 70-88 | Unsafe defaults |
+| 89-96 | Live probes (only on a local app, only undone through the app) |
+| 97-120 | Statuses |
+| 121-124 | Related |
 
 <!-- /skill-index -->
 # Security Report
@@ -38,17 +38,26 @@ mxcli report security --from docs/security/sec.json --annotations docs/security/
 
 ## Triage a client-callable flow
 
-The page lists every microflow a user role may call that takes a persistent object.
-The client passes that object as a **plain id**. Work through each one:
+The page lists every microflow a user role may call that takes a persistent object,
+one table per entity they take (the riskiest first). The client passes that object
+as a **plain id**. Work through each one:
 
 1. **Does it take the acting user (or "me") as a parameter?** Then any user the
    caller may read can be substituted. Measured on a running app: a subscription was
    created for another user this way. Fix: derive the user in the body
    (`$currentUser`), never take it from the page.
-2. **Does it check the caller in its own body?** (`$currentUser`,
-   `[%CurrentUser%]`) — then it holds, provided the check is on the object it acts on.
-3. **Entity access off and it writes?** Nothing stops a substituted id. Turn entity
-   access on or add the check.
+2. **Does it check the caller?** (`$currentUser`, `[%CurrentUser%]`) In its own body
+   it holds, provided the check is on the object it acts on. In a sub-microflow that
+   works with the same entity, the report names the sub and rates it low: confirm
+   it, because a sub that fetches the caller's *own* cart does not protect a
+   different cart the page passed in. A sub checking the caller on another entity (a
+   toast, a log line) does not count.
+3. **Entity access off and it writes the object it takes** (in the flow or a
+   sub-microflow)? The client can only pass an object its role may read, so the read
+   rule bounds the substitution: high when the granted roles read every row of the
+   entity, medium when the rule narrows it (own rows). Turn entity access on or add
+   the check. Writing a *different* entity (the caller's own cart line) is not this
+   case.
 4. **Relies on access rules?** Then it is as safe as the parameter entity's read
    rule for the granted roles. `all` means any id works.
 
@@ -59,6 +68,11 @@ mode `mx.data.get` is refused. A flow that only receives objects through
 associations of an object it already checks is not exposed the same way.
 
 ## Unsafe defaults
+
+The **Settings and defaults** section lists every security setting and every app
+constant's committed default, also the ones that are fine — a default that looks
+like a secret is masked, never printed. The findings below are the ones it flags.
+What a deployment overrides is not in the model; ask whoever runs the environments.
 
 - **A constant whose default looks like key material** (base64 of 16/32 bytes, hex
   keys, PEM) is committed in git with the model. "Override in every environment" in

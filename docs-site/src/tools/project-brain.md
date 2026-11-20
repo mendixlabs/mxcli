@@ -528,7 +528,7 @@ progress from 65/65 to 63/65 and the number was the only symptom.
 | `brain milestone ["<name>"] [--slice <n>]… [--requirement <id>]… [--clear] [--import <file>]` | Groups slices (or single requirements) into milestones; with no name, lists them |
 | `brain brief --slice <name> \| --module <M>` | The reading pack: exactly the shards that work needs |
 | `brain check [--changed]` | Anchors resolve, entries filed correctly, plus slice progress |
-| `brain list [--slice <n>] [--kind <k>] [--open]` | The committed entries; with `--json`, as data |
+| `brain list [--slice <n>] [--kind decision\|requirement\|question] [--open]` | The committed entries; with `--json`, as data. An open question is listed with kind `question`, not among the decisions |
 | `brain show [<shard>]` | Entries, lines and headroom per shard |
 
 Dropping the last entry from a module shard deletes the file, so the directory

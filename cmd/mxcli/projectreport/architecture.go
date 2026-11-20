@@ -5,6 +5,7 @@ package projectreport
 import (
 	"fmt"
 	"math"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -29,6 +30,11 @@ type ArchitectureOptions struct {
 	// microflows. Project settings are not a source in the refs table, so
 	// without these the after-startup microflow reads as unused.
 	SettingsMicroflows []string
+	// ExcludeDocs are name globs (path.Match against the qualified name, e.g.
+	// "Shop.FaultProbe*", "RestClient.*") for documents to leave out:
+	// generated code, probes and fixtures that would otherwise dominate the
+	// clusters, hubs and unused list (ako/mxcli#2443).
+	ExcludeDocs []string
 }
 
 // ArchitectureData is the collected architecture report.
@@ -51,6 +57,22 @@ type ArchitectureData struct {
 	Bridges                       []Asset     `json:"bridges"`
 	Hotspots                      []Hotspot   `json:"hotspots"`
 	Unused                        []UnusedDoc `json:"unused"`
+	// ExcludeDocs are the patterns given, and ExcludedDocs how many app
+	// documents they matched.
+	ExcludeDocs  []string `json:"excludeDocs,omitempty"`
+	ExcludedDocs int      `json:"excludedDocs,omitempty"`
+}
+
+// docFilter reports whether a qualified name matches one of the patterns.
+type docFilter []string
+
+func (f docFilter) out(name string) bool {
+	for _, p := range f {
+		if ok, _ := path.Match(p, name); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ModuleHealth is one app module's size and coupling.
@@ -156,7 +178,8 @@ func CollectArchitecture(q Querier, opt ArchitectureOptions) (*ArchitectureData,
 	if err != nil {
 		return nil, err
 	}
-	d := &ArchitectureData{Scope: scope, NavigationKinds: NavigationKinds}
+	d := &ArchitectureData{Scope: scope, NavigationKinds: NavigationKinds, ExcludeDocs: opt.ExcludeDocs}
+	excl := docFilter(opt.ExcludeDocs)
 	app := setOf(scope.App)
 	known := setOf(append(append([]string{}, scope.App...), scope.Outside...))
 	nav := setOf(NavigationKinds)
@@ -168,6 +191,9 @@ func CollectArchitecture(q Querier, opt ArchitectureOptions) (*ArchitectureData,
 	}
 	refs := make([]refRow, 0, len(rs))
 	for _, r := range rs {
+		if excl.out(r["SourceName"]) || excl.out(r["TargetName"]) {
+			continue
+		}
 		refs = append(refs, refRow{r["SourceName"], r["SourceType"], r["TargetName"], r["TargetType"], r["RefKind"]})
 	}
 
@@ -308,6 +334,21 @@ func CollectArchitecture(q Querier, opt ArchitectureOptions) (*ArchitectureData,
 		}
 		docs[r["ModuleName"]][r["ObjectType"]] = atoi(r["N"])
 	}
+	if len(excl) > 0 {
+		names, err := rows(q, `SELECT ModuleName, ObjectType, QualifiedName FROM objects
+			WHERE ModuleName != '' AND ObjectType NOT IN ('MODULE', 'ATTRIBUTE', 'ASSOCIATION', 'ENUMERATION_VALUE')`)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range names {
+			if excl.out(r["QualifiedName"]) && docs[r["ModuleName"]] != nil {
+				docs[r["ModuleName"]][r["ObjectType"]]--
+				if app[r["ModuleName"]] {
+					d.ExcludedDocs++
+				}
+			}
+		}
+	}
 	fanIn, fanOut := map[string]map[string]bool{}, map[string]map[string]bool{}
 	for _, e := range d.DomainEdges {
 		if fanOut[e.From] == nil {
@@ -354,37 +395,60 @@ func CollectArchitecture(q Querier, opt ArchitectureOptions) (*ArchitectureData,
 		return d.Modules[i].Name < d.Modules[j].Name
 	})
 
-	if err := collectCommunities(q, d, app); err != nil {
+	if err := collectCommunities(q, d, app, excl); err != nil {
 		return nil, err
 	}
 	appList := sqlList(scope.App)
-	top := fmt.Sprint(opt.Top)
+	// Over-fetch when excluding, so the top list is still full after filtering.
+	top := fmt.Sprint(opt.Top * (1 + 4*min(len(excl), 1)))
 	gn, err := rows(q, `SELECT Asset, COALESCE(ObjectType, '') AS ObjectType, ModuleName, InDegree, OutDegree, Degree,
 		COALESCE(Betweenness, 0) AS Betweenness FROM graph_god_nodes WHERE ModuleName IN (`+appList+`)
 		ORDER BY Degree DESC, Asset LIMIT `+top)
 	if err != nil {
 		return nil, err
 	}
-	d.GodNodes = toAssets(gn)
+	d.GodNodes = trimAssets(toAssets(gn), excl, opt.Top)
 	br, err := rows(q, `SELECT Asset, COALESCE(ObjectType, '') AS ObjectType, ModuleName, InDegree, OutDegree, Degree,
 		COALESCE(Betweenness, 0) AS Betweenness FROM graph_god_nodes WHERE ModuleName IN (`+appList+`)
 		AND COALESCE(Betweenness, 0) > 0 ORDER BY Betweenness DESC, Asset LIMIT `+top)
 	if err != nil {
 		return nil, err
 	}
-	d.Bridges = toAssets(br)
+	d.Bridges = trimAssets(toAssets(br), excl, opt.Top)
 	hs, err := rows(q, `SELECT Entity, UsedByFlows, COALESCE(AcrossModules, '') AS AcrossModules FROM graph_entity_hotspots
 		WHERE substr(Entity, 1, instr(Entity, '.') - 1) IN (`+appList+`) ORDER BY UsedByFlows DESC, Entity LIMIT `+top)
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range hs {
+		if excl.out(r["Entity"]) || len(d.Hotspots) >= opt.Top {
+			continue
+		}
 		d.Hotspots = append(d.Hotspots, Hotspot{Entity: r["Entity"], Flows: atoi(r["UsedByFlows"]), Modules: r["AcrossModules"]})
 	}
 	if d.Unused, err = collectUnused(q, appList, opt.SettingsMicroflows); err != nil {
 		return nil, err
 	}
+	if len(excl) > 0 {
+		kept := d.Unused[:0]
+		for _, u := range d.Unused {
+			if !excl.out(u.Name) {
+				kept = append(kept, u)
+			}
+		}
+		d.Unused = kept
+	}
 	return d, nil
+}
+
+func trimAssets(as []Asset, excl docFilter, top int) []Asset {
+	var out []Asset
+	for _, a := range as {
+		if !excl.out(a.Name) && len(out) < top {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 func toAssets(rs []map[string]string) []Asset {
@@ -419,7 +483,7 @@ func moduleRole(name string, h *ModuleHealth, docs map[string]int) (string, stri
 	return "", ""
 }
 
-func collectCommunities(q Querier, d *ArchitectureData, app map[string]bool) error {
+func collectCommunities(q Querier, d *ArchitectureData, app map[string]bool, excl docFilter) error {
 	rs, err := rows(q, `SELECT c.AssetName, c.ModuleName, c.CommunityId, COALESCE(gc.PageRank, 0) AS PageRank
 		FROM communities c LEFT JOIN graph_centrality_data gc ON gc.AssetName = c.AssetName
 		ORDER BY c.CommunityId, PageRank DESC, c.AssetName`)
@@ -430,7 +494,7 @@ func collectCommunities(q Querier, d *ArchitectureData, app map[string]bool) err
 	byID := map[string]*Community{}
 	var order []string
 	for _, r := range rs {
-		if !app[r["ModuleName"]] {
+		if !app[r["ModuleName"]] || excl.out(r["AssetName"]) {
 			continue
 		}
 		id := r["CommunityId"]
@@ -606,9 +670,9 @@ func RenderArchitecture(env *Envelope, ann *Annotations) (Doc, error) {
 	doc.Stats = []Stat{
 		{Label: "app modules", Value: fmt.Sprint(len(d.Modules)), Note: fmt.Sprintf("%d outside", len(d.Scope.Outside))},
 		{Label: "layers", Value: fmt.Sprint(maxLayer + 1)},
-		{Label: "domain cycles", Value: fmt.Sprint(len(d.Cycles)), Note: fmt.Sprintf("%d modules; %d with navigation counted", modsInCycles, d.ModulesInCyclesWithNavigation)},
+		{Label: "domain cycles", Value: fmt.Sprint(len(d.Cycles)), Status: statusIf(len(d.Cycles) > 0, false), Note: fmt.Sprintf("%d modules; %d with navigation counted", modsInCycles, d.ModulesInCyclesWithNavigation)},
 		{Label: "clusters", Value: fmt.Sprint(len(d.Communities))},
-		{Label: "unused documents", Value: fmt.Sprint(len(d.Unused)), Note: fmt.Sprintf("%d to verify", verify)},
+		{Label: "unused documents", Value: fmt.Sprint(len(d.Unused)), Note: fmt.Sprintf("%d to verify", verify), Status: statusIf(false, verify > 0)},
 	}
 
 	// 1. Map.
@@ -634,6 +698,12 @@ func RenderArchitecture(env *Envelope, ann *Annotations) (Doc, error) {
 			Figure{SVG: layeredMapSVG(d.Modules, d.DomainEdges), Caption: "Domain dependencies between app modules, highest layer at the top.",
 				Fallback: strings.Join(layersMD, "  \n")},
 		}})
+
+	if len(d.ExcludeDocs) > 0 {
+		doc.Sections[0].Blocks = append([]Block{Callout{Kind: "info", Text: fmt.Sprintf(
+			"%d app documents matching %s are left out of every figure on this page (`--exclude-docs`).",
+			d.ExcludedDocs, strings.Join(codeList(d.ExcludeDocs), ", "))}}, doc.Sections[0].Blocks...)
+	}
 
 	// 2. Health.
 	ht := Table{Columns: []string{"Module", "Purpose", "Layer", "Documents", "Internal refs", "Outbound", "Inbound", "Cohesion", "Fan-in", "Fan-out", "Role / note"}}
@@ -664,6 +734,20 @@ func RenderArchitecture(env *Envelope, ann *Annotations) (Doc, error) {
 		ht.Rows = append(ht.Rows, []string{m.Name, m.Purpose, fmt.Sprint(m.Layer), fmt.Sprint(m.Documents), fmt.Sprint(m.Internal),
 			fmt.Sprint(m.ExternalOut), fmt.Sprint(m.ExternalIn), coh, fmt.Sprint(m.FanIn), fmt.Sprint(m.FanOut), note})
 		ht.Classes = append(ht.Classes, []string{"", "", "num", "num", "num", "num", "num", cls, "num", "num", ""})
+		var bar *Bar
+		if m.Cohesion >= 0 {
+			st := ""
+			switch cls {
+			case "warn":
+				st = "warn"
+			case "num":
+				if m.Cohesion >= 60 {
+					st = "good"
+				}
+			}
+			bar = &Bar{Pct: m.Cohesion, Status: st}
+		}
+		ht.Bars = append(ht.Bars, []*Bar{nil, nil, nil, nil, nil, nil, nil, bar, nil, nil, nil})
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "health", Title: "Module health",
 		Intro:  "Purpose is the module's documentation (`alter module <Name> set documentation '…'`). Low cohesion is flagged only where nothing explains it. A shell, an admin UI or an adapter is low-cohesion by design; annotate `module:<Name>` to explain another.",
@@ -732,9 +816,21 @@ func RenderArchitecture(env *Envelope, ann *Annotations) (Doc, error) {
 
 	// 9. Unused.
 	ut := Table{Columns: []string{"Document", "Type", "Verdict", "Why"}}
+	// The key is the qualified name. A key without the module
+	// (`unused:FaultProbe`) silently matched nothing (ako/mxcli#2443); it
+	// applies when one unused document has that name, and is ambiguous
+	// otherwise, so it is left to show as an annotation that matched nothing.
+	shortCount := map[string]int{}
+	for _, u := range d.Unused {
+		shortCount[shortName(u.Name)]++
+	}
 	for _, u := range d.Unused {
 		verdict, why := u.Verdict, u.Reason
-		if n, ok := ann.Get("unused:" + u.Name); ok {
+		n, ok := ann.Get("unused:" + u.Name)
+		if !ok && shortCount[shortName(u.Name)] == 1 {
+			n, ok = ann.Get("unused:" + shortName(u.Name))
+		}
+		if ok {
 			verdict, why = nonEmpty(n.Status, verdict), joinNote("", n.Note, why)
 		}
 		cls := map[string]string{"unused": "warn", "verify": "info", "used": "ok"}[verdict]
@@ -742,7 +838,7 @@ func RenderArchitecture(env *Envelope, ann *Annotations) (Doc, error) {
 		ut.Classes = append(ut.Classes, []string{"", "", cls, ""})
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "unused", Title: "Unused documents",
-		Intro: "Documents of a kind that should be referenced if used, with no inbound reference. \"verify\" means the graph cannot see the way it may be used; check before deleting. Annotate `unused:<Name>`.", Blocks: []Block{ut}})
+		Intro: "Documents of a kind that should be referenced if used, with no inbound reference. \"verify\" means the graph cannot see the way it may be used; check before deleting. Annotate `unused:<Module.Name>` (the module may be left out when the name is unique).", Blocks: []Block{ut}})
 
 	return Frame(env, ann, doc), nil
 }
@@ -798,7 +894,7 @@ func contextsSection(d ArchitectureData, ann *Annotations) Section {
 		t.Rows = append(t.Rows, row)
 		t.Heat = append(t.Heat, append(heat, 0))
 	}
-	s.Blocks = append(s.Blocks, t)
+	s.Blocks = append(s.Blocks, contextComposition(d, ann, mods), t)
 	var split []string
 	for _, m := range mods {
 		if spread[m] > 1 {
@@ -888,4 +984,54 @@ func joinNote(status, note, derived string) string {
 		s += " (" + derived + ")"
 	}
 	return s
+}
+
+// contextComposition draws each cluster as one bar split by the modules its
+// documents come from: a cluster that is one colour is one module's context,
+// one of many colours spans modules (ako/mxcli#2443). The modules with the
+// most clustered documents get their own colour, the rest share "other".
+func contextComposition(d ArchitectureData, ann *Annotations, mods []string) Stacked {
+	totals := map[string]int{}
+	for _, c := range d.Communities {
+		for _, mc := range c.Modules {
+			totals[mc.Module] += mc.Count
+		}
+	}
+	ranked := append([]string(nil), mods...)
+	sort.SliceStable(ranked, func(i, j int) bool { return totals[ranked[i]] > totals[ranked[j]] })
+	const slots = 7
+	slot := map[string]int{}
+	var legend []StackKey
+	for i, m := range ranked {
+		if i >= slots || totals[m] == 0 {
+			break
+		}
+		slot[m] = len(legend)
+		legend = append(legend, StackKey{Label: m, Color: fmt.Sprintf("s%d", len(legend)+1)})
+	}
+	other := -1
+	for _, m := range ranked {
+		if _, ok := slot[m]; !ok && totals[m] > 0 {
+			other = len(legend)
+			legend = append(legend, StackKey{Label: "other modules", Color: "none"})
+			break
+		}
+	}
+	st := Stacked{Caption: "What each cluster is made of", Legend: legend}
+	for _, c := range d.Communities {
+		label := c.Label
+		if n, ok := ann.Get(c.Key); ok {
+			label = nonEmpty(n.Name, label)
+		}
+		parts := make([]int, len(legend))
+		for _, mc := range c.Modules {
+			if i, ok := slot[mc.Module]; ok {
+				parts[i] += mc.Count
+			} else if other >= 0 {
+				parts[other] += mc.Count
+			}
+		}
+		st.Rows = append(st.Rows, StackRow{Label: label, Parts: parts, Value: fmt.Sprintf("%d documents", c.Size)})
+	}
+	return st
 }

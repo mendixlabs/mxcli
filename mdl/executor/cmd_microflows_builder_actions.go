@@ -96,7 +96,10 @@ func (fb *flowBuilder) addChangeVariableAction(s *ast.MfSetStmt) model.ID {
 	fb.objects = append(fb.objects, activity)
 	fb.posX += fb.spacing
 
-	fb.finishCustomErrorHandler(activity.ID, activityX, s.ErrorHandling, s.Target)
+	// No skip variable: this activity changes a variable that already exists,
+	// so it is still there on the error path and nothing after it needs
+	// skipping — the handler rejoins right after it (ako/mxcli#2421).
+	fb.finishCustomErrorHandler(activity.ID, activityX, s.ErrorHandling, "")
 
 	return activity.ID
 }
@@ -430,7 +433,10 @@ func (fb *flowBuilder) addChangeObjectAction(s *ast.ChangeObjectStmt) model.ID {
 	fb.objects = append(fb.objects, activity)
 	fb.posX += fb.spacing
 
-	fb.finishCustomErrorHandler(activity.ID, activityX, s.ErrorHandling, s.Variable)
+	// No skip variable: this activity changes a variable that already exists,
+	// so it is still there on the error path and nothing after it needs
+	// skipping — the handler rejoins right after it (ako/mxcli#2421).
+	fb.finishCustomErrorHandler(activity.ID, activityX, s.ErrorHandling, "")
 
 	return activity.ID
 }
@@ -2492,7 +2498,10 @@ func (fb *flowBuilder) addClearListAction(s *ast.ClearListStmt) model.ID {
 func (fb *flowBuilder) addReplaceListAction(s *ast.MfSetStmt) model.ID {
 	activityX := fb.posX
 	id := fb.addChangeListAction(microflows.ChangeListTypeSet, s.Target, fb.exprToString(s.Value), s.ErrorHandling)
-	fb.finishCustomErrorHandler(id, activityX, s.ErrorHandling, s.Target)
+	// No skip variable: this activity changes a variable that already exists,
+	// so it is still there on the error path and nothing after it needs
+	// skipping — the handler rejoins right after it (ako/mxcli#2421).
+	fb.finishCustomErrorHandler(id, activityX, s.ErrorHandling, "")
 	return id
 }
 

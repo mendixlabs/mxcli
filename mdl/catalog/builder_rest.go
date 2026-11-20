@@ -17,9 +17,9 @@ func (b *Builder) buildRestClients() error {
 
 	svcStmt, err := b.tx.Prepare(`
 		INSERT INTO rest_clients_data (Id, Name, QualifiedName, ModuleName, Folder,
-			BaseUrl, AuthScheme, OperationCount, Documentation,
+			BaseUrl, BaseUrlConstant, AuthScheme, OperationCount, Documentation,
 			ProjectId, SnapshotId)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -60,6 +60,7 @@ func (b *Builder) buildRestClients() error {
 			moduleName,
 			b.hierarchy.buildFolderPath(svc.ContainerID), // real folder path (Bug 12b class)
 			svc.BaseUrl,
+			svc.BaseUrlConstant,
 			authScheme,
 			len(svc.Operations),
 			svc.Documentation,
@@ -138,8 +139,8 @@ func (b *Builder) buildPublishedRestServices() error {
 	svcStmt, err := b.tx.Prepare(`
 		INSERT INTO published_rest_services_data (Id, Name, QualifiedName, ModuleName, Folder,
 			Path, Version, ServiceName, ResourceCount, OperationCount, Documentation,
-			ProjectId, SnapshotId)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			AuthenticationTypes, ProjectId, SnapshotId)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -191,6 +192,7 @@ func (b *Builder) buildPublishedRestServices() error {
 			len(svc.Resources),
 			opCount,
 			svc.Documentation, // was always "", so QUAL002 could never close (mendixlabs/mxcli#1510)
+			strings.Join(svc.AuthenticationTypes, ", "),
 			projectID, snapshotID,
 		)
 		if err != nil {

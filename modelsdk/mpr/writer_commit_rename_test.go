@@ -94,8 +94,8 @@ func hashOf(b []byte) string {
 func unitDoc(t *testing.T, name string) []byte {
 	t.Helper()
 	b, err := bson.Marshal(bson.D{
-		{Key: "$Type", Value: "Projects$Folder"},
 		{Key: "$ID", Value: bson.Binary{Subtype: 0x00, Data: uuidToBlob("11111111-1111-1111-1111-111111111111")}},
+		{Key: "$Type", Value: "Projects$Folder"},
 		{Key: "Name", Value: name},
 	})
 	if err != nil {

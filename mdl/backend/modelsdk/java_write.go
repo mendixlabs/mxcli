@@ -13,6 +13,7 @@ import (
 	"github.com/mendixlabs/mxcli/modelsdk/element"
 	genCa "github.com/mendixlabs/mxcli/modelsdk/gen/codeactions"
 	genJa "github.com/mendixlabs/mxcli/modelsdk/gen/javaactions"
+	genJsa "github.com/mendixlabs/mxcli/modelsdk/gen/javascriptactions"
 	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
 	"github.com/mendixlabs/mxcli/sdk/javaactions"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -389,6 +390,17 @@ func codeActionParamTypeToGen(t javaactions.CodeActionParameterType) element.Ele
 		}
 		assignID(m)
 		return m
+	case *javaactions.NanoflowType:
+		// A JavaScript action's Nanoflow parameter, stored directly as Studio
+		// Pro stores it (the reader maps it back to NanoflowType). It fell to
+		// the default below and was written as a String, so no call could
+		// pass it a nanoflow (ako/mxcli#2450).
+		n := genJsa.NewNanoflowJavaScriptActionParameterType()
+		if v.ID != "" {
+			n.SetID(element.ID(v.ID))
+		}
+		assignID(n)
+		return n
 	default:
 		b := genCa.NewBasicParameterType()
 		assignID(b)

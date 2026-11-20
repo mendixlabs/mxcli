@@ -502,10 +502,10 @@ func RenderTraceability(env *Envelope, ann *Annotations) (Doc, error) {
 	doc := Doc{Title: "Requirements traceability", Subtitle: "Each requirement: built, partial or changed, what implements it and what proves it"}
 	doc.Stats = []Stat{
 		{Label: "requirements", Value: fmt.Sprint(total)},
-		{Label: "built", Value: fmt.Sprint(count[StatusBuilt]), Note: pct(count[StatusBuilt], total)},
+		{Label: "built", Value: fmt.Sprint(count[StatusBuilt]), Note: pct(count[StatusBuilt], total), Status: statusIf(false, count[StatusBuilt] < total)},
 		{Label: "partial / changed", Value: fmt.Sprintf("%d / %d", count[StatusPartial], count[StatusChanged])},
-		{Label: "not built / not traceable", Value: fmt.Sprintf("%d / %d", count[StatusNotBuilt], count[StatusNotTraceable])},
-		{Label: "built but untested", Value: fmt.Sprint(len(untested))},
+		{Label: "not built / not traceable", Value: fmt.Sprintf("%d / %d", count[StatusNotBuilt], count[StatusNotTraceable]), Status: statusIf(count[StatusNotBuilt] > 0, count[StatusNotTraceable] > 0)},
+		{Label: "built but untested", Value: fmt.Sprint(len(untested)), Status: statusIf(false, len(untested) > 0)},
 	}
 	var pre []Block
 	if d.ModelAbsent {
@@ -519,6 +519,12 @@ func RenderTraceability(env *Envelope, ann *Annotations) (Doc, error) {
 	}
 	if len(pre) > 0 {
 		doc.Sections = append(doc.Sections, Section{ID: "inputs", Title: "Inputs", Blocks: pre})
+	}
+	doc.Sections = append(doc.Sections, traceGlance(d))
+	if all := everyRequirement(d); len(all.Rows) > 0 {
+		doc.Sections = append(doc.Sections, Section{ID: "all", Title: "Every requirement",
+			Intro:  "One row per requirement, across milestones and epics, with what proves it. The sections after it give each milestone's requirements in full: what implements them, the decisions and the open questions.",
+			Blocks: []Block{all}})
 	}
 	for i, m := range d.Milestones {
 		t := Table{Columns: []string{"Requirement", "Status", "Implemented by", "Tests", "Journeys", "Decisions", "Open questions"}}
@@ -557,6 +563,58 @@ func RenderTraceability(env *Envelope, ann *Annotations) (Doc, error) {
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "gap-questions", Title: "Open questions that affect a requirement", Blocks: []Block{bulletsOrNone(qs)}})
 	return Frame(env, ann, doc), nil
+}
+
+// traceGlance is the page's overview (ako/mxcli#2443): per milestone and per
+// slice (an epic), how many requirements are built and proven, built but not
+// reached by a test or journey, partly built or changed, or not built.
+func traceGlance(d TraceabilityData) Section {
+	legend := []StackKey{{"built, proven", "good"}, {"built, untested", "s1"}, {"partial or changed", "warn"}, {"not built or not traceable", "bad"}}
+	bucket := func(r TraceRequirement) int {
+		switch r.Status {
+		case StatusBuilt:
+			if len(r.Tests)+len(r.Journeys) > 0 {
+				return 0
+			}
+			return 1
+		case StatusPartial, StatusChanged:
+			return 2
+		}
+		return 3
+	}
+	row := func(label string, rs []TraceRequirement) StackRow {
+		parts := make([]int, 4)
+		for _, r := range rs {
+			parts[bucket(r)]++
+		}
+		return StackRow{Label: label, Parts: parts, Value: fmt.Sprintf("%d/%d built", parts[0]+parts[1], len(rs))}
+	}
+	ms := Stacked{Caption: "Per milestone", Legend: legend}
+	bySlice := map[string][]TraceRequirement{}
+	var slices []string
+	for _, m := range d.Milestones {
+		ms.Rows = append(ms.Rows, row(m.Name, m.Requirements))
+		for _, r := range m.Requirements {
+			if _, ok := bySlice[r.Slice]; !ok {
+				slices = append(slices, r.Slice)
+			}
+			bySlice[r.Slice] = append(bySlice[r.Slice], r)
+		}
+	}
+	sort.Strings(slices)
+	ep := Stacked{Caption: "Per epic (plan slice)", Legend: legend}
+	for _, sl := range slices {
+		ep.Rows = append(ep.Rows, row(sl, bySlice[sl]))
+	}
+	blocks := []Block{ms}
+	if len(slices) > 1 && len(slices) != len(d.Milestones) {
+		blocks = append(blocks, ep)
+	}
+	intro := "Proven means a microflow test or a browser journey reaches what implements it."
+	if !d.HasTests && !d.HasJourneys {
+		intro = "No tests or journeys were read, so nothing counts as proven yet."
+	}
+	return Section{ID: "glance", Title: "At a glance", Intro: intro, Blocks: blocks}
 }
 
 func proofClass(r TraceRequirement) string {
@@ -603,4 +661,36 @@ func testsClass(r TraceRequirement) string {
 		}
 	}
 	return proofClass(r)
+}
+
+// everyRequirement is one table of every requirement (ako/mxcli#2443), short
+// enough to scan: where it sits, its status and what proves it.
+func everyRequirement(d TraceabilityData) Table {
+	t := Table{Columns: []string{"Requirement", "Status", "Proven by"}}
+	for _, m := range d.Milestones {
+		for _, r := range m.Requirements {
+			var proof []string
+			if n := len(r.Tests); n > 0 {
+				proof = append(proof, count(n, "test", "tests"))
+			}
+			if n := len(r.Journeys); n > 0 {
+				proof = append(proof, count(n, "journey", "journeys"))
+			}
+			p := strings.Join(proof, ", ")
+			switch {
+			case p != "":
+			case len(r.Footprint) == 0 && (r.Status == StatusBuilt || r.Status == StatusPartial || r.Status == StatusChanged):
+				// Nothing implements it in a microflow (UI only), so no test or
+				// journey can be seen to reach it: say so, rather than leave a
+				// plain "nothing" beside the highlighted ones.
+				p = "nothing to reach (no microflow implements it)"
+			default:
+				p = "nothing"
+			}
+			t.Rows = append(t.Rows, []string{fmt.Sprintf("`%s` %s", r.ID, r.Title), r.Status, p})
+			t.Classes = append(t.Classes, []string{"", statusClass(r.Status), proofClass(r)})
+			t.Groups = append(t.Groups, m.Name+" · "+nonEmpty(r.Slice, "no epic"))
+		}
+	}
+	return t
 }

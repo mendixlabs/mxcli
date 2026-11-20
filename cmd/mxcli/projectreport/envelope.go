@@ -110,6 +110,12 @@ type Note struct {
 	Name   string `json:"name,omitempty" yaml:"name,omitempty"`
 	Status string `json:"status,omitempty" yaml:"status,omitempty"`
 	Note   string `json:"note,omitempty" yaml:"note,omitempty"`
+	// Finding ties an item to a finding (`finding:<ID>`) that explains it:
+	// a performance step the finding's fix targets (ako/mxcli#2443).
+	Finding string `json:"finding,omitempty" yaml:"finding,omitempty"`
+	// Scope says what a finding is about when it is not a step: "background"
+	// for work no journey step runs (a scheduled job, a traffic generator).
+	Scope string `json:"scope,omitempty" yaml:"scope,omitempty"`
 }
 
 // LoadAnnotations reads a JSON or YAML annotations file. An empty path is no
@@ -210,6 +216,8 @@ func Frame(env *Envelope, ann *Annotations, d Doc) Doc {
 			Intro:  "These keys are in the annotations file but name nothing on this page. The item was renamed, fixed or removed — update or drop the entry.",
 			Blocks: []Block{Bullets{Items: codeList(unused)}}})
 	}
+	d.Project, d.Kind, d.Generated, d.Mxcli = env.Project, KindLabel(env.Kind), env.Generated, env.Mxcli
+	d.Description = d.Subtitle
 	sub := fmt.Sprintf("%s · generated %s", env.Project, env.Generated)
 	if env.Mxcli != "" {
 		sub += " · mxcli " + env.Mxcli
@@ -219,6 +227,20 @@ func Frame(env *Envelope, ann *Annotations, d Doc) Doc {
 	}
 	d.Subtitle = sub
 	return d
+}
+
+// KindLabel is a report kind as the page names it.
+func KindLabel(kind string) string {
+	switch kind {
+	case "", "quality":
+		return "Quality score"
+	case "tests":
+		return "Tests"
+	case "map":
+		return "Software map"
+	default:
+		return strings.ToUpper(kind[:1]) + kind[1:]
+	}
 }
 
 // Render writes the framed document in the given format ("markdown" or "html").
