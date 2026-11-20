@@ -40,7 +40,9 @@ Scripts are applied only with --apply. Without it they are checked and not
 applied, so lint and mxcheck describe the project WITHOUT them, and the result
 says so. With --apply a failed check writes nothing and skips everything after it,
 and a script exec refuses skips lint and mxcheck (they would judge a project
-without the change). Several scripts are checked as one ordered set, as
+without the change). A stage that fails AFTER exec leaves the applied change in the
+project: the result then says the scripts were applied, and the undo is yours (git).
+Several scripts are checked as one ordered set, as
 "mxcli check" does, and applied in order; exec is not transactional across files,
 so a failure part-way leaves the earlier ones applied, and the finding says how far
 it got.
