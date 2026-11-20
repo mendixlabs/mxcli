@@ -25,9 +25,15 @@ func WriteJSON(w io.Writer, r Result) error {
 func WriteText(w io.Writer, r Result, failOn string) {
 	opts := Options{FailOn: failOn}
 	fmt.Fprintf(w, "verify %s\n", r.Project)
+	for _, n := range r.Notes {
+		fmt.Fprintf(w, "  note: %s\n", n)
+	}
 	below := 0
 	var quietStages []string
 	for _, s := range r.Stages {
+		if s.Status == StatusSkipped && s.Note == notSelectedNote {
+			continue // the JSON keeps it; a text line per stage nobody asked for is noise
+		}
 		listed, quiet := splitByThreshold(s.New, opts)
 		fmt.Fprintf(w, "  %-8s %-8s %s\n", s.Name, strings.ToUpper(s.Status), summary(s, len(quiet), countBySeverity(quiet)))
 		for _, f := range listed {

@@ -411,11 +411,22 @@ type Stage interface {
    baseline directory moved from `.mxcli/verify` to `verify-baseline/` because
    `mxcli init` git-ignores `.mxcli/`; an ignored baseline is lost on the next fresh
    clone or reaped session.
-4. **`--apply` and `--through`, with the `exec` stage** (next). `check` →
+4. **`--apply` and `--through`, with the `exec` stage** (implemented). `check` →
    `exec` → `lint` → `mxcheck` in one call, the dependency rule above, the
    `applied` field and the "script not applied" note. The note and the `applied`
    field also ship for scripts given without `--apply`, since that misreading
    exists today. This is the step that cuts the call count.
+   Built as designed, with three details the design did not settle. `exec` takes a
+   single file, so several scripts run one `exec` per file in order and stop at the
+   first failure (the finding says how many were applied before it). `check` writes
+   JSON for one script only, so several scripts are checked as one ordered set and
+   a failing set is one finding carrying `check`'s cleaned text, which keeps the
+   set's all-or-nothing pre-flight at the cost of per-violation findings (a
+   follow-up could extend `check --format json` to a set). The text output omits
+   stages that were not selected (the JSON keeps them). Checked on real MxBuild
+   11.16.1: `--apply good.mdl` runs all four stages in 11 s; a failing script
+   leaves the project byte-identical and skips the rest (exit 17); a good-plus-bad
+   set writes nothing; `--through exec` takes under a second.
 5. **`test` stage and the `report` summary line**, both reached only by
    `--through test` / `--through report` or `--stages`.
 6. **`--base <git ref>`** via scratch export.
