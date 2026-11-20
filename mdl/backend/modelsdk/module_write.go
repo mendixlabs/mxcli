@@ -23,9 +23,15 @@ func init() {
 	codec.RegisterTypeDefaults("DomainModels$DomainModel", codec.TypeDefaults{
 		MandatoryLists: []string{"Annotations", "Entities", "Associations", "CrossAssociations"},
 	})
+	// ModuleRoles holds the module roles themselves (parts), not references to
+	// them, so it is marker 3 like every part list, empty or not: 8/8 in a
+	// Studio Pro-made project. Marker 1 (the by-name lists, e.g.
+	// UserRole.ModuleRoles) made Studio Pro rewrite the unit on first open
+	// (ako/mxcli#2467). Registered per owner/key, so a stored 1 is corrected too.
 	codec.RegisterTypeDefaults("Security$ModuleSecurity", codec.TypeDefaults{
-		MandatoryListMarkers: map[string]int32{"ModuleRoles": 1}, // by-name role list
+		MandatoryListMarkers: map[string]int32{"ModuleRoles": 3},
 	})
+	codec.RegisterPropertyListMarker("Security$ModuleSecurity", "ModuleRoles", 3)
 	codec.RegisterTypeDefaults("Projects$ModuleSettings", codec.TypeDefaults{
 		MandatoryListMarkers: map[string]int32{"JarDependencies": 2},
 	})
