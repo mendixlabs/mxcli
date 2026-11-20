@@ -11,8 +11,9 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/linter"
 )
 
-// ValidateAlterFlow runs the annotation rules (MDL059, MDL060, MDL079, MDL092)
-// over the fragments an `alter microflow|nanoflow` inserts or replaces.
+// ValidateAlterFlow runs the annotation rules (MDL059, MDL060, MDL079, MDL092),
+// the template rules and the duplicate-name rule (MDL063) over the fragments an
+// `alter microflow|nanoflow` inserts or replaces.
 //
 // A fragment is built by the same flowBuilder as a create body, which drops an
 // annotation it cannot read — the visitor records why, and only the validator
@@ -21,9 +22,10 @@ import (
 // microflow") and no note was written, while the same line in `create or
 // modify` was refused (mendixlabs/mxcli#1597).
 //
-// Only the annotation rules: the rest of the microflow rule set reads the whole
-// flow — its parameters, its declares, what a later statement uses — and a
-// fragment is a piece of a stored flow that this pass cannot see.
+// Only the rules a fragment can answer alone: the rest of the microflow rule
+// set reads the whole flow — its parameters, its declares, what a later
+// statement uses — and a fragment is a piece of a stored flow that this pass
+// cannot see.
 //
 // The note labels are checked per fragment, as each fragment's builder keeps
 // them: an `@annotation(id: n1)` no earlier mention in the fragment declares
@@ -38,6 +40,12 @@ func ValidateAlterFlow(s *ast.AlterFlowStmt) []linter.Violation {
 		// is (MDL-TEMPLATE01, ako/mxcli#1683).
 		v.checkMessageTemplates(op.Body)
 		v.checkTemplateGrammar(op.Body) // MDL-TEMPLATE02, ako/mxcli#1397
+		// A name defined twice inside one fragment is CE0111 whatever the
+		// stored flow holds, the namespace being flat: MDL063 needs nothing
+		// from the flow for that. A COUNT into a variable the same loop body
+		// declared passed check and exec (mendixlabs/mxcli#1914). A clash with
+		// a stored activity is exec's refusal (checkBodyUnclashed).
+		v.checkDuplicateVariableNames(nil, op.Body)
 	}
 	return v.violations
 }
