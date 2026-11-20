@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`check` reports a REST call's binary body that is not Binary** (ako/mxcli#2409, mendixlabs/mxcli#1897) — `Body: BINARY $File` with a FileDocument object, a String literal or a String member passed check and failed the build with CE0117. It is now reported, and for an object the fix names `$File/Contents`.
 - **`check` reports a variable defined twice inside an `alter microflow` fragment** (ako/mxcli#2478, mendixlabs/mxcli#1914) — a replaced loop body that declared `$N` and then made it a `count()` output passed check and exec, and the build failed with CE0111. MDL063 now runs over each fragment, as it does over a `create` body.
 - **`mxcli test` without a Docker daemon leaves the project untouched** (ako/mxcli#2474) — a run without `--local` where no daemon runs failed at `docker compose up`, after it had generated a `.docker/` stack and built into it. It now asks the daemon first and stops with the `--local` hint before writing anything.
 - **`mxcli new` says the first Studio Pro open may convert the project** (ako/mxcli#2467) — the template `mx create-project` ships can be one conversion behind the Studio Pro of the same version (11.16.1 adds `UseMeToSetupNodeConversion` and a `SetupSettings` unit `mx` never writes), so a fresh project prompts for a conversion on first open. `mxcli new` and the quickstart now say so, and to commit that conversion on its own.

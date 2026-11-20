@@ -2,7 +2,11 @@
 
 package exprcheck
 
-import "github.com/mendixlabs/mxcli/mdl/exprcheck/hints"
+import (
+	"strings"
+
+	"github.com/mendixlabs/mxcli/mdl/exprcheck/hints"
+)
 
 // checkTargetKind compares an expression with the declared type of the variable
 // it initialises, the variable it is assigned to, or the flow it is returned from.
@@ -27,6 +31,14 @@ import "github.com/mendixlabs/mxcli/mdl/exprcheck/hints"
 // stays unreported here exactly as it does for a call argument.
 func checkTargetKind(expr RobustExpr, ctx Context) []Hint {
 	want := ctx.Target
+	if want == KindBinary {
+		// Measured for a REST call's binary body only; a Binary declare, set
+		// or return is not, so it stays silent like every other non-primitive.
+		if base, _ := splitSlotQual(ctx.SlotPath); base == BinaryBodySlot {
+			return checkBinaryTarget(expr, ctx)
+		}
+		return nil
+	}
 	if !primitiveKind(want) {
 		return nil
 	}
@@ -86,4 +98,49 @@ func coveredByDecimalIntoInteger(expr RobustExpr, ctx Context, want, got TypeKin
 		return known
 	}
 	return false
+}
+
+// BinaryBodySlot is the slot of a REST call's binary request body.
+const BinaryBodySlot = "RestCall.BinaryBody"
+
+// checkBinaryTarget is checkTargetKind for a position that takes the bytes of a
+// Binary expression: a REST call's binary body (mendixlabs/mxcli#1897).
+// Measured on 11.12.6, one microflow each: a FileDocument's or Image's Contents
+// and `empty` build; the object itself, a String literal and a String member
+// are CE0117. So anything of known kind but Binary is reported, and an object
+// is told to name its Contents member.
+func checkBinaryTarget(expr RobustExpr, ctx Context) []Hint {
+	got := argKind(expr, ctx)
+	switch got {
+	case KindBinary, KindEmpty, KindUnknown, KindAny:
+		return nil
+	}
+	gotName := typeKindName(got)
+	fix := "Write an expression of type Binary: the Contents member of a FileDocument or Image."
+	if got == KindObject {
+		gotName = "object"
+		if v, ok := unwrapParens(expr).(*VariableExpr); ok {
+			fix = "Send the file's bytes: write $" + strings.TrimPrefix(v.Name, "$") + "/Contents."
+		}
+	}
+	where := hintsLocation(ctx, expr.Pos())
+	where.Context = "binary request body"
+	return []Hint{{
+		Code:     "E009",
+		Slug:     "slot-type-mismatch",
+		Severity: hints.SeverityError,
+		Where:    where,
+		YouWrote: "<" + gotName + ">",
+		Problem: "A binary body sends the bytes of a Binary expression, but this is " +
+			binaryArticle(gotName) + "; mxbuild rejects it with CE0117 \"Error(s) in expression\".",
+		Fix: fix,
+	}}
+}
+
+// binaryArticle is withArticle, which knows the type names, extended to "object".
+func binaryArticle(name string) string {
+	if name == "object" {
+		return "an object"
+	}
+	return withArticle(name)
 }
