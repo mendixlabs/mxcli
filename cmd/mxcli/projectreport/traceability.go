@@ -521,6 +521,11 @@ func RenderTraceability(env *Envelope, ann *Annotations) (Doc, error) {
 		doc.Sections = append(doc.Sections, Section{ID: "inputs", Title: "Inputs", Blocks: pre})
 	}
 	doc.Sections = append(doc.Sections, traceGlance(d))
+	if all := everyRequirement(d); len(all.Rows) > 0 {
+		doc.Sections = append(doc.Sections, Section{ID: "all", Title: "Every requirement",
+			Intro:  "One row per requirement, across milestones and epics, with what proves it. The sections after it give each milestone's requirements in full: what implements them, the decisions and the open questions.",
+			Blocks: []Block{all}})
+	}
 	for i, m := range d.Milestones {
 		t := Table{Columns: []string{"Requirement", "Status", "Implemented by", "Tests", "Journeys", "Decisions", "Open questions"}}
 		for _, r := range m.Requirements {
@@ -656,4 +661,28 @@ func testsClass(r TraceRequirement) string {
 		}
 	}
 	return proofClass(r)
+}
+
+// everyRequirement is one table of every requirement (ako/mxcli#2443), short
+// enough to scan: where it sits, its status and what proves it.
+func everyRequirement(d TraceabilityData) Table {
+	t := Table{Columns: []string{"Milestone", "Epic", "Requirement", "Status", "Proven by"}}
+	for _, m := range d.Milestones {
+		for _, r := range m.Requirements {
+			var proof []string
+			if n := len(r.Tests); n > 0 {
+				proof = append(proof, count(n, "test", "tests"))
+			}
+			if n := len(r.Journeys); n > 0 {
+				proof = append(proof, count(n, "journey", "journeys"))
+			}
+			p := strings.Join(proof, ", ")
+			if p == "" {
+				p = "nothing"
+			}
+			t.Rows = append(t.Rows, []string{m.Name, r.Slice, fmt.Sprintf("`%s` %s", r.ID, r.Title), r.Status, p})
+			t.Classes = append(t.Classes, []string{"", "", "", statusClass(r.Status), proofClass(r)})
+		}
+	}
+	return t
 }

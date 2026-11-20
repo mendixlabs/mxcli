@@ -136,7 +136,9 @@ func TestTraceabilityGlanceAndTileStatus(t *testing.T) {
 	}
 	var md bytes.Buffer
 	_ = RenderMarkdown(&md, doc)
-	mustContain(t, md.String(), "## At a glance", "| M1 | 1 | 1 | 1 | 0 | 2/3 built |", "| M2 | 0 | 0 | 0 | 1 | 0/1 built |", "| 02-orders | 0 | 0 | 1 | 0 | 0/1 built |")
+	mustContain(t, md.String(), "## At a glance", "| M1 | 1 | 1 | 1 | 0 | 2/3 built |", "| M2 | 0 | 0 | 0 | 1 | 0/1 built |", "| 02-orders | 0 | 0 | 1 | 0 | 0/1 built |",
+		// one table of every requirement, across milestones (ako/mxcli#2443)
+		"## Every requirement", "| M1 | 01-accounts | `a`  | built | 1 test |", "| M2 | 03-pay | `d`  | not built | nothing |")
 	h := htmlOf(t, doc)
 	if !strings.Contains(h, `<div class="kpi warn"><span class="v">2</span><span class="l">built</span>`) {
 		t.Error("the built tile is warn while not every requirement is built")
