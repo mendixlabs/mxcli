@@ -2176,8 +2176,8 @@ func microflowSettingsToGen(microflowName string, mappings []*pages.MicroflowPar
 	s.SetFormValidations(orDefaultStr(settings.FormValidations, "All"))
 	s.SetMicroflowQualifiedName(microflowName)
 	s.SetProgressBar(progressBarOrNone(settings.ProgressBar))
-	if settings.ProgressMessage != nil {
-		s.SetProgressMessage(textToGen(settings.ProgressMessage))
+	if msg := progressMessageFor(settings.ProgressBar, settings.ProgressMessage); msg != nil {
+		s.SetProgressMessage(textToGen(msg))
 	}
 	if settings.Confirmation != nil {
 		s.SetConfirmationInfo(confirmationInfoToGen(settings.Confirmation))
@@ -2527,8 +2527,8 @@ func clientActionToGen(a pages.ClientAction) (element.Element, error) {
 		g.SetDisabledDuringExecution(actionDisabledDuringExecution(x.ActionExecution))
 		g.SetNanoflowQualifiedName(x.NanoflowName)
 		g.SetProgressBar(progressBarOrNone(x.ProgressBar))
-		if x.ProgressMessage != nil {
-			g.SetProgressMessage(textToGen(x.ProgressMessage))
+		if msg := progressMessageFor(x.ProgressBar, x.ProgressMessage); msg != nil {
+			g.SetProgressMessage(textToGen(msg))
 		}
 		if x.Confirmation != nil {
 			g.SetConfirmationInfo(confirmationInfoToGen(x.Confirmation))
@@ -2655,4 +2655,19 @@ func orDefaultFileManagerType(t pages.FileManagerType) pages.FileManagerType {
 		return pages.FileManagerTypeBoth
 	}
 	return t
+}
+
+// progressMessageFor is the ProgressMessage a flow call stores: the one given,
+// else, with a progress bar set, an empty Texts$Text — never null. Studio Pro
+// stores a Text whenever a progress bar is set (33 of 33 on a real 10.24
+// project) and null only for None; a null beside Blocking crashed its page
+// export in MicroflowSettings.WriteProperties (ako/mxcli#2448).
+func progressMessageFor(bar string, msg *model.Text) *model.Text {
+	if msg != nil {
+		return msg
+	}
+	if progressBarOrNone(bar) != "None" {
+		return &model.Text{}
+	}
+	return nil
 }
