@@ -22,6 +22,7 @@ const droppedMemberRefRule = "MDL108"
 //	drop attribute used in a microflow `change`      CE1613 on the microflow
 //	  ... in a page, a snippet or a nanoflow         CE1613 on each
 //	  ... only in a retrieve's XPath                 CE0161 on the microflow
+//	  ... only in an expression (`$P/Code`)          CE0117 on the microflow or snippet
 //	drop entity used as a microflow parameter        CE1613
 //	drop association used by a retrieve or a page    CE1613
 //	drop entity that only an association points at   clean (the association goes with it)
@@ -132,7 +133,7 @@ func CheckDroppedMemberReferences(ctx *ExecContext, prog *ast.Program) []linter.
 			Severity: linter.SeverityError,
 			Message: fmt.Sprintf(
 				"`%s` leaves %s still using it — mxbuild reports CE1613 \"The selected … no longer exists\" on each "+
-					"(CE0161 where it is only in an XPath), and exec applies the drop and only warns",
+					"(CE0117 where it is in an expression, CE0161 in an XPath), and exec applies the drop and only warns",
 				what, describeUsers(users)),
 			Location:   linter.Location{Module: module, DocumentType: "entity", DocumentName: doc},
 			Suggestion: "Change those documents first (an `alter` of each, or drop them in this script), or keep the member. `show references to " + target + "` lists them.",
