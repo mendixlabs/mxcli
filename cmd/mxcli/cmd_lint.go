@@ -521,6 +521,7 @@ func builtinLintRules() []linter.Rule {
 		rules.NewOverlappingEntitiesRule(),       // MPR016 - reads entity geometry from the domain model
 		rules.NewFixedGuardAttributeRule(),       // MPR017 - a Boolean guard with one reachable value
 		rules.NewModelNameInLiteralRule(),        // MPR018 - a model element named in a string literal
+		rules.NewUnindexedConstraintRule(),       // MPR019 - an XPath-filtered attribute with no leading index
 		rules.NewNoCommitInLoopRule(),            // CONV011-CONV014 - require BSON inspection
 		rules.NewExclusiveSplitCaptionRule(),
 		rules.NewErrorHandlingOnCallsRule(),

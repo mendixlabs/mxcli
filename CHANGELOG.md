@@ -21,6 +21,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Lint `MPR019`: an attribute an XPath constraint filters on with no index leading with it** (ako/mxcli#2407) — every such query scans the table, and nothing else reports it: `mx check` is clean and demo data hides it. Severity `info`, because whether an index earns its place depends on table size and write rate, which the model does not know; it names a candidate rather than asserting a defect.
+
+  Coverage is tested against an index's **leading** attribute, not membership: a composite index on `(Status, Date)` does nothing for a query on `Date` alone, and treating membership as coverage would make the rule wrong rather than merely quiet. Only attributes of the entity the XPath targets are considered — one reached across an association belongs to the other entity, and reporting it here would blame the wrong document.
+
+  Attributes carrying a `Unique` validation rule are treated as covered. That is an admission rather than a claim: whether Mendix also creates a database index to enforce uniqueness was not established, and it decides the question. Without the exclusion the only findings on the 900-unit Studio Pro-authored `testdata/testapp` were two attributes both declared `unique` — so at `info` severity, where a false candidate costs more trust than a missed one costs performance, the exclusion keeps every finding the rule makes a true one. `uniqueAttributes` records how to settle it.
+
+  **Sort orders are not covered**, though #2407 lists them: no sort column exists on any catalog table, so they need the flow and page models read. XPath constraints are the richest source and are catalogued, so they are v1 on their own.
+
+  Measured: the planted defect reports the unindexed attribute *and* the one that is only the second column of a composite index, while the single-column indexed attribute is not reported; adding an index leading with the reported attribute clears exactly that finding. **0 findings** on `testdata/pedapp`, `testdata/testapp-views` and `testdata/testapp`.
+
 - **Lint `MPR018`: a model element named inside a string literal** (ako/mxcli#2405) — a flow that passes `'Module.SomeFlow'` as text has no reference for any checker to follow, so renaming or moving that element passes Studio Pro, mxbuild and `mxcli check --references` and fails at runtime. mxcli has a particular stake in it: it makes renaming cheap and scriptable, and `check --references` is sold as the thing that catches a stale reference. Measured on the premise itself: mxbuild reported **28 errors before the rename and 28 after**, naming the renamed microflow in neither.
 
   Two verdicts. A literal that **resolves** to a real element is a warning — the rename trap. A literal whose module exists but whose name resolves to nothing is `info`, since a string may legitimately look like a qualified name.
