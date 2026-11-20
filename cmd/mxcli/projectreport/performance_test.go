@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -79,13 +80,25 @@ func TestPerformanceMedianOfWarmRuns(t *testing.T) {
 	doc, _ = RenderPerformance(env2, &Annotations{Items: map[string]Note{
 		"finding:F1":         {Name: "Housekeeping held a long transaction", Status: "fixed", Note: "split into batches of 500"},
 		"finding:F2":         {Name: "Menu query scans every order", Status: "open"},
-		"step:Market / open": {Finding: "F1", Note: "the step the fix targets"},
+		"finding:F3":         {Name: "Traffic generator lacked an index", Status: "fixed", Scope: "background"},
+		"finding:F4":         {Name: "Payment waits on a simulated gateway", Status: "by design"},
+		"step:Market / open": {Finding: "F1", Note: "F1: the step the fix targets"},
 	}})
 	md.Reset()
 	_ = RenderMarkdown(&md, doc)
 	mustContain(t, md.String(), "## Findings", "Housekeeping held a long transaction", "split into batches of 500",
-		"Steps: Market / open: server 200 → 200 ms, 1 → 1 queries.", "Menu query scans every order",
-		"No step names this finding", "finding F1: the step the fix targets")
+		// DB time on the card, and a change inside the spread said to be one (ako/mxcli#2475)
+		"Steps: Market / open: server 200 → 200 ms (within the run-to-run spread), DB 5.0 → 5.0 ms (no clear change), 1 → 1 queries.",
+		"Menu query scans every order", "No step names this finding",
+		// a background finding says so; a by-design one is not "open"
+		"Background work: no journey step runs it.", "by design",
+		// the row names the finding by name, and its ID once
+		"finding F1 — Housekeeping held a long transaction: the step the fix targets",
+		// no plans read: no "0 of 0"
+		"no plans read (no Postgres log given)")
+	if strings.Contains(md.String(), "F1: F1:") {
+		t.Error("the finding ID is written twice")
+	}
 
 }
 

@@ -763,7 +763,7 @@ func RenderPerformance(env *Envelope, ann *Annotations) (Doc, error) {
 		{Label: "steps measured", Value: fmt.Sprint(len(d.Steps))},
 		{Label: "server time, all steps", Value: fmt.Sprintf("%.0f ms", server)},
 		{Label: "database time", Value: fmt.Sprintf("%.0f ms", db), Note: fmt.Sprintf("%d queries", queries)},
-		{Label: "plans dominated by JIT", Value: fmt.Sprint(jit), Note: fmt.Sprintf("of %d", len(d.Plans))},
+		jitStat(jit, len(d.Plans)),
 	}
 	var env0 []Block
 	if d.Database != "" {
@@ -798,7 +798,11 @@ func RenderPerformance(env *Envelope, ann *Annotations) (Doc, error) {
 		if n, ok := ann.Get("step:" + s.key()); ok {
 			note = joinNote(n.Status, n.Note, "")
 			if n.Finding != "" {
-				note = joinNote("finding "+n.Finding, note, "")
+				// The finding's name, not its ID: the ID often starts the note
+				// already ("F2: index on …"), and the name says more in a row.
+				f, _ := ann.Peek("finding:" + n.Finding)
+				rest := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(n.Note), n.Finding+":"))
+				note = joinNote("finding "+n.Finding+" — "+nonEmpty(f.Name, n.Finding), rest, "")
 			}
 		}
 		if len(d.Baseline) == 0 {
@@ -947,28 +951,60 @@ func findingsSection(d PerformanceData, base map[string]StepStats, ann *Annotati
 		if !ok || n.Finding == "" {
 			continue
 		}
-		line := s.key() + ": server " + ms(s.ServerMs) + " ms"
+		line := s.key() + ": server " + ms(s.ServerMs) + " ms, DB " + ms(s.DBMs) + " ms, " + fmt.Sprintf("%d queries", s.Queries)
 		if b, ok := base[s.key()]; ok {
-			line = s.key() + ": server " + arrow(b.ServerMs, s.ServerMs) + " ms, " + fmt.Sprintf("%d → %d queries", b.Queries, s.Queries)
+			// Each change with the same signal the table gives: one inside the
+			// run-to-run spread is not the fix's effect (ako/mxcli#2475).
+			line = s.key() + ": server " + arrow(b.ServerMs, s.ServerMs) + " ms" + noise(b.ServerMs, s.ServerMs, b.ServerMin, b.ServerMax, s.ServerMin, s.ServerMax) +
+				", DB " + arrow(b.DBMs, s.DBMs) + " ms" + noise(b.DBMs, s.DBMs, 0, 0, 0, 0) +
+				fmt.Sprintf(", %d → %d queries", b.Queries, s.Queries)
 		}
 		targets[n.Finding] = append(targets[n.Finding], line)
 	}
 	var blocks []Block
 	for _, id := range ids {
 		n, _ := ann.Get("finding:" + id)
-		status := map[string]string{"fixed": "good", "open": "warn", "accepted": "none"}[strings.ToLower(n.Status)]
+		// fixed, open, or a decision not to change it: accepted, intended,
+		// by design (as the other annotation kinds take).
+		status := map[string]string{"fixed": "good", "open": "warn", "accepted": "none", "intended": "none", "by design": "none"}[strings.ToLower(n.Status)]
 		c := Card{Tag: id, Status: status, StatusText: nonEmpty(n.Status, "open"), Title: nonEmpty(n.Name, id)}
 		if n.Note != "" {
 			c.Paras = append(c.Paras, n.Note)
 		}
 		if ts := targets[id]; len(ts) > 0 {
 			c.Paras = append(c.Paras, "Steps: "+strings.Join(ts, "; ")+".")
+		} else if strings.EqualFold(n.Scope, "background") {
+			c.Paras = append(c.Paras, "Background work: no journey step runs it.")
 		} else {
 			c.Paras = append(c.Paras, "No step names this finding (`step:<journey / step>` with `finding: "+id+"`).")
 		}
 		blocks = append(blocks, c)
 	}
 	return &Section{ID: "findings", Title: "Findings",
-		Intro:  "What was found and done, each with the steps it targets. Write them in the annotations: `finding:<ID>` (name, status, note) and `finding: <ID>` on each `step:<journey / step>`.",
+		Intro:  "What was found and done, each with the steps it targets. Write them in the annotations: `finding:<ID>` (name, status — fixed, open, accepted, intended or by design —, note, and `scope: background` for work no step runs) and `finding: <ID>` on each `step:<journey / step>`.",
 		Blocks: blocks}
+}
+
+// noise marks a change that is not one: inside the run-to-run spread when
+// both runs have one, else under the table's 20 % threshold.
+func noise(before, after, bLo, bHi, aLo, aHi float64) string {
+	if bHi > bLo && aHi > aLo {
+		if aLo <= bHi && bLo <= aHi {
+			return " (within the run-to-run spread)"
+		}
+		return ""
+	}
+	if deltaClass(before, after) == "num" {
+		return " (no clear change)"
+	}
+	return ""
+}
+
+// jitStat is the JIT tile; without plans it says none were read rather than
+// "0 of 0".
+func jitStat(jit, plans int) Stat {
+	if plans == 0 {
+		return Stat{Label: "plans dominated by JIT", Value: "–", Note: "no plans read (no Postgres log given)"}
+	}
+	return Stat{Label: "plans dominated by JIT", Value: fmt.Sprint(jit), Note: fmt.Sprintf("of %d", plans)}
 }

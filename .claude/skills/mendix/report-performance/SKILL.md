@@ -13,10 +13,10 @@ description: "Measure an app's main journeys at production volume and produce th
 | 32-54 | 1. Seed (backup first) |
 | 55-69 | 2. Instrument (and write down what you change) |
 | 70-87 | 3. Measure |
-| 88-113 | 4. Before and after — fairly |
-| 114-119 | 5. Restore |
-| 120-142 | Reading it |
-| 143-146 | Related |
+| 88-116 | 4. Before and after — fairly |
+| 117-122 | 5. Restore |
+| 123-145 | Reading it |
+| 146-149 | Related |
 
 <!-- /skill-index -->
 # Performance Report
@@ -108,8 +108,11 @@ items:
   "step:Guest orders a pizza / 6 place order and pay": {finding: F1}
 ```
 
-Each finding becomes a card with its steps' before → after; a finding no step names
-says so.
+Each finding becomes a card with its steps' before → after — server and DB time, with
+a change inside the run-to-run spread marked as such — and a finding no step names
+says so. Status is `fixed`, `open`, or a decision not to change it (`accepted`,
+`intended`, `by design`); `scope: background` marks work no journey step runs (a
+scheduled job, a traffic generator).
 
 ## 5. Restore
 

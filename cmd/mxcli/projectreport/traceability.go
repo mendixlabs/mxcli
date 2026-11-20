@@ -666,7 +666,7 @@ func testsClass(r TraceRequirement) string {
 // everyRequirement is one table of every requirement (ako/mxcli#2443), short
 // enough to scan: where it sits, its status and what proves it.
 func everyRequirement(d TraceabilityData) Table {
-	t := Table{Columns: []string{"Milestone", "Epic", "Requirement", "Status", "Proven by"}}
+	t := Table{Columns: []string{"Requirement", "Status", "Proven by"}}
 	for _, m := range d.Milestones {
 		for _, r := range m.Requirements {
 			var proof []string
@@ -677,11 +677,19 @@ func everyRequirement(d TraceabilityData) Table {
 				proof = append(proof, count(n, "journey", "journeys"))
 			}
 			p := strings.Join(proof, ", ")
-			if p == "" {
+			switch {
+			case p != "":
+			case len(r.Footprint) == 0 && (r.Status == StatusBuilt || r.Status == StatusPartial || r.Status == StatusChanged):
+				// Nothing implements it in a microflow (UI only), so no test or
+				// journey can be seen to reach it: say so, rather than leave a
+				// plain "nothing" beside the highlighted ones.
+				p = "nothing to reach (no microflow implements it)"
+			default:
 				p = "nothing"
 			}
-			t.Rows = append(t.Rows, []string{m.Name, r.Slice, fmt.Sprintf("`%s` %s", r.ID, r.Title), r.Status, p})
-			t.Classes = append(t.Classes, []string{"", "", "", statusClass(r.Status), proofClass(r)})
+			t.Rows = append(t.Rows, []string{fmt.Sprintf("`%s` %s", r.ID, r.Title), r.Status, p})
+			t.Classes = append(t.Classes, []string{"", statusClass(r.Status), proofClass(r)})
+			t.Groups = append(t.Groups, m.Name+" · "+nonEmpty(r.Slice, "no epic"))
 		}
 	}
 	return t

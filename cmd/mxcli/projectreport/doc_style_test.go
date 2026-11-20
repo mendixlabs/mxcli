@@ -138,7 +138,12 @@ func TestTraceabilityGlanceAndTileStatus(t *testing.T) {
 	_ = RenderMarkdown(&md, doc)
 	mustContain(t, md.String(), "## At a glance", "| M1 | 1 | 1 | 1 | 0 | 2/3 built |", "| M2 | 0 | 0 | 0 | 1 | 0/1 built |", "| 02-orders | 0 | 0 | 1 | 0 | 0/1 built |",
 		// one table of every requirement, across milestones (ako/mxcli#2443)
-		"## Every requirement", "| M1 | 01-accounts | `a`  | built | 1 test |", "| M2 | 03-pay | `d`  | not built | nothing |")
+		"## Every requirement", "| **M1 · 01-accounts** |", "| `a`  | built | 1 test |", "| **M2 · 03-pay** |", "| `d`  | not built | nothing |",
+		// built with nothing to reach says why it can never be proven (ako/mxcli#2475)
+		"| `b`  | built | nothing to reach (no microflow implements it) |")
+	if strings.Count(md.String(), "| **M1 · 01-accounts** |") != 1 {
+		t.Error("a group header is written once, where the group starts")
+	}
 	h := htmlOf(t, doc)
 	if !strings.Contains(h, `<div class="kpi warn"><span class="v">2</span><span class="l">built</span>`) {
 		t.Error("the built tile is warn while not every requirement is built")
