@@ -161,6 +161,18 @@ func extractVisibilityRulesFromJS(js string) ([]types.WidgetVisibilityRule, edit
 			stats.SkippedComplex++
 			continue
 		}
+		// A list computed by a switch (the native Image's image source).
+		if lifted, ok := iifeSwitchHideRules(js, callStart, args, consts); ok {
+			stats.Recognized++
+			for _, r := range lifted {
+				sig := "\x00" + r.PropertyKey + "\x00" + r.HiddenWhen.PropertyKey + r.HiddenWhen.Operator + r.HiddenWhen.Value
+				if !seen[sig] {
+					seen[sig] = true
+					rules = append(rules, r)
+				}
+			}
+			continue
+		}
 		listKey, keys, condKeys, ok := hideTargetKeys(args, consts)
 		if !ok || (len(keys) == 0 && len(condKeys) == 0) {
 			stats.SkippedComplex++

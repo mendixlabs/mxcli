@@ -90,14 +90,18 @@ func execCreateNavigation(ctx *ExecContext, s *ast.CreateNavigationStmt) error {
 		// User-Agent — not on viewport width — so a device-specific front end could
 		// not be built from MDL at all (ako/mxcli-maintenance §7).
 		//
-		// Mendix's web profiles are a closed set, so an unknown name is still an
-		// error: creating "Phone" is adding the profile the platform defines,
-		// while creating "Mobile" would be inventing one that can never route.
+		// Mendix's web and native profiles are both closed sets, so an unknown
+		// name is still an error: creating "Phone" or "NativePhone" is adding a
+		// profile the platform defines, while creating "Mobile" would be
+		// inventing one that can never route.
 		kind, ok := types.CanonicalProfileKind(s.ProfileName)
 		if !ok {
+			kind, ok = types.CanonicalNativeProfileKind(s.ProfileName)
+		}
+		if !ok {
 			return mdlerrors.NewNotFoundMsg("navigation profile", s.ProfileName,
-				fmt.Sprintf("navigation profile not found: %s (available: %s; Mendix's web profiles are %s)",
-					s.ProfileName, profileNames(nav), strings.Join(types.WebProfileKindNames(), ", ")))
+				fmt.Sprintf("navigation profile not found: %s (available: %s; Mendix's web profiles are %s, and its native profiles are %s)",
+					s.ProfileName, profileNames(nav), strings.Join(types.WebProfileKindNames(), ", "), strings.Join(types.NativeProfileKindNames(), ", ")))
 		}
 		if err := ctx.Backend.AddNavigationProfile(nav.ID, kind); err != nil {
 			return mdlerrors.NewBackend("create navigation profile", err)
@@ -199,10 +203,10 @@ func warnOfflineWithoutPWA(ctx *ExecContext, s *ast.CreateNavigationStmt, kind s
 // checkProfileClauses refuses what the statement says that the profile cannot
 // take, before anything is written (ako/mxcli#980).
 //
-// A native profile's writer sets its home pages and offline sync and nothing
-// else, so a menu block, login or not-found page or on-sync-error clause on one
-// was dropped in silence: the statement reported "updated" and the bottom bar
-// stayed as it was. Its flow home is a nanoflow — `home microflow` there is
+// A native profile's writer sets its home pages, offline sync and bottom bar
+// (the { } block) and nothing else, so a login or not-found page or
+// on-sync-error clause on one was dropped in silence: the statement reported
+// "updated" and the profile stayed as it was. Its flow home is a nanoflow — `home microflow` there is
 // what describe used to print, so it is read as the nanoflow and warned about —
 // while a web profile's is a microflow, so `home nanoflow` there is refused.
 func checkProfileClauses(ctx *ExecContext, s *ast.CreateNavigationStmt, isNative bool) error {
@@ -220,8 +224,6 @@ func checkProfileClauses(ctx *ExecContext, s *ast.CreateNavigationStmt, isNative
 			"and leaving it out is how it used to be dropped without a word — remove it from the statement and set it in Studio Pro", s.ProfileName, what)
 	}
 	switch {
-	case s.HasMenuBlock:
-		return refuse("its bottom bar (the { } block)")
 	case s.LoginPage != nil:
 		return refuse("login page")
 	case s.NotFoundPage != nil:
@@ -817,25 +819,11 @@ func outputNavigationProfile(ctx *ExecContext, p *types.NavigationProfile) {
 		}
 	}
 
-	// A native profile's bottom bar is not written by mxcli, so it is not a
-	// { } block exec would have to refuse: it is listed as comments, each item
-	// as it would read (ako/mxcli#980).
-	if p.IsNative && len(p.MenuItems) > 0 {
-		fmt.Fprintln(ctx.Output, "  -- bottom bar (not written by mxcli; set it in Studio Pro):")
-		var bar strings.Builder
-		printMenuMDL(ctx, &bar, p.MenuItems, 0, "CREATE NAVIGATION")
-		for _, line := range strings.Split(strings.TrimRight(bar.String(), "\n"), "\n") {
-			fmt.Fprintf(ctx.Output, "  --   %s\n", strings.TrimPrefix(line, "-- "))
-		}
-		fmt.Fprintln(ctx.Output, ";")
-		fmt.Fprintln(ctx.Output)
-		return
-	}
-
-	// Menu items: the profile's children, in { } after its clauses (R2).
+	// Menu items: the profile's children, in { } after its clauses (R2). A
+	// native profile's are its bottom bar, written by the same block.
 	if len(p.MenuItems) > 0 {
 		fmt.Fprintln(ctx.Output, "{")
-		printMenuMDL(ctx, ctx.Output, p.MenuItems, 1, "CREATE NAVIGATION")
+		printMenuMDLFor(ctx, ctx.Output, p.MenuItems, 1, "CREATE NAVIGATION", p.IsNative)
 		fmt.Fprintln(ctx.Output, "};")
 	} else {
 		fmt.Fprintln(ctx.Output, ";")
@@ -879,7 +867,17 @@ func menuItemTarget(item *types.NavMenuItem) string {
 // (renderClientActionMDL), so every kind a menu item stores — a nanoflow call,
 // open link, create object — and every `with ( … )` setting prints, and what
 // MDL cannot express is said in a comment rather than left out (ako/mxcli#980).
+//
+// native is true for a NativePhone profile's bottom bar: CREATE NAVIGATION can
+// author only a glyph icon there (see navBottomBarItemBson), so a collection or
+// image icon — which the web Menu can reproduce — gets the "not reproducible"
+// note instead of an Icon: property.
 func printMenuMDL(ctx *ExecContext, w io.Writer, items []*types.NavMenuItem, depth int, reproducer string) {
+	printMenuMDLFor(ctx, w, items, depth, reproducer, false)
+}
+
+// printMenuMDLFor is printMenuMDL with the native flag above.
+func printMenuMDLFor(ctx *ExecContext, w io.Writer, items []*types.NavMenuItem, depth int, reproducer string, native bool) {
 	indent := strings.Repeat("  ", depth)
 	for _, item := range items {
 		var props []string
@@ -895,7 +893,7 @@ func printMenuMDL(ctx *ExecContext, w io.Writer, items []*types.NavMenuItem, dep
 			// has no OnClick on one, so the rewrite keeps it only as stored.
 			actionNote = fmt.Sprintf("-- menu %s: its action (%s) belongs to a sub-menu and has no MDL form there", menuCaptionNote(item.Caption), onClick)
 		}
-		if icon := menuItemIconMDL(item); icon != "" {
+		if icon := menuItemIconMDL(item, native); icon != "" {
 			props = append(props, "Icon: "+icon)
 		}
 		propList := ""
@@ -905,12 +903,12 @@ func printMenuMDL(ctx *ExecContext, w io.Writer, items []*types.NavMenuItem, dep
 		if len(item.Items) > 0 {
 			// Sub-menu container
 			fmt.Fprintf(w, "%smenu %s%s {\n", indent, mdlQuote(ctx, item.Caption), propList)
-			printMenuMDL(ctx, w, item.Items, depth+1, reproducer)
+			printMenuMDLFor(ctx, w, item.Items, depth+1, reproducer, native)
 			fmt.Fprintf(w, "%s}\n", indent)
 		} else {
 			fmt.Fprintf(w, "%smenu item %s%s\n", indent, mdlQuote(ctx, item.Caption), propList)
 		}
-		if note := menuItemIconNote(item, reproducer); note != "" {
+		if note := menuItemIconNote(item, reproducer, native); note != "" {
 			fmt.Fprintf(w, "%s%s\n", indent, note)
 		}
 		if actionNote != "" {
@@ -941,8 +939,13 @@ func legacyMenuItemOnClick(item *types.NavMenuItem) string {
 // All three of Mendix's icon elements have a form now. Only the collection one
 // used to, so DESCRIBE emitted a comment for a glyph or image icon — and since
 // CREATE NAVIGATION is a full replacement, re-running that output DELETED the
-// icon it had just declined to describe.
-func menuItemIconMDL(item *types.NavMenuItem) string {
+// icon it had just declined to describe. A native bottom bar item can
+// reproduce only a glyph icon (navBottomBarItemBson); a collection or image
+// icon there falls through to the note.
+func menuItemIconMDL(item *types.NavMenuItem, native bool) string {
+	if native && types.MenuIconKindOf(item.IconType) != types.MenuIconGlyph {
+		return ""
+	}
 	switch types.MenuIconKindOf(item.IconType) {
 	case types.MenuIconGlyph:
 		// The code is the whole identity of a glyph. Without it there is nothing
@@ -968,18 +971,21 @@ func menuItemIconMDL(item *types.NavMenuItem) string {
 // menuItemIconNote flags an icon DESCRIBE still cannot round-trip, so re-running
 // the output loses it visibly rather than silently.
 //
-// All three icon elements are reproducible now, so this fires only on what is
-// genuinely beyond the language: a stored $Type this build does not know, or a
-// variant whose payload is missing (a glyph with no Code, a named icon with no
-// name) — where emitting a clause would rebuild a DIFFERENT icon rather than the
-// same one. Guessing between polymorphic variants is the failure mode that
-// produces a document mxbuild accepts and Studio Pro cannot open.
-func menuItemIconNote(item *types.NavMenuItem, reproducer string) string {
+// All three icon elements are reproducible now on a web menu item, so this
+// fires only on what is genuinely beyond the language: a stored $Type this
+// build does not know, or a variant whose payload is missing (a glyph with no
+// Code, a named icon with no name) — where emitting a clause would rebuild a
+// DIFFERENT icon rather than the same one. On a native bottom bar item only a
+// glyph icon is reproducible (navBottomBarItemBson); a collection or image
+// icon there gets this note too. Guessing between
+// polymorphic variants is the failure mode that produces a document mxbuild
+// accepts and Studio Pro cannot open.
+func menuItemIconNote(item *types.NavMenuItem, reproducer string, native bool) string {
 	if item.IconType == "" {
 		return ""
 	}
 	// If there is a clause for it, there is nothing to flag.
-	if menuItemIconMDL(item) != "" {
+	if menuItemIconMDL(item, native) != "" {
 		return ""
 	}
 	target := item.Icon

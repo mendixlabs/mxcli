@@ -542,10 +542,11 @@ DISCONNECT;`,
 -- Browse the available names with:
 --   LIST ICON COLLECTIONS  /  DESCRIBE ICON COLLECTION Module.Name
 --
--- <profile> is one of Mendix's fixed web kinds, and the profile is CREATED if
--- the project does not have it yet:
---   Responsive  Phone  Tablet                       online
---   ResponsiveOffline  PhoneOffline  TabletOffline  offline
+-- <profile> is one of Mendix's fixed web or native kinds, and the profile is
+-- CREATED if the project does not have it yet:
+--   Responsive  Phone  Tablet                       online (web)
+--   ResponsiveOffline  PhoneOffline  TabletOffline  offline (web)
+--   NativePhone                                     native
 --
 -- SYNC configures offline synchronization, and an offline profile downloads
 -- NOTHING until its entities have one -- a profile with no SYNC block builds,
@@ -595,7 +596,15 @@ DISCONNECT;`,
 --
 -- An OFFLINE profile restricts every page it can reach -- an attribute may be
 -- bound across at most ONE association hop (CE6206). Creating one reports the
--- documents in the project that already exceed that.`,
+-- documents in the project that already exceed that.
+--
+-- A NATIVE profile (Navigation$NativeNavigationProfile, no Kind property) has
+-- a { } block too -- its bottom bar -- but it is FLAT and PAGE-ONLY
+-- (NativePages$BottomBarItem): no nested MENU groups, no OnClick other than
+-- SHOW PAGE. Its icon is a numeric glyph code -- Icon: GLYPH <code> -- not a
+-- qualified name; a collection or image icon is unconfirmed for a native
+-- bottom bar item and rejected. A home page whose layout has "Bottom bar"
+-- enabled must appear in this block, or Mendix reports CE6108.`,
 		Example: `mdl 1;
 CREATE OR MODIFY NAVIGATION Responsive
   APP TITLE 'Order Desk'
@@ -615,6 +624,12 @@ CREATE OR MODIFY NAVIGATION TabletOffline
   HOME PAGE Maintenance.Request_Overview
   {
     MENU ITEM 'Requests' ( OnClick: SHOW PAGE Maintenance.Request_Overview )
+  };
+
+CREATE OR MODIFY NAVIGATION NativePhone
+  HOME PAGE MyModule.Home_Native
+  {
+    MENU ITEM 'Home' ( OnClick: SHOW PAGE MyModule.Home_Native, Icon: GLYPH 57377 )
   };`,
 		SeeAlso: []string{"navigation.show"},
 	})

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/backend"
@@ -384,9 +385,51 @@ func executeMDL(projectPath, mdlCmd string, setup ...func(*executor.Executor)) {
 	}
 }
 
+// devVersionFromBuildInfo derives a version string from Go's automatic VCS
+// build stamping, which `go build`/`go run` populate from the surrounding git
+// checkout even when no -ldflags -X main.Version=... was passed (`make build`'s
+// LDFLAGS sets Version explicitly via `git describe` for release-style builds;
+// this is the fallback for a bare `go build ./cmd/mxcli` during local mxcli
+// development). Without this, an unstamped build silently fell back to the
+// literal "0.1.0" below, which is indistinguishable from a real release and
+// carries no git identity at all — a real gap surfaced by
+// native-pwa-migrator's mxcli version-check tests expecting to trace a binary
+// back to a source revision. Returns "" if no VCS revision is available (e.g.
+// building outside a git checkout), leaving the "0.1.0" fallback as an
+// explicitly-unidentifiable last resort.
+func devVersionFromBuildInfo() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	var revision string
+	var modified bool
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.modified":
+			modified = setting.Value == "true"
+		}
+	}
+	if revision == "" {
+		return ""
+	}
+	short := revision
+	if len(short) > 8 {
+		short = short[:8]
+	}
+	if modified {
+		return "0.0.0-dev+g" + short + ".dirty"
+	}
+	return "0.0.0-dev+g" + short
+}
+
 func init() {
 	if Version != "" {
 		version = Version
+	} else if dev := devVersionFromBuildInfo(); dev != "" {
+		version = dev
 	}
 	if BuildTime != "" {
 		rootCmd.Version = version + " (" + BuildTime + ")"

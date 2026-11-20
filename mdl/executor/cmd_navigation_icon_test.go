@@ -10,12 +10,20 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/mendixlabs/mxcli/model"
 )
 
 // menuMDL renders items through the DESCRIBE emitter.
 func menuMDL(items []*types.NavMenuItem) string {
 	var b bytes.Buffer
 	printMenuMDL(nil, &b, items, 0, "CREATE NAVIGATION")
+	return b.String()
+}
+
+// nativeMenuMDL is menuMDL for a NativePhone profile's bottom bar.
+func nativeMenuMDL(items []*types.NavMenuItem) string {
+	var b bytes.Buffer
+	printMenuMDLFor(nil, &b, items, 0, "CREATE NAVIGATION", true)
 	return b.String()
 }
 
@@ -134,6 +142,69 @@ func TestPrintMenuMDL_StillFlagsWhatItCannotRebuild(t *testing.T) {
 				t.Errorf("dropped silently: %q", got)
 			}
 		})
+	}
+}
+
+// A native profile's bottom bar cannot author an IconCollectionIcon
+// (navBottomBarItemBson accepts only a glyph) even though the web Menu
+// reproduces one fine. DESCRIBE must flag it instead of emitting a property
+// that would fail on replay.
+func TestPrintMenuMDL_NativeNeverEmitsAnIconCollectionIcon(t *testing.T) {
+	got := nativeMenuMDL([]*types.NavMenuItem{{
+		Caption:  "Home",
+		Page:     "NativeMobile.Home_Native",
+		Icon:     "Atlas_Core.Atlas.home",
+		IconType: "Forms$IconCollectionIcon",
+	}})
+	stmt := strings.SplitN(got, "\n", 2)[0]
+	if strings.Contains(stmt, "Icon:") {
+		t.Errorf("emitted an Icon: property for a native bottom bar item, which replay would reject: %q", got)
+	}
+	if !strings.Contains(got, "-- icon") || !strings.Contains(got, "Atlas_Core.Atlas.home") {
+		t.Errorf("the unreproducible native icon was dropped silently: %q", got)
+	}
+}
+
+// A native bottom bar item's glyph IS reproducible — the one icon shape
+// navBottomBarItemBson accepts — so it gets `Icon: glyph <code>`, not a note,
+// and that output parses back to the same glyph.
+func TestPrintMenuMDL_NativeRoundTripsAGlyphIcon(t *testing.T) {
+	got := nativeMenuMDL([]*types.NavMenuItem{{
+		Caption:  "Home",
+		Page:     "NativeMobile.Home_Native",
+		IconType: "Forms$GlyphIcon",
+		IconCode: 57377,
+	}})
+	want := "menu item 'Home' ( OnClick: show page NativeMobile.Home_Native, Icon: glyph 57377 )\n"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	script := "create or modify navigation NativePhone {\n" + got + "};"
+	prog, errs := visitor.Build(script)
+	if len(errs) > 0 {
+		t.Fatalf("DESCRIBE emitted output its own parser rejects:\n%s\nerrors: %v", script, errs)
+	}
+	stmt, ok := prog.Statements[0].(*ast.CreateNavigationStmt)
+	if !ok || len(stmt.MenuItems) != 1 {
+		t.Fatalf("re-parsed to %T", prog.Statements[0])
+	}
+	if it := stmt.MenuItems[0]; it.IconKind != types.MenuIconGlyph || it.IconCode != 57377 {
+		t.Errorf("round trip changed the glyph: got (%v, %d), want (glyph, 57377)", it.IconKind, it.IconCode)
+	}
+}
+
+// Exec hands a native item's glyph to the writer as IconKind/IconCode, the
+// same fields a web item's glyph travels in.
+func TestExecNativeNavigation_PassesTheGlyphIcon(t *testing.T) {
+	var got types.NavigationProfileSpec
+	mb := nativeNav()
+	mb.UpdateNavigationProfileFunc = func(_ model.ID, _ string, spec types.NavigationProfileSpec) error { got = spec; return nil }
+	if _, err := runNav(t, mb, "create or modify navigation NativePhone { menu item 'Home' ( OnClick: show page M.P, Icon: glyph 57377 ) };"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.MenuItems) != 1 || got.MenuItems[0].IconKind != types.MenuIconGlyph || got.MenuItems[0].IconCode != 57377 {
+		t.Errorf("spec.MenuItems = %+v, want one item with a glyph 57377", got.MenuItems)
 	}
 }
 

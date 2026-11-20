@@ -57,14 +57,20 @@ func TestNativeProfile_ReadsBottomBarActionAndIcon(t *testing.T) {
 func TestNativeProfile_WritesSync(t *testing.T) {
 	doc := bson.D{{Key: "$Type", Value: "Navigation$NativeNavigationProfile"}, {Key: "Name", Value: "NativePhone"},
 		{Key: "OfflineEntityConfigs", Value: bson.A{navMarkerItems}}}
-	out := navPatchNativeProfile(doc, types.NavigationProfileSpec{HasSync: true,
+	out, err := navPatchNativeProfile(doc, types.NavigationProfileSpec{HasSync: true,
 		OfflineEntities: []types.NavOfflineEntitySpec{{Entity: "M.Order", SyncMode: "All"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfgs := navGetArray(out, "OfflineEntityConfigs")
 	if len(cfgs) != 2 || navGetString(cfgs[1].(bson.D), "Entity") != "M.Order" {
 		t.Errorf("sync not written: %v", cfgs)
 	}
 	// CONTROL: no sync block leaves the stored list alone.
-	out = navPatchNativeProfile(doc, types.NavigationProfileSpec{})
+	out, err = navPatchNativeProfile(doc, types.NavigationProfileSpec{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(navGetArray(out, "OfflineEntityConfigs")) != 1 {
 		t.Errorf("a statement without sync changed the list")
 	}

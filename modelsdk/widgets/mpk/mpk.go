@@ -28,7 +28,11 @@ type PropertyDef struct {
 	// OnChange names the sibling action property Studio Pro runs when this
 	// property changes. Part of the widget DEFINITION, so a stale value makes
 	// Mendix report CE0463 "definition of this widget has changed" (#716).
-	OnChange     string
+	OnChange string
+	// AllowUpload is an image/file property's allowUpload="true": part of the
+	// widget DEFINITION (ValueType.AllowUpload), CE0463 when it differs
+	// (Native Mobile Resources 12.6.0's Signature).
+	AllowUpload  bool
 	DefaultValue string // for enumeration/boolean/integer types
 	// DefaultType is the KIND of the default — `defaultType` in the widget XML,
 	// e.g. an action defaulting to a nanoflow call ("CallNanoflow") or a
@@ -76,7 +80,12 @@ type ActionVariable struct {
 // EnumValue is one option of an enumeration-typed widget property.
 type EnumValue struct {
 	Key     string
-	Caption string
+	Caption string // trimmed, for display
+	// RawCaption is the caption as the package writes it. Mendix stores that
+	// text verbatim — a multi-line element keeps its trailing newline and
+	// indentation — and a trimmed copy in the definition is CE0463 (Native
+	// Mobile Resources 12.6.0's Maps).
+	RawCaption string
 }
 
 // Translation is one localized caption/template string of a widget property.
@@ -236,6 +245,7 @@ type xmlProperty struct {
 	DefaultType       string             `xml:"defaultType,attr"`
 	Required          string             `xml:"required,attr"`
 	OnChange          string             `xml:"onChange,attr"`
+	AllowUpload       string             `xml:"allowUpload,attr"`
 	IsList            string             `xml:"isList,attr"`
 	Multiline         string             `xml:"multiline,attr"`
 	DataSource        string             `xml:"dataSource,attr"`
@@ -447,7 +457,7 @@ func walkPropertyGroup(pg xmlPropGroup, parentCategory string, def *WidgetDefini
 		}
 		var enumValues []EnumValue
 		for _, ev := range p.EnumValues {
-			enumValues = append(enumValues, EnumValue{Key: ev.Key, Caption: strings.TrimSpace(ev.Caption)})
+			enumValues = append(enumValues, EnumValue{Key: ev.Key, Caption: strings.TrimSpace(ev.Caption), RawCaption: ev.Caption})
 		}
 		prop := PropertyDef{
 			Key:         p.Key,
@@ -462,6 +472,7 @@ func walkPropertyGroup(pg xmlPropGroup, parentCategory string, def *WidgetDefini
 			// caused within-key CE0463 drift on augment-added keys (issue #600).
 			Required:               p.Required != "false",
 			OnChange:               p.OnChange,
+			AllowUpload:            p.AllowUpload == "true",
 			DefaultValue:           p.DefaultValue,
 			DefaultType:            p.DefaultType,
 			IsList:                 p.IsList == "true",
@@ -540,7 +551,7 @@ func collectNestedProperties(pg xmlPropGroup, parent *PropertyDef, parentCategor
 		}
 		var enumValues []EnumValue
 		for _, ev := range p.EnumValues {
-			enumValues = append(enumValues, EnumValue{Key: ev.Key, Caption: strings.TrimSpace(ev.Caption)})
+			enumValues = append(enumValues, EnumValue{Key: ev.Key, Caption: strings.TrimSpace(ev.Caption), RawCaption: ev.Caption})
 		}
 		child := PropertyDef{
 			Key:         p.Key,
@@ -555,6 +566,7 @@ func collectNestedProperties(pg xmlPropGroup, parent *PropertyDef, parentCategor
 			// caused within-key CE0463 drift on augment-added keys (issue #600).
 			Required:               p.Required != "false",
 			OnChange:               p.OnChange,
+			AllowUpload:            p.AllowUpload == "true",
 			DefaultValue:           p.DefaultValue,
 			DefaultType:            p.DefaultType,
 			IsList:                 p.IsList == "true",

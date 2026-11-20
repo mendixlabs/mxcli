@@ -112,6 +112,122 @@ func TestNoKindCarriesProgressiveWebAppSettings(t *testing.T) {
 	}
 }
 
+func TestResolveProfileKind(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		wantKind   string
+		wantNative bool
+		wantOK     bool
+	}{
+		{"phone", "Phone", false, true},
+		{" Responsive ", "Responsive", false, true},
+		{"TabletOffline", "TabletOffline", false, true},
+		{"nativephone", "NativePhone", true, true},
+		{" NativePhone ", "NativePhone", true, true},
+		{"Mobile", "", false, false},
+		{"Hybrid", "", false, false},
+	} {
+		kind, isNative, ok := resolveProfileKind(tc.name)
+		if ok != tc.wantOK || kind != tc.wantKind || isNative != tc.wantNative {
+			t.Errorf("resolveProfileKind(%q) = (%q, %v, %v), want (%q, %v, %v)",
+				tc.name, kind, isNative, ok, tc.wantKind, tc.wantNative, tc.wantOK)
+		}
+	}
+}
+
+func TestNewNativeProfileMatchesTheFixtureKeySet(t *testing.T) {
+	// Every key native-pwa-migrator's fixtures/native-phone-minimal carries on its
+	// real, Studio-Pro-authored NativePhone profile, and nothing it does not —
+	// same discipline as TestNewWebProfileMatchesTheStudioProKeySet, except this
+	// reference is a configured document (see newNativeProfileBson's doc comment
+	// for why no fresher one exists). A key mxcli invents, or one it omits, is
+	// the failure that passes mx check and then will not open in Studio Pro.
+	want := []string{
+		"$ID", "$Type", "ApplyScreenTransition", "BottomBarItems",
+		"EncryptionDbEnabled", "LocalFileEncryptionEnabled", "LoggingEnabled",
+		"Name", "NativeHomePage", "NativeNavigationEnabled", "NetworkTimeoutMs",
+		"OfflineEntityConfigs", "OtaEnabled", "PopupNavigationTransition",
+		"RoleBasedNativeHomePages", "ScreenNavigationTransition",
+		"SessionCookieEncryptionEnabled", "ThrowPartialSyncError",
+	}
+	got := newNativeProfileBson("NativePhone")
+	if len(got) != len(want) {
+		t.Errorf("NativePhone: %d keys, want %d", len(got), len(want))
+	}
+	for _, k := range want {
+		if _, ok := profileKey(got, k); !ok {
+			t.Errorf("NativePhone: missing key %q", k)
+		}
+	}
+	if v, _ := profileKey(got, "Name"); v != "NativePhone" {
+		t.Errorf("NativePhone: Name = %v", v)
+	}
+	if v, _ := profileKey(got, "$Type"); v != "Navigation$NativeNavigationProfile" {
+		t.Errorf("NativePhone: $Type = %v", v)
+	}
+	// A native profile has no Kind property at all — confirmed against
+	// modelsdk/gen/navigation/types.go, which gives NativeNavigationProfile no
+	// `kind` field. Unlike the web builder, Kind must never appear here.
+	if _, ok := profileKey(got, "Kind"); ok {
+		t.Error("NativePhone: has a Kind key, but native profiles have none")
+	}
+}
+
+func TestNativeProfileStartsWithNoHomePage(t *testing.T) {
+	// UpdateNavigationProfile's navPatchNativeProfile only overwrites
+	// NativeHomePage when the CREATE statement gives one — so a bare
+	// `create navigation NativePhone;` leaves this constructor's value in place.
+	// It must be an explicit null, not the fixture's configured home page.
+	v, ok := profileKey(newNativeProfileBson("NativePhone"), "NativeHomePage")
+	if !ok {
+		t.Fatal("NativePhone: no NativeHomePage key at all")
+	}
+	if v != nil {
+		t.Errorf("NativePhone: NativeHomePage = %#v, want an explicit null", v)
+	}
+}
+
+func TestNativeProfileStartsWithEmptyChildCollections(t *testing.T) {
+	// OfflineEntityConfigs and RoleBasedNativeHomePages are stored EMPTY on the
+	// fixture's own (otherwise configured) document — direct evidence of the
+	// unconfigured state. BottomBarItems is only rewritten by
+	// UpdateNavigationProfile when the CREATE statement has a MENU block (see
+	// navPatchNativeProfile), so a freshly created profile must start empty here
+	// rather than carrying the fixture's configured bottom bar item forward.
+	for _, tc := range []struct {
+		key    string
+		marker int32
+	}{
+		{"OfflineEntityConfigs", 3},
+		{"RoleBasedNativeHomePages", 1},
+		{"BottomBarItems", 2},
+	} {
+		v, ok := profileKey(newNativeProfileBson("NativePhone"), tc.key)
+		if !ok {
+			t.Fatalf("NativePhone: no %s key at all", tc.key)
+		}
+		arr, ok := v.(bson.A)
+		if !ok {
+			t.Fatalf("NativePhone: %s is %T, want bson.A", tc.key, v)
+		}
+		if len(arr) != 1 {
+			t.Errorf("NativePhone: %s has %d entries beyond the marker, want 0", tc.key, len(arr)-1)
+		}
+		if len(arr) == 1 && arr[0] != tc.marker {
+			t.Errorf("NativePhone: %s marker = %v, want %d", tc.key, arr[0], tc.marker)
+		}
+	}
+}
+
+func TestNativeProfileHasNoHermesEnabledKey(t *testing.T) {
+	// modelsdk/gen exposes a HermesEnabled setter, but the fixture's real
+	// document does not carry this key — writing a value here would be exactly
+	// the "assembled from a guess" failure mode this feature exists to avoid.
+	if _, ok := profileKey(newNativeProfileBson("NativePhone"), "HermesEnabled"); ok {
+		t.Error("NativePhone: has a HermesEnabled key, but the reference document does not")
+	}
+}
+
 func TestOfflineProfilesStartWithNoEntityConfigs(t *testing.T) {
 	// Studio Pro DERIVES the offline entity list from the pages the profile
 	// reaches; only rows that deviate from the defaults are stored. An empty
