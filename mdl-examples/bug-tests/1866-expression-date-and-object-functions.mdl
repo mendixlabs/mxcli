@@ -1,0 +1,13 @@
+-- ako/mxcli#1866 (mendixlabs/mxcli#1708): isNew, addMonths and the trimTo
+-- functions were missing from `mxcli syntax expression`. This is the example
+-- the new `mxcli syntax microflow expressions functions` topic shows.
+mdl 1;
+create module BugTest1866;
+create persistent entity BugTest1866.Order (OrderDate: DateTime);
+create microflow BugTest1866.DueDate ($Order: BugTest1866.Order) returns DateTime
+begin
+  if isNew($Order) then
+    return addMonths(trimToDays([%CurrentDateTime%]), 1);
+  end if;
+  return endOfMonth($Order/OrderDate);
+end;

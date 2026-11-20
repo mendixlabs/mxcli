@@ -19,6 +19,7 @@ import (
 	"github.com/mendixlabs/mxcli/internal/pathutil"
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/dmlayout"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
@@ -33,7 +34,7 @@ func outputJavadoc(w io.Writer, text string) {
 
 // outputJavadocIndented writes a javadoc-style comment block with an indent prefix.
 func outputJavadocIndented(w io.Writer, text string, indent string) {
-	lines := strings.Split(text, "\n")
+	lines := strings.Split(doccomment.Escape(text), "\n")
 	fmt.Fprintf(w, "%s/**\n", indent)
 	for _, line := range lines {
 		fmt.Fprintf(w, "%s * %s\n", indent, line)

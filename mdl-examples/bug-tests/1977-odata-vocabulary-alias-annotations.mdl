@@ -1,0 +1,19 @@
+-- ako/mxcli#1977: a $metadata that aliases a vocabulary
+--   <edmx:Include Namespace="Org.OData.Capabilities.V1" Alias="Capabilities"/>
+-- and writes its terms with the alias (Term="Capabilities.InsertRestrictions")
+-- had those annotations ignored: the entity was imported as not creatable or
+-- deletable. Measured on a fresh 11.14.0 app with the contract next to the
+-- project as alias1977.xml (one entity set, Insert/Update/DeleteRestrictions
+-- all true, aliased): the base build gives 6 errors (4 x CE6630, CE0852,
+-- CE9435), this build 0.
+mdl 1;
+create module BugTest1977;
+create constant BugTest1977.SvcUrl ( Type: String, DefaultValue: 'https://example.com/odata/' );
+create consumed odata service BugTest1977.OrderService ( Version: '1.0', ODataVersion: OData4, MetadataUrl: 'alias1977.xml', Timeout: 300, ServiceUrl: BugTest1977.SvcUrl );
+create external entities from BugTest1977.OrderService into BugTest1977;
+create microflow BugTest1977.ACT_Save ($Order: BugTest1977.Order)
+begin
+  change $Order (Number = 'x');
+  send external object $Order;
+  return;
+end;

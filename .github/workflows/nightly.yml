@@ -5,12 +5,23 @@ on:
     # Every day at 02:00 UTC
     - cron: '0 2 * * *'
   workflow_dispatch: # Allow manual trigger
+    inputs:
+      # A manual run of everything from a branch would also publish that
+      # branch's binaries as the `nightly` release. `bench` runs the benchmark
+      # job alone, which is how a change to it is tried before it merges.
+      only:
+        description: 'Run every job, or the benchmark alone'
+        type: choice
+        options: [all, bench]
+        default: all
 
 permissions:
   contents: write
 
 jobs:
   test:
+    # On a schedule `inputs.only` is empty, so every job runs.
+    if: inputs.only != 'bench'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -41,7 +52,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.3'
+          go-version: '1.27.4'
 
       - name: Cache ANTLR4 JAR
         uses: actions/cache@v6
@@ -78,6 +89,7 @@ jobs:
   # in the job log. Once this job is green, fold the version into the `test`
   # matrix and delete this job.
   test-mendix-9:
+    if: inputs.only != 'bench'
     runs-on: ubuntu-latest
     continue-on-error: true
     env:
@@ -90,7 +102,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.3'
+          go-version: '1.27.4'
 
       # mxbuild 9 draws through System.Drawing; without libgdiplus every mx call
       # dies with "The type initializer for 'Gdip' threw an exception."
@@ -128,6 +140,24 @@ jobs:
         run: make test-integration
         timeout-minutes: 60
 
+  # The tunnel seam's !linux stub on macOS (ADR-0009) -- the ONLY place it runs.
+  # push-test.yml runs it on Windows, on every PR and main push; macOS left
+  # that workflow because its hosted queue failed to deliver a runner for a
+  # third of main pushes. This catches a darwin-only break within a day; run it
+  # on demand with workflow_dispatch. Like upgrade-full-corpus it does not gate
+  # the release: a nightly is not held back by a macOS queue flake.
+  tunnel-seam-macos:
+    if: inputs.only != 'bench'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.4'
+      - name: Test the tunnel seam
+        run: bash scripts/test-tunnel-seam.sh
+
   # The upgrade property test over the WHOLE mdl-examples corpus, header-only
   # scripts included (MXCLI_UPGRADE_ALL). Per-PR CI executes only the scripts
   # the upgrade rewrites beyond the header and terminators; this is the run that
@@ -135,6 +165,7 @@ jobs:
   # Mendix version — it runs on the committed PedApp fixture and never calls
   # mx — so it runs once, not per matrix entry. It does not gate the release.
   upgrade-full-corpus:
+    if: inputs.only != 'bench'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -145,7 +176,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.3'
+          go-version: '1.27.4'
       - name: Cache ANTLR4 JAR
         uses: actions/cache@v6
         with:
@@ -166,8 +197,202 @@ jobs:
           MXCLI_UPGRADE_SHARD: ${{ matrix.shard }}
         timeout-minutes: 45
 
+  # The agent dev-loop benchmark (docs/11-proposals/PROPOSAL_agent_devloop_benchmark.md):
+  # a scripted session of the mxcli commands an agent runs, timed one process
+  # per command. A hosted runner's speed varies from night to night by more
+  # than most regressions, so the job does not compare tonight with last
+  # night: it downloads the previous nightly's binary and runs both
+  # interleaved on THIS runner, and reports the ratio. The record goes to the
+  # `benchmarks` branch, one file per run.
+  #
+  # Three sessions. Two time mxcli alone and start from the committed PedApp
+  # fixture. The third times the running app -- boot, a hot change, an entity
+  # change, a page check, tests -- on a project `mxcli new` creates, and so
+  # needs mxbuild and the runtime (mxcli downloads both), JDK 21 for the
+  # runtime, and a browser for the page check. It runs last: if it fails, the
+  # record of the first two is still written and committed.
+  #
+  # Does not gate the release, like upgrade-full-corpus: a slow night must not
+  # hold a nightly back. The driver exits non-zero only when a command fails
+  # or re-running a settled script changes a file.
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    name: agent dev-loop benchmark
+    permissions:
+      # The record and the trend are pushed to the `benchmarks` branch; an
+      # alert opens or updates an issue.
+      contents: write
+      issues: write
+    env:
+      # One version, the one the running-app session was developed against.
+      # Moving it is a deliberate change: boot and apply times differ between
+      # Mendix versions, so the trend restarts where it moves.
+      BENCH_MENDIX_VERSION: '11.13.0'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.4'
+      - name: Cache ANTLR4 JAR
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository/org/antlr/antlr4
+          key: antlr4-4.13.2
+      - name: Install ANTLR4
+        run: pip install 'antlr4-tools==0.2.2'
+      - name: Generate parser
+        run: make grammar
+        env:
+          ANTLR4_TOOLS_ANTLR_VERSION: '4.13.2'
+
+      # The Mendix 11 runtime launches under JDK 21; the runner's default
+      # `java` is older.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # `mxcli playwright check` requires the `playwright` package from the
+      # global node_modules and launches its Chromium.
+      - name: Install Playwright and Chromium
+        run: |
+          npm install -g playwright@1.63.0
+          npx --yes playwright@1.63.0 install --with-deps chromium
+
+      # First, before the `nightly` job can replace the release. That job
+      # waits for the whole `test` matrix, but nothing here relies on it: the
+      # record names the baseline's version, and with no baseline the run
+      # still measures, without ratios.
+      - name: Download the previous nightly binary
+        id: baseline
+        run: |
+          mkdir -p "$RUNNER_TEMP/baseline"
+          if gh release download nightly --repo "$GITHUB_REPOSITORY" \
+               --pattern mxcli-linux-amd64 --dir "$RUNNER_TEMP/baseline"; then
+            chmod +x "$RUNNER_TEMP/baseline/mxcli-linux-amd64"
+            echo "path=$RUNNER_TEMP/baseline/mxcli-linux-amd64" >> "$GITHUB_OUTPUT"
+          else
+            echo "No previous nightly binary: measuring without an A/B."
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Run the benchmark
+        run: |
+          make bench BASELINE="${{ steps.baseline.outputs.path }}" \
+            BENCH_RUNTIME="$BENCH_MENDIX_VERSION" \
+            BENCH_FLAGS="-out agentbench-record.json -summary $GITHUB_STEP_SUMMARY"
+
+      - name: Upload the record
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-benchmark-record
+          path: agentbench-record.json
+          if-no-files-found: ignore
+
+      # One file per run, so two runs never edit the same file. An orphan
+      # branch: results only, never merged. With the record go TREND.md and
+      # trend.json, rebuilt from every record on the branch by
+      # scripts/agentbench/trend -- so a lost push is retried from the
+      # branch as it then stands, not rebased: the trend is a function of
+      # the records, and two runs' versions of it would conflict.
+      #
+      # A run from another branch (workflow_dispatch) builds the trend with
+      # its own record in it and uploads that, and pushes nothing: it is not
+      # history, but it is how a change to the trend is tried.
+      - name: Record the run and build the trend
+        # hashFiles sees the workspace only, which is why the record is written there.
+        if: always() && hashFiles('agentbench-record.json') != ''
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse --short HEAD)
+          file="results/$(date -u +%Y/%m)/$(date -u +%Y-%m-%dT%H%M)-$sha.json"
+          bm="$RUNNER_TEMP/benchmarks"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch origin benchmarks:benchmarks 2>/dev/null; then
+            git worktree add "$bm" benchmarks
+          else
+            git worktree add --detach "$bm"
+            git -C "$bm" checkout --orphan benchmarks
+            git -C "$bm" rm -rf -q .
+            printf '%s\n' '# Agent dev-loop benchmark records' '' \
+              'One JSON file per nightly run, written by the `bench` job of `.github/workflows/nightly.yml`.' \
+              'Never merged into `main`. How to read a record: `docs-site/src/internals/agent-benchmark.md` on `main`.' \
+              > "$bm/README.md"
+          fi
+          for attempt in 1 2 3; do
+            mkdir -p "$bm/$(dirname "$file")"
+            cp agentbench-record.json "$bm/$file"
+            # The record is what must not be lost: a trend that fails to
+            # build is a warning, and the next run rebuilds it.
+            go run ./scripts/agentbench/trend -records "$bm/results" \
+              -md "$bm/TREND.md" -json "$bm/trend.json" -alerts "$RUNNER_TEMP/bench-alerts.md" \
+              || echo "::warning::the benchmark trend could not be built"
+            if [ "$GITHUB_REF" != refs/heads/main ]; then
+              echo "Not main: the record and the trend are not pushed."
+              exit 0
+            fi
+            git -C "$bm" add -A
+            git -C "$bm" commit -q -m "bench: $sha"
+            if git -C "$bm" push origin benchmarks; then exit 0; fi
+            git -C "$bm" fetch origin benchmarks
+            git -C "$bm" reset -q --hard FETCH_HEAD
+          done
+          exit 1
+
+      - name: Upload the trend
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-benchmark-trend
+          path: |
+            ${{ runner.temp }}/benchmarks/TREND.md
+            ${{ runner.temp }}/benchmarks/trend.json
+            ${{ runner.temp }}/bench-alerts.md
+          if-no-files-found: ignore
+
+      # One issue, opened when the trend has something to report and updated
+      # while it does. A comment is added only when what is reported changed,
+      # so a regression nobody has got to yet does not notify every night.
+      # Never closed from here: that an alert stopped firing is not the same
+      # as someone having looked.
+      - name: Report alerts in an issue
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/bench-alerts.md"
+          if [ ! -s "$body" ]; then
+            echo "No alerts."
+            exit 0
+          fi
+          cat "$body" >> "$GITHUB_STEP_SUMMARY"
+          printf '\nRun: %s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> "$body"
+          gh label create benchmark-regression --repo "$GITHUB_REPOSITORY" --color D93F0B \
+            --description "The agent dev-loop benchmark has something to report" 2>/dev/null || true
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --label benchmark-regression --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -z "$number" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --label benchmark-regression \
+              --title "Agent dev-loop benchmark: regression alert" --body-file "$body"
+            exit 0
+          fi
+          # The alert lines are the list items; the figures in them move a
+          # little every night, so compare kind, session and step only.
+          reported() { grep '^- \*\*' "$1" | sed 's/: .*//' | sort; }
+          gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$RUNNER_TEMP/bench-alerts-was.md"
+          gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$body"
+          if [ "$(reported "$body")" != "$(reported "$RUNNER_TEMP/bench-alerts-was.md")" ]; then
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body-file "$body"
+          fi
+
   nightly:
     needs: test
+    if: inputs.only != 'bench'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -176,7 +401,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.3'
+          go-version: '1.27.4'
 
       - uses: oven-sh/setup-bun@v2
 
@@ -209,9 +434,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      # One version string for the binaries and the dated release that carries
+      # them: `mxcli --version` prints it, `mxcli init` stamps it into a
+      # project, and the bootstrap script can then download exactly that build.
+      - name: Compute nightly version
+        if: steps.check.outputs.skip != 'true'
+        id: version
+        run: echo "version=nightly-$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Build release binaries
         if: steps.check.outputs.skip != 'true'
-        run: VERSION=nightly-$(date -u +%Y%m%d)-$(git rev-parse --short HEAD) make release
+        run: VERSION=${{ steps.version.outputs.version }} make release
 
       - name: Generate changelog
         if: steps.check.outputs.skip != 'true'
@@ -253,3 +486,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           NOTES: ${{ steps.changelog.outputs.body }}
+
+      # The rolling `nightly` tag moves every night, so the build a project was
+      # made with could not be fetched again: no rollback, and the bootstrap
+      # script's "set MXCLI_TAG to <stamp>" downloaded a 404 (ako/mxcli#2359).
+      # Each nightly is also published under its dated tag — the version
+      # `mxcli --version` prints — and the newest KEEP of those are kept.
+      - name: Publish dated nightly
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          if ! gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release create "$VERSION" \
+              --prerelease \
+              --latest=false \
+              --target "$(git rev-parse HEAD)" \
+              --title "Nightly $(date -u +%Y-%m-%d) ($VERSION)" \
+              --notes "$NOTES" \
+              bin/mxcli-*
+          fi
+          gh release list --limit 200 --json tagName,createdAt \
+            -q '.[] | select(.tagName | test("^nightly-[0-9]{8}-")) | [.createdAt, .tagName] | @tsv' |
+            sort -r | tail -n +$((KEEP + 1)) | cut -f2 |
+            while read -r old; do
+              gh release delete "$old" --cleanup-tag -y || true
+            done
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ steps.changelog.outputs.body }}
+          VERSION: ${{ steps.version.outputs.version }}
+          KEEP: '30'

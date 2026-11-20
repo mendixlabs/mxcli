@@ -1,0 +1,32 @@
+-- ako/mxcli#1968 (mendixlabs/mxcli#1746): a snippet call passing a data view's
+-- object by the data view's name (`Params: (Item = $dvOuter)`) was written as a
+-- page-parameter mapping (PageParameter = 'dvOuter'), naming a page parameter
+-- the page does not have. Measured on a fresh 11.14.0 app: the base build gives
+-- 2 x CE0115 "The arguments that are passed to snippet … need to be refreshed"
+-- (scA, scC); this build writes the Widget slot, 0 errors, and describe -> exec
+-- of PageA is Unchanged. (11.12.6 does not report CE0115 here.)
+mdl 1;
+create module BugTest1968;
+create persistent entity BugTest1968.Item (Name: String(50));
+create persistent entity BugTest1968.Note (Text: String(200));
+create association BugTest1968.Note_Item from BugTest1968.Note to BugTest1968.Item;
+create snippet BugTest1968.SN_Item ( Params: ( $Item: BugTest1968.Item ) ) {
+  dataview dvSnip (DataSource: $Item) { textbox tbSnip (Label: 'Name', Attribute: Name) }
+};
+create page BugTest1968.PageA ( Title: 'A', Layout: Atlas_Core.PopupLayout, Params: ( $Note: BugTest1968.Note ) ) {
+  dataview dvOuter (DataSource: $Note/BugTest1968.Note_Item) {
+    dataview dvInner (DataSource: $Note) {
+      snippetcall scA (Snippet: BugTest1968.SN_Item, Params: (Item = $dvOuter))
+    }
+  }
+};
+create page BugTest1968.PageB ( Title: 'B', Layout: Atlas_Core.PopupLayout, Params: ( $Note: BugTest1968.Note ) ) {
+  dataview dvOuterB (DataSource: $Note/BugTest1968.Note_Item) {
+    snippetcall scB (Snippet: BugTest1968.SN_Item, Params: (Item = $currentObject))
+  }
+};
+create page BugTest1968.PageC ( Title: 'C', Layout: Atlas_Core.PopupLayout, Params: ( $Note: BugTest1968.Note ) ) {
+  dataview dvOuterC (DataSource: $Note/BugTest1968.Note_Item) {
+    snippetcall scC (Snippet: BugTest1968.SN_Item, Params: (Item = $dvOuterC))
+  }
+};

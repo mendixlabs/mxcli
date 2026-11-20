@@ -36,15 +36,25 @@ type scriptContext struct {
 	// association endpoint check from refusing what exec will find (#555).
 	indirectEntities      map[string]bool
 	externalEntityModules map[string]bool
-	enumerations          map[string]bool // Enumerations created (Module.Enum)
-	microflows            map[string]bool // Microflows created (Module.Microflow)
-	nanoflows             map[string]bool // Nanoflows created (Module.Nanoflow)
-	pages                 map[string]bool // Pages created (Module.Page)
-	snippets              map[string]bool // Snippets created (Module.Snippet)
-	layouts               map[string]bool // Layouts created (Module.Layout)
-	menus                 map[string]bool // Menu documents created (Module.Menu)
-	constants             map[string]bool // Constants created (Module.Constant)
-	workflows             map[string]bool // Workflows created (Module.Workflow)
+	// indirectDocs is the same for every document kind ("microflow:M.Name"),
+	// and renamedModules the names a rename module gives, so the statement
+	// target check does not refuse what an earlier statement provides
+	// (ako/mxcli#1821). opaqueModules are modules a statement fills with
+	// documents it does not name (generated connectors, business event
+	// services); opaqueScript is an execute script, which can create anything.
+	indirectDocs   map[string]bool
+	renamedModules map[string]bool
+	opaqueModules  map[string]bool
+	opaqueScript   bool
+	enumerations   map[string]bool // Enumerations created (Module.Enum)
+	microflows     map[string]bool // Microflows created (Module.Microflow)
+	nanoflows      map[string]bool // Nanoflows created (Module.Nanoflow)
+	pages          map[string]bool // Pages created (Module.Page)
+	snippets       map[string]bool // Snippets created (Module.Snippet)
+	layouts        map[string]bool // Layouts created (Module.Layout)
+	menus          map[string]bool // Menu documents created (Module.Menu)
+	constants      map[string]bool // Constants created (Module.Constant)
+	workflows      map[string]bool // Workflows created (Module.Workflow)
 	// Task queues created (Module.Queue, lower-cased — a queue is resolved
 	// case-insensitively, like buildQueueQualifiedNames). Missing, a queue the
 	// script creates was "not found" for every `in queue` call to it
@@ -52,7 +62,9 @@ type scriptContext struct {
 	queues map[string]bool
 
 	// Image collections created (Module.Collection) and the images they declare
-	// (Module.Collection.Image), both lower-cased like buildImageQualifiedNames.
+	// (Module.Collection.Image), both spelled as declared, like
+	// buildImageQualifiedNames — Mendix resolves an image reference
+	// case-sensitively.
 	// Missing, an image widget naming a collection the same script creates was
 	// "image collection not found" and exec refused the script
 	// (mendixlabs/mxcli#1419).
@@ -99,9 +111,17 @@ type scriptContext struct {
 	// the workflow task signature checks, for the same reason as flowParams: the
 	// task page, the targeting microflow, the context entity and the workflow are
 	// ordinarily one script.
-	pageParams            map[string][]string // Module.Page (lower-cased) -> parameter entities
-	pageParamNames        map[string][]string // Module.Page (lower-cased) -> parameter names, for show page arguments
-	entityGeneralizations map[string]string   // Module.Entity (lower-cased) -> generalization, "" for none
+	pageParams     map[string][]string // Module.Page (lower-cased) -> parameter entities
+	pageParamNames map[string][]string // Module.Page (lower-cased) -> parameter names, for show page arguments
+	// pageParamDecls keeps a script-declared page's parameters whole, for the
+	// menu item CE1571 check, which needs to know which are optional
+	// (ako/mxcli#2098).
+	pageParamDecls map[string][]ast.PageParameter
+	// pageParamEdits is each page's add/drop parameter operations from alter
+	// page statements, in script order, applied over pageParamNames or the
+	// stored list (ako/mxcli#1940).
+	pageParamEdits        map[string][]ast.AlterPageOperation
+	entityGeneralizations map[string]string // Module.Entity (lower-cased) -> generalization, "" for none
 
 	// Associations and entity attributes declared in the script, for
 	// MDL-XPATH01. Same reason as flowParams above: the overwhelmingly common
@@ -173,6 +193,11 @@ func newScriptContext() *scriptContext {
 
 		pageParams:            make(map[string][]string),
 		pageParamNames:        make(map[string][]string),
+		pageParamDecls:        make(map[string][]ast.PageParameter),
+		pageParamEdits:        make(map[string][]ast.AlterPageOperation),
+		indirectDocs:          make(map[string]bool),
+		renamedModules:        make(map[string]bool),
+		opaqueModules:         make(map[string]bool),
 		entityGeneralizations: make(map[string]string),
 	}
 }
@@ -304,10 +329,24 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 		if s.ObjectType == "entity" && s.Name.Module != "" && s.NewName != "" {
 			sc.indirectEntities[s.Name.Module+"."+s.NewName] = true
 		}
+		if s.ObjectType == "module" && s.NewName != "" {
+			sc.renamedModules[s.NewName] = true
+		} else if s.Name.Module != "" && s.NewName != "" && !s.DryRun {
+			sc.markIndirectDoc(s.ObjectType, s.Name.Module+"."+s.NewName)
+		}
 	case *ast.MoveStmt:
 		if s.DocumentType == ast.DocumentTypeEntity && s.TargetModule != "" {
 			sc.indirectEntities[s.TargetModule+"."+s.Name.Name] = true
 		}
+		if s.TargetModule != "" {
+			sc.markIndirectDoc(moveTargetKind(s.DocumentType), s.TargetModule+"."+s.Name.Name)
+		}
+	case *ast.ExecuteScriptStmt:
+		sc.opaqueScript = true
+	case *ast.SQLGenerateConnectorStmt:
+		sc.opaqueModules[s.Module] = true
+	case *ast.CreateBusinessEventServiceStmt:
+		sc.opaqueModules[s.Name.Module] = true
 	case *ast.CreateEnumerationStmt:
 		if s.Name.Module != "" {
 			sc.enumerations[s.Name.String()] = true
@@ -331,10 +370,15 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 			sc.pages[s.Name.String()] = true
 			sc.recordPageParams(s.Name.String(), s.Parameters)
 			sc.recordPageParamNames(s.Name.String(), s.Parameters)
+			sc.pageParamDecls[strings.ToLower(s.Name.String())] = s.Parameters
 		}
 	case *ast.CreateSnippetStmtV3:
 		if s.Name.Module != "" {
 			sc.snippets[s.Name.String()] = true
+		}
+	case *ast.AlterPageStmt:
+		if s.ContainerType == "PAGE" && s.PageName.Module != "" {
+			sc.recordPageParamEdits(s.PageName.String(), s.Operations)
 		}
 	case *ast.CreateLayoutStmt:
 		if s.Name.Module != "" {
@@ -346,10 +390,10 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 		}
 	case *ast.CreateImageCollectionStmt:
 		if s.Name.Module != "" {
-			qn := strings.ToLower(s.Name.String())
+			qn := s.Name.String()
 			sc.imageCollections[qn] = true
 			for _, img := range s.Images {
-				sc.images[qn+"."+strings.ToLower(img.Name)] = true
+				sc.images[qn+"."+img.Name] = true
 			}
 		}
 	case *ast.CreateWorkflowStmt:
@@ -474,6 +518,12 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 		return []error{mdlerrors.NewNotConnected()}, nil
 	}
 
+	// The project does not change while it is checked: list each kind once.
+	if ctx.checkMemo == nil {
+		ctx.checkMemo = &checkPassMemo{}
+		defer func() { ctx.checkMemo = nil }()
+	}
+
 	// Collect all objects defined in the script
 	sc := newScriptContext()
 	sc.collectDefinitions(prog)
@@ -509,6 +559,9 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// unchecked, so a typo was CE1613 at build time, after the whole menu had
 	// been rewritten.
 	errors = append(errors, validateNavigationTargets(ctx, prog, sc)...)
+	// CE1571 on a menu item: a menu has no context object, so a flow or page
+	// parameter nothing fills is a build error (ako/mxcli#2098).
+	errors = append(errors, validateMenuItemArguments(ctx, prog, sc)...)
 	// Resolve what a GRANT / REVOKE, a user role and a demo user name: the
 	// entity, document or member, and the module and user roles. exec refuses
 	// the grants after the statements before them are written, and writes the
@@ -547,6 +600,11 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// useless — a snippet call renders no element (mendixlabs/mxcli#1511).
 	// What the target IS lives only in the document. Warns, never blocks.
 	validateStoredSnippetCallAppearance(ctx, prog, sc)
+	// An ALTER STYLING design-property key some widget type declares, judged
+	// against the STORED widget's own type: a ListView's `Row size` on a
+	// DynamicText passed the no-project any-type check and was CE6083 at build
+	// (ako/mxcli#613). Warns, never blocks.
+	validateAlterStylingStoredTypes(ctx, prog, sc)
 	// The entity an ALTER's INSERT / REPLACE binds against is in the stored
 	// document, not the statement. Where it has none (a missing flow source, or
 	// no data container at all) a bare binding is written bare and the project
@@ -579,6 +637,21 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// CE0069, after exec wrote it (ako/mxcli#1645). Replayed in statement
 	// order, judged by the verdict exec gives.
 	errors = append(errors, validateMemberNameClashes(ctx, prog)...)
+	// A drop + create of a flow whose stored body holds an activity MDL cannot
+	// express: the create writes it without that activity (mendixlabs/mxcli#1735).
+	errors = append(errors, validateDropRecreateKeepsActivities(ctx, prog)...)
+	// toString(<Decimal>) into a String(n): builds, and overflows the attribute
+	// on commit (mendixlabs/mxcli#1515). Warns, never blocks.
+	validateToStringIntoShortAttribute(ctx, prog, sc)
+	// A create or modify that leaves an agent without a selected model or a
+	// consumed MCP service without an endpoint: MDL-AGENT02/03 for the case
+	// only the project can see (ako/mxcli#2089). Warns, except an agent with a
+	// Model and no selected model: Studio Pro's AE018, an error (ako/mxcli#2289).
+	errors = append(errors, validateAgentDocumentsLeftUnset(ctx, prog, sc)...)
+	// An agent's Model, Entity, tool documents and knowledge bases, and the
+	// agent an alter names: exec resolves and refuses them, check did not
+	// (ako/mxcli#2293).
+	errors = append(errors, validateAgentReferences(ctx, prog)...)
 	return errors, sc.warnings
 }
 
@@ -686,6 +759,11 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 		return err
 	}
 
+	// A packaged module is read-only; exec's writer refuses it (#1780).
+	if err := validatePackagedModuleTarget(ctx, stmt); err != nil {
+		return err
+	}
+
 	// An ALTER's target document must already exist. Until this, only the
 	// MODULE was resolved, so a misspelled document passed --references and was
 	// refused by exec — check was the weaker gate, which is backwards.
@@ -719,6 +797,11 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 			warnings, err := checkSpecializationSystemMembers(ctx, s.Name.String(), s.Generalization.String(), s.Attributes, true)
 			sc.warnings = append(sc.warnings, warnings...)
 			if err != nil {
+				return err
+			}
+			// The persistability verdict exec gives; a parent the script
+			// declares counts, it decides the chain once written (#2005).
+			if err := checkSpecializationPersistability(ctx, sc, s); err != nil {
 				return err
 			}
 		}
@@ -1068,6 +1151,27 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 		}
 	case *ast.CreatePublishedRestServiceStmt:
 		return validatePublishedRestAuthMicroflow(ctx, s.Authentication, sc)
+	case *ast.CreateConsumedMCPServiceStmt:
+		return validateConsumedMCPRefs(ctx, sc, s.Name, s.Endpoint, s.AuthenticationMicroflow)
+	case *ast.AlterConsumedMCPServiceStmt:
+		var endpoint, mf *ast.QualifiedName
+		for k, v := range s.Changes {
+			if v == "" {
+				continue
+			}
+			qn := parseQualifiedNameStr(v)
+			switch strings.ToLower(k) {
+			case "endpoint":
+				endpoint = &qn
+			case "authenticationmicroflow":
+				mf = &qn
+			}
+		}
+		return validateConsumedMCPRefs(ctx, sc, s.Name, endpoint, mf)
+	case *ast.CreateMessageDefinitionCollectionStmt:
+		return messageDefinitionMemberErrors(ctx, sc, s.Name.String(), s.Definitions...)
+	case *ast.CreateMessageDefinitionStmt:
+		return messageDefinitionMemberErrors(ctx, sc, s.Name.String(), s.Definition)
 	case *ast.AlterPublishedRestServiceStmt:
 		for _, a := range s.Actions {
 			if set, ok := a.(*ast.PublishedRestSetAction); ok {
@@ -1197,6 +1301,22 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 				ents = buildEntityQualifiedNames(ctx)
 			}
 			errs = validateSettingsReferences(s, mfs, ents, rets, sc)
+			// A theme module order naming a module neither the project nor the
+			// script has is what exec refuses (ako/mxcli#1286).
+			if names, ok := s.Properties["ThemeModuleOrder"].([]string); ok && strings.EqualFold(s.Section, "webui") {
+				if mods, err := ctx.Backend.ListModules(); err == nil {
+					known := map[string]bool{}
+					for _, m := range mods {
+						known[m.Name] = true
+					}
+					for _, n := range names {
+						if !known[n] && !sc.modules[n] {
+							errs = append(errs, mdlerrors.NewNotFoundMsg("module", n, fmt.Sprintf(
+								"ThemeModuleOrder names module %s, which the project does not have", n)))
+						}
+					}
+				}
+			}
 		}
 		if len(errs) > 0 {
 			return errs[0]
@@ -1413,7 +1533,7 @@ func carriedExclusion(ctx *ExecContext, kind string, qn ast.QualifiedName, rewri
 	var docs []doc
 	switch kind {
 	case "page":
-		pgs, err := ctx.Backend.ListPages()
+		pgs, err := projectPages(ctx)
 		if err != nil {
 			return false
 		}
@@ -1440,6 +1560,38 @@ func carriedExclusion(ctx *ExecContext, kind string, qn ast.QualifiedName, rewri
 		excluded = true
 	}
 	return excluded
+}
+
+// markIndirectDoc records a document an earlier statement of the script puts
+// under qn without creating it — a RENAME, or a MOVE to another module.
+//
+// It goes into indirectDocs, and into the kind's own script-defined set as
+// well: every reference check (show page, call microflow, a page's snippet
+// call, …) consults that set, so a document known only to indirectDocs was
+// "not found" by the name exec would find it under (mendixlabs/mxcli#1790).
+func (sc *scriptContext) markIndirectDoc(kind, qn string) {
+	if kind == "" {
+		return
+	}
+	sc.indirectDocs[kind+":"+qn] = true
+	switch kind {
+	case "page":
+		sc.pages[qn] = true
+	case "snippet":
+		sc.snippets[qn] = true
+	case "layout":
+		sc.layouts[qn] = true
+	case "microflow":
+		sc.microflows[qn] = true
+	case "nanoflow":
+		sc.nanoflows[qn] = true
+	case "enumeration":
+		sc.enumerations[qn] = true
+	case "constant":
+		sc.constants[qn] = true
+	case "workflow":
+		sc.workflows[qn] = true
+	}
 }
 
 // validateFlowBodyReferences validates references in any flow body (microflow or nanoflow).
@@ -1797,7 +1949,7 @@ func buildEntityIndex(ctx *ExecContext) map[string]*domainmodel.Entity {
 	for _, m := range modules {
 		moduleNames[m.ID] = m.Name
 	}
-	dms, err := ctx.Backend.ListDomainModels()
+	dms, err := projectDomainModels(ctx)
 	if err != nil {
 		return nil
 	}
@@ -2324,4 +2476,31 @@ func validatePublishedRestAuthMicroflow(ctx *ExecContext, auth *ast.PublishedRes
 		return nil
 	}
 	return mdlerrors.NewValidationf("MDL-REST04: authentication microflow not found: %s", auth.Microflow)
+}
+
+// validateConsumedMCPRefs checks a consumed MCP service's Endpoint and
+// AuthenticationMicroflow (#2060). The endpoint must be a String constant:
+// AgentEditorCommons reads its value as the server URL. MCPClient calls the
+// credentials microflow with no arguments and reads its result as a list of
+// System.HttpHeader (ConsumedMCPService_CreateMCPClient), so a parameter or
+// another return type fails at runtime. A constant or microflow the script
+// itself creates is known by name only, so its type is left to exec.
+func validateConsumedMCPRefs(ctx *ExecContext, sc *scriptContext, name ast.QualifiedName, endpoint, mf *ast.QualifiedName) error {
+	var problems []string
+	if endpoint != nil && !sc.constants[endpoint.String()] {
+		if _, err := consumedMCPEndpointRef(ctx, *endpoint); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
+	if mf != nil && !sc.microflows[mf.String()] {
+		if live, ok := liveMicroflowsByQualifiedName(ctx)[mf.String()]; !ok {
+			problems = append(problems, "AuthenticationMicroflow not found: "+mf.String())
+		} else if p := consumedMCPCredentialsProblem(live); p != "" {
+			problems = append(problems, "AuthenticationMicroflow "+mf.String()+" "+p)
+		}
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	return mdlerrors.NewValidationf("consumed mcp service %s: %s", name, strings.Join(problems, "; "))
 }

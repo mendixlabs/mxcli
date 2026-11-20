@@ -31,6 +31,12 @@ const (
 	endpointStartupFlow = mxTestModule + ".RegisterEndpoint"
 	// testFlowPrefix prefixes every generated per-test microflow.
 	testFlowPrefix = mxTestModule + ".Test_"
+	// errorMessageFlow returns a raised error's message to a generated test
+	// caller, which applies entity access and so may not read it itself
+	// (CE0150, ako/mxcli#2100). It carries the generated prefix so every path
+	// that finds and removes the generated flows removes it too, and no test ID
+	// (test_N) can produce its name.
+	errorMessageFlow = testFlowPrefix + "ErrorMessage"
 )
 
 // newEndpointToken returns a fresh 256-bit token as hex.
@@ -224,6 +230,11 @@ com.mendix.core.Core.addRequestHandler("` + endpointPath + `", new com.mendix.ex
             return;
         }
 
+        if ("` + endpointExecRoute + `".equals(path)) {
+            doExec(request, response, out);
+            return;
+        }
+
         if (!"run".equals(path)) {
             response.setStatus(com.mendix.m2ee.api.IMxRuntimeResponse.NOT_FOUND);
             out.write("{\"error\":\"no such route\",\"path\":" + esc(path) + "}");
@@ -308,6 +319,7 @@ com.mendix.core.Core.addRequestHandler("` + endpointPath + `", new com.mendix.ex
         out.write(b.toString());
         out.flush();
     }
+` + endpointExecJava + `
 });
 
 log.info("MxTest: test endpoint registered at /` + endpointPath + `");

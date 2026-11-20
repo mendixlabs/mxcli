@@ -27,6 +27,35 @@ func HasStrictEscapes(in antlr.CharStream) bool {
 	return ok
 }
 
+// followsMemberSeparator reports whether the token just matched comes straight
+// after a `/` or `.` member separator on the same line (spaces and tabs between
+// them skipped), as `Error` does in `Obj/Error`. A block comment's closing `*/`
+// is not a separator, and neither is a line break: a line comment ending in a
+// full stop (`-- see the docs.`) must not swallow the `error message` clause on
+// the next line.
+//
+// It is a right-edge predicate, so it runs only once the input has matched the
+// rule; at the left edge ANTLR evaluates it at the start of every token, which
+// disables the lexer's DFA cache and doubled `check` time on the examples. The
+// token's start is therefore read from TokenStartCharIndex: LA(j) for a
+// negative j is the character at Index()+j.
+func (l *MDLLexer) followsMemberSeparator() bool {
+	in := l.GetInputStream()
+	at := func(k int) int { return in.LA(k - in.Index()) }
+	for k := l.TokenStartCharIndex - 1; k >= 0; k-- {
+		switch at(k) {
+		case ' ', '\t':
+			continue
+		case '.':
+			return true
+		case '/':
+			return k == 0 || at(k-1) != '*'
+		}
+		return false
+	}
+	return false
+}
+
 // isTrailingComma reports whether the ',' just matched ends a bracketed list:
 // the next significant character closes a (), {} or [] (whitespace and
 // comments skipped), and the one before it neither opens a list nor is another
@@ -141,6 +170,11 @@ NORMALIZED: N O R M A L I Z E D;
 // activity (ADR-0012). In `keyword` too, so "handles" still parses as a name.
 HANDLES: H A N D L E S;
 
+// `command = $Cmd include associations (M.A (M.B))` — a call external action
+// argument's Associations to include (ako/mxcli#1914). In `keyword` too, so
+// "include" still parses as a name.
+INCLUDE: I N C L U D E;
+
 ENTITY: E N T I T Y;
 PERSISTENT: P E R S I S T E N T;
 VIEW: V I E W;
@@ -194,9 +228,15 @@ RESTRICT: R E S T R I C T;
 //
 // `error message` is the one spelling (R8, ako/mxcli#752); the other two are
 // aliases, and so are `error`, `feedback` where a rule takes a message.
-ERROR_MESSAGE: E R R O R WS+ M E S S A G E
+//
+// Never right after a `/` or `.` member separator: there `Error` is a member's
+// name, so `validation feedback $E/Error message 'x'` — what describe writes
+// for an attribute called Error — is the attribute and then the MESSAGE
+// keyword, not this clause (mendixlabs/mxcli#1720).
+ERROR_MESSAGE: ( E R R O R WS+ M E S S A G E
              | E R R O R '_' M E S S A G E /* @alias MDL-DEPR021 */
-             | E R R O R M E S S A G E /* @alias MDL-DEPR021 */;
+             | E R R O R M E S S A G E /* @alias MDL-DEPR021 */
+             ) {!p.followsMemberSeparator()}?;
 CASCADE: C A S C A D E;
 PREVENT: P R E V E N T;
 
@@ -379,6 +419,7 @@ CONTAINER: C O N T A I N E R;
 ROW: R O W;
 ITEM: I T E M;
 CELL: C E L L;   // legacy table cell address: `table1 cell(row, column)`
+WRAP: W R A P;   // alter page: `wrap <widget> in { <container> }` (ako/mxcli#2122)
 CONTROLBAR: C O N T R O L B A R;
 SEARCH: S E A R C H;
 SEARCHBAR: S E A R C H B A R;
@@ -511,6 +552,10 @@ TOOL: T O O L;
 KNOWLEDGE: K N O W L E D G E;
 BASES: B A S E S;
 CONSUMED: C O N S U M E D;
+// CONSUME must stay distinct from CONSUMED above: ANTLR's longest match keeps
+// `consumed` on CONSUMED whichever order they appear in, so this only adds the
+// shorter word. Body item of a consumed business event service (#2384 §5.1).
+CONSUME: C O N S U M E;
 MCP: M C P;
 STATICIMAGE: S T A T I C I M A G E;
 DYNAMICIMAGE: D Y N A M I C I M A G E;
@@ -954,6 +999,14 @@ REASON: R E A S O N;
 OPEN: O P E N;
 COMPLETE_TASK: C O M P L E T E WS+ T A S K
              | C O M P L E T E '_' T A S K /* @alias MDL-DEPR020 */;
+
+// `<unbound>`: a text-template parameter with no binding yet, `{1} = <unbound>`.
+// One token rather than `<` IDENTIFIER `>` so the word stays an ordinary
+// identifier everywhere else (an attribute may be called Unbound), and so no
+// other word in angle brackets parses as it. Longest match beats LESS_THAN.
+// `describe` prints it for a stored parameter with no binding — normal in a
+// building block (ako/mxcli#2181).
+UNBOUND_PARAM: '<' U N B O U N D '>';
 
 // =============================================================================
 // COMPARISON OPERATORS (multi-char before single-char)

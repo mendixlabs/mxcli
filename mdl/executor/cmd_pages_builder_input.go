@@ -108,7 +108,10 @@ func (pb *pageBuilder) attributeIndex() attributeIndex {
 }
 
 // entityAttributeOwners indexes, for every entity in the project, the set of
-// attribute names it declares itself, plus each entity's direct parent.
+// attribute names it declares itself, plus each entity's direct parent. The
+// system members an entity stores (createdDate, changedDate, owner,
+// changedBy) count as its own: Studio Pro stores a binding of one that a
+// specialization inherits against the entity that stores it (ako/mxcli#2106).
 func (pb *pageBuilder) entityAttributeOwners() (owners map[string]map[string]bool, parents map[string]string, err error) {
 	dms, err := pb.getDomainModels()
 	if err != nil {
@@ -127,6 +130,14 @@ func (pb *pageBuilder) entityAttributeOwners() (owners map[string]map[string]boo
 			attrs := make(map[string]bool, len(e.Attributes))
 			for _, a := range e.Attributes {
 				attrs[strings.ToLower(a.Name)] = true
+			}
+			for name, stored := range map[string]bool{
+				"createddate": e.HasCreatedDate, "changeddate": e.HasChangedDate,
+				"owner": e.HasOwner, "changedby": e.HasChangedBy,
+			} {
+				if stored {
+					attrs[name] = true
+				}
 			}
 			owners[qn] = attrs
 			if e.GeneralizationRef != "" {

@@ -24,6 +24,7 @@ func TestCheckVersionGates_DocumentShapes1811(t *testing.T) {
 	}
 	iconItem := ast.NavMenuItemDef{Caption: "Home", Icon: "Atlas_Core.Atlas_Filled.home", IconKind: types.MenuIconCollection}
 	getOp := &ast.RestOperationDef{Name: "Get", Method: "GET", Path: "/x"}
+	addon := "addon"
 	queryOp := &ast.RestOperationDef{Name: "Search", Method: "GET", Path: "/s", QueryParameters: []ast.RestParamDef{{Name: "q", DataType: "String"}}}
 	checkStatementGateCases(t, []statementGateCase{
 		{"create snippet with a parameter", &ast.CreateSnippetStmtV3{Name: qn("M", "S"), Parameters: param},
@@ -66,6 +67,10 @@ func TestCheckVersionGates_DocumentShapes1811(t *testing.T) {
 		{"add jar dependency", &ast.AlterModuleJarDepStmt{ModuleName: "M", Actions: []ast.JarDepAction{
 			&ast.AddJarDepAction{Group: "g", Artifact: "a", Version: "1"}}},
 			[3]int{9, 24, 30}, [3]int{10, 0, 0}, "add jar dependency"},
+		{"create an add-on module", &ast.CreateModuleStmt{Name: "M", Settings: ast.ModuleSettingsClause{ModuleType: &addon}},
+			[3]int{9, 11, 0}, [3]int{9, 12, 0}, "ModuleType: addon on a module"},
+		{"make a module an add-on", &ast.AlterModuleSetStmt{ModuleName: "M", Settings: ast.ModuleSettingsClause{ModuleType: &addon}},
+			[3]int{9, 11, 0}, [3]int{9, 12, 0}, "ModuleType: addon on a module"},
 		{"add a jar dependency exclusion", &ast.AlterModuleJarDepStmt{ModuleName: "M", Actions: []ast.JarDepAction{
 			&ast.AddJarDepExclusionAction{}}},
 			[3]int{10, 11, 0}, [3]int{10, 12, 0}, "add exclusion on a jar dependency"},
@@ -100,6 +105,7 @@ func TestCheckVersionGates_DocumentShapes1811(t *testing.T) {
 // variables, a menu item without an icon, a REST client with no operation.
 func TestCheckVersionGates_PlainShapesAreNotGated(t *testing.T) {
 	qn := func(module, name string) ast.QualifiedName { return ast.QualifiedName{Module: module, Name: name} }
+	app, version := "app", "2.0.0"
 	for _, stmt := range []ast.Statement{
 		&ast.CreateWorkflowStmt{Name: qn("M", "WF"), Activities: []ast.WorkflowActivityNode{&ast.WorkflowCallMicroflowNode{Microflow: qn("M", "Act")}}},
 		&ast.CreateSnippetStmtV3{Name: qn("M", "S")},
@@ -108,6 +114,8 @@ func TestCheckVersionGates_PlainShapesAreNotGated(t *testing.T) {
 		&ast.CreateNavigationStmt{ProfileName: "Responsive", ProgressiveWebApp: &types.NavPWASpec{Off: true}},
 		&ast.CreateNavigationStmt{ProfileName: "Responsive", HomePages: []ast.NavHomePageDef{{IsPage: true, Target: qn("M", "Home")}}},
 		&ast.AlterModuleJarDepStmt{ModuleName: "M", Actions: []ast.JarDepAction{&ast.DropJarDepAction{}}},
+		// An app module and a version are in every version's metamodel.
+		&ast.AlterModuleSetStmt{ModuleName: "M", Settings: ast.ModuleSettingsClause{ModuleType: &app, Version: &version}},
 	} {
 		prog := &ast.Program{Statements: []ast.Statement{&ast.CreateModuleStmt{Name: "M"}, stmt}}
 		if vs := versionGateViolations(versionCtx(t, 9, 0, 2), prog); len(vs) != 0 {

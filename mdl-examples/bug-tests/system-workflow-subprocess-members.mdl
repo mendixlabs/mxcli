@@ -1,0 +1,29 @@
+mdl 1;
+-- ============================================================================
+-- Bug: System.WorkflowSubProcess was missing from mxcli's System module
+-- ============================================================================
+--
+-- Symptom (before fix): System.WorkflowSubProcess, WorkflowSubProcessDefinition,
+-- their associations and System.WorkflowSubProcessState (Mendix 11.8+) were
+-- unknown to mxcli. A binding over System.WorkflowActivityRecord_WorkflowSubProcess
+-- could not resolve and was written as an expression: describe -> exec of
+-- TestApp's WorkflowCommons.Snip_WorkflowActivityRecord_Header failed mx check
+--   [CE0117] "Error(s) in expression." at Text 'text4'
+--
+-- After fix: the members are known for Mendix 11.8 and later (measured from
+-- each version's modeler assembly; attributes and lengths from the 11.14.0
+-- model.mdp), the binding is stored as association steps, and this script is
+-- mx check 0 errors on 11.14.0. Before 11.8 the names stay unknown, as they
+-- are to Mendix.
+--
+-- Usage (Mendix 11.8 or later):
+--   mxcli exec mdl-examples/bug-tests/system-workflow-subprocess-members.mdl -p app.mpr
+--   mxcli docker check -p app.mpr        -- expect 0 errors
+-- ============================================================================
+
+create module BugTestSubProcess;
+
+create snippet BugTestSubProcess.SN_ActivityHeader (Params: ($Activity: System.WorkflowActivityRecord)) {
+  dynamictext txtSubProcess (Content: 'Sub-process: {1}', ContentParams: ({1} = $Activity/System.WorkflowActivityRecord_WorkflowSubProcess/Caption))
+  dynamictext txtDefinition (Content: 'Definition: {1}', ContentParams: ({1} = $Activity/System.WorkflowActivityRecord_WorkflowSubProcessDefinition/Caption))
+};

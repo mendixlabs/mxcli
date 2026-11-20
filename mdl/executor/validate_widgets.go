@@ -285,6 +285,9 @@ func validateWidgetTreeIn(widgets []*ast.WidgetV3, registry *WidgetRegistry, loc
 			out = append(out, validatePluggableTemplateParams(w, locationPrefix)...)
 		}
 		out = append(out, validateWidgetVisibility(w, registry, locationPrefix)...)
+		// A required property the package declares, left unset: CE0642 /
+		// CE4899 at build time (MDL-WIDGET56).
+		out = append(out, validateWidgetRequired(w, registry, locationPrefix)...)
 		// #1519: several attributes for a widget with one attribute slot — the
 		// drop-down filter. exec refuses it; so does check.
 		if m, attrs, over := singleAttributeOverflow(lookupWidgetDef(w, registry), w); over {
@@ -298,7 +301,7 @@ func validateWidgetTreeIn(widgets []*ast.WidgetV3, registry *WidgetRegistry, loc
 		// An IMAGE with nothing to show — the default source needs an image
 		// reference MDL cannot author. See validate_widget_image.go.
 		out = append(out, validateImageSource(w, locationPrefix)...)
-		out = append(out, validateStaticWidget(w, locationPrefix)...)
+		out = append(out, validateStaticWidgetOf(w, lookupWidgetDef(w, registry), locationPrefix)...)
 		// #1511: a snippet call renders no element, so its Class / Style /
 		// DynamicClasses / design properties never reach the page.
 		out = append(out, validateSnippetCallAppearance(w, locationPrefix)...)
@@ -320,6 +323,8 @@ func validateWidgetTreeIn(widgets []*ast.WidgetV3, registry *WidgetRegistry, loc
 		// The widget's OWN action is judged in the context IT establishes, not the
 		// one it sits in — a list widget's onClick is row-scoped (ako/mxcli#552).
 		out = append(out, validateShowPageArguments(w, argContextForOwnAction(w, argCtx), locationPrefix)...)
+		// A bare `delete` with no object to delete is CE7005 (ako/mxcli#1932).
+		out = append(out, validateDeleteSource(w, argContextForOwnAction(w, argCtx), locationPrefix)...)
 		// An `Attribute:` binding with no object to bind to is written empty.
 		out = append(out, validateInputBindingContext(w, argCtx, locationPrefix)...)
 		// Unknown-property warning applies only to built-in widgets; pluggable
@@ -865,6 +870,29 @@ func widgetValueMap(w *ast.WidgetV3, def *WidgetDefinition) (values map[string]s
 			values[key] = val
 		}
 	}
+	// A widgets slot filled by a child block (`emptyplaceholder { … }`) is set as
+	// surely as a `key: value` property, but has no property to read. Counting
+	// it lets MDL-WIDGET10 see a slot the configuration hides: a Data grid 2
+	// placeholder under showEmptyPlaceholder "none" built and then failed mx
+	// check with CE0463 (ako/mxcli#1862).
+	if slots, _ := selectedChildSlots(def, w); len(slots) > 0 {
+		for _, c := range w.Children {
+			if c == nil || len(c.Children) == 0 {
+				continue
+			}
+			for _, cs := range slots {
+				if strings.EqualFold(cs.MDLContainer, defaultSlotContainer) {
+					continue // the catch-all template is not a choice the script made
+				}
+				if strings.EqualFold(cs.MDLContainer, c.Type) || strings.EqualFold(cs.PropertyKey, c.Name) ||
+					(strings.EqualFold(c.Type, "container") && strings.EqualFold(cs.MDLContainer, c.Name)) {
+					key := strings.ToLower(cs.PropertyKey)
+					values[key] = slotFilledValue
+					explicit[key] = true
+				}
+			}
+		}
+	}
 	// Direct MDL properties named after a widget key (not covered by a mapping).
 	for k, raw := range w.Properties {
 		lk := strings.ToLower(k)
@@ -878,6 +906,10 @@ func widgetValueMap(w *ast.WidgetV3, def *WidgetDefinition) (values map[string]s
 	}
 	return values, explicit
 }
+
+// slotFilledValue stands for a widgets slot holding widgets in the value map;
+// a slot's default is empty, so a hidden filled slot is reported as an error.
+const slotFilledValue = "(widgets)"
 
 // lookupWidgetProp reads a widget property from the MDL by name (case-insensitive)
 // as a string, reporting whether it was present.
@@ -1200,11 +1232,11 @@ var staticWidgetKnownProps = func() map[string]bool {
 		// keys the builders/visitor consume and the conditional-binding metadata
 		"CaptionAttribute", "Collapsible", "DatabaseHost", "DefaultLanguage", "Footer",
 		"FormOrientation", "HeaderMode", "LabelWidth", "Prefix", "ShowContentAs", "Title",
-		"Widget", "WidgetType", "ShowLabel", "VisibleIf", "VisibleWhen", "VisibleRoles", "EditableIf", "DynamicClasses",
+		"Widget", "WidgetType", "ShowLabel", "VisibleIf", "VisibleWhen", "VisibleRoles", "EditableIf", "EditableWhen", "DynamicClasses",
 		// vocabulary describe page emits (native widgets + datagrid columns)
 		"Alignment", "AlternativeText", "ColumnClass", "ColumnWidth", "DesktopColumns",
 		"DisplayAs", "Draggable", "DynamicCellClass", "HeightUnit", "Hidable", "ImageType",
-		"ImageUrl", "LabelPosition", "PageSize", "Pagination", "PagingPosition",
+		"ImageUrl", "LabelPosition", "RenderHorizontal", "PageSize", "Pagination", "PagingPosition",
 		"PhoneColumns", "ReadOnlyStyle", "Resizable", "Responsive", "ShowPagingButtons",
 		"Size", "Sortable", "TabletColumns", "WidthUnit", "WrapText", "Name",
 		// input-widget properties describe page emits (ako/mxcli#550): a text
@@ -1226,7 +1258,7 @@ var staticWidgetKnownProps = func() map[string]bool {
 		// mendixlabs/mxcli#1346: a dataview's explicit footer flag (#813), the
 		// menu source and orientation of navigationtree / menubar /
 		// simplemenubar, and a scroll-container region's size mode.
-		"ShowFooter", "Menu", "Profile", "Orientation", "SizeMode",
+		"ShowFooter", "NoEntityMessage", "Menu", "Profile", "Orientation", "SizeMode",
 		// a scroll-container region's toggle mode, which a sidebartoggle opens
 		// (mendixlabs/mxcli#1220).
 		"ToggleMode",
@@ -1510,7 +1542,7 @@ func violation18(locationPrefix string, w *ast.WidgetV3, msg string) linter.Viol
 //
 // The grammar fix removes the known trigger. This rule is the general guard: the
 // next function name promoted to a lexer token fails loudly here instead.
-func validateConsumableConditional(w *ast.WidgetV3, locationPrefix string) []linter.Violation {
+func validateConsumableConditional(w *ast.WidgetV3, def *WidgetDefinition, locationPrefix string) []linter.Violation {
 	var out []linter.Violation
 	for _, p := range []struct{ plain, routed string }{
 		{"Visible", "VisibleIf"},
@@ -1529,7 +1561,14 @@ func validateConsumableConditional(w *ast.WidgetV3, locationPrefix string) []lin
 			// Visible takes any string as its condition; Editable takes an enum
 			// word, a boolean or a condition, and refuses what is none of them
 			// here, because the writer has nowhere to put it.
-			if p.plain == "Editable" {
+			//
+			// Not on a pluggable widget declaring an `editable` key of its own
+			// (the native Slider, Range slider, Rating and Toggle buttons:
+			// `default` | `never`, and no Editability system property). exec
+			// writes the value there, and validatePluggableEnumValues judges
+			// it against the keys the package declares, as for a PDS Button's
+			// own buttonStyle (ako/mxcli#2180).
+			if p.plain == "Editable" && !defDeclaresOwnKey(def, "editable") {
 				if problem := editableValueProblem(w); problem != "" {
 					out = append(out, linter.Violation{
 						RuleID:   "MDL-WIDGET19",
@@ -1561,12 +1600,24 @@ func validateConsumableConditional(w *ast.WidgetV3, locationPrefix string) []lin
 }
 
 func validateStaticWidget(w *ast.WidgetV3, locationPrefix string) []linter.Violation {
+	return validateStaticWidgetOf(w, nil, locationPrefix)
+}
+
+// validateStaticWidgetOf is validateStaticWidget for a widget whose definition
+// is known (nil for a built-in widget or no registry).
+func validateStaticWidgetOf(w *ast.WidgetV3, def *WidgetDefinition, locationPrefix string) []linter.Violation {
 	var out []linter.Violation
 
 	// An unrecognized (often mis-cased) button style is silently degraded to
 	// btn-default by MxBuild. Reject it at check time. CanonicalButtonStyle is
 	// case-insensitive, so legitimate lowercase values still pass.
-	if bs := w.GetButtonStyle(); bs != "" {
+	//
+	// Not on a pluggable widget that declares a `buttonStyle` of its own (a
+	// PDS Button: fill, fillBlue, outline, …): that is its own enumeration,
+	// judged against the keys its package declares by
+	// validatePluggableEnumValues, and Mendix's button styles mean nothing to
+	// it (ako/mxcli#2180).
+	if bs := w.GetButtonStyle(); bs != "" && !defOwnsCoreName(def, "buttonStyle") {
 		if _, ok := pages.CanonicalButtonStyle(bs); !ok {
 			out = append(out, linter.Violation{
 				RuleID:   "MDL-WIDGET02",
@@ -1577,19 +1628,6 @@ func validateStaticWidget(w *ast.WidgetV3, locationPrefix string) []linter.Viola
 				),
 			})
 		}
-	}
-
-	// An inline Style on a DynamicText crashes MxBuild with a
-	// NullReferenceException — the widget must be wrapped in a container.
-	if strings.EqualFold(w.Type, "dynamictext") && w.GetStyle() != "" {
-		out = append(out, linter.Violation{
-			RuleID:   "MDL-WIDGET03",
-			Severity: linter.SeverityError,
-			Message: fmt.Sprintf(
-				"%s: widget `%s` (dynamictext) cannot have an inline `style` — it crashes MxBuild; wrap it in a container and style the container instead",
-				locationPrefix, w.Name,
-			),
-		})
 	}
 
 	// A dynamic text whose template references a {N} placeholder with no matching
@@ -1607,7 +1645,7 @@ func validateStaticWidget(w *ast.WidgetV3, locationPrefix string) []linter.Viola
 		out = append(out, *v)
 	}
 
-	out = append(out, validateConsumableConditional(w, locationPrefix)...)
+	out = append(out, validateConsumableConditional(w, def, locationPrefix)...)
 
 	// A DataView cannot use a database data source — a data view shows one object,
 	// so Mendix offers only Context / Microflow / Nanoflow / Listen sources.
@@ -1637,6 +1675,7 @@ func validateStaticWidget(w *ast.WidgetV3, locationPrefix string) []linter.Viola
 	// over, because a data binding on the SAME widget can traverse the same
 	// association legitimately. (findings #4)
 	out = append(out, validateWidgetExpressionAssociations(w, locationPrefix)...)
+	out = append(out, validateWidgetExpressionRoles(w, locationPrefix)...)
 
 	// A contentparams/captionparams value is a DATA BINDING (an attribute path),
 	// not a client-side expression: mxcli stores an unquoted value as an attribute
@@ -2377,5 +2416,58 @@ func sortedPropertyKeys(w *ast.WidgetV3) []string {
 		out = append(out, k)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// rolesCallRe finds `roles (` in an expression, checked outside string
+// literals by exprCallsRoles.
+var rolesCallRe = regexp.MustCompile(`(?i)\broles\s*\(`)
+
+// exprCallsRoles reports whether expr calls `roles (…)` outside a string
+// literal. Mendix has no such function: it is MDL's "visible for module
+// roles", which only the leading `roles (…) and <condition>` form, split by
+// the parser, can carry (ako/mxcli#2319).
+func exprCallsRoles(expr string) bool {
+	var b strings.Builder
+	inStr := false
+	for i := 0; i < len(expr); i++ {
+		c := expr[i]
+		if c == '\'' {
+			inStr = !inStr
+			b.WriteByte(' ')
+			continue
+		}
+		if inStr {
+			b.WriteByte(' ')
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return rolesCallRe.MatchString(b.String())
+}
+
+// rolesInExpressionMessage is MDL-WIDGET54's text, shared by check and exec.
+func rolesInExpressionMessage(where, widget, prop string) string {
+	return fmt.Sprintf("%s: widget `%s` property `%s` calls `roles (…)` inside an expression. Mendix expressions have no roles "+
+		"function: it would be stored as invalid expression text and the role restriction lost. Write the roles as their own "+
+		"property beside the condition — `Visible: roles (Mod.Role), Visible: <condition>` — or lead with them: "+
+		"`Visible: roles (Mod.Role) and <condition>` (both apply)", where, widget, prop)
+}
+
+// validateWidgetExpressionRoles refuses a `roles (…)` call left inside a widget
+// expression property (MDL-WIDGET54, ako/mxcli#2319).
+func validateWidgetExpressionRoles(w *ast.WidgetV3, locationPrefix string) []linter.Violation {
+	var out []linter.Violation
+	for _, key := range expressionWidgetProps {
+		expr, ok := lookupWidgetProp(w, key)
+		if !ok || !exprCallsRoles(expr) {
+			continue
+		}
+		out = append(out, linter.Violation{
+			RuleID:   "MDL-WIDGET54",
+			Severity: linter.SeverityError,
+			Message:  rolesInExpressionMessage(locationPrefix, w.Name, key),
+		})
+	}
 	return out
 }

@@ -176,10 +176,23 @@ func PackageProject(ctx context.Context, mpkPath, mendixVersion, workDir string,
 	// unpicks the references the template set up (it reports e.g. "Removed
 	// Administration.User from 1 user role(s)"); leaving those dangling would
 	// give module-import an inconsistent model to write into.
-	if name, err := ModuleNameInPackage(mpkPath); err == nil && name != "" {
+	name, nameErr := ModuleNameInPackage(mpkPath)
+	if nameErr == nil && name != "" {
 		if err := dropModuleIfPresent(mprPath, name, newBackend); err != nil {
 			return "", err
 		}
+	}
+
+	// A protected module ships its model as a module tree, which mx refuses to
+	// import; split it into units and write those instead (moduletree.go).
+	if tree, treeVersion, err := readModuleTree(mpkPath); err == nil && tree != nil {
+		if nameErr != nil {
+			return "", nameErr
+		}
+		if err := buildFromModuleTree(tree, treeVersion, mpkPath, mprPath, name, mendixVersion); err != nil {
+			return "", fmt.Errorf("load the package's module tree: %w", err)
+		}
+		return mprPath, nil
 	}
 
 	// mx refuses a theme module (Atlas_Core, Atlas_Web_Content, Conversational

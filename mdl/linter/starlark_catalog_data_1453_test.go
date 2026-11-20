@@ -71,6 +71,46 @@ func TestStarlarkEnumerationCarriesItsValuesAndCaptions(t *testing.T) {
 	}
 }
 
+// ako/mxcli#1301, the half #1453 left: values() carries the caption in the
+// default language only. A caption in another language is a strings() row whose
+// element_id is the value's $ID, and a rule had no id on the value to match it
+// with. Measured on CitrusGrove, all 144 enumeration caption rows match a value
+// by id. The control row has the same text under another value's id, so a match
+// on anything but the id picks the wrong one.
+func TestStarlarkEnumerationValueIdMatchesItsTranslations(t *testing.T) {
+	cat := emptyCatalog(t)
+	for _, stmt := range []string{
+		`INSERT INTO modules_data (Id, Name, QualifiedName, ModuleName, Source) VALUES ('m1', 'Shop', 'Shop', 'Shop', '')`,
+		`INSERT INTO enumerations_data (Id, Name, QualifiedName, ModuleName, ValueCount) VALUES
+			('e1', 'ApiTimeout', 'Shop.ApiTimeout', 'Shop', 2)`,
+		`INSERT INTO enumeration_values_data (Id, EnumerationId, EnumerationQualifiedName, ModuleName, Name, Caption, Ordinal) VALUES
+			('v1', 'e1', 'Shop.ApiTimeout', 'Shop', 'Quick', '30', 0),
+			('v2', 'e1', 'Shop.ApiTimeout', 'Shop', 'Slow', '400', 1)`,
+		`INSERT INTO strings (QualifiedName, ObjectType, StringValue, StringContext, Language, ElementId, ModuleName) VALUES
+			('Shop.ApiTimeout', 'ENUMERATION', '30', 'Enumerations$EnumerationValue.Caption', 'en_US', 'v1', 'Shop'),
+			('Shop.ApiTimeout', 'ENUMERATION', '400', 'Enumerations$EnumerationValue.Caption', 'en_US', 'v2', 'Shop'),
+			('Shop.ApiTimeout', 'ENUMERATION', 'traag', 'Enumerations$EnumerationValue.Caption', 'nl_NL', 'v2', 'Shop'),
+			('Shop.ApiTimeout', 'ENUMERATION', 'snel', 'Enumerations$EnumerationValue.Caption', 'nl_NL', 'v1', 'Shop')`,
+	} {
+		if _, err := cat.CatalogDB().Exec(stmt); err != nil {
+			t.Fatalf("%s: %v", stmt, err)
+		}
+	}
+	got := runDump(t, linter.NewLintContext(cat, nil), `    nl = {}
+    for s in strings(language = "nl_NL"):
+        if s.context == "Enumerations$EnumerationValue.Caption":
+            nl[s.element_id] = s.value
+    out = []
+    for e in enumerations():
+        for v in e.values:
+            out.append(violation(message = "%s id=%s nl=%s" % (v.qualified_name, v.id, nl.get(v.id, "?"))))
+    return out`)
+	want := "Shop.ApiTimeout.Quick id=v1 nl=snel|Shop.ApiTimeout.Slow id=v2 nl=traag"
+	if strings.Join(got, "|") != want {
+		t.Errorf("value ids = %v, want %s", got, want)
+	}
+}
+
 func TestStarlarkConstantValuesAndProjectSettings(t *testing.T) {
 	cat := emptyCatalog(t)
 	if _, err := cat.CatalogDB().Exec(`INSERT INTO constant_values (ConstantName, ConfigurationName, Value) VALUES

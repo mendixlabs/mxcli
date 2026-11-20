@@ -120,3 +120,41 @@ func walkFlowStatements(body []ast.MicroflowStatement, fn func(ast.MicroflowStat
 		}
 	}
 }
+
+// voidFlowCallResultRule reports a result variable on a call to a microflow or
+// nanoflow known to return nothing.
+const voidFlowCallResultRule = "MDL096"
+
+// checkVoidFlowCallResult flags `$X = call microflow F(…)` (or nanoflow) when F
+// is known to return nothing — MDL096, a warning.
+//
+// mxbuild accepts it (the name is inert, see voidCodeActions) and so does
+// Studio Pro, which keeps such a name when a flow stops returning a value. But
+// the statement reads as declaring `$X`, which it does not: exec stores no
+// result variable for it, and describe prints the call without one
+// (mendixlabs/mxcli#1820, ako/mxcli#2138). Reading `$X` afterwards is MDL093.
+// Java and JavaScript action calls are left alone: Studio Pro names a void
+// JavaScript action's output after the action, so that shape is ordinary.
+func (v *microflowValidator) checkVoidFlowCallResult(body []ast.MicroflowStatement) {
+	if v.skipCEGapRules() || v.voids == nil {
+		return
+	}
+	walkFlowStatements(body, func(s ast.MicroflowStatement) {
+		var kind, target, out string
+		switch st := s.(type) {
+		case *ast.CallMicroflowStmt:
+			kind, target, out = "microflow", st.MicroflowName.String(), st.OutputVariable
+		case *ast.CallNanoflowStmt:
+			kind, target, out = "nanoflow", st.NanoflowName.String(), st.OutputVariable
+		default:
+			return
+		}
+		if out == "" || !v.voids.callIsKnownVoid(s) {
+			return
+		}
+		v.addViolation(voidFlowCallResultRule, linter.SeverityWarning,
+			fmt.Sprintf("'$%s = call %s %s(…)': %s returns nothing, so the call declares no variable — "+
+				"exec stores it without a result variable", out, kind, target, target),
+			fmt.Sprintf("Write `call %s %s(…);` without `$%s =`, or give %s a return type", kind, target, out, target))
+	})
+}

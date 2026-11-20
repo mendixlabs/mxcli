@@ -177,7 +177,7 @@ func (s *mdlServer) describeElement(ctx context.Context, text string, line uint3
 	}
 
 	// Try common types in order (frequently referenced types first)
-	for _, t := range []string{"entity", "microflow", "page", "enumeration", "nanoflow", "association", "snippet", "workflow", "constant", "layout", "importmapping", "exportmapping", "restclient", "jsonstructure", "agent", "aimodel", "knowledgebase", "consumedmcpservice", "datatransformer"} {
+	for _, t := range []string{"entity", "microflow", "page", "enumeration", "nanoflow", "association", "snippet", "workflow", "constant", "layout", "importmapping", "exportmapping", "restclient", "jsonstructure", "agent", "aimodel", "knowledgebase", "consumedmcpservice", "publishedmcpservice", "datatransformer"} {
 		if t == elemType {
 			continue // Already tried
 		}
@@ -208,7 +208,7 @@ func (s *mdlServer) resolveElementType(ctx context.Context, text string, line ui
 	}
 
 	// Try common types (frequently referenced types first)
-	for _, t := range []string{"entity", "microflow", "page", "enumeration", "nanoflow", "association", "snippet", "workflow", "constant", "layout", "importmapping", "exportmapping", "restclient", "jsonstructure", "agent", "aimodel", "knowledgebase", "consumedmcpservice", "datatransformer"} {
+	for _, t := range []string{"entity", "microflow", "page", "enumeration", "nanoflow", "association", "snippet", "workflow", "constant", "layout", "importmapping", "exportmapping", "restclient", "jsonstructure", "agent", "aimodel", "knowledgebase", "consumedmcpservice", "publishedmcpservice", "datatransformer"} {
 		if t == elemType {
 			continue
 		}

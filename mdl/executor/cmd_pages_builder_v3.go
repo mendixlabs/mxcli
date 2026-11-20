@@ -140,6 +140,10 @@ func (pb *pageBuilder) buildPageV3(s *ast.CreatePageStmtV3) (*pages.Page, error)
 		if bsonType := pageParamBSONType(param.Type); bsonType != "" {
 			// Primitive type parameter
 			pageParam.TypeName = bsonType
+			if pb.primitiveParams == nil {
+				pb.primitiveParams = map[string]bool{}
+			}
+			pb.primitiveParams[param.Name] = true
 		} else if param.EntityType.Name != "" {
 			// Entity type parameter
 			entityID, err := pb.resolveEntity(param.EntityType)
@@ -577,6 +581,9 @@ func (pb *pageBuilder) buildWidgetV3(w *ast.WidgetV3) (pages.Widget, error) {
 	if err := pb.applyVisibleWhen(widget, w); err != nil {
 		return nil, err
 	}
+	if err := pb.applyEditableWhen(widget, w); err != nil {
+		return nil, err
+	}
 	if err := applyVisibleRoles(widget, w); err != nil {
 		return nil, err
 	}
@@ -613,6 +620,9 @@ func (pb *pageBuilder) buildPluggable(def *WidgetDefinition, w *ast.WidgetV3) (p
 		return nil, err
 	}
 	if err := pb.applyVisibleWhen(widget, w); err != nil {
+		return nil, err
+	}
+	if err := pb.applyEditableWhen(widget, w); err != nil {
 		return nil, err
 	}
 	if err := applyVisibleRoles(widget, w); err != nil {
@@ -689,15 +699,12 @@ func expressionVisibility(w *ast.WidgetV3) *pages.ConditionalVisibilitySettings 
 func applyWidgetAppearance(widget pages.Widget, w *ast.WidgetV3, theme *ThemeRegistry) error {
 	class, style := w.GetClass(), w.GetStyle()
 
-	// A DynamicText with an inline Style crashes MxBuild with a
-	// NullReferenceException. Reject it here (the workaround is to wrap the
-	// widget in a container and style the container instead).
-	if style != "" && strings.EqualFold(w.Type, "dynamictext") {
-		return mdlerrors.NewValidationf(
-			"dynamictext %q: an inline `style` crashes MxBuild — wrap it in a container and style the container instead",
-			w.Name,
-		)
-	}
+	// A DynamicText takes an inline Style like any widget. It used to be
+	// refused (MDL-WIDGET03, #673) on the claim that it crashed MxBuild with a
+	// NullReferenceException; measured on 11.12.1, a styled dynamic text this
+	// engine writes passes `mx check` and builds, Studio Pro stores the same
+	// (testdata/testapp, PlatformDesignSystem's Icon_After_Text), and the
+	// refusal blocked whole building blocks (ako/mxcli#2183).
 
 	if class != "" || style != "" {
 		type appearanceSetter interface {
@@ -1197,9 +1204,24 @@ func (pb *pageBuilder) applyDatabaseClausesV3(dbSource *pages.DatabaseSource, ds
 // exists"), and `A1/E1/A2/E2` as one step whose DestinationEntity was the
 // literal "E1/A2/E2" — the project would not load.
 func (pb *pageBuilder) resolveAssociationSourceHops(reference, fromEntity string) (entityPath, destEntity string, err error) {
+	hops, dest, err := pb.resolveAssociationHops(reference, fromEntity)
+	if err != nil {
+		return "", "", err
+	}
+	pairs := make([]string, 0, 2*len(hops))
+	for _, h := range hops {
+		pairs = append(pairs, h.Association, h.DestinationEntity)
+	}
+	return strings.Join(pairs, "/"), dest, nil
+}
+
+// resolveAssociationHops is resolveAssociationSourceHops' traversal: one step
+// per hop, and the entity the last one arrives at. The association source and
+// `database from $ctx/…` (buildDatabaseOverAssociationV3) both read a path
+// through it, so every spelling one accepts the other does (ako/mxcli#834).
+func (pb *pageBuilder) resolveAssociationHops(reference, fromEntity string) (hops []pages.AttributeRefStep, destEntity string, err error) {
 	segs := strings.Split(reference, "/")
 	at := fromEntity
-	var pairs []string
 	for i := 0; i < len(segs); {
 		// Both halves of an EntityRefStep are BY_NAME references, and Mendix
 		// resolves either one it cannot find to null — so the association half
@@ -1224,19 +1246,30 @@ func (pb *pageBuilder) resolveAssociationSourceHops(reference, fromEntity string
 				// association would sail through and be written
 				// qualified-but-nonexistent, which Mendix resolves to null just
 				// the same. Verify it exists.
-				return "", "", mdlerrors.NewValidationf(
+				return nil, "", mdlerrors.NewValidationf(
 					"association %q for datasource %q does not exist — "+
 						"writing it would produce a project Mendix cannot open; "+
 						"a bare name is qualified with the module of the context entity (%s), "+
 						"so an association declared elsewhere must be named in full",
 					assoc, reference, at)
 			}
+			// The hop must start where the path is: an association joining two
+			// other entities has both ends, so the destination check below
+			// passes it, and the step it writes cannot be followed from `at`
+			// (ako/mxcli#834). A derived destination needs no such check —
+			// resolveAssociationDestination finds none off the association.
+			if at != "" && !pb.isEndOrSpecialization(at, from, to) {
+				return nil, "", mdlerrors.NewValidationf(
+					"association %q in datasource %q does not start at %s — its ends are %s and %s; "+
+						"each hop must follow an association of the entity the previous one arrives at",
+					assoc, reference, at, from, to)
+			}
 			// Neither the next association nor an end of this one: a misspelled
 			// association read as an entity, or an entity off the path. Either
 			// way the step would name an entity the hop does not arrive at.
 			// Studio Pro may store a specialization of an end, so accept that.
-			if dest != from && dest != to && !pb.isSpecializationOf(dest, from) && !pb.isSpecializationOf(dest, to) {
-				return "", "", mdlerrors.NewValidationf(
+			if !pb.isEndOrSpecialization(dest, from, to) {
+				return nil, "", mdlerrors.NewValidationf(
 					"%q in datasource %q is neither an association nor an end of association %q (%s, %s) — "+
 						"each hop is `Module.Assoc` or `Module.Assoc/Module.DestinationEntity`",
 					dest, reference, assoc, from, to)
@@ -1252,16 +1285,22 @@ func (pb *pageBuilder) resolveAssociationSourceHops(reference, fromEntity string
 		// instead of writing a structurally invalid unit; the author can name the
 		// destination explicitly as `Assoc/Module.Entity`. (issuetracker #14)
 		if dest == "" {
-			return "", "", mdlerrors.NewValidationf(
+			return nil, "", mdlerrors.NewValidationf(
 				"cannot resolve the destination entity of association %q for datasource %q — "+
 					"writing it unresolved would produce a project Mendix cannot open; "+
 					"name the destination explicitly, e.g. `%s/Module.Entity`",
 				assoc, reference, assoc)
 		}
-		pairs = append(pairs, assoc, dest)
+		hops = append(hops, pages.AttributeRefStep{Association: assoc, DestinationEntity: dest})
 		at = dest
 	}
-	return strings.Join(pairs, "/"), at, nil
+	return hops, at, nil
+}
+
+// isEndOrSpecialization reports whether entity is one of an association's ends
+// (from, to) or a specialization of one.
+func (pb *pageBuilder) isEndOrSpecialization(entity, from, to string) bool {
+	return entity == from || entity == to || pb.isSpecializationOf(entity, from) || pb.isSpecializationOf(entity, to)
 }
 
 // isAssociationSegment reports whether a path segment following an association
@@ -1293,8 +1332,9 @@ func (pb *pageBuilder) buildListViewDataSourceV3(ds *ast.DataSourceV3) (pages.Da
 // IndirectEntityRef (ako/mxcli#721 L5). It keeps the XPath, sort and search an
 // association source (`$ctx/Assoc`) does not have.
 //
-// The path's segments pair up as association/destination. Describe prints every
-// destination, because Studio Pro may store a specialization of the
+// The path is read hop by hop as an association source's is
+// (resolveAssociationHops): a destination after an association is optional.
+// Describe prints every destination, because Studio Pro may store a specialization of the
 // association's own end (Administration.Account over System.User's
 // WorkflowUserTask_Assignees) and re-deriving it would write a different entity.
 // A trailing association with no destination is resolved as an association
@@ -1314,36 +1354,12 @@ func (pb *pageBuilder) buildDatabaseOverAssociationV3(ds *ast.DataSourceV3) (pag
 		}
 	}
 
-	segs := strings.Split(ds.AssociationPath, "/")
-	var steps []pages.AttributeRefStep
-	at := fromEntity
-	for i := 0; i < len(segs); i += 2 {
-		assoc := pb.resolveAssociationPathIn(segs[i], at)
-		if _, _, ok := pb.associationEndpoints(assoc); !ok {
-			return nil, "", mdlerrors.NewValidationf(
-				"association %q in datasource `database from $%s/%s` does not exist — "+
-					"writing it would produce a project Mendix cannot open",
-				assoc, ds.ContextVariable, ds.AssociationPath)
-		}
-		dest := ""
-		if i+1 < len(segs) {
-			dest = segs[i+1]
-			if _, err := pb.resolveEntity(ast.QualifiedName{Module: pb.extractModule(dest), Name: pb.extractName(dest)}); err != nil {
-				return nil, "", mdlerrors.NewValidationf(
-					"entity %q in datasource `database from $%s/%s` does not exist",
-					dest, ds.ContextVariable, ds.AssociationPath)
-			}
-		} else {
-			dest = pb.resolveAssociationDestination(assoc, at)
-		}
-		if dest == "" {
-			return nil, "", mdlerrors.NewValidationf(
-				"cannot resolve the entity association %q arrives at in datasource `database from $%s/%s` — "+
-					"name it after the association, e.g. `%s/Module.Entity`",
-				assoc, ds.ContextVariable, ds.AssociationPath, assoc)
-		}
-		steps = append(steps, pages.AttributeRefStep{Association: assoc, DestinationEntity: dest})
-		at = dest
+	// One traversal for both builders: the association source's, which takes
+	// the short form `A1/A2`, the full `A1/E1/A2/E2` and mixtures, and refuses a
+	// destination that is not an end of its association (ako/mxcli#834).
+	steps, at, err := pb.resolveAssociationHops(ds.AssociationPath, fromEntity)
+	if err != nil {
+		return nil, "", err
 	}
 
 	entityID, err := pb.resolveEntity(ast.QualifiedName{Module: pb.extractModule(at), Name: pb.extractName(at)})
@@ -1816,6 +1832,10 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 		}, nil
 
 	case "delete":
+		source, err := pb.deleteSource(action.SourceVariable)
+		if err != nil {
+			return nil, err
+		}
 		return &pages.DeleteClientAction{
 			BaseElement: model.BaseElement{
 				ID:       model.ID(types.GenerateID()),
@@ -1824,7 +1844,8 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 			// The visitor sets it for `delete close page`; dropping it here
 			// turned a describe → exec round trip into a button that no longer
 			// closes its page (ako/mxcli#950).
-			ClosePage: action.ClosePage,
+			ClosePage:      action.ClosePage,
+			SourceVariable: source,
 		}, nil
 
 	case "create":
@@ -1955,6 +1976,7 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 			if strVal, ok := arg.Value.(string); ok {
 				if v, kind := pb.classifyFlowArgValue(strVal); kind != "" {
 					mapping.Variable, mapping.VariableKind = v, kind
+					mapping.WidgetParameter, mapping.WidgetParameterKind = pb.flowArgWidgetParameter(v, kind)
 				} else if strings.HasPrefix(strVal, "$") {
 					mapping.Variable = strVal
 				} else {
@@ -1999,6 +2021,7 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 			if strVal, ok := arg.Value.(string); ok {
 				if v, kind := pb.classifyFlowArgValue(strVal); kind != "" {
 					mapping.Variable, mapping.VariableKind = v, kind
+					mapping.WidgetParameter, mapping.WidgetParameterKind = pb.flowArgWidgetParameter(v, kind)
 				} else if strings.HasPrefix(strVal, "$") {
 					mapping.Variable = strVal
 				} else {
@@ -2400,6 +2423,15 @@ func (pb *pageBuilder) resolveTemplateAttributePathFull(attrRef string, param *p
 			param.SourceVariableKind = "local"
 			return
 		}
+		// A primitive page parameter binds the same way, in the PageParameter
+		// slot. It used to fall through to the attribute path "$IpAddress",
+		// which binds nothing: mxbuild CE0402 "No value specified."
+		// (ako/mxcli#2132).
+		if pb.primitiveParams[after] {
+			param.SourceVariable = after
+			param.SourceVariableKind = ""
+			return
+		}
 	}
 
 	// Check for $paramName.Attribute pattern where paramName is a page parameter
@@ -2470,6 +2502,16 @@ func (pb *pageBuilder) resolveTemplateAttributePathFull(attrRef string, param *p
 // value is not an association path or cannot be resolved, so the caller falls
 // back to the previous behavior.
 func (pb *pageBuilder) resolveTemplateAssociationPath(attrRef string, param *pages.ClientTemplateParameter) bool {
+	// `$Param/Assoc/Attr`: the path read from a named object, which Studio Pro
+	// stores as the steps beside a SourceVariable naming it (ako/mxcli#833).
+	if wv, finalQN, steps, ok := pb.resolveRootedAssociationPath(attrRef); ok {
+		param.AttributeRef = finalQN
+		param.AttributeRefSteps = steps
+		param.SourceWidget = wv.Widget
+		param.SourceVariable = wv.Variable
+		param.SourceVariableKind = wv.Kind
+		return true
+	}
 	finalQN, steps, ok := pb.resolveAssociationAttributePath(attrRef)
 	if !ok {
 		return false
@@ -2517,35 +2559,99 @@ func (pb *pageBuilder) resolveInputAttribute(attr string) (string, []pages.Attri
 func (pb *pageBuilder) resolveAssociationAttributePath(attrRef string) (finalQN string, steps []pages.AttributeRefStep, ok bool) {
 	path := strings.TrimPrefix(attrRef, "$currentObject/")
 	// Only context-relative association paths are handled here; a $param- or
-	// $widget-rooted navigation is a different (unsupported) shape.
+	// $widget-rooted navigation is resolveRootedAssociationPath's.
 	if strings.HasPrefix(path, "$") || !strings.Contains(path, "/") {
 		return "", nil, false
 	}
+	return pb.resolveAssociationPathFrom(path, pb.entityContext)
+}
+
+// resolveRootedAssociationPath resolves `$Root/Assoc/…/Attr`, an association
+// path read from a page or snippet parameter or an enclosing data view rather
+// than from the context object, starting at the root's entity. wv is the
+// SourceVariable the binding stores beside the steps: the parameter in its
+// slot, or the data view's recorded pair (ako/mxcli#833).
+func (pb *pageBuilder) resolveRootedAssociationPath(attrRef string) (wv pages.WidgetVariable, finalQN string, steps []pages.AttributeRefStep, ok bool) {
+	root, path, ok := rootedAssociationPath(attrRef)
+	if !ok {
+		return pages.WidgetVariable{}, "", nil, false
+	}
+	wv, start, named := pb.namedObjectVariable(root)
+	if !named {
+		return pages.WidgetVariable{}, "", nil, false
+	}
+	finalQN, steps, ok = pb.resolveAssociationPathFrom(path, start)
+	if !ok {
+		return pages.WidgetVariable{}, "", nil, false
+	}
+	return wv, finalQN, steps, true
+}
+
+// resolveAssociationPathFrom resolves a context-relative association path
+// starting at the entity start.
+func (pb *pageBuilder) resolveAssociationPathFrom(path, start string) (finalQN string, steps []pages.AttributeRefStep, ok bool) {
 	segs := strings.Split(path, "/")
 	if len(segs) < 2 {
 		return "", nil, false
 	}
 	attrName := segs[len(segs)-1]
-	current := pb.entityContext
+	current := start
 	if current == "" {
 		return "", nil, false
 	}
 
+	// `Module.Entity/Assoc/…/Attr`: a leading step naming the entity the path
+	// starts from — the way a microflow writes `$X/…` fully qualified — is the
+	// start itself. Unresolved, the whole string was written as one flat
+	// attribute and mxbuild aborted the build (ako/mxcli#2252). Only the start
+	// or a generalization of it, and only where no association has that name.
+	if len(segs) > 2 && strings.Count(segs[0], ".") == 1 && pb.entityIsOrDescendsFrom(current, segs[0]) {
+		if _, isAssoc := pb.associationDestination(pb.resolveAssociationPathIn(segs[0], current), current); !isAssoc {
+			segs = segs[1:]
+		}
+	}
+
 	steps = make([]pages.AttributeRefStep, 0, len(segs)-1)
+	afterAssociation := false
 	for _, seg := range segs[:len(segs)-1] {
 		// Against the entity THIS hop starts from — qualifying every hop with
 		// the path's start named a later hop into the wrong module. (#662)
 		assocQN := pb.resolveAssociationPathIn(seg, current)
 		dest, ok := pb.associationDestination(assocQN, current)
+		if !ok && len(steps) > 0 && seg != current && strings.Count(seg, ".") == 1 && pb.entityIsOrDescendsFrom(seg, current) {
+			// `Assoc/Module.Special/…`: a cast of the previous hop's
+			// destination to a specialization, which Studio Pro stores as that
+			// step's DestinationEntity (TestApp WorkflowCommons
+			// Snip_WorkflowUserTaskView_Details). Dropped, the attribute was
+			// qualified with the association's end: CE1613.
+			steps[len(steps)-1].DestinationEntity = seg
+			current = seg
+			continue
+		}
 		if !ok {
 			// Not a modelled association — it may be System.changedBy /
 			// System.owner, which no domain model lists. (#1338)
-			if assocQN, dest, ok = pb.systemMemberAssociation(seg, current); !ok {
+			assocQN, dest, ok = pb.systemMemberAssociation(seg, current)
+		}
+		if !ok {
+			// `Assoc/Module.Entity/Attr`: an entity right after a hop names the
+			// entity the hop arrives at, or a specialization of it — Studio
+			// Pro's downcast, stored as that step's DestinationEntity, exactly
+			// as a data source path stores it (resolveAssociationHops). Read as
+			// an association it failed the lookup and the caller wrote the
+			// whole path as one flat attribute: CE1613 (ako/mxcli#2127). An
+			// entity the hop cannot arrive at stays unresolved.
+			if !afterAssociation || !strings.Contains(seg, ".") || !pb.isSpecializationOf(seg, current) {
 				return "", nil, false
 			}
+			steps[len(steps)-1].DestinationEntity = seg
+			current = seg
+			afterAssociation = false
+			continue
 		}
 		steps = append(steps, pages.AttributeRefStep{Association: assocQN, DestinationEntity: dest})
 		current = dest
+		afterAssociation = true
 	}
 
 	// The final attribute is qualified with the entity that DECLARES it, which
@@ -2722,6 +2828,16 @@ func (pb *pageBuilder) entityGeneralizations() (map[string]string, error) {
 	return m, nil
 }
 
+// associationHasEnd reports whether entity is one of the association's two
+// ends; known is false when the association cannot be resolved.
+func (pb *pageBuilder) associationHasEnd(assocQN, entityQN string) (isEnd, known bool) {
+	from, to, ok := pb.associationEndpoints(assocQN)
+	if !ok {
+		return false, false
+	}
+	return entityQN == from || entityQN == to, true
+}
+
 // associationEndpoints resolves a qualified association name to its FROM
 // (ParentID) and TO (ChildID) entity qualified names.
 //
@@ -2783,6 +2899,39 @@ func (pb *pageBuilder) associationEndpoints(assocQN string) (fromEntity, toEntit
 		}
 	}
 	return "", "", false
+}
+
+// associationKind reports whether the stored association assocQN is a
+// reference set and whether its owner is Both; ok is false when no domain
+// model declares it (System.owner / System.changedBy among them, both plain
+// references).
+func (pb *pageBuilder) associationKind(assocQN string) (refSet, ownerBoth, ok bool) {
+	modName, assocName, found := strings.Cut(assocQN, ".")
+	if !found {
+		return false, false, false
+	}
+	dms, err := pb.getDomainModels()
+	if err != nil {
+		return false, false, false
+	}
+	h, err := pb.getHierarchy()
+	if err != nil {
+		return false, false, false
+	}
+	for _, dm := range dms {
+		if h.GetModuleName(dm.ContainerID) != modName {
+			continue
+		}
+		if a := dm.FindAssociationByName(assocName); a != nil {
+			return a.Type == domainmodel.AssociationTypeReferenceSet, a.Owner == domainmodel.AssociationOwnerBoth, true
+		}
+		for _, ca := range dm.CrossAssociations {
+			if ca.Name == assocName {
+				return ca.Type == domainmodel.AssociationTypeReferenceSet, ca.Owner == domainmodel.AssociationOwnerBoth, true
+			}
+		}
+	}
+	return false, false, false
 }
 
 // registerDataViewVariable records the Forms$PageVariable a binding read
@@ -2858,6 +3007,18 @@ func (pb *pageBuilder) widgetVariableFor(name string) (pages.WidgetVariable, boo
 // (CE7001) — is refused: the writer would otherwise store a binding that reads
 // nothing.
 func (pb *pageBuilder) resolveInputBinding(w *ast.WidgetV3, attr string) (string, []pages.AttributeRefStep, *pages.WidgetVariable, error) {
+	// `$Param/Assoc/Attr`: an association path read from a named object
+	// (ako/mxcli#833).
+	if root, _, isRooted := rootedAssociationPath(attr); isRooted {
+		wv, path, steps, ok := pb.resolveRootedAssociationPath(attr)
+		if !ok {
+			return "", nil, nil, mdlerrors.NewValidationf(
+				"%s `%s`: `Attribute: %s` — `$%s/…` reads an association path from a parameter of this %s or an "+
+					"enclosing data view, and `$%s` is neither, or the path does not resolve from it",
+				strings.ToLower(w.Type), w.Name, attr, root, pb.documentKind(), root)
+		}
+		return path, steps, &wv, nil
+	}
 	name, attrName, ok := strings.Cut(strings.TrimPrefix(attr, "$"), ".")
 	if !strings.HasPrefix(attr, "$") {
 		path, steps := pb.resolveInputAttribute(attr)
@@ -2896,6 +3057,27 @@ func (pb *pageBuilder) parameterVariable(name string) (pages.WidgetVariable, str
 		return pages.WidgetVariable{}, "", false
 	}
 	return pages.WidgetVariable{Variable: name, Kind: pb.parameterSlotKind(name)}, entity, true
+}
+
+// namedObjectVariable is parameterVariable widened to an enclosing data view:
+// the `$name` of a `$name.Attr` binding read from a page or snippet parameter,
+// or else from a data view the widget sits inside, whose SourceVariable is the
+// data-view pair {Widget: name, PageParameter: …} (ako/mxcli#826, #2107). It
+// returns the SourceVariable to store and the object's entity.
+func (pb *pageBuilder) namedObjectVariable(name string) (pages.WidgetVariable, string, bool) {
+	if wv, entity, ok := pb.parameterVariable(name); ok {
+		return wv, entity, true
+	}
+	name = strings.TrimPrefix(name, "$")
+	wv, known := pb.dataViewVariables[name]
+	if !known || pb.isDeclaredParameter(name) {
+		return pages.WidgetVariable{}, "", false
+	}
+	entity := pb.paramEntityNames[name]
+	if entity == "" {
+		return pages.WidgetVariable{}, "", false
+	}
+	return wv, entity, true
 }
 
 // documentKind names what is being built, for messages.
@@ -3216,6 +3398,7 @@ func (pb *pageBuilder) expandBuildingBlockRef(w *ast.WidgetV3) ([]*ast.WidgetV3,
 		return nil, fmt.Errorf("use building block %s: could not expand widget tree", w.Name)
 	}
 	widgets := def.Widgets
+	markFromBuildingBlock(widgets)
 
 	// Apply the optional prefix rename.
 	if prefix, ok := w.Properties["Prefix"].(string); ok && prefix != "" {
@@ -3243,11 +3426,10 @@ func (pb *pageBuilder) expandBuildingBlockRef(w *ast.WidgetV3) ([]*ast.WidgetV3,
 		}
 	}
 	if act, ok := w.Properties["ActionOverride"].(*ast.ActionV3); ok && act != nil {
-		// Action target: the first button-type widget. Atlas blocks ship
-		// placeholder buttons with no action, so match by widget type (not by an
-		// existing Action property) and set the handler.
-		hit := rebindFirst(widgets, isButtonWidget,
-			func(t *ast.WidgetV3) { t.Properties["Action"] = act })
+		// Action target: see rebindBuildingBlockAction. Atlas blocks ship
+		// placeholder buttons with no action, so the target is matched by
+		// widget type (not by an existing Action property).
+		hit := rebindBuildingBlockAction(widgets, ctx.GetWidgetRegistry(), act)
 		if !hit {
 			return nil, mdlerrors.NewValidation(fmt.Sprintf(
 				"use building block %s: action override supplied, but the block has no button to rebind", w.Name))
@@ -3256,7 +3438,15 @@ func (pb *pageBuilder) expandBuildingBlockRef(w *ast.WidgetV3) ([]*ast.WidgetV3,
 	return widgets, nil
 }
 
-// isButtonWidget reports whether a widget is an action-capable button.
+// markFromBuildingBlock flags every widget of an expanded block, children
+// included, as one the author did not write (see ast.WidgetV3.FromBuildingBlock).
+func markFromBuildingBlock(widgets []*ast.WidgetV3) {
+	for _, w := range widgets {
+		w.FromBuildingBlock = true
+		markFromBuildingBlock(w.Children)
+	}
+}
+
 // isDataSourceWidget reports whether a widget is one that takes a datasource,
 // whether or not it currently carries one. The list is the data containers a
 // building block can be built around; anything else in a block is layout or a
@@ -3269,12 +3459,99 @@ func isDataSourceWidget(w *ast.WidgetV3) bool {
 	return false
 }
 
+// isButtonWidget reports whether a widget is a core action-capable button.
 func isButtonWidget(w *ast.WidgetV3) bool {
 	switch strings.ToLower(w.Type) {
 	case "actionbutton", "linkbutton", "button":
 		return true
 	}
 	return false
+}
+
+// pluggableClickActionSlot returns the AST property an `action:` override is
+// written to when w is a pluggable widget that acts as a button — one whose
+// definition has a CLICK action — or "" when it is not one.
+//
+// The definition, not a list of widget names, decides: PDS Button's click
+// action is `onClickAction`, Badge Button's `onClickEvent`, Image's `onClick`,
+// and GenerateDefJSON gives each the Source "OnClick" (actionSourceForKey),
+// which the engine reads from the widget's Action slot — the property
+// `OnClick:` parses to. Two kinds of action are not a button's:
+//   - another event (`onChange`, a Switch's `action`): an input's, not a click;
+//   - a data container's click (a Gallery's or Data Grid 2's `onClick`): an
+//     item action. The block's datasource override targets that widget; the
+//     action override is the block's primary action.
+func pluggableClickActionSlot(w *ast.WidgetV3, registry *WidgetRegistry) string {
+	if registry == nil || isDataSourceWidget(w) {
+		return ""
+	}
+	def := lookupWidgetDef(w, registry)
+	if def == nil {
+		return ""
+	}
+	mappings := append([]PropertyMapping(nil), def.PropertyMappings...)
+	for _, m := range def.Modes {
+		mappings = append(mappings, m.PropertyMappings...)
+	}
+	click := false
+	for _, m := range mappings {
+		switch {
+		case m.Operation == "datasource":
+			return ""
+		case m.Operation == "action" && m.Source == "OnClick":
+			click = true
+		}
+	}
+	if !click {
+		return ""
+	}
+	return "Action"
+}
+
+// rebindBuildingBlockAction binds a `use building block … (action: …)`
+// override to the block's primary button, and reports whether it found one.
+// It looks in three tiers, each over the whole block, and the first tier with
+// a match wins:
+//
+//  1. a core button (actionbutton, linkbutton) — a block that has one binds it
+//     exactly as before, even when a clickable pluggable widget precedes it;
+//  2. a pluggable button (isPluggableButtonWidget) — PlatformDesignSystem's
+//     blocks are built from the pluggable PDS Button (mendixlabs/mxcli#1821);
+//  3. any other pluggable widget with a click action that is not a data
+//     container (pluggableClickActionSlot) — Atlas's Card_WithImage, whose only
+//     clickable widget is the pluggable Image (ako/mxcli#2145).
+//
+// The tiers matter where a block has several clickable widgets: on a PDS page
+// header the first one is a "Back to" PDS Link and the primary button comes
+// after it (mendixlabs/mxcli#1822); a link is tier 3, so the button wins.
+func rebindBuildingBlockAction(widgets []*ast.WidgetV3, registry *WidgetRegistry, act *ast.ActionV3) bool {
+	for _, isTarget := range []func(*ast.WidgetV3) bool{
+		isButtonWidget,
+		func(t *ast.WidgetV3) bool { return isPluggableButtonWidget(registry, t) },
+		func(t *ast.WidgetV3) bool { return pluggableClickActionSlot(t, registry) != "" },
+	} {
+		// `OnClick:` parses to the Action slot, which the engine writes to the
+		// pluggable widget's own click property (the mapping whose Source is
+		// OnClick); a core button reads the same slot.
+		if rebindFirst(widgets, isTarget, func(t *ast.WidgetV3) { t.Properties["Action"] = act }) {
+			return true
+		}
+	}
+	return false
+}
+
+// isPluggableButtonWidget reports whether a widget is a pluggable button: one
+// with a click action (pluggableClickActionSlot) whose definition names it a
+// button. The name is what tells a button from the other clickable widgets a
+// block holds — a PDS Link takes `OnClick:` too, and on a PDS page header it
+// comes before the primary button (mendixlabs/mxcli#1822). registry may be nil
+// (no project); then nothing is a pluggable button.
+func isPluggableButtonWidget(registry *WidgetRegistry, w *ast.WidgetV3) bool {
+	if pluggableClickActionSlot(w, registry) == "" {
+		return false
+	}
+	def := lookupWidgetDef(w, registry)
+	return def != nil && strings.HasSuffix(strings.ToLower(def.MDLName), "button")
 }
 
 // rebindFirst applies set to the first widget (pre-order) matching pred,
@@ -3318,16 +3595,6 @@ func cloneWidget(w *ast.WidgetV3) *ast.WidgetV3 {
 	return clone
 }
 
-// prefixWidgetNames recursively prepends a prefix to all widget names.
-func prefixWidgetNames(widgets []*ast.WidgetV3, prefix string) {
-	for _, w := range widgets {
-		if w.Name != "" {
-			w.Name = prefix + w.Name
-		}
-		prefixWidgetNames(w.Children, prefix)
-	}
-}
-
 // flowArgsToParameterMappings converts parsed datasource/action arguments into
 // model parameter mappings. A microflow or nanoflow used as a widget datasource
 // needs an argument for every parameter exactly as a call action does — Mendix
@@ -3349,6 +3616,7 @@ func (pb *pageBuilder) flowArgsToParameterMappings(args []ast.FlowArgV3) []*page
 		if strVal, ok := arg.Value.(string); ok {
 			if v, kind := pb.classifyFlowArgValue(strVal); kind != "" {
 				mapping.Variable, mapping.VariableKind = v, kind
+				mapping.WidgetParameter, mapping.WidgetParameterKind = pb.flowArgWidgetParameter(v, kind)
 			} else if strings.HasPrefix(strVal, "$") {
 				mapping.Variable = strVal
 			} else {

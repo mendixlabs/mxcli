@@ -57,6 +57,10 @@ func renderClientActionSettingsMDL(ctx *ExecContext, action map[string]any) stri
 		if page, _ := action["DefaultPage"].(string); page != "" {
 			props = append(props, "DefaultPage: "+page)
 		}
+	case "Forms$FormAction", "Pages$PageClientAction":
+		if n, _ := action["NumberOfPagesToClose2"].(string); strings.TrimSpace(n) != "" {
+			props = append(props, "NumberOfPagesToClose: "+strings.TrimSpace(n))
+		}
 	}
 	if flow != nil {
 		if pb, _ := flow["ProgressBar"].(string); pb != "" && pb != "None" {
@@ -144,6 +148,9 @@ func formatActionSettingsV3(s *ast.ActionSettingsV3) string {
 	}
 	if s.DefaultPage != "" {
 		props = append(props, "DefaultPage: "+s.DefaultPage)
+	}
+	if s.NumberOfPagesToClose != "" {
+		props = append(props, "NumberOfPagesToClose: "+s.NumberOfPagesToClose)
 	}
 	if len(props) == 0 {
 		return ""

@@ -16,6 +16,9 @@ mdl 1;
 -- It therefore asks whether ANY widget type in the theme declares the key — a key
 -- declared nowhere cannot be right here either. A key declared for a DIFFERENT
 -- widget type is accepted. Under-reporting, never over-reporting.
+-- (ako/mxcli#613 closes that half: with a project, the reference pass opens the
+-- document and judges the key against the stored widget's own type — see
+-- 613-alter-styling-key-of-another-widget-type.mdl.)
 --
 -- #511: a design property declared `"multiSelect": true` (Atlas: 'Hide on') is
 -- stored as a COMPOUND, one entry per selected option. Decoded from a Studio

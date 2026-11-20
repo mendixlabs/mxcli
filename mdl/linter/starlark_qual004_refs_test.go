@@ -51,8 +51,9 @@ func qual004FixtureDB(t *testing.T, refs []qual004Ref) catalog.CatalogDB {
 			('f5','Target','M.Target','M','','MICROFLOW','','',0,1,1,1),
 			('f6','TargetNF','M.TargetNF','M','','NANOFLOW','','',0,1,1,1)`,
 		`CREATE TABLE pages (Id TEXT, Name TEXT, QualifiedName TEXT, ModuleName TEXT, Folder TEXT,
-			Title TEXT, URL TEXT, Description TEXT, WidgetCount INTEGER)`,
-		`INSERT INTO pages VALUES
+			Title TEXT, URL TEXT, Description TEXT, WidgetCount INTEGER,
+			Class TEXT, Style TEXT, DynamicClasses TEXT)`,
+		`INSERT INTO pages (Id, Name, QualifiedName, ModuleName, Folder, Title, URL, Description, WidgetCount) VALUES
 			('p1','Orders_Overview','M.Orders_Overview','M','','','','',0),
 			('p2','Unused_Page','M.Unused_Page','M','','','','',0),
 			('p3','TargetPage','M.TargetPage','M','','','','',0)`,

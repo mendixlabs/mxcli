@@ -15,11 +15,11 @@ description: "Find out what a running Mendix app actually does — logs, Prometh
 | 52-136 | 1. Logs — the first stop for errors |
 | 137-151 | 2. Metrics — throughput and database pressure |
 | 152-175 | 3. Traces — where the time goes |
-| 176-193 | 4. Model shape — the catalog |
-| 194-221 | 5. The app warehouse — join the signals (external DuckDB) |
-| 222-229 | Known gap: logs ↔ traces |
-| 230-239 | Decision guide |
-| 240-245 | See Also |
+| 176-195 | 4. Model shape — the catalog |
+| 196-223 | 5. The app warehouse — join the signals (external DuckDB) |
+| 224-231 | Known gap: logs ↔ traces |
+| 232-241 | Decision guide |
+| 242-247 | See Also |
 
 <!-- /skill-index -->
 # Analyze an App's Runtime Behavior — Logs, Metrics, Traces, Catalog
@@ -175,10 +175,12 @@ mxcli run --local -p app.mpr --trace-otlp http://127.0.0.1:4318
 
 ## 4. Model shape — the catalog
 
-The catalog is a SQLite database at `.mxcli/catalog.db` describing the model. **Run
-`refresh catalog full`** — plain `refresh catalog` (fast mode) leaves the analytic
-tables (`CATALOG.ACTIVITIES`, `CATALOG.REFS`, `CATALOG.XPATH_EXPRESSIONS`,
-`CATALOG.WIDGETS`) **empty** (a fast-mode query warns "requires refresh catalog full").
+The catalog is a SQLite database at `.mxcli/catalog.db` describing the model. A
+`SELECT … FROM CATALOG.*` through mxcli builds what its tables need — full mode for
+`CATALOG.ACTIVITIES`, `CATALOG.REFS`, `CATALOG.XPATH_EXPRESSIONS`, `CATALOG.WIDGETS` —
+incrementally after a change, so no refresh is needed first. **Run
+`refresh catalog full`** only before reading `catalog.db` with another tool (DuckDB
+below): plain `refresh catalog` (fast mode) leaves those tables empty in the file.
 
 ```bash
 mxcli -p app.mpr -c "refresh catalog full"

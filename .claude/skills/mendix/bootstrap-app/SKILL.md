@@ -11,11 +11,11 @@ description: "Provision a Mendix project in a repo that has none — interview, 
 | lines | section |
 |---|---|
 | 23-43 | When to Use This Skill |
-| 44-130 | Step 0 — interview, and WAIT for the answers |
-| 131-263 | Provision |
-| 264-333 | If this is a solution (several apps in one repo) |
-| 334-391 | Then propose the model — do not build it yet |
-| 392-455 | After bootstrap — the inner loop |
+| 44-134 | Step 0 — interview, and WAIT for the answers |
+| 135-268 | Provision |
+| 269-338 | If this is a solution (several apps in one repo) |
+| 339-398 | Then propose the model — do not build it yet |
+| 399-462 | After bootstrap — the inner loop |
 
 <!-- /skill-index -->
 # Bootstrap a Mendix App in an Empty Repo
@@ -104,7 +104,11 @@ ls ~/.mxcli/mxbuild/ 2>/dev/null | sort -V | tail -1   # e.g. 11.13.0, or empty
 ```
 
 If that names a version, use it and say so in one line ("using 11.13.0, already cached
-in this environment"). If the user asked for a specific version, they win — check it on
+in this environment"). **Except an 11.14.x:** its `mxbuild --serve` fails every build
+after the first (its own bundler config is gone), so `run --local --watch` rebuilds
+through a serve restart per change (~30 s instead of ~3 s); 11.15.0 is measured to
+fix that failure (ako/mxcli#606). Take the
+newest version on the CDN instead and say why in one line. If the user asked for a specific version, they win — check it on
 the CDN as below and accept the download.
 
 **Otherwise take the newest version on the CDN.** Everything mxcli does starts with
@@ -227,8 +231,9 @@ drop the `./` if it came pre-installed on `PATH`.
    template ships with" — afterwards every figure is yours plus the template's, and
    there is nothing to subtract. A blank app is **not** expected to score zero
    warnings; knowing which ones it starts with is what stops you chasing them later.
-   Read `.ai-context/skills/assess-quality/SKILL.md` before interpreting the report —
-   it covers what each category means and which findings are worth acting on.
+   Read `.ai-context/skills/report-quality/SKILL.md` before interpreting the report —
+   it covers how the score is computed, what it leaves out, and how to accept a
+   finding that is intended.
 10. **(Optional) browser preview from a cloud session:**
     `./mxcli run --hub https://hub.mxcli.org -p <AppName>.mpr`, and report the preview
     URL it prints. Needs `MXCLI_HUB_KEY` on the environment; without it, continue as a
@@ -363,7 +368,9 @@ flags it. The cost lands later, on someone else.
   `GROUP BY`, `SUM`/`COUNT` — returning rows a page binds to directly. The microflow
   version pulls every object into memory to produce one number, and it gets slower
   exactly as the app succeeds, which is the worst possible failure curve. Needs
-  **Mendix 10.18+** (`list features` confirms it). `create view entity Mod.Name (…)
+  **Mendix 10.21+** for mxcli to write one (view entities are 10.18, but the source
+  document mxcli writes is 10.21; `list features` and `mxcli syntax view-entity`
+  print the floor from the registry). `create view entity Mod.Name (…)
   as ( select … )` — see `mxcli syntax view-entity` for the shape, its `oql` and
   `association` subtopics for the rules that bite (every column needs an `AS`
   alias; `ORDER BY` needs a `LIMIT`; selecting an id under an alias makes an
@@ -421,7 +428,7 @@ Two of them are easy to mistake for optional and are not:
 
 - **`report` is the quality report**, and its six category scores are what the
   baseline in step 9 exists to be compared against. A score that fell is a finding,
-  not a detail. `assess-quality` covers how to read it.
+  not a detail. `report-quality` covers how to read it.
 - **`test` needs a suite to run.** Write the first one with the **first microflow you
   build** — not "later", because later is after the code is written and the expected
   values have stopped being obvious. One `tests/<Slice>.test.mdl` per slice is the

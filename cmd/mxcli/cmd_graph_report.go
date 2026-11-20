@@ -77,39 +77,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		// notIn builds a "<expr> NOT IN ('a','b',...)" filter for the framework
-		// (+ user-excluded) modules, or "" when framework is included.
-		notIn := func(expr string) string {
-			if includeFramework {
-				return ""
-			}
-			mods := append(append([]string{}, frameworkModules...), exclude...)
-			quoted := make([]string, len(mods))
-			for i, m := range mods {
-				quoted[i] = "'" + strings.ReplaceAll(m, "'", "''") + "'"
-			}
-			return " WHERE " + expr + " NOT IN (" + strings.Join(quoted, ", ") + ")"
-		}
-		moduleOf := "substr(Entity, 1, instr(Entity, '.') - 1)"
-
-		sections := []graphSection{
-			{"God nodes — most depended-upon / highest fan-out",
-				"SELECT Asset, ObjectType, InDegree, OutDegree, Degree FROM graph_god_nodes" +
-					notIn("ModuleName") + " ORDER BY Degree DESC LIMIT ?"},
-			{"Module coupling — cross-module edges (surprise edges)",
-				"SELECT SourceModule, TargetModule, Edges, RefKinds FROM graph_module_coupling ORDER BY Edges DESC LIMIT ?"},
-			{"Module cohesion — lowest first (most entangled)",
-				"SELECT ModuleName, IntraEdges, InterEdges, CohesionPct FROM graph_module_cohesion" +
-					notIn("ModuleName") + " ORDER BY CohesionPct ASC LIMIT ?"},
-			{"Dead documents — referenceable but no inbound edge",
-				"SELECT QualifiedName, ObjectType, ModuleName FROM graph_dead_assets" +
-					notIn("ModuleName") + " ORDER BY ObjectType, QualifiedName LIMIT ?"},
-			{"Reference kinds — edge vocabulary",
-				"SELECT RefKind, SourceType, TargetType, Count, Pct FROM graph_refkind_distribution ORDER BY Count DESC LIMIT ?"},
-			{"Entity hotspots — used by the most flows",
-				"SELECT Entity, UsedByFlows, AcrossModules FROM graph_entity_hotspots" +
-					notIn(moduleOf) + " ORDER BY UsedByFlows DESC LIMIT ?"},
-		}
+		sections := graphReportSections(includeFramework, exclude)
 
 		results := make([]graphSectionResult, 0, len(sections))
 		for _, s := range sections {
@@ -138,6 +106,55 @@ Examples:
 		}
 		fmt.Print(out)
 	},
+}
+
+// graphReportSections builds the report's queries. Framework modules and
+// --exclude are filtered on every section that names a module — on BOTH ends
+// of the coupling edges: filtering only the cohesion and god-node sections left
+// an excluded module listed as a coupling source (ako/mxcli#2222).
+func graphReportSections(includeFramework bool, exclude []string) []graphSection {
+	var mods []string
+	if !includeFramework {
+		mods = append(mods, frameworkModules...)
+	}
+	mods = append(mods, exclude...)
+	quoted := make([]string, len(mods))
+	for i, m := range mods {
+		quoted[i] = "'" + strings.ReplaceAll(m, "'", "''") + "'"
+	}
+	list := strings.Join(quoted, ", ")
+	// where renders a WHERE clause keeping rows whose expressions are all
+	// outside the excluded modules, or "" when nothing is excluded.
+	where := func(exprs ...string) string {
+		if len(mods) == 0 {
+			return ""
+		}
+		conds := make([]string, len(exprs))
+		for i, e := range exprs {
+			conds[i] = e + " NOT IN (" + list + ")"
+		}
+		return " WHERE " + strings.Join(conds, " AND ")
+	}
+	moduleOf := "substr(Entity, 1, instr(Entity, '.') - 1)"
+	return []graphSection{
+		{"God nodes — most depended-upon / highest fan-out",
+			"SELECT Asset, ObjectType, InDegree, OutDegree, Degree FROM graph_god_nodes" +
+				where("ModuleName") + " ORDER BY Degree DESC LIMIT ?"},
+		{"Module coupling — cross-module edges (surprise edges)",
+			"SELECT SourceModule, TargetModule, Edges, RefKinds FROM graph_module_coupling" +
+				where("SourceModule", "TargetModule") + " ORDER BY Edges DESC LIMIT ?"},
+		{"Module cohesion — lowest first (most entangled)",
+			"SELECT ModuleName, IntraEdges, InterEdges, CohesionPct FROM graph_module_cohesion" +
+				where("ModuleName") + " ORDER BY CohesionPct ASC LIMIT ?"},
+		{"Dead documents — referenceable but no inbound edge",
+			"SELECT QualifiedName, ObjectType, ModuleName FROM graph_dead_assets" +
+				where("ModuleName") + " ORDER BY ObjectType, QualifiedName LIMIT ?"},
+		{"Reference kinds — edge vocabulary",
+			"SELECT RefKind, SourceType, TargetType, Count, Pct FROM graph_refkind_distribution ORDER BY Count DESC LIMIT ?"},
+		{"Entity hotspots — used by the most flows",
+			"SELECT Entity, UsedByFlows, AcrossModules FROM graph_entity_hotspots" +
+				where(moduleOf) + " ORDER BY UsedByFlows DESC LIMIT ?"},
+	}
 }
 
 type graphSection struct {

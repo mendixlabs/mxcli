@@ -1,0 +1,92 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#684: `mxcli layout flows` introduced MPR008 overlaps at merge nodes.
+-- After the reporter's correction, two remain:
+--
+--   '(merge)' (2355,80)   and '(merge)' (2360,80)        ACT_DealGame     5px
+--   '(merge)' (2815,1730) and '(unnamed)' (2740,1730)    ACT_Refresh     75px
+--
+-- "both merge nodes, at the same y on the main path." An IF's closing merge is
+-- placed from the measured width of its branch, and a decision inside the branch
+-- was measured from its split's centre instead of its left edge (ako/mxcli#1773),
+-- so the merge landed in the activity — or the merge — before it.
+--
+-- The reporter's project is not available. These are the shapes that put
+-- merges side by side on the main path: decisions closing at the same point, a
+-- decision followed by an activity in a branch, a loop ending in a decision, and
+-- nested loops. Execute without @position, or execute and run `layout flows`,
+-- then lint: MPR008 and MPR011 must not increase.
+--
+--   mxcli exec 684-layout-flows-merge-overlaps.mdl -p app.mpr
+--   mxcli layout flows -p app.mpr --module Bug684
+--   mxcli lint -p app.mpr --rules MPR008,MPR011
+--
+-- Regression coverage: mdl/executor/layout_merge_overlap_684_test.go
+-- ============================================================================
+
+create or modify module Bug684;
+
+create or modify persistent entity Bug684.Cell ( "Value": Integer );
+
+create or modify microflow Bug684.DecisionsCloseTogether ($Flag: Boolean, $Other: Boolean)
+begin
+  if $Flag then
+    log info node 'Bug684' 'a';
+    if $Other then
+      log info node 'Bug684' 'b';
+    else
+      log info node 'Bug684' 'c';
+    end if;
+  else
+    log info node 'Bug684' 'd';
+  end if;
+  log info node 'Bug684' 'done';
+end;
+
+create or modify microflow Bug684.ThreeDecisionsCloseTogether ($Flag: Boolean, $Other: Boolean)
+begin
+  if $Flag then
+    if $Other then
+      if $Flag then
+        log info node 'Bug684' 'b';
+      end if;
+    end if;
+  end if;
+  log info node 'Bug684' 'done';
+end;
+
+create or modify microflow Bug684.DecisionThenActivityInBranch ($Flag: Boolean, $Other: Boolean)
+begin
+  if $Flag then
+    if $Other then
+      log info node 'Bug684' 'b';
+    else
+      log info node 'Bug684' 'c';
+    end if;
+    log info node 'Bug684' 'x';
+  else
+    log info node 'Bug684' 'd';
+  end if;
+  log info node 'Bug684' 'done';
+end;
+
+create or modify microflow Bug684.NestedLoopsWithMerges ($Flag: Boolean, $Other: Boolean, $Cells: list of Bug684.Cell)
+begin
+  if $Flag then
+    loop $Row in $Cells begin
+      if $Other then
+        log info node 'Bug684' 'a';
+      end if;
+      loop $Col in $Cells begin
+        if $Other then
+          log info node 'Bug684' 'b';
+        else
+          log info node 'Bug684' 'c';
+        end if;
+        log info node 'Bug684' 'd';
+      end loop;
+      log info node 'Bug684' 'e';
+    end loop;
+  end if;
+  log info node 'Bug684' 'done';
+end;

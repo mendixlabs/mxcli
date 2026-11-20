@@ -50,8 +50,19 @@ func writeFeatureDetail(w io.Writer, f SyntaxFeature) {
 	fmt.Fprintf(w, "%s\n\n", strings.Repeat("═", len(f.Path)))
 	fmt.Fprintf(w, "%s\n\n", f.Summary)
 
-	if f.MinVersion != "" {
-		fmt.Fprintf(w, "Requires: Mendix %s+\n\n", f.MinVersion)
+	switch {
+	case len(f.Requires) == 1:
+		fmt.Fprintf(w, "Requires: Mendix %s\n\n", f.Requires[0].versionRange())
+	case len(f.Requires) > 1:
+		fmt.Fprintln(w, "Requires:")
+		width := 9
+		for _, r := range f.Requires {
+			width = max(width, len(r.versionRange()))
+		}
+		for _, r := range f.Requires {
+			fmt.Fprintf(w, "  Mendix %-*s %s\n", width, r.versionRange(), r.Feature)
+		}
+		fmt.Fprintln(w)
 	}
 
 	if len(f.Keywords) > 0 {
@@ -110,4 +121,33 @@ func groupByDomain(features []SyntaxFeature) []featureGroup {
 		groups[i] = featureGroup{title: capitalize(d), features: m[d]}
 	}
 	return groups
+}
+
+// versionRange is "10.0.0+" for a feature Mendix still has, and
+// "10.0.0 to 11.14.99" for one it removed.
+func (r Requirement) versionRange() string {
+	if r.Until != "" {
+		return r.Since + " to " + r.Until
+	}
+	return r.Since + "+"
+}
+
+// WriteText renders a lookup's answer. A nested topic that has subtopics of
+// its own (workflow.user-task, with workflow.user-task.targeting under it)
+// prints its detail and then lists them; it used to print only the index, so
+// `mxcli syntax workflow user-task` never showed the user task syntax
+// (ako/mxcli#2238). A top-level area (`workflow`, `microflow`) stays an index
+// of its topics, and every other answer is WriteText's.
+func (m Match) WriteText(w io.Writer) {
+	if own := ByPath(m.Path); m.Exact && own != nil && strings.Contains(m.Path, ".") && len(m.Features) > 1 {
+		writeFeatureDetail(w, *own)
+		fmt.Fprintln(w, "Subtopics:")
+		for _, f := range m.Features {
+			if f.Path != own.Path {
+				fmt.Fprintf(w, "  %-40s %s\n", f.Path, f.Summary)
+			}
+		}
+		return
+	}
+	WriteText(w, m.Features)
 }

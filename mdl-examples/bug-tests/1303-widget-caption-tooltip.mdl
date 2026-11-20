@@ -1,0 +1,38 @@
+mdl 1;
+-- ako/mxcli#1303: a Starlark rule could not read a button's caption or
+-- tooltip, and a strings() caption row named the button's inner
+-- Forms$ClientTemplate, so with two buttons a rule could not tell which caption
+-- belonged to the one without a confirmation.
+--
+-- Run on a fresh app, then:
+--   mxcli -p App.mpr -c "refresh catalog full force"
+--   mxcli -p App.mpr -c "select Name, Caption, HasConfirmation from CATALOG.WIDGETS where ContainerQualifiedName = 'Bug1303.Sale_Edit' and WidgetType = 'Forms\$ActionButton' order by Name"
+-- Expected:
+--   btnDelete  Delete sale  0
+--   btnRemove  Remove       1
+-- and in a lint rule, strings(language = "nl_NL") rows whose widget_id is
+-- btnRemove's id: 'Weghalen' and 'Deze verkoop verwijderen?'.
+-- Before the fix the Caption column did not exist and no strings() row named a
+-- widget id.
+
+create module Bug1303;
+
+create persistent entity Bug1303.Sale (Amount: Integer);
+
+create microflow Bug1303.Act_Sale_Delete ($Sale: Bug1303.Sale)
+begin
+  delete $Sale;
+end;
+
+create page Bug1303.Sale_Edit (params: ($Sale: Bug1303.Sale), title: 'Edit sale', layout: Atlas_Core.Atlas_Default) {
+  dataview dvSale (datasource: $Sale) {
+    actionbutton btnDelete (caption: 'Delete sale', action: call microflow Bug1303.Act_Sale_Delete(Sale = $currentObject))
+    actionbutton btnRemove (caption: 'Remove', action: call microflow Bug1303.Act_Sale_Delete(Sale = $currentObject) with (Confirmation: 'Delete this sale?'))
+  }
+};
+
+create or modify translations in Bug1303 for nl_NL (
+  'Delete sale' as 'Verkoop verwijderen',
+  'Remove' as 'Weghalen',
+  'Delete this sale?' as 'Deze verkoop verwijderen?'
+);

@@ -17,6 +17,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 )
 
@@ -32,7 +33,7 @@ func moveDocumentUnit(ctx *ExecContext, docType ast.DocumentType, name ast.Quali
 	if !ast.IsMoveDocumentType(asked) {
 		return mdlerrors.NewUnsupported("unsupported document type: " + string(docType))
 	}
-	doc, err := ctx.Backend.FindDocumentUnit(name.Module, name.Name)
+	doc, err := findDocumentOfKind(ctx, asked, name)
 	if err != nil {
 		return mdlerrors.NewBackend("find "+asked, err)
 	}
@@ -52,6 +53,25 @@ func moveDocumentUnit(ctx *ExecContext, docType ast.DocumentType, name ast.Quali
 	return nil
 }
 
+// findDocumentOfKind resolves name to the document of the kind the statement
+// asked for. A name is unique per document type, not per module — a microflow
+// and a scheduled event may both be M.Nightly (mendixlabs/mxcli#1792) — so a
+// name-only lookup returned whichever it met first and refused the move as a
+// mistyped doctype. With no document of the asked kind, the first one is
+// returned, so checkMovedDocumentType can say what the name really is.
+func findDocumentOfKind(ctx *ExecContext, asked string, name ast.QualifiedName) (*types.DocumentUnit, error) {
+	docs, err := ctx.Backend.FindDocumentUnits(name.Module, name.Name)
+	if err != nil || len(docs) == 0 {
+		return nil, err
+	}
+	for _, d := range docs {
+		if strings.EqualFold(d.Kind, asked) {
+			return d, nil
+		}
+	}
+	return docs[0], nil
+}
+
 // checkMovedDocumentType refuses a document whose stored type is not the one
 // the statement named, and says what it actually is.
 //
@@ -66,9 +86,10 @@ func moveDocumentUnit(ctx *ExecContext, docType ast.DocumentType, name ast.Quali
 // Hence the deliberate asymmetry: refuse only when the derived kind is itself a
 // doctype MOVE knows how to spell. A kind mxcli has no MDL word for — a page
 // template, a document type a future Mendix version adds — is a derivation this
-// code cannot vouch for, so it defers to the name lookup. Document names are
-// unique within a module, so that lookup is the authority; this check is here to
-// catch a mistyped doctype, not to second-guess the model.
+// code cannot vouch for, so it defers to the name lookup. A name is unique per
+// document type, and findDocumentOfKind has already preferred the asked kind,
+// so reaching a mismatch here means nothing of that kind has the name; this
+// check is here to catch a mistyped doctype, not to second-guess the model.
 func checkMovedDocumentType(asked, found string, name ast.QualifiedName) error {
 	if found == "" || strings.EqualFold(found, asked) || !ast.IsMoveDocumentType(found) {
 		return nil

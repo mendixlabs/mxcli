@@ -115,7 +115,15 @@ to make.
 ```bash
 mxcli brain check -p app.mpr             # every shard
 mxcli brain check --changed -p app.mpr   # only shards this branch touched
+mxcli brain check --strict -p app.mpr    # also fail on requirements no test can prove
 ```
+
+A requirement whose anchors are all module roles, enumerations, constants or
+other kinds no microflow implements is built, but no test can ever be linked to
+it. `brain check` lists it as `UNPROVABLE` (a warning; `--strict` makes it a
+failure), and `brain capture --slice` prints the same hint when the model is
+there to resolve the anchors. Add the microflow, page or entity that implements
+the requirement as an anchor. `report traceability` uses the same list of kinds.
 
 Two independent things are checked.
 
@@ -199,6 +207,112 @@ implement it.
 
 Misfiling is not checked for slices: a slice spans modules by design.
 
+### Milestones
+
+A specification's milestones group its slices. The milestone is part of the
+slice, not a separate file:
+
+```bash
+mxcli brain milestone "M1 — accounts" --slice 01-accounts --slice 02-profiles -p app.mpr
+mxcli brain milestone "M2 — approvals" --requirement a1b2c3 -p app.mpr
+mxcli brain milestone -p app.mpr            # list them
+```
+
+That writes `milestone: "M1 — accounts"` in the slice file's frontmatter, and a
+``Milestone: `M2 — approvals` `` line on a requirement placed apart from its
+slice. `brain plan` adds a MILESTONE column, `brain plan --json` a `milestone`
+per slice, and `report traceability` groups by them. Milestones are ordered by
+where they first appear, walking the slices in name order. `--clear` takes
+slices or requirements out again.
+
+A project that kept milestones in `docs/brain/plan/traceability.json` moves them
+with `mxcli brain milestone --import docs/brain/plan/traceability.json`, which
+removes the file once everything in it is placed.
+
+### Before there is a project
+
+The brain does not need a model to exist: capture requirements from a
+specification first, create the app afterwards. Name the brain's directory with
+`-C`; no store command opens, or needs, the project.
+
+```bash
+mxcli brain init -C ./App
+mxcli brain capture "A planner can create a visit" -s 01-scheduling -a @Scheduling.Visit -C ./App
+mxcli brain plan -C ./App
+```
+
+`-p app.mpr` still works and means the directory that `.mpr` is — or will be —
+in. The two are alternatives; passing both is refused.
+
+`plan` and `check` then report what is true: nothing is built.
+
+```
+No model at /ws/App.mpr yet: 1 anchor(s) not checked, so nothing counts as built.
+
+SLICE            BUILT  PLANNED   UNANCHORED
+01-scheduling        0        1
+
+0 of 1 requirements built, across 1 slice(s).
+```
+
+Every anchor is **unverifiable** — neither *not found* (that would report the
+whole store as stale) nor built. `check` exits 0, and `--json` carries
+`"model_absent": true` and an `unverifiable` count. Only a *missing* `.mpr`
+means this: one that exists but will not open is still an error.
+
+### Then create the project in the same directory
+
+```bash
+mxcli new App --version 11.12.1
+```
+
+`mxcli new` refuses a non-empty directory with one exception: a directory
+holding **only** a brain — `docs/brain/` written by mxcli and its queue in
+`.mxcli/brain/` — is adopted. The project is created around it, the store and
+the queue are left exactly as they were, and from then on `-C ./App` finds the
+one `.mpr` in the directory and counts the same requirements against it. Any
+other file in the directory, or a `docs/brain/` mxcli did not write, is still
+refused. A file the project would overwrite is reported before anything moves.
+
+So the brain lives where the project will live, not in a workspace above it:
+the directory is the project root from the first requirement onwards.
+
+## Verdicts: built, but not as asked
+
+A requirement is built when its anchors resolve. When what was built differs from
+what was asked, record it on the entry that explains it — a decision, or an open
+question that holds it — never on the requirement:
+
+```bash
+mxcli brain capture "Approval is per team" --changes a1b2c3:"per team, not per person" -a @Leave.ACT_Approve -p app.mpr
+mxcli brain capture "Is mobile in scope?" --open --partly-meets d4e5f6:"until answered: web only" -a @Leave.ACT_Request -p app.mpr
+mxcli brain edit 7f00aa --partly-meets a1b2c3:"no export yet" -p app.mpr
+```
+
+Each flag writes a line in the entry's body (``Changes requirement `a1b2c3`: …``).
+`brain list --json` returns them parsed as `verdicts: [{requirement, kind, reason}]`,
+and `brain plan --json` gives every requirement its effective `status` — `built`,
+`partial`, `changed`, `not built` or `not traceable` — with the reason.
+
+`brain check` fails on a verdict naming a requirement the plan does not have, on a
+verdict written on a requirement, and on a requirement that is both changed and
+partly met. Several verdicts of one kind are fine. A verdict on an open question
+counts until the question is answered; `brain resolve` says what happens to it: a
+question filed on a slice becomes a requirement and drops the line, a module
+question becomes a decision and keeps it.
+
+## Accepting a lint finding
+
+A lint finding the project keeps on purpose is a decision. Record it with
+`--accepts`, on the element it is about, and lint stops counting it:
+
+```bash
+mxcli brain capture "Pages bind Core.Medewerker directly" --accepts "ARCH001:the shell owns it" -a @Core.Medewerker -p app.mpr
+```
+
+See [mxcli lint](mxcli-lint.md#accepted-findings-decisions-in-the-project-brain).
+`brain list --json` returns them as `accepts: [{rule, element, reason}]`.
+
 ## Open questions
 
 An open question is a decision that has not been made yet.
@@ -232,6 +346,106 @@ by a test.
 Both `brain check` and `mxcli lint` report unanswered questions until one is
 resolved. A question nobody answers is the one kind of entry that gets more
 expensive the longer it sits.
+
+## Where an entry came from
+
+```bash
+mxcli brain capture "A planner can create a visit" -s 01-scheduling -a @Scheduling.Visit \
+  --source docs/sample-prd.md#L18-21 -p app.mpr
+```
+
+`--source` records the document an entry was taken from, and optionally where
+in it after a `#` — a line range, a heading, whatever locates it. It is rendered
+on its own line under the anchors and is in the JSON (`staged --json`):
+
+```markdown
+## A planner can create a visit
+
+Anchors: `@Scheduling.Visit` · id `72dfdd` · 2026-11-04
+Source: `docs/sample-prd.md#L18-21`
+```
+
+The path is stored **relative to the project directory** — type it relative to
+where you are, or absolute — so it means the same on every checkout. The
+document has to be **in the project**: a source outside it, or one that does not
+exist, is refused, because provenance pointing at a file nobody else has is not
+provenance. If the document later disappears, `brain check` fails with
+`NO SOURCE`, as it does for an anchor that names nothing.
+
+`brain edit <id> --source …` sets or changes it; an edit of the wording keeps it.
+The source is provenance, not content: the same requirement found in two places
+is still one entry.
+
+Older mxcli builds read a shard with sources without complaint — they see the
+`Source:` line as the first line of the entry's text and keep it when they
+rewrite the file. The queue is less forgiving: an older build that rewrites
+`.mxcli/brain/staged.jsonl` (on a capture, drop or promote) drops the source of
+the entries still queued there.
+
+## Reading the store from a program
+
+```bash
+mxcli brain list -C ./App --json
+mxcli brain list --slice 01-scheduling --json -p app.mpr
+mxcli brain list --open --json -p app.mpr      # --open=false: only settled entries
+```
+
+`brain list --json` is the committed side of `brain staged --json`: the same
+entry objects — `id`, `kind`, `slice`, `open`, `title`, `body`, `anchors`,
+`source`, `date` — each with the `shard` it is in, in store order (`project.md`,
+modules, slices; file order within each). `kind` is always present.
+
+```json
+{
+  "count": 1,
+  "entries": [
+    {
+      "id": "72dfdd", "kind": "requirement", "slice": "01-scheduling",
+      "title": "A planner can create a visit",
+      "anchors": ["@Scheduling.Visit"], "source": "docs/sample-prd.md#L18-21",
+      "date": "2026-11-04", "shard": "plan/01-scheduling"
+    }
+  ],
+  "malformed": []
+}
+```
+
+Use it rather than parsing the shard files: their format is mxcli's to change.
+`brief --json` is the other read, meant for a prompt — it returns each shard's
+rendered markdown. A block whose metadata line cannot be read is listed under
+`malformed` instead of being dropped, so a listing never quietly shows fewer
+entries than the files hold. Built-ness is not in the listing: that is derived
+from the model by `brain plan`, never stored on an entry.
+
+## Editing an entry
+
+```bash
+mxcli brain edit 66dcf4 "A planner can create a visit for one named engineer" -p app.mpr
+mxcli brain edit a1b2c3 -a @Finance.ACT_Post -p app.mpr      # re-anchor, keep the text
+mxcli brain move 66dcf4 --slice 02-dispatch -p app.mpr
+```
+
+An entry's id is a handle — `promote`, `resolve` and prose cite it — so
+changing the wording keeps the id, the entry's position in its file, and its
+date. The text replaces the title and body; `-a`, if given, replaces the
+anchors and is checked as `capture` checks it — with `-a` the text can be left
+out. A staged entry is edited in the
+queue, a committed one in its shard.
+
+Two things move an entry to another file, and only these:
+
+- `move --slice` on a requirement. A decision has no slice: giving it one would
+  make it a requirement, whose anchors stop failing when they go stale.
+- Re-anchoring a decision into another module, so `check` does not report it
+  misfiled. A decision put in `project.md` on purpose (`promote --to project`)
+  stays there.
+
+An id is derived from the content once, at capture, and never again — so after
+an edit it no longer matches the text. Duplicates are therefore found by what
+an entry *says*, not by its id: capturing the edited wording again is refused
+("Already committed as 66dcf4"), and capturing the *original* wording — which
+hashes to the edited entry's id — is a new fact and gets an id of its own. An
+edit that would make one entry say the same as another is refused.
 
 ## When to capture a decision
 
@@ -301,23 +515,61 @@ progress from 65/65 to 63/65 and the number was the only symptom.
 | `brain init` | Creates `docs/brain/`. Refuses a `docs/brain/` it did not write |
 | `brain capture "<text>" [-a @Anchor]…` | Queues an entry. Never commits |
 | `brain staged [--since <id>] [--slice <n>] [--fail-if-empty]` | Lists the queue with the shard each entry would land in |
-| `brain promote <id> [--to <shard>]` | Writes it into its shard |
+| `brain capture --from-json <file\|->` | Queues a JSON array of entries as one act: all validated first, duplicates skipped |
+| `brain promote <id>… [--to <shard>]` | Writes them into their shards, all or none |
 | `brain drop <id>` | Removes it from the queue or from its shard |
+| `brain capture "<text>" --source <doc>[#<locator>]` | Records which document, and where in it, the entry came from |
+| `brain edit <id> ["<text>"] [-a @Anchor]… [--source <doc>]` | Rewrites it in place, staged or committed; the id does not change |
+| `brain move <id> --slice <name>` | Moves a requirement to another slice; the id does not change |
 | `brain capture "<text>" --slice <name> [-a @Anchor]…` | Queues a **requirement** of that slice |
 | `brain capture "<text>" --open [-a @Anchor]…` | Queues an **open question**; anchors not checked |
 | `brain resolve <id> "<answer>"` | Answers it, turning it into a decision in place |
 | `brain plan [--slice <name>]` | Each slice's requirements counted against the model |
+| `brain milestone ["<name>"] [--slice <n>]… [--requirement <id>]… [--clear] [--import <file>]` | Groups slices (or single requirements) into milestones; with no name, lists them |
 | `brain brief --slice <name> \| --module <M>` | The reading pack: exactly the shards that work needs |
 | `brain check [--changed]` | Anchors resolve, entries filed correctly, plus slice progress |
+| `brain list [--slice <n>] [--kind <k>] [--open]` | The committed entries; with `--json`, as data |
 | `brain show [<shard>]` | Entries, lines and headroom per shard |
 
 Dropping the last entry from a module shard deletes the file, so the directory
 does not accumulate husks that read as "this module has decisions".
 
 Every command takes `--json`, so a dispatcher running one agent per slice can
-act on the answers rather than read them. `brain staged --since <id>` is the
+act on the answers rather than read them. `capture --json` returns the entry's
+`id`, `kind`, `slice`, `shard`, `added` and a `status` of `queued`,
+`already_queued` or `already_committed` (a duplicate is reported with its
+twin's id, and exits 0 as before); `promote --json` returns the `id`, `kind`,
+`shard`, the shard file's `path` and a `status` of `promoted` or
+`already_promoted`. `brain staged --since <id>` is the
 slice boundary: note `last_id` before handing a slice off, pass it back
 afterwards, and `--fail-if-empty` exits 1 on a slice that recorded nothing.
+
+### Many entries at once
+
+A tool that turns a specification into fifty requirements, and a person who
+accepts them all, should not mean fifty captures and fifty promotes — each is a
+place to stop half way. Both commands take a batch, and a batch is one act:
+
+```bash
+mxcli brain capture --from-json requirements.json -p app.mpr --json
+mxcli brain promote 1a2b3c 4d5e6f 7a8b9c -p app.mpr
+```
+
+`--from-json` reads a JSON array (`-` for stdin) of
+`{"text" | "title"+"body", "anchors": [...], "slice"?, "open"?, "source"?}`,
+the input fields `staged --json` prints. Every item is checked before anything
+is queued, so one bad item fails the batch and names its index (`items[3]`).
+A duplicate — of a committed entry, a queued one, or an earlier item — is
+skipped and reported with the existing id, so the same list twice is a no-op.
+
+`promote` with several ids resolves every id and checks each shard's cap with
+**all** of the batch's additions to it before writing anything; additions that
+each fit can still overrun the shard together, and then nothing is written.
+`--to` applies to every id. The shards are written first, then the queue once:
+interrupted between the two, the entries are committed and still queued, and
+running the same `promote` again completes it. With `--json`, both return
+`results` (one per item, in input order) plus totals; `promote` with a single
+id keeps its single-object shape.
 
 `--since` rather than `--slice`, because `capture --slice` is what makes an entry
 a *requirement* — a decision found while building a slice carries no slice at

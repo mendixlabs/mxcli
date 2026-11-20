@@ -178,8 +178,11 @@ type widgetRef struct {
 // findMatchingWidgets queries the catalog for widgets matching the filters.
 func findMatchingWidgets(ctx *ExecContext, filters []ast.WidgetFilter, module string) ([]widgetRef, error) {
 	var query strings.Builder
+	// Pages and snippets only. The catalog also records a layout's widgets
+	// (ako/mxcli#1302), for the linter; writing to a layout through this
+	// statement is a separate decision, and a read-side change must not make it.
 	query.WriteString(`select Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType
-	          from widgets where 1=1`)
+	          from widgets where ContainerType in ('PAGE', 'SNIPPET')`)
 	args := []any{}
 
 	for _, f := range filters {

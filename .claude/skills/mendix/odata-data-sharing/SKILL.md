@@ -10,17 +10,18 @@ description: "Share data between Mendix apps over OData — published services, 
 
 | lines | section |
 |---|---|
-| 30-42 | Reference files |
-| 43-52 | When to Use This Skill |
-| 53-73 | MetadataUrl Formats |
-| 74-125 | Refreshing the Cached Contract |
-| 126-154 | ServiceUrl Must Be a Constant |
-| 155-193 | Architecture Overview |
-| 194-226 | API Versioning |
-| 227-272 | Folder Organization |
-| 273-284 | Module Organization Conventions |
-| 285-306 | Checklist |
-| 307-334 | Exploration Commands |
+| 31-43 | Reference files |
+| 44-53 | When to Use This Skill |
+| 54-74 | MetadataUrl Formats |
+| 75-126 | Refreshing the Cached Contract |
+| 127-155 | ServiceUrl Must Be a Constant |
+| 156-164 | Writing to an External Entity |
+| 165-203 | Architecture Overview |
+| 204-236 | API Versioning |
+| 237-282 | Folder Organization |
+| 283-294 | Module Organization Conventions |
+| 295-316 | Checklist |
+| 317-344 | Exploration Commands |
 
 <!-- /skill-index -->
 # OData Data Sharing Between Mendix Apps
@@ -151,6 +152,15 @@ CREATE CONSUMED ODATA SERVICE ProductClient.ProductDataApiClient (
 ```
 
 This enforces Mendix best practice of externalizing configuration values for different environments.
+
+## Writing to an External Entity
+
+A changed external object is saved with `send external object $Obj [refresh];`
+and removed with `delete external object $Obj [refresh];` — Studio Pro's *Send
+external object* / *Delete external object*. A plain `commit` or `delete` on an
+external entity is a Studio Pro error. The entity set must allow it (Updatable /
+Deletable in `$metadata`, else CE9435), and `on error continue` is refused
+(CE6035); `mxcli syntax odata.write` has the rest.
 
 ## Architecture Overview
 

@@ -103,6 +103,10 @@ type AgentEditorBackend interface {
 	CreateAgentEditorConsumedMCPService(c *agenteditor.ConsumedMCPService) error
 	UpdateAgentEditorConsumedMCPService(c *agenteditor.ConsumedMCPService) error
 	DeleteAgentEditorConsumedMCPService(id string) error
+	ListAgentEditorPublishedMCPServices() ([]*agenteditor.PublishedMCPService, error)
+	CreateAgentEditorPublishedMCPService(p *agenteditor.PublishedMCPService) error
+	UpdateAgentEditorPublishedMCPService(p *agenteditor.PublishedMCPService) error
+	DeleteAgentEditorPublishedMCPService(id string) error
 	CreateAgentEditorAgent(a *agenteditor.Agent) error
 	UpdateAgentEditorAgent(a *agenteditor.Agent) error
 	DeleteAgentEditorAgent(id string) error

@@ -1,0 +1,19 @@
+-- ako/mxcli#1784: codegen named a workflow annotation Workflows$AnnotationActivity;
+-- the writer wrote Workflows$Annotation. Measured on mxbuild 9.24.30 and 11.12.6:
+-- this script (a start annotation and an activity annotation) is 0 errors with
+-- Workflows$Annotation, and TypeCacheUnknownTypeException with AnnotationActivity.
+mdl 1;
+create module BugTest1784;
+create persistent entity BugTest1784.Request ( Title: String(100) );
+create microflow BugTest1784.ACT_Validate ($WorkflowContext: BugTest1784.Request)
+begin
+  log info node 'Wf' 'validate';
+end;
+create workflow BugTest1784.WF_Request
+  parameter $WorkflowContext: BugTest1784.Request
+  display 'Request'
+  annotation 'Started from the request form'
+begin
+  @annotation 'Checks the request'
+  call microflow BugTest1784.ACT_Validate;
+end workflow;

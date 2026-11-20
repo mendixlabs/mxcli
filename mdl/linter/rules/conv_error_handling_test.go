@@ -130,6 +130,10 @@ func TestFindUnhandledCalls_NonExternalAction(t *testing.T) {
 	}
 }
 
+// ako/mxcli#1838 (mendixlabs/mxcli#1689): inside a loop Mendix allows only
+// Rollback (CE0644, which check reports as MDL006), so a CONV013 finding there
+// could not be fixed in place — one rule or the other always fired. A call in
+// a loop is not reported; its handling is the loop's.
 func TestFindUnhandledCalls_InsideLoop(t *testing.T) {
 	loopBody := &microflows.MicroflowObjectCollection{
 		Objects: []microflows.MicroflowObject{
@@ -151,8 +155,34 @@ func TestFindUnhandledCalls_InsideLoop(t *testing.T) {
 	r := NewErrorHandlingOnCallsRule()
 	findUnhandledCalls(objects, testMicroflow(), r, &violations)
 
+	if len(violations) != 0 {
+		t.Errorf("a call inside a loop can only roll back (CE0644); want no finding, got %d", len(violations))
+	}
+}
+
+// ako/mxcli#1838: a call to an action that always throws, such as
+// CommunityCommons.ThrowException, is how a flow rolls itself back — MDL
+// refuses `raise error` in the main flow (MDL084/CE0710). Its Rollback is the
+// point of the call; a custom handler beside it is what another rule flags.
+func TestFindUnhandledCalls_ThrowingJavaActionIsDeliberate(t *testing.T) {
+	call := func(javaAction string) []microflows.MicroflowObject {
+		return []microflows.MicroflowObject{&microflows.ActionActivity{
+			Action: &microflows.JavaActionCallAction{JavaAction: javaAction},
+		}}
+	}
+	r := NewErrorHandlingOnCallsRule()
+	for _, ja := range []string{"CommunityCommons.ThrowException", "CommunityCommons.ThrowWebserviceException"} {
+		var violations []linter.Violation
+		findUnhandledCalls(call(ja), testMicroflow(), r, &violations)
+		if len(violations) != 0 {
+			t.Errorf("%s: want no finding for a deliberate throw, got %v", ja, violations)
+		}
+	}
+	// Control: any other Java action with Rollback handling is still reported.
+	var violations []linter.Violation
+	findUnhandledCalls(call("CommunityCommons.Base64Encode"), testMicroflow(), r, &violations)
 	if len(violations) != 1 {
-		t.Errorf("expected 1 violation inside loop, got %d", len(violations))
+		t.Errorf("control: want 1 finding for a Java action that does not throw, got %d", len(violations))
 	}
 }
 

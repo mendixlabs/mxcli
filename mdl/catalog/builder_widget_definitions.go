@@ -165,9 +165,7 @@ func (b *Builder) buildWidgetDefinitions() error {
 		count++
 	}
 
-	if b.progress != nil {
-		b.progress("widget_definitions", count)
-	}
+	b.count("widget_definitions", count)
 	return nil
 }
 

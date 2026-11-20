@@ -46,6 +46,8 @@ mxcli lint -p app.mpr --baseline lint-baseline.json
 | MPR007 | security | PageNavigationSecurity - Navigation pages need allowed roles (CE0557); every user role must be able to open its home page (at Production security, else CE2729 per widget) |
 | MPR012 | correctness | ReactUnsupportedWidget - static/dynamic image, drop-down, legacy data grid and reference selector are unsupported by the React client (CE0582; info on the classic client) |
 | MPR013 | correctness | SnippetCallAppearance - Class/Style/DynamicClasses/design properties on a snippet call never reach the page (it renders no element) |
+| MPR014 | correctness | AgentWithoutSelectedModel - an agent with no selected model, which Agent Editor 2.2+ refuses at startup, stopping the import of every agent (not reported for AgentEditorCommons before 2.2) |
+| MPR015 | correctness | ConsumedMCPServiceWithoutEndpoint - a consumed MCP service with no endpoint constant, which Agent Editor skips at startup |
 | SEC001 | security | NoEntityAccessRules - Persistent entities need access rules |
 | SEC002 | security | WeakPasswordPolicy - Password minimum length should be 8+ |
 | SEC003 | security | DemoUsersActive - Demo users should be off at Production security |

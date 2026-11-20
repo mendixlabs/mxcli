@@ -91,6 +91,7 @@ func (b *Builder) appendAgentBodyBlock(stmt *ast.AlterAgentStmt, blk *parser.Age
 			td.Enabled = strings.EqualFold(v, "true")
 		}
 		td.Description = blockProps["description"]
+		b.toolUserSettings(&td, blockProps)
 		stmt.AddTools = append(stmt.AddTools, td)
 
 	case blk.KNOWLEDGE() != nil && blk.BASE() != nil:
@@ -112,18 +113,11 @@ func (b *Builder) appendAgentBodyBlock(stmt *ast.AlterAgentStmt, blk *parser.Age
 		if v, ok := blockProps["enabled"]; ok {
 			kbd.Enabled = strings.EqualFold(v, "true")
 		}
+		kbRetrievalSettings(&kbd, blockProps)
 		stmt.AddKBs = append(stmt.AddKBs, kbd)
 
 	case blk.TOOL() != nil:
-		td := ast.AgentToolDef{ToolType: "Microflow", Enabled: true}
-		if iok := blk.IdentifierOrKeyword(); iok != nil {
-			td.Name = iok.GetText()
-		}
-		td.Description = blockProps["description"]
-		if v, ok := blockProps["enabled"]; ok {
-			td.Enabled = strings.EqualFold(v, "true")
-		}
-		stmt.AddTools = append(stmt.AddTools, td)
+		stmt.AddTools = append(stmt.AddTools, b.toolBlockDef(blk, blockProps))
 	}
 }
 

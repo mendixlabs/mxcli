@@ -1,0 +1,43 @@
+mdl 1;
+-- ============================================================================
+-- Regression: ako/mxcli#808 - a boundary event could not be addressed
+-- ============================================================================
+--
+-- Symptom (before fix):
+--   `drop X boundary event` named no event. On an activity with several, the
+--   mutators dropped the first stored one, a guess at which the author meant;
+--   under mdl 1 that was refused (MDL-V1-BOUNDARYDROP) and there was no way
+--   to drop the second at all.
+--
+-- After fix:
+--   `drop X boundary event N` drops the N-th, numbered as `describe workflow`
+--   lists them; a number past the last is refused with nothing written.
+--   Expected below: callChild keeps only its interrupting timer.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/808-drop-boundary-event-by-number.mdl -p app.mpr
+--   mxcli -p app.mpr -c "describe workflow BugTest808.WF_Parent"
+--   mxcli docker check -p app.mpr   -- expect 0 errors
+-- ============================================================================
+
+create module BugTest808;
+create persistent entity BugTest808.Item ( Name: String(100) );
+
+create workflow BugTest808.WF_Child
+  parameter $WorkflowContext: BugTest808.Item
+begin
+  wait for timer childWait addDays([%CurrentDateTime%], 1);
+end workflow;
+
+create workflow BugTest808.WF_Parent
+  parameter $WorkflowContext: BugTest808.Item
+begin
+  call workflow BugTest808.WF_Child(WorkflowContext = $WorkflowContext) as callChild
+    boundary event interrupting timer addDays([%CurrentDateTime%], 1) { end workflow; }
+    boundary event non interrupting timer addHours([%CurrentDateTime%], 4) {
+      wait for timer remindWait addHours([%CurrentDateTime%], 1);
+    };
+end workflow;
+
+-- The second event, the non-interrupting reminder, is the one to go.
+alter workflow BugTest808.WF_Parent { drop callChild boundary event 2 };

@@ -274,6 +274,7 @@ func layoutFromGen(u mprread.Unit[*genPg.Layout]) *pages.Layout {
 		ContainerID:   u.ContainerID,
 		Name:          u.Element.Name(),
 		Documentation: u.Element.Documentation(),
+		Excluded:      u.Element.Excluded(),
 		LayoutType:    layoutTypeOf(u.Element),
 		Native:        layoutIsNative(u.Element),
 		Class:         appearanceClassOf(u.Element),

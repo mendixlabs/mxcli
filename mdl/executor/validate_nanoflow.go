@@ -37,6 +37,7 @@ func validateNanoflowWith(stmt *ast.CreateNanoflowStmt, voids *voidCodeActions) 
 		excluded:   stmt.Excluded,
 		voids:      voids,
 	}
+	v.initDefinedVariables(stmt.Body)
 	v.walkExprFunctions(stmt.Body)
 	v.walkAnnotations(stmt.Body)
 	// MDL063 holds for a nanoflow too: its variable names are as flat as a
@@ -48,6 +49,8 @@ func validateNanoflowWith(stmt *ast.CreateNanoflowStmt, voids *voidCodeActions) 
 	// contains/find rewrite come from the parameters and the declares.
 	v.seedPrimitiveKinds(stmt.Parameters, stmt.Body)
 	v.checkDuplicateVariableNames(v.params, stmt.Body)
+	v.checkListOperandKinds(stmt.Body)
+	v.checkEnumSplitDuplicateValues(stmt.Body)
 	// A nanoflow's show message has the same ShowMessageType (mendixlabs/mxcli#1280).
 	v.checkShowMessageType(stmt.Body)
 	// MDL-TEMPLATE01: a nanoflow's log, show message and validation feedback
@@ -56,6 +59,7 @@ func validateNanoflowWith(stmt *ast.CreateNanoflowStmt, voids *voidCodeActions) 
 	// MDL-TEMPLATE02: and the same template grammar (ako/mxcli#1397).
 	v.checkTemplateGrammar(stmt.Body)
 	v.checkVoidCallOutputUse(v.params, stmt.Body)
+	v.checkVoidFlowCallResult(stmt.Body)
 	// MDL-SET01: a nanoflow's Change variable is as primitive-only (CE7247).
 	v.checkSetOnObjectVariable(v.params, stmt.Body)
 	// MDL-CHANGE01: System.owner / System.changedBy are CE1050 in a nanoflow's
@@ -64,6 +68,10 @@ func validateNanoflowWith(stmt *ast.CreateNanoflowStmt, voids *voidCodeActions) 
 	// MDL-FLOW05: a nanoflow's flow is built by the same builder, so a statement
 	// after a return is dead there too (mendixlabs/mxcli#1491).
 	v.checkUnreachableStatements(stmt.Body)
+	// MDL097: `returns T as $R` with a path off the end and no $R. Measured on
+	// 11.16.1 in a nanoflow as in a microflow: CE0109 when $R is undefined, clean
+	// when it is declared at the top level.
+	v.checkReturnVariableDefined(stmt.Body)
 	// MDL049 / MDL094: a bare association path returned, or a loop over a path.
 	// Measured on 11.12.1, a nanoflow's return is CE0117 as a microflow's is,
 	// and its loop is built from the same AST (mendixlabs/mxcli#199).

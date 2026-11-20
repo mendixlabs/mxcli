@@ -139,6 +139,13 @@ func applyWorkflowActionSettings(a pages.ClientAction, s *ast.ActionSettingsV3) 
 	if _, ok := a.(*pages.OpenWorkflowClientAction); s.DefaultPage != "" && !ok {
 		return mdlerrors.NewValidation("DefaultPage is a setting of `open workflow` only")
 	}
+	if s.NumberOfPagesToClose != "" {
+		x, ok := a.(*pages.PageClientAction)
+		if !ok {
+			return mdlerrors.NewValidation("NumberOfPagesToClose is a setting of `show page` only")
+		}
+		x.NumberOfPagesToClose = s.NumberOfPagesToClose
+	}
 	return nil
 }
 

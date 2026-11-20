@@ -12,11 +12,11 @@ package mcp
 // half goes over MCP to Studio Pro and is covered by the fakePED tests around it.
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
@@ -28,7 +28,7 @@ import (
 func localProject(t *testing.T) string {
 	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../../testdata/expr-checker")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../../testdata/expr-checker"); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	return filepath.Join(dst, "minimal.mpr")

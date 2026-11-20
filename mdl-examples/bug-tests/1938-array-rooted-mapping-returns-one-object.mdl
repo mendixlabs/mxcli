@@ -1,0 +1,42 @@
+-- ako/mxcli#1938 (mendixlabs/mxcli#1734): an import mapping over an ARRAY-rooted JSON
+-- structure that maps the array itself to its root entity (the items a child)
+-- returns ONE root object, but the import activity was written as returning a
+-- list: mx check CE0243 "The mapping used to return a value of type
+-- 'List of BugTest1938.Root', but now returns a value of type 'BugTest1938.Root'".
+-- Measured on a fresh 11.14.0 app: the base build gives 1 x CE0243 on the first
+-- create (the reporter saw it on re-execution); this build 0, on create and
+-- after re-executing the microflow with a renamed result variable.
+mdl 1;
+create module BugTest1938;
+create or modify json structure BugTest1938.JSON_structure_2
+  sample $$[
+  {
+    "curveNumber": 3,
+    "pointNumber": 5,
+    "pointIndex": 5,
+    "x": "2024-04-15",
+    "y": 1
+  }
+]$$;
+create non-persistent entity BugTest1938.Root ();
+create non-persistent entity BugTest1938.JsonObject (CurveNumber: Integer, PointNumber: Integer, PointIndex: Integer, X: String(200), Y: Integer);
+create association BugTest1938.JsonObject_Root from BugTest1938.JsonObject to BugTest1938.Root;
+create or modify import mapping BugTest1938.Import_mapping_2
+  with json structure BugTest1938.JSON_structure_2
+{
+  create BugTest1938.Root {
+    create BugTest1938.JsonObject_Root/BugTest1938.JsonObject = JsonObject {
+      CurveNumber = curveNumber,
+      PointNumber = pointNumber,
+      PointIndex = pointIndex,
+      X = x,
+      Y = y
+    }
+  }
+};
+create or modify microflow BugTest1938.ACT_import ()
+begin
+  declare $Variable String = '';
+  $Root = import from mapping BugTest1938.Import_mapping_2($Variable);
+  return;
+end;

@@ -1,0 +1,15 @@
+-- ako/mxcli#1928 (mendixlabs/mxcli#1726): `check --references` validated a call
+-- against an EXCLUDED microflow when a live one has the same name, and refused
+-- a correct call: "microflow BugTest1928.Test has no parameter "param1"
+-- (declared parameters: param2)".
+--
+-- Setup in Studio Pro (or with mxcli on a copy): BugTest1928.Test($param1) live,
+-- and a second BugTest1928.Test($param2) marked "Exclude from project", listed
+-- after it. Mendix accepts the pair (CE0122 counts active documents only).
+-- Then `mxcli check this.mdl -p app.mpr --references` passes; naming param2
+-- instead is refused against the live flow's parameter list.
+mdl 1;
+create or modify microflow BugTest1928.Test2 ()
+begin
+  call microflow BugTest1928.Test(param1 = 'test');
+end;

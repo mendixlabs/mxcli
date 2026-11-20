@@ -59,6 +59,14 @@ type Writer struct {
 	// net result (writer_deferred.go); nil when no run is open.
 	deferred      map[string]deferredWrite
 	deferredOrder []string
+	// deferredJudged says the open run judges each held write as it is held
+	// (DeferUnitWritesJudged), so its statements can report for themselves.
+	deferredJudged bool
+	// reconciles counts the comparisons of a write with the stored unit
+	// (canon.Reconcile). For tests.
+	reconciles int
+	// judgedDigests counts the digests judgeHeld computes (JudgedDigests).
+	judgedDigests int
 	// simulating says the deferred run is a simulation (writer_simulated.go):
 	// it is discarded, never flushed, and any write it cannot hold is refused.
 	simulating bool
@@ -81,6 +89,14 @@ type removedUnit struct {
 // nothing further is recorded and the carry degrades to the behaviour that
 // existed before it — a churned re-insert, not a wrong one.
 const maxRemovedUnitsRemembered = 1024
+
+// Reconciles is how many times this writer has compared a write with the
+// stored unit. For tests.
+func (w *Writer) Reconciles() int { return w.reconciles }
+
+// JudgedDigests is how many canonical digests this writer has computed to
+// judge the held writes of a judged run (judgeHeld). For tests.
+func (w *Writer) JudgedDigests() int { return w.judgedDigests }
 
 // WriteStats reports how many unit writes this session offered to storage and
 // how many were not elided as no-ops.
@@ -237,6 +253,9 @@ func (wt *WriteTransaction) storedBytes(unitID string) ([]byte, error) {
 // WriteUnit writes a unit within the transaction.
 // The actual file write is deferred until Commit.
 func (wt *WriteTransaction) WriteUnit(unitID string, contents []byte) error {
+	if err := wt.writer.reader.PackagedUnitError(unitID, ""); err != nil {
+		return err
+	}
 	// Same no-op elision as updateUnit. This is a second write path into the
 	// same storage (codec.Store.SaveUnit / FlushUnits reach it), so leaving it
 	// out would mean the codec engine's own document writes kept churning while
@@ -554,6 +573,9 @@ func validateNoPlaceholderIDs(unitID string, contents []byte) error {
 }
 
 func (w *Writer) insertUnit(unitID, containerID, containmentName, unitType string, contents []byte) error {
+	if err := w.reader.PackagedUnitError(unitID, containerID); err != nil {
+		return err
+	}
 	if err := validateNoPlaceholderIDs(unitID, contents); err != nil {
 		return err
 	}
@@ -605,16 +627,17 @@ func (w *Writer) insertUnit(unitID, containerID, containmentName, unitType strin
 		}
 
 		// Insert reference to database
+		hash := contentsHashOf(contents)
 		_, err := w.reader.db.Exec(`
 			INSERT INTO Unit (UnitID, ContainerID, ContainmentName, TreeConflict, ContentsHash, ContentsConflicts)
 			VALUES (?, ?, ?, 0, ?, '')
-		`, unitIDBlob, containerIDBlob, containmentName, contentsHashOf(contents))
+		`, unitIDBlob, containerIDBlob, containmentName, hash)
 		if err != nil {
 			// Clean up the file we just wrote — otherwise it becomes an orphan
 			os.Remove(filePath)
 			return err
 		}
-		w.reader.InvalidateCache()
+		w.reader.noteUnitWritten(unitIDBlob, containerIDBlob, containmentName, contents, hash, true)
 		w.updateTransactionID()
 		w.restoreTransactionID(restoreTransactionID)
 		return nil
@@ -641,6 +664,9 @@ func (w *Writer) insertUnit(unitID, containerID, containmentName, unitType strin
 }
 
 func (w *Writer) updateUnit(unitID string, contents []byte, opts ...canon.Option) error {
+	if err := w.reader.PackagedUnitError(unitID, ""); err != nil {
+		return err
+	}
 	if err := validateNoPlaceholderIDs(unitID, contents); err != nil {
 		return err
 	}
@@ -715,11 +741,12 @@ func (w *Writer) updateUnit(unitID string, contents []byte, opts ...canon.Option
 		}
 
 		// Update ContentsHash in database
+		hash := contentsHashOf(contents)
 		_, err := w.reader.db.Exec(`
 			UPDATE Unit SET ContentsHash = ? WHERE UnitID = ?
-		`, contentsHashOf(contents), unitIDBlob)
+		`, hash, unitIDBlob)
 		if err == nil {
-			w.reader.InvalidateCache()
+			w.reader.noteUnitWritten(unitIDBlob, nil, "", contents, hash, false)
 			w.updateTransactionID()
 		}
 		return err
@@ -731,6 +758,9 @@ func (w *Writer) updateUnit(unitID string, contents []byte, opts ...canon.Option
 	_, err = w.reader.db.Exec(`
 		UPDATE Unit SET Contents = ?, ContentsHash = ? WHERE UnitID = ?
 	`, contents, contentsHashOf(contents), unitIDBlob)
+	// The reader keeps its scan of the Unit table until told it is stale
+	// (ako/mxcli#2094), as the v2 branch above and every other write does.
+	w.reader.InvalidateCache()
 	return err
 }
 
@@ -755,6 +785,7 @@ func (w *Writer) reconcileAgainst(unitID string, contents []byte, readStored fun
 		w.writesLanded++
 		return contents, false, nil // new unit, or unreadable — write it
 	}
+	w.reconciles++
 	out, unchanged = canon.Reconcile(contents, stored, opts...)
 
 	// The storage-GUID guard runs here, on the reconciled bytes, because it is
@@ -939,6 +970,9 @@ func (w *Writer) DeleteUnit(unitID string) error {
 // the elision re-running an already-applied script dirties the .mpr — the two
 // halves of ADR-0008's guarantee, applied to the row instead of the blob.
 func (w *Writer) MoveUnit(unitID, newContainerID string) error {
+	if err := w.reader.PackagedUnitError(unitID, newContainerID); err != nil {
+		return err
+	}
 	w.writesOffered++
 	target := uuidToBlob(newContainerID)
 	if stored, err := w.containerOfUnit(unitID); err == nil && bytes.Equal(stored, target) {
@@ -967,6 +1001,9 @@ func (w *Writer) containerOfUnit(unitID string) ([]byte, error) {
 }
 
 func (w *Writer) deleteUnit(unitID string) error {
+	if err := w.reader.PackagedUnitError(unitID, ""); err != nil {
+		return err
+	}
 	// Convert UUID string to 16-byte blob
 	unitIDBlob := uuidToBlob(unitID)
 	if unitIDBlob == nil {
@@ -1019,6 +1056,9 @@ func (w *Writer) deleteUnit(unitID string) error {
 
 // UpdateUnitContainer changes the ContainerID of a unit, moving it to a new parent.
 func (w *Writer) UpdateUnitContainer(unitID, newContainerID string) error {
+	if err := w.reader.PackagedUnitError(unitID, newContainerID); err != nil {
+		return err
+	}
 	unitIDBlob := uuidToBlob(unitID)
 	if unitIDBlob == nil {
 		return fmt.Errorf("invalid unit ID: %s", unitID)
@@ -1066,9 +1106,5 @@ func (w *Writer) UpdateUnitContainer(unitID, newContainerID string) error {
 // edit — kept whatever an older build wrote, on every later rewrite
 // (ako/mxcli#1640).
 func (w *Writer) normalizeForStorage(unitID string, contents []byte) ([]byte, error) {
-	out, err := normalizePropertySetsFor(w.reader.ProjectVersion(), unitID, contents)
-	if err != nil {
-		return nil, err
-	}
-	return canon.NormalizeListMarkers(out), nil
+	return storageFormFor(w.reader.ProjectVersion(), unitID, contents, true)
 }

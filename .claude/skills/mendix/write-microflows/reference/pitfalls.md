@@ -264,6 +264,11 @@ so a round trip does not change the model. The name is not a variable: using
 `$RefreshEntity` afterwards is CE0109 "Undefined variable" (MDL093 — `check`
 reports it when the script or, with `-p`, the project says the action is void).
 
+A call to a **microflow or nanoflow** that returns nothing is different: write it
+without `$X =`. Studio Pro keeps a stale result name on such a call when the flow
+used to return a value, and does not show it; `describe` does not print it
+either, `exec` stores no result variable for it, and `check` warns (MDL096).
+
 ### 10. Calling a Rule or Microflow Inside an Expression
 
 **Error**: CE0117 - "Error(s) in expression." (MDL066)
@@ -472,6 +477,12 @@ has 3 paths". Those change where the flow's paths end or meet; rebuild the flow
 deliberately (drop the microflow and create it in the same script) or edit it in Studio
 Pro. Inside a loop body a decision is the loop's to replace (§11).
 
+Make that rebuild a **one-time run**, not part of the script you re-run: a drop + create
+rewrites the flow every time it runs. Run it once, then keep the flow's final
+`create or modify` in the project script — the second run of that finds it unchanged.
+A refusal that says there is no room for new statements has a re-runnable fix of its
+own: leave out the `@position` of what comes after them, so it moves along.
+
 ### 16. A Message Template Is a String, Not an Expression With `with (…)`
 
 The text of a `log` message, a `send email` subject or body, a `show message` and a
@@ -566,6 +577,28 @@ A regex that ends in a lone backslash (`'\'`) builds and fails every time it run
 (PatternSyntaxException); `check` warns MDL-REGEX01. The `*Between` functions
 (`secondsBetween`, `minutesBetween`, …) return the absolute difference, whichever date
 comes first — compare the dates for the direction.
+
+### 21. `returns T as $R` Needs `$R` Defined Where the Flow Ends
+
+The `as $R` clause makes the end event return `$R`, so the body need not spell out a
+`return` — but only while `$R` has a value on the path that reaches the end. Declare it at
+the top level of the flow, or end every path with a `return`. Measured on MxBuild 11.16.1,
+microflow and nanoflow alike:
+
+- `$R` never defined and a path falls off the end — CE0109 "Undefined variable 'R'" (MDL097).
+- `$R` defined only inside an `if` branch or loop — CE0108, out of scope at the end event (MDL097).
+- `$R` declared at the top level — clean, even when the body falls off the end.
+
+```mdl
+mdl 1;
+create microflow Mod.IsEven ($N: Integer) returns Boolean as $Even
+begin
+  declare $Even Boolean = false;          -- top level: always has a value at the end
+  if $N mod 2 = 0 then
+    set $Even = true;
+  end if;
+end;
+```
 
 ## Implicit Variable Creation (CE0111 Duplicate Variable)
 
@@ -881,8 +914,9 @@ end;
   removes both.
 - **`export level api | hidden`** decides whether the microflow is part of the
   module's public surface when the module is exported. It bites in a
-  **Protected (add-on) module** — `describe module` prints
-  `-- export level: Protected …` and `show modules` says `Protected AddOn`:
+  **Protected (add-on) module** — `describe module` prints `ModuleType: addon`
+  (set it with `alter module M set (ModuleType: addon)`) and `show modules`
+  says `Protected AddOn`:
   another module or the navigation referencing a Hidden microflow, entity,
   attribute, association or any page there is **CE1406**, and an `api`
   microflow whose parameter or return type is a Hidden entity or enumeration of
@@ -958,6 +992,13 @@ none of these unless the script restates them. Use `create or modify` to edit a
 microflow that carries any of them — and note that `describe` now emits all
 four clauses, so **describe → rename → exec copies them faithfully**. Give the
 copy a different `url`, though: two microflows may not share one (CE0570).
+
+What no statement *can* state is different: in ONE script, the create is written
+as an update of the dropped unit, so it keeps the flow's Mark as used, the
+documentation of its parameters, activities, loops and decisions, each loop's
+error handling and a REST call's proxy (ako/mxcli#2178). A create in a later run
+has nothing to take them from and writes the defaults — loop error handling
+`Rollback` among them.
 
 The flow's `/** … */` doc comment goes directly above the `create`, **after** the
 `drop`. A doc comment belongs to the statement right after it, and a `drop` (like

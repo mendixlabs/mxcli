@@ -1,0 +1,26 @@
+-- Bug #673, revisited by ako/mxcli#2183: an inline `style` on a dynamictext.
+--
+-- #673 made `mxcli check` refuse it (MDL-WIDGET03) on the claim that the BSON
+-- it produced crashed MxBuild with a NullReferenceException. That does not
+-- reproduce: on Mendix 11.12.1 a dynamic text written by mxcli with an inline
+-- style (plain, a CSS variable, several declarations, and one set by
+-- `alter page … set`) passes `mx check` with 0 errors and `mxcli docker build`
+-- succeeds. Studio Pro stores the same: Marketplace WorkflowCommons'
+-- WorkflowAttachment_View styles a dynamic text `word-wrap: break-word;`, and
+-- PlatformDesignSystem's Icon_After_Text `--icon-size: auto;`. The refusal
+-- blocked describe -> exec of those pages and whole building blocks, so it is
+-- gone. This was the negative test 673-dynamictext-style-rejected.fail.mdl.
+--
+-- Expected: `mxcli check` passes.
+mdl 1;
+
+create page BugTest.DynamicTextStylePage
+(
+  title: 'Dynamic Text Style',
+  layout: Atlas_Core.Atlas_Default,
+  url: 'bug633_dynamictext_style'
+)
+{
+  dynamictext dtStyled (content: 'Hello', style: 'color: red;')
+  dynamictext dtVariable (content: 'Icon', style: '--icon-size: auto;')
+};

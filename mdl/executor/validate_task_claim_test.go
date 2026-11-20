@@ -21,7 +21,7 @@ func taskClaimWarnings(t *testing.T, body string) []string {
 		t.Fatalf("parse errors: %v", errs)
 	}
 	var msgs []string
-	for _, v := range ValidateTaskClaims(prog) {
+	for _, v := range ValidateTaskClaimsIn(prog, nil) {
 		msgs = append(msgs, v.Message)
 	}
 	return msgs
@@ -105,7 +105,7 @@ func taskClaimWarningsIn(t *testing.T, src string, stored storedClaimSource) []s
 		t.Fatalf("parse errors: %v", errs)
 	}
 	var msgs []string
-	for _, v := range validateTaskClaims(prog, stored) {
+	for _, v := range validateTaskClaims(prog, stored, nil) {
 		msgs = append(msgs, v.Message)
 	}
 	return msgs
@@ -198,5 +198,33 @@ func TestStoredCalleeIsRead(t *testing.T) {
 	}
 	if got := taskClaimWarningsIn(t, callerOfSub, fakeStoredClaims{"M.SUB_Claim.T": false}); len(got) != 1 {
 		t.Errorf("a stored callee that does not claim: got %v, want 1 warning", got)
+	}
+}
+
+// ako/mxcli#1810: on Mendix 9 a claim writes WorkflowUserTask_Assignee (the
+// association is renamed Assignees in 10.0). It must count as a claim, and the
+// suggestion must be the spelling that builds on the project's version —
+// Assignees is CE1613 on 9.24.
+func TestTaskClaim_NineXAssigneeClaims(t *testing.T) {
+	got := taskClaimWarnings(t, `  change $Task (System.WorkflowUserTask_Assignee = [%CurrentUser%]);
+  commit $Task;
+  set task outcome $Task 'Approve';`)
+	if len(got) != 0 {
+		t.Errorf("a 9.x claim through WorkflowUserTask_Assignee must count, got %v", got)
+	}
+}
+
+func TestTaskClaim_SuggestionFollowsVersion(t *testing.T) {
+	nine := taskClaimSuggestion("T", func(maj, min int) bool { return 9 > maj || (9 == maj && 24 >= min) })
+	if !strings.Contains(nine, "WorkflowUserTask_Assignee =") || strings.Contains(nine, "WorkflowUserTask_Assignees =") {
+		t.Errorf("9.24 suggestion must use Assignee only:\n%s", nine)
+	}
+	eleven := taskClaimSuggestion("T", func(maj, min int) bool { return 11 > maj || (11 == maj && 12 >= min) })
+	if !strings.Contains(eleven, "WorkflowUserTask_Assignees =") || strings.Contains(eleven, "WorkflowUserTask_Assignee =") {
+		t.Errorf("11.12 suggestion must use Assignees only:\n%s", eleven)
+	}
+	unknown := taskClaimSuggestion("T", nil)
+	if !strings.Contains(unknown, "Assignees =") || !strings.Contains(unknown, "Assignee =") || !strings.Contains(unknown, "9.x") {
+		t.Errorf("unknown version must give both spellings with their versions:\n%s", unknown)
 	}
 }

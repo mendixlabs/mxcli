@@ -3,6 +3,8 @@
 package canon
 
 import (
+	"sort"
+
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore"
 )
@@ -64,12 +66,35 @@ import (
 // mapping and the contents pass through untouched, which is the behaviour that
 // existed before this function.
 func TransplantIDs(contents, stored []byte) []byte {
+	return transplantIDs(contents, parseStored(stored))
+}
+
+// transplantIDs is TransplantIDs with the stored document already parsed. It
+// only reads the parse.
+func transplantIDs(contents []byte, stored parsedStored) []byte {
+	if !stored.ok {
+		return contents
+	}
+	m := idMappingWith(contents, stored.doc)
+	if len(m) == 0 {
+		return contents
+	}
+	out := append([]byte(nil), contents...)
+	if !substituteIDs(out, m, elementIDSetOf) {
+		return contents
+	}
+	return out
+}
+
+// transplantIDsInPasses is TransplantIDs as it was: both documents parsed
+// here, and the substitution checked by parsing the document before and after.
+func transplantIDsInPasses(contents, stored []byte) []byte {
 	m := idMapping(contents, stored)
 	if len(m) == 0 {
 		return contents
 	}
 	out := append([]byte(nil), contents...)
-	if !substituteIDs(out, m) {
+	if !substituteIDs(out, m, elementIDSetByParsing) {
 		return contents
 	}
 	return out
@@ -79,14 +104,20 @@ func TransplantIDs(contents, stored []byte) []byte {
 // for every pair that is safe to apply. Entries that would be no-ops are kept so
 // the collision check can see them, and skipped when applied.
 func idMapping(contents, stored []byte) map[string][]byte {
-	var newDoc, oldDoc bson.D
-	if err := bson.Unmarshal(contents, &newDoc); err != nil {
-		return nil
-	}
+	var oldDoc bson.D
 	if err := bson.Unmarshal(stored, &oldDoc); err != nil {
 		return nil
 	}
-	w := &pairer{pairs: map[string][]byte{}, claimed: map[string]bool{}}
+	return idMappingWith(contents, oldDoc)
+}
+
+// idMappingWith is idMapping with the stored document already parsed.
+func idMappingWith(contents []byte, oldDoc bson.D) map[string][]byte {
+	var newDoc bson.D
+	if err := bson.Unmarshal(contents, &newDoc); err != nil {
+		return nil
+	}
+	w := &pairer{pairs: map[string][]byte{}, claimed: map[string]bool{}, storedNames: namedElementIDs(oldDoc)}
 	w.pairValue(newDoc, oldDoc)
 	if len(w.pairs) == 0 {
 		return nil
@@ -100,6 +131,14 @@ func idMapping(contents, stored []byte) map[string][]byte {
 type pairer struct {
 	pairs   map[string][]byte
 	claimed map[string]bool
+	// storedNames maps the stored document's named elements' ids to their
+	// names. A written element that carries one of those ids under the same
+	// name IS that stored element — moved to another list, or retyped from an
+	// association to a cross-association — and keeps its id rather than take
+	// the id of whatever the alignment put opposite it (ako/mxcli#2322: a
+	// converted cross-association took its neighbour's $ID, and with it the
+	// GUID mxcli had minted equal to it, and mx check reported CE9208).
+	storedNames map[string]string
 }
 
 func (p *pairer) record(newID string, oldID string, oldData []byte) {
@@ -142,6 +181,12 @@ func (p *pairer) pairDoc(nd, od map[string]any) {
 	}
 	if nid, ndata, ok := binaryElementID(nd); ok {
 		if oid, odata, ok := binaryElementID(od); ok && len(ndata) == len(odata) {
+			// Not the element opposite it: neither it nor anything under it
+			// takes that element's ids (its delete behaviour took the
+			// neighbour's, the second duplicate of #2322).
+			if p.keepsOwnID(nid, oid, nd) {
+				return
+			}
 			p.record(nid, oid, odata)
 		}
 	}
@@ -191,7 +236,7 @@ func alignSlices(news, olds []any) [][2]int {
 		return positionalPairs(0, 0, len(news), len(olds))
 	}
 
-	anchors := lcsPairs(matchKeys(news), matchKeys(olds))
+	anchors := lcsPairsPlaced(matchKeys(news), matchKeys(olds), places(news), places(olds))
 
 	var out [][2]int
 	ni, oi := 0, 0
@@ -200,7 +245,65 @@ func alignSlices(news, olds []any) [][2]int {
 		out = append(out, a)
 		ni, oi = a[0]+1, a[1]+1
 	}
-	return append(out, positionalPairs(ni, oi, len(news), len(olds))...)
+	out = append(out, positionalPairs(ni, oi, len(news), len(olds))...)
+	return pairLeftovers(news, olds, out)
+}
+
+// pairLeftovers adds to pairs the entries the alignment left with nothing
+// opposite them, paired by matchKey where that key occurs exactly once among
+// the leftovers on each side (ako/mxcli#2329, mendixlabs/mxcli#1872).
+//
+// The alignment is ordered, and some lists are not: Studio Pro stores a flow's
+// objects in the order they were drawn, and mxcli writes a flow's parameters
+// and start event first. Anchored on the longest common run of activities,
+// the parameter and the start event fell in a gap with nothing — or an element
+// of another $Type, which pairDoc refuses — opposite them, so a rebuild of a
+// Studio Pro flow re-minted their $IDs and every carry keyed on the $ID missed
+// them: the parameter's documentation was lost on `drop` + `create`.
+//
+// A positional pair of two elements of different $Types pairs nothing
+// (pairDoc), so it is released here rather than holding both entries. A key
+// that occurs twice among the leftovers on either side is ambiguous, and those
+// entries stay unpaired rather than pair by guess.
+func pairLeftovers(news, olds []any, pairs [][2]int) [][2]int {
+	usedNew, usedOld := map[int]bool{}, map[int]bool{}
+	kept := pairs[:0:0]
+	for _, p := range pairs {
+		nd, nok := asDoc(news[p[0]])
+		od, ook := asDoc(olds[p[1]])
+		if nok && ook && typeName(nd) != typeName(od) {
+			continue
+		}
+		kept = append(kept, p)
+		usedNew[p[0]], usedOld[p[1]] = true, true
+	}
+	leftovers := func(vs []any, used map[int]bool) map[string][]int {
+		out := map[string][]int{}
+		for i, v := range vs {
+			if used[i] {
+				continue
+			}
+			if _, ok := asDoc(v); !ok {
+				continue
+			}
+			k := matchKey(v)
+			out[k] = append(out[k], i)
+		}
+		return out
+	}
+	newLeft, oldLeft := leftovers(news, usedNew), leftovers(olds, usedOld)
+	var extra [][2]int
+	for k, ns := range newLeft {
+		if os := oldLeft[k]; len(ns) == 1 && len(os) == 1 {
+			extra = append(extra, [2]int{ns[0], os[0]})
+		}
+	}
+	if len(extra) == 0 {
+		return kept
+	}
+	// In list order, so the pairing does not depend on map iteration.
+	sort.Slice(extra, func(i, j int) bool { return extra[i][0] < extra[j][0] })
+	return append(kept, extra...)
 }
 
 // positionalPairs pairs [nStart,nEnd) with [oStart,oEnd) by offset. Used only
@@ -252,6 +355,17 @@ func matchKey(v any) string {
 	return key
 }
 
+// places returns each entry's RelativeMiddlePoint, "" where it has none.
+func places(vs []any) []string {
+	out := make([]string, len(vs))
+	for i, v := range vs {
+		if d, ok := asDoc(v); ok {
+			out[i], _ = d["RelativeMiddlePoint"].(string)
+		}
+	}
+	return out
+}
+
 func matchKeys(vs []any) []string {
 	out := make([]string, len(vs))
 	for i, v := range vs {
@@ -263,28 +377,54 @@ func matchKeys(vs []any) []string {
 // lcsPairs returns a longest common subsequence of the two key sequences as
 // index pairs.
 func lcsPairs(a, b []string) [][2]int {
+	return lcsPairsPlaced(a, b, nil, nil)
+}
+
+// lcsPairsPlaced is lcsPairs that, among the alignments matching as many keys,
+// favours entries drawn at the same place: a flow object's RelativeMiddlePoint,
+// in pa and pb ("" for an entry with none).
+//
+// Every activity of one kind has one key, so where Studio Pro's order of the
+// objects differs from mxcli's, two show messages could cross: the rebuilt one
+// took the identity, and with it the documentation and translations, of the
+// other (ako/mxcli#2329). A describe states every object's position, so a
+// rebuild of it puts each one where it was, and an element of one kind at one
+// point is that element. A match scores 2, and 12 at the same place, so an
+// alignment keeps the same-place pairs over a longer run of guesses; what the
+// order then leaves out pairs by key afterwards (pairLeftovers). Where nothing
+// is at its old place — an insertion that moved everything after it — every
+// match scores the same and the alignment is the plain one.
+func lcsPairsPlaced(a, b, pa, pb []string) [][2]int {
 	n, m := len(a), len(b)
+	score := func(i, j int) int {
+		if a[i] != b[j] {
+			return -1
+		}
+		if pa != nil && pb != nil && pa[i] != "" && pa[i] == pb[j] {
+			return 12
+		}
+		return 2
+	}
 	table := make([][]int, n+1)
 	for i := range table {
 		table[i] = make([]int, m+1)
 	}
 	for i := n - 1; i >= 0; i-- {
 		for j := m - 1; j >= 0; j-- {
-			if a[i] == b[j] {
-				table[i][j] = table[i+1][j+1] + 1
-				continue
+			best := table[i+1][j]
+			if table[i][j+1] > best {
+				best = table[i][j+1]
 			}
-			if table[i+1][j] >= table[i][j+1] {
-				table[i][j] = table[i+1][j]
-			} else {
-				table[i][j] = table[i][j+1]
+			if w := score(i, j); w > 0 && w+table[i+1][j+1] > best {
+				best = w + table[i+1][j+1]
 			}
+			table[i][j] = best
 		}
 	}
 	var out [][2]int
 	for i, j := 0, 0; i < n && j < m; {
 		switch {
-		case a[i] == b[j]:
+		case score(i, j) > 0 && table[i][j] == score(i, j)+table[i+1][j+1]:
 			out = append(out, [2]int{i, j})
 			i, j = i+1, j+1
 		case table[i+1][j] >= table[i][j+1]:
@@ -339,8 +479,8 @@ func dropCollisions(pairs map[string][]byte, newIDs map[string]int) map[string][
 // copying out of it — a property of the library, not of this package. Rather
 // than assume it, the result is read back and checked against the id set the
 // substitution was supposed to produce.
-func substituteIDs(raw []byte, m map[string][]byte) bool {
-	before, ok := elementIDsOf(raw)
+func substituteIDs(raw []byte, m map[string][]byte, idsOf func([]byte) (map[string]bool, bool)) bool {
+	before, ok := idsOf(raw)
 	if !ok {
 		return false
 	}
@@ -361,7 +501,7 @@ func substituteIDs(raw []byte, m map[string][]byte) bool {
 		return false
 	}
 
-	after, ok := elementIDsOf(raw)
+	after, ok := idsOf(raw)
 	if !ok || len(after) != len(want) {
 		return false
 	}
@@ -371,6 +511,81 @@ func substituteIDs(raw []byte, m map[string][]byte) bool {
 		}
 	}
 	return true
+}
+
+// elementIDSetByParsing is the set of element ids of a document, read by
+// parsing it: what elementIDSetOf is compared with.
+func elementIDSetByParsing(raw []byte) (map[string]bool, bool) {
+	ids, ok := elementIDsOf(raw)
+	if !ok {
+		return nil, false
+	}
+	out := make(map[string]bool, len(ids))
+	for id := range ids {
+		out[id] = true
+	}
+	return out, true
+}
+
+// elementIDSetOf is the set of element ids of a document, read where they lie:
+// every $ID of the document and of every document under it, a 16-byte binary
+// as its UUID and a string as itself (elementID). ok is false for bytes that
+// are not a document.
+//
+// The substitution check reads the ids before and after it patches. Parsing
+// the whole document for each was two of the twelve parses a reconcile made
+// (ako/mxcli#2160); the ids are all it needs, and they can be read without
+// building the tree.
+func elementIDSetOf(raw []byte) (map[string]bool, bool) {
+	if bson.Raw(raw).Validate() != nil {
+		return nil, false
+	}
+	out := map[string]bool{}
+	var walkDoc func(doc bsoncore.Document, isArray bool)
+	walkDoc = func(doc bsoncore.Document, isArray bool) {
+		elems, err := doc.Elements()
+		if err != nil {
+			return
+		}
+		id, hasID := "", false
+		for _, e := range elems {
+			v := e.Value()
+			switch v.Type {
+			case bsoncore.TypeEmbeddedDocument:
+				if d, ok := v.DocumentOK(); ok {
+					walkDoc(d, false)
+				}
+			case bsoncore.TypeArray:
+				if a, ok := v.ArrayOK(); ok {
+					walkDoc(bsoncore.Document(a), true)
+				}
+			}
+			if isArray || e.Key() != "$ID" {
+				continue
+			}
+			// The last $ID of a document wins, as it does in the map a parsed
+			// document becomes.
+			switch v.Type {
+			case bsoncore.TypeBinary:
+				if _, data, ok := v.BinaryOK(); ok && len(data) == 16 {
+					id, hasID = blobToUUID(data), true
+				} else {
+					hasID = false
+				}
+			case bsoncore.TypeString:
+				if str, ok := v.StringValueOK(); ok {
+					id, hasID = str, true
+				}
+			default:
+				hasID = false
+			}
+		}
+		if hasID {
+			out[id] = true
+		}
+	}
+	walkDoc(bsoncore.Document(raw), false)
+	return out, true
 }
 
 func elementIDsOf(raw []byte) (map[string]int, bool) {
@@ -410,4 +625,41 @@ func patchDocument(doc bsoncore.Document, m map[string][]byte) bool {
 		}
 	}
 	return true
+}
+
+// keepsOwnID reports whether nd, a written element with id nid paired with the
+// stored element oid, is instead the stored element that already holds nid:
+// one with the same name.
+func (p *pairer) keepsOwnID(nid, oid string, nd map[string]any) bool {
+	if nid == oid {
+		return false
+	}
+	name, held := p.storedNames[nid]
+	return held && name != "" && name == nd["Name"]
+}
+
+// namedElementIDs maps the id of every element of doc that has a Name to it.
+func namedElementIDs(doc bson.D) map[string]string {
+	out := map[string]string{}
+	var walk func(v any)
+	walk = func(v any) {
+		if d, ok := asDoc(v); ok {
+			if id, _, ok := binaryElementID(d); ok {
+				if name, ok := d["Name"].(string); ok && name != "" {
+					out[id] = name
+				}
+			}
+			for _, k := range sortedKeys(d) {
+				walk(d[k])
+			}
+			return
+		}
+		if s, ok := asSlice(v); ok {
+			for _, e := range s {
+				walk(e)
+			}
+		}
+	}
+	walk(doc)
+	return out
 }

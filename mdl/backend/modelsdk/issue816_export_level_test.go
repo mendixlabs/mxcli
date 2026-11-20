@@ -403,6 +403,22 @@ var exportLevelCases = []exportLevelCase{
 		},
 	},
 	{
+		// Constants have no MDL spelling for their export level, and the
+		// executor builds the model without one (ako/mxcli#1980).
+		name: "Constant",
+		subject: func(t *testing.T, b *Backend) model.ID {
+			c := issue1980Constant(firstModuleID(t, b), "")
+			if err := b.CreateConstant(c); err != nil {
+				t.Fatalf("create constant: %v", err)
+			}
+			return c.ID
+		},
+		rewrite: func(t *testing.T, b *Backend, id model.ID, _ string) error {
+			c := issue1980Constant(firstModuleID(t, b), id)
+			return b.UpdateConstant(c)
+		},
+	},
+	{
 		name: "AgentEditorModel",
 		subject: func(t *testing.T, b *Backend) model.ID {
 			m := &agenteditor.Model{ContainerID: firstModuleID(t, b), Name: "Issue816Model"}
@@ -522,5 +538,47 @@ func TestWithExportLevel_ReplacesOnlyTheValue(t *testing.T) {
 	kept, err := withExportLevel(noKey, "API")
 	if err != nil || string(kept) != string(noKey) {
 		t.Errorf("no ExportLevel key: want the input unchanged (no key added), err=%v", err)
+	}
+}
+
+func issue1980Constant(container, id model.ID) *model.Constant {
+	return &model.Constant{
+		BaseElement:  model.BaseElement{ID: id},
+		ContainerID:  container,
+		Name:         "Issue1980Constant",
+		Type:         model.ConstantDataType{Kind: "Boolean"},
+		DefaultValue: "true",
+	}
+}
+
+// ako/mxcli#1980 (mendixlabs/mxcli#1749): `create constant` wrote ExportLevel ""
+// where Studio Pro writes "Hidden". mx check accepts it, but mx diff crashes on
+// a pair of units holding "" and "Hidden", and git merge's report goes with it.
+// A rewrite also repairs a unit an earlier version left at "".
+func TestConstant_ExportLevelDefaultsToHidden(t *testing.T) {
+	src := filepath.Join("..", "..", "..", "testdata", "testapp", "TestApp")
+	if _, err := os.Stat(filepath.Join(src, "TestApp.mpr")); err != nil {
+		t.Skipf("TestApp submodule not initialised: %v", err)
+	}
+	proj := copyTestAppFixture(t, src)
+	b := New()
+	if err := b.Connect(proj); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer b.Disconnect()
+
+	c := issue1980Constant(firstModuleID(t, b), "")
+	if err := b.CreateConstant(c); err != nil {
+		t.Fatal(err)
+	}
+	if got := storedExportLevel(t, b, c.ID); got != "Hidden" {
+		t.Fatalf("create constant wrote ExportLevel %q, want Hidden", got)
+	}
+	setStoredExportLevel(t, b, c.ID, "")
+	if err := b.UpdateConstant(issue1980Constant(firstModuleID(t, b), c.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if got := storedExportLevel(t, b, c.ID); got != "Hidden" {
+		t.Errorf("rewriting a constant stored with ExportLevel \"\" wrote %q, want Hidden", got)
 	}
 }

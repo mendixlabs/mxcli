@@ -10,17 +10,18 @@ description: "Add, update, remove and audit a module's Maven/JAR dependencies in
 
 | lines | section |
 |---|---|
-| 34-44 | When to Use This Skill |
-| 45-56 | Listing Dependencies |
-| 57-64 | Describing a Dependency |
-| 65-80 | Adding a Dependency |
-| 81-93 | Updating a Dependency |
-| 94-108 | Managing Transitive Exclusions |
-| 109-116 | Removing a Dependency |
-| 117-132 | Jackson Version Gotcha |
-| 133-143 | After Adding a Dependency |
-| 144-154 | Coordinate Format |
-| 155-158 | Related Skills |
+| 35-45 | When to Use This Skill |
+| 46-57 | Listing Dependencies |
+| 58-66 | Describing a Dependency |
+| 67-104 | Adding a Dependency |
+| 105-117 | Updating a Dependency |
+| 118-132 | Managing Transitive Exclusions |
+| 133-140 | Removing a Dependency |
+| 141-156 | Jackson Version Gotcha |
+| 157-181 | A JDBC Driver or Native Library in the Runtime |
+| 182-192 | After Adding a Dependency |
+| 193-203 | Coordinate Format |
+| 204-207 | Related Skills |
 
 <!-- /skill-index -->
 # Managing Maven / JAR Dependencies
@@ -60,7 +61,8 @@ Output columns: `module`, `group`, `artifact`, `version`, `included`.
 DESCRIBE JAR DEPENDENCY MyModule 'com.fasterxml.jackson.core:jackson-databind';
 ```
 
-Outputs a re-executable `ALTER MODULE ... ADD JAR DEPENDENCY (...)` block.
+Outputs an `ALTER MODULE ... ADD JAR DEPENDENCY (...)` block (bare `ADD`: add
+`IF NOT EXISTS` before re-executing it against a module that has it).
 
 ## Adding a Dependency
 
@@ -76,7 +78,29 @@ ALTER MODULE MyModule
 ```
 
 - `included` defaults to `true` when set explicitly; always set it to be explicit.
-- The coordinate `group:artifact` must be unique within the module.
+- The coordinate `group:artifact` must be unique within the module: a bare
+  `ADD` of a declared coordinate **fails**, so a project script holding it
+  cannot be executed twice.
+
+### In a re-runnable script: `IF NOT EXISTS`
+
+```sql
+mdl 1;
+ALTER MODULE MyModule
+  ADD JAR DEPENDENCY IF NOT EXISTS (
+    group    = 'org.duckdb',
+    artifact = 'duckdb_jdbc',
+    version  = '1.1.3',
+    included = true,
+  );
+```
+
+Same semantics as `ADD ATTRIBUTE IF NOT EXISTS`: absent → added; present →
+**left untouched**, "already exists — skipped", and a second exec writes nothing
+("Unchanged jar dependencies …"). A present coordinate with a *different*
+version is still not updated — the notice names the stored version and the
+`SET … VERSION` to run. To pin the version as well, follow the guarded `ADD`
+with `SET JAR DEPENDENCY '…' VERSION '…'`, which is also a no-op when restated.
 
 ## Updating a Dependency
 
@@ -129,6 +153,31 @@ Pin to the version the Mendix runtime bundles to avoid classloader conflicts:
 ```bash
 ls ~/.mxcli/mxbuild/<runtime-version>/runtime/bundles/ | grep jackson
 ```
+
+## A JDBC Driver or Native Library in the Runtime
+
+A library that registers itself with the JVM can be on the class path and still
+not be found from a Java action. Reported building a SPARQL action on DuckDB
+(`org.duckdb:duckdb_jdbc` 2.0.0.1) in Mendix 11.16 (ako/mxcli#2314; not
+measured here):
+
+1. **`DriverManager` does not see a userlib driver.** `DriverManager.getConnection("jdbc:duckdb:")`
+   fails with `No suitable driver found`: the jar sits in the app's own class
+   loader, which `DriverManager` does not search. Instantiate the driver class
+   instead — `new org.duckdb.DuckDBDriver().connect("jdbc:duckdb:", new java.util.Properties())` —
+   the same for any JDBC driver a dependency brings.
+2. **DuckDB verifies an extension file against its core signing key.** A core
+   extension installs from a bundled file (`INSTALL '<path>'`); a community one
+   (`rdf`) is refused ("doesn't have a valid signature"), loading it by path is
+   refused too, and the failed `INSTALL` closes the statement. What works: run
+   `INSTALL rdf FROM community` once on a machine with network access, bundle the
+   installed `rdf.duckdb_extension` with its `.info` file, copy both into
+   `<extension_directory>/v<duckdb version>/<platform>/` (e.g. `v2.0.0/linux_amd64/`)
+   at runtime, then `LOAD rdf` by name.
+3. **Only a real build compiles Java.** `mxcli check` and `mxcli docker check`
+   (`mx check`) do not, so a mistake in the body shows in `mxcli test --local` or
+   `run --local` (`mxbuild --target=deploy`). `import com.mendix.core.Core;` is
+   added for you when the code uses `Core`; any other class needs its import line.
 
 ## After Adding a Dependency
 

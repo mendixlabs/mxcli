@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="4.0" xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx">
+  <edmx:DataServices>
+    <Schema Namespace="App.Model" xmlns="http://docs.oasis-open.org/odata/ns/edm">
+      <EntityType Name="Sealed">
+        <Key><PropertyRef Name="Code"/></Key>
+        <Property Name="Code" Type="Edm.String" Nullable="false" MaxLength="36"/>
+        <Property Name="Label" Type="Edm.String" MaxLength="100"/>
+      </EntityType>
+      <EntityType Name="KeyOnly">
+        <Key><PropertyRef Name="Code"/></Key>
+        <Property Name="Code" Type="Edm.String" Nullable="false" MaxLength="36"/>
+        <Property Name="Label" Type="Edm.String" MaxLength="100"/>
+      </EntityType>
+      <EntityContainer Name="Container">
+        <!-- the whole set is not filterable: every property, the key included -->
+        <EntitySet Name="Sealed" EntityType="App.Model.Sealed">
+          <Annotation Term="Org.OData.Capabilities.V1.FilterRestrictions">
+            <Record><PropertyValue Property="Filterable" Bool="false"/></Record>
+          </Annotation>
+        </EntitySet>
+        <!-- only the key is listed as not filterable -->
+        <EntitySet Name="KeyOnly" EntityType="App.Model.KeyOnly">
+          <Annotation Term="Org.OData.Capabilities.V1.FilterRestrictions">
+            <Record>
+              <PropertyValue Property="NonFilterableProperties">
+                <Collection><PropertyPath>Code</PropertyPath></Collection>
+              </PropertyValue>
+            </Record>
+          </Annotation>
+        </EntitySet>
+      </EntityContainer>
+    </Schema>
+  </edmx:DataServices>
+</edmx:Edmx>

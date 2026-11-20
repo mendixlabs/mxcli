@@ -140,8 +140,11 @@ func microflowsByQualifiedName(ctx *ExecContext) (map[string]*microflows.Microfl
 		return nil, mdlerrors.NewBackend("list microflows", err)
 	}
 	out := make(map[string]*microflows.Microflow, len(mfs))
-	for _, mf := range mfs {
-		out[strings.ToLower(h.GetQualifiedName(mf.ContainerID, mf.Name))] = mf
+	for _, mf := range liveFirst(mfs, microflowExcluded) {
+		key := strings.ToLower(h.GetQualifiedName(mf.ContainerID, mf.Name))
+		if _, seen := out[key]; !seen { // live before an excluded twin (#1928)
+			out[key] = mf
+		}
 	}
 	return out, nil
 }

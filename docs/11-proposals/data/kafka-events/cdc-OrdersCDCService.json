@@ -1,0 +1,196 @@
+{
+ "$ID": "XJcmnizTcUGevz8cZk2vnQ==",
+ "$Type": "ChangeDataCapture$EntityChangeDataCaptureService",
+ "AppName": "TestApp",
+ "Baseline": {
+  "$ID": "1tkN9G4D/UCRdP1O2htHvQ==",
+  "$Type": "ChangeDataCapture$VersionedEntityChangeDataCaptureService",
+  "Sources": [
+   2,
+   {
+    "$ID": "kA3kcKWz0kys+quBWLm8iQ==",
+    "$Type": "ChangeDataCapture$VersionedEntityChangeSource",
+    "EntityGuid": "4WR5BXj9dE69ZsdKBhMVEQ==",
+    "ExposedName": "Order",
+    "Properties": [
+     2,
+     {
+      "$ID": "r3o8+Pi3EkmU04X/VY1lkQ==",
+      "$Type": "ChangeDataCapture$VersionedProperty",
+      "AssociatedEntityGuid": "AAAAAAAAAAAAAAAAAAAAAA==",
+      "ExposedName": "OrderId",
+      "PropertyGuid": "n6q889hO3kabfdrYFCW8Mw==",
+      "Type": "Int64"
+     },
+     {
+      "$ID": "rUsjPFMmd0qQ48Hys5P7Ow==",
+      "$Type": "ChangeDataCapture$VersionedProperty",
+      "AssociatedEntityGuid": "AAAAAAAAAAAAAAAAAAAAAA==",
+      "ExposedName": "CustomerName",
+      "PropertyGuid": "cVSRjNaSskCeuva7LtNWLA==",
+      "Type": "String"
+     },
+     {
+      "$ID": "3fKZjmvtuk6HRkcEsWmm1w==",
+      "$Type": "ChangeDataCapture$VersionedProperty",
+      "AssociatedEntityGuid": "AAAAAAAAAAAAAAAAAAAAAA==",
+      "ExposedName": "ProductName",
+      "PropertyGuid": "0R7AyIdW9kaxFiUajfBG2Q==",
+      "Type": "String"
+     },
+     {
+      "$ID": "rJCDqTQqh0i+cTP+elVmNQ==",
+      "$Type": "ChangeDataCapture$VersionedProperty",
+      "AssociatedEntityGuid": "AAAAAAAAAAAAAAAAAAAAAA==",
+      "ExposedName": "Price",
+      "PropertyGuid": "DVFayQ9N0EivYrn/9+xydw==",
+      "Type": "Decimal"
+     },
+     {
+      "$ID": "1tbI0VDneU2hMPfZru9wwA==",
+      "$Type": "ChangeDataCapture$VersionedProperty",
+      "AssociatedEntityGuid": "cvHjuruupkmtkng/U89QFA==",
+      "ExposedName": "Order_Customer",
+      "PropertyGuid": "rd9XQAxoy0S/0pdwa5GdPg==",
+      "Type": "ArrayOfInt64"
+     }
+    ],
+    "Version": {
+     "$ID": "1rwm1TV+skmCyaufPkb5QQ==",
+     "$Type": "ChangeDataCapture$Version",
+     "Major": 1,
+     "Minor": 1
+    }
+   },
+   {
+    "$ID": "NvM40bLHVEGsjmCOHF2vMg==",
+    "$Type": "ChangeDataCapture$VersionedEntityChangeSource",
+    "EntityGuid": "cvHjuruupkmtkng/U89QFA==",
+    "ExposedName": "Customer",
+    "Properties": [
+     2,
+     {
+      "$ID": "CtSi0JbPZ0yooiAFs66PJQ==",
+      "$Type": "ChangeDataCapture$VersionedProperty",
+      "AssociatedEntityGuid": "AAAAAAAAAAAAAAAAAAAAAA==",
+      "ExposedName": "CustomerId",
+      "PropertyGuid": "EJMsBnbJHkiH+0X5aC13cA==",
+      "Type": "Int64"
+     },
+     {
+      "$ID": "e5z3yWUI2k+fnUgj+RMSig==",
+      "$Type": "ChangeDataCapture$VersionedProperty",
+      "AssociatedEntityGuid": "AAAAAAAAAAAAAAAAAAAAAA==",
+      "ExposedName": "CustomerName",
+      "PropertyGuid": "24ASpoOGMkKUdy+TZGTKaQ==",
+      "Type": "String"
+     },
+     {
+      "$ID": "EMn6RtUoiUmdEvQFu1BERg==",
+      "$Type": "ChangeDataCapture$VersionedProperty",
+      "AssociatedEntityGuid": "AAAAAAAAAAAAAAAAAAAAAA==",
+      "ExposedName": "Address",
+      "PropertyGuid": "kuE7E74iaEa9XB0ly38FvA==",
+      "Type": "String"
+     }
+    ],
+    "Version": {
+     "$ID": "Ax6wt635lUSVrUeuPOsdbw==",
+     "$Type": "ChangeDataCapture$Version",
+     "Major": 1,
+     "Minor": 0
+    }
+   }
+  ],
+  "Version": {
+   "$ID": "y2yrouvW902oKcCHITzRlA==",
+   "$Type": "ChangeDataCapture$Version",
+   "Major": 1,
+   "Minor": 1
+  }
+ },
+ "Documentation": "",
+ "Excluded": false,
+ "ExportLevel": "Hidden",
+ "Name": "OrdersCDCService",
+ "ServiceName": "OrdersCDCService",
+ "Sources": [
+  3,
+  {
+   "$ID": "6ytDr9odtUCVd2W4hYHekw==",
+   "$Type": "ChangeDataCapture$EntityChangeSource",
+   "Entity": "CdcPublish.Order",
+   "ExposedName": "Order",
+   "Properties": [
+    3,
+    {
+     "$ID": "jtKkmQXZPEGAbNEDqZToNg==",
+     "$Type": "ChangeDataCapture$AttributeProperty",
+     "Attribute": "CdcPublish.Order.OrderId",
+     "ExposedName": "OrderId",
+     "VersionedPropertyPointer": "r3o8+Pi3EkmU04X/VY1lkQ=="
+    },
+    {
+     "$ID": "ZxFZh2nJDk6Hyjl8X0dOGQ==",
+     "$Type": "ChangeDataCapture$AttributeProperty",
+     "Attribute": "CdcPublish.Order.CustomerName",
+     "ExposedName": "CustomerName",
+     "VersionedPropertyPointer": "rUsjPFMmd0qQ48Hys5P7Ow=="
+    },
+    {
+     "$ID": "c7WUiqyE4Uu/p9p6rObngA==",
+     "$Type": "ChangeDataCapture$AttributeProperty",
+     "Attribute": "CdcPublish.Order.ProductName",
+     "ExposedName": "ProductName",
+     "VersionedPropertyPointer": "3fKZjmvtuk6HRkcEsWmm1w=="
+    },
+    {
+     "$ID": "oWK7PIAQoU2BUYgaDMja4g==",
+     "$Type": "ChangeDataCapture$AttributeProperty",
+     "Attribute": "CdcPublish.Order.Price",
+     "ExposedName": "Price",
+     "VersionedPropertyPointer": "rJCDqTQqh0i+cTP+elVmNQ=="
+    },
+    {
+     "$ID": "wf/9yNUTG0S8fmzJKKexeQ==",
+     "$Type": "ChangeDataCapture$AssociationProperty",
+     "Association": "CdcPublish.Order_Customer",
+     "ExposedName": "Order_Customer",
+     "VersionedPropertyPointer": "1tbI0VDneU2hMPfZru9wwA=="
+    }
+   ],
+   "VersionedSourcePointer": "kA3kcKWz0kys+quBWLm8iQ=="
+  },
+  {
+   "$ID": "MGiJEokBmUyEuUuKEuJrgA==",
+   "$Type": "ChangeDataCapture$EntityChangeSource",
+   "Entity": "CdcPublish.Customer",
+   "ExposedName": "Customer",
+   "Properties": [
+    3,
+    {
+     "$ID": "/57KqEuxFkW40IDnSHtpig==",
+     "$Type": "ChangeDataCapture$AttributeProperty",
+     "Attribute": "CdcPublish.Customer.CustomerId",
+     "ExposedName": "CustomerId",
+     "VersionedPropertyPointer": "CtSi0JbPZ0yooiAFs66PJQ=="
+    },
+    {
+     "$ID": "drJSpb2FEkaViQeoJspebQ==",
+     "$Type": "ChangeDataCapture$AttributeProperty",
+     "Attribute": "CdcPublish.Customer.CustomerName",
+     "ExposedName": "CustomerName",
+     "VersionedPropertyPointer": "e5z3yWUI2k+fnUgj+RMSig=="
+    },
+    {
+     "$ID": "y/CR1GYUDkiQBUMGOp8P8A==",
+     "$Type": "ChangeDataCapture$AttributeProperty",
+     "Attribute": "CdcPublish.Customer.Address",
+     "ExposedName": "Address",
+     "VersionedPropertyPointer": "EMn6RtUoiUmdEvQFu1BERg=="
+    }
+   ],
+   "VersionedSourcePointer": "NvM40bLHVEGsjmCOHF2vMg=="
+  }
+ ]
+}

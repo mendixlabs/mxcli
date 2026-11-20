@@ -133,15 +133,17 @@ func TestTemplateParameterThroughDataView(t *testing.T) {
 	}
 }
 
-// A page `Variables:` entry passed to a snippet call fills LocalVariable, not
-// PageParameter.
+// A page `Variables:` entry passed to a snippet call is refused: page
+// variables are primitive and a snippet parameter is an object, so the call is
+// mx check CE0115 in either slot — measured with the LocalVariable slot this
+// test used to pin (ako/mxcli#833). A page parameter is passed as before.
 func TestSnippetCallLocalVariableArgument(t *testing.T) {
 	for _, tc := range []struct {
-		arg                string
-		wantLocal, wantSnp bool
+		arg     string
+		refused bool
 	}{
-		{"$Caption", true, false},
-		{"$Task", false, false}, // control: a page parameter
+		{"$Caption", true},
+		{"$Task", false}, // control: a page parameter
 	} {
 		pb := scopedPB(false)
 		pb.localVariables = map[string]bool{"Caption": true}
@@ -149,15 +151,18 @@ func TestSnippetCallLocalVariableArgument(t *testing.T) {
 			return []*pages.Snippet{{Name: "Snip", Parameters: []*pages.SnippetParameter{{Name: "P"}}}}, nil
 		}}
 		sc := &pages.SnippetCallWidget{}
-		if err := pb.buildSnippetCallParams(sc, "M.Snip", []ast.SnippetCallParam{{ParamName: "P", Variable: tc.arg}}); err != nil {
+		err := pb.buildSnippetCallParams(sc, "M.Snip", []ast.SnippetCallParam{{ParamName: "P", Variable: tc.arg}})
+		if tc.refused {
+			if err == nil {
+				t.Errorf("%s: built %+v, want the CE0115 refusal", tc.arg, sc.ParameterMappings)
+			}
+			continue
+		}
+		if err != nil {
 			t.Fatalf("%s: %v", tc.arg, err)
 		}
-		if len(sc.ParameterMappings) != 1 {
-			t.Fatalf("%s: %d mappings, want 1", tc.arg, len(sc.ParameterMappings))
-		}
-		m := sc.ParameterMappings[0]
-		if m.IsLocalVariable != tc.wantLocal || m.IsSnippetParameter != tc.wantSnp {
-			t.Errorf("%s: (local, snippet) = (%v, %v), want (%v, %v)", tc.arg, m.IsLocalVariable, m.IsSnippetParameter, tc.wantLocal, tc.wantSnp)
+		if len(sc.ParameterMappings) != 1 || sc.ParameterMappings[0].IsLocalVariable {
+			t.Errorf("%s: %+v, want one page-parameter mapping", tc.arg, sc.ParameterMappings)
 		}
 	}
 }

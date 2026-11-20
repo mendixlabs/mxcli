@@ -69,10 +69,10 @@ Choose the mode by who owns the microflow ([choose-edit-mode](../choose-edit-mod
   (targets from `describe microflow X with handles`). `create or modify` of `describe`
   output patches too: unchanged writes nothing; a statement (even one whose handler returns), guard
   clause, `return` value, `if` condition, header clause, parameter (added/retyped; removed only if unused) or stated `@position`/`@start` change is
-  patched in place (a move keeps the node's flows; an activity changed into one of the same kind — an expression, a `where`, a member value, an argument — keeps its `$ID` and its action's, reported `edited in place`), as are plain activities added, removed, reordered or changed in a loop body ([an insert needing room past a stated `@position`](reference/pitfalls.md#13-inserting-where-the-script-states-every-position)). A redrawn
+  patched in place (a move keeps the node's flows; an activity changed into one of the same kind — an expression, a `where`, a member value, an argument — keeps its `$ID` and its action's, and the properties MDL cannot state — its documentation, a REST call's proxy — reported `edited in place`), as are plain activities added, removed, reordered or changed in a loop body ([an insert needing room past a stated `@position`](reference/pitfalls.md#13-inserting-where-the-script-states-every-position)). A redrawn
   `@anchor`/`@curve`, a decision/loop/`return` added or changed inside a loop body, error handler or other `return` added/taken away rebuilds under
   mdl 0 (`MDL-V1-REBUILD`: IDs renumbered, merges and curves lost) and is refused under `mdl 1;`. **To put a
-  decision or loop in a loop body, `alter … replace body of loop $X in $Xs with begin … end;`** — the loop keeps its `$ID` ([pitfalls](reference/pitfalls.md#11-changing-something-inside-a-loop-body)); a decision `alter … insert` put in is taken out by a re-run, `drop` or `replace` ([pitfalls](reference/pitfalls.md#15-taking-out-a-decision-another-script-put-in)). **To rebuild deliberately, `drop` and `create` in ONE script** — the grants carry only within it ([pitfalls](reference/pitfalls.md#drop--create-is-still-a-new-document)).
+  decision or loop in a loop body, `alter … replace body of loop $X in $Xs with begin … end;`** — the loop keeps its `$ID` ([pitfalls](reference/pitfalls.md#11-changing-something-inside-a-loop-body)); a decision `alter … insert` put in is taken out by a re-run, `drop` or `replace` ([pitfalls](reference/pitfalls.md#15-taking-out-a-decision-another-script-put-in)). **To rebuild deliberately, `drop` and `create` in ONE script** — the grants carry only within it ([pitfalls](reference/pitfalls.md#drop--create-is-still-a-new-document)); a flow with an `-- Unsupported action` line cannot be rebuilt (the rebuild would delete it, so it is refused), so change it in place.
 
 ## When to Use a Microflow vs a Nanoflow
 
@@ -439,7 +439,7 @@ toString($value)           -- Convert to string
 > **MDL044 also blocks `mxcli exec`**, not just `check`: a call to a name Mendix
 > has no built-in for is CE0117 at build time, so exec refuses to write the
 > microflow or nanoflow (log messages included). Not real: `currentDeviceType()`,
-> `[%CurrentDeviceType%]` (a CE0117 `check` misses) and `trunc()` (use
+> `[%CurrentDeviceType%]` (MDL-TOKEN01, which knows the token names Mendix has) and `trunc()` (use
 > `round`/`floor`/`ceil`). If exec rejects a function you believe IS a Mendix
 > built-in, build it once and — if mxbuild accepts it — add it to `funcTable` in
 > `mdl/exprcheck/func_checker.go`; that table is the rule's only allow-list.

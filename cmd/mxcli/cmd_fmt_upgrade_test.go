@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/mdl/executor"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 )
@@ -226,22 +227,10 @@ func TestFmtUpgrade_FindOnACallResultReadsTheProject(t *testing.T) {
 	}
 }
 
+// copyTree copies a fixture project, leaving out the .mxcli caches other
+// packages' tests write into it in place (testutil.CopyFixture).
 func copyTree(src, dst string) error {
-	return filepath.Walk(src, func(p string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, _ := filepath.Rel(src, p)
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, 0o644)
-	})
+	return testutil.CopyFixture(dst, src)
 }
 
 // ako/mxcli#873: without a project, a bare commit in a `create or modify`

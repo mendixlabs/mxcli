@@ -304,3 +304,126 @@ func TestExecEnforcesSetOnParameter(t *testing.T) {
 		t.Errorf("exec's rule gate let `set` on a parameter through: %v", err)
 	}
 }
+
+// execSetRefusals builds src's single microflow the way exec does — the flow
+// builder, its variable types seeded from the parameters — and returns the
+// "cannot set object variable" refusals it reports.
+func execSetRefusals(t *testing.T, src string) []string {
+	t.Helper()
+	prog, errs := visitor.Build(src)
+	if len(errs) > 0 {
+		t.Fatalf("parse: %v", errs)
+	}
+	var mf *ast.CreateMicroflowStmt
+	for _, st := range prog.Statements {
+		if m, ok := st.(*ast.CreateMicroflowStmt); ok {
+			mf = m
+		}
+	}
+	if mf == nil {
+		t.Fatalf("no microflow in %q", src)
+	}
+	fb := &flowBuilder{
+		posX:         100,
+		posY:         100,
+		spacing:      HorizontalSpacing,
+		varTypes:     map[string]string{},
+		declaredVars: map[string]string{},
+	}
+	for _, p := range mf.Parameters {
+		switch {
+		case p.Type.EntityRef != nil && p.Type.Kind == ast.TypeListOf:
+			fb.varTypes[p.Name] = "List of " + p.Type.EntityRef.String()
+		case p.Type.EntityRef != nil:
+			fb.varTypes[p.Name] = p.Type.EntityRef.String()
+		default:
+			fb.declaredVars[p.Name] = p.Type.Kind.String()
+		}
+	}
+	fb.buildFlowGraph(mf.Body, nil)
+	var out []string
+	for _, e := range fb.errors {
+		if strings.Contains(e, "cannot set object variable") {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// The repro from ako/mxcli#2176: an object from a list `find`, reassigned with
+// `set` inside an if. exec refused it ("cannot set object variable") and rolled
+// the script back; check said "Check passed!" because the text-only typing
+// MDL-SET01 runs on did not type a find's output, so the rule never fired.
+const setOnFoundObjectRepro = `create module "M";
+create or modify non-persistent entity "M"."Line" ( "Model": String(200) );
+create or modify microflow "M"."SUB_Repro" ($Lines: List of "M"."Line", $Model: String)
+returns String as $R
+begin
+  $Line = find $Lines by Model = $Model;
+  if $Line = empty then
+    $New = create "M"."Line" ("Model" = $Model);
+    add $New to $Lines;
+    set $Line = $New;
+  end if;
+  return $Line/Model;
+end;
+`
+
+func TestCheckRefusesSetOnFoundObject_Issue2176(t *testing.T) {
+	hits := setObjectRuleHits(t, setOnFoundObjectRepro)
+	if len(hits) != 1 || !strings.Contains(hits[0], "cannot set object variable '$Line' (M.Line)") {
+		t.Fatalf("plain check: want one %s on $Line, got %q", setObjectRule, hits)
+	}
+	// check --references runs MDL-SET01 too, and its own validator stays quiet
+	// so the author reads the refusal once.
+	if got := checkScriptMicroflows(t, setOnFoundObjectRepro); strings.Contains(got, "cannot set object variable") {
+		t.Errorf("reference validator reported what MDL-SET01 owns: %q", got)
+	}
+}
+
+// check and exec answer the same question — is this `set` target an object? —
+// for every producer whose type the text states. Each case is run through
+// both, and they must agree; the control (no `set`) must pass both.
+func TestCheckAndExecAgreeOnSetOnObject_Issue2176(t *testing.T) {
+	const head = "create microflow M.MF ($A: M.E, $B: M.E, $Ls: list of M.E, $S: String)\nbegin\n  "
+	refused := map[string]string{
+		"find by":        "$F = find $Ls by Name = $S;\n  set $F = $B;",
+		"find where":     "$F = find $Ls where Name = $S;\n  set $F = $B;",
+		"find call":      "$F = find($Ls, Name = $S);\n  set $F = $B;",
+		"find in if":     "$F = find $Ls by Name = $S;\n  if $F = empty then\n    set $F = $B;\n  end if;",
+		"find of filter": "$G = filter($Ls, Name = $S);\n  $F = find $G by Name = $S;\n  set $F = $B;",
+		"retrieve first": "retrieve $F from M.E first;\n  set $F = $B;",
+		"parameter":      "set $A = $B;",
+		"create object":  "$F = create M.E (Name = $S);\n  set $F = $B;",
+		"head":           "$F = head($Ls);\n  set $F = $B;",
+	}
+	for name, body := range refused {
+		t.Run(name, func(t *testing.T) {
+			src := head + body + "\nend;\n"
+			check := setObjectRuleHits(t, src)
+			exec := execSetRefusals(t, src)
+			if len(exec) != 1 {
+				t.Fatalf("exec: want one refusal, got %q", exec)
+			}
+			if len(check) != 1 {
+				t.Errorf("check and exec disagree: exec refused (%q), check reported %q", exec[0], check)
+			}
+		})
+	}
+	accepted := map[string]string{
+		"find, no set":     "$F = find $Ls by Name = $S;\n  change $F (Name = 'x');",
+		"string find":      "declare $I Integer = 0;\n  $I = find($S, 'x');",
+		"list from filter": "$G = filter($Ls, Name = $S);\n  set $G = $Ls;",
+	}
+	for name, body := range accepted {
+		t.Run(name, func(t *testing.T) {
+			src := head + body + "\nend;\n"
+			if check := setObjectRuleHits(t, src); len(check) != 0 {
+				t.Errorf("check refused: %q", check)
+			}
+			if exec := execSetRefusals(t, src); len(exec) != 0 {
+				t.Errorf("exec refused: %q", exec)
+			}
+		})
+	}
+}

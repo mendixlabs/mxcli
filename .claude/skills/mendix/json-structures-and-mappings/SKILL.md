@@ -13,17 +13,17 @@ description: "Create and manage JSON structures, import mappings and export mapp
 | 33-110 | Key Concepts |
 | 111-122 | Export Mappings |
 | 123-187 | JSON Structures |
-| 188-229 | Message Definitions |
-| 230-393 | Import Mappings |
-| 394-491 | Export Mappings |
-| 492-509 | Starting a Mapping Below the Payload Root |
-| 510-593 | Microflow Actions |
-| 594-606 | Browse |
-| 607-654 | Export Workflow: PE → NPE → JSON |
-| 655-661 | Realistic Example: Countries REST API |
-| 662-685 | Placing Documents in Folders |
-| 686-701 | Documentation |
-| 702-716 | Common Mistakes |
+| 188-234 | Message Definitions |
+| 235-400 | Import Mappings |
+| 401-498 | Export Mappings |
+| 499-516 | Starting a Mapping Below the Payload Root |
+| 517-600 | Microflow Actions |
+| 601-613 | Browse |
+| 614-661 | Export Workflow: PE → NPE → JSON |
+| 662-668 | Realistic Example: Countries REST API |
+| 669-692 | Placing Documents in Folders |
+| 693-708 | Documentation |
+| 709-723 | Common Mistakes |
 
 <!-- /skill-index -->
 # JSON Structures, Import Mappings & Export Mappings
@@ -206,6 +206,11 @@ target entity** — the stored cardinality follows the direction of traversal an
 the association's type, so a `Reference` gives a single object one way and a list
 the other, while a `ReferenceSet` is a list both ways.
 
+The association must also connect the entity the element sits under to the element's
+own entity (either direction; a generalization of either is fine). Any other one is
+CE0295 "Association '...' is not allowed"; `check` refuses it as MDL100, in import and
+export mappings alike.
+
 **Mendix 11.15 removed collections.** Each definition is its own document, and
 a mapping names it in two parts. The collection form is refused on 11.15, and
 the document form below 11.15:
@@ -384,7 +389,9 @@ create import mapping Module.IMM_Embed
 
 Using `parameter` without declaring one is refused — the build reports it as
 CE0279. The declared entity must match the microflow's parameter type, which the
-build checks as CE0282.
+build checks as CE0282. A handler's `P: member` is checked the same way: a
+String parameter takes any member, a Decimal parameter also an Integer, a Long
+parameter an Integer, and every other type only its own (CE0282, `check` MDL107).
 
 The **activity** that calls such a mapping passes the object in its settings
 list, `(Parameter: $Obj)` — see "Settings" under Import from Mapping below.

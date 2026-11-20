@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mendixlabs/mxcli/internal/pathutil"
 )
 
 // runstate.go is the contract between a running `mxcli run --local` and the
@@ -114,13 +116,44 @@ type RunState struct {
 	Gen            int       `json:"gen"`
 	Building       bool      `json:"building"`
 	BuildingSource time.Time `json:"buildingSource,omitempty"`
+	// Scaffold is the theme source the run's builds wrote themselves, by
+	// themesource/ module folder (see buildScaffold): files there no newer than
+	// the time are build output, not an edit. Recorded so a reader of this file
+	// (`run status`, `run wait`) judges "change pending" by the signal the
+	// watcher uses — SourceMTimeOf.
+	Scaffold map[string]time.Time `json:"scaffold,omitempty"`
+	// HeldBy is the process holding the watcher (a `test --attach` changing the
+	// project for its run, watchhold.go); 0 when nothing does.
+	HeldBy int `json:"heldBy,omitempty"`
 	// Last is the newest finished generation.
 	Last    *BuildOutcome `json:"last,omitempty"`
 	Updated time.Time     `json:"updated"`
 }
 
-// ReadRunState reads a project's state file. A missing file is (nil, nil).
+// ReadRunState reads a project's state file. A missing file is (nil, nil), and
+// so is one that was written for another project: copying an app folder copies
+// .mxcli/ with it, and a state that names the original's pid must neither block
+// the copy nor be acted on (`run stop` would signal the original's process).
+// ForeignRunState says whether that is what was skipped.
 func ReadRunState(projectPath string) (*RunState, error) {
+	st, err := readRunStateFile(projectPath)
+	if st != nil && !pathutil.SameProject(st.Project, projectPath) {
+		return nil, nil
+	}
+	return st, err
+}
+
+// ForeignRunState returns the state in projectPath's .mxcli/ when it was
+// written for a different project, so a command can say that it is ignoring it.
+func ForeignRunState(projectPath string) *RunState {
+	st, err := readRunStateFile(projectPath)
+	if err != nil || st == nil || pathutil.SameProject(st.Project, projectPath) {
+		return nil
+	}
+	return st
+}
+
+func readRunStateFile(projectPath string) (*RunState, error) {
 	body, err := os.ReadFile(RunStatePath(projectPath))
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -230,6 +263,32 @@ func (r *RunStateRecorder) Ports(app, admin, serve int, runtimeLog string) {
 	r.update(func(s *RunState) {
 		s.AppPort, s.AdminPort, s.ServePort, s.RuntimeLog = app, admin, serve, runtimeLog
 	})
+}
+
+// Scaffold records the theme scaffold the run's builds have written.
+func (r *RunStateRecorder) Scaffold(s buildScaffold) {
+	cp := make(map[string]time.Time, len(s))
+	for k, v := range s {
+		cp[k] = v
+	}
+	r.update(func(st *RunState) { st.Scaffold = cp })
+}
+
+// Covered records that the latest build covers source up to t without a new
+// build: the watcher found the model it already serves (a hold released over an
+// unchanged model). Without it `run status` read the project's newer mtimes as a
+// change pending, and `run wait` waited for a build that was never coming.
+func (r *RunStateRecorder) Covered(t time.Time) {
+	r.update(func(st *RunState) {
+		if st.Last != nil && t.After(st.Last.Source) {
+			st.Last.Source = t
+		}
+	})
+}
+
+// Held records which process holds the watcher, or 0 when the hold ended.
+func (r *RunStateRecorder) Held(pid int) {
+	r.update(func(st *RunState) { st.HeldBy = pid })
 }
 
 // BuildStarted records that generation gen is being built from source.
@@ -395,6 +454,18 @@ func FormatOutcome(o *BuildOutcome, maxLines int) string {
 // SourceMTime is the --watch change signal (model + theme source), exported so
 // `run wait` measures a change with the same clock the watch loop builds from.
 func SourceMTime(projectPath string) time.Time { return sourceMTime(projectPath) }
+
+// SourceMTimeOf is the change signal of the run st describes: SourceMTime
+// without the theme scaffold its builds wrote, which is what its watcher
+// compares. A hosted dev loop (`--test-endpoint`) scaffolds themesource/mxtest/
+// at boot, and judged by the unfiltered signal `run status` reported "change
+// pending" for as long as it ran, a change the watcher rightly never built.
+func SourceMTimeOf(projectPath string, st *RunState) time.Time {
+	if st == nil || len(st.Scaffold) == 0 {
+		return sourceMTime(projectPath)
+	}
+	return sourceMTimeExcept(projectPath, buildScaffold(st.Scaffold))
+}
 
 // buildErrorLines turns a failed build into the lines a waiter is shown.
 func buildErrorLines(b *BuildResult, hint string) []string {

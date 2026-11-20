@@ -1,0 +1,13 @@
+-- ako/mxcli#1810: MDL-WORKFLOW10 suggested System.WorkflowUserTask_Assignees on
+-- every version, and check --references accepted it on 9.24, which then failed
+-- the build (CE1613 "no longer exists"). The association is one association,
+-- renamed in 10.0: on 9.x it is WorkflowUserTask_Assignee (a Reference), from
+-- 10.0 WorkflowUserTask_Assignees (a ReferenceSet). Measured on mxbuild 9.24.30:
+-- the 9.x form below builds at 0 errors. This script is the 10.0+ form.
+mdl 1;
+create module BugTest1810;
+create microflow BugTest1810.ACT_Claim ($Task: System.WorkflowUserTask)
+begin
+  change $Task (System.WorkflowUserTask_Assignees = [%CurrentUser%]);
+  commit $Task;
+end;

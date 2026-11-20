@@ -133,7 +133,7 @@ func (fb *flowBuilder) addLogMessageAction(s *ast.LogStmt) model.ID {
 // activity rather than the script, which makes a typo here expensive to trace.
 //
 // `what` names the statement in the error (e.g. "CALL MICROFLOW").
-func (fb *flowBuilder) buildQueueSettings(q *ast.QualifiedName, what string) *microflows.QueueSettings {
+func (fb *flowBuilder) buildQueueSettings(q *ast.QualifiedName, retry *ast.QueueRetry, what string) *microflows.QueueSettings {
 	if q == nil {
 		return nil
 	}
@@ -141,10 +141,22 @@ func (fb *flowBuilder) buildQueueSettings(q *ast.QualifiedName, what string) *mi
 	if !fb.queueExists(q.Module, q.Name) {
 		fb.addError("%s ... IN QUEUE '%s': task queue not found in the project (create it with `create task queue %s (Parallelism: 1)`)", what, qn, qn)
 	}
-	return &microflows.QueueSettings{
+	qs := &microflows.QueueSettings{
 		BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 		Queue:       qn,
 	}
+	if retry != nil && retry.Kind != "" {
+		qs.RetryPolicy = &microflows.QueueRetry{
+			BaseElement:     model.BaseElement{ID: model.ID(types.GenerateID())},
+			Kind:            retry.Kind,
+			Retries:         retry.Retries,
+			Interval:        retry.Interval,
+			InitialInterval: retry.InitialInterval,
+			MaximumInterval: retry.MaximumInterval,
+			IntervalType:    retry.IntervalType,
+		}
+	}
+	return qs
 }
 
 // queueExists reports whether a Queues$Queue with the given module-qualified
@@ -173,6 +185,19 @@ func (fb *flowBuilder) queueExists(moduleName, name string) bool {
 	return false
 }
 
+// storedResultVariable is the result variable a flow call stores: none for a
+// call to a flow known to return nothing, whatever name the statement gives it.
+// Such a name defines no variable (measured, see voidCodeActions), and storing
+// it is what Studio Pro leaves behind when a flow stops returning a value — the
+// stale name describe no longer prints (ako/mxcli#2138). A flow that cannot be
+// found (nil) keeps the name.
+func storedResultVariable(name string, returnType microflows.DataType) string {
+	if returnType != nil && returnType.GetTypeName() == "Void" {
+		return ""
+	}
+	return name
+}
+
 func (fb *flowBuilder) addCallMicroflowAction(s *ast.CallMicroflowStmt) model.ID {
 	mfQN := s.MicroflowName.Module + "." + s.MicroflowName.Name
 
@@ -198,14 +223,18 @@ func (fb *flowBuilder) addCallMicroflowAction(s *ast.CallMicroflowStmt) model.ID
 		BaseElement:       model.BaseElement{ID: model.ID(types.GenerateID())},
 		Microflow:         mfQN,
 		ParameterMappings: mappings,
-		QueueSettings:     fb.buildQueueSettings(s.Queue, "CALL MICROFLOW"),
+		QueueSettings:     fb.buildQueueSettings(s.Queue, s.QueueRetry, "CALL MICROFLOW"),
+	}
+	var returnType microflows.DataType
+	if s.OutputVariable != "" {
+		returnType = fb.lookupMicroflowReturnType(mfQN)
 	}
 	action := &microflows.MicroflowCallAction{
 		BaseElement:        model.BaseElement{ID: model.ID(types.GenerateID())},
 		ErrorHandlingType:  fb.ehType(s.ErrorHandling),
 		MicroflowCall:      mfCall,
-		ResultVariableName: s.OutputVariable,
-		UseReturnVariable:  s.OutputVariable != "",
+		ResultVariableName: storedResultVariable(s.OutputVariable, returnType),
+		UseReturnVariable:  storedResultVariable(s.OutputVariable, returnType) != "",
 	}
 
 	activityX := fb.posX
@@ -225,7 +254,7 @@ func (fb *flowBuilder) addCallMicroflowAction(s *ast.CallMicroflowStmt) model.ID
 	fb.posX += fb.spacing
 
 	if s.OutputVariable != "" {
-		fb.registerResultVariableType(s.OutputVariable, fb.lookupMicroflowReturnType(mfQN))
+		fb.registerResultVariableType(s.OutputVariable, returnType)
 	}
 
 	fb.finishCustomErrorHandler(activity.ID, activityX, s.ErrorHandling, s.OutputVariable)
@@ -259,12 +288,16 @@ func (fb *flowBuilder) addCallNanoflowAction(s *ast.CallNanoflowStmt) model.ID {
 		ParameterMappings: mappings,
 	}
 
+	var returnType microflows.DataType
+	if s.OutputVariable != "" {
+		returnType = fb.lookupNanoflowReturnType(nfQN)
+	}
 	action := &microflows.NanoflowCallAction{
 		BaseElement:        model.BaseElement{ID: model.ID(types.GenerateID())},
 		ErrorHandlingType:  fb.ehType(s.ErrorHandling),
 		NanoflowCall:       nfCall,
-		OutputVariableName: s.OutputVariable,
-		UseReturnVariable:  s.OutputVariable != "",
+		OutputVariableName: storedResultVariable(s.OutputVariable, returnType),
+		UseReturnVariable:  storedResultVariable(s.OutputVariable, returnType) != "",
 	}
 
 	activityX := fb.posX
@@ -284,7 +317,7 @@ func (fb *flowBuilder) addCallNanoflowAction(s *ast.CallNanoflowStmt) model.ID {
 	fb.posX += fb.spacing
 
 	if s.OutputVariable != "" {
-		fb.registerResultVariableType(s.OutputVariable, fb.lookupNanoflowReturnType(nfQN))
+		fb.registerResultVariableType(s.OutputVariable, returnType)
 	}
 
 	fb.finishCustomErrorHandler(activity.ID, activityX, s.ErrorHandling, s.OutputVariable)
@@ -441,7 +474,7 @@ func (fb *flowBuilder) addCallJavaActionAction(s *ast.CallJavaActionStmt) model.
 		ErrorHandlingType:  fb.ehType(s.ErrorHandling),
 		JavaAction:         actionQN,
 		ParameterMappings:  mappings,
-		QueueSettings:      fb.buildQueueSettings(s.Queue, "CALL JAVA ACTION"),
+		QueueSettings:      fb.buildQueueSettings(s.Queue, s.QueueRetry, "CALL JAVA ACTION"),
 		ResultVariableName: s.OutputVariable,
 		UseReturnVariable:  s.OutputVariable != "",
 	}
@@ -1126,6 +1159,14 @@ func (fb *flowBuilder) addCallExternalActionAction(s *ast.CallExternalActionStmt
 			// raises CE7252 when they disagree, so leaving it at Go's false
 			// makes every call on a nullable parameter unbuildable.
 			mapping.CanBeEmpty = pk.canBeEmpty
+		}
+		if arg.IncludeAssociations != nil {
+			mapping.IncludedAssociations = fb.buildIncludedAssociations(
+				serviceQN+"."+s.ActionName, arg.Name, mapping.ParameterEntity, arg.IncludeAssociations.Associations)
+			if fb.statedIncludes == nil {
+				fb.statedIncludes = map[*microflows.ExternalActionParameterMapping]bool{}
+			}
+			fb.statedIncludes[mapping] = true
 		}
 		mappings = append(mappings, mapping)
 	}
@@ -2264,11 +2305,9 @@ func (fb *flowBuilder) addImportFromMappingAction(s *ast.ImportFromMappingStmt) 
 
 	fb.objects = append(fb.objects, activity)
 	fb.posX += fb.spacing
-	if s.OutputVariable != "" && resultEntityQN != "" && fb.varTypes != nil {
-		if resultHandling.SingleObject {
-			fb.varTypes[s.OutputVariable] = resultEntityQN
-		} else {
-			fb.varTypes[s.OutputVariable] = "List of " + resultEntityQN
+	if s.OutputVariable != "" && fb.varTypes != nil {
+		if t := mappingResultType(resultHandling); t != "" {
+			fb.varTypes[s.OutputVariable] = t
 		}
 	}
 
@@ -2479,4 +2518,82 @@ func (fb *flowBuilder) optExprToString(e ast.Expression) string {
 		return ""
 	}
 	return fb.exprToString(e)
+}
+
+// buildIncludedAssociations builds an argument's Associations to include from
+// `include associations ( … )` (ako/mxcli#1914). side is the entity on this
+// side of each node: the parameter's entity at the root, and below a node the
+// entity at its association's far end.
+//
+// IsParent is derived, never written: it is whether side is the association's
+// FROM end, its owner (ParentPointer — CLAUDE.md, "Association Parent/Child
+// Pointer Semantics"). A self-association is refused, because both ends are
+// side and the direction cannot be derived; guessing it would serialise the
+// wrong one. So is an association that does not touch side, and one side
+// specializes both ends of.
+func (fb *flowBuilder) buildIncludedAssociations(call, param, side string, defs []*ast.IncludedAssociationDef) []*microflows.IncludedAssociation {
+	out := make([]*microflows.IncludedAssociation, 0, len(defs))
+	for _, def := range defs {
+		qn := def.Name.String()
+		where := fmt.Sprintf("call external action %s(%s): include associations %s", call, param, qn)
+		if side == "" {
+			if fb.resolveKnownOnly {
+				return out
+			}
+			fb.addError("%s: the parameter's entity is not known (the service's metadata does not type it), "+
+				"so which end of the association it is on cannot be worked out", where)
+			return out
+		}
+		info := fb.lookupAssociation(def.Name.Module, def.Name.Name)
+		if info == nil {
+			if !fb.resolveKnownOnly {
+				fb.addError("%s: association not found", where)
+			}
+			continue
+		}
+		if info.parentEntityQN != "" && info.parentEntityQN == info.childEntityQN {
+			fb.addError("%s is a self-association (%s to itself): MDL cannot tell which end the object is on, "+
+				"so it cannot write it. Tick it in Studio Pro; a create or modify that leaves the clause out keeps it", where, side)
+			continue
+		}
+		isFrom := fb.entityIsSubtypeOf(side, info.parentEntityQN)
+		isTo := fb.entityIsSubtypeOf(side, info.childEntityQN)
+		var far string
+		switch {
+		case isFrom && !isTo:
+			far = info.childEntityQN
+		case isTo && !isFrom:
+			far = info.parentEntityQN
+		case isFrom && isTo:
+			fb.addError("%s: %s specializes both ends (%s and %s), so which end the object is on cannot be worked out",
+				where, side, info.parentEntityQN, info.childEntityQN)
+			continue
+		default:
+			fb.addError("%s does not touch %s: it is from %s to %s. A node's associations start from the entity "+
+				"at its parent's far end, and the root's from the parameter's entity", where, side, info.parentEntityQN, info.childEntityQN)
+			continue
+		}
+		out = append(out, &microflows.IncludedAssociation{
+			BaseElement:          model.BaseElement{ID: model.ID(types.GenerateID())},
+			Association:          qn,
+			IsParent:             isFrom,
+			IncludedAssociations: fb.buildIncludedAssociations(call, param, far, def.Children),
+		})
+	}
+	return out
+}
+
+// mappingResultType is the type a mapping's result binds its variable to: the
+// root entity it writes ResultEntityID with (a qualified name), one object
+// or a list as SingleObject says; "" when there is none. It reads the written
+// result handling, not the statement, so a stored import or REST call result
+// can be typed the way the full build types it (ako/mxcli#1796).
+func mappingResultType(h *microflows.ResultHandlingMapping) string {
+	if h == nil || h.ResultEntityID == "" {
+		return ""
+	}
+	if h.SingleObject {
+		return string(h.ResultEntityID)
+	}
+	return "List of " + string(h.ResultEntityID)
 }

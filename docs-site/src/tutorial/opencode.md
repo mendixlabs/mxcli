@@ -46,27 +46,27 @@ my-mendix-project/
 
 ### opencode.json
 
-The `opencode.json` file is OpenCode's primary configuration. It points to `AGENTS.md` for instructions and to both the OpenCode-format skills in `.opencode/skills/` and the universal skill files in `.ai-context/skills/`:
+The `opencode.json` file is OpenCode's primary configuration. Its instructions are `AGENTS.md` alone:
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": [
-    "AGENTS.md",
-    ".opencode/skills/**/SKILL.md",
-    ".ai-context/skills/*/SKILL.md"
+    "AGENTS.md"
   ]
 }
 ```
 
+The skills are not listed there. OpenCode inlines every instruction file's whole body into the system prompt, so listing the skill trees put about 2.7 MB of skill text in front of every session. OpenCode discovers the skills in `.opencode/skills/` itself and loads a skill's body only when its description matches the task.
+
 ### Skills
 
-Skills live in `.opencode/skills/<name>/SKILL.md` and use YAML frontmatter that OpenCode understands:
+Skills live in `.opencode/skills/<name>/SKILL.md` and use YAML frontmatter that OpenCode understands. The description is the skill's own, with its "Use when…" clause, since that is what OpenCode matches a task against:
 
 ```markdown
 ---
 name: write-microflows
-description: MDL syntax and patterns for creating microflows
+description: 'Microflow syntax reference in MDL — … Use before writing any CREATE MICROFLOW …'
 compatibility: opencode
 ---
 

@@ -1,0 +1,14 @@
+-- ako/mxcli#1211: the check-syntax skill said every forward reference fails.
+-- A forward CALL MICROFLOW is resolved by a plain `mxcli exec` (which rolls back
+-- on failure) — this script runs as written. Only --continue-on-error, the REPL
+-- and -c, which cannot roll back, refuse it (mendixlabs/mxcli#1405).
+mdl 1;
+create module BugTest1211;
+create microflow BugTest1211.A ()
+begin
+  call microflow BugTest1211.B();
+end;
+create microflow BugTest1211.B ()
+begin
+  return;
+end;

@@ -37,6 +37,14 @@ const (
 		`"status":"Failure","message":"Compilation of the app bundle failed."}`
 
 	bundleFailedMessage = "Compilation of the app bundle failed."
+
+	// Second serve build after an ALTER PAGE edit, macOS mxbuild 11.15.0: the
+	// same failure, reported by resource key instead of English text.
+	real1115MacOSMissingClientDirsByKey = "One or more errors occurred. " +
+		"(AggregateException_ctor_DefaultMessage (IO_PathNotFound_Path, " +
+		"/w/W1115/deployment/web/pages/MyFirstModule.Home_Web.js)) " +
+		"(AggregateException_ctor_DefaultMessage (IO_PathNotFound_Path, " +
+		"/w/W1115/deployment/web/layouts/Atlas_Core.Atlas_TopBar.js))"
 )
 
 // deploy1114 is the shape a 11.14 first build leaves: web/dist and nothing
@@ -74,6 +82,41 @@ func TestLegacyClientBuildHintExplainsBothRealFailures(t *testing.T) {
 				t.Errorf("%s: hint missing %q:\n%s", name, want, hint)
 			}
 		}
+	}
+}
+
+// macOS (and Linux) mxbuild report the identical first-build-only failure by
+// resource key, not English text (measured on 11.15.0). The English-text match
+// alone would leave --watch reporting "could not be applied" forever on these
+// platforms, since missingClientDirs would never recognize the failure.
+func TestLegacyClientBuildHintRecognizesMacOSKeyForm(t *testing.T) {
+	hint := legacyClientBuildHint(deploy1114(t), real1115MacOSMissingClientDirsByKey, "")
+	if hint == "" {
+		t.Fatal("must be explained: this is the same shape as the English-text message")
+	}
+	for _, want := range []string{"not a problem with your model", "web/pages/", "run --local --screenshot"} {
+		if !strings.Contains(hint, want) {
+			t.Errorf("hint missing %q:\n%s", want, hint)
+		}
+	}
+}
+
+// The key form names a FILE ("…/web/pages/X.js"), not the directory. When an
+// earlier serve build left the directory behind (e.g. mid-session after one
+// successful incremental build), a plain directory-exists check would wrongly
+// conclude nothing is missing and the hint would stay silent on a build that
+// is failing for exactly this reason.
+func TestLegacyClientBuildHintMacOSKeyForm_DirExistsFileMissing(t *testing.T) {
+	dir := deploy1114(t)
+	if err := os.MkdirAll(filepath.Join(dir, "web", "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hint := legacyClientBuildHint(dir, real1115MacOSMissingClientDirsByKey, "")
+	if hint == "" {
+		t.Fatal("must still be explained: the directory exists but the file mxbuild wants does not")
+	}
+	if !strings.Contains(hint, "web/pages/ files") {
+		t.Errorf("hint must name the missing files, not just the directory:\n%s", hint)
 	}
 }
 
@@ -119,5 +162,28 @@ func TestLegacyClientBuildHintStaysSilentWhenTheArtifactsExist(t *testing.T) {
 		if hint := legacyClientBuildHint(dir, tc.message, tc.raw); hint != "" {
 			t.Errorf("%s: must not fire when the artifact exists:\n%s", name, hint)
 		}
+	}
+}
+
+// ako/mxcli#606: the two halves of the failure have different remedies, and the
+// hint must not promise one for the other. The bundler-config half was measured
+// gone on 11.15.0 (BankV1, Linux, 2026-10-03: builds #2-#4 reloaded in 2.8-3.9 s
+// after a convert from 11.14.0), so its hint names the upgrade. The per-document
+// client half was still seen on macOS 11.15.0 (the fixture above), so its hint
+// must not.
+func TestLegacyClientBuildHint_UpgradeAdviceOnlyForTheHalfItFixes(t *testing.T) {
+	config := legacyClientBuildHint(deploy1114(t), bundleFailedMessage, real1114MissingRollupConfig)
+	if !strings.Contains(config, "11.15.0") {
+		t.Errorf("the bundler-config hint does not name the version that fixes it:\n%s", config)
+	}
+	pages := legacyClientBuildHint(deploy1114(t), real1115MacOSMissingClientDirsByKey, "")
+	if pages == "" {
+		t.Fatal("no hint for the client-directory half")
+	}
+	if strings.Contains(pages, "fixed in") || strings.Contains(pages, "upgrade") {
+		t.Errorf("the client-directory hint promises an upgrade fix that 11.15.0 (macOS) did not deliver:\n%s", pages)
+	}
+	if !strings.Contains(pages, "11.15") {
+		t.Errorf("the client-directory hint still lists only 11.12.5 and 11.14 though 11.15.0 was measured failing:\n%s", pages)
 	}
 }

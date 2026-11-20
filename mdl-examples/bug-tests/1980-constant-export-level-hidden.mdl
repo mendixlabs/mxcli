@@ -1,0 +1,27 @@
+mdl 1;
+-- ============================================================================
+-- Regression: ako/mxcli#1980 (mendixlabs/mxcli#1749) - create constant wrote
+-- ExportLevel "" where Studio Pro writes "Hidden"
+-- ============================================================================
+--
+-- Symptom (before fix):
+--   `create constant` stored "ExportLevel": "". mx check accepts it, but once
+--   another branch holds the same constant with "Hidden", mx diff crashes on
+--   the pair (exit 129, "Value cannot be null. (Parameter 'element')") and
+--   `mxcli git merge` loses its property-level report. `create or modify
+--   constant` also turned a stored "API" or "Hidden" into "".
+--
+-- After fix:
+--   A new constant is written with "Hidden"; a rewrite keeps the stored level,
+--   and repairs a stored "" to "Hidden". Measured on 11.14.0: mx diff of a ""
+--   copy against a "Hidden" copy exits 129; of two "Hidden" copies, 0.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/1980-constant-export-level-hidden.mdl -p app.mpr
+--   mxcli bson dump -p app.mpr -t constant -o BugTest1980.Enabled   -- "ExportLevel": "Hidden"
+--   mxcli docker check -p app.mpr   -- expect 0 errors
+-- ============================================================================
+
+create module BugTest1980;
+create constant BugTest1980.Enabled ( Type: boolean, DefaultValue: true );
+create or modify constant BugTest1980.Enabled ( Type: boolean, DefaultValue: false );

@@ -37,6 +37,7 @@ Built-in rules check for:
   - Unreadable page data (SEC010) - a data widget's entity must be readable by the roles that open its page (at Production it renders empty)
   - XPath through an unreadable association (SEC011) - a page data source's XPath may cross only associations the roles opening the page can read (at Production the page fails)
   - Reachable page not readable (SEC012) - every page a user role can reach shows only what the role may read (mxbuild CE2729)
+  - Security level ignores rules (SEC013) - Off ignores access rules, grants and demo users; Prototype ignores entity XPath constraints
   - Un-describable branch structure (MDL-FLOW01) - decision branches that do not nest, so DESCRIBE cannot render them faithfully
 
 Bundled Starlark rules (in .claude/lint-rules/):
@@ -316,6 +317,13 @@ modules, and findings that are not about those documents are not reported.
 			violations = keepDocumentViolations(violations, documentFilter)
 		}
 
+		// Findings a decision in the project brain accepts are left out of
+		// what lint reports as open, and of the exit code; an acceptance whose
+		// rule no longer fires there is stale (ako/mxcli#2304). Applied before
+		// the baseline, so a baseline records only what is not accepted.
+		acceptances := loadBrainAcceptances(projectDir)
+		violations = acceptances.apply(violations)
+
 		// Baseline: record the findings, or keep only the new ones. On stderr,
 		// so the summary cannot corrupt --format json/sarif.
 		if updateBaseline {
@@ -369,6 +377,20 @@ modules, and findings that are not about those documents are not reported.
 		// silent when there is no store or no queue, and on stderr so it cannot
 		// corrupt --format json/sarif.
 		reportBrainGap(projectDir)
+		showAccepted, _ := cmd.Flags().GetBool("show-accepted")
+		var stale []brain.Acceptance
+		if !scoped {
+			// A rule ran when lint has it and it is enabled: RuleEnabled alone
+			// is true for an id lint has never heard of, which is brain
+			// check's to report, not a stale acceptance.
+			has := map[string]bool{}
+			for _, r := range lint.Rules() {
+				has[strings.ToUpper(r.ID())] = true
+			}
+			ran := func(rule string) bool { return has[strings.ToUpper(rule)] && lint.RuleEnabled(rule) }
+			stale = acceptances.stale(ran, func(m string) bool { return !ctx.IsExcluded(m) })
+		}
+		acceptances.report(os.Stderr, showAccepted, stale)
 
 		// Exit with error if there are errors — the new ones, against a
 		// baseline. Recording a baseline accepts what it records.
@@ -480,6 +502,8 @@ func builtinLintRules() []linter.Rule {
 		rules.NewImageSourceRule(),
 		rules.NewReactUnsupportedWidgetRule(),
 		rules.NewSnippetCallAppearanceRule(),
+		rules.NewAgentWithoutSelectedModelRule(),
+		rules.NewConsumedMCPServiceWithoutEndpointRule(),
 		rules.NewEmptyContainerRule(),
 		rules.NewGallerySelectionListenerRule(),
 		rules.NewDataViewLayoutGridRule(),
@@ -488,12 +512,15 @@ func builtinLintRules() []linter.Rule {
 		rules.NewNoEntityAccessRulesRule(),
 		rules.NewWeakPasswordPolicyRule(),
 		rules.NewDemoUsersActiveRule(),
-		rules.NewPageEntityReadAccessRule(),    // SEC010 - full catalog (widgets, permissions)
-		rules.NewXPathAssociationAccessRule(),  // SEC011 - full catalog (xpath_expressions, permissions)
-		rules.NewReachablePageReadAccessRule(), // SEC012 - full catalog (refs, navigation, permissions)
-		rules.NewOverlappingActivitiesRule(),   // MPR008 - requires BSON inspection
-		rules.NewLoopChildContainmentRule(),    // MPR011 - requires BSON inspection
-		rules.NewNoCommitInLoopRule(),          // CONV011-CONV014 - require BSON inspection
+		rules.NewPageEntityReadAccessRule(),      // SEC010 - full catalog (widgets, permissions)
+		rules.NewXPathAssociationAccessRule(),    // SEC011 - full catalog (xpath_expressions, permissions)
+		rules.NewReachablePageReadAccessRule(),   // SEC012 - full catalog (refs, navigation, permissions)
+		rules.NewSecurityLevelIgnoresRulesRule(), // SEC013 - security level Off/Prototype ignores the project's rules
+		rules.NewOverlappingActivitiesRule(),     // MPR008 - requires BSON inspection
+		rules.NewLoopChildContainmentRule(),      // MPR011 - requires BSON inspection
+		rules.NewOverlappingEntitiesRule(),       // MPR016 - reads entity geometry from the domain model
+		rules.NewFixedGuardAttributeRule(),       // MPR017 - a Boolean guard with one reachable value
+		rules.NewNoCommitInLoopRule(),            // CONV011-CONV014 - require BSON inspection
 		rules.NewExclusiveSplitCaptionRule(),
 		rules.NewErrorHandlingOnCallsRule(),
 		rules.NewNoContinueErrorHandlingRule(),

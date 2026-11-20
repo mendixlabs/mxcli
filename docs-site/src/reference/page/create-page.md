@@ -238,7 +238,14 @@ DATAGRID dgOrders (DataSource: DATABASE FROM Sales.Order, Selection: Single) {
 
 A `SHOW PAGE` in the control bar takes the selection the same way —
 `Action: SHOW PAGE Sales.Order_Detail(Order = $dgOrders)` opens the page with
-the selected row, and the button is disabled until a row is selected.
+the selected row, and the button is disabled until a row is selected. In a grid
+with `Selection`, a `SHOW PAGE` in a column's custom content may pass the
+grid's selection by name as well, which is what Studio Pro stores there;
+`$currentObject` is the row.
+
+A control bar takes its object from above its grid, but sits inside the grid,
+so the data view around the grid is an outer one there: `$dvOrder` from the
+control bar of a grid in data view `dvOrder` is valid.
 
 `mxcli check -p <app.mpr>` reports a missing argument before mxbuild does.
 
@@ -287,6 +294,14 @@ attribute property set by its own key too, such as a Custom chart's
 `eventDataAttribute: $Ctx.EventData`. The qualified name of another entity's
 attribute (`Module.Other.Attr`) is refused, because stored without the
 parameter it is mx check CE7247.
+
+An **enclosing data view** is named the same way: inside a data view nested in
+`dvOuter`, `$dvOuter.Attr` reads the outer data view's object, and
+`$dvOuter/Assoc/Attr` reads over an association from it. This works on input
+widgets, on a pluggable widget's attribute property
+(`markdown md (stringAttribute: $dvOuter.Output)`) and in an attribute-based
+visibility condition (`Visible: $dvOuter.HasError in (true)`). It is the form
+Studio Pro stores for these bindings.
 
 ## Parameters
 

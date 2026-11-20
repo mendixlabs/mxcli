@@ -1,0 +1,15 @@
+mdl 1;
+-- NEGATIVE TEST — `mxcli check` must REFUSE this file (MDL099), with no project.
+--
+-- An association with `owner both` cannot connect an entity to itself or to one of
+-- its generalizations. The build reports
+--
+--   [CE0002]
+--
+-- Measured on MxBuild 11.16.1, Reference and ReferenceSet alike: same entity,
+-- child -> parent, parent -> child and a longer chain are all CE0002; an unrelated
+-- pair and every other owner build (see association-owner-both-self.mdl).
+create entity MyFirstModule.OwnerBothA (Name: string(10));
+create entity MyFirstModule.OwnerBothB extends MyFirstModule.OwnerBothA (X: string(10));
+create association MyFirstModule.OwnerBothA_OwnerBothA from MyFirstModule.OwnerBothA to MyFirstModule.OwnerBothA type reference owner both;
+create association MyFirstModule.OwnerBothB_OwnerBothA from MyFirstModule.OwnerBothB to MyFirstModule.OwnerBothA type referenceset owner both;

@@ -1,0 +1,33 @@
+-- mendixlabs/mxcli#1632: every Marketplace Calendar (content 245304, 2.6.1)
+-- written by mxcli passed `check` and `exec`, then a plain `mx check` failed:
+--   [CE0463] "The definition of this widget has changed. ..." at Calendar 'cal'
+-- `mxcli docker check` reported it clean, because it runs update-widgets on a
+-- temporary copy before checking.
+-- The Calendar has no embedded template, so its Type is generated from the
+-- .mpk. Its toolbarItems object list declares its sub-properties directly
+-- under <properties>, with no <propertyGroup>, and the parser read only the
+-- grouped shape: toolbarItems was stored with ObjectType null.
+-- After the fix, `mx check` reports no error for this page, and the stored
+-- page equals a copy that `mx update-widgets` rewrote (ids stripped).
+-- Needs: `mxcli marketplace install 245304 -p <app>` first.
+mdl 1;
+
+create module BugTest1632;
+
+create persistent entity BugTest1632.Shift (
+  Title: String(200),
+  StartsAt: DateTime,
+  EndsAt: DateTime
+);
+
+-- No toolbar item written: the object list is empty, its definition must
+-- still be complete.
+create or modify page BugTest1632.ShiftCalendar (Title: 'Shifts', Layout: Atlas_Core.Atlas_Default) {
+  pluggablewidget 'com.mendix.widget.web.calendar.Calendar' cal (
+    databaseDataSource: database BugTest1632.Shift,
+    titleType: 'attribute',
+    titleAttribute: Title,
+    startAttribute: StartsAt,
+    endAttribute: EndsAt
+  )
+};

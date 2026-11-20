@@ -132,7 +132,7 @@ func flowKindsFixtureDB(t *testing.T) catalog.CatalogDB {
 			Description TEXT, AutoGenerateCaption INTEGER, ConditionExpression TEXT,
 			ConditionRule TEXT, ErrorHandlingType TEXT, LogLevel TEXT, LogNodeExpression TEXT,
 			LogMessage TEXT, CommitType TEXT, WithEvents INTEGER, RetrieveSource TEXT,
-			QueueRef TEXT)`,
+			QueueRef TEXT, X INTEGER, Y INTEGER, Width INTEGER, Height INTEGER)`,
 		`INSERT INTO activities (Id, Name, Caption, ActivityType, ActionType, MicroflowId,
 			MicroflowQualifiedName, ModuleName, EntityRef, ServiceRef, ActionRef,
 			UseRequestTimeout, TimeoutExpression, Sequence, ParentLoopId, LoopDepth) VALUES
@@ -145,7 +145,8 @@ func flowKindsFixtureDB(t *testing.T) catalog.CatalogDB {
 			TargetId TEXT, TargetName TEXT, RefKind TEXT, ModuleName TEXT)`,
 		`INSERT INTO refs VALUES ('PAGE','p1','Sales.P','ENTITY','e1','Sales.E','parameter','Sales')`,
 		`CREATE TABLE pages (Id TEXT, Name TEXT, QualifiedName TEXT, ModuleName TEXT, Folder TEXT,
-			Title TEXT, URL TEXT, Description TEXT, WidgetCount INTEGER)`,
+			Title TEXT, URL TEXT, Description TEXT, WidgetCount INTEGER,
+			Class TEXT, Style TEXT, DynamicClasses TEXT)`,
 		`CREATE TABLE entities (
 			Id TEXT, Name TEXT, QualifiedName TEXT, ModuleName TEXT, Folder TEXT,
 			EntityType TEXT, Description TEXT, Generalization TEXT,

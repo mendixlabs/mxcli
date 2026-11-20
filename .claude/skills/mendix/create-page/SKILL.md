@@ -15,12 +15,12 @@ description: "CREATE PAGE syntax reference — parameters, variables, layouts, a
 | 47-222 | Syntax |
 | 223-293 | Basic Examples |
 | 294-318 | Modifying Existing Pages |
-| 319-422 | Conditional Visibility and Editability |
-| 423-587 | Known Limitations |
-| 588-596 | Tips |
-| 597-623 | Related Commands |
-| 624-648 | PLUGGABLEWIDGET Escape Hatch |
-| 649-652 | See Also |
+| 319-440 | Conditional Visibility and Editability |
+| 441-610 | Known Limitations |
+| 611-619 | Tips |
+| 620-646 | Related Commands |
+| 647-671 | PLUGGABLEWIDGET Escape Hatch |
+| 672-675 | See Also |
 
 <!-- /skill-index -->
 # CREATE PAGE - MDL Syntax Guide
@@ -158,7 +158,7 @@ actionbutton btn (caption: 'Save', class: 'btn-lg')
 container c (style: 'background-color: #f8f9fa; padding: 16px;') { ... }
 ```
 
-> **Warning:** Do NOT use `style` directly on DYNAMICTEXT widgets — it crashes MxBuild with a NullReferenceException. Wrap the DYNAMICTEXT in a styled CONTAINER instead.
+> **Note:** `style` works on DYNAMICTEXT like on any widget (an old "crashes MxBuild" warning does not reproduce). Prefer `class:` with a theme class for anything reusable.
 
 **Design Properties** — Atlas UI structured properties (spacing, colors, toggles):
 ```sql
@@ -364,6 +364,15 @@ container cntRunning (visible: Status in (Running, empty)) { ... }
 textbox txtPassword (label: 'Password', attribute: Password, visible: IsLocalUser in (true))
 ```
 
+**Editable based on an attribute value** is spelled the same way — the values
+that make the widget EDITABLE — on any widget that takes `editable:`, combo
+boxes included. A page or snippet parameter is `$Param.Attr`:
+
+```sql
+textbox txtTitle (attribute: Title, editable: Status in (Draft, Open))
+combobox cbStatus (attribute: Status, editable: IsLocked in (false))
+```
+
 **Visible for module roles** (Studio Pro's role-based visibility) is a separate
 setting — a second `visible:` line that combines with either condition above. It
 works on widgets, tab pages and navigation-list items; `check --references`
@@ -379,6 +388,15 @@ create page MyModule.Request_Review (title: 'Review', layout: Atlas_Core.Atlas_D
     visible: false, visible: roles (MyModule.Manager))
 };
 ```
+
+The roles must be roles of the page's, snippet's or layout's OWN module: a role of
+another module (`Administration.Administrator` on a page in `MyModule`) builds with
+CE0149 "reselect roles", and `check` refuses it (MDL-GRANT04). Whether the page may
+be viewed by the role does not matter, only the role's module.
+
+`visible: roles (Mod.Role) and <condition>` is the same two settings in one line
+(both apply). `roles (…)` anywhere else in an expression is refused (MDL-WIDGET54):
+Mendix expressions have no roles function.
 
 
 > **`visible:`/`editable:` is a Mendix *expression*, not XPath** — a different
@@ -471,8 +489,13 @@ The two other sources take no collection entry:
 
 ```sql
 image imgRemote (ImageType: imageUrl, ImageUrl: 'https://example.com/logo.svg')
-image imgIcon   (ImageType: icon)
+image imgIcon   (ImageType: icon, Icon: 'Atlas_Core.Atlas_Filled.user')
 ```
+
+An icon image names its icon exactly as a button does — `Icon: 'Module.Collection.Icon'`
+(icon collection), `Icon: image 'Module.Collection.Image'`, or `Icon: glyph 57377` —
+and without one mxbuild refuses it ("No icon selected."), which check reports as
+MDL-WIDGET22.
 
 **An uploaded image** — an object of an entity that extends `System.Image` — is
 shown by binding the widget to the data view's object. It is not an `ImageType`

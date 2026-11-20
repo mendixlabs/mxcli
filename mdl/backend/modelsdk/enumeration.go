@@ -27,7 +27,7 @@ func (b *Backend) ListEnumerations() ([]*model.Enumeration, error) {
 	// ListJavaActions. Without them `describe enumeration System.X` reports
 	// "not found" and `check --references` rejects an attribute typed against
 	// one, while `describe entity` prints that very type (#1102).
-	out = append(out, meta.BuildSystemEnumerations()...)
+	out = append(out, meta.BuildSystemEnumerationsIn(b.systemVersionAtLeast())...)
 	return out, nil
 }
 

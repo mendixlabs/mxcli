@@ -12,18 +12,18 @@ description: "Write and run MDL-based microflow tests with `mxcli test` — anno
 |---|---|
 | 33-39 | Reference files |
 | 40-50 | When to Use This Skill |
-| 51-184 | Prerequisites |
-| 185-227 | Test File Formats |
-| 228-243 | string Operations |
-| 244-267 | Running Tests |
-| 268-461 | How It Works |
-| 462-500 | Check a test file before you run it |
-| 501-622 | Writing Good Tests |
-| 623-637 | Test File Organization |
-| 638-650 | Interpreting Failures |
-| 651-672 | CI Integration |
-| 673-679 | Related Skills |
-| 680-682 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
+| 51-189 | Prerequisites |
+| 190-232 | Test File Formats |
+| 233-248 | string Operations |
+| 249-272 | Running Tests |
+| 273-471 | How It Works |
+| 472-510 | Check a test file before you run it |
+| 511-632 | Writing Good Tests |
+| 633-647 | Test File Organization |
+| 648-660 | Interpreting Failures |
+| 661-682 | CI Integration |
+| 683-689 | Related Skills |
+| 690-694 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
 
 <!-- /skill-index -->
 # Test Microflows Skill
@@ -137,6 +137,11 @@ To set a value for one run without touching the project, use `--constant`
 ```bash
 mxcli test tests/ -p app.mpr --local --constant MyModule.ApiKey=sk-test-123
 ```
+
+A real secret should not be typed there (it shows in `ps` and shell history):
+`--constant MyModule.ApiKey=@env:API_KEY` reads an environment variable, and
+`--constant MyModule.ApiKey=@file:/path/to/key` a file only you can read
+(`chmod 600`). `@@…` is a literal value starting with `@`.
 
 A name the project does not declare is **refused**, before anything boots — the
 runtime silently ignores a value for a constant that does not exist, so a typo
@@ -320,11 +325,12 @@ chained, `--local` ran with the app's startup logic suppressed, and a suite that
 depended on startup state passed under `--attach` and failed under `--local` for
 reasons unrelated to the code.
 
-`MxTest.RegisterEndpoint` applies entity access, so it can call a startup
-microflow that does or does not (CE0114 only forbids a non-applying microflow
-calling an applying one); yours still runs with its own setting. A build error
-located in `MxTest.RegisterEndpoint` or `MxTest.RegisterTestEndpoint` is reported
-as an mxcli defect, not as an error in your project.
+`MxTest.RegisterEndpoint` and the generated test microflows apply entity
+access, so they can call a microflow that does or does not (CE0114 only forbids
+a non-applying microflow calling an applying one); yours still runs with its own
+setting. Exception: a test whose own error handler reads `$latestError/…` gets a
+flow that does not apply it, since an applying one may not (CE0150). A build
+error in an `MxTest` document mxcli generated is reported as an mxcli defect.
 
 One thing rollback does **not** cover: whatever the startup microflow writes
 happens at boot, outside any test's transaction, so `@cleanup rollback` does not
@@ -389,6 +395,10 @@ Three things to know before reaching for it:
 - **A change needing a runtime restart is refused** — a new entity or
   association. That runtime belongs to the other process. Restart it, or drop
   `--attach`.
+- **On Mendix 11.14.0 every attach is refused**, whatever the tests change: its
+  `mxbuild --serve` fails every build after its first, so the attach falls back
+  to a full build, and a full build asks for a runtime restart whatever changed.
+  Use `--local` there. (11.12.x, 11.13 and 11.15+ build incrementally.)
 
 | | Boot | Database | Owns the runtime |
 |---|---|---|---|
@@ -680,3 +690,5 @@ The JUnit XML works with GitHub Actions, Jenkins, Azure DevOps, GitLab CI, etc.
 ## Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`)
 
 local test runs go through a **token-guarded HTTP endpoint** registered by a generated Java custom request handler, instead of compiling the suite into the project's after-startup microflow. Boot registers the endpoint and then **chains the project's own after-startup microflow**, so tests see the app as it really boots (`--skip-app-startup` opts out) — without that, a suite depending on startup state passed under `--attach` and failed under `--local`. One microflow per test, resolved by name at request time from `Core.getMicroflowNames()` and invoked with `Core.microflowCall(...).execute(...)` — so a throwing test fails only itself (not the boot), results are returned rather than scraped from the runtime log, and each test has its own variable scope. Owning the `IContext` is also what finally makes **`@cleanup rollback`** (the annotation's documented default, previously parsed and ignored) real: the handler wraps the call in `startTransaction()`/`rollbackTransaction()`, so a test's writes do not survive it — verified against Postgres, with `@cleanup none` as the in-run control. A rollback that fails is reported per test and summarised, never silent; an unknown strategy is a parse error. The handler **survives `reload_model`** (after-startup does not re-run, the JVM is unchanged), which is what makes `--watch` possible: ~30s first run, then ~2s from an edit — to a test *or* to the microflow under test — to a verdict. `--attach` skips even that boot by running against an app already up under `run --local --test-endpoint`, driving that process's serve + admin APIs over loopback; it uses **that app's database**, only ever adds/removes its own test microflows, and refuses a change needing a restart. Security: the handler is **not registered at all** without `MXCLI_TEST_TOKEN` in the runtime env (so a project that kept the `MxTest` module through a failed cleanup is inert in production), the token is constant-time compared, non-loopback callers are refused, `/list` is clamped to the test namespace, and only `MxTest.Test_*` may be invoked. The token reaches the runtime via its environment and is never written into the project. A `.test.mdl` file is **checkable**: each block is a microflow body, so `mxcli check` (and the LSP, hence VS Code) renders the blocks as the microflows they become, on the file's own lines — before #1103 the top-level grammar was applied instead, and since `RETRIEVE` is a non-reserved keyword the leftover `FROM …` started an OQL query, so the reader was told their retrieve needed a SELECT; 9 of this repo's 10 test files reported errors that way, one of them 392. `make check-mdl` now sweeps them, with `.fail.test.mdl` for a file whose annotations are deliberately unusable. Two things a failed run must not do, both reported as #1104: **a rejected build is reported with MxBuild's own errors** — `BuildResult.ErrorSummary()` was in hand and discarded by `fmt.Errorf("build failed: %s", build.Message)` on the `--attach` and rebuild paths, and that sentence is identical for every failing build, so it could not tell "your test does not compile" from "an unrelated document is broken"; and **cleanup removes every generated `MxTest.Test_*` the project holds**, not just this suite's. The names are positional and every file reuses them, so keying cleanup on the suite left a flow behind whenever a later run had fewer tests than an earlier one — and one leftover that does not build fails every later run of every test file. What cleanup could not remove is named, with the `DROP` that removes it. Docker keeps the after-startup runner (`--legacy-runner` selects it locally). Packages: `cmd/mxcli/testrunner/` (`endpoint.go`, `client.go`, `watch.go`, `host.go`, `handshake.go`, `check_source.go`, `cleanup_leftovers.go`). See `docs/15-testing/SPIKE_test_endpoint_request_handler.md`
+
+**No build at all (`--allow-call`).** Start the dev loop with `run --local --watch --test-endpoint --allow-call`, and `mxcli test … --attach` sends each test to the app as compiled steps instead of injecting and building it, so a test edit costs one HTTP round trip. Still `.test.mdl`. Supported: `declare`, `set`, `create`, `change`, `commit`, `delete`, `call microflow`, database `retrieve` (`where`, `first`), `retrieve` over an association, the aggregates `count`/`sum`/`average`/`minimum`/`maximum` over an attribute, and `@expect` (with `count`), `@throws`, `@setup`, `@cleanup`, `@verify`. A test with anything else (if, loop, list operations, sort/limit, `on error` other than rollback, nanoflow/Java calls) is injected and built as before; only that test, and the output names it and the statement. Verdicts are the same either way. An undeclared `$variable` or a non-existent enumeration value is an ERROR, never a silent empty. A model newer than the running build is refused: `mxcli run wait -p app.mpr` under `--watch`. Details: `docs-site/src/tools/running-tests.md`.

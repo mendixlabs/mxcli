@@ -11,11 +11,11 @@ description: "Write custom Starlark lint rules in .claude/lint-rules/ that run b
 | lines | section |
 |---|---|
 | 25-67 | Rule File Structure |
-| 68-163 | Available Query Functions |
-| 164-545 | Object Properties |
-| 546-559 | Helper Functions |
-| 560-646 | Common Patterns |
-| 647-655 | Validation |
+| 68-170 | Available Query Functions |
+| 171-577 | Object Properties |
+| 578-591 | Helper Functions |
+| 592-678 | Common Patterns |
+| 679-687 | Validation |
 
 <!-- /skill-index -->
 # Writing Custom Starlark Lint Rules
@@ -43,7 +43,7 @@ def check():
 
 Some builtins need a deeper catalog than the default fast build:
 
-- `refs_to`, `refs_from`, `widgets`, `xpath_expressions`, `activities_for`,
+- `refs_to`, `refs_from`, `widgets`, `xpath_expressions`, `activities_for`, `flows_for`,
   `permissions`, `permissions_for`, `strings` and the `widget_count` field of a
   page or snippet need **`REFRESH CATALOG FULL`** — the `refs`, `widgets`,
   `xpath_expressions`, `activities`, `permissions` and `strings` tables and the
@@ -88,6 +88,7 @@ Without this, a rule that reads a full-only table under a fast build gets
 | `rest_operations()` | list of rest_operation | Operations on consumed REST services, including their `timeout` |
 | `attributes_for(entity_qualified_name)` | list of attribute | Attributes for a specific entity |
 | `activities_for(microflow_qualified_name, nested = False)` | list of activity | Activities of a microflow, nanoflow or rule, in flow order (full catalog — auto-detected). By default only the top level: a loop is one activity and its body is left out. `nested = True` adds every object inside a loop, at any depth, right after its loop, with `parent_loop_id` and `loop_depth` set |
+| `flows_for(microflow_qualified_name)` | list of flow | The sequence flows and annotation flows of a microflow, nanoflow or rule, loop bodies included (full catalog — auto-detected). `origin_id` / `destination_id` are activity `id`s from `activities_for(…, nested = True)`. Walk from an activity whose `error_handling_type` is `"Custom"` or `"CustomWithoutRollBack"` along the flow with `is_error_handler` to reach its handler; read a split's branches from `case_value` |
 | `permissions()` | list of permission | All permissions across all element types (full catalog — auto-detected) |
 | `permissions_for(entity_qualified_name)` | list of permission | Access rules for a specific entity (full catalog — auto-detected) |
 | `refs_to(target_name)` | list of reference | Cross-references *to* a target (full catalog — auto-detected) |
@@ -100,17 +101,23 @@ Without this, a rule that reads a full-only table under a fast build gets
 | `languages()` | list of language | The languages **enabled** in the project settings, in settings order (requires MPR reader; `[]` without one). Use it to scope per-language checks: `strings()` has a row for every stored translation, including languages the project never enabled |
 | `xpath_expressions()` | list of xpath_expression | All XPath constraint expressions in the catalog (access rules, retrieve actions, widgets) (full catalog — auto-detected) |
 | `modules()` | list of module | The user's modules (not System, not Marketplace), with their domain model's documentation |
+| `folders()` | list of folder | Every folder of the user's modules, **empty folders included**, with its path, parent and the documents and folders directly in it. A document's `folder` only names folders that hold a document, so check a module's folder layout with this |
+| `annotations()` | list of annotation | Every **domain model** annotation in the user's modules, with its full caption (newlines kept) and its place on the canvas. A microflow's annotations are activities: read them with `activities_for()` (`activity_type == "Annotation"`) |
 | `associations()` | list of association | All non-system associations, same-module and cross-module, with the delete behaviour of both ends |
 | `entity_event_handlers()` | list of entity_event_handler | Every before/after event handler on a non-system entity: which moment, which event, which microflow |
 | `navigation_menu_items()` | list of navigation_menu_item | Every navigation menu item of every profile, at every depth. Navigation belongs to the project, so no module filter applies |
 | `jar_dependencies()` | list of jar_dependency | Maven dependencies declared by non-system, non-marketplace modules |
+| `jar_files()` | list of jar_file | The `.jar` files on disk in `userlib/` and `vendorlib/` (top level, as the runtime reads them), with the library name and version split from the file name and the modules whose `.RequiredLib` marker names each. Read from disk at each call, not from the catalog; `[]` without a project path. Use it to find one library on the classpath in two versions |
 | `strings(language = None)` | list of catalog_string | User-facing and documentary text, one row per text and language; pass `language` (`"nl_NL"`) to narrow. An untranslated language has **no row**. Needs a FULL catalog, which `mxcli lint` builds automatically for a rule that calls it |
 | `layouts()` | list of layout | All non-system layouts |
 | `published_rest_operations()` | list of published_rest_operation | Operations of published REST services, with the microflow behind each |
+| `workflows()` | list of workflow | The user's workflows, with their parameter entity and activity counts |
+| `workflow_activities()` | list of workflow_activity | Every activity of the user's workflows — boundary-event paths and event sub-processes included — with its kind and the microflow, page or workflow each slot names. Use it for "a system task's microflow is prefixed `WF_`": `refs_to()` says only that the workflow calls a microflow, not from which kind of activity |
 
-The fields of `module`, `association`, `entity_event_handler`,
-`navigation_menu_item`, `jar_dependency`, `catalog_string`, `layout` and
-`published_rest_operation` are in [catalog-tables.md](catalog-tables.md).
+The fields of `module`, `folder`, `annotation`, `association`, `entity_event_handler`,
+`navigation_menu_item`, `jar_dependency`, `jar_file`, `catalog_string`, `layout`,
+`published_rest_operation`, `workflow` and `workflow_activity` are in
+[catalog-tables.md](catalog-tables.md).
 
 ### Graph-analysis functions (architecture rules)
 
@@ -143,7 +150,7 @@ SEVERITY = "error"
 def check():
     out = []
     for d in module_dependencies():
-        if d.ref_kind in ("layout", "show_page"):  # ignore UI navigation
+        if d.ref_kind in ("layout", "show_page", "snippet_call"):  # ignore UI navigation
             continue
         ls, lt = layer_of(d.source_module + ".x"), layer_of(d.target_module + ".x")
         # (resolve a real asset per module in practice; shown simplified)
@@ -245,6 +252,9 @@ def check():
 | `url` | string | Page URL |
 | `description` | string | Documentation text |
 | `widget_count` | int | Number of widgets (full catalog — auto-detected) |
+| `class_name` | string | The page's own `Class` (Appearance), else `""` (full catalog — auto-detected). Named `class_name` because `class` is a Starlark keyword |
+| `style` | string | The page's own inline `Style` (Appearance), else `""` (full catalog) |
+| `dynamic_classes` | string | The page's own `Dynamic classes` expression, else `""` (full catalog) |
 
 ### enumeration
 | Property | Type | Example |
@@ -265,6 +275,7 @@ def check():
 | `qualified_name` | string | `"Sales.ApiTimeout.Slow"` — the name `refs_from()` and an expression's `getCaption(Sales.ApiTimeout.Slow)` use |
 | `caption` | string | Caption in the project's default language: `"400"` |
 | `ordinal` | int | Position in the enumeration, from 0 |
+| `id` | string | The value's UUID. A caption in another language is the `strings(language = "nl_NL")` row with `context == "Enumerations$EnumerationValue.Caption"` and `element_id == v.id` |
 
 ### constant
 | Property | Type | Example |
@@ -495,7 +506,7 @@ def count_not(node):
 | `module_name` | string | `"Sales"` |
 | `entity_ref` | string | Entity qualified name, for a create object, a database retrieve, and a delete — the entity of the deleted variable when the flow types it (a parameter, a create or retrieve output, a loop iterator); empty when it cannot |
 | `service_ref` | string | Called service document (REST / web service / OData client); empty when the activity calls none |
-| `action_ref` | string | Operation or action within that service; for a microflow, nanoflow, Java action or JavaScript action call, the called document, e.g. `"Sales.SUB_Process"` (`service_ref` then empty). Empty when the activity calls nothing |
+| `action_ref` | string | Operation or action within that service; for a microflow, nanoflow, Java action or JavaScript action call, the called document, e.g. `"Sales.SUB_Process"` (`service_ref` then empty). For an import or export action, the mapping; for a REST call with mappings, the response mapping, else the request one. Empty when the activity calls nothing |
 | `queue_ref` | string | Microflow or Java action call run in a task queue: the queue, e.g. `"Sales.OrderQueue"`. The call runs asynchronously, outside the loop and transaction it appears in. Empty for a call that runs in place |
 | `use_request_timeout` | bool | Call REST service or Call web service: whether "Use a timeout" is enabled. False for other action types |
 | `timeout_expression` | string | Call REST service or Call web service: the timeout in seconds, stored as an expression, e.g. `"300"` |
@@ -510,6 +521,27 @@ def count_not(node):
 | `commit_type` | string | Create or change object: exactly `"Yes"`, `"YesWithoutEvents"` or `"No"`. Empty for other actions |
 | `with_events` | bool | True for a commit action with events, and for a create or change object with `commit_type` `"Yes"` |
 | `retrieve_source` | string | Retrieve: exactly `"database"` or `"association"`. For `"database"`, `entity_ref` is the retrieved entity |
+| `x` | int | Canvas position: the object's stored **middle** point, as `describe` prints it in `@position(x, y)`. Inside a loop (`parent_loop_id` set) it is relative to the loop's box, so compare positions only between objects with the same `parent_loop_id` |
+| `y` | int | Canvas position, middle point; grows **downwards** |
+| `width` | int | The object's box width on the canvas |
+| `height` | int | The object's box height on the canvas |
+
+### flow
+One row per flow line of a microflow, nanoflow or rule, from `flows_for()`.
+
+| Property | Type | Example |
+|----------|------|---------|
+| `id` | string | Flow UUID |
+| `flow_type` | string | Exactly `"SequenceFlow"` or `"AnnotationFlow"` |
+| `microflow_id` | string | Parent flow document UUID |
+| `microflow_qualified_name` | string | `"Sales.ACT_Customer_Create"` |
+| `module_name` | string | `"Sales"` |
+| `origin_id` | string | `id` of the activity the flow leaves. For an annotation flow, the annotation |
+| `destination_id` | string | `id` of the activity the flow enters. For an annotation flow, the object the note is attached to |
+| `is_error_handler` | bool | True for the flow out of an activity into its custom error handler (`on error … begin … end error` in `describe`) |
+| `case_value` | string | A split's branch: `"true"` / `"false"`, an enumeration value or `"(empty)"`, or the entity of an inheritance split's branch, e.g. `"Sales.SpecialOrder"`. Empty for an unconditional flow |
+| `origin_connection_index` | int | Side of the origin the line leaves: `0` top, `1` right, `2` bottom, `3` left |
+| `destination_connection_index` | int | Side of the destination the line enters, same numbering |
 
 ### rest_client
 | Property | Type | Example |

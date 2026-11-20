@@ -3,10 +3,12 @@
 package executor
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -93,21 +95,15 @@ func CheckEntityAccessCalls(ctx *ExecContext, prog *ast.Program) []linter.Violat
 			if u.Type != typ || len(u.Contents) == 0 {
 				continue
 			}
-			var doc bson.D
-			if err := bson.Unmarshal(u.Contents, &doc); err != nil {
+			st, ok := storedEAFlow(u.Contents, kind == "microflow")
+			if !ok {
 				continue
 			}
-			name, _ := bsonField(doc, "Name").(string)
-			qn := h.GetQualifiedName(u.ContainerID, name)
-			excluded, _ := bsonField(doc, "Excluded").(bool)
+			qn := h.GetQualifiedName(u.ContainerID, st.name)
 			if prev, ok := sim.flows[qn]; ok && !prev.excluded {
 				continue // a live namesake wins over excluded ones (#914)
 			}
-			ea, _ := bsonField(doc, "ApplyEntityAccess").(bool)
-			f := &eaFlow{kind: kind, name: qn, exists: true, excluded: excluded, ea: ea}
-			if kind == "microflow" {
-				f.calls = collectRawEntityAccessCalls(doc)
-			}
+			f := &eaFlow{kind: kind, name: qn, exists: true, excluded: st.excluded, ea: st.ea, calls: st.calls}
 			sim.flows[qn] = f
 		}
 	}
@@ -171,6 +167,75 @@ func scriptTouchesEntityAccessCalls(prog *ast.Program) bool {
 		}
 	}
 	return false
+}
+
+// storedEAState is what the simulation reads of one stored microflow or rule.
+type storedEAState struct {
+	name         string
+	excluded, ea bool
+	calls        []eaCall
+}
+
+// eaCallMarkers are the $Type values collectRawEntityAccessCalls looks for. A
+// document that holds neither string holds no call.
+var eaCallMarkers = [][]byte{[]byte("Microflows$MicroflowCall"), []byte("Microflows$RuleCall")}
+
+// eaDocumentsDecoded counts the stored documents decoded in full to read
+// their calls. For tests.
+var eaDocumentsDecoded atomic.Int64
+
+// storedEAFlow reads one stored microflow or rule for the simulation. ok is
+// false for contents that are not a document.
+//
+// The check runs once per script and reads every microflow of the project, so
+// what it costs per document is what `check` costs per project unit before it
+// has looked at a statement (ako/mxcli#2160, mendixlabs/mxcli#1842). The name
+// and the two flags are top-level values, read where they lie. The calls are
+// anywhere in the body, and finding them takes the whole document decoded:
+// that is done only for a document whose bytes hold one of the call types'
+// names, which a document with a call always does, since a $Type is stored as
+// its name.
+func storedEAFlow(contents []byte, withCalls bool) (storedEAState, bool) {
+	raw := bson.Raw(contents)
+	if raw.Validate() != nil {
+		return storedEAState{}, false
+	}
+	var st storedEAState
+	st.name, _ = raw.Lookup("Name").StringValueOK()
+	st.excluded, _ = raw.Lookup("Excluded").BooleanOK()
+	st.ea, _ = raw.Lookup("ApplyEntityAccess").BooleanOK()
+	if !withCalls {
+		return st, true
+	}
+	for _, marker := range eaCallMarkers {
+		if bytes.Contains(contents, marker) {
+			var doc bson.D
+			if err := bson.Unmarshal(contents, &doc); err != nil {
+				return storedEAState{}, false
+			}
+			eaDocumentsDecoded.Add(1)
+			st.calls = collectRawEntityAccessCalls(doc)
+			break
+		}
+	}
+	return st, true
+}
+
+// storedEAFlowDecoded is storedEAFlow as it was: the whole document decoded,
+// whatever it holds. It is what storedEAFlow is compared with.
+func storedEAFlowDecoded(contents []byte, withCalls bool) (storedEAState, bool) {
+	var doc bson.D
+	if err := bson.Unmarshal(contents, &doc); err != nil {
+		return storedEAState{}, false
+	}
+	var st storedEAState
+	st.name, _ = bsonField(doc, "Name").(string)
+	st.excluded, _ = bsonField(doc, "Excluded").(bool)
+	st.ea, _ = bsonField(doc, "ApplyEntityAccess").(bool)
+	if withCalls {
+		st.calls = collectRawEntityAccessCalls(doc)
+	}
+	return st, true
 }
 
 // collectRawEntityAccessCalls reads the calls out of a stored microflow: the

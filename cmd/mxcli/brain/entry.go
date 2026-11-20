@@ -53,7 +53,12 @@ type Entry struct {
 	Title   string   `json:"title"`
 	Body    string   `json:"body,omitempty"`
 	Anchors []string `json:"anchors,omitempty"`
-	Date    string   `json:"date"`
+	// Source is where the entry came from: a document path relative to the
+	// project directory, with / separators, plus an optional #locator
+	// ("docs/prd.md#L18-21"). Provenance, not content — it is not part of the
+	// content key, so the same fact found in two places is still one fact.
+	Source string `json:"source,omitempty"`
+	Date   string `json:"date"`
 }
 
 // EntryKind normalises the zero value: an entry with no kind is a decision.

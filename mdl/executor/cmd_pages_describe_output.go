@@ -188,7 +188,7 @@ func appendAppearanceProps(ctx *ExecContext, props []string, w rawWidget) []stri
 	// quiet round-trip. Empty means the widget type has no editability at all.
 	// "Conditional" is not authorable: the `Editable: <expr>` printed below is
 	// what makes it conditional, and printing both gives the key twice.
-	if w.Editable != "" && w.Editable != "Always" && !(w.Editable == "Conditional" && w.EditableIf != "") {
+	if w.Editable != "" && w.Editable != "Always" && !(w.Editable == "Conditional" && (w.EditableIf != "" || w.EditableAttr != "")) {
 		props = append(props, fmt.Sprintf("Editable: %s", w.Editable))
 	}
 	if w.Class != "" {
@@ -214,6 +214,9 @@ func appendAppearanceProps(ctx *ExecContext, props []string, w rawWidget) []stri
 	}
 	if w.EditableIf != "" {
 		props = append(props, widgetConditionMDL("Editable", w.EditableIf))
+	}
+	if prop := attributeConditionProp("Editable", "editable", w.EditableAttr, w.EditableValues); prop != "" {
+		props = append(props, prop)
 	}
 	return props
 }
@@ -772,6 +775,9 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 			props = append(props, fmt.Sprintf("Attribute: %s", w.Content))
 		}
 		props = appendReadOnlyStyle(props, w)
+		if w.RenderVertical {
+			props = append(props, "RenderHorizontal: false")
+		}
 		if w.OnChange != "" {
 			props = append(props, actionProp("OnChange", w.OnChange))
 		}
@@ -792,6 +798,9 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 		// Show ShowLabel if false (not showing label)
 		if !w.ShowLabel {
 			props = append(props, "ShowLabel: No")
+		}
+		if w.LabelPosition != "" && w.LabelPosition != "Default" {
+			props = append(props, "LabelPosition: "+w.LabelPosition)
 		}
 		if w.OnChange != "" {
 			props = append(props, actionProp("OnChange", w.OnChange))
@@ -1024,6 +1033,16 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 			}
 		} else {
 			header := fmt.Sprintf("%s %s", widgetType, mdlIdent(w.Name))
+			// A widget with no branch of its own is named the way the
+			// generic branch names it — its definition's keyword where that
+			// round-trips, else the id form. widgetType is the id's last
+			// segment, which names the web widget for a native one
+			// (`badge`) or no widget at all (`activityindicator`), so a
+			// native widget left at its defaults re-ran as the web widget
+			// or was refused.
+			if !isKnownCustomWidgetType(widgetType) && w.WidgetID != "" {
+				header = pluggableWidgetHeader(ctx.GetWidgetRegistry(), w.WidgetID, w.Name)
+			}
 			props := []string{}
 			if w.Caption != "" {
 				props = append(props, fmt.Sprintf("Label: %s", mdlQuote(ctx, w.Caption)))
@@ -1658,6 +1677,11 @@ func renderClientActionBaseMDL(ctx *ExecContext, action map[string]any) string {
 		return "close page"
 	case "Forms$DeleteClientAction", "Pages$DeleteClientAction":
 		result := "delete"
+		// A grid's selection (a control-bar button) or a page/snippet
+		// parameter; null is the context object (ako/mxcli#1932).
+		if src := flowArgVariableValue(action["SourceVariable"]); src != "" {
+			result += " " + src
+		}
 		if closePage, ok := action["ClosePage"].(bool); ok && closePage {
 			result += " close page"
 		}
@@ -2142,21 +2166,38 @@ func formatParamFormatSuffix(ctx *ExecContext, pMap map[string]any) string {
 // template parameter whose AttributeRef binds an attribute over one or more
 // associations (AttributeRef.EntityRef = DomainModels$IndirectEntityRef). Returns
 // "" when the parameter is a plain (direct-attribute) binding.
-func associationTemplateParamPath(attrRef map[string]any) string {
+func associationTemplateParamPath(ctx *ExecContext, attrRef map[string]any) string {
+	return associationPathMDL(attrRef, false, describeAssociationEnds(ctx))
+}
+
+// associationEndFunc answers whether entity is one of the association's two
+// ends; known is false when the association cannot be looked up.
+type associationEndFunc func(assocQN, entityQN string) (isEnd, known bool)
+
+// associationPathMDL renders an IndirectEntityRef attribute binding as
+// "Assoc/…/Attr" (shortAssoc drops each association's module), or "" when the
+// binding is not over associations.
+//
+// A step whose DestinationEntity is not an end of its association is a cast to
+// a specialization: Studio Pro stores Administration.Account after
+// System.WorkflowUserTaskOutcome_User, whose end is System.User (TestApp
+// WorkflowCommons.Snip_WorkflowUserTaskView_Details). It prints as
+// "Assoc/Module.Entity/…", the Mendix expression spelling the builder reads
+// back; dropped, the path re-executed against the association's end and the
+// attribute was CE1613 "The selected attribute 'System.User.FullName' no
+// longer exists". isEnd nil (no project) prints the associations only.
+func associationPathMDL(attrRef map[string]any, shortAssoc bool, isEnd associationEndFunc) string {
 	entityRef, ok := attrRef["EntityRef"].(map[string]any)
-	if !ok || entityRef == nil {
-		return ""
-	}
-	if extractString(entityRef["$Type"]) != "DomainModels$IndirectEntityRef" {
+	if !ok || entityRef == nil || extractString(entityRef["$Type"]) != "DomainModels$IndirectEntityRef" {
 		return ""
 	}
 	steps := getBsonArrayElements(entityRef["Steps"])
 	if len(steps) == 0 {
 		return ""
 	}
-	assocs := make([]string, 0, len(steps))
-	for _, s := range steps {
-		sm, ok := s.(map[string]any)
+	segs := make([]string, 0, len(steps))
+	for _, st := range steps {
+		sm, ok := st.(map[string]any)
 		if !ok {
 			return ""
 		}
@@ -2164,13 +2205,35 @@ func associationTemplateParamPath(attrRef map[string]any) string {
 		if assoc == "" {
 			return ""
 		}
-		assocs = append(assocs, assoc)
+		if shortAssoc {
+			segs = append(segs, shortAttributeName(assoc))
+		} else {
+			segs = append(segs, assoc)
+		}
+		if dest := extractString(sm["DestinationEntity"]); dest != "" && isEnd != nil {
+			if end, known := isEnd(assoc, dest); known && !end {
+				segs = append(segs, dest)
+			}
+		}
 	}
 	attr := shortAttributeName(extractString(attrRef["Attribute"]))
 	if attr == "" {
 		return ""
 	}
-	return strings.Join(assocs, "/") + "/" + attr
+	return strings.Join(segs, "/") + "/" + attr
+}
+
+// describeAssociationEnds is the association-end lookup describe uses: the
+// page builder's own, so describe and exec resolve an association one way.
+func describeAssociationEnds(ctx *ExecContext) associationEndFunc {
+	if ctx == nil || ctx.Backend == nil || !ctx.Connected() {
+		return nil
+	}
+	if ctx.Cache == nil {
+		ctx.Cache = &executorCache{}
+	}
+	pb := &pageBuilder{backend: ctx.Backend, execCache: ctx.Cache}
+	return pb.associationHasEnd
 }
 
 // associationDataSourceExpr renders an association data source as the MDL
@@ -2223,6 +2286,13 @@ func describeImageWidgetProps(ctx *ExecContext, w rawWidget) []string {
 	props := []string{}
 	if w.ImageType != "" && w.ImageType != "image" {
 		props = append(props, fmt.Sprintf("ImageType: %s", w.ImageType))
+	}
+	// The icon an `ImageType: icon` image shows, in a button's spelling. Without
+	// it a re-created image named no icon: "No icon selected." (ako/mxcli#2174).
+	if icon := widgetIconMDL(ctx, w); icon != "" {
+		props = append(props, icon)
+	} else if note := widgetIconNote(ctx, w); note != "" {
+		props = append(props, note)
 	}
 	switch {
 	case w.ImageFromObject:
@@ -2295,15 +2365,21 @@ func actionProp(key, rendered string) string {
 // (the list would be empty); Studio Pro allows it, so say what it is rather
 // than drop it — a dropped setting is an always-visible widget.
 func visibleWhenProp(w rawWidget) string {
-	if w.VisibleAttr == "" {
+	return attributeConditionProp("Visible", "visible", w.VisibleAttr, w.VisibleValues)
+}
+
+// attributeConditionProp renders a "based on attribute value" setting —
+// visibility or editability — as `<Key>: Attr in (v1, …)`.
+func attributeConditionProp(key, adjective, attrName string, values []string) string {
+	if attrName == "" {
 		return ""
 	}
-	if len(w.VisibleValues) == 0 {
-		return "-- NOT re-executable: visible for no value of " + w.VisibleAttr +
-			" (never shown) — MDL cannot spell an empty value list, so re-running this script would make it always visible"
+	if len(values) == 0 {
+		return "-- NOT re-executable: " + adjective + " for no value of " + attrName +
+			" — MDL cannot spell an empty value list, so re-running this script would make it always " + adjective
 	}
-	vals := make([]string, len(w.VisibleValues))
-	for i, v := range w.VisibleValues {
+	vals := make([]string, len(values))
+	for i, v := range values {
 		// `empty` (Studio Pro's "(empty)") and the boolean values are keywords
 		// the value list takes bare; quoting them would read as identifiers.
 		if v == "empty" || v == "true" || v == "false" {
@@ -2312,13 +2388,13 @@ func visibleWhenProp(w rawWidget) string {
 		}
 		vals[i] = mdlIdent(v)
 	}
-	attr := mdlIdent(w.VisibleAttr)
-	if strings.Contains(w.VisibleAttr, ".") {
+	attr := mdlIdent(attrName)
+	if strings.Contains(attrName, ".") {
 		// Qualified (Module.Entity.Attr) where no entity is in scope — written
 		// as a qualified name, which takes keyword segments bare.
-		attr = w.VisibleAttr
+		attr = attrName
 	}
-	return fmt.Sprintf("Visible: %s in (%s)", attr, strings.Join(vals, ", "))
+	return fmt.Sprintf("%s: %s in (%s)", key, attr, strings.Join(vals, ", "))
 }
 
 // visibleRolesProp renders "Visible for module roles" as `Visible: roles

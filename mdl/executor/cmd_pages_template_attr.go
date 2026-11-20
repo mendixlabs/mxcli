@@ -81,6 +81,21 @@ func isTemplateExpression(v string) bool {
 		isVariableRootedTemplatePath(v)
 }
 
+// isTemplateExpression is isTemplateExpression for the document being built:
+// a `$Root/Assoc/…/Attr` path that resolves from one of its parameters or an
+// enclosing data view is a binding, as `$currentObject/Assoc/Attr` is. Studio
+// Pro stores it as the steps beside a SourceVariable naming the root
+// (TestApp WorkflowCommons.Snip_Workflow_Header), and the expression form of
+// the same path is mx check CE0117 "Error(s) in expression." (ako/mxcli#833).
+// Anything else is judged as before, so `$Customer/Name` stays the expression
+// Studio Pro stores (mendixlabs/mxcli#1406).
+func (pb *pageBuilder) isTemplateExpression(v string) bool {
+	if _, _, _, ok := pb.resolveRootedAssociationPath(strings.TrimSpace(v)); ok {
+		return false
+	}
+	return isTemplateExpression(v)
+}
+
 // isVariableRootedTemplatePath reports a `$var/…` member path, which is Mendix
 // expression syntax rather than one of MDL's binding spellings: `$Customer/Name`,
 // `$currentObject/Name`. Studio Pro stores such a parameter as an Expression, and

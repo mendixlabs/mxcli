@@ -46,6 +46,12 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// declares no variable (MDL063, #953). The script answers for the actions
 	// it creates; the project for the rest.
 	voids := newVoidCodeActions(prog, project)
+	// owner Both between an entity and itself or its generalization (CE0002).
+	violations = append(violations, ValidateAssociationOwnerBoth(prog)...)
+	// A mapping element whose association does not connect it to its parent (CE0295).
+	violations = append(violations, ValidateMappingAssociations(prog, project)...)
+	// An alter that leaves a published OData attribute published as the wrong type (CE5016).
+	violations = append(violations, ValidatePublishedAttributeTypes(prog, project)...)
 	for _, stmt := range prog.Statements {
 		// Check enumeration values for reserved words
 		if enumStmt, ok := stmt.(*ast.CreateEnumerationStmt); ok {
@@ -67,6 +73,10 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 				assocStmt.CreateOrModify, assocStmt.IfNotExists, "association", assocStmt.Name.String())...)
 			violations = append(violations, ValidateAssociationModules(assocStmt)...)
 		}
+		// A published MCP service the runtime would not start (ako/mxcli#2020).
+		if pubStmt, ok := stmt.(*ast.CreatePublishedMCPServiceStmt); ok {
+			violations = append(violations, ValidatePublishedMCPService(pubStmt)...)
+		}
 		// Every other guarded create carries the same contradiction (#731).
 		// Entities and associations report it above, from their own flags.
 		violations = append(violations, validateCreateGuardContradiction(stmt)...)
@@ -85,6 +95,10 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 		violations = append(violations, validateEnumValueDocs(stmt)...)
 		violations = append(violations, validateMenuItemIcons(stmt)...)
 		violations = append(violations, validateGlyphCodes(stmt)...)
+		// A `[%Token%]` whose name Mendix does not have where it is written:
+		// lexed whatever the name, so a typo passed check and exec and the build
+		// refused it, CE0117 or CE0161 (MDL-TOKEN01, ako/mxcli#2271).
+		violations = append(violations, validateTokenNames(stmt)...)
 		// A layout must declare exactly one placeholder named `Main`, with unique
 		// names (MDL081/MDL082). mxbuild validates this — CE0848/CE0849/CE0495 —
 		// and nothing before it resolves a placeholder name, so the reported
@@ -193,8 +207,21 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 		}
 	}
 
+	// MDL-WF02 for ALTER WORKFLOW: a user task the script leaves with one outcome
+	// holding activities (CE1876). Judged over the whole script, since a later
+	// statement may add the second outcome; a stored task's outcomes need the
+	// project (ako/mxcli#2097, mendixlabs/mxcli#1798).
+	violations = append(violations, validateAlterWorkflowSingleOutcomes(prog, project)...)
+
 	// Check for intra-script duplicate definitions (CREATE X … CREATE X without DROP)
 	violations = append(violations, CheckScriptDuplicates(prog)...)
+
+	// An ALTER PAGE / SNIPPET target on a document the script itself creates,
+	// against the names that document holds by then — building blocks and
+	// fragments expanded as exec expands them, which needs the project
+	// (MDL-ALTER02, ako/mxcli#2182). The stored-document passes skip such a
+	// document, so a misspelt target passed check and stopped exec.
+	violations = append(violations, ValidateScriptWidgetTargets(prog, project)...)
 
 	// A member named like one already on its entity's generalization chain
 	// (CE0069, ako/mxcli#1645), among what the script declares and the System
@@ -213,8 +240,10 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// The same question for ALTER STYLING, which that pass never looked at — the
 	// one statement whose entire job is writing design properties, and the one
 	// where an unsupported key was silent until mxbuild said CE6083
-	// (ako/mxcli#509). It resolves less, because the statement names a STORED
-	// widget whose $Type this pass cannot read; see the file comment.
+	// (ako/mxcli#509). Here it asks whether ANY widget type declares the key;
+	// the reference pass, which can open the document, then judges a key some
+	// OTHER type declares against the stored widget's own type
+	// (validateAlterStylingStoredTypes, ako/mxcli#613). See the file comment.
 	violations = append(violations, validateAlterStylingDesignProps(
 		prog, LoadThemeRegistryForProject(projectPath))...)
 
@@ -231,6 +260,11 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// A page on a native layout is exempt (ako/mxcli#962); only the project
 	// can say which layouts are native.
 	violations = append(violations, ValidatePageLayoutGrid(prog, projectNativeLayouts(project))...)
+
+	// A pluggable widget whose package declares the other platform than its
+	// page's — a web combobox on a native page, a native slider on a web one
+	// (MDL-WIDGET55). Judged only where both platforms are known.
+	violations = append(violations, ValidateWidgetPlatforms(prog, projectPath, project)...)
 
 	// A widget data source constraint whose one-hop comparand is the wrong type
 	// (MDL-XPATH02) or names its association unqualified (MDL-XPATH01) —
@@ -259,7 +293,9 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// assigned. TARGETING decides who may SEE a task; it does not assign it, and
 	// completing an unassigned one fails only at runtime, with the button
 	// appearing to do nothing.
-	violations = append(violations, ValidateTaskClaims(prog)...)
+	violations = append(violations, ValidateTaskClaimsIn(prog, func() func(major, minor int) bool {
+		return projectVersionAtLeast(project())
+	})...)
 
 	// Warn (MDL-WF20) when a user task's page has no button that completes one
 	// of its outcomes: the instance waits at the task and nothing reports it.
@@ -323,6 +359,26 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// under --references, where it would only fire with -p (#836).
 	violations = append(violations, ValidateGrantRoles(prog)...)
 
+	// MDL-GRANT04: the same mistake in a widget's `Visible: roles (…)` — a role of
+	// another module than the document's is CE0149. Also needs no project.
+	violations = append(violations, ValidateVisibleRolesModule(prog)...)
+
+	// MDL-GRANT03: a role given a constrained and an unconstrained rule on one
+	// entity in this script — rules add up, so the constraint limits nothing
+	// (ako/mxcli#2320). The overlap with the project's rules is reported under
+	// --references (CheckAccessRuleOverlap).
+	violations = append(violations, ValidateAccessRuleOverlap(prog)...)
+
+	// Warn on an AI model or knowledge base Provider no Studio Pro document has
+	// been seen to hold. mxbuild never reads it, so a typo builds and only
+	// shows in Studio Pro (ako/mxcli#2023).
+	violations = append(violations, ValidateAgentProviders(prog)...)
+	violations = append(violations, ValidateAgentSelectedModel(prog)...)
+	violations = append(violations, ValidateConsumedMCPEndpoint(prog)...)
+	// An agent value longer than the Agent Commons attribute it is copied
+	// into fails the startup import and leaves the old agent in use (#2211).
+	violations = append(violations, ValidateAgentCommonsLengths(prog)...)
+
 	// Flag an after-startup microflow that does not return Boolean (CE0142).
 	// The reference RESOLVES — the name exists — so #274's existence check has
 	// nothing to say; the constraint is on the thing the setting names. When the
@@ -370,6 +426,12 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// mapping's shape comes from the script, or the project when given
 	// (ako/mxcli#570).
 	violations = append(violations, ValidateImportMappingRange(prog, projectPath)...)
+	// A REST call declared to return a list from a mapping that returns one object (CE0243).
+	violations = append(violations, ValidateRestMappingResult(prog, projectPath)...)
+	// A custom object handler naming a parameter its microflow does not declare (CE1613).
+	violations = append(violations, ValidateMappingHandlerParams(prog, project)...)
+	// A custom handler feeding a JSON member to a microflow parameter of another type (CE0282).
+	violations = append(violations, ValidateMappingHandlerTypes(prog, project)...)
 
 	// Flag a REST client operation whose Body/Response mapping clause has no
 	// `{ ... }` body — Mendix cannot reference a mapping document from an

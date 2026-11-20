@@ -12,7 +12,7 @@ import (
 
 func execConnect(ctx *ExecContext, s *ast.ConnectStmt) error {
 	if ctx.Backend != nil && ctx.Backend.IsConnected() {
-		if err := ctx.Backend.Disconnect(); err != nil {
+		if err := disconnectBackend(ctx.Backend); err != nil {
 			fmt.Fprintf(ctx.Output, "Warning: disconnect error: %v\n", err)
 		}
 	}
@@ -54,7 +54,7 @@ func reconnect(ctx *ExecContext) error {
 
 	// Close existing connection
 	if ctx.Backend != nil && ctx.Backend.IsConnected() {
-		if err := ctx.Backend.Disconnect(); err != nil {
+		if err := disconnectBackend(ctx.Backend); err != nil {
 			fmt.Fprintf(ctx.Output, "Warning: disconnect error: %v\n", err)
 		}
 	}
@@ -91,7 +91,7 @@ func execDisconnect(ctx *ExecContext) error {
 		}
 	}
 
-	if err := ctx.Backend.Disconnect(); err != nil {
+	if err := disconnectBackend(ctx.Backend); err != nil {
 		fmt.Fprintf(ctx.Output, "Warning: disconnect error: %v\n", err)
 	}
 	fmt.Fprintf(ctx.Output, "Disconnected from: %s\n", ctx.MprPath)

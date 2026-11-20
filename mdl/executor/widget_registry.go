@@ -39,6 +39,11 @@ var defaultKnownOperations = map[string]bool{
 	// `imageObject`). Without it the property is unreachable from MDL and the
 	// widget's default source has nothing to show — see setImageValue.
 	"image": true,
+	// An icon element on an icon-typed property (the Image widget's
+	// `imageIcon`), written `Icon:` exactly as a button's is. Without it an
+	// `ImageType: icon` image could not say which icon, and mxbuild refused it
+	// with "No icon selected." (ako/mxcli#2174).
+	"icon": true,
 }
 
 // knownOperations is the active set used for validation, initialized from
@@ -101,6 +106,7 @@ func NewWidgetRegistryWithOps(extraOps map[string]bool) (*WidgetRegistry, error)
 
 		def.MDLName = strings.ToLower(def.MDLName)
 		lowerSlotContainers(&def)
+		fillActionSources(&def)
 		reg.byMDLName[strings.ToUpper(def.MDLName)] = &def
 		reg.byWidgetID[def.WidgetID] = &def
 		reg.embeddedIDs[strings.ToUpper(def.MDLName)] = def.WidgetID
@@ -199,6 +205,7 @@ func (r *WidgetRegistry) loadDefinitionsFromDir(dir string) error {
 
 		def.MDLName = strings.ToLower(def.MDLName)
 		lowerSlotContainers(&def)
+		fillActionSources(&def)
 		upperName := strings.ToUpper(def.MDLName)
 		// A definition for a DIFFERENT widget must never take a built-in
 		// keyword: `widget init` used to name the native Image `image` and the
@@ -312,4 +319,25 @@ func (r *WidgetRegistry) validateMappings(mappings []PropertyMapping, source, mo
 		}
 	}
 	return nil
+}
+
+// fillActionSources gives an action mapping with no Source the one its key
+// names (actionSourceForKey). Definitions are cached on disk —
+// <project>/.mxcli/widgets and ~/.mxcli/widgets — by whichever mxcli extracted
+// them, so a slot an older extraction left unrouted stays unrouted for check
+// while exec, deriving afresh, writes it: a Switch's `action` slot, refused as
+// MDL-WIDGET37 by check and written by exec (ako/mxcli#2114). A mapping that
+// names its Source keeps it.
+func fillActionSources(def *WidgetDefinition) {
+	fill := func(ms []PropertyMapping) {
+		for i := range ms {
+			if ms[i].Operation == "action" && ms[i].Source == "" {
+				ms[i].Source = actionSourceForKey(ms[i].PropertyKey)
+			}
+		}
+	}
+	fill(def.PropertyMappings)
+	for i := range def.Modes {
+		fill(def.Modes[i].PropertyMappings)
+	}
 }

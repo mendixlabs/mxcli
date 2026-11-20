@@ -11,6 +11,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/exprcheck"
 	"github.com/mendixlabs/mxcli/mdl/exprcheck/adapters"
 	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
 // ValidateMicroflow checks a microflow for common issues that don't require a project connection.
@@ -98,6 +99,11 @@ type microflowValidator struct {
 	// excluded marks an @excluded document. mxbuild does not check one, so the
 	// #893 rules stand down for it — see skipCEGapRules.
 	excluded bool
+	// definedVars is every name the flow defines, lower-cased, and
+	// undefinedReported the names MDL098 has already reported (see
+	// validate_undefined_variable.go). Both are nil until initDefinedVariables.
+	definedVars       map[string]bool
+	undefinedReported map[string]bool
 	// fragment marks the body of an `alter microflow|nanoflow` operation: a
 	// piece of a stored flow, whose notes `@annotation(existing: '…')` can
 	// attach to (ako/mxcli#1695). Anything else states a whole flow.
@@ -122,6 +128,7 @@ func (v *microflowValidator) addViolation(ruleID string, severity linter.Severit
 
 // validate runs all checks on the microflow body.
 func (v *microflowValidator) validate(body []ast.MicroflowStatement) {
+	v.initDefinedVariables(body)
 	v.checkListOperationIterator(body)
 	v.checkRetrieveLimitOneAsList(body)
 	v.checkRetrieveListAsObject(body)
@@ -162,6 +169,10 @@ func (v *microflowValidator) validate(body []ast.MicroflowStatement) {
 		}
 	}
 
+	// MDL097: the AS clause's exemption above holds only while $Var has a value
+	// where the flow ends. See validate_return_variable_defined.go.
+	v.checkReturnVariableDefined(body)
+
 	// Check 3: variable scope — detect variables declared inside branches but used after
 	v.checkBranchScoping(body)
 
@@ -178,9 +189,14 @@ func (v *microflowValidator) validate(body []ast.MicroflowStatement) {
 	// by the build. See validate_microflow_ce_gaps.go for the measurements.
 	v.checkReturnInLoop(body)
 	v.checkDuplicateVariableNames(v.params, body)
+	// CE0023: a primitive where UNION/INTERSECT/SUBTRACT/EQUALS/CONTAINS need an object or list.
+	v.checkListOperandKinds(body)
+	// CE0771: a value two branches of one enumeration split both name.
+	v.checkEnumSplitDuplicateValues(body)
 	// ako/mxcli#962: the other half of #953's void-call finding — the name is
 	// inert both ways, so reading it is CE0109. See validate_void_call_output.go.
 	v.checkVoidCallOutputUse(v.params, body)
+	v.checkVoidFlowCallResult(body)
 
 	// mendixlabs/mxcli#1030: an error event is legal only on an error-handling
 	// flow. See validate_microflow_raise_error.go.
@@ -594,6 +610,19 @@ func (v *microflowValidator) checkStmtExprFunctions(s ast.MicroflowStatement) {
 		for _, tp := range stmt.Template {
 			v.checkExprFunctions(fmt.Sprintf("log template {%d}", tp.Index), tp.Value)
 		}
+	case *ast.ShowMessageStmt:
+		// ako/mxcli#2199: never walked, so `show message information (…)` — a
+		// call to information(), the type written before the message — passed
+		// check and exec and failed the build with CE0117.
+		v.checkExprFunctions("show message", stmt.Message)
+		for i, arg := range stmt.TemplateArgs {
+			v.checkExprFunctions(fmt.Sprintf("show message template {%d}", i+1), arg)
+		}
+	case *ast.ValidationFeedbackStmt:
+		v.checkExprFunctions("validation feedback", stmt.Message)
+		for i, arg := range stmt.TemplateArgs {
+			v.checkExprFunctions(fmt.Sprintf("validation feedback template {%d}", i+1), arg)
+		}
 	}
 }
 
@@ -611,6 +640,7 @@ func (v *microflowValidator) checkExprFunctions(label string, expr ast.Expressio
 	if src == "" {
 		return
 	}
+	v.checkUndefinedVariables(label, src)
 	for _, u := range exprcheck.UnknownFunctionCalls(src) {
 		var suggestion string
 		if mendixAggregateFuncs[strings.ToLower(u.Name)] {
@@ -621,6 +651,10 @@ func (v *microflowValidator) checkExprFunctions(label string, expr ast.Expressio
 			suggestion = fmt.Sprintf(
 				"'%s' is an aggregate activity, not an expression function. Assign it to a variable first: $n = %s($List); then use $n in the expression.",
 				u.Name, u.Name)
+		} else if t, ok := microflows.CanonicalMessageType(u.Name); ok && strings.HasPrefix(label, "show message") {
+			// ako/mxcli#2199: the message type written before the message.
+			suggestion = fmt.Sprintf("The message type goes after the message: show message (…) type %s, "+
+				"or show message 'text {1}' type %s with ({1} = …).", t, t)
 		} else if u.Token != "" {
 			suggestion = fmt.Sprintf("Use the %s token instead of '%s()'.", u.Token, u.Name)
 		} else {
@@ -1264,6 +1298,11 @@ func stmtActivityName(stmt ast.MicroflowStatement) string {
 		return "delete"
 	case *ast.MfCommitStmt:
 		return "commit"
+	case *ast.ExternalObjectStmt:
+		if s := stmt.(*ast.ExternalObjectStmt); s.Delete {
+			return "delete external object"
+		}
+		return "send external object"
 	case *ast.RetrieveStmt:
 		return "retrieve"
 	case *ast.CallMicroflowStmt:
@@ -1600,6 +1639,8 @@ func referencedVars(stmt ast.MicroflowStatement) []string {
 	case *ast.MfCommitStmt:
 		refs = append(refs, s.Variable)
 	case *ast.DeleteObjectStmt:
+		refs = append(refs, s.Variable)
+	case *ast.ExternalObjectStmt:
 		refs = append(refs, s.Variable)
 	case *ast.AddToListStmt:
 		if s.Value != nil {

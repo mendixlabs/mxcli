@@ -5,6 +5,7 @@ package marketplace
 import (
 	"archive/zip"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +17,7 @@ import (
 	modelsdk "github.com/mendixlabs/mxcli"
 	"github.com/mendixlabs/mxcli/internal/zipentry"
 	"github.com/mendixlabs/mxcli/mdl/backend"
+	"github.com/mendixlabs/mxcli/modelsdk/mpr"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -192,6 +194,21 @@ type SkippedFile struct {
 func PerformUpdate(mprPath, referenceMpr, targetMpk, moduleName, fromVersion, toVersion, toVersionID string,
 	newBackend func() backend.FullBackend) (*UpdateResult, error) {
 
+	// Studio Pro holding the project refuses every write; asked here, it is
+	// one refusal and an untouched project, not hundreds of refused writes
+	// and a "mid-update" warning (ako/mxcli#2366).
+	if err := mpr.CheckStudioProOpen(mprPath); err != nil {
+		return nil, fmt.Errorf("%w; %w", err, ErrUpdateNotStarted)
+	}
+
+	// Everything below the drop is only worth starting if it can finish. The
+	// inputs it reads after the drop are checked first, so a missing or
+	// unreadable one stops the update with the project untouched rather than
+	// half-way, without the module it was updating (ako/mxcli#1934).
+	if err := preflightUpdate(referenceMpr, targetMpk, moduleName); err != nil {
+		return nil, fmt.Errorf("%w; %w", err, ErrUpdateNotStarted)
+	}
+
 	ids, err := CaptureIdentities(mprPath, moduleName)
 	if err != nil {
 		return nil, fmt.Errorf("record the identities the database keys on: %w", err)
@@ -246,6 +263,38 @@ func PerformUpdate(mprPath, referenceMpr, targetMpk, moduleName, fromVersion, to
 		FilesInstalled:  files,
 		FilesSkipped:    skippedFiles,
 	}, nil
+}
+
+// ErrUpdateNotStarted marks a PerformUpdate failure that stopped before the
+// first write: the project is as it was, so the caller must not tell the user it
+// may be mid-update.
+var ErrUpdateNotStarted = errors.New("nothing was changed")
+
+// preflightUpdate checks the two inputs PerformUpdate reads after it has
+// dropped the installed module: the reference project must open and hold the
+// module, and the package its bundled files come from must open.
+func preflightUpdate(referenceMpr, targetMpk, moduleName string) error {
+	src, err := modelsdk.Open(referenceMpr)
+	if err != nil {
+		return fmt.Errorf("open the new version's reference project %s: %w", referenceMpr, err)
+	}
+	defer src.Disconnect()
+	units, err := src.ListUnits()
+	if err != nil {
+		return fmt.Errorf("list the reference project's units: %w", err)
+	}
+	moduleUnits, err := unitsOfModule(src, units, moduleName)
+	if err != nil {
+		return err
+	}
+	if len(moduleUnits) == 0 {
+		return fmt.Errorf("the new version's reference project has no module %s", moduleName)
+	}
+	zr, err := zip.OpenReader(targetMpk)
+	if err != nil {
+		return fmt.Errorf("open the new version's package %s: %w", filepath.Base(targetMpk), err)
+	}
+	return zr.Close()
 }
 
 // StampMarketplaceVersion records which published version a module now is.
@@ -358,6 +407,9 @@ func setBoolField(doc bson.D, key string, value bool) {
 // listed, and landed in the app root as untracked files (mendixlabs/mxcli#1487).
 // `mx module-import` writes exactly the listed files and passes over a listed
 // one the archive lacks — measured on 11.12.1 — so this does the same.
+// The one exception is an add-on module package, modules/<Name>.mxmodule,
+// which is installed whether listed or not (ako/mxcli#2205, see addon.go) and,
+// like every other written file, replaces the project's copy on update.
 //
 // Three kinds of entry are deliberately not installed, all measured on real
 // packages: one package.xml does not list; a bundled widget older than the copy
@@ -514,7 +566,14 @@ func declaredProjectFiles(entries []*zip.File) (declared map[string]bool, listed
 // <files> list that list decides. Without one, only an entry at the package
 // root is left out: every root entry in the packages measured was metadata, and
 // every project file sits under a folder (javasource/, themesource/, widgets/).
+//
+// An add-on module package (modules/<Name>.mxmodule) is a project file whatever
+// the list says: Studio Pro installs it, and without it the add-on's extension
+// and document types are missing from the app (ako/mxcli#2205).
 func isProjectFile(name string, declared map[string]bool, listed bool) bool {
+	if isAddOnModulePackage(name) {
+		return true
+	}
 	name = packagePath(name)
 	if listed {
 		return declared[name]

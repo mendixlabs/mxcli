@@ -190,6 +190,11 @@ func modifyFlowInPlace(ctx *ExecContext, d *flowDecl) (handled bool, err error) 
 	switch summary := patchSummary(ops, a.edited, moves, set); {
 	case summary != "":
 		ctx.ReportMutation("Modified", "%s: %s (%s)", d.kind(), d.name, summary)
+		if ctx.Output != nil {
+			for _, c := range a.carriedIncludes {
+				fmt.Fprintln(ctx.Output, carriedIncludesWarning(d.name.String(), c))
+			}
+		}
 	case moved:
 		ctx.ReportMutation("Moved", "%s: %s", d.kind(), d.name)
 	default:
@@ -202,7 +207,12 @@ func modifyFlowInPlace(ctx *ExecContext, d *flowDecl) (handled bool, err error) 
 	} else {
 		ctx.trackCreatedMicroflow(d.name.Module, d.name.Name, a.mf.ID, containerID, returnEntity)
 	}
-	invalidateHierarchy(ctx)
+	// An edit in place changes no unit's container, so the hierarchy built
+	// from them still holds. Rebuilding it after every statement listed every
+	// unit of the project per `create or modify` (ako/mxcli#2160).
+	if moved {
+		invalidateHierarchy(ctx)
+	}
 	return true, nil
 }
 
@@ -315,7 +325,7 @@ func planFlowModify(ctx *ExecContext, d *flowDecl) (*flowPlan, error) {
 	// matches its stored one, so neither builtAsStored nor the statement diff
 	// could find a change.
 	sameBody := !headerChanged && declaredMatches(d.body, storedBody(stored))
-	if !sameBody && !builtAsStored(ctx, a, build) {
+	if !sameBody && !builtAsStored(ctx, d, a, build) {
 		// Members are compared in the spelling describe prints them in, or a
 		// script naming one another way never matches its own stored activity.
 		// Which entity a variable holds is the builder's to say where the
@@ -378,7 +388,7 @@ func planFlowModify(ctx *ExecContext, d *flowDecl) (*flowPlan, error) {
 // build, or a backend that cannot say how a flow reads back — including a
 // flow the reader would not read back whole, where both sides would compare
 // equal in what it drops — leaves it to the statement diff.
-func builtAsStored(ctx *ExecContext, a *alterFlowContext, build func() (any, []*microflows.MicroflowParameter, map[string]string, error)) bool {
+func builtAsStored(ctx *ExecContext, d *flowDecl, a *alterFlowContext, build func() (any, []*microflows.MicroflowParameter, map[string]string, error)) bool {
 	built, _, _, err := build()
 	if err != nil {
 		return false
@@ -403,7 +413,12 @@ func builtAsStored(ctx *ExecContext, a *alterFlowContext, build func() (any, []*
 	if oc == nil || a.mf.ObjectCollection == nil {
 		return false
 	}
-	same, _ := sameBuiltFlow(oc, a.mf.ObjectCollection)
+	if same, _ := sameBuiltFlow(oc, a.mf.ObjectCollection); same {
+		return true
+	}
+	// Drawn elsewhere by this release's layout pass, where the script states
+	// no position: the same graph all the same (ako/mxcli#2259).
+	same, _ := sameBuiltFlowUpToLayout(oc, a.mf.ObjectCollection, declaredLayout(d))
 	return same
 }
 
@@ -874,6 +889,10 @@ func withImplicitEnd(declared, stored []ast.MicroflowStatement, returnVar string
 
 // patchDiff accumulates the operations of one diff.
 type patchDiff struct {
+	// before is the declared statement before the run gap is diffing, nil at
+	// the start of a list: the statement whose @curve draws the connector
+	// into an inserted run (ako/mxcli#2311).
+	before  ast.MicroflowStatement
 	loc     *storedLocator
 	ops     []*ast.AlterFlowOperation
 	targets []mfmutator.Candidate
@@ -898,6 +917,10 @@ func (pd *patchDiff) statements(declared, stored []ast.MicroflowStatement) error
 		dEnd, sEnd := len(declared), len(stored)
 		if p < len(pairs) {
 			dEnd, sEnd = pairs[p][0], pairs[p][1]
+		}
+		pd.before = nil
+		if di > 0 {
+			pd.before = declared[di-1]
 		}
 		if err := pd.gap(declared[di:dEnd], stored, si, sEnd); err != nil {
 			return err
@@ -959,6 +982,7 @@ func (pd *patchDiff) gap(ins []ast.MicroflowStatement, stored []ast.MicroflowSta
 			return err
 		}
 		pd.add(op, c, ins)
+		pd.statedCurves(pd.ops[len(pd.ops)-1], ins)
 		return nil
 	}
 	if len(ins) == 1 && len(del) == 1 {
@@ -973,6 +997,20 @@ func (pd *patchDiff) gap(ins []ast.MicroflowStatement, stored []ast.MicroflowSta
 			}
 			if err := pd.statements(d.ThenBody, s.ThenBody); err != nil {
 				return err
+			}
+			return pd.statements(d.ElseBody, s.ElseBody)
+		}
+		if d, s, ok := sameCaseShell(ins[0], del[0]); ok {
+			// The same `case` with a change in a branch: splice each branch
+			// like an if's, rather than replace the split — which the splice
+			// cannot do for more than two paths (mendixlabs/mxcli#1778).
+			if err := pd.movedNode(d, s); err != nil {
+				return err
+			}
+			for i := range d.Cases {
+				if err := pd.statements(d.Cases[i].Body, s.Cases[i].Body); err != nil {
+					return err
+				}
 			}
 			return pd.statements(d.ElseBody, s.ElseBody)
 		}
@@ -1003,6 +1041,19 @@ func (pd *patchDiff) gap(ins []ast.MicroflowStatement, stored []ast.MicroflowSta
 	// at the loop, which is diffed in place like a loop on its own, and the
 	// changes on either side of it are runs of their own (ako/mxcli#942,
 	// ako/mxcli#1693).
+	// A stored `case` declared again with a change in a branch, in a run with
+	// other changes, is split out the same way: replacing the run would take
+	// the split out, which the splice cannot do for more than two paths
+	// (mendixlabs/mxcli#1778).
+	if i, j, ok := casePair(ins, del); ok && (len(ins) > 1 || len(del) > 1) {
+		if err := pd.gap(ins[:i], stored, si, si+j); err != nil {
+			return err
+		}
+		if err := pd.gap(ins[i:i+1], stored, si+j, si+j+1); err != nil {
+			return err
+		}
+		return pd.gap(ins[i+1:], stored, si+j+1, sEnd)
+	}
 	if i, j, ok := loopPair(ins, del); ok {
 		if err := pd.gap(ins[:i], stored, si, si+j); err != nil {
 			return err
@@ -1171,6 +1222,36 @@ func sameIfShell(declared, stored ast.MicroflowStatement) (*ast.IfStmt, *ast.IfS
 	}
 	dShell, sShell := *d, *s
 	dShell.ThenBody, dShell.ElseBody, sShell.ThenBody, sShell.ElseBody = nil, nil, nil, nil
+	if !sameExceptPositions(&dShell, &sShell) {
+		return nil, nil, false
+	}
+	return d, s, true
+}
+
+// sameCaseShell reports whether two statements are the same `case` — the
+// same subject, annotations and branches, each branch deciding on the same
+// values in the same order, and an else on both or neither — differing at most
+// inside its branches and in where the split is drawn. A branch's activities
+// are top-level nodes of the stored graph, as an if's are, so each branch is
+// spliced like one.
+//
+// The branches are paired by position, not by value: describe prints them in
+// the order the stored flows leave the split, and a script restating the flow
+// keeps that order. A reordered or regrouped branch is a change of the split
+// itself, which is still replaced (and refused for more than two paths).
+func sameCaseShell(declared, stored ast.MicroflowStatement) (*ast.EnumSplitStmt, *ast.EnumSplitStmt, bool) {
+	d, ok1 := declared.(*ast.EnumSplitStmt)
+	s, ok2 := stored.(*ast.EnumSplitStmt)
+	if !ok1 || !ok2 || len(d.Cases) != len(s.Cases) || (len(d.ElseBody) == 0) != (len(s.ElseBody) == 0) {
+		return nil, nil, false
+	}
+	dShell, sShell := *d, *s
+	dShell.Cases, sShell.Cases = make([]ast.EnumSplitCase, len(d.Cases)), make([]ast.EnumSplitCase, len(s.Cases))
+	for i := range d.Cases {
+		dShell.Cases[i] = ast.EnumSplitCase{Value: d.Cases[i].Value, Values: d.Cases[i].Values}
+		sShell.Cases[i] = ast.EnumSplitCase{Value: s.Cases[i].Value, Values: s.Cases[i].Values}
+	}
+	dShell.ElseBody, sShell.ElseBody = nil, nil
 	if !sameExceptPositions(&dShell, &sShell) {
 		return nil, nil, false
 	}
@@ -1363,6 +1444,19 @@ func loopPair(ins, del []ast.MicroflowStatement) (int, int, bool) {
 	for i, d := range ins {
 		for j, st := range del {
 			if sameLoopShell(d, st) {
+				return i, j, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+// casePair finds, in a run of unmatched statements, a declared `case` that is
+// a stored one restated (sameCaseShell): its index in ins and in del.
+func casePair(ins, del []ast.MicroflowStatement) (int, int, bool) {
+	for i, d := range ins {
+		for j, st := range del {
+			if _, _, ok := sameCaseShell(d, st); ok {
 				return i, j, true
 			}
 		}
@@ -2065,4 +2159,24 @@ func patchSummary(ops []*ast.AlterFlowOperation, edited map[*ast.AlterFlowOperat
 		out = append(out, "set: "+strings.Join(set, ", "))
 	}
 	return strings.Join(out, "; ")
+}
+
+// statedCurves gives an insert the curves the script states for the two
+// connectors the splice draws: into the run, on the declared statement before
+// it, and out of it, on the run's last statement (ako/mxcli#2311). Only where
+// both ends are plain statements — an activity's @curve is its one outgoing
+// connector; a decision's or a loop's says nothing about the one at hand.
+// The splice drew those connectors with vectors of its own, and the next run
+// of the same script read the difference as a redrawn connector and refused.
+func (pd *patchDiff) statedCurves(op *ast.AlterFlowOperation, ins []ast.MicroflowStatement) {
+	if len(ins) == 0 || pd.before == nil || notPlainInBody(pd.before) != "" || notPlainInBody(ins[len(ins)-1]) != "" {
+		return
+	}
+	op.StatesCurves = true
+	if ann := statementAnnotations(pd.before); ann != nil {
+		op.InCurve = ann.Curve
+	}
+	if ann := statementAnnotations(ins[len(ins)-1]); ann != nil {
+		op.OutCurve = ann.Curve
+	}
 }

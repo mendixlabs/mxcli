@@ -25,6 +25,8 @@ type HostedEndpoint struct {
 	Token string
 	// Env is the entry to add to the runtime process environment.
 	Env []string
+	// AllowExec switches on the endpoint's exec route (--allow-call).
+	AllowExec bool
 
 	projectPath string
 	state       projectState
@@ -37,9 +39,20 @@ type HostedEndpoint struct {
 //
 // The project's own after-startup microflow is chained rather than displaced, so
 // the app still boots the way the developer expects.
-func InstallHostedEndpoint(projectPath string, w io.Writer) (*HostedEndpoint, error) {
+//
+// allowExec switches on the exec route (--allow-call): the runtime is given
+// endpointAllowExecEnv, and the handshake says so. Without it the route answers
+// 403, whatever a caller sends.
+func InstallHostedEndpoint(projectPath string, allowExec bool, w io.Writer) (*HostedEndpoint, error) {
 	token, err := newEndpointToken()
 	if err != nil {
+		return nil, err
+	}
+
+	// An endpoint an earlier run could not remove (a Windows `run stop`, a crash)
+	// comes out first: captured as the project's own state, its after-startup
+	// would be chained to and its module kept as the user's.
+	if _, err := RestoreAbandonedEndpoint(projectPath, w); err != nil {
 		return nil, err
 	}
 
@@ -47,13 +60,23 @@ func InstallHostedEndpoint(projectPath string, w io.Writer) (*HostedEndpoint, er
 	if err != nil {
 		return nil, fmt.Errorf("capturing project state: %w", err)
 	}
+	// Written before anything is installed, so a run that is killed from here on
+	// can still be undone by `run stop` (ako/mxcli#1917).
+	if err := writeRestoreRecord(projectPath, os.Getpid(), state); err != nil {
+		fmt.Fprintf(w, "Warning: could not record how to remove the test endpoint (%v); if this run is killed, `run stop` cannot remove it\n", err)
+	}
 
 	h := &HostedEndpoint{
 		Token:       token,
 		Env:         []string{endpointTokenEnv + "=" + token},
+		AllowExec:   allowExec,
 		projectPath: projectPath,
 		state:       state,
 		out:         w,
+	}
+
+	if allowExec {
+		h.Env = append(h.Env, endpointAllowExecEnv+"=1")
 	}
 
 	fmt.Fprintln(w, "Installing the mxcli test endpoint (for 'mxcli test --attach')...")
@@ -86,6 +109,7 @@ func (h *HostedEndpoint) Publish(info docker.LocalAppInfo) error {
 		ServePort: info.ServePort,
 		AdminPass: info.AdminPass,
 		Token:     h.Token,
+		AllowExec: h.AllowExec,
 		Started:   nowFunc(),
 	})
 	if err != nil {
@@ -118,5 +142,7 @@ func (h *HostedEndpoint) Remove() {
 	// Only past the error return above, so this never claims a project is
 	// unchanged while an injection is still in it.
 	restoreProjectFile(h.state, nil, h.out)
+	// Kept on the error path above, so `run stop` tries the removal again.
+	removeRestoreRecord(h.projectPath)
 	fmt.Fprintln(h.out, "  test endpoint removed; project restored")
 }

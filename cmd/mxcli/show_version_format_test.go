@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mendixlabs/mxcli/internal/testutil"
 )
 
 // SHOW VERSION printed `MPR Format: v2` for an MPR v1 project — a single .mpr
@@ -29,7 +31,7 @@ func TestShowVersionReportsTheStorageFormatOnDisk(t *testing.T) {
 	}
 
 	v2dir := t.TempDir()
-	if err := os.CopyFS(v2dir, os.DirFS(filepath.Join("..", "..", "testdata", "testapp-views"))); err != nil {
+	if err := testutil.CopyFixture(v2dir, filepath.Join("..", "..", "testdata", "testapp-views")); err != nil {
 		t.Fatalf("copy v2 fixture: %v", err)
 	}
 	v2 := filepath.Join(v2dir, "TestApp.mpr")

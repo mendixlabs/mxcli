@@ -46,6 +46,13 @@ func init() {
 	// value, leaving the rest at Go's zero value, never marked dirty, and so
 	// omitted. Registering them here covers all three construction sites and
 	// any future one, which setting every field at each site would not.
+	// A Delete action that deletes its context object stores SourceVariable
+	// null — 13 of 13 in ako/TestApp — and mxcli omitted the key; one that
+	// deletes a grid's selection stores a PageVariable there (ako/mxcli#1932).
+	// The property is 10.4+; below that the null is stripped.
+	codec.RegisterTypeDefaults("Forms$DeleteClientAction", codec.TypeDefaults{
+		NullFields: []string{"SourceVariable"},
+	})
 	codec.RegisterTypeDefaults("Forms$PageVariable", codec.TypeDefaults{
 		EmptyStringFields: []string{"LocalVariable", "PageParameter", "SnippetParameter", "SubKey", "Widget"},
 		FalseFields:       []string{"UseAllPages"},
@@ -112,7 +119,15 @@ func init() {
 	// A List View's XPath source always carries its SourceVariable key, null
 	// when the source is not reached from a parameter: 44 of 44 in the
 	// fixtures, as on the pluggable XPath source above (ako/mxcli#721 L5).
+	// EntityRef likewise: a List View with no entity configured yet stores the
+	// key null — every such List View in the testdata/testapp page templates —
+	// and mxcli omitted it (ako/mxcli#2183).
 	codec.RegisterTypeDefaults("Forms$ListViewXPathSource", codec.TypeDefaults{
+		NullFields: []string{"EntityRef", "SourceVariable"},
+	})
+	// An association source likewise: 40 of 40 in FactoryManagement carry the
+	// key, null (30) when the source starts from $currentObject (ako/mxcli#2106).
+	codec.RegisterTypeDefaults("Forms$AssociationSource", codec.TypeDefaults{
 		NullFields: []string{"SourceVariable"},
 	})
 	// LayoutGrid and its rows carry a null ConditionalVisibilitySettings; the grid,
@@ -672,6 +687,9 @@ func widgetToGen(w pages.Widget) (element.Element, error) {
 		if x.Label != "" {
 			g.SetLabelTemplate(textAsClientTemplate(textFromString(x.Label)))
 		}
+		if x.LabelPosition != "" {
+			g.SetLabelPosition(x.LabelPosition)
+		}
 		onChangeCB, err := clientActionToGen(x.OnChangeAction)
 		if err != nil {
 			return nil, err
@@ -1031,6 +1049,14 @@ func widgetToGen(w pages.Widget) (element.Element, error) {
 			// A snippet's own parameter, passed on from inside that snippet,
 			// fills the SnippetParameter slot (ako/mxcli#721 L3).
 			// A page `Variables:` entry fills LocalVariable (ako/mxcli#826).
+			// A data view's object, passed by naming the data view, fills
+			// Widget alone, as a flow call's widget argument does
+			// (ako/mxcli#1968); in PageParameter it was CE0115.
+			if pm.IsWidget {
+				m.SetVariable(pageVariableToGen(strings.TrimPrefix(pm.Argument, "$"), "", ""))
+				call.AddParameterMappings(m)
+				continue
+			}
 			kind := ""
 			switch {
 			case pm.IsSnippetParameter:
@@ -1326,6 +1352,21 @@ func conditionalEditabilityToGen(ces *pages.ConditionalEditabilitySettings) elem
 	}
 	assignID(g)
 	g.SetExpression(ces.Expression)
+	// "Editable: based on attribute value" (ako/mxcli#2111): written exactly as
+	// the visibility settings' attribute form above.
+	if ces.Attribute != "" {
+		g.SetAttributeQualifiedName(ces.Attribute)
+		for _, c := range ces.Conditions {
+			cg := genEnum.NewCondition()
+			assignID(cg)
+			cg.SetAttributeValue(c.Value)
+			cg.SetEditableVisible(c.Visible)
+			g.AddConditions(cg)
+		}
+		if sv := inputSourceVariableToGen(ces.SourceVariable); sv != nil {
+			g.SetSourceVariable(sv)
+		}
+	}
 	return g
 }
 
@@ -1816,7 +1857,18 @@ func associationContextVariableToGen(d *pages.AssociationSource) element.Element
 // Forms$ListViewXPathSource (EntityRef + XPathConstraint + a GridSortBar and a
 // ListViewSearch sub-element, matching what Studio Pro/the legacy writer emit);
 // a microflow source uses Forms$MicroflowSource (as DataView does).
+//
+// No source at all is a List View whose data source is not configured yet — a
+// building block's (PlatformDesignSystem's Avatar_Group_SM) or a hand-written
+// `listview` without `DataSource:`. Studio Pro stores that as an XPath source
+// naming no entity: the same element with EntityRef and SourceVariable null and
+// an empty sort bar and search (every such List View in the page templates of
+// testdata/testapp). `mx check` then asks for the entity, which is the author's
+// to choose. Refusing it instead blocked the whole block (ako/mxcli#2183).
 func listViewSourceToGen(ds pages.DataSource) (element.Element, error) {
+	if ds == nil {
+		return listViewSourceToGen(&pages.DatabaseSource{})
+	}
 	switch d := ds.(type) {
 	case *pages.DatabaseSource:
 		src := genPg.NewListViewXPathSource()
@@ -2076,13 +2128,17 @@ type parameterMappingTarget interface {
 //
 // Kind "widget" is a widget's selection: the PageVariable names the widget and
 // nothing else, as on all 13 such mappings in TestApp's WorkflowCommons
-// (ako/mxcli#1560). It used to fall to the page-parameter slot.
-func bindParameterMappingValue(m parameterMappingTarget, variable, kind, expression string) {
+// (ako/mxcli#1560). It used to fall to the page-parameter slot. A data view
+// showing a page or snippet parameter names that parameter beside the widget
+// (widgetParam, widgetParamKind "" or "snippet"): Widget alone is CE0115 there
+// (ako/mxcli#2095), while a data view with no parameter behind it keeps Widget
+// alone, which passes.
+func bindParameterMappingValue(m parameterMappingTarget, variable, kind, expression, widgetParam, widgetParamKind string) {
 	if variable != "" && kind != "" {
 		name := strings.TrimPrefix(variable, "$")
 		switch kind {
 		case "widget":
-			m.SetVariable(pageVariableToGen(name, "", ""))
+			m.SetVariable(pageVariableToGen(name, widgetParam, widgetParamKind))
 		case "parameter":
 			// sourceVariableToGen spells the page-parameter slot as the empty kind.
 			m.SetVariable(sourceVariableToGen(name, ""))
@@ -2131,7 +2187,7 @@ func microflowSettingsToGen(microflowName string, mappings []*pages.MicroflowPar
 		assignID(gm)
 		// Parameter is a BY_NAME reference: <MicroflowQName>.<ParameterName>.
 		gm.SetParameterQualifiedName(microflowName + "." + pm.ParameterName)
-		bindParameterMappingValue(gm, pm.Variable, pm.VariableKind, pm.Expression)
+		bindParameterMappingValue(gm, pm.Variable, pm.VariableKind, pm.Expression, pm.WidgetParameter, pm.WidgetParameterKind)
 		s.AddParameterMappings(gm)
 	}
 	for _, om := range outputs {
@@ -2324,6 +2380,13 @@ func clientActionToGen(a pages.ClientAction) (element.Element, error) {
 		g := genPg.NewDeleteClientAction()
 		assignID(g)
 		g.SetClosePage(x.ClosePage)
+		// A grid's selection is a PageVariable naming only the widget, as
+		// Studio Pro stores it for a control-bar Delete button; without it
+		// mx check reports CE7005 (ako/mxcli#1932). The property is 10.4+:
+		// canon.StripUndeclaredProperties refuses it on an older project.
+		if sv := x.SourceVariable; sv != nil {
+			g.SetSourceVariable(pageVariableToGen(sv.Widget, sv.Variable, sv.Kind))
+		}
 		g.SetDisabledDuringExecution(actionDisabledDuringExecution(x.ActionExecution))
 		return g, nil
 	case *pages.PageClientAction:
@@ -2334,7 +2397,7 @@ func clientActionToGen(a pages.ClientAction) (element.Element, error) {
 		}
 		assignID(g)
 		g.SetDisabledDuringExecution(actionDisabledDuringExecution(x.ActionExecution))
-		g.SetNumberOfPagesToClose2("")
+		g.SetNumberOfPagesToClose2(x.NumberOfPagesToClose)
 		g.SetPageSettings(pageSettingsWithMappings(x.PageName, x.ParameterMappings))
 		return g, nil
 	case *pages.LinkClientAction:
@@ -2475,7 +2538,7 @@ func clientActionToGen(a pages.ClientAction) (element.Element, error) {
 			assignID(m)
 			// Parameter is a BY_NAME reference: Nanoflow.ParamName.
 			m.SetParameterQualifiedName(x.NanoflowName + "." + pm.ParameterName)
-			bindParameterMappingValue(m, pm.Variable, pm.VariableKind, pm.Expression)
+			bindParameterMappingValue(m, pm.Variable, pm.VariableKind, pm.Expression, pm.WidgetParameter, pm.WidgetParameterKind)
 			g.AddParameterMappings(m)
 		}
 		for _, om := range x.OutputMappings {

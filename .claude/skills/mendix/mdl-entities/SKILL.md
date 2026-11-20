@@ -15,14 +15,14 @@ description: "Complete syntax reference for entities, attributes and association
 | 78-94 | Non-Persistent Entity |
 | 95-109 | Attribute Types |
 | 110-129 | Attribute Modifiers |
-| 130-175 | Generalization (Inheritance) |
-| 176-224 | Associations |
-| 225-241 | Enumerations |
-| 242-298 | View Entity (OQL) |
-| 299-322 | Entity with Index |
-| 323-384 | Complete Domain Model Example |
-| 385-402 | Changing an Existing Domain Model |
-| 403-445 | Quick Reference |
+| 130-177 | Generalization (Inheritance) |
+| 178-226 | Associations |
+| 227-243 | Enumerations |
+| 244-300 | View Entity (OQL) |
+| 301-324 | Entity with Index |
+| 325-386 | Complete Domain Model Example |
+| 387-404 | Changing an Existing Domain Model |
+| 405-447 | Quick Reference |
 
 <!-- /skill-index -->
 # MDL Entity Syntax Reference
@@ -149,6 +149,8 @@ create persistent entity Module.Customer extends Module.Person (
   CreditLimit: decimal
 );
 ```
+
+A specialization **inherits its persistability** from the root of the chain: Mendix stores none on it. `persistent` / `non-persistent` must match the parent (or be left out); `create persistent entity X extends NonPersistentBase` is refused by `check` and `exec`.
 
 Common parent entities for file/image storage:
 ```mdl

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/mendixlabs/mxcli/internal/pathutil"
 	"github.com/mendixlabs/mxcli/internal/procalive"
 )
 
@@ -46,6 +47,23 @@ type devLoopHandshake struct {
 	BootConfig map[string]any `json:"bootConfig"`
 	// Started is when this was published, for a clearer stale message.
 	Started time.Time `json:"started"`
+}
+
+// bootConfigForHandshake is the boot payload without MicroflowConstants. Every
+// resolved constant is in there, secrets included, and nothing reads them back:
+// docker.ApplyConstants replaces that key with the freshly resolved chain
+// before it re-sends the payload.
+func bootConfigForHandshake(boot map[string]any) map[string]any {
+	if _, ok := boot["MicroflowConstants"]; !ok {
+		return boot
+	}
+	out := make(map[string]any, len(boot))
+	for k, v := range boot {
+		if k != "MicroflowConstants" {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 func devLoopHandshakePath(projectPath string) string {
@@ -120,6 +138,13 @@ func readDevLoopHandshake(projectPath string) (devLoopHandshake, error) {
 	}
 	if err := json.Unmarshal(body, &h); err != nil {
 		return h, fmt.Errorf("%s is not valid JSON: %w", path, err)
+	}
+	// A copied app folder carries the original's handshake. Its ports and
+	// password belong to the original's runtime, so it is no run of this project.
+	if !pathutil.SameProject(h.Project, projectPath) {
+		return devLoopHandshake{}, fmt.Errorf("%w\n"+
+			"  (%s was left by the run of %s, not this project; ignoring it)%s",
+			errNoDevLoopHandshake, path, h.Project, runStatusNote(projectPath))
 	}
 	if !procalive.Alive(h.PID) {
 		return h, fmt.Errorf("%s refers to process %d, which is %w\n"+

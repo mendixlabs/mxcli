@@ -43,7 +43,7 @@ create or modify page IMG.ImagePage (
 
   -- The two sources that take no collection entry, unchanged by this fix.
   image imgRemote (ImageType: imageUrl, ImageUrl: 'https://example.com/logo.svg')
-  image imgIcon (ImageType: icon)
+  image imgIcon (ImageType: icon, Icon: 'Atlas_Core.Atlas_Filled.user')
 };
 
 -- Both new checks, as MDL that must FAIL `mxcli check`. Uncomment one at a time.

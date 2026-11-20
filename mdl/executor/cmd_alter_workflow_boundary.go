@@ -42,15 +42,25 @@ func checkBoundaryEventDrops(ctx *ExecContext, s *ast.AlterWorkflowStmt) error {
 			}
 		}
 		n := len(storedBoundaryEvents(resolveStoredActivity(wf.Flow, o.ActivityRef, o.AtPosition)))
+		if o.Index > 0 {
+			// `boundary event N` names one (ako/mxcli#808): nothing to guess,
+			// only a place to check.
+			if n > 0 && o.Index > n {
+				return mdlerrors.NewValidation(fmt.Sprintf(
+					"alter workflow %s: `drop %s boundary event %d`: '%s' has %d boundary event(s). Nothing was written",
+					s.Name, o.ActivityRef, o.Index, o.ActivityRef, n))
+			}
+			continue
+		}
 		if n < 2 {
 			continue
 		}
 		if boundaryDropAmbiguous.Applies(ctx.LanguageVersion) {
 			return mdlerrors.NewValidation(fmt.Sprintf(
 				"alter workflow %s: `drop %s boundary event` is refused: '%s' has %d boundary events, and the "+
-					"statement does not say which. Nothing was written. Restate the workflow with "+
-					"`create or modify workflow`, keeping the events to keep",
-				s.Name, o.ActivityRef, o.ActivityRef, n))
+					"statement does not say which. Nothing was written. Name it by its place, as `describe workflow` "+
+					"prints them: `drop %s boundary event 1` … `boundary event %d`",
+				s.Name, o.ActivityRef, o.ActivityRef, n, o.ActivityRef, n))
 		}
 		fmt.Fprintf(ctx.progress(), "Warning [%s]: alter workflow %s: '%s' has %d boundary events; "+
 			"`drop %s boundary event` drops the first. %s\n",

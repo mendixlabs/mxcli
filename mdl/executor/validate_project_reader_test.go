@@ -14,10 +14,10 @@ package executor
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
@@ -27,7 +27,7 @@ import (
 func projectFixture(t *testing.T) string {
 	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../testdata/expr-checker")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../testdata/expr-checker"); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	return filepath.Join(dst, "minimal.mpr")

@@ -72,7 +72,7 @@ func execHelp(ctx *ExecContext, s *ast.HelpStmt) error {
 			return syntax.WriteJSON(ctx.Output, m.Features)
 		}
 		fmt.Fprint(ctx.Output, m.Heading())
-		syntax.WriteText(ctx.Output, m.Features)
+		m.WriteText(ctx.Output)
 		return nil
 	}
 	help := `MDL Commands:
@@ -248,7 +248,7 @@ Security - Project Settings:
   alter app security ( SecurityLevel: off|prototype|production );
   alter app security ( EnableDemoUsers: true|false, StrictMode: true|false );
   alter app security ( EnableGuestAccess: true|false [, GuestUserRole: <UserRole>] );
-  alter app security ( AdminUserName: '<name>', AdminPassword: '<password>' );
+  alter app security ( AdminUserName: '<name>', AdminUserRole: <UserRole>, AdminPassword: '<password>' );
   create demo user 'name' ( Password: 'pass', UserRoles: (UserRole [, ...]) );
   drop demo user 'name';
 

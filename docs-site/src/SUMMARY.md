@@ -142,6 +142,7 @@
   - [Writing Custom Rules](tools/custom-rules.md)
   - [mxcli lint](tools/mxcli-lint.md)
   - [mxcli report](tools/mxcli-report.md)
+  - [Project Reports](tools/project-reports.md)
 - [Claude Code Companion](tools/companion.md)
 - [Terminal UI (TUI)](tools/tui.md)
   - [Navigation and Layout](tools/tui-navigation.md)
@@ -286,6 +287,7 @@
   - [CREATE AI MODEL](reference/agent/create-model.md)
   - [CREATE KNOWLEDGE BASE](reference/agent/create-knowledge-base.md)
   - [CREATE CONSUMED MCP SERVICE](reference/agent/create-consumed-mcp-service.md)
+  - [CREATE PUBLISHED MCP SERVICE](reference/agent/create-published-mcp-service.md)
   - [CREATE AGENT](reference/agent/create-agent.md)
 - [Business Event Statements](reference/business-event/README.md)
   - [CREATE BUSINESS EVENT SERVICE](reference/business-event/create-business-event-service.md)
@@ -311,6 +313,7 @@
   - [ALTER SETTINGS](reference/settings/alter-settings.md)
 - [Organization Statements](reference/organization/README.md)
   - [CREATE MODULE](reference/organization/create-module.md)
+  - [ALTER MODULE … SET](reference/organization/alter-module-set.md)
   - [CREATE FOLDER](reference/organization/create-folder.md)
   - [DROP FOLDER](reference/organization/drop-folder.md)
   - [MOVE](reference/organization/move.md)
@@ -346,6 +349,7 @@
   - [FTS5 Full-Text Search](internals/fts5.md)
   - [Reference Tracking](internals/reference-tracking.md)
 - [MCP Backend: Script-to-Tool-Call Cost](internals/mcp-backend-cost.md)
+- [Agent Dev-Loop Benchmark](internals/agent-benchmark.md)
 
 ---
 
@@ -375,6 +379,8 @@
 # Blog
 
 - [Blog](blog/index.md)
+  - [Release: mxcli v0.32.0](blog/v0.32.0-release.md)
+  - [Release: mxcli v0.31.0](blog/v0.31.0-release.md)
   - [Release: mxcli v0.30.0](blog/v0.30.0-release.md)
   - [Release: mxcli v0.29.0](blog/v0.29.0-release.md)
   - [Release: mxcli v0.28.0](blog/v0.28.0-release.md)

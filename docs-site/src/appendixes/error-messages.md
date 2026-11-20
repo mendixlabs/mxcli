@@ -204,6 +204,24 @@ CE4899 "Empty caption" [MDL-I18N01]
 
 **Solution:** Change the default language before the script creates its pages, or give each caption a text in the new default after the change — `alter page … { set (Caption: '…') on <tab>; };` (or `alter snippet`) writes the default language. `alter settings language (DefaultLanguageCode: …)` prints the list when it runs, and `mxcli lint` reports the project's existing ones as **QUAL006**. A page the script creates or rewrites *after* the change is written in the new default and is not reported.
 
+### MDL-TOKEN01: A token Mendix does not have
+
+```
+✗ [%CurrentDateTim%] is not a Mendix token — did you mean [%CurrentDateTime%]?
+(mxbuild: CE0117 "Error(s) in expression.") [MDL-TOKEN01]
+```
+
+**Cause:** A `[%Token%]` whose name Mendix does not define where it is written. MDL reads any `[%…%]` as a token, so a typo used to pass `check` and `exec` and fail the build: CE0117 in an expression, CE0161 in an XPath constraint. The names were measured on Mendix 11.14, about 130 of them, each in a microflow, a nanoflow and an XPath. Names are case-sensitive.
+
+| Token | Expression (microflow, nanoflow) | XPath |
+|---|---|---|
+| `CurrentDateTime`, `BeginOfCurrent…` / `EndOfCurrent…` (Minute, Hour, Day, Week, Month, Year), `BeginOf…` / `EndOf…` (Tomorrow, Yesterday), each also with `UTC` | yes | yes |
+| `CurrentUser` | yes | yes |
+| `SecondLength` … `YearLength`, `UserRole_<role>` | no | yes |
+| `CurrentObject` | no | a page data source's, not a retrieve's |
+
+**Solution:** Use the suggested spelling, or the right token for the context: a length or role token only in an XPath, the flow's variable instead of `[%CurrentObject%]`. A role token's role name is checked separately, against the project's user roles (CE1613).
+
 ### MDL-DUPDEF: Element defined twice in one script
 
 ```
@@ -261,6 +279,86 @@ The registry of deprecated spellings is `mdl/deprecation/deprecation.go`. It hol
 
 ## mxcli Parser Errors
 
+
+### MDL-MCPSERVER01: A published MCP service the runtime will not start
+
+```
+published mcp service Shop.OrdersMCP: EndpointPath "mcp" is reserved: it cannot be
+'mcp' or end in '/mcp' [MDL-MCPSERVER01]
+```
+
+**Cause:** A published MCP service document is not validated by mxbuild; AgentEditorCommons
+reads it at startup and calls `MCPServer.CreateMCPServer`, which throws for a reserved or
+sub-path `EndpointPath` (`mcp`, `…/mcp`, any `/`), a missing `Version`,
+`EndpointPath` or `ProtocolVersion`, `Scopes` without an `AuthorizationServerUrl`, an
+`AuthorizationServerUrl` without an `AuthenticationMicroflow` or not an absolute http(s) URL.
+The app still starts, without that server, and logs the error. A tool without a `Microflow`, or
+two tools with one name, is refused too. As a warning: `AuthenticationMicroflow`,
+`AuthorizationServerUrl` and `Scopes` are ignored while `AuthenticationEnabled` is false, and
+`AuthenticationEnabled: true` with no authentication microflow accepts every request.
+
+**Solution:** Fix the property the message names; `create published mcp service` documents each.
+
+### MDL-AGENT02: An agent created without a selected model
+
+```
+agent Shop.SupportAgent has no SelectedModel: Agent Editor 2.2+ refuses to import it at
+startup ("Model with name  is referenced but could not be found"), and that stops the
+import of every agent; Studio Pro reports AE018 "Model version is required for an agent"
+[MDL-AGENT02]
+```
+
+**Severity:** an error, refusing `exec`, when the agent names a `Model` — Studio Pro's AE018
+(ako/mxcli#2289). A warning when it has no `Model` at all.
+
+**Cause:** Agent Editor 2.2+ (AgentEditorCommons `AgentFromModel_Validate`) requires the
+agent's `selectedModel` id and retrieves the deployed model by it. mxbuild does not read agent
+documents, so the build is green; `ASU_AgentEditor` refuses the agent at startup and stops
+importing the rest.
+
+**Solution:** Add `SelectedModel: '<model id>'` (e.g. `'eu.anthropic.claude-sonnet-5'`), the id
+of a model the Model document's resource offers. `create or modify agent` keeps a stored value
+when the key is left out, so `check --references` and `exec` flag it only when there is
+none to keep: a new agent, one the script dropped, or a stored agent that has none. They do not
+flag it when the project's AgentEditorCommons predates 2.2, which does not read the value. `mxcli
+lint` reports stored agents without one as MPR014.
+
+### MDL-AGENT03: A consumed MCP service without an endpoint
+
+```
+consumed mcp service Shop.CarrierTracking has no Endpoint: Agent Editor skips it at startup
+("No value could be found for the local configuration for the constant"), so it connects
+nowhere [MDL-AGENT03]
+```
+
+**Cause:** Agent Editor imports a consumed MCP service only when its `endpoint` constant has a
+value: `ConsumedMCPService_CreateUpdateFromModel` reads it with `GetConstantValue` and skips the
+service otherwise. mxbuild does not read agent documents, so the build is green; the agents that
+use the service get none of its tools.
+
+**Solution:** Add `Endpoint: @Module.UrlConstant`, a String constant holding the server URL, and
+set its value per environment. `create or modify` keeps a stored endpoint when the key is left
+out, so `check --references` and `exec` warn on it only when there is none to keep. `mxcli lint`
+reports stored services without one as MPR015.
+
+### MDL-AGENT04: An agent value longer than Agent Commons stores
+
+```
+agent Shop.SupportAgent: the Description is 250 characters, longer than
+AgentCommons.Agent.Description (200): Agent Editor's import fails at startup and the
+previous version of the agent stays in use [MDL-AGENT04]
+```
+
+**Cause:** At startup `AgentEditorCommons.AgentFromModel_CreateUpdateAgent` copies each agent
+document into Agent Commons entities with fixed lengths (Agent Editor 2.7.0): the document name
+into `AgentCommons.Agent.Title` (50), `Description` into `AgentCommons.Agent.Description` (200),
+a tool's name and `DisplayTitle` into `AgentCommons.Tool.Name` / `DisplayTitle` (200) and its
+`Description` into `AgentCommons.Tool.Description` (4096). A longer value fails the import ("tried
+setting a value of length 203") and Agent Commons keeps the previous version of the agent.
+mxbuild does not read agent documents, so the build is green.
+
+**Solution:** Shorten the value. Lengths are counted in characters, not bytes. It is a warning,
+like MDL-AGENT01..03, because the lengths belong to the installed AgentCommons version.
 
 ### MDL-LISTOP02: A list operation nested inside another one
 

@@ -32,13 +32,21 @@ func LoadThemeRegistryForProject(mprPath string) *ThemeRegistry {
 
 // ValidateDesignProperties validates the design properties authored on page /
 // snippet / alter-page widgets against the project's theme registry
-// (themesource/*/web/design-properties.json). It warns (never blocks — a newer
-// theme may legitimately add keys/values the snapshot lacks) on:
+// (themesource/*/web/design-properties.json). It reports:
 //
 //   - MDL-WIDGET11: a design-property key that is not defined for the widget type.
 //   - MDL-WIDGET12: an option/toggle-group value that is not one of the property's
 //     allowed values — the message lists the allowed values (design-property
 //     values are case-sensitive, so this catches the common casing typo).
+//
+// Both are errors (ako/mxcli#2236). They were warnings on the grounds that a
+// newer theme may add keys the snapshot lacks, but the registry IS the
+// project's own themesource — the theme mxbuild builds against — and mxbuild
+// refuses both, measured on 11.12.6: an unknown key is CE6083 "Design property
+// Hoover is not supported by your theme", an unknown option CE6085 "Unknown
+// option Tiny for design property Shadow". Warned, exec wrote them anyway. An
+// OLD name of a renamed property stays a warning: CE6087 does not apply to an
+// excluded page.
 //
 // It only runs with --project AND a themesource that actually defines design
 // properties; otherwise there is no metadata to validate against and it is a
@@ -69,8 +77,20 @@ func ValidateDesignProperties(prog *ast.Program, projectPath string, project fun
 
 // nativeLayoutResolver answers whether a layout, by qualified name, is native:
 // one the script creates with a native layout type, or one the project holds.
-// The project is read once, on the first question.
+// The project is read once, on the first question. A layout it cannot resolve
+// is answered web.
 func nativeLayoutResolver(prog *ast.Program, project func() backend.FullBackend) func(string) bool {
+	resolve := layoutPlatformResolver(prog, project)
+	return func(qn string) bool {
+		native, _ := resolve(qn)
+		return native
+	}
+}
+
+// layoutPlatformResolver is nativeLayoutResolver that also says whether it
+// knows: known is false for a layout neither the script nor the project holds,
+// for a caller that must not guess.
+func layoutPlatformResolver(prog *ast.Program, project func() backend.FullBackend) func(string) (native, known bool) {
 	native := map[string]bool{}
 	for _, stmt := range prog.Statements {
 		if s, ok := stmt.(*ast.CreateLayoutStmt); ok {
@@ -80,25 +100,25 @@ func nativeLayoutResolver(prog *ast.Program, project func() backend.FullBackend)
 		}
 	}
 	loaded := project == nil
-	return func(qn string) bool {
+	return func(qn string) (bool, bool) {
 		if n, ok := native[qn]; ok {
-			return n
+			return n, true
 		}
 		if loaded {
-			return false
+			return false, false
 		}
 		loaded = true
 		b := project()
 		if b == nil {
-			return false
+			return false, false
 		}
 		layouts, err := b.ListLayouts()
 		if err != nil {
-			return false
+			return false, false
 		}
 		h, err := NewContainerHierarchyFromBackend(b)
 		if err != nil {
-			return false
+			return false, false
 		}
 		for _, l := range layouts {
 			name := h.GetModuleName(h.FindModuleID(l.ContainerID)) + "." + l.Name
@@ -106,7 +126,8 @@ func nativeLayoutResolver(prog *ast.Program, project func() backend.FullBackend)
 				native[name] = l.Native
 			}
 		}
-		return native[qn]
+		n, ok := native[qn]
+		return n, ok
 	}
 }
 
@@ -314,9 +335,10 @@ func validateDesignPropsAs(w *ast.WidgetV3, key string, reg *ThemeRegistry, loca
 			}
 			out = append(out, linter.Violation{
 				RuleID:   "MDL-WIDGET11",
-				Severity: linter.SeverityWarning,
-				Message: fmt.Sprintf("%s: widget %q (%s) sets design property %q, which is not defined for this widget type",
-					locationPrefix, w.Name, w.Type, p.Key),
+				Severity: linter.SeverityError,
+				Message: fmt.Sprintf("%s: widget %q (%s) sets design property %q, which is not defined for this widget type"+
+					" — mxbuild reports CE6083 \"Design property %s is not supported by your theme\"",
+					locationPrefix, w.Name, w.Type, p.Key, p.Key),
 				Location:   linter.Location{DocumentType: "page", DocumentName: locationPrefix},
 				Suggestion: designPropKeySuggestion(props, p.Key),
 			})
@@ -328,9 +350,10 @@ func validateDesignPropsAs(w *ast.WidgetV3, key string, reg *ThemeRegistry, loca
 			if !themeOptionAllowed(tp.Options, p.Value) {
 				out = append(out, linter.Violation{
 					RuleID:   "MDL-WIDGET12",
-					Severity: linter.SeverityWarning,
-					Message: fmt.Sprintf("%s: widget %q (%s) design property %q has value %q, which is not an allowed value",
-						locationPrefix, w.Name, w.Type, p.Key, p.Value),
+					Severity: linter.SeverityError,
+					Message: fmt.Sprintf("%s: widget %q (%s) design property %q has value %q, which is not an allowed value"+
+						" — mxbuild reports CE6085 \"Unknown option %s for design property %s\"",
+						locationPrefix, w.Name, w.Type, p.Key, p.Value, p.Value, p.Key),
 					Location:   linter.Location{DocumentType: "page", DocumentName: locationPrefix},
 					Suggestion: fmt.Sprintf("Allowed values (case-sensitive): %s", themeOptionNames(tp.Options)),
 				})

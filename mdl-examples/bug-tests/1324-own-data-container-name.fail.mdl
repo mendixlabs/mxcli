@@ -14,6 +14,12 @@
 --
 -- Fix: `mxcli check` flags it as MDL-BUTTON02 (error), so exec refuses it.
 -- btnCur and btnOuter build clean (measured, Mendix 11.14.0) and are not flagged.
+--
+-- ako/mxcli#2149: that CE0117 was the EXPRESSION form. The writer now stores a
+-- bare `$dvGate` argument as a variable reference (#2095), and btnOwn builds
+-- with 0 errors on mx check 11.12.6 and 11.14.0, so it is no longer flagged.
+-- The own name read inside an expression (btnOwnPath, `$dvGate/Name`) is still
+-- CE0117 on both, and is what this negative test now holds.
 
 create module G52;
 create persistent entity G52.Gate (Name: String(50));
@@ -21,10 +27,15 @@ create microflow G52.ACT_Open ($Gate: G52.Gate)
 begin
   log info node 'G52' 'open';
 end;
+create microflow G52.ACT_Str ($S: String)
+begin
+  log info node 'G52' 'str';
+end;
 
 create page G52.GatePage (Title: 'Gate', Layout: Atlas_Core.PopupLayout, Params: ( $Gate: G52.Gate )) {
   dataview dvGate (DataSource: $Gate) {
     actionbutton btnOwn (Caption: 'Own data view name', Action: call microflow G52.ACT_Open(Gate = $dvGate))
+    actionbutton btnOwnPath (Caption: 'Own name in an expression', Action: call microflow G52.ACT_Str(S = $dvGate/Name))
     actionbutton btnCur (Caption: 'Current object', Action: call microflow G52.ACT_Open(Gate = $currentObject))
     dataview dvInner (DataSource: $Gate) {
       actionbutton btnOuter (Caption: 'Enclosing data view name', Action: call microflow G52.ACT_Open(Gate = $dvGate))

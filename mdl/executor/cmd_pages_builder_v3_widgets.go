@@ -61,6 +61,18 @@ func (pb *pageBuilder) buildDataViewV3(w *ast.WidgetV3) (*pages.DataView, error)
 	}
 	dv.ReadOnlyStyle = dvStyle
 
+	// The message shown when the data view has no object (ako/mxcli#2133). The
+	// writer always wrote the field; nothing filled it.
+	if msg := w.GetStringProp("NoEntityMessage"); msg != "" {
+		dv.NoEntityMessage = &model.Text{
+			BaseElement: model.BaseElement{
+				ID:       model.ID(types.GenerateID()),
+				TypeName: "Texts$Text",
+			},
+			Translations: map[string]string{pb.textLang(): msg},
+		}
+	}
+
 	showFooterSet := false
 	if raw, ok := lookupPropCI(w, "ShowFooter"); ok {
 		v, err := propBool(raw)
@@ -95,9 +107,11 @@ func (pb *pageBuilder) buildDataViewV3(w *ast.WidgetV3) (*pages.DataView, error)
 		// Save and restore entity context so nested DataViews work correctly
 		oldContext := pb.entityContext
 		oldArgCtx := pb.argCtx
+		pb.enterOuterEntityContext(oldContext)
 		pb.entityContext = entityName
 		pb.argCtx = enteringDataWidget(ds, entityName)
 		defer func() {
+			pb.leaveOuterEntityContext()
 			pb.entityContext = oldContext
 			pb.argCtx = oldArgCtx
 		}()
@@ -188,7 +202,7 @@ func (pb *pageBuilder) buildClientTemplateParams(astParams []ast.ParamAssignment
 			out = append(out, param)
 			continue
 		}
-		if isTemplateExpression(strVal) {
+		if pb.isTemplateExpression(strVal) {
 			// A quoted string literal or any other expression
 			// (`toString($Order/Total)`) — stored as written.
 			param.Expression = strVal
@@ -314,6 +328,26 @@ func (pb *pageBuilder) buildDataGridColumnV3(w *ast.WidgetV3) (*pages.DataGridCo
 	return col, nil
 }
 
+// warnListViewWithoutSource reports a list view written with no data source.
+// It is placed — the writer stores Studio Pro's unconfigured source, an XPath
+// source naming no entity — and `mx check` will ask for the entity until the
+// author sets one. A building block ships list views like that
+// (PlatformDesignSystem's Avatar_Group_SM); refusing them refused the whole
+// block (ako/mxcli#2183).
+func (pb *pageBuilder) warnListViewWithoutSource(w *ast.WidgetV3) {
+	if pb.ctx == nil {
+		return
+	}
+	origin := ""
+	if w.FromBuildingBlock {
+		origin = " (from the building block)"
+	}
+	fmt.Fprintf(pb.ctx.progress(),
+		"Warning: listview %q%s has no data source; it is placed unconfigured, as Studio Pro stores it, "+
+			"and `mx check` reports it until one is set (e.g. `DataSource: database from Module.Entity`).\n",
+		w.Name, origin)
+}
+
 func (pb *pageBuilder) buildListViewV3(w *ast.WidgetV3) (*pages.ListView, error) {
 	lv := &pages.ListView{
 		BaseWidget: pages.BaseWidget{
@@ -371,9 +405,11 @@ func (pb *pageBuilder) buildListViewV3(w *ast.WidgetV3) (*pages.ListView, error)
 		// Save and restore entity context so nested containers work correctly
 		oldContext := pb.entityContext
 		oldArgCtx := pb.argCtx
+		pb.enterOuterEntityContext(oldContext)
 		pb.entityContext = entityName
 		pb.argCtx = enteringDataWidget(ds, entityName)
 		defer func() {
+			pb.leaveOuterEntityContext()
 			pb.entityContext = oldContext
 			pb.argCtx = oldArgCtx
 		}()
@@ -382,6 +418,8 @@ func (pb *pageBuilder) buildListViewV3(w *ast.WidgetV3) (*pages.ListView, error)
 		if w.Name != "" && entityName != "" {
 			pb.paramEntityNames[w.Name] = entityName
 		}
+	} else {
+		pb.warnListViewWithoutSource(w)
 	}
 
 	// Register widget scope for SELECTION references
@@ -501,7 +539,7 @@ func (pb *pageBuilder) buildTextBoxV3(w *ast.WidgetV3) (*pages.TextBox, error) {
 	}
 
 	// Handle Attribute (attribute path)
-	if attr := w.GetAttribute(); attr != "" {
+	if attr := inputAttributeText(w); attr != "" {
 		path, steps, sv, err := pb.resolveInputBinding(w, attr)
 		if err != nil {
 			return nil, err
@@ -603,7 +641,7 @@ func (pb *pageBuilder) buildTextAreaV3(w *ast.WidgetV3) (*pages.TextArea, error)
 	}
 
 	// Handle Attribute
-	if attr := w.GetAttribute(); attr != "" {
+	if attr := inputAttributeText(w); attr != "" {
 		path, steps, sv, err := pb.resolveInputBinding(w, attr)
 		if err != nil {
 			return nil, err
@@ -690,7 +728,7 @@ func (pb *pageBuilder) buildDatePickerV3(w *ast.WidgetV3) (*pages.DatePicker, er
 	}
 
 	// Handle Attribute
-	if attr := w.GetAttribute(); attr != "" {
+	if attr := inputAttributeText(w); attr != "" {
 		path, steps, sv, err := pb.resolveInputBinding(w, attr)
 		if err != nil {
 			return nil, err
@@ -828,7 +866,7 @@ func (pb *pageBuilder) buildDropdownV3(w *ast.WidgetV3) (*pages.DropDown, error)
 	}
 
 	// Handle Attribute
-	if attr := w.GetAttribute(); attr != "" {
+	if attr := inputAttributeText(w); attr != "" {
 		path, steps, sv, err := pb.resolveInputBinding(w, attr)
 		if err != nil {
 			return nil, err
@@ -874,7 +912,7 @@ func (pb *pageBuilder) buildCheckBoxV3(w *ast.WidgetV3) (*pages.CheckBox, error)
 	}
 
 	// Handle Attribute
-	if attr := w.GetAttribute(); attr != "" {
+	if attr := inputAttributeText(w); attr != "" {
 		path, steps, sv, err := pb.resolveInputBinding(w, attr)
 		if err != nil {
 			return nil, err
@@ -897,6 +935,15 @@ func (pb *pageBuilder) buildCheckBoxV3(w *ast.WidgetV3) (*pages.CheckBox, error)
 	// omitted property stays empty and the writer keeps the stored default —
 	// what decides whether a read-only check box renders as "Yes"/"No" text or
 	// as the checkbox glyph (ako/mxcli#490).
+	// LabelPosition (ako/mxcli#2106): Default, BeforeControl or AfterControl.
+	if raw := w.GetStringProp("LabelPosition"); raw != "" {
+		pos, ok := map[string]string{"default": "Default", "beforecontrol": "BeforeControl", "aftercontrol": "AfterControl"}[strings.ToLower(raw)]
+		if !ok {
+			return nil, mdlerrors.NewValidationf("checkbox %q: LabelPosition %q is not a Mendix label position — use Default, BeforeControl or AfterControl", w.Name, raw)
+		}
+		cb.LabelPosition = pos
+	}
+
 	style, err := readOnlyStyleValue(w.GetStringProp("ReadOnlyStyle"), "checkbox", w.Name)
 	if err != nil {
 		return nil, err
@@ -953,7 +1000,7 @@ func (pb *pageBuilder) buildRadioButtonsV3(w *ast.WidgetV3) (*pages.RadioButtons
 	}
 
 	// Get attribute path from Attribute property
-	if attr := w.GetAttribute(); attr != "" {
+	if attr := inputAttributeText(w); attr != "" {
 		path, steps, sv, err := pb.resolveInputBinding(w, attr)
 		if err != nil {
 			return nil, err
@@ -968,6 +1015,19 @@ func (pb *pageBuilder) buildRadioButtonsV3(w *ast.WidgetV3) (*pages.RadioButtons
 	}
 
 	// ReadOnlyStyle, as on a checkbox; unset keeps Inherit (ako/mxcli#977).
+	// RenderHorizontal (ako/mxcli#2106): Studio Pro's "Orientation". Unset
+	// keeps the writer's default, horizontal.
+	if v, ok := w.Properties["RenderHorizontal"]; ok {
+		switch strings.ToLower(fmt.Sprint(v)) {
+		case "true":
+			rb.RenderDirection = pages.RenderDirectionHorizontal
+		case "false":
+			rb.RenderDirection = pages.RenderDirectionVertical
+		default:
+			return nil, mdlerrors.NewValidationf("radiobuttons %q: RenderHorizontal takes true or false, not %v", w.Name, v)
+		}
+	}
+
 	rbStyle, err := readOnlyStyleValue(w.GetStringProp("ReadOnlyStyle"), "radiobuttons", w.Name)
 	if err != nil {
 		return nil, err
@@ -1148,7 +1208,7 @@ func (pb *pageBuilder) buildDynamicTextV3(w *ast.WidgetV3) (*pages.DynamicText, 
 			}
 			// Check if it's an attribute reference or literal
 			if strVal, ok := p.Value.(string); ok {
-				if isTemplateExpression(strVal) {
+				if pb.isTemplateExpression(strVal) {
 					// A quoted string literal or any other expression
 					// (`toString($Order/Total)`) - stored as written
 					param.Expression = strVal
@@ -1618,8 +1678,7 @@ func (pb *pageBuilder) buildSnippetCallParams(sc *pages.SnippetCallWidget, snipp
 			// Omitted. Legal exactly when the surrounding data context supplies
 			// the parameter's entity; otherwise nothing can satisfy it and the
 			// author gets the guidance rather than a build error later.
-			if pb.entityContext != "" && declared.EntityName != "" &&
-				strings.EqualFold(pb.entityContext, declared.EntityName) {
+			if pb.contextSupplies(declared.EntityName) {
 				continue
 			}
 			return mdlerrors.NewValidationf(
@@ -1633,11 +1692,19 @@ func (pb *pageBuilder) buildSnippetCallParams(sc *pages.SnippetCallWidget, snipp
 		// the snippet does not have — CE0115 (ako/mxcli#721 L3).
 		// A page `Variables:` entry is named in LocalVariable (ako/mxcli#826).
 		_, kind := pb.classifyFlowArgValue(argument)
+		if kind == "local" {
+			// A page variable is primitive and a snippet parameter an object:
+			// CE0115 whichever slot it is written to (ako/mxcli#833).
+			return mdlerrors.NewValidation(snippetCallPageVariableMessage(sc.Name, declared.Name, strings.TrimPrefix(argument, "$")))
+		}
 		sc.ParameterMappings = append(sc.ParameterMappings, pages.SnippetParamMapping{
 			ParamName:          declared.Name,
 			Argument:           argument,
 			IsSnippetParameter: kind == "snippet",
 			IsLocalVariable:    kind == "local",
+			// A data view of the document, named for its object
+			// (ako/mxcli#1968), the way a flow call's argument is (#1560).
+			IsWidget: kind == "widget",
 		})
 	}
 
@@ -1964,17 +2031,17 @@ func buildWidgetIcon(w *ast.WidgetV3) (*pages.Icon, error) {
 	case types.MenuIconGlyph:
 		if spec.Code == 0 {
 			return nil, mdlerrors.NewValidationf(
-				"button %q: `Icon: glyph` needs a character code, e.g. `Icon: glyph 57377` — "+
+				"widget %q: `Icon: glyph` needs a character code, e.g. `Icon: glyph 57377` — "+
 					"a glyph icon carries no name, so the code is the only thing that identifies it", w.Name)
 		}
 	default:
 		if spec.Name == "" {
 			return nil, mdlerrors.NewValidationf(
-				"button %q: `Icon:` needs a qualified name, e.g. `Icon: 'Atlas_Core.Atlas_Filled.pencil'`", w.Name)
+				"widget %q: `Icon:` needs a qualified name, e.g. `Icon: 'Atlas_Core.Atlas_Filled.pencil'`", w.Name)
 		}
 	}
 	if icon.TypeName == "" {
-		return nil, mdlerrors.NewValidationf("button %q: unsupported icon kind %q", w.Name, spec.Kind)
+		return nil, mdlerrors.NewValidationf("widget %q: unsupported icon kind %q", w.Name, spec.Kind)
 	}
 	return icon, nil
 }
@@ -1999,4 +2066,45 @@ func widgetIconSpec(w *ast.WidgetV3) *ast.WidgetIcon {
 		}
 	}
 	return nil
+}
+
+// enterOuterEntityContext records the context a data container is entered
+// from, so a snippet call below it can see every enclosing container's entity;
+// leaveOuterEntityContext undoes it.
+func (pb *pageBuilder) enterOuterEntityContext(entity string) {
+	pb.outerEntityContexts = append(pb.outerEntityContexts, entity)
+}
+
+func (pb *pageBuilder) leaveOuterEntityContext() {
+	if n := len(pb.outerEntityContexts); n > 0 {
+		pb.outerEntityContexts = pb.outerEntityContexts[:n-1]
+	}
+}
+
+// contextSupplies reports whether a data container around the current widget
+// — the nearest or any enclosing one — supplies an object for a snippet
+// parameter of entity want. Studio Pro stores such a call with no parameter
+// mapping and mx check accepts it; measured on 11.14 with TestApp's
+// WorkflowCommons.ManageTaskAssignments, whose $Account (Administration.Account)
+// comes from a System.User data view two containers out (ako/mxcli#2055). An
+// entity in want's generalisation chain or one specialising it counts.
+func (pb *pageBuilder) contextSupplies(want string) bool {
+	if want == "" {
+		return false
+	}
+	related := func(ctx string) bool {
+		if ctx == "" {
+			return false
+		}
+		return strings.EqualFold(ctx, want) || pb.entityInChain(ctx, want) || pb.entityInChain(want, ctx)
+	}
+	if related(pb.entityContext) {
+		return true
+	}
+	for _, ctx := range pb.outerEntityContexts {
+		if related(ctx) {
+			return true
+		}
+	}
+	return false
 }

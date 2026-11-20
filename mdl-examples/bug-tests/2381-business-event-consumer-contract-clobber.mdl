@@ -1,0 +1,58 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#2381 — `create or modify business event service` destroyed a
+-- CONSUMED service's AsyncAPI contract and its handler microflow.
+--
+-- In Mendix 11 both roles are the same BusinessEvents$BusinessEventService
+-- document. What makes one a consumer is `Definition: null` plus the producing
+-- app's AsyncAPI contract in `Document`, with a handler microflow on each
+-- ServiceOperation. The rebuild wrote neither, so a statement like the one
+-- below — which can only describe a *published* service — silently produced:
+--
+--   Document                                2696 chars  ->  ""
+--   OperationImplementations[0].Microflow   M.Handle…   ->  ""
+--   Definition                              null        ->  invented
+--
+-- while `check --references` passed and `exec` reported "Modified business
+-- event service". The control is that the fixture's *publisher* round-tripped
+-- to "Unchanged" on the same build, so this was the property carry and not
+-- general churn.
+--
+-- Why it matters: the contract is the only record of the channel id, and the
+-- channel id is what binds a subscriber to the producer's topic at deployment
+-- (`businessevents.<channel id>.<space>`). Nothing in the model can put it
+-- back, so this is guard-don't-drop territory (ADR-0005): the statement is now
+-- refused rather than applied.
+--
+-- This file only checks that the statement still PARSES — the defect is in the
+-- executor and needs a stored consumer, which a standalone check has not got.
+--
+-- Manual repro (needs a project holding a Studio Pro-authored consumer; the
+-- fixture is ako/TestApp at 619864b, BusinessEventsClient.OrdersEventClient):
+--
+--   mxcli exec mdl-examples/bug-tests/2381-business-event-consumer-contract-clobber.mdl \
+--     -p TestApp.mpr
+--
+--   before the fix:  "Modified business event service: …"   (contract gone)
+--   after  the fix:  Error: … is a consumed business event service: its stored
+--                    AsyncAPI contract (2696 bytes) holds the channel id
+--                    subscribers bind to …
+--
+--   `describe business event service BusinessEventsClient.OrdersEventClient`
+--   now prints the subscriptions and the contract as comments: parseable
+--   output with no statement to re-run. Before the fix it printed a bare
+--   `create or modify business event service …` header that failed to parse
+--   with "mismatched input '<EOF>' expecting '('".
+--
+-- Unit coverage: mdl/executor/cmd_businessevents_consumer_test.go
+-- ============================================================================
+
+create or modify business event service BusinessEventsClient.OrdersEventClient
+(
+  ServiceName: 'OrdersEventService',
+  EventNamePrefix: ''
+)
+{
+  message OrderPlaceEvent (OrderId: Long, CustomerId: Long) subscribe
+    entity BusinessEventsClient.CBE_OrderPlaceEvent;
+};

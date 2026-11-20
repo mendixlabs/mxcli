@@ -1,0 +1,32 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#904 — describe output of an AccessibilityHelper did not re-execute
+-- ============================================================================
+--
+-- Two defects. (1) describe emitted `content { … }` for the widget's child
+-- slot, refused by exec as MDL-WIDGET26 "`content` is not a container of
+-- `accessibilityhelper` — it declares: attr, template". Already fixed by
+-- mendixlabs/mxcli#1400: describe now emits `template { … }`, as below.
+-- (2) An attributesList item's `attribute:` property (the HTML attribute's
+-- NAME, a string) was read by check --references — which exec runs first — as
+-- an attribute binding: "Attribute 'aria-label' is bound but there is no
+-- enclosing data container providing entity context". The page below is the
+-- form describe prints; it must check, execute, and describe back unchanged.
+--
+-- Measured on mx 11.12.1: exec → describe → exec reports "Unchanged page", and
+-- mx check reports 0 errors.
+-- ============================================================================
+
+create module Probe904;
+
+create page Probe904.P (
+  title: 'P',
+  layout: Atlas_Core.Atlas_Default
+) {
+  accessibilityhelper acc1 (targetSelector: '.mx-name-acc1') {
+    attr (attribute: 'aria-label', valueSourceType: 'text', valueText: 'Hello', attributeCondition: 'true')
+    template {
+      dynamictext accContent (content: 'Accessible content area')
+    }
+  }
+};

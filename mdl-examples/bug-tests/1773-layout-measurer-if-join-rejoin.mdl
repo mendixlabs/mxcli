@@ -1,0 +1,82 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#1773: the layout measurer disagreed with the flow builder in three
+-- shapes, so an object landed on or behind its neighbour, and `layout flows`
+-- reported such a flow as already laid out because it uses the same builder.
+--
+--   1. "An IF is measured 45 px short. The measurer counts the split's centre as
+--      its left edge. Take an if/else followed by an activity inside a THEN
+--      branch: the enclosing merge ends up 5 px inside that activity."
+--      A decision that opens a branch was a further 15px short: the builder
+--      centres it where an activity's centre would be, and a split is narrower.
+--   2. "A `join` is measured as an activity plus an end event, though it draws
+--      nothing. A handler row that ends in joins reserves roughly twice its
+--      drawn width."
+--   3. "A fall-through error handler of two or more statements rejoins
+--      backwards." The merge stood between the activity and the next one, left
+--      of the row's last activity. It now goes one gap past the row, and the
+--      main line waits for it.
+--
+-- Geometry is invisible below Studio Pro: every flow here passes `mx check`
+-- either way. Execute without @position and lint: MPR008 must report nothing.
+--
+--   mxcli exec 1773-layout-measurer-if-join-rejoin.mdl -p app.mpr
+--   mxcli lint -p app.mpr --rules MPR008,MPR011
+--
+-- Regression coverage: mdl/executor/layout_measurer_1773_test.go and
+-- mdl/executor/layout_handler_lane_1768_test.go (now without skips).
+-- ============================================================================
+
+create or modify module Bug1773;
+
+create or modify persistent entity Bug1773.Item ( "Code": String(50) );
+
+-- Shape 1: before the fix the closing merge of the outer IF stood inside the
+-- 'last in then' activity.
+create or modify microflow Bug1773.NestedDecisionInBranch ($Flag: Boolean, $Other: Boolean)
+begin
+  if $Other then
+    if $Flag then
+      log info node 'Bug1773' 'yes';
+    else
+      log info node 'Bug1773' 'no';
+    end if;
+    log info node 'Bug1773' 'last in then';
+  else
+    log info node 'Bug1773' 'else';
+  end if;
+  log info node 'Bug1773' 'after';
+end;
+
+-- Shape 2: handler rows that end in a join, in a THEN branch whose closing
+-- merge is placed from the branch's measured width.
+create or modify microflow Bug1773.HandlerRowsEndingInJoins ($Flag: Boolean)
+begin
+  if $Flag then
+    retrieve $A from Bug1773.Item on error without rollback begin
+      log error node 'Bug1773' 'a1';
+      join recovered;
+    end error;
+    retrieve $B from Bug1773.Item on error without rollback begin
+      log error node 'Bug1773' 'b1';
+      log error node 'Bug1773' 'b2';
+      join recovered;
+    end error;
+    log info node 'Bug1773' 'between';
+  else
+    log info node 'Bug1773' 'else';
+  end if;
+  merge recovered;
+  log info node 'Bug1773' 'done';
+end;
+
+-- Shape 3: a handler of three statements that falls through to the main line.
+create or modify microflow Bug1773.LongHandlerRejoins ()
+begin
+  retrieve $A from Bug1773.Item on error without rollback begin
+    log error node 'Bug1773' 'a1';
+    log error node 'Bug1773' 'a2';
+    log error node 'Bug1773' 'a3';
+  end error;
+  log info node 'Bug1773' 'next';
+end;

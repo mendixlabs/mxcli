@@ -7,12 +7,12 @@ package roundtrip
 import (
 	"bytes"
 	"encoding/hex"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
@@ -153,7 +153,7 @@ func copyViewsFixture(t *testing.T) string {
 		t.Fatal(err)
 	}
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS(src)); err != nil {
+	if err := testutil.CopyFixture(dst, src); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	return filepath.Join(dst, viewsFixtureMPR)

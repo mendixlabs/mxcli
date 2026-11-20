@@ -17,21 +17,36 @@ mxcli docker build -p app.mpr
 
 ## The Project Is Not Modified
 
-`mx update-widgets`, `mx check` and MxBuild all write into the project they are
-given: update-widgets rewrites the model (an MPRv1 `.mpr` in place, an MPRv2
-project into MPRv1), mx check compiles the theme into `theme-cache/` and
-`deployment/sass/`, and MxBuild regenerates the `javasource/` proxies, the
-`.launch`, `.classpath` and `.project` files and all of `deployment/`.
+`mx check` and MxBuild write into the project they are given: mx check
+compiles the theme into `theme-cache/` and `deployment/sass/`, and MxBuild
+regenerates the `javasource/` proxies, the `.launch`, `.classpath` and
+`.project` files and all of `deployment/`.
 
 So `docker build` copies the project to a temporary directory (in `$TMPDIR`)
-and runs all three there. Widget definitions are normalised on that copy, so the
-build uses the normalised model while the project keeps its own; run
-`mxcli fix widgets` to apply the normalisation to the project. (So the build's
-pre-build check does not report a stale widget definition; `mxcli docker check`,
-which checks the project as stored, does.) The only thing
+and runs them there. The only thing
 written is the output directory (`.docker/build/` by default, or `-o`). Build
 output, caches and VCS folders (`deployment/`, `.docker/`, `.git/`,
 `node_modules/`, ...) are not copied.
+
+## The Project Is Built as Stored
+
+The pre-build check runs on the project as stored, exactly as
+[`mxcli docker check`](docker-check.md) checks it, and MxBuild builds that same
+model: a deployment is built from what is committed. A project whose stored
+widget definitions are stale (CE0463) therefore fails the build, with each
+CE0463 labelled as one `mxcli fix widgets` clears or one that persists — the
+same verdict `docker check`, `mxcli run --local` and Studio Pro give.
+
+| Flag | Checks and builds | Use |
+|------|-------------------|-----|
+| *(default)* | the project as stored | a build that matches what is committed |
+| `--update-widgets` | a copy normalised by `mx update-widgets` first | build anyway; the project keeps its stale widgets, `mxcli fix widgets` fixes them |
+| `--no-update-widgets` | the project as stored, without the re-check that labels CE0463s | scripts that passed it before |
+| `--skip-check` | no check at all | — |
+
+`--update-widgets` is how `docker build` (and `docker run` / `docker reload`,
+which build through it) behaved before ako/mxcli#1794; `docker run` and
+`docker reload` take the same flag.
 
 ## PAD Patching
 

@@ -1,6 +1,6 @@
 /**
  * MDL Agent Grammar — agent editor: models, knowledge bases,
- * consumed MCP services, agents.
+ * consumed and published MCP services, agents.
  */
 parser grammar MDLAgent;
 
@@ -66,6 +66,39 @@ createConsumedMCPServiceStatement
     : CONSUMED MCP SERVICE ifNotExists? qualifiedName
       (FOLDER STRING_LITERAL)?
       LPAREN modelProperty (COMMA modelProperty)* RPAREN
+    ;
+
+// =============================================================================
+// AGENT-EDITOR PUBLISHED MCP SERVICE CREATION (Agent Editor 2.6+, MCP Server 5.x)
+// =============================================================================
+// CREATE PUBLISHED MCP SERVICE Module.Name (
+//   ServerName: 'Orders', EndpointPath: 'orders', Version: '1.0.0',
+//   ProtocolVersion: v2025_03_26, Documentation: '...'
+// ) {
+//   tool get_order ( Microflow: Module.GetOrder, Description: '...', Title: '...' )
+// };
+createPublishedMCPServiceStatement
+    : PUBLISHED MCP SERVICE ifNotExists? qualifiedName
+      (FOLDER STRING_LITERAL)?
+      LPAREN modelProperty (COMMA modelProperty)* RPAREN
+      publishedMCPServiceBody?
+    ;
+
+publishedMCPServiceBody
+    : LBRACE publishedMCPToolBlock* RBRACE
+    ;
+
+// A microflow exposed as an MCP tool, named as the client sees it.
+publishedMCPToolBlock
+    : TOOL identifierOrKeyword LPAREN modelProperty (COMMA modelProperty)* COMMA? RPAREN
+    ;
+
+// ALTER PUBLISHED MCP SERVICE actions: SET for the service's properties,
+// ADD / DROP for its tools.
+alterPublishedMCPServiceAction
+    : SET agentEditorAlterAssignment (COMMA agentEditorAlterAssignment)*
+    | ADD publishedMCPToolBlock
+    | DROP TOOL identifierOrKeyword
     ;
 
 // =============================================================================

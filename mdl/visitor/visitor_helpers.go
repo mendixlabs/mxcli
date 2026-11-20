@@ -8,6 +8,7 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	"github.com/mendixlabs/mxcli/mdl/grammar/parser"
 )
 
@@ -146,6 +147,12 @@ func buildEnumValues(ctx parser.IEnumerationValueListContext, b *Builder) []ast.
 		}
 		if ev.STRING_LITERAL() != nil {
 			enumVal.Caption = unquoteStringLit(ev.STRING_LITERAL())
+		} else {
+			// No caption written: Studio Pro fills a new value's caption from
+			// its name, and an empty one is a blank option in every drop-down
+			// that mx check does not report (ako/mxcli#2397). A caption
+			// written as '' is kept empty.
+			enumVal.Caption = enumVal.Name
 		}
 		values = append(values, enumVal)
 	}
@@ -608,7 +615,9 @@ func extractDocComment(s string) string {
 	for len(cleaned) > 0 && cleaned[len(cleaned)-1] == "" {
 		cleaned = cleaned[:len(cleaned)-1]
 	}
-	return strings.Join(cleaned, "\n")
+	// Describe writes a `*/` in the text as `*\/`, which does not end the
+	// comment (ako/mxcli#2113).
+	return doccomment.Unescape(strings.Join(cleaned, "\n"))
 }
 
 // extractOriginalText extracts the original text from a parse tree context,

@@ -80,6 +80,7 @@ func execShowCatalogTables(ctx *ExecContext) error {
 var fullOnlyTables = map[string]bool{
 	"widgets":           true,
 	"activities":        true,
+	"flows":             true,
 	"refs":              true,
 	"xpath_expressions": true,
 	"strings":           true,
@@ -158,15 +159,21 @@ func warnIfCatalogModeInsufficient(ctx *ExecContext, tables []string) {
 
 // execCatalogQuery handles SELECT ... FROM CATALOG.xxx queries.
 func execCatalogQuery(ctx *ExecContext, query string) error {
-	// Build catalog if not already built (fast mode by default)
-	if ctx.Catalog == nil || !ctx.Catalog.IsBuilt() {
-		if err := ensureCatalog(ctx, false); err != nil {
+	// Convert CATALOG.xxx table names to actual table names
+	query, tables := rewriteCatalogTableRefs(query)
+
+	// The catalog the query needs: current, and built in the mode its tables
+	// are filled by. A query used to build fast whenever the cache was stale —
+	// after every exec that wrote, since a write changes the .mpr — and
+	// CATALOG.ACTIVITIES, refs and the graph views then answered empty or
+	// short, with only a progress-line warning an agent rarely reads
+	// (ako/mxcli#2200). The rebuild is incremental: only units changed since
+	// the cached catalog are read again.
+	if required := requiredCatalogMode(tables); !catalogCurrent(ctx, required) {
+		if err := ensureCatalogMode(ctx, required); err != nil {
 			return err
 		}
 	}
-
-	// Convert CATALOG.xxx table names to actual table names
-	query, tables := rewriteCatalogTableRefs(query)
 
 	// Warn if querying a table that requires a higher build mode
 	warnIfCatalogModeInsufficient(ctx, tables)
@@ -185,6 +192,53 @@ func execCatalogQuery(ctx *ExecContext, query string) error {
 
 	outputCatalogResults(ctx, result)
 	return nil
+}
+
+// requiredCatalogMode is the build mode that fills every table in tables:
+// "source", "full" or "fast". The communities tables are filled by the graph
+// pass, not a mode; they need full (the pass reads refs) and keep their own
+// warning.
+func requiredCatalogMode(tables []string) string {
+	mode := "fast"
+	for _, t := range tables {
+		switch {
+		case sourceOnlyTables[t]:
+			return "source"
+		case fullOnlyTables[t], communitiesOnlyTables[t]:
+			mode = "full"
+		}
+	}
+	return mode
+}
+
+// catalogCurrent reports whether the session's catalog can answer a query
+// that needs mode: built, at that level or above, for this .mpr, and not older
+// than the project file — a write earlier in the same session changes the .mpr
+// and leaves the in-memory catalog behind it.
+func catalogCurrent(ctx *ExecContext, mode string) bool {
+	if ctx.Catalog == nil || !ctx.Catalog.IsBuilt() {
+		return false
+	}
+	info, err := ctx.Catalog.GetCacheInfo()
+	if err != nil || info == nil {
+		return false
+	}
+	// A catalog that records no build mode, or a session with no project file,
+	// was not built from the project (a test hands one in): there is nothing
+	// to compare it against or rebuild it from, so it answers as before.
+	if info.BuildMode == "" || ctx.MprPath == "" {
+		return true
+	}
+	if catalogModeRank(info.BuildMode) < catalogModeRank(mode) {
+		return false
+	}
+	if info.MprPath != "" && !catalog.SameMprPath(info.MprPath, ctx.MprPath) {
+		return false
+	}
+	if mt := getMprModTime(ctx); !mt.IsZero() && !info.MprModTime.IsZero() && !catalog.ModTimeUnchanged(info.MprModTime, mt) {
+		return false
+	}
+	return true
 }
 
 // tableRequiredMode returns the command that populates a table.
@@ -297,10 +351,17 @@ func cachedCatalogInfo(ctx *ExecContext) *catalog.CacheInfo {
 
 // ensureCatalog ensures a catalog is available, using cache if possible.
 func ensureCatalog(ctx *ExecContext, full bool) error {
-	requiredMode := "fast"
 	if full {
-		requiredMode = "full"
+		return ensureCatalogMode(ctx, "full")
 	}
+	return ensureCatalogMode(ctx, "fast")
+}
+
+// ensureCatalogMode is ensureCatalog for a required build mode: "fast",
+// "full" or "source". A source requirement builds source; a full one builds at
+// the cached level when that is source (below).
+func ensureCatalogMode(ctx *ExecContext, requiredMode string) error {
+	full := requiredMode == "full" || requiredMode == "source"
 
 	// Try to load from cache first
 	cachePath := getCachePath(ctx)
@@ -327,7 +388,7 @@ func ensureCatalog(ctx *ExecContext, full bool) error {
 	// invocation, and the cache goes stale on every project save — so making it
 	// pay for a source reindex would trade one papercut for a worse one. It
 	// builds narrow in memory and the guard keeps its result off disk.
-	isSource := false
+	isSource := requiredMode == "source"
 	if full && cachedCatalogMode(ctx) == "source" {
 		isSource = true
 	}
@@ -399,14 +460,15 @@ func isCacheValid(ctx *ExecContext, cachePath string, requiredMode string) (bool
 		return false, fmt.Sprintf("failed to read cache info: %v", err)
 	}
 
-	// Check MPR path matches
-	if info.MprPath != ctx.MprPath {
+	// Check MPR path matches: the same file, however -p spells it (#2200).
+	if !catalog.SameMprPath(info.MprPath, ctx.MprPath) {
 		return false, "MPR path changed"
 	}
 
-	// Check MPR modification time (compare Unix seconds to handle timezone/precision issues)
+	// Check MPR modification time, as an instant (a zone-independent, exact
+	// comparison; whole seconds missed a write in the second of the build).
 	currentModTime := getMprModTime(ctx)
-	if info.MprModTime.Unix() != currentModTime.Unix() {
+	if !catalog.ModTimeUnchanged(info.MprModTime, currentModTime) {
 		return false, "project file modified"
 	}
 
@@ -570,14 +632,21 @@ func buildCatalog(ctx *ExecContext, full, isSource, communities bool, resolution
 	if hook := catalogBuilderHook; hook != nil {
 		hook(builder)
 	}
-	// Per-table lines are the only sign of life during a build that takes
-	// minutes on a large app (18 on a 140MB one), so quiet mode moves them off
-	// stdout rather than dropping them: `search -q --format names` promises one
-	// name per line, and forty "✓ Table: N" lines ahead of the names on a cold
-	// cache broke that promise.
+	// Quiet mode moves progress off stdout: `search -q --format names`
+	// promises one name per line, and forty "✓ Table: N" lines ahead of the
+	// names on a cold cache broke that promise.
 	buildProgress := ctx.progress()
 	if ctx.Quiet {
 		buildProgress = ctx.diagnostics()
+	}
+	// A line per table is for someone watching a terminal. Anywhere else —
+	// a pipe, a log, an agent's context — the build prints only a heartbeat,
+	// so the ~50 lines are not paid for after every model change, and a build
+	// that takes minutes (18 on a 140MB app) still shows it is alive
+	// (ako/mxcli#1860). Lines that carry information still print in full.
+	perTable := ctx.terminal && !ctx.Quiet
+	if !perTable {
+		builder.SetRoutineProgress(newCatalogHeartbeat(buildProgress).line)
 	}
 	err = builder.Build(func(table string, count int) {
 		fmt.Fprintf(buildProgress, "✓ %s: %d\n", table, count)
@@ -599,7 +668,7 @@ func buildCatalog(ctx *ExecContext, full, isSource, communities bool, resolution
 	} else if full {
 		buildMode = "full"
 	}
-	cat.SetCacheInfo(ctx.MprPath, getMprModTime(ctx), version, buildMode, elapsed)
+	cat.SetCacheInfo(catalog.AbsMprPath(ctx.MprPath), getMprModTime(ctx), version, buildMode, elapsed)
 
 	cat.SetBuilt(true)
 	ctx.Catalog = cat
@@ -637,7 +706,7 @@ func buildCatalog(ctx *ExecContext, full, isSource, communities bool, resolution
 			// and the in-place write that followed raced it (ako/mxcli#951).
 			if err := cat.SaveToFile(cachePath); err != nil {
 				fmt.Fprintf(ctx.progress(), "Warning: failed to save catalog cache: %v\n", err)
-			} else {
+			} else if perTable {
 				fmt.Fprintf(buildProgress, "✓ Catalog cached to %s\n", cachePath)
 			}
 		}
@@ -1078,10 +1147,13 @@ func parallelDescribeContext(ctx *ExecContext, out io.Writer, id model.ID) *Exec
 		// Pins the describe to this document rather than to whichever
 		// document of this name the lookup prefers (#1185).
 		describeID: id,
-		// The text feeds the search index, where layout annotations do not
-		// matter, and telling derived layout from authored rebuilds each flow
-		// several times — it made a full source refresh 2.3x slower (#766).
-		describeFullLayout: true,
+		// The canonical description, as DESCRIBE prints it (ako/mxcli#2036).
+		// The text is read as MDL, not only searched: tools generate scripts
+		// from it, and with every stored layout annotation kept (#766 did so
+		// to skip the derivation, 2.3x faster cold) those scripts stated
+		// layout DESCRIBE leaves out — 376 of one project's 858 microflows.
+		// Telling derived layout from authored costs on a cold build; the
+		// incremental source build (#1790) carries unchanged rows after it.
 	}
 }
 
@@ -1179,6 +1251,18 @@ type SearchOptions struct {
 	// absence of hits needs the difference: "nothing found" and "could not look"
 	// are not the same answer.
 	Strict bool
+	// NoBuild never builds the source index (CATALOG.SOURCE). Without it the
+	// flow, page and expression bodies are not searched, and the outcome says
+	// so (SearchOutcome.Incomplete) instead of passing for "nothing found".
+	NoBuild bool
+}
+
+// SearchOutcome is what a search found, and whether it looked everywhere.
+type SearchOutcome struct {
+	Hits int
+	// Incomplete is true when MDL source was not searched because the source
+	// index does not exist and NoBuild kept the search from building it.
+	Incomplete bool
 }
 
 // marketplaceModuleFilter is the WHERE fragment that keeps a search to modules
@@ -1229,16 +1313,15 @@ func execSearch(ctx *ExecContext, stmt *ast.SearchStmt) error {
 	return err
 }
 
-// searchTable prints the human-readable result of a search and returns how many
-// hits it printed.
-func searchTable(ctx *ExecContext, query string, opts SearchOptions) (int, error) {
+// searchTable prints the human-readable result of a search and returns what it
+// found.
+func searchTable(ctx *ExecContext, query string, opts SearchOptions) (SearchOutcome, error) {
 	if !ctx.Connected() {
-		return 0, mdlerrors.NewNotConnected()
+		return SearchOutcome{}, mdlerrors.NewNotConnected()
 	}
-
-	// Ensure catalog is built (at least full mode for strings table)
-	if err := ensureCatalog(ctx, true); err != nil {
-		return 0, err
+	incomplete, err := ensureSearchCatalog(ctx, opts)
+	if err != nil {
+		return SearchOutcome{}, err
 	}
 
 	stringsSQL, sourceSQL := searchSQL(query, opts)
@@ -1247,7 +1330,7 @@ func searchTable(ctx *ExecContext, query string, opts SearchOptions) (int, error
 	// Search strings table
 	strResult, err := runSearchQuery(ctx, stringsSQL, opts)
 	if err != nil {
-		return 0, err
+		return SearchOutcome{}, err
 	}
 	if strResult != nil && strResult.Count > 0 {
 		hits += strResult.Count
@@ -1259,7 +1342,7 @@ func searchTable(ctx *ExecContext, query string, opts SearchOptions) (int, error
 	// Search source table (if available)
 	srcResult, err := runSearchQuery(ctx, sourceSQL, opts)
 	if err != nil {
-		return 0, err
+		return SearchOutcome{}, err
 	}
 	if srcResult != nil && srcResult.Count > 0 {
 		hits += srcResult.Count
@@ -1271,9 +1354,59 @@ func searchTable(ctx *ExecContext, query string, opts SearchOptions) (int, error
 	if hits == 0 {
 		fmt.Fprintln(ctx.Output, "No matches found.")
 	}
-	warnIfSourceIndexMissing(ctx)
+	if incomplete {
+		warnIfSourceIndexMissing(ctx)
+	}
 
-	return hits, nil
+	return SearchOutcome{Hits: hits, Incomplete: incomplete}, nil
+}
+
+// ensureSearchCatalog gets the catalog a search reads. A search reads
+// CATALOG.SOURCE as well as the strings index, and answered "No matches
+// found." for a name used only in flow, page and expression bodies on a
+// project whose source index had never been built (ako/mxcli#2004). So it
+// builds the source index when it is missing — once, saying so, since on a
+// large project that first build is noticeable; later builds carry every
+// unchanged document's row over (builder_source_reuse.go), so keeping it
+// current after a save costs a fraction of that.
+//
+// With NoBuild it never builds the source index, and incomplete reports that
+// the source was therefore not searched.
+func ensureSearchCatalog(ctx *ExecContext, opts SearchOptions) (incomplete bool, err error) {
+	if opts.NoBuild {
+		if err := ensureCatalog(ctx, true); err != nil {
+			return false, err
+		}
+		return !catalogHasSourceIndex(ctx), nil
+	}
+	if cachePath := getCachePath(ctx); cachePath != "" {
+		if valid, _ := isCacheValid(ctx, cachePath, "source"); valid {
+			return false, loadCachedCatalog(ctx, cachePath)
+		}
+	}
+	if !ctx.Connected() {
+		return false, mdlerrors.NewNotConnected()
+	}
+	if cachedCatalogMode(ctx) != "source" {
+		fmt.Fprintln(ctx.diagnostics(), "Building the source index so the search covers flow, page and expression bodies "+
+			"(once; later searches keep it up to date incrementally — pass --no-build to skip it)…")
+	}
+	defer beginUntimed(ctx.Context, "source mode")()
+	if implicitCatalogBuildHook != nil {
+		defer implicitCatalogBuildHook()()
+	}
+	return false, buildCatalog(ctx, true, true, false, 0)
+}
+
+// catalogHasSourceIndex reports whether the loaded catalog was built with the
+// source index. Keyed off the build mode the catalog records, never the row
+// count: a source-mode catalog with no matching (or no) rows is a real answer.
+func catalogHasSourceIndex(ctx *ExecContext) bool {
+	if ctx.Catalog == nil {
+		return false
+	}
+	info, err := ctx.Catalog.GetCacheInfo()
+	return err == nil && catalogModeRank(info.BuildMode) >= catalogModeRank("source")
 }
 
 // warnIfSourceIndexMissing says, on the diagnostics channel, that a search did
@@ -1286,14 +1419,14 @@ func searchTable(ctx *ExecContext, query string, opts SearchOptions) (int, error
 // source-mode catalog with no matching (or no) rows is a real answer, and
 // counting rows would make "built, nothing matched" warn too.
 func warnIfSourceIndexMissing(ctx *ExecContext) {
+	if catalogHasSourceIndex(ctx) {
+		return
+	}
 	mode := ""
 	if ctx.Catalog != nil {
 		if info, err := ctx.Catalog.GetCacheInfo(); err == nil {
 			mode = info.BuildMode
 		}
-	}
-	if catalogModeRank(mode) >= catalogModeRank("source") {
-		return
 	}
 	if mode == "" {
 		mode = "unknown"
@@ -1332,17 +1465,23 @@ func search(ctx *ExecContext, query, format string) error {
 // searchWith is search with options. It returns how many hits it found, which
 // is the number a caller gating on "no match" needs.
 func searchWith(ctx *ExecContext, query, format string, opts SearchOptions) (int, error) {
+	res, err := searchReport(ctx, query, format, opts)
+	return res.Hits, err
+}
+
+// searchReport is searchWith with the outcome in full.
+func searchReport(ctx *ExecContext, query, format string, opts SearchOptions) (SearchOutcome, error) {
 	if !ctx.Connected() {
-		return 0, mdlerrors.NewNotConnected()
+		return SearchOutcome{}, mdlerrors.NewNotConnected()
 	}
 
 	if format != "names" && format != "json" { // "table" (default)
 		return searchTable(ctx, query, opts)
 	}
 
-	// Ensure catalog is built (at least full mode for strings table)
-	if err := ensureCatalog(ctx, true); err != nil {
-		return 0, err
+	incomplete, err := ensureSearchCatalog(ctx, opts)
+	if err != nil {
+		return SearchOutcome{}, err
 	}
 
 	type searchResult struct {
@@ -1362,7 +1501,7 @@ func searchWith(ctx *ExecContext, query, format string, opts SearchOptions) (int
 	// Search strings table
 	strResult, err := runSearchQuery(ctx, stringsSQL, opts)
 	if err != nil {
-		return 0, err
+		return SearchOutcome{}, err
 	}
 	if strResult != nil && strResult.Count > 0 {
 		for _, row := range strResult.Rows {
@@ -1381,7 +1520,7 @@ func searchWith(ctx *ExecContext, query, format string, opts SearchOptions) (int
 	// Search source table (if available)
 	srcResult, err := runSearchQuery(ctx, sourceSQL, opts)
 	if err != nil {
-		return 0, err
+		return SearchOutcome{}, err
 	}
 	if srcResult != nil && srcResult.Count > 0 {
 		for _, row := range srcResult.Rows {
@@ -1402,8 +1541,10 @@ func searchWith(ctx *ExecContext, query, format string, opts SearchOptions) (int
 		} else {
 			fmt.Fprintln(ctx.Output, "[]")
 		}
-		warnIfSourceIndexMissing(ctx)
-		return 0, nil
+		if incomplete {
+			warnIfSourceIndexMissing(ctx)
+		}
+		return SearchOutcome{Incomplete: incomplete}, nil
 	}
 
 	switch format {
@@ -1419,13 +1560,15 @@ func searchWith(ctx *ExecContext, query, format string, opts SearchOptions) (int
 	case "json":
 		jsonBytes, err := json.MarshalIndent(allResults, "", "  ")
 		if err != nil {
-			return 0, err
+			return SearchOutcome{}, err
 		}
 		fmt.Fprintln(ctx.Output, string(jsonBytes))
 	}
 
-	warnIfSourceIndexMissing(ctx)
-	return len(allResults), nil
+	if incomplete {
+		warnIfSourceIndexMissing(ctx)
+	}
+	return SearchOutcome{Hits: len(allResults), Incomplete: incomplete}, nil
 }
 
 // Search performs a full-text search with the specified output format.
@@ -1439,6 +1582,12 @@ func (e *Executor) Search(query, format string) error {
 // parsing the output it just printed.
 func (e *Executor) SearchWith(query, format string, opts SearchOptions) (int, error) {
 	return searchWith(e.newExecContext(context.Background()), query, format, opts)
+}
+
+// SearchReport is SearchWith with the outcome in full: the hits, and whether
+// MDL source went unsearched because NoBuild found no source index.
+func (e *Executor) SearchReport(query, format string, opts SearchOptions) (SearchOutcome, error) {
+	return searchReport(e.newExecContext(context.Background()), query, format, opts)
 }
 
 // builtinWidgetMetas adapts the built-in WidgetRegistry's definitions into

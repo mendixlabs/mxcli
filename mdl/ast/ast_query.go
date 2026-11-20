@@ -111,6 +111,7 @@ const (
 	ShowConnections                  // SHOW CONNECTIONS (open external SQL connections in this session)
 	// ShowAnnotations lists a domain model's canvas notes.
 	ShowAnnotations
+	ShowPublishedMCPServices // LIST PUBLISHED MCP SERVICES [IN module] (agent-editor, MCP Server 5.x)
 )
 
 // String returns the human-readable name of the show object type.
@@ -262,6 +263,8 @@ func (t ShowObjectType) String() string {
 		return "KNOWLEDGE BASES"
 	case ShowConsumedMCPServices:
 		return "CONSUMED MCP SERVICES"
+	case ShowPublishedMCPServices:
+		return "PUBLISHED MCP SERVICES"
 	case ShowJarDependencies:
 		return "JAR DEPENDENCIES"
 	case ShowBuildingBlocks:
@@ -378,9 +381,10 @@ const (
 	DescribeScheduledEvent              // DESCRIBE SCHEDULED EVENT Module.Name
 	// DescribeWidget is not a document — it is a widget DEFINITION, named by
 	// MDL keyword or widget id. Name carries whichever was written.
-	DescribeWidget            // DESCRIBE WIDGET combobox | DESCRIBE WIDGET 'com.mendix.widget.web.combobox.Combobox'
-	DescribeRegularExpression // DESCRIBE REGULAR EXPRESSION Module.Name
-	DescribeAuto              // DESCRIBE Module.Name — type auto-detected at execution time
+	DescribeWidget              // DESCRIBE WIDGET combobox | DESCRIBE WIDGET 'com.mendix.widget.web.combobox.Combobox'
+	DescribeRegularExpression   // DESCRIBE REGULAR EXPRESSION Module.Name
+	DescribeAuto                // DESCRIBE Module.Name — type auto-detected at execution time
+	DescribePublishedMCPService // DESCRIBE PUBLISHED MCP SERVICE Module.Name (agent-editor, MCP Server 5.x)
 )
 
 // String returns the human-readable name of the describe object type.
@@ -472,6 +476,8 @@ func (t DescribeObjectType) String() string {
 		return "KNOWLEDGE BASE"
 	case DescribeConsumedMCPService:
 		return "CONSUMED MCP SERVICE"
+	case DescribePublishedMCPService:
+		return "PUBLISHED MCP SERVICE"
 	case DescribeJarDependency:
 		return "JAR DEPENDENCY"
 	case DescribeBuildingBlock:

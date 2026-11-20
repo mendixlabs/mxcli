@@ -1,0 +1,88 @@
+asyncapi: 2.2.0
+info:
+  title: "OrdersEventService"
+  version: "1.0.0"
+  description: ""
+  x-summary: ""
+  x-mendix-generated: true
+channels:
+  f2477dc90f714d69bb12df0df1ee9cce:
+    subscribe:
+      operationId: receiveOrderPlaceEventEvents
+      traits:
+      - $ref: '#/components/operationTraits/kafka'
+      message:
+        $ref: '#/components/messages/OrderPlaceEvent'
+components:
+  messages:
+    OrderPlaceEvent:
+      name: OrderPlaceEvent
+      title: OrderPlaceEvent event
+      description: ""
+      contentType: application/json
+      traits:
+      - $ref: '#/components/messageTraits/commonHeaders'
+      payload:
+        $ref: '#/components/schemas/OrderPlaceEventPayload'
+  schemas:
+    OrderPlaceEventPayload:
+      type: object
+      properties:
+        OrderId:
+          type: integer
+          format: int64
+        CustomerId:
+          type: integer
+          format: int64
+  messageTraits:
+    commonHeaders:
+      name: cloudevents-headers
+      summary: "\r\nMessage headers used by CloudEvents spec in binary content mode Kafka\r\nbinding (see\r\nhttps://github.com/cloudevents/spec/blob/v1.0.1/kafka-protocol-binding.md)"
+      headers:
+        type: object
+        required:
+        - ce_specversion
+        - ce_id
+        - ce-source
+        - ce_type
+        properties:
+          ce_specversion:
+            type: string
+            enum:
+            - 1.0
+            description: "The version of the CloudEvents specification which the event uses."
+          ce_id:
+            type: string
+            description: "Identifies the event."
+            minLength: 1
+          ce_source:
+            type: string
+            format: uri-reference
+            description: "Identifies the context in which an event happened."
+            minLength: 1
+          ce_type:
+            type: string
+            description: "Describes the type of event related to the originating occurrence."
+            minLength: 1
+          ce_service:
+            type: string
+            description: "Describes the service name in which this event was defined."
+          ce_subject:
+            type: string
+            description: "Describes the subject of the event in the context of the event\r\nproducer (identified by source)."
+          ce_time:
+            type: string
+            format: date-time
+            description: "Timestamp of when the occurrence happened. Must adhere to RFC\r\n3339."
+          content-type:
+            type: string
+            enum:
+            - application/json
+  operationTraits:
+    kafka:
+      bindings:
+        kafka:
+          key:
+            type: string
+            description: "Event Id"
+defaultContentType: application/json

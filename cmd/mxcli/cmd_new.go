@@ -36,6 +36,10 @@ Step 4 exists because Atlas's layouts live in a Marketplace module, and Mendix's
 own guidance is not to edit them: an update replaces the module and the edit is
 gone. A generated app therefore starts with a layout it can change.
 
+The target directory must be empty, or hold only a brain (docs/brain/ and
+.mxcli/brain/, from 'mxcli brain init -C <dir>'). A brain is adopted: the project
+is created around it and its requirements are counted against the new model.
+
 The project is created in a short temporary directory and moved into place, so
 --output-dir may be as deep as your filesystem allows and a failure never leaves
 partial output behind. Mendix tooling itself refuses paths over 259 characters,
@@ -85,10 +89,15 @@ Examples:
 			os.Exit(1)
 		}
 
-		// Check if directory already exists and has content
-		if entries, err := os.ReadDir(absDir); err == nil && len(entries) > 0 {
-			fmt.Fprintf(os.Stderr, "Error: directory %s already exists and is not empty\n", absDir)
+		// The directory must be empty, or hold only a brain started before the
+		// project (requirements first, app second), which is adopted in place.
+		adoptBrain, err := checkNewProjectDestination(absDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
+		}
+		if adoptBrain {
+			fmt.Printf("Adopting the brain already in %s; the project is created around it.\n", absDir)
 		}
 
 		// A hand-typed version may name no CDN artifact: Mendix 9 and 10 publish a

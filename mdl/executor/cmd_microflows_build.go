@@ -174,6 +174,8 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 	var existingDocumentation string
 	preserveDocumentation := false
 	var existingActionInfo, existingWorkflowInfo *types.MicroflowActionInfo
+	// The stored flow, for what its activities hold that MDL cannot restate.
+	var existingObjects *microflows.MicroflowObjectCollection
 	existingMicroflows, err := microflowsNamed(ctx, s.Name.Name)
 	if err != nil {
 		return nil, mdlerrors.NewBackend("check existing microflows", err)
@@ -211,6 +213,7 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 		existingDocumentation = existing.Documentation
 		preserveDocumentation = true
 		existingWorkflowInfo = existing.WorkflowActionInfo
+		existingObjects = existing.ObjectCollection
 	}
 
 	// For CREATE OR REPLACE/MODIFY, reuse the existing ID to preserve references
@@ -221,6 +224,11 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 	if existingID != "" && opts.AllowCreate {
 		if err := checkNoQueuedCalls(ctx, existingID, qualifiedName, s); err != nil {
 			return nil, err
+		}
+		// A whole-flow rebuild writes only what the statement says, so an
+		// activity MDL cannot express is lost (mendixlabs/mxcli#1735).
+		if types := unsupportedActionTypes(existingObjects); len(types) > 0 {
+			return nil, unsupportedActionLossError("microflow", qualifiedName, "rebuilding it from this statement", types)
 		}
 		// Same reasoning for a REST body the writer cannot express: the rebuild
 		// would drop it, DESCRIBE would not show it missing, and the app would
@@ -298,32 +306,10 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 		return nil, err
 	}
 
-	// Build entity resolver function for parameter/return types
-	entityResolver := func(qn ast.QualifiedName) model.ID {
-		// Get all domain models and build module name map
-		dms, err := ctx.Backend.ListDomainModels()
-		if err != nil {
-			return ""
-		}
-		modules, _ := ctx.Backend.ListModules()
-		moduleNames := make(map[model.ID]string)
-		for _, m := range modules {
-			moduleNames[m.ID] = m.Name
-		}
-		// Search for entity in all domain models
-		for _, dm := range dms {
-			modName := moduleNames[dm.ContainerID]
-			if modName != qn.Module {
-				continue
-			}
-			for _, ent := range dm.Entities {
-				if ent.Name == qn.Name {
-					return ent.ID
-				}
-			}
-		}
-		return ""
-	}
+	// Build entity resolver function for parameter/return types: it decodes
+	// only the domain model of the module a type names (ako/mxcli#2094).
+	resolver := newFlowEntityResolver(ctx)
+	entityResolver := resolver.resolve
 
 	// Validate and add parameters
 	for i, p := range s.Parameters {
@@ -335,6 +321,9 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 		if p.Type.EntityRef != nil && !isBuiltinModuleEntity(p.Type.EntityRef.Module) {
 			entityID := entityResolver(*p.Type.EntityRef)
 			if entityID == "" {
+				if resolver.err != nil {
+					return nil, mdlerrors.NewBackend("read domain models", resolver.err)
+				}
 				// Bare qualified name in microflow context is treated as TypeEntity by the
 				// visitor, but it may actually be an enumeration. Try enum lookup before failing.
 				if retyped, ok := bareEnumerationType(ctx, p.Type); ok {
@@ -374,6 +363,9 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 		if s.ReturnType.Type.EntityRef != nil && !isBuiltinModuleEntity(s.ReturnType.Type.EntityRef.Module) {
 			entityID := entityResolver(*s.ReturnType.Type.EntityRef)
 			if entityID == "" {
+				if resolver.err != nil {
+					return nil, mdlerrors.NewBackend("read domain models", resolver.err)
+				}
 				// A bare qualified name may be an enumeration, as for parameters above.
 				if retyped, ok := bareEnumerationType(ctx, s.ReturnType.Type); ok && s.ReturnType.Type.Kind == ast.TypeEntity {
 					s.ReturnType.Type = retyped
@@ -463,6 +455,15 @@ func buildMicroflowFromStmt(ctx *ExecContext, s *ast.CreateMicroflowStmt, opts b
 			errMsg.WriteString(fmt.Sprintf("  - %s\n", err))
 		}
 		return nil, fmt.Errorf("%s", errMsg.String())
+	}
+	carried, err := carryIncludedAssociations(mf.ObjectCollection, existingObjects, qualifiedName, builder.statedIncludes)
+	if err != nil {
+		return nil, err
+	}
+	if !opts.Quiet && ctx.Output != nil {
+		for _, c := range carried {
+			fmt.Fprintln(ctx.Output, carriedIncludesWarning(qualifiedName, c))
+		}
 	}
 	return &builtFlow{
 		Microflow:           mf,
@@ -564,6 +565,14 @@ func buildNanoflowFromStmt(ctx *ExecContext, s *ast.CreateNanoflowStmt, opts bui
 		// A rewrite that carried no doc comment keeps the stored one (#1018).
 		existingDocumentation = existing.Documentation
 		preserveDocumentation = true
+		// As for a microflow: a whole-flow rebuild loses an activity MDL cannot
+		// express (mendixlabs/mxcli#1735).
+		if opts.AllowCreate {
+			if types := unsupportedActionTypes(existing.ObjectCollection); len(types) > 0 {
+				return nil, unsupportedActionLossError("nanoflow", s.Name.Module+"."+s.Name.Name,
+					"rebuilding it from this statement", types)
+			}
+		}
 	}
 
 	// For CREATE OR REPLACE/MODIFY, reuse the existing ID to preserve references
@@ -615,37 +624,12 @@ func buildNanoflowFromStmt(ctx *ExecContext, s *ast.CreateNanoflowStmt, opts bui
 		nf.AllowedModuleRoles = existingAllowedRoles
 	}
 
-	// Load metadata needed by the entity resolver up front so backend read
-	// failures are returned as actionable errors instead of being treated as
-	// "entity not found".
-	dms, err := ctx.Backend.ListDomainModels()
-	if err != nil {
-		return nil, mdlerrors.NewBackend("list domain models", err)
-	}
-	modules, err := ctx.Backend.ListModules()
-	if err != nil {
-		return nil, mdlerrors.NewBackend("list modules", err)
-	}
-	moduleNames := make(map[model.ID]string)
-	for _, m := range modules {
-		moduleNames[m.ID] = m.Name
-	}
-
-	// Build entity resolver function for parameter/return types
-	entityResolver := func(qn ast.QualifiedName) model.ID {
-		for _, dm := range dms {
-			modName := moduleNames[dm.ContainerID]
-			if modName != qn.Module {
-				continue
-			}
-			for _, ent := range dm.Entities {
-				if ent.Name == qn.Name {
-					return ent.ID
-				}
-			}
-		}
-		return ""
-	}
+	// The entity resolver decodes only the domain model of the module a type
+	// names, on the first lookup (ako/mxcli#2094). A backend failure is
+	// returned where the entity is looked up, as an actionable error rather
+	// than as "entity not found".
+	resolver := newFlowEntityResolver(ctx)
+	entityResolver := resolver.resolve
 
 	// Validate and add parameters
 	for i, p := range s.Parameters {
@@ -654,6 +638,9 @@ func buildNanoflowFromStmt(ctx *ExecContext, s *ast.CreateNanoflowStmt, opts bui
 		if p.Type.EntityRef != nil && !isBuiltinModuleEntity(p.Type.EntityRef.Module) {
 			entityID := entityResolver(*p.Type.EntityRef)
 			if entityID == "" {
+				if resolver.err != nil {
+					return nil, mdlerrors.NewBackend("read domain models", resolver.err)
+				}
 				// Bare qualified name in microflow context is treated as TypeEntity by the
 				// visitor, but it may actually be an enumeration. Try enum lookup before failing.
 				if retyped, ok := bareEnumerationType(ctx, p.Type); ok {
@@ -689,6 +676,9 @@ func buildNanoflowFromStmt(ctx *ExecContext, s *ast.CreateNanoflowStmt, opts bui
 		if s.ReturnType.Type.EntityRef != nil && !isBuiltinModuleEntity(s.ReturnType.Type.EntityRef.Module) {
 			entityID := entityResolver(*s.ReturnType.Type.EntityRef)
 			if entityID == "" {
+				if resolver.err != nil {
+					return nil, mdlerrors.NewBackend("read domain models", resolver.err)
+				}
 				// A bare qualified name may be an enumeration, as for parameters above.
 				if retyped, ok := bareEnumerationType(ctx, s.ReturnType.Type); ok && s.ReturnType.Type.Kind == ast.TypeEntity {
 					s.ReturnType.Type = retyped

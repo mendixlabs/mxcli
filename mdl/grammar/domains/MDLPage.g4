@@ -587,6 +587,10 @@ widgetPropertyV3
     | VISIBLE COLON propertyValueV3                   // Visible: false
     | VISIBLE COLON expression                        // Visible: $currentObject/Status = 'Open'
     | EDITABLE COLON xpathConstraint /* @alias MDL-DEPR081 */ // Editable: [Status != 'Closed']
+    // Studio Pro's "Editable: based on attribute value", spelled as its
+    // visibility twin (ako/mxcli#2111).
+    | EDITABLE COLON qualifiedName IN LPAREN visibleValueV3 (COMMA visibleValueV3)* RPAREN  // Editable: Status in (Draft, empty)
+    | EDITABLE COLON widgetAttributeRefV3 IN LPAREN visibleValueV3 (COMMA visibleValueV3)* RPAREN  // Editable: $Param.Status in (Draft)
     | EDITABLE COLON propertyValueV3                  // Editable: Never | Always
     | EDITABLE COLON expression                       // Editable: $currentObject/Status != 'Closed'
     | TOOLTIP COLON propertyValueV3                   // Tooltip: 'text'
@@ -730,8 +734,10 @@ actionExprV3
     | SAVE_CHANGES closePageV3? actionSettingsV3?     // save changes [close page]
     | CANCEL_CHANGES closePageV3? actionSettingsV3?   // cancel changes [close page]
     | closePageV3 actionSettingsV3?                   // close page
-    | DELETE closePageV3? actionSettingsV3?           // delete [close page]
-    | DELETE_OBJECT /* @alias MDL-DEPR020 */ closePageV3? actionSettingsV3?
+    // `delete $grid1` deletes grid1's selection, `delete $Param` a page or
+    // snippet parameter; bare `delete` the context object (ako/mxcli#1932).
+    | DELETE VARIABLE? closePageV3? actionSettingsV3? // delete [$source] [close page]
+    | DELETE_OBJECT /* @alias MDL-DEPR020 */ VARIABLE? closePageV3? actionSettingsV3?
     | CREATE OBJECT qualifiedName (THEN actionExprV3 | actionSettingsV3)? // create object Entity then show page ...
     | CREATE_OBJECT /* @alias MDL-DEPR020 */ qualifiedName (THEN actionExprV3 | actionSettingsV3)?
     | SHOW PAGE qualifiedName microflowArgsV3? actionSettingsV3?        // show page Module.Page (Param: val)
@@ -784,7 +790,7 @@ actionReturnV3
 // workflow with (DefaultPage: Module.Page)`); a single segment is the
 // identifierOrKeyword every other setting takes.
 actionSettingV3
-    : identifierOrKeyword COLON (STRING_LITERAL | NONE | qualifiedName)
+    : identifierOrKeyword COLON (STRING_LITERAL | NUMBER_LITERAL | NONE | qualifiedName)
     ;
 
 // The page actions are the words a microflow uses (R8, ako/mxcli#752):
@@ -876,8 +882,11 @@ paramListV3
     | LBRACKET /* @alias MDL-DEPR124 */ paramAssignmentV3 (COMMA paramAssignmentV3)* RBRACKET
     ;
 
+// `{1} = <unbound>` keeps a parameter with no binding — what `describe` prints
+// for one Studio Pro stored unbound, typically in a building block, and what
+// writes it back that way (ako/mxcli#2181). mxbuild reports it until bound.
 paramAssignmentV3
-    : LBRACE NUMBER_LITERAL RBRACE EQUALS expression (FORMAT paramFormatV3)?
+    : LBRACE NUMBER_LITERAL RBRACE EQUALS (expression | UNBOUND_PARAM) (FORMAT paramFormatV3)?
     ;
 
 // Optional per-parameter formatting for a dynamic-text parameter, mapping to the

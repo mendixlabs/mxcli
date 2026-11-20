@@ -140,8 +140,10 @@ func TestWriteText_SingleFeature(t *testing.T) {
 	if !strings.Contains(out, "Example:") {
 		t.Error("output missing Example section")
 	}
-	if !strings.Contains(out, "Mendix 9.0.0+") {
-		t.Error("output missing MinVersion")
+	// From the version registry (#1367): a user task is 9.19.0, group
+	// targeting 11.2.0. The hand-written 9.0.0 this used to assert was wrong.
+	if !strings.Contains(out, "Mendix 9.19.0+") || !strings.Contains(out, "Mendix 11.2.0+") {
+		t.Errorf("output missing the registry versions:\n%s", out)
 	}
 }
 

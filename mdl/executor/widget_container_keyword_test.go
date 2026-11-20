@@ -22,6 +22,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/mendixlabs/mxcli/mdl/visitor"
 )
 
 // containerKeywordsInGrammar reads the keywords widgetTypeV3 accepts straight
@@ -42,15 +44,15 @@ func containerKeywordsInGrammar(t *testing.T) map[string]bool {
 	return out
 }
 
-// knownUnsupportedContainers are derived keywords that collide with an existing
-// token (ATTRIBUTE, ATTR and EVENT are already lexed for other purposes), so they
-// cannot simply be added to widgetTypeV3. Their widgets' object lists are not
-// authorable until the collision is resolved — tracked in issue #239, not
-// silently tolerated.
-var knownUnsupportedContainers = map[string]string{
-	"ATTRIBUTE": "collides with the Attribute: property keyword (htmlelement attributes)",
-	"ATTR":      "collides with the ATTR token (accessibilityhelper)",
-	"EVENT":     "collides with the EVENT token (htmlelement events)",
+// parsesAsContainer reports whether kw parses as a widget-body container. The
+// grammar's `| keyword` alternative of widgetTypeV3 admits a keyword token that
+// is not enumerated — `attr`, `attribute`, `event`. Those three were listed here
+// as knowingly unsupported (#239) after that alternative had made them writable
+// (ako/mxcli#904); asking the parser keeps the test honest without a second list.
+func parsesAsContainer(kw string) bool {
+	_, errs := visitor.Build("create page M.P (Title: 'T', Layout: A.L) {\n" +
+		"  pluggablewidget 'w.W' w1 {\n    " + strings.ToLower(kw) + " (x: 'y')\n  }\n}")
+	return len(errs) == 0
 }
 
 func TestDerivedContainerKeywordsExistInTheGrammar(t *testing.T) {
@@ -61,7 +63,7 @@ func TestDerivedContainerKeywordsExistInTheGrammar(t *testing.T) {
 	for _, propertyKey := range []string{
 		"columns", "groups", "series", "lines", "markers", "dynamicMarkers",
 		"scaleColors", "customItems", "basicItems", "customButtons",
-		"allowedFileFormats",
+		"allowedFileFormats", "attributesList", "attributes", "events",
 	} {
 		kw := strings.ToUpper(deriveObjectListKeyword(propertyKey))
 		if kw == "" {
@@ -70,12 +72,10 @@ func TestDerivedContainerKeywordsExistInTheGrammar(t *testing.T) {
 		if known[kw] {
 			continue
 		}
-		if why, ok := knownUnsupportedContainers[kw]; ok {
-			t.Logf("%s (from %q) is knowingly unsupported: %s", kw, propertyKey, why)
+		if parsesAsContainer(kw) {
 			continue
 		}
 		t.Errorf("object-list property %q derives container keyword %q, which widgetTypeV3 does not accept — "+
-			"DESCRIBE will emit MDL that does not parse; add it to MDLLexer.g4 + MDLPage.g4, or record it in "+
-			"knownUnsupportedContainers with the reason", propertyKey, kw)
+			"DESCRIBE will emit MDL that does not parse; add it to MDLLexer.g4 + MDLPage.g4", propertyKey, kw)
 	}
 }

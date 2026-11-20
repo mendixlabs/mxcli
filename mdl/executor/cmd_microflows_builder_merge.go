@@ -189,6 +189,9 @@ func (fb *flowBuilder) resolveJoins() {
 		if !ok {
 			continue // already reported as undeclared
 		}
+		if fb.adoptDecisionMerge(reg, e, m) {
+			continue
+		}
 		var flow *microflows.SequenceFlow
 		if e.caseValue != "" {
 			flow = newHorizontalFlowWithCase(e.origin, m.ID, e.caseValue)
@@ -212,6 +215,67 @@ func (fb *flowBuilder) resolveJoins() {
 	// A merge nothing reaches is an orphan for the same reason an undeclared one
 	// is: Mendix rejects a merge with no inbound flow.
 	fb.dropUnreachedMerges(reg)
+}
+
+// adoptDecisionMerge makes a label's merge BE the merge a decision closed on,
+// when the script spells it `end case; join L; … merge L;` and nothing else
+// reaches L. It reports whether it did; no edge is then drawn for the join.
+//
+// DESCRIBE writes exactly that when the decision's own merge is the one it has
+// to name — typically a decision one of whose branches ends the flow, so the
+// branches post-dominate at the exit rather than at the merge (ako/mxcli#1929,
+// mendixlabs/mxcli#1727). `end case` and `merge L` then denote one stored node.
+// Built as two, wired merge -> merge, every describe -> drop + create added a
+// merge, which the next describe named `join junctionN; merge junctionN;`.
+//
+// Narrow on purpose:
+//   - the origin is an unlabelled merge (one the builder drew to close a
+//     decision), not a label's own merge;
+//   - it has no way out but this join;
+//   - the join is the label's only way in, and no path falls into `merge L`.
+//     A label other paths also reach is a real crossing, and the decision's
+//     merge in front of it is a node of its own;
+//   - the join leaves a merge, not a split's branch (no case value).
+func (fb *flowBuilder) adoptDecisionMerge(reg *labelRegistry, e joinEdge, m *microflows.ExclusiveMerge) bool {
+	if e.caseValue != "" || e.origin == m.ID {
+		return false
+	}
+	var origin *microflows.ExclusiveMerge
+	for _, o := range fb.objects {
+		if o != nil && o.GetID() == e.origin {
+			origin, _ = o.(*microflows.ExclusiveMerge)
+			break
+		}
+	}
+	if origin == nil {
+		return false
+	}
+	for _, lm := range reg.merges {
+		if lm.ID == origin.ID {
+			return false
+		}
+	}
+	joins := 0
+	for _, j := range reg.joins {
+		if j.label == e.label {
+			joins++
+		}
+	}
+	if joins != 1 {
+		return false
+	}
+	for _, f := range fb.flows {
+		if f != nil && (f.OriginID == origin.ID || f.DestinationID == m.ID) {
+			return false
+		}
+	}
+	for _, f := range fb.flows {
+		if f != nil && f.DestinationID == origin.ID {
+			f.DestinationID = m.ID
+		}
+	}
+	fb.dropObject(origin.ID)
+	return true
 }
 
 // dropUnreachedMerges removes declared merges that no flow reaches. Declaring a

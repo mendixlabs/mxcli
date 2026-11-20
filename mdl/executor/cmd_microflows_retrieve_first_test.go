@@ -146,3 +146,22 @@ end;`
 		})
 	}
 }
+
+// mendixlabs/mxcli#1737 (ako/mxcli#1941): `retrieve … offset 5000` without a
+// limit was written as the "all" range: the offset was dropped, so the
+// retrieve returned the first objects instead of skipping 5000, with check and
+// exec both silent. An offset alone is a Custom range too.
+func TestRetrieveRange_OffsetWithoutLimit(t *testing.T) {
+	const body = "create microflow M.F () begin\n  retrieve $O from M.Order offset 5000;\nend;"
+	for _, header := range []string{"", "mdl 1;\n"} {
+		t.Run(strings.TrimSpace(header), func(t *testing.T) {
+			rng, varType := retrieveRangeOf(t, header+body)
+			if rng == nil || rng.RangeType != microflows.RangeTypeCustom || rng.Offset != "5000" || rng.Limit != "" {
+				t.Fatalf("range = %+v, want a Custom range with offset 5000 and no limit", rng)
+			}
+			if !strings.HasPrefix(varType, "List of ") {
+				t.Errorf("output typed %q, want a list", varType)
+			}
+		})
+	}
+}

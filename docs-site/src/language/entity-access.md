@@ -82,14 +82,19 @@ Limit which objects a role can see or modify using an XPath expression in the `W
 
 ```sql
 mdl 1;
--- Users can only access their own orders
+-- Users can only access their own orders (Shop.Order stores its owner)
 GRANT READ *, WRITE * ON ENTITY Shop.Order TO Shop.User
-  WHERE [Sales.Order_Customer/Sales.Customer/Name = $currentUser];
+  WHERE [System.owner = '[%CurrentUser%]'];
 
 -- Only open orders are editable
 GRANT READ *, WRITE * ON ENTITY Shop.Order TO Shop.User
   WHERE [Status = 'Open'];
 ```
+
+An access rule has no variables: `$currentUser` (or any `$var`) is CE0161 in a
+constraint, so write the user as the `'[%CurrentUser%]'` token, compared with
+`System.owner` on an entity that stores its owner or with an association to
+`System.User`. `mxcli check` reports a variable as MDL-XPATH04.
 
 Note that single quotes inside XPath expressions must be doubled (`''`), since the entire expression is wrapped in single quotes.
 
@@ -125,7 +130,7 @@ which is how row-level security is normally written:
 mdl 1;
 -- Two separate rules for one role
 GRANT READ * ON ENTITY Shop.Order TO Shop.User WHERE [Status = 'Open'];
-GRANT READ (Total) ON ENTITY Shop.Order TO Shop.User WHERE [Owner = $currentUser];
+GRANT READ (Total) ON ENTITY Shop.Order TO Shop.User WHERE [System.owner = '[%CurrentUser%]'];
 ```
 
 Mendix combines them at runtime: a role's effective access is the union of every

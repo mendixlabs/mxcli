@@ -11,7 +11,9 @@ import (
 	modelsdk "github.com/mendixlabs/mxcli"
 	"github.com/mendixlabs/mxcli/mdl/catalog"
 	"github.com/mendixlabs/mxcli/mdl/executor"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
+	"github.com/mendixlabs/mxcli/sdk/security"
 	"github.com/spf13/cobra"
 )
 
@@ -26,9 +28,11 @@ repeat the header, which is allowed. --mdl 0 writes the alpha language
 instead, with no header (ako/mxcli#840).
 
 The <type> is optional for a qualified document name: 'describe MyModule.Customer'
-auto-detects the document type. Pass the type explicitly to disambiguate (a name
-can match both an entity and a document, for example) or for forms that have no
-single qualified name (module, settings, navigation, module role).
+auto-detects the document type. So it is for a module role ('describe
+Administration.Administrator'), a user role and a navigation profile
+('describe Responsive'). Pass the type explicitly to disambiguate (a name can
+match both an entity and a document, for example) or for forms that have no
+single name (module, settings).
 
 Types:
   module           Describe a module and its module roles (--all: everything in it)
@@ -65,6 +69,7 @@ Types:
   aimodel          Describe an AI model (also: "ai model"; old: model)
   knowledgebase    Describe a knowledge base (also: "knowledge base")
   consumedmcpservice  Describe a consumed MCP service (also: "consumed mcp service")
+  publishedmcpservice Describe a published MCP service (also: "published mcp service")
   datatransformer  Describe a data transformer (also: "data transformer")
   modulerole       Describe a module role
   userrole         Describe a user role
@@ -135,8 +140,8 @@ Example:
 		mdlCmd, ok := describeMDLCommand(objectType, name)
 		if !ok {
 			fmt.Fprintf(os.Stderr, "Unknown type: %s\n", strings.Join(args[:len(args)-1], " "))
-			fmt.Fprintln(os.Stderr, "Valid types: module, entity, association, enumeration, constant, microflow, nanoflow, rule, workflow, page, snippet, layout, javaaction, javascriptaction, jsonstructure, importmapping, exportmapping, consumedrestservice, consumedodataservice, publishedodataservice, publishedrestservice, imagecollection, menu, taskqueue, scheduledevent, businesseventservice, databaseconnection, agent, aimodel, knowledgebase, consumedmcpservice, datatransformer, modulerole, userrole, appsecurity, settings, demouser, navigation, systemoverview")
-			fmt.Fprintln(os.Stderr, "Multi-word types also accepted: json structure, import mapping, export mapping, consumed rest service, consumed odata service, published odata service, published rest service, task queue, app security, image collection, scheduled event, regular expression, business event service, ai model, knowledge base, consumed mcp service, data transformer, etc.")
+			fmt.Fprintln(os.Stderr, "Valid types: module, entity, association, enumeration, constant, microflow, nanoflow, rule, workflow, page, snippet, layout, javaaction, javascriptaction, jsonstructure, importmapping, exportmapping, consumedrestservice, consumedodataservice, publishedodataservice, publishedrestservice, imagecollection, menu, taskqueue, scheduledevent, businesseventservice, databaseconnection, agent, aimodel, knowledgebase, consumedmcpservice, publishedmcpservice, datatransformer, modulerole, userrole, appsecurity, settings, demouser, navigation, systemoverview")
+			fmt.Fprintln(os.Stderr, "Multi-word types also accepted: json structure, import mapping, export mapping, consumed rest service, consumed odata service, published odata service, published rest service, task queue, app security, image collection, scheduled event, regular expression, business event service, ai model, knowledge base, consumed mcp service, published mcp service, data transformer, etc.")
 			os.Exit(1)
 		}
 		all, _ := cmd.Flags().GetBool("all")
@@ -341,6 +346,8 @@ func describeMDLCommand(objectType, name string) (mdlCmd string, ok bool) {
 		return fmt.Sprintf("DESCRIBE KNOWLEDGE BASE %s", name), true
 	case "CONSUMEDMCPSERVICE", "CONSUMED MCP SERVICE", "MCP SERVICE":
 		return fmt.Sprintf("DESCRIBE CONSUMED MCP SERVICE %s", name), true
+	case "PUBLISHEDMCPSERVICE", "PUBLISHED MCP SERVICE":
+		return fmt.Sprintf("DESCRIBE PUBLISHED MCP SERVICE %s", name), true
 	case "DATATRANSFORMER", "DATA TRANSFORMER":
 		return fmt.Sprintf("DESCRIBE DATA TRANSFORMER %s", name), true
 	case "SYSTEMOVERVIEW", "DOMAINMODEL", "DOMAIN MODEL":
@@ -402,6 +409,7 @@ var objectTypeToDescribe = map[string]string{
 	"AI_MODEL":               "aimodel",
 	"KNOWLEDGE_BASE":         "knowledgebase",
 	"CONSUMED_MCP_SERVICE":   "consumedmcpservice",
+	"PUBLISHED_MCP_SERVICE":  "publishedmcpservice",
 	"JAVASCRIPT_ACTION":      "javascriptaction",
 }
 
@@ -510,7 +518,7 @@ func resolveViaCatalog(projectPath, name string) []string {
 
 // catalogMatchesProject reports whether the cached catalog was built from the
 // current project file and is still up to date — same MPR path and unchanged
-// modification time (Unix seconds, mirroring isCacheValid). Any read failure or
+// modification time (the same instant, mirroring isCacheValid). Any read failure or
 // mismatch is treated as "not fresh" so the caller live-scans (safe but slower).
 func catalogMatchesProject(cat *catalog.Catalog, projectPath string) bool {
 	info, err := cat.GetCacheInfo()
@@ -521,17 +529,13 @@ func catalogMatchesProject(cat *catalog.Catalog, projectPath string) bool {
 	if err != nil {
 		return false
 	}
-	if info.MprModTime.Unix() != fi.ModTime().Unix() {
+	if !catalog.ModTimeUnchanged(info.MprModTime, fi.ModTime()) {
 		return false
 	}
 	// Compare absolute paths when both resolve; a path mismatch means the cache
 	// is for a different .mpr in the same directory.
-	if info.MprPath != "" {
-		a, err1 := filepath.Abs(info.MprPath)
-		b, err2 := filepath.Abs(projectPath)
-		if err1 == nil && err2 == nil && a != b {
-			return false
-		}
+	if info.MprPath != "" && !catalog.SameMprPath(info.MprPath, projectPath) {
+		return false
 	}
 	return true
 }
@@ -583,5 +587,52 @@ func resolveViaReader(projectPath, name string) ([]string, error) {
 			}
 		}
 	}
+	out = append(out, describableMembers(reader, moduleName, name)...)
 	return out, nil
+}
+
+// describableMembers is the `describe` type of each member named name that
+// is not a document of its own: a module role (Module.Role), a user role and
+// a navigation profile (both bare names). Each has a describe type, but the
+// auto-detect saw only documents, so `describe Administration.Administrator`
+// answered "no describable document named …" for a role `describe module
+// role` describes (ako/mxcli#1262).
+//
+// The catalog's objects view does not list them, and has no complete table to
+// list module roles from (role_mappings holds only the mapped ones), so these
+// are resolved here, by the live scan a catalog miss falls back to.
+func describableMembers(reader memberReader, moduleName map[string]string, name string) []string {
+	var out []string
+	if mss, err := reader.ListModuleSecurity(); err == nil {
+		for _, ms := range mss {
+			mn := moduleName[string(ms.ContainerID)]
+			for _, r := range ms.ModuleRoles {
+				if mn+"."+r.Name == name {
+					out = append(out, "modulerole")
+				}
+			}
+		}
+	}
+	if ps, err := reader.GetProjectSecurity(); err == nil && ps != nil {
+		for _, r := range ps.UserRoles {
+			if r.Name == name {
+				out = append(out, "userrole")
+			}
+		}
+	}
+	if nav, err := reader.GetNavigation(); err == nil && nav != nil {
+		for _, p := range nav.Profiles {
+			if p.Name == name {
+				out = append(out, "navigation")
+			}
+		}
+	}
+	return out
+}
+
+// memberReader is the part of the backend describableMembers reads.
+type memberReader interface {
+	ListModuleSecurity() ([]*security.ModuleSecurity, error)
+	GetProjectSecurity() (*security.ProjectSecurity, error)
+	GetNavigation() (*types.NavigationDocument, error)
 }

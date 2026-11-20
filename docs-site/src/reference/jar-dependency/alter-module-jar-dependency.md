@@ -3,7 +3,7 @@
 ## Synopsis
 
     ALTER MODULE module_name
-      ADD JAR DEPENDENCY (
+      ADD JAR DEPENDENCY [IF NOT EXISTS] (
         group    = 'groupId',
         artifact = 'artifactId',
         version  = 'version',
@@ -33,6 +33,23 @@ document. These are the same dependencies shown in Studio Pro under
 
 Multiple actions can be chained in a single `ALTER MODULE` statement.
 
+A bare `ADD JAR DEPENDENCY` fails when the module already declares the same
+`group:artifact`, so a script containing it cannot be executed twice.
+`ADD JAR DEPENDENCY IF NOT EXISTS` is the re-runnable form, with the same
+semantics as `ADD ATTRIBUTE IF NOT EXISTS` and `CREATE ENTITY IF NOT EXISTS`:
+
+- When the coordinate is absent, it is added exactly as the bare form would.
+- When it is present, it is **left untouched** and a `… already exists — skipped`
+  notice is printed — even if the stored `version` or `included` differs from the
+  statement. The notice then names the difference and the `SET JAR DEPENDENCY`
+  that would change it; `IF NOT EXISTS` never updates.
+- When every action of the statement was skipped, nothing is written and the
+  statement reports `Unchanged jar dependencies for module '…'`.
+
+To make a script both re-runnable and authoritative about the version, follow
+the guarded `ADD` with a `SET … VERSION`: restating the stored version writes
+nothing either.
+
 ## Parameters
 
 **module_name**
@@ -56,6 +73,18 @@ Multiple actions can be chained in a single `ALTER MODULE` statement.
 ```sql
 ALTER MODULE MyModule
   ADD JAR DEPENDENCY (
+    group    = 'org.duckdb',
+    artifact = 'duckdb_jdbc',
+    version  = '1.1.3',
+    included = true,
+  );
+```
+
+### Add a dependency from a re-runnable script
+
+```sql
+ALTER MODULE MyModule
+  ADD JAR DEPENDENCY IF NOT EXISTS (
     group    = 'org.duckdb',
     artifact = 'duckdb_jdbc',
     version  = '1.1.3',

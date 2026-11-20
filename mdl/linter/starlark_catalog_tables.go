@@ -115,6 +115,52 @@ func (r *StarlarkRule) builtinModules(_ *starlark.Thread, _ *starlark.Builtin, a
 	return starlark.NewList(out), nil
 }
 
+func (r *StarlarkRule) builtinAnnotations(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if r.ctx == nil {
+		return starlark.NewList(nil), nil
+	}
+	var out []starlark.Value
+	for a := range r.ctx.Annotations() {
+		out = append(out, annotationToStarlark(a))
+	}
+	return starlark.NewList(out), nil
+}
+
+func annotationToStarlark(a Annotation) starlark.Value {
+	return starlarkstruct.FromStringDict(starlark.String("annotation"), starlark.StringDict{
+		"id":          starlark.String(a.ID),
+		"module_name": starlark.String(a.ModuleName),
+		"caption":     starlark.String(a.Caption),
+		"x":           starlark.MakeInt(a.X),
+		"y":           starlark.MakeInt(a.Y),
+		"width":       starlark.MakeInt(a.Width),
+	})
+}
+
+func (r *StarlarkRule) builtinFolders(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if r.ctx == nil {
+		return starlark.NewList(nil), nil
+	}
+	var out []starlark.Value
+	for f := range r.ctx.Folders() {
+		out = append(out, folderToStarlark(f))
+	}
+	return starlark.NewList(out), nil
+}
+
+func folderToStarlark(f Folder) starlark.Value {
+	return starlarkstruct.FromStringDict(starlark.String("folder"), starlark.StringDict{
+		"id":             starlark.String(f.ID),
+		"name":           starlark.String(f.Name),
+		"module_name":    starlark.String(f.ModuleName),
+		"path":           starlark.String(f.Path),
+		"parent_path":    starlark.String(f.ParentPath),
+		"depth":          starlark.MakeInt(f.Depth),
+		"document_count": starlark.MakeInt(f.DocumentCount),
+		"folder_count":   starlark.MakeInt(f.FolderCount),
+	})
+}
+
 func associationToStarlark(a Association) starlark.Value {
 	return starlarkstruct.FromStringDict(starlark.String("association"), starlark.StringDict{
 		"name":                      starlark.String(a.Name),
@@ -176,6 +222,7 @@ func catalogStringToStarlark(s CatalogString) starlark.Value {
 		"context":        starlark.String(s.Context),
 		"language":       starlark.String(s.Language),
 		"element_id":     starlark.String(s.ElementID),
+		"widget_id":      starlark.String(s.WidgetID),
 		"module_name":    starlark.String(s.ModuleName),
 	})
 }
@@ -189,6 +236,10 @@ func layoutToStarlark(l Layout) starlark.Value {
 		"layout_type":    starlark.String(l.LayoutType),
 		"platform":       starlark.String(l.Platform),
 		"description":    starlark.String(l.Description),
+		// Named class_name because class is a Starlark keyword, as on a widget.
+		"class_name":      starlark.String(l.Class),
+		"style":           starlark.String(l.Style),
+		"dynamic_classes": starlark.String(l.DynamicClasses),
 	})
 }
 
@@ -210,5 +261,60 @@ func moduleToStarlark(m Module) starlark.Value {
 		"id":                         starlark.String(m.ID),
 		"name":                       starlark.String(m.Name),
 		"domain_model_documentation": starlark.String(m.DomainModelDocumentation),
+	})
+}
+
+func (r *StarlarkRule) builtinWorkflows(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if r.ctx == nil {
+		return starlark.NewList(nil), nil
+	}
+	var out []starlark.Value
+	for w := range r.ctx.Workflows() {
+		out = append(out, workflowToStarlark(w))
+	}
+	return starlark.NewList(out), nil
+}
+
+func (r *StarlarkRule) builtinWorkflowActivities(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if r.ctx == nil {
+		return starlark.NewList(nil), nil
+	}
+	var out []starlark.Value
+	for a := range r.ctx.WorkflowActivities() {
+		out = append(out, workflowActivityToStarlark(a))
+	}
+	return starlark.NewList(out), nil
+}
+
+func workflowToStarlark(w Workflow) starlark.Value {
+	return starlarkstruct.FromStringDict(starlark.String("workflow"), starlark.StringDict{
+		"id":                   starlark.String(w.ID),
+		"qualified_name":       starlark.String(w.QualifiedName),
+		"name":                 starlark.String(w.Name),
+		"module_name":          starlark.String(w.ModuleName),
+		"description":          starlark.String(w.Description),
+		"parameter_entity":     starlark.String(w.ParameterEntity),
+		"activity_count":       starlark.MakeInt(w.ActivityCount),
+		"user_task_count":      starlark.MakeInt(w.UserTaskCount),
+		"microflow_call_count": starlark.MakeInt(w.MicroflowCallCount),
+		"decision_count":       starlark.MakeInt(w.DecisionCount),
+	})
+}
+
+func workflowActivityToStarlark(a WorkflowActivity) starlark.Value {
+	return starlarkstruct.FromStringDict(starlark.String("workflow_activity"), starlark.StringDict{
+		"id":                      starlark.String(a.ID),
+		"workflow_qualified_name": starlark.String(a.WorkflowQualifiedName),
+		"module_name":             starlark.String(a.ModuleName),
+		"name":                    starlark.String(a.Name),
+		"caption":                 starlark.String(a.Caption),
+		"activity_type":           starlark.String(a.ActivityType),
+		"microflow":               starlark.String(a.Microflow),
+		"user_source_microflow":   starlark.String(a.UserSourceMicroflow),
+		"on_created_microflow":    starlark.String(a.OnCreatedMicroflow),
+		"completion_microflow":    starlark.String(a.CompletionMicroflow),
+		"page":                    starlark.String(a.Page),
+		"user_task_entity":        starlark.String(a.UserTaskEntity),
+		"called_workflow":         starlark.String(a.CalledWorkflow),
 	})
 }

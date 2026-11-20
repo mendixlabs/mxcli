@@ -130,12 +130,17 @@ func extractCustomWidgetType(ctx *ExecContext, w map[string]any) string {
 		case "com.mendix.widget.web.image.Image":
 			return "image"
 		default:
-			// Extract last part of widget ID and uppercase it
+			// The last part of the widget ID, lowercased. It routes describe,
+			// so it must not name a dedicated branch: those were written for
+			// the web widgets matched above, and another widget ending in the
+			// same segment — the native Gallery and Image — was described as
+			// the web one and rebuilt as it on re-run.
 			parts := strings.Split(widgetID, ".")
-			if len(parts) > 0 {
-				return strings.ToLower(parts[len(parts)-1])
+			seg := strings.ToLower(parts[len(parts)-1])
+			if isKnownCustomWidgetType(seg) {
+				return "customwidget"
 			}
-			return strings.ToLower(widgetID)
+			return seg
 		}
 	}
 	return ""
@@ -341,29 +346,11 @@ func buildColumnPropertyKeyMap(ctx *ExecContext, w map[string]any) map[string]st
 // `Assoc/.../Attr` using SHORT association names — the column-attribute grammar
 // (attributePathV3) accepts bare segments only, so a module-qualified association
 // would not re-parse.
-func columnAttributeFromRef(attrRef map[string]any) string {
-	attr := shortAttributeName(extractString(attrRef["Attribute"]))
-	entityRef, ok := attrRef["EntityRef"].(map[string]any)
-	if !ok || entityRef == nil || extractString(entityRef["$Type"]) != "DomainModels$IndirectEntityRef" {
-		return attr
+func columnAttributeFromRef(ctx *ExecContext, attrRef map[string]any) string {
+	if path := associationPathMDL(attrRef, true, describeAssociationEnds(ctx)); path != "" {
+		return path
 	}
-	steps := getBsonArrayElements(entityRef["Steps"])
-	assocs := make([]string, 0, len(steps))
-	for _, s := range steps {
-		sm, ok := s.(map[string]any)
-		if !ok {
-			return attr
-		}
-		a := extractString(sm["Association"])
-		if a == "" {
-			return attr
-		}
-		assocs = append(assocs, shortAttributeName(a)) // drop module prefix
-	}
-	if len(assocs) == 0 || attr == "" {
-		return attr
-	}
-	return strings.Join(assocs, "/") + "/" + attr
+	return shortAttributeName(extractString(attrRef["Attribute"]))
 }
 
 func extractDataGrid2Column(ctx *ExecContext, colObj map[string]any, colPropKeyMap map[string]string, entityContext string) rawDataGridColumn {
@@ -492,7 +479,7 @@ func extractDataGrid2Column(ctx *ExecContext, colObj map[string]any, colPropKeyM
 		// Check for AttributeRef (attribute property)
 		if col.Attribute == "" {
 			if attrRef, ok := value["AttributeRef"].(map[string]any); ok && attrRef != nil {
-				col.Attribute = columnAttributeFromRef(attrRef)
+				col.Attribute = columnAttributeFromRef(ctx, attrRef)
 			}
 		}
 
@@ -670,7 +657,13 @@ func extractTextTemplateParameters(ctx *ExecContext, textTemplate map[string]any
 			// reconstruct the "Assoc/.../Attr" path so DESCRIBE round-trips. The
 			// bare attribute re-executes against the widget's own entity (CE1365,
 			// mendixlabs/mxcli#1494).
-			if assocPath := associationTemplateParamPath(attrRef); assocPath != "" {
+			if assocPath := associationTemplateParamPath(ctx, attrRef); assocPath != "" {
+				// Read from a named object (a parameter, a data view): the root
+				// is part of the binding. Without it the path re-executed against
+				// the context with no source, CE0402 (ako/mxcli#833).
+				if sourceVarName != "" {
+					assocPath = "$" + sourceVarName + "/" + assocPath
+				}
 				result = append(result, assocPath)
 				continue
 			}
@@ -684,6 +677,15 @@ func extractTextTemplateParameters(ctx *ExecContext, textTemplate map[string]any
 					// No SourceVariable - use short attribute name
 					result = append(result, describeAttr(ctx, attr))
 				}
+				continue
+			}
+		}
+		// A page parameter or page variable with no attribute: a primitive
+		// page parameter bound as itself (ako/mxcli#2132), which the builder
+		// writes back to the same slot from the bare `$Name`.
+		if sourceVarName != "" {
+			if srcVar, _ := pMap["SourceVariable"].(map[string]any); extractString(srcVar["Widget"]) == "" {
+				result = append(result, "$"+sourceVarName)
 				continue
 			}
 		}
@@ -1108,6 +1110,33 @@ func extractCustomWidgetPropertyImage(ctx *ExecContext, w map[string]any, proper
 	return ""
 }
 
+// extractCustomWidgetPropertyIcon reads an icon-typed property's stored Icon
+// element — the Image widget's `imageIcon`, the icon an `ImageType: icon` image
+// shows. It is the same element a button's Icon holds, so it is read the same
+// way: name, $Type and glyph code, all three needed to rebuild the same element.
+// Describe used to skip it, so a re-created icon image named no icon and
+// mxbuild refused it with "No icon selected." (ako/mxcli#2174).
+func extractCustomWidgetPropertyIcon(w map[string]any, propertyKey string) (name, iconType string, code int) {
+	obj, ok := w["Object"].(map[string]any)
+	if !ok {
+		return "", "", 0
+	}
+	propTypeKeyMap := buildPropertyTypeKeyMap(w, false)
+	for _, prop := range getBsonArrayElements(obj["Properties"]) {
+		propMap, ok := prop.(map[string]any)
+		if !ok {
+			continue
+		}
+		if propTypeKeyMap[extractBinaryID(propMap["TypePointer"])] != propertyKey {
+			continue
+		}
+		if value, ok := propMap["Value"].(map[string]any); ok {
+			return extractButtonIcon(value)
+		}
+	}
+	return "", "", 0
+}
+
 // extractCustomWidgetPropertyImageBound reports whether an image-typed
 // property is bound to the object in context: its WidgetValue carries an
 // EntityRef rather than a collection entry (mendixlabs/mxcli#1476).
@@ -1348,11 +1377,29 @@ func extractExplicitProperties(ctx *ExecContext, w map[string]any, enclosingEnti
 		if attrRef, ok := value["AttributeRef"].(map[string]any); ok && attrRef != nil {
 			if attr := extractString(attrRef["Attribute"]); attr != "" {
 				described := describeAttr(ctx, attr)
-				if param := parameterSourceName(value["SourceVariable"]); param != "" && attrRef["EntityRef"] == nil {
-					// Read from a page or snippet parameter: `$Param.Attr`. The
-					// qualified name re-executes without the SourceVariable —
-					// CE7247 (mendixlabs/mxcli#1591).
+				if root := namedObjectSourceName(value["SourceVariable"]); root != "" && attrRef["EntityRef"] != nil {
+					// The same object, with association steps: `$Root/Assoc/Attr`
+					// (ako/mxcli#833), as FactoryManagement's
+					// ConversationalUI.Span_TextGeneration_SlideIn stores it
+					// (ako/mxcli#2107).
+					if path := columnAttributeFromRef(ctx, attrRef); strings.Contains(path, "/") {
+						described = "$" + root + "/" + path
+					}
+				} else if param := namedObjectSourceName(value["SourceVariable"]); param != "" && attrRef["EntityRef"] == nil {
+					// Read from a page or snippet parameter, `$Param.Attr`, or an
+					// enclosing data view, `$dataView1.Attr`. The qualified name
+					// re-executes without the SourceVariable and binds against
+					// the nearest container — CE7247 (mendixlabs/mxcli#1591,
+					// ako/mxcli#2107).
 					described = parameterAttributeMDL(param, attr)
+				} else if path := columnAttributeFromRef(ctx, attrRef); attrRef["EntityRef"] != nil && strings.Contains(path, "/") {
+					// Read over associations from the context object,
+					// `Assoc/Attr` — what create page and alter page set store as
+					// the final attribute plus its steps (ako/mxcli#2279,
+					// #2283). The final attribute alone re-executed against the
+					// context entity: another binding, or a refusal
+					// (ako/mxcli#2295).
+					described = path
 				} else if schemas[typePointerID].DataSourceProperty == "" && strings.Contains(enclosing, ".") &&
 					!strings.EqualFold(attributeEntity(attr), enclosing) {
 					described = attr
@@ -1464,6 +1511,7 @@ func extractImageProperties(ctx *ExecContext, w map[string]any, widget *rawWidge
 	widget.ImageObject = extractCustomWidgetPropertyImage(ctx, w, "imageObject")
 	widget.ImageFromObject = extractCustomWidgetPropertyImageBound(ctx, w, "imageObject")
 	widget.DefaultImage = extractCustomWidgetPropertyImage(ctx, w, "defaultImageDynamic")
+	widget.Icon, widget.IconType, widget.IconCode = extractCustomWidgetPropertyIcon(w, "imageIcon")
 	widget.ImageUrl, widget.ImageUrlParams = extractCustomWidgetPropertyTextTemplate(ctx, w, "imageUrl")
 	widget.AlternativeText, widget.AlternativeTextParams = extractCustomWidgetPropertyTextTemplate(ctx, w, "alternativeText")
 	widget.ImageWidth = extractCustomWidgetPropertyString(ctx, w, "width")

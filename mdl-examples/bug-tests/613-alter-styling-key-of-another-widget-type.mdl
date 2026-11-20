@@ -1,0 +1,55 @@
+mdl 1;
+-- ako/mxcli#613 — the residual half of #509. ALTER STYLING's key check asked
+-- whether ANY widget type in the theme declares a key, so a key declared for
+-- some OTHER type passed every mxcli gate and failed the build. `Row size` is a
+-- ListView design property; on a DynamicText it is CE6083.
+--
+-- Measured on a blank Mendix 11.14.0 project (Atlas), dt and lvH as below, the
+-- page created by an earlier script so ALTER STYLING meets STORED widgets:
+--
+--     alter styling on page MyFirstModule.HideOn widget dt
+--       set ( 'Row size': 'Small' );
+--       check -p (before)  -> Check passed!   (no MDL-WIDGET11)
+--       check -p (after)   -> ⚠ sets design property "Row size" on "dt", a
+--                             DynamicText, which the theme declares only for
+--                             other widget types — mxbuild reports this as
+--                             CE6083 [MDL-WIDGET11] — Valid design properties
+--                             for a DynamicText: Align self, Alignment, Color,
+--                             Color shade, Hide on, Letter case, Size, Spacing,
+--                             Weight, Wrap options
+--       docker check       -> [CE6083] "Design property Row size is not
+--                             supported by your theme." at Text 'dt'  1 error
+--
+-- Control: the same key on lvH (a ListView) — check -p silent, 0 errors.
+--
+-- The widget's type lives only in the stored document, so the precise check
+-- runs in the reference pass (which `-p` implies) and judges keys against the
+-- stored widget's own theme group, `Widget`-group keys included. Without a
+-- project it degrades to #509's any-type question, so the failing shape below
+-- is silent under `make check-mdl` either way — and it is also silent with -p
+-- in THIS script, because the page is created here: the stored tree is not the
+-- one exec will style, so the check does not guess.
+
+create or modify entity MyFirstModule.Thing ( Name: string(200) );
+
+create or modify page MyFirstModule.HideOn (
+  title: 'h', layout: 'Atlas_Core.Atlas_Default'
+) {
+  listview lvH (DataSource: database from MyFirstModule.Thing) {
+    dynamictext dt (Content: 'x')
+  }
+};
+
+-- Control: 'Row size' on the widget whose type declares it, and an inherited
+-- `Widget`-group key on the DynamicText. Both build at 0 errors.
+alter styling on page MyFirstModule.HideOn widget lvH
+  set ( 'Row size': 'Small' );
+alter styling on page MyFirstModule.HideOn widget dt
+  set ( 'Align self': 'Right' );
+
+-- The failing shape, kept commented so a run of this file builds green:
+--
+--   alter styling on page MyFirstModule.HideOn widget dt
+--     set ( 'Row size': 'Small' );
+--   -> (run against a project already holding the page) MDL-WIDGET11 warning,
+--      names DynamicText and its valid keys; mxbuild: CE6083.

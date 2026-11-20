@@ -30,6 +30,7 @@ type rawLegacyGridItem struct {
 	Caption   string
 	Attribute string
 	Type      string
+	Action    string // a control-bar button's action, as MDL
 }
 
 // parseLegacyGrid reads the named parts of a Forms$DataGrid: ControlBar.Items,
@@ -37,15 +38,26 @@ type rawLegacyGridItem struct {
 func parseLegacyGrid(ctx *ExecContext, w map[string]any) *rawLegacyGrid {
 	g := &rawLegacyGrid{}
 	if cb, ok := w["ControlBar"].(map[string]any); ok {
-		g.ControlBar = parseLegacyGridItems(ctx, cb["Items"])
+		g.ControlBar = parseLegacyGridItems(ctx, storedItems(cb))
 	}
 	g.Columns = parseLegacyGridItems(ctx, w["Columns"])
 	if ds, ok := w["DataSource"].(map[string]any); ok {
 		if sb, ok := ds["SearchBar"].(map[string]any); ok {
-			g.SearchFields = parseLegacyGridItems(ctx, sb["Items"])
+			g.SearchFields = parseLegacyGridItems(ctx, storedItems(sb))
 		}
 	}
 	return g
+}
+
+// storedItems is a control bar's or search bar's list. The metamodel calls it
+// Items; it is STORED as `NewButtons` (Forms$GridControlBar, Forms$SearchBar),
+// so reading `Items` alone listed no button and no search field of a real grid
+// (ako/mxcli#2382).
+func storedItems(bar map[string]any) any {
+	if v, ok := bar["NewButtons"]; ok && v != nil {
+		return v
+	}
+	return bar["Items"]
 }
 
 func parseLegacyGridItems(ctx *ExecContext, v any) []rawLegacyGridItem {
@@ -61,8 +73,16 @@ func parseLegacyGridItems(ctx *ExecContext, v any) []rawLegacyGridItem {
 			Caption: extractTextCaption(ctx, m),
 			Type:    extractString(m["Type"]),
 		}
+		if item.Caption == "" {
+			// A control-bar button keeps its caption as a client template,
+			// under CaptionTemplate, like an action button.
+			item.Caption = extractButtonCaption(ctx, m)
+		}
+		if _, ok := m["Action"].(map[string]any); ok {
+			item.Action = extractButtonAction(ctx, m)
+		}
 		if ref, ok := m["AttributeRef"].(map[string]any); ok && ref != nil {
-			item.Attribute = columnAttributeFromRef(ref)
+			item.Attribute = columnAttributeFromRef(ctx, ref)
 		}
 		if item.Attribute == "" {
 			// Older models store the binding as a path string instead.
@@ -119,6 +139,9 @@ func legacyItemProps(it rawLegacyGridItem, withType bool) string {
 	}
 	if withType && it.Type != "" {
 		props = append(props, "Type: "+it.Type)
+	}
+	if it.Action != "" {
+		props = append(props, "Action: "+legacyCommentText(it.Action))
 	}
 	return strings.Join(props, ", ")
 }

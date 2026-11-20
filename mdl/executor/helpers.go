@@ -15,6 +15,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/folderpath"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/modelsdk/meta"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
@@ -532,6 +533,16 @@ func buildMicroflowQualifiedNames(ctx *ExecContext) map[string]bool {
 		qn := h.GetQualifiedName(mf.ContainerID, mf.Name)
 		result[qn] = true
 	}
+	// The System module's microflows ship with the platform and are never in
+	// the listing; describe navigation prints `call microflow
+	// System.ShowHomePage` (ako/mxcli#2247). Added only to a listing that has
+	// an answer: callers read an empty set as "could not be read" and skip
+	// the check, and adding these would turn that into false errors.
+	if len(result) > 0 {
+		for _, qn := range meta.SystemMicroflows {
+			result[qn] = true
+		}
+	}
 	return result
 }
 
@@ -551,7 +562,7 @@ func microflowsNamed(ctx *ExecContext, name string) ([]*microflows.Microflow, er
 	if l, ok := ctx.Backend.(microflowLookup); ok {
 		return l.ListMicroflowsNamed(name)
 	}
-	all, err := ctx.Backend.ListMicroflows()
+	all, err := projectMicroflows(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -587,10 +598,10 @@ func pinnedMicroflow(ctx *ExecContext, h *ContainerHierarchy, name ast.Qualified
 // (ako/mxcli#1791).
 func microflowsInModule(ctx *ExecContext, h *ContainerHierarchy, moduleName string) ([]*microflows.Microflow, error) {
 	if moduleName == "" {
-		return ctx.Backend.ListMicroflows()
+		return projectMicroflows(ctx)
 	}
 	if _, ok := ctx.Backend.(microflowLookup); !ok {
-		return ctx.Backend.ListMicroflows()
+		return projectMicroflows(ctx)
 	}
 	hs, err := microflowHeaders(ctx)
 	if err != nil {
@@ -619,7 +630,7 @@ func microflowHeaders(ctx *ExecContext) ([]types.DocumentHeader, error) {
 	if l, ok := ctx.Backend.(microflowLookup); ok {
 		return l.ListMicroflowHeaders()
 	}
-	all, err := ctx.Backend.ListMicroflows()
+	all, err := projectMicroflows(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -665,12 +676,15 @@ func buildMicroflowReturnTypes(ctx *ExecContext) map[string]string {
 	if err != nil {
 		return result
 	}
-	mfs, err := ctx.Backend.ListMicroflows()
+	mfs, err := projectMicroflows(ctx)
 	if err != nil {
 		return result
 	}
-	for _, mf := range mfs {
+	for _, mf := range liveFirst(mfs, microflowExcluded) {
 		qn := h.GetQualifiedName(mf.ContainerID, mf.Name)
+		if _, seen := result[qn]; seen {
+			continue // an excluded twin of a live flow (#1928)
+		}
 		if mf.ReturnType == nil {
 			result[qn] = ""
 			continue
@@ -724,7 +738,7 @@ func buildNanoflowQualifiedNames(ctx *ExecContext) map[string]bool {
 	if err != nil {
 		return result
 	}
-	nfs, err := ctx.Backend.ListNanoflows()
+	nfs, err := projectNanoflows(ctx)
 	if err != nil {
 		return result
 	}
@@ -742,7 +756,7 @@ func buildPageQualifiedNames(ctx *ExecContext) map[string]bool {
 	if err != nil {
 		return result
 	}
-	pgs, err := ctx.Backend.ListPages()
+	pgs, err := projectPages(ctx)
 	if err != nil {
 		return result
 	}
@@ -782,7 +796,7 @@ func buildEntityQualifiedNames(ctx *ExecContext) map[string]bool {
 	for _, m := range modules {
 		moduleNames[m.ID] = m.Name
 	}
-	dms, err := ctx.Backend.ListDomainModels()
+	dms, err := projectDomainModels(ctx)
 	if err != nil {
 		return result
 	}
@@ -814,7 +828,7 @@ func buildEntityEnumAttrMap(ctx *ExecContext, entityQN string) map[string]string
 	if err != nil {
 		return result
 	}
-	dms, err := ctx.Backend.ListDomainModels()
+	dms, err := projectDomainModels(ctx)
 	if err != nil {
 		return result
 	}
@@ -850,7 +864,7 @@ func buildAssociationQualifiedNames(ctx *ExecContext) map[string]bool {
 	for _, m := range modules {
 		moduleNames[m.ID] = m.Name
 	}
-	dms, err := ctx.Backend.ListDomainModels()
+	dms, err := projectDomainModels(ctx)
 	if err != nil {
 		return result
 	}

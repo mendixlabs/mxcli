@@ -1,0 +1,40 @@
+mdl 1;
+-- ============================================================================
+-- Bug ako/mxcli#2178 (mendixlabs/mxcli#1831): drop + create in one script
+-- resets what MDL cannot state
+-- ============================================================================
+--
+-- MDL cannot set these, so this script only creates the flow. To reproduce:
+--   1. exec this script; in Studio Pro tick Mark as used, document $Count, the
+--      `declare $Total` activity and the loop, and set the loop's error handling
+--      to Continue.
+--   2. Write `drop microflow if exists BugTest2178.ACT_docs_layout;` and the
+--      output of `describe microflow BugTest2178.ACT_docs_layout` to ONE script
+--      and exec it: "Dropped microflow ... Created microflow ...".
+--
+-- Symptom (before fix): bson dump shows MarkAsUsed false, every documentation
+-- text empty and the loop's ErrorHandlingType Rollback — one failing iteration
+-- then aborts the whole loop.
+-- After fix: all of them are as stored; mx check 0 errors on Mendix 11.14.0.
+-- ============================================================================
+
+create module BugTest2178;
+
+create microflow BugTest2178.ACT_docs_layout (
+  $Count: Integer,
+  $List: List of System.User
+)
+begin
+  @position(300, 200)
+  declare $Total Integer = 0;
+  @position(500, 200)
+  loop $User in $List
+  begin
+    @position(100, 50)
+    set $Total = $Total + 1;
+    @position(300, 50)
+    log info 'in loop';
+  end loop;
+  @position(1100, 200)
+  log info 'after loop';
+end;

@@ -530,6 +530,16 @@ func buildProjectTree(projectPath string) ([]*TreeNode, error) {
 		md.documents = append(md.documents, treeElement{Name: svc.Name, ContainerID: svc.ContainerID, Type: "consumedmcpservice"})
 	}
 
+	pubServices, _ := reader.ListAgentEditorPublishedMCPServices()
+	for _, svc := range pubServices {
+		modID := h.FindModuleID(svc.ContainerID)
+		md, ok := modData[modID]
+		if !ok {
+			continue
+		}
+		md.documents = append(md.documents, treeElement{Name: svc.Name, ContainerID: svc.ContainerID, Type: "publishedmcpservice"})
+	}
+
 	agents, _ := reader.ListAgentEditorAgents()
 	for _, a := range agents {
 		modID := h.FindModuleID(a.ContainerID)

@@ -369,7 +369,28 @@ alterEnumerationAction
 // =============================================================================
 
 createModuleStatement
-    : MODULE ifNotExists? identifierOrKeyword moduleOptions?
+    : MODULE ifNotExists? identifierOrKeyword moduleOptions? moduleSettingsBody?
+    ;
+
+// The General tab of Studio Pro's Module settings dialog, as a property list:
+// `( Version: '2.3.1', ModuleType: addon )` (ako/mxcli#1921). The visitor
+// holds the key table; `alter module … set ( … )` takes the same keys.
+moduleSettingsBody
+    : LPAREN (moduleSettingProperty (COMMA moduleSettingProperty)* COMMA?)? RPAREN
+    ;
+
+// NUMBER_LITERAL only so `Version: 2.0` gets the visitor's message, not a
+// parse error.
+moduleSettingProperty
+    : identifierOrKeyword COLON (STRING_LITERAL | NUMBER_LITERAL | identifierOrKeyword)
+    ;
+
+// ALTER MODULE name SET ( Version: '…', ModuleType: app | addon )
+// SET DOCUMENTATION writes the module's documentation, which Mendix keeps on
+// the module's domain model (DomainModels$DomainModel.Documentation) — the
+// same property a doc comment before CREATE MODULE sets (ako/mxcli#2305).
+alterModuleSetStatement
+    : ALTER MODULE (qualifiedName | IDENTIFIER) SET (moduleSettingsBody | DOCUMENTATION STRING_LITERAL)
     ;
 
 // =============================================================================
@@ -380,8 +401,11 @@ alterModuleJarDepStatement
     : ALTER MODULE (qualifiedName | IDENTIFIER) alterModuleJarDepAction+
     ;
 
+// ADD … IF NOT EXISTS leaves a coordinate the module already declares untouched,
+// as ADD ATTRIBUTE / ADD VALUE IF NOT EXISTS do, so a script that declares a
+// module's Java dependency can be executed twice (ako/mxcli#2239).
 alterModuleJarDepAction
-    : ADD JAR DEPENDENCY LPAREN jarDepProperty (COMMA jarDepProperty)* COMMA? RPAREN
+    : ADD JAR DEPENDENCY ifNotExists? LPAREN jarDepProperty (COMMA jarDepProperty)* COMMA? RPAREN
     | SET JAR DEPENDENCY STRING_LITERAL VERSION STRING_LITERAL
     | SET JAR DEPENDENCY STRING_LITERAL INCLUDED booleanLiteral
     | SET JAR DEPENDENCY STRING_LITERAL ADD EXCLUSION STRING_LITERAL

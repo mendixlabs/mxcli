@@ -162,10 +162,12 @@ func loginFailureHint(runtimeLogPath string) string {
 		return ""
 	}
 	return "\nThe runtime log reports: " + sessionCapMarker + " — the unlicensed local\n" +
-		"runtime allows only a handful of concurrent sessions, and the login page reports\n" +
-		"that as \"Sign in failed\" as if the password were wrong. Sessions are released by\n" +
-		"restarting `mxcli run --local`; a script that drives the app through a browser\n" +
-		"should sign out when it finishes so it does not consume a slot per run."
+		"runtime allows 6 concurrent sessions, and the login page reports a 7th sign-in\n" +
+		"(HTTP 560) as \"Sign in failed\" as if the password were wrong. Every sign-in\n" +
+		"holds a slot until it signs out or expires. Free them all without a restart with\n" +
+		"`mxcli run clear-sessions -p <app.mpr>` (signed-in browsers sign in again), or\n" +
+		"restart `mxcli run --local`, which deletes old sessions as it starts. A script\n" +
+		"that drives the app through a browser should sign out when it finishes."
 }
 
 // readLogTail reads at most the last n bytes of a file.

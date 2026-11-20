@@ -43,6 +43,16 @@ outside it — worse than a box that is too wide. Those runs fall back to the
 conservative measure deliberately. The containment check is the honest test:
 every child of a looped activity must lie inside the container's box.
 
+**The measurer and the builder must agree, and a loop box says whether they
+do.** Whatever follows a body — an IF's closing merge, the next row, a loop's
+box — is placed from the body's *measured* width, while the box around a loop
+is fitted to what was *built*. Wrapping a run in a loop and comparing the two
+widths is an exact oracle that needs no expected coordinates, and it catches
+the over-measures no overlap check can see. Every "already laid out" report
+from `layout flows` is the builder agreeing with itself, so it proves nothing
+about this class. Keep the main-line cursor apart from the drawn extent: an IF
+without a merge resumes at a point that is not the edge of anything.
+
 **Wiring: the invalid shapes come from branches that do not merge.** A decision
 whose non-terminal branch falls off the end of a loop body, a `break` nested
 inside an `if`, a split followed by a statement — each is a place where a

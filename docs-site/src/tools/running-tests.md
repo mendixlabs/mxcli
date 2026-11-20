@@ -48,7 +48,13 @@ default — and prints what it applied. Use `--configuration <name>` to choose
 between several, and `--constant Module.Name=value` (repeatable) to set one for
 this run only — it wins over everything and is never written anywhere. For a
 value that should persist on this machine without being committed, use
-`mxcli constant set` (see [Constant values](#constant-values) below). A constant
+`mxcli constant set` (see [Constant values](#constant-values) below). A literal
+value on the command line shows in shell history and in `ps`; write
+`--constant Module.Name=@env:VAR` to read it from an environment variable, or
+`--constant Module.Name=@file:path` to read it from a file that only you can read
+(`chmod 600`; owner-only check on Unix, not checked on Windows). An unset or empty
+variable, an empty file, or an open file is an error, never an empty
+value, and a value that must start with `@` is written `@@…`. A constant
 the project does not declare is refused before anything boots. `--attach` takes
 none of these, since it inherits the constants of the app it attaches to. This
 matters whenever a test asserts on something a constant feeds: the two modes
@@ -73,7 +79,7 @@ Highest layer wins:
 
 | Layer | Set with | In git? |
 |---|---|---|
-| this run | `--constant Module.Name=value` | no |
+| this run | `--constant Module.Name=value` (or `=@env:VAR`, `=@file:path`) | no |
 | this machine | `mxcli constant set Module.Name value` | no — gitignored, 0600 |
 | this configuration | `alter settings constant … in configuration 'X'` | yes |
 | default | `create constant … default '…'` | yes |
@@ -143,6 +149,7 @@ Two more rules follow from the walk:
 | `--local` | ~30s | `<project>_test` | no |
 | `--local --watch` | ~30s once, then ~2s | `<project>_test` | no |
 | `--attach` | none | **the running app's** | no |
+| `--attach` to an app started with `--allow-call` | none, and no build when the tests compile for the executor | **the running app's** | no |
 
 ```bash
 # No Docker daemon needed
@@ -167,14 +174,90 @@ wins when both are set.
 mxcli test tests/ -p app.mpr --local --mxbuild-path "C:\Program Files\Mendix\11.11.0\modeler\mxbuild.exe"
 ```
 
+`--reuse-build` (with `--local`, not `--watch`) skips the injection and the build
+when the project, the test files and mxcli are unchanged since the last run: the
+deployment that run left is booted as it is. Any difference — a changed file, a
+deployment something else rebuilt — builds as usual.
+
 `--watch` is the everyday loop: edit a test *or* the microflow under test, and
 the verdict lands in about two seconds.
+
+A test run that writes its test microflows into a project a `run --local --watch`
+dev loop is watching (`--local`, or `--attach` with a test that has to be built)
+holds that dev loop's watcher while it owns the project: the dev loop does not
+rebuild, or restart its app, for the injection, `run status` shows
+`held by a test run (pid …)`, and when the run has put the project back exactly
+the watcher finds nothing to build. An edit made in the meantime is built once
+the run ends. A hold whose run died is ignored.
+
+A run that builds (`--local`, or a built test under `--attach`) writes the
+`deployment/` folder the dev loop serves from too — mxbuild cannot put it
+elsewhere. When it did, the dev loop builds its own back once the run ends, so a
+later `--attach` finds the app's build; that one build can be a restart (measured:
+after `--local`, a restart; after a mixed `--attach`, a reload). A `--test-endpoint`
+dev loop's endpoint is left in place by `--local`, which chains to the project's
+own after-startup microflow rather than to the endpoint (ako/mxcli#2119). For a
+gate in the middle of such a loop, `--attach` costs nothing to the running app.
 
 `--attach` skips even the first boot, at one cost worth knowing: the tests run
 against the running app's database rather than a scratch one, so they can leave
 data behind in the app you are looking at. It needs the dev loop to have been
 started with `--test-endpoint`, because the endpoint's handler is registered by
 the after-startup microflow and cannot be added to an app that is already up.
+
+On **Mendix 11.14.0** an attach is always refused. That version's
+`mxbuild --serve` fails every build after its first, even for an unchanged model,
+and says nothing about whether the runtime needs a restart. So the attach builds
+on a fresh serve process instead, and a fresh process's first build asks for a
+restart whatever changed — which an attach cannot do, the runtime being the other
+process's. Use `--local` on 11.14.0; 11.15.0 builds incrementally again.
+
+### Running a test without building it (`--allow-call`)
+
+An attach normally injects the suite's test microflows and builds them into the
+running app. When that app was started with `--allow-call`, a test whose
+statements the endpoint can execute is not injected or built at all: mxcli
+compiles it into a list of steps, the app runs them with the Mendix runtime API,
+and every expression goes to Mendix's own evaluator (`Core.evaluateExpression`).
+Editing a test then costs one HTTP round trip.
+
+```bash
+mxcli run  --local --watch --test-endpoint --allow-call -p app.mpr    # terminal 1
+mxcli test tests/ -p app.mpr --attach                                 # terminal 2
+```
+
+You still write `.test.mdl`. The executor runs these statements: `declare`,
+`set`, `create`, `change`, `commit`, `delete`, `call microflow`, a database
+`retrieve` with an optional `where` and `first`, a `retrieve` over an
+association, and the list aggregates `count`, `sum`, `average`, `minimum` and
+`maximum` over an attribute. It also handles `@expect` (including `count(...)`),
+`@throws`, `@setup`, `@cleanup` and `@verify`. A test with anything else (a
+decision, a loop, a list operation such as `find` or `filter`, a retrieve with
+`sort by`/`limit`, an aggregate by expression, an `on error` clause other than
+`rollback`, a nanoflow or Java action call) is injected and built as before.
+Only that test is: the rest of the run still goes straight to the app, and mxcli
+prints which test and which statement decided it. The verdicts are the same on
+both routes. This applies to a one-shot `--attach`; `test --attach --watch` still
+injects and builds.
+
+Three things are checked before a test runs, because the runtime's evaluator
+returns *empty* for a name it does not know instead of failing:
+
+- every `$variable` an expression reads must be declared earlier in the test
+  (checked by mxcli, then again by the app);
+- every enumeration value an expression names must exist, so
+  `Module.Enum.TYPO` is an ERROR rather than a comparison against empty;
+- the model on disk must not be newer than the build the app is serving. If it
+  is, the run is refused: with `--watch`, `mxcli run wait -p app.mpr` lets the dev
+  loop apply the change; without it, `mxcli run restart -p app.mpr`.
+
+`--allow-call` widens what the endpoint can do. Without it, the endpoint only
+runs microflows the runner generated. With it, the endpoint calls the microflows
+a test names and reads and writes data in a system context. It still needs the
+run's token and a loopback caller, accepts only POST, and is off unless you pass
+the flag. Under `--hub` the loopback check does not help: the tunnel client
+connects from loopback, so the token is the only guard, and `run` warns when both
+flags are given.
 
 ## How tests execute
 
@@ -367,9 +450,29 @@ The generated startup flow, `MxTest.RegisterEndpoint`, **applies entity
 access**, so it can call your after-startup microflow whichever way that one is
 set: Mendix refuses a microflow that does not apply entity access calling one
 that does (CE0114), and allows the other direction. Your microflow still runs
-with its own setting. A build error located in `MxTest.RegisterEndpoint` or
-`MxTest.RegisterTestEndpoint` is reported as mxcli's, not your project's — those
-documents exist only for the run.
+with its own setting.
+
+The generated test microflows apply entity access for the same reason, so a
+test, and its `@setup` microflows, can call a production microflow that applies
+it without you changing that microflow's setting. `mxcli check` sees the test
+the same way, so it does not report MDL-SEC22 for such a call. Tests run in a
+system context, which entity access does not restrict, so what a test reads and
+writes is the same either way.
+
+An applying microflow may not read the attributes of `System.Error`
+(CE0150), so the runner's own error handlers pass `$latestError` to a generated
+helper, `MxTest.Test_ErrorMessage`, which does not apply entity access and
+returns the message. A test whose **own** error handler reads `$latestError/…`
+keeps a test microflow that does not apply entity access, so it builds as it
+did; if that test also calls a microflow that applies entity access, no setting
+serves both, and the handler has to pass `$latestError` to a microflow of yours
+that does not apply it, as CE0150's own text says. Under `--legacy-runner` the
+whole suite shares one microflow, so one such test keeps all of them
+non-applying.
+
+A build error located in `MxTest.RegisterEndpoint`,
+`MxTest.RegisterTestEndpoint` or `MxTest.Test_ErrorMessage` is reported as
+mxcli's, not your project's — those documents exist only for the run.
 
 ### `@cleanup`: what happens to a test's data
 

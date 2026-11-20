@@ -1,0 +1,10 @@
+-- ako/mxcli#1966 (mendixlabs/mxcli#1744): `alter page … set (CaptionParams:
+-- (…))` / `set (ContentParams: (…))` was a parse error, so a text template's
+-- parameters could be written by create page and replace but not changed in
+-- place. Both now parse, resolve a bare attribute against the data view's
+-- entity as create page does, and describe back. Measured on a fresh 11.14.0
+-- app with the reporter's pages: check and exec pass, mx check 0 errors, and
+-- the parameter written is the one create page writes, $IDs aside.
+mdl 1;
+alter page BugTest1966.PageD { set (Caption: 'Open draft (version {1})', CaptionParams: ({1} = VersionNo)) on btnD };
+alter page BugTest1966.PageE { set (Content: 'Draft {1}', ContentParams: ({1} = VersionNo)) on txtE };

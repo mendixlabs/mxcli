@@ -144,6 +144,11 @@ func execCreateEntity(ctx *ExecContext, s *ast.CreateEntityStmt) error {
 		if err != nil {
 			return err
 		}
+		// A stated persistability the chain's root contradicts would be
+		// dropped the same way (ako/mxcli#2005).
+		if err := checkSpecializationPersistability(ctx, nil, s); err != nil {
+			return err
+		}
 	}
 
 	// A member name must be unique along the generalization chain — up to the

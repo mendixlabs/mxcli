@@ -63,6 +63,9 @@ func widgetAsksEditability(w *ast.WidgetV3) bool {
 	if w.GetStringProp("EditableIf") != "" {
 		return true
 	}
+	if ew, ok := w.Properties["EditableWhen"].(*ast.VisibleWhenV3); ok && ew != nil {
+		return true
+	}
 	enum, expr, ok := staticEditability(w)
 	return ok && (expr != "" || enum != "Always")
 }
@@ -180,7 +183,7 @@ func withoutEditability(w *ast.WidgetV3) *ast.WidgetV3 {
 	c := *w
 	c.Properties = make(map[string]any, len(w.Properties))
 	for k, v := range w.Properties {
-		if strings.EqualFold(k, "Editable") || strings.EqualFold(k, "EditableIf") {
+		if strings.EqualFold(k, "Editable") || strings.EqualFold(k, "EditableIf") || strings.EqualFold(k, "EditableWhen") {
 			continue
 		}
 		c.Properties[k] = v

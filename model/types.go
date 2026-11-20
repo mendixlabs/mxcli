@@ -92,6 +92,14 @@ type Module struct {
 	AppStoreVersion     string `json:"appStoreVersion,omitempty"`
 	AppStoreGuid        string `json:"appStoreGuid,omitempty"`
 	IsReusableComponent bool   `json:"isReusableComponent,omitempty"`
+	// IsThemeModule is Studio Pro's "UI resources package" flag
+	// (Projects$ModuleImpl.IsThemeModule): the module's themesource styling is
+	// compiled as part of the theme, in the project's theme module order.
+	IsThemeModule bool `json:"isThemeModule,omitempty"`
+	// PackageFile is set for a module the project holds as a package file
+	// instead of as units: its path relative to the project directory,
+	// modules/<Name>.mxmodule. Such a module is read-only (ako/mxcli#1780).
+	PackageFile string `json:"packageFile,omitempty"`
 
 	// Contained units
 	DomainModelID ID   `json:"domainModelId,omitempty"`
@@ -1039,6 +1047,10 @@ type WebUISettings struct {
 	EnableMicroflowReachabilityAnalysis bool   `json:"enableMicroflowReachabilityAnalysis"`
 	UseOptimizedClient                  string `json:"useOptimizedClient,omitempty"`
 	UrlPrefix                           string `json:"urlPrefix,omitempty"`
+	// ThemeModuleOrder is App Settings > Theme > module order: the modules
+	// whose themesource the theme compiles, in that order (a module listed
+	// later wins). Empty means Mendix's default order (ako/mxcli#1286).
+	ThemeModuleOrder []string `json:"themeModuleOrder,omitempty"`
 }
 
 // IntegrationSettings represents Settings$IntegrationProjectSettingsPart.

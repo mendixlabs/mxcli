@@ -5,6 +5,7 @@ package visitor
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
@@ -45,6 +46,8 @@ var actionSettingKeys = map[string]struct {
 	"closepage":        {canonical: "ClosePage", kinds: []string{"completeTask", "callWorkflow"}, what: "`complete task` and `call workflow`"},
 	"commit":           {canonical: "Commit", kinds: []string{"completeTask"}, what: "`complete task`"},
 	"defaultpage":      {canonical: "DefaultPage", kinds: []string{"openWorkflow"}, what: "`open workflow`"},
+	// Show page's "number of pages to close" (ako/mxcli#2106).
+	"numberofpagestoclose": {canonical: "NumberOfPagesToClose", kinds: []string{"showPage"}, what: "`show page`"},
 }
 
 var (
@@ -71,6 +74,8 @@ func actionSettingsKind(act *parser.ActionExprV3Context) string {
 		return "openWorkflow"
 	case act.CALL() != nil && act.WORKFLOW() != nil:
 		return "callWorkflow"
+	case (act.SHOW() != nil && act.PAGE() != nil) || act.SHOW_PAGE() != nil:
+		return "showPage"
 	}
 	return "other"
 }
@@ -90,6 +95,9 @@ var canonicalFormValidations = map[string]string{
 func actionSettingValue(s *parser.ActionSettingV3Context) (string, bool) {
 	if str := s.STRING_LITERAL(); str != nil {
 		return unquoteStringLit(str), true
+	}
+	if n := s.NUMBER_LITERAL(); n != nil {
+		return n.GetText(), false
 	}
 	if n := s.NONE(); n != nil {
 		return n.GetText(), false
@@ -168,6 +176,10 @@ func buildActionSettingsV3(ctx parser.IActionSettingsV3Context) *ast.ActionSetti
 			if !isString {
 				out.DefaultPage = val
 			}
+		case "numberofpagestoclose":
+			if n, err := strconv.Atoi(val); !isString && err == nil && n >= 1 {
+				out.NumberOfPagesToClose = val
+			}
 		}
 	}
 	return out
@@ -213,7 +225,8 @@ func (b *Builder) ExitActionSettingsV3(ctx *parser.ActionSettingsV3Context) {
 				"Confirmation, ProceedCaption and CancelCaption, a microflow call also "+
 				"Asynchronous and FormValidations, `call workflow` Confirmation and ClosePage, "+
 				"`complete task` ClosePage and Commit, `open user task` AssignOnOpen and "+
-				"OpenWhenAssigned, and `open workflow` DefaultPage", pos, written))
+				"OpenWhenAssigned, `open workflow` DefaultPage, and `show page` "+
+				"NumberOfPagesToClose", pos, written))
 			continue
 		}
 		if seen[key] {
@@ -257,6 +270,10 @@ func (b *Builder) ExitActionSettingsV3(ctx *parser.ActionSettingsV3Context) {
 		case "formvalidations":
 			if _, ok := canonicalFormValidations[strings.ToLower(val)]; isString || !ok {
 				b.addError(fmt.Errorf("%s: FormValidations takes All, Widget or None, not %s", pos, valText))
+			}
+		case "numberofpagestoclose":
+			if n, err := strconv.Atoi(val); isString || err != nil || n < 1 {
+				b.addError(fmt.Errorf("%s: NumberOfPagesToClose takes a whole number of at least 1, not %s", pos, valText))
 			}
 		default: // the text settings
 			if !isString {

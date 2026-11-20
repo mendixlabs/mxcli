@@ -92,6 +92,14 @@ refuses it, and the cascade never starts — one error, at the mistake, quoting
 the author's own header back corrected. Dump the rule-context stack at each
 error first; a stack of just the program rule is the sign.
 
+**A lint rule with several causes must not name only one.** The same failure
+shows outside the parser: MPR008 told every overlapping pair that "each
+statement needs its own @position", while an overlap involving a loop is a
+spacing problem — the loop's box grows with its body — so authors added
+annotations that were already there. The rule already measured each box by its
+own stored size; asking *which kind* of box overlapped was enough to name the
+loop, its size and the gap it needs.
+
 **The reachable-form question.** Several of these are not really about wording:
 the reader's next question is "then how *do* I write it?", and a hint that names
 the working spelling answers it. Where there is no working spelling, saying so is

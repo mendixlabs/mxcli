@@ -58,6 +58,14 @@ func resolvePluggableSetValue(ctx *ExecContext, mutator backend.PageMutator, wid
 	pb := newAlterPageBuilder(ctx, moduleName, moduleID, "", mutator)
 	where := fmt.Sprintf("widget `%s` property `%s`", widgetRef, scope.Key)
 
+	// `Assoc/Attr` written unquoted reaches here as an expression; it is the
+	// path CREATE PAGE takes, not a Mendix expression (ako/mxcli#2283).
+	if isExpr {
+		if _, isPath := contextAssociationAttributePath(expr.Text); isPath {
+			value, isExpr = expr.Text, false
+		}
+	}
+
 	if isExpr {
 		// `$Param.Attr`: the attribute of a page or snippet parameter, whatever
 		// encloses the widget — the AttributeRef plus a SourceVariable naming
@@ -75,9 +83,10 @@ func resolvePluggableSetValue(ctx *ExecContext, mutator backend.PageMutator, wid
 
 	attr, ok := value.(string)
 	if !ok || attr == "" {
-		return nil, mdlerrors.NewValidationf("%s takes an attribute name, `Module.Entity.Attr` or `$Param.Attr`", where)
+		return nil, mdlerrors.NewValidationf("%s takes an attribute name, `Module.Entity.Attr`, `Assoc/Attr` or `$Param.Attr`", where)
 	}
-	if strings.ContainsAny(attr, "/$") {
+	_, isPath := contextAssociationAttributePath(attr)
+	if !isPath && strings.ContainsAny(attr, "/$") {
 		return nil, mdlerrors.NewUnsupported(fmt.Sprintf(
 			"%s: alter page set cannot bind the path `%s` — use `replace <widget> with …`, which rebuilds the "+
 				"widget through the CREATE PAGE path", where, attr))
@@ -93,6 +102,9 @@ func resolvePluggableSetValue(ctx *ExecContext, mutator backend.PageMutator, wid
 		}
 	}
 	bs := resolveBindingScope(scope.DataSource, true, outer, dsEntities, "")
+	if isPath {
+		return pb.associationAttributeBinding(where, attr, bs.Entity, scope.DataSource == "")
+	}
 	if err := misboundAttributeError(where, attr, bs, outer, dsEntities, pb.attributeIndex()); err != nil {
 		return nil, err
 	}
@@ -109,6 +121,46 @@ func resolvePluggableSetValue(ctx *ExecContext, mutator backend.PageMutator, wid
 		return nil, err
 	}
 	return backend.AttributeBinding{Path: pb.resolveAttributePathForEntity(attr, bs.Entity)}, nil
+}
+
+// associationAttributeBinding binds `Assoc/…/Attr`, read from entity, as
+// CREATE PAGE binds it on the same property (ako/mxcli#2279): the final
+// attribute plus the hops, refused where CREATE refuses it — a hop that does
+// not arrive at one object on a property linked to no datasource (singleValue,
+// singleValueAttributeProperty's reading of the template), or a path that does
+// not resolve. Resolved as one name it was the flat attribute
+// `Entity.Assoc/Attr`, CE1613 (ako/mxcli#2283).
+func (pb *pageBuilder) associationAttributeBinding(where, attr, entity string, singleValue bool) (backend.AttributeBinding, error) {
+	if lead, name, ok := pb.leadingEntityAttribute(attr, entity); ok {
+		// `Mod.Entity/Attr`: the entity the path is read from, then the
+		// attribute — MDL-ATTRPATH02, as check says of CREATE's spelling.
+		return backend.AttributeBinding{}, mdlerrors.NewValidation(leadingEntityAttributeMessage(where, attr, lead, name))
+	}
+	finalQN, steps, err := pb.pluggableAssociationAttributePathAt(where, attr, entity, singleValue)
+	if err != nil {
+		return backend.AttributeBinding{}, err
+	}
+	return backend.AttributeBinding{Path: finalQN, Steps: steps}, nil
+}
+
+// leadingEntityAttribute reports whether attr is `Mod.Entity/Attr` with
+// Mod.Entity the entity it is read from or a generalization of it, and no
+// association of that name: the shape resolveAssociationPathFrom does not
+// normalise (it drops a leading entity only when an association follows).
+func (pb *pageBuilder) leadingEntityAttribute(attr, entity string) (lead, name string, ok bool) {
+	path, _ := contextAssociationAttributePath(attr)
+	segs := strings.Split(path, "/")
+	if entity == "" || len(segs) != 2 || strings.Count(segs[0], ".") != 1 || segs[1] == "" || strings.Contains(segs[1], ".") {
+		return "", "", false
+	}
+	lead = unquoteQualifiedName(segs[0])
+	if _, isAssoc := pb.associationDestination(pb.resolveAssociationPathIn(lead, entity), entity); isAssoc {
+		return "", "", false
+	}
+	if !pb.entityIsOrDescendsFrom(entity, lead) {
+		return "", "", false
+	}
+	return lead, segs[1], true
 }
 
 // sourceScopeEntity is the entity a data source supplies: the one it names, or

@@ -5,6 +5,7 @@ package executor
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
@@ -342,7 +343,9 @@ func execAlterUserRole(ctx *ExecContext, s *ast.AlterUserRoleStmt) error {
 	return nil
 }
 
-// execDropUserRole handles DROP USER ROLE Name.
+// execDropUserRole handles DROP USER ROLE Name. It refuses a role the
+// administrator or a demo user still holds, which would leave a dangling name
+// (adminUserRoleDropRefusal, demoUserRoleDropRefusal).
 func execDropUserRole(ctx *ExecContext, s *ast.DropUserRoleStmt) error {
 	if !ctx.ConnectedForWrite() {
 		return mdlerrors.NewNotConnectedWrite()
@@ -368,6 +371,18 @@ func execDropUserRole(ctx *ExecContext, s *ast.DropUserRoleStmt) error {
 		}
 		return mdlerrors.NewNotFound("user role", s.Name)
 	}
+	if ps.AdminUserRole == s.Name {
+		return mdlerrors.NewValidation(adminUserRoleDropRefusal(s.Name))
+	}
+	var holders []string
+	for _, du := range ps.DemoUsers {
+		if slices.Contains(du.UserRoles, s.Name) {
+			holders = append(holders, du.UserName)
+		}
+	}
+	if len(holders) > 0 {
+		return mdlerrors.NewValidation(demoUserRoleDropRefusal(s.Name, holders))
+	}
 
 	if err := ctx.Backend.RemoveUserRole(ps.ID, s.Name); err != nil {
 		return mdlerrors.NewBackend("drop user role", err)
@@ -375,6 +390,53 @@ func execDropUserRole(ctx *ExecContext, s *ast.DropUserRoleStmt) error {
 
 	fmt.Fprintf(ctx.Output, "Dropped user role: %s\n", s.Name)
 	return nil
+}
+
+// adminUserRoleDropRefusal is why `drop user role` refuses the administrator's
+// role (ako/mxcli#2015, mendixlabs/mxcli#1775). Security$ProjectSecurity names
+// it by name, and the drop left that name dangling: `mx check` reports nothing
+// (an empty one is CE0130, a name that does not resolve is not checked), and
+// every build then fails with a NullReferenceException in mxbuild's metadata
+// writer — measured on 11.12.6, where moving AdminUserRole first builds.
+func adminUserRoleDropRefusal(role string) string {
+	return fmt.Sprintf("user role '%s' is the administrator's user role (App Security > Administrator > User role): "+
+		"dropping it leaves the administrator a role that does not exist, which mx check does not report and every "+
+		"build then crashes on. Give the administrator another role first: alter app security ( AdminUserRole: <UserRole> );", role)
+}
+
+// demoUserRoleDropRefusal is why `drop user role` refuses a role demo users
+// still hold: each would name a role that does not exist, which `mx check`
+// reports as CE1613 "The selected user role 'X' no longer exists." at the demo
+// user (measured on 11.12.6). A demo user's roles only grow — `create or
+// modify demo user` adds — so the demo user has to go first.
+func demoUserRoleDropRefusal(role string, demoUsers []string) string {
+	quoted := make([]string, len(demoUsers))
+	drops := make([]string, len(demoUsers))
+	for i, u := range demoUsers {
+		quoted[i] = "'" + u + "'"
+		drops[i] = "drop demo user '" + u + "';"
+	}
+	what := "demo user " + quoted[0]
+	if len(quoted) > 1 {
+		what = "demo users " + strings.Join(quoted, ", ")
+	}
+	return fmt.Sprintf("user role '%s' is held by %s: dropping it leaves a demo user with a role that no longer "+
+		"exists (CE1613). Drop the demo user first, and re-create it with other roles if it is still needed: %s",
+		role, what, strings.Join(drops, " "))
+}
+
+// resolveUserRole returns the project user role named role, in its declared
+// casing, or an error naming the roles there are.
+func resolveUserRole(ps *security.ProjectSecurity, role, why string) (string, error) {
+	known := make([]string, 0, len(ps.UserRoles))
+	for _, ur := range ps.UserRoles {
+		known = append(known, ur.Name)
+		if strings.EqualFold(ur.Name, role) {
+			return ur.Name, nil
+		}
+	}
+	return "", mdlerrors.NewNotFoundMsg("user role", role, fmt.Sprintf(
+		"user role not found: %s (project user roles: %s). %s", role, strings.Join(known, ", "), why))
 }
 
 // execGrantEntityAccess handles GRANT roles ON Module.Entity (rights) [WHERE '...'].
@@ -597,7 +659,45 @@ func execGrantEntityAccess(ctx *ExecContext, s *ast.GrantEntityAccessStmt) error
 		text:      text,
 		unchanged: fmt.Sprintf("entity access: %s.%s (%s)", s.Entity.Module, s.Entity.Name, strings.Join(roleNames, ", ")),
 	})
+	// Printed on a re-run too: an unchanged write leaves the overlap in place.
+	if w := grantOverlapWarning(entityQN, entity.AccessRules, roleNames, xpathConstraint); w != "" {
+		ctx.reportAccessRule(heldReport{notice: true, text: w})
+	}
 	return nil
+}
+
+// grantOverlapWarning is MDL-GRANT03 at exec (ako/mxcli#2320): the roles of a
+// grant that, beside the rule it writes, hold a rule on the entity of the other
+// kind — one with no constraint beside a constrained grant, or a constrained one
+// beside an unconstrained grant. Access rules add up, so the constraint limits
+// nothing. rules are the entity's rules as they were before the grant.
+func grantOverlapWarning(entityQN string, rules []*domainmodel.AccessRule, roleNames []string, xpath string) string {
+	constrained := strings.TrimSpace(xpath) != ""
+	want := map[string]bool{}
+	for _, r := range roleNames {
+		want[r] = true
+	}
+	hit := map[string]bool{}
+	for _, rule := range rules {
+		if (strings.TrimSpace(rule.XPathConstraint) != "") == constrained {
+			continue
+		}
+		for _, role := range rule.ModuleRoleNames {
+			if want[role] {
+				hit[role] = true
+			}
+		}
+	}
+	if len(hit) == 0 {
+		return ""
+	}
+	roles := make([]string, 0, len(hit))
+	for r := range hit {
+		roles = append(roles, r)
+	}
+	v := accessRuleOverlapViolation(0, entityQN, roles, constrained)
+	msg := strings.TrimPrefix(v.Message, "statement 0: ")
+	return fmt.Sprintf("Warning (%s): %s.\n  %s\n", v.RuleID, msg, v.Suggestion)
 }
 
 // execRevokeEntityAccess handles REVOKE roles ON Module.Entity [(rights...)].
@@ -1233,6 +1333,18 @@ func execAlterProjectSecurity(ctx *ExecContext, s *ast.AlterProjectSecurityStmt)
 			return mdlerrors.NewBackend("set admin user name", err)
 		}
 		ctx.reportWrite("admin user name: "+s.AdminUserName, "Admin user name set to %s", s.AdminUserName)
+	}
+
+	if s.AdminUserRole != "" {
+		role, err := resolveUserRole(ps, s.AdminUserRole,
+			"mxbuild does not report an administrator role that does not resolve; every build crashes on it")
+		if err != nil {
+			return err
+		}
+		if err := ctx.Backend.SetProjectAdminUserRole(ps.ID, role); err != nil {
+			return mdlerrors.NewBackend("set admin user role", err)
+		}
+		ctx.reportWrite("admin user role: "+role, "Admin user role set to %s", role)
 	}
 
 	if s.AdminPassword != "" {

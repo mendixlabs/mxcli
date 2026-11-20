@@ -60,15 +60,113 @@ Present identically in 11.6.3 and 11.12.1.
 Subsystem split (by source file): Microflows 364, Domain model 275, Pages/Widgets 248,
 Integration/REST/OData 129, Security 29, Workflows 15, Navigation 7.
 
-**mxcli already does ~6% of this by hand.** The source references **~77–81 distinct
-`CE`/`CW` codes** across ~24 `validate_*.go` files and ~30 lint rules — proof the approach
-works; the catalog just turns "port as we hit them" into an ordered backlog of ~1240 left.
+**mxcli already names a share of this by hand, and that share is computed, not quoted.**
+`make diag-coverage` (`scripts/diagcoverage/`) reads the code IDs from the installed MxBuild's
+`Mendix.Modeler.Texts.dll`, compares them with the codes named in mxcli's message strings and
+lint rules, and ranks the codes it does not name by how many bug-fix records
+(`.claude/skills/fix-issue/findings/`) hit them. A figure written here would be stale the next
+time anyone adds a check. "Named" is a proxy for "covered": a check that does not name its
+code is declared in `scripts/diagcoverage/covered-as.tsv`, with the fixture that shows it.
+The approach works; the catalog turns "port as we hit them" into an ordered backlog.
 
-**There is no cheaper Mendix-native shortcut.** `mx check` (consistency only, no build)
-measured **~22 s** — *slower* than an incremental build — because both cold-start the .NET
-model engine + load the full `.mpr`. So mxcli's Go-native `check` is the **only** path under
-the ~18–60 s floor. That is the entire justification for porting rules into Go rather than
-shelling out to `mx check`.
+**Is there a cheaper Mendix-native shortcut?** Not established. `mx check` (consistency
+only, no build) was measured **once, at ~22 s** (project size and warm/cold state not
+recorded), *slower* than an incremental build, because both cold-start the .NET model
+engine and load the full `.mpr`. A later measurement on one small project (mxcli v0.32.0,
+Mendix 11.16.1, ako/mxcli#1258) gave `mxcli docker check` 7.6 s and Mendix CLI 2's
+`mendix check` (an in-process checker that emits CE codes such as CE0109/CE0844) 1.2 s.
+Two single-project numbers do not settle it, but they show 22 s is not a constant.
+`mendix check` also reported false errors on some real apps (tester report), so it is a
+candidate *pre-filter* for the harvest loop, not a replacement oracle: any finding must be
+confirmed against MxBuild before a rule is ported.
+
+The justification for a Go-native `check` therefore rests on more than speed: it needs no
+.NET runtime or mxbuild download, runs in the pre-write path before any model exists on
+disk, and can be wired into `exec`. A faster Mendix-native checker would change the cost of
+the *harvest loop*, not the case for porting.
+
+## Spike results: Mendix CLI 2 `mendix check` as a fast oracle (2026-11-16)
+
+Harness: `mdl-examples/check-gap/run-parity.sh` (fixtures beside it). Mendix 11.16.1
+MxBuild, Mendix CLI 2 (11.16 build), Linux x64, one clean project from `mxcli new`
+(0 errors on both checkers), single runs, no cold/warm split.
+
+| fixture | `mxcli check -p` | `mx check` (MxBuild) | `mendix check` (CLI 2) |
+|---|---|---|---|
+| duplicate variable | rejected | CE0111 | CE0111 |
+| wrong parameter name | rejected | CE1613 | CE0115, CE7710 |
+| undefined variable | **passed** | CE0109 | CE0109, CE7823 |
+| `DECLARE $X Integer = 'abc'` | **passed** | CE0117 | CE0844 |
+| branch with no return | **passed** | CE0109 | CE0109, CE7823 |
+| Decimal returned from String microflow | **passed** | CE0117 | CE0844 |
+| unknown function `replace` | **passed** | CE0117 | CE7811 |
+| commit of non-persistable entity (control) | passed | none | none |
+
+- **Detection.** Both Mendix checkers flag all 7 broken fixtures and agree on the control.
+  `mxcli check -p` misses 5 of 7, all Tier B (expression and flow typing).
+- **Speed.** `mendix check` 1.3-1.7 s, `mx check` 6.3-8.5 s on the clean project (one 18.3 s outlier on the first fixture of a later run, so run-to-run spread is wide; 4.0 s on
+  a 28-error project); `mxcli docker check` 7.5 s. None is near the 22 s above.
+- **More specific.** Where `mx check` reports the generic CE0117 "Error(s) in
+  expression", `mendix check` names the cause (CE0844 type mismatch, CE7811 unknown
+  function). That is the better porting target.
+- **Codes differ for the same finding.** On a 28-error project (`testdata/testapp-views`),
+  all 28 "... no longer exists" findings are CE1613 in `mx check` (11.14.0 and 11.16.1
+  alike) and CE7710 in `mendix check`. The harness must compare messages, not only codes.
+- **The 6 extras are artifacts of a stripped project.** On `testdata/testapp-views/TestApp.mpr`
+  (a Studio Pro 11.14.0 project holding only `MyFirstModule` and `System`: no Atlas_Core, no
+  theme, no Administration module) `mendix check` reports 34 errors to MxBuild 11.16.1's 28.
+  The 28 "selected … no longer exists" findings are CE7710 in CLI 2 and CE1613 in MxBuild,
+  the same count. The 6 left over, classified by a control each:
+  - **3x CE0136** (retrieve without an entity) are a cascade of the unresolved entity
+    `Administration.Account`: they sit on the same three retrieve activities MxBuild reports
+    as CE1613. Defining the entity removes all three, and the retrieve errors with them.
+  - **2x CE0535** (grid column weights "add up to -1") are a cascade of the unresolved layout
+    `Atlas_Core.Atlas_TopBar`. The stored columns are identical to what mxcli writes for
+    `DesktopWidth: AutoFill` (Weight, TabletWeight, PhoneWeight and PreviewWidth all -1), and
+    that shape is clean in both checkers on a healthy project, in a theme-less project when
+    the layout resolves, and for a lone 6-wide column. Repointing the page at a layout that
+    exists clears both; CE6858 ("update Atlas UI to 2.4 to use Layout Grid on Native pages")
+    appears instead, for every page with a layout grid in a project without Atlas.
+  - **1x CE6083** (design property "Row gap" unsupported by the theme) survives the repoint,
+    and `mendix check` also raises it for a new page written into this project. MxBuild is
+    silent on all of them. It is clean in both checkers on a healthy project, where the Atlas
+    theme defines the property. The likely reason is that this project has no theme to
+    compare against (inferred, not measured). MxBuild does raise CE6083 for real projects:
+    10 bug-fix records name it.
+  None is a check to port, and none is a CLI 2 false positive on a healthy project. Defining
+  the missing entity also made `mendix check` raise CE8412 (the demo users' entity must be
+  `System.User`): a result of the control, not of the project.
+- **MxBuild reports errors in stages; `mendix check` does not.** Measured on MxBuild 11.16.1
+  with six single defects and every ordered pair of them (30 documents, both orders) in one
+  project, plus a reference defect:
+
+  | stage | what is reported | what it hides |
+  |---|---|---|
+  | 0 | a reference that does not resolve (CE1613) | **every other error in every document**, a page's CE0149 included |
+  | 1 | a duplicate variable name (CE0111) | every other error in the same microflow |
+  | 2 | an undefined variable (CE0109) | the stage 3 group, in the same microflow |
+  | 3 | CE0117 (wrong type), CE0068 (return in a loop), CE0038 (declare without a value), CE0067 (no final return) | nothing: all four are reported together |
+
+  With one wrong-parameter call (CE1613) in 13 documents, MxBuild reported those 13 errors and
+  nothing from the other 36 documents; `mendix check` reported 115 errors in 50. Dropping the
+  reference defect made the undefined variable, the wrong type and the page's CE0149 appear
+  together. No pair differed by order, and no two defects share a code. `mendix check` reported
+  both defects in all 30 pair documents (judged by its own codes: CE0844 is its name for
+  MxBuild's CE0117). Not measured: Studio Pro itself (the same consistency checker, so likely
+  the same), documents other than microflows and pages, and the order among codes outside these
+  six. Reproduce it with `make mask-matrix` (`scripts/maskmatrix`). What follows from it:
+  - **Report every real error.** `mxcli check` reporting more than MxBuild is not a mismatch:
+    the rest are real, only hidden until the earlier stage is fixed. Copying the staging would
+    send an author through one fix-and-rebuild loop per stage.
+  - **One defect per fixture**, and a control with it removed. A fixture holding two defects
+    can look as if one is absent (the `captrack-19` rule stood down for exactly this reason).
+  - **The bug records skew early.** A later-stage code shows up in a report only after the
+    earlier ones were fixed, so the field ranking in `make diag-coverage` under-counts it.
+  - **Run the oracle on a project whose references resolve**, or stage 0 hides the rest.
+- **Conclusion.** `mendix check` works as a first-pass oracle: run it, then confirm any
+  code it reports against `mx check` before porting. Run it on a project whose references
+  resolve (no CE7710 / CE1613): on one that does not, it reports cascades MxBuild suppresses. It is a proprietary binary, so the
+  harness takes its path as an option and nothing is committed.
 
 ## Extraction methodology
 
@@ -128,11 +226,14 @@ button, or a URL."*
 2. **Port by tier then frequency.** Tier A first (cheapest, highest hit-rate), Tier B behind
    the type-inference work, Tier C case-by-case, Tier D never. Route `CE`→`check` (hard),
    `CW`→`lint` (advisory) — severity is free from the prefix.
-3. **Harvest-against-the-oracle loop.** Use `mx check` (~22 s, the full 1318-code truth) as
-   an **offline oracle** over a corpus of deliberately-broken projects; diff its findings
+3. **Harvest-against-the-oracle loop.** Use `mx check` (the full 1318-code truth; ~22 s in
+   one measurement, see above) as an **offline oracle** over a corpus of deliberately-broken projects; diff its findings
    against `mxcli check`; the misses are the ranked backlog; port; re-run to confirm parity.
    This is the build tool for the porting effort, and reuses the "run mxbuild over broken
    projects and harvest output" fallback from the very first spike as a *deliberate* tool.
+   Open spike: run Mendix CLI 2's `mendix check` over the same fixtures as a fast
+   pre-filter and record its agreement with `mx check` per code (false-positive and
+   false-negative rate) before trusting it for anything.
 4. `PROPOSAL_check_mxbuild_gap_heuristics.md` is the first tactical instance; this proposal
    is the strategic program it fits into.
 
@@ -140,6 +241,7 @@ button, or a URL."*
 
 | File | Change |
 |------|--------|
+| `scripts/diagcoverage/` | New (done): `make diag-coverage`, per-code coverage from the installed MxBuild, IDs only, ranked by bug-record frequency. No monodis. |
 | `scripts/extract-diagnostics-catalog.sh` | New: the reproducible extractor (stream DLL → `monodis --mresources` → parse+tier). Committed here. |
 | `sdk/versions/diagnostics-{version}.json` | Generated catalog data asset per version (IP decision pending). |
 | `mdl/linter/rules/`, `mdl/executor/validate_*.go` | Port Tier-A codes, prioritised by frequency; cite the `CE`/`CW` code in each. |
@@ -170,12 +272,18 @@ button, or a URL."*
    our own paraphrased messages**; (b) generate the full catalog **locally at build time**
    from the user's own licensed mxbuild (never committed); (c) confirm redistribution is
    permitted. Default: **(b)** — commit the extractor, not the corpus.
-2. **`monodis` dependency.** The extractor needs `mono-utils`. Alternatives: `ilspycmd`
-   (dotnet tool) or a small pure-Go PE manifest-resource reader to drop the mono dep.
+2. **`monodis` dependency.** The message extractor needs `mono-utils`. Alternatives:
+   `ilspycmd` (dotnet tool) or a small pure-Go PE manifest-resource reader to drop the mono
+   dep. The code IDs alone need none of it: the PO resources are plain ASCII in the DLL, so
+   `scripts/diagcoverage` finds them by scanning the bytes. Only the message text and the
+   tiering still need the extractor.
 3. **Tiering is heuristic.** The A/B/C/D split is keyword+subsystem-based; the real
    per-rule trigger predicate lives in Mendix's `.cs` (the `LOCATION` breadcrumb) and must
    be reverse-engineered per rule. The catalog gives the *target + message*, not the
    predicate — sizing must account for that.
-4. **Overlap with `PROPOSAL_check_mxbuild_gap_heuristics.md`.** Fold that proposal's 6 cases
+4. **Fast oracle.** The spike above supports `mendix check` as a first-pass oracle with
+   `mx check` confirming. Still open: a corpus larger than 8 fixtures, and cold/warm
+   timings. The 6 extras on a broken project are classified above.
+5. **Overlap with `PROPOSAL_check_mxbuild_gap_heuristics.md`.** Fold that proposal's 6 cases
    in as the first harvested batch, or keep it separate and cross-link? (Recommend: keep it
    as the tactical pilot; this proposal owns the methodology + backlog.)

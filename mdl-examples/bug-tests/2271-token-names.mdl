@@ -1,0 +1,23 @@
+-- ako/mxcli#2271: a `[%Token%]` is lexed whatever its name, so a typo or a
+-- token Mendix does not have passed check and exec and the build refused it
+-- (CE0117 in an expression, CE0161 in an XPath). MDL-TOKEN01 now judges the
+-- name against the vocabulary measured on mx check 11.14.0 (some 130 names,
+-- each in a microflow, a nanoflow and an XPath; see validate_token_names.go).
+--
+-- EXPECTED: `mxcli check` passes — every token below builds where it is used.
+-- The negative twin is 2271-token-names.fail.mdl.
+mdl 1;
+
+create module BugTokens2271;
+create persistent entity BugTokens2271.Item ( Due: DateTime );
+
+create microflow BugTokens2271.ACT_Tokens () begin
+  declare $now DateTime = [%CurrentDateTime%];
+  declare $start DateTime = [%BeginOfCurrentDayUTC%];
+  declare $tomorrow DateTime = [%BeginOfTomorrow%];
+  declare $weekEnd DateTime = [%EndOfCurrentWeek%];
+  declare $hasUser Boolean = [%CurrentUser%] != empty;
+  -- Length and role tokens are XPath-only.
+  retrieve $soon from BugTokens2271.Item where Due < '[%CurrentDateTime%] + 3 * [%DayLength%]';
+  retrieve $due from BugTokens2271.Item where Due >= '[%BeginOfYesterday%]';
+end;

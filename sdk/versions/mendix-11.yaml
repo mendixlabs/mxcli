@@ -97,6 +97,14 @@ features:
       min_version: "9.0.3"
       mdl: "$Found = FIND $List WHERE expression; $Kept = FILTER $List WHERE expression;"
       notes: "Microflows$FindByExpression and FilterByExpression introduced in 9.0.3 (mendixmodelsdk 4.117.0); `BY Member = value` writes Microflows$Find/Filter, which every version has. The write refuses each type below it (canon.UndeclaredTypeError); check -p names the statement first (ako/mxcli#1811)."
+    send_external_object:
+      min_version: "9.6.0"
+      mdl: "SEND EXTERNAL OBJECT $Obj [REFRESH];"
+      notes: "Microflows$SendExternalObject introduced in 9.6.0 (mendixmodelsdk; ako/mxcli#1939)."
+    delete_external_object:
+      min_version: "9.12.0"
+      mdl: "DELETE EXTERNAL OBJECT $Obj [REFRESH];"
+      notes: "Microflows$DeleteExternalObject introduced in 9.12.0 (mendixmodelsdk; ako/mxcli#1939)."
     call_external_action:
       min_version: "9.19.0"
       mdl: "CALL EXTERNAL ACTION Module.Service.Action ();"
@@ -113,6 +121,10 @@ features:
       min_version: "10.2.0"
       mdl: "CALL EXTERNAL ACTION Module.Service.Action (Name = $Value);"
       notes: "Microflows$ExternalActionParameterMapping introduced in 10.2.0 (mendixmodelsdk 4.117.0); an action called with no arguments writes none (ako/mxcli#1811)."
+    call_external_action_include_associations:
+      min_version: "10.11.0"
+      mdl: "CALL EXTERNAL ACTION Module.Service.Action (Command = $Cmd INCLUDE ASSOCIATIONS (Module.Assoc (Module.SubAssoc)));"
+      notes: "Microflows$IncludedAssociation and ExternalActionParameterMapping.IncludedAssociations introduced in 10.11.0 (mendixmodelsdk); an empty clause writes nothing (ako/mxcli#1914)."
     send_rest_request_output:
       min_version: "10.4.0"
       mdl: "$Response = SEND REST REQUEST Module.Service.Operation;"
@@ -316,7 +328,11 @@ features:
       mdl: "CREATE CONSUMED MCP SERVICE Module.Name (ProtocolVersion: ...)"
     agent:
       min_version: "11.9.0"
-      mdl: "CREATE AGENT Module.Name (UsageType: Task|Chat, Model: ..., SystemPrompt: '...')"
+      mdl: "CREATE AGENT Module.Name (UsageType: Task|Chat, Model: ..., SelectedModel: '...', SystemPrompt: '...')"
+    agent_published_mcp_service:
+      min_version: "11.9.0"
+      mdl: "CREATE PUBLISHED MCP SERVICE Module.Name (ServerName: '...', EndpointPath: '...', ...) { tool ... }"
+      notes: "agenteditor.publishedMCPService, read at startup by AgentEditorCommons and started through MCP Server 5.x. Measured on Studio Pro 11.16 with Agent Editor 2.6.0 and MCP Server 5.4.0 (ako/mxcli#2020); the floor is the agent-document floor, the first Studio Pro version that can hold the document is not measured."
 
   workflows:
     basic:
@@ -505,6 +521,10 @@ features:
       min_version: "10.12.0"
       mdl: "ALTER MODULE Module SET JAR DEPENDENCY 'group:artifact' ADD EXCLUSION '…'"
       notes: "Projects$JarDependencyExclusion introduced in 10.12.0 (mendixmodelsdk 4.117.0; ako/mxcli#1811)."
+    module_type:
+      min_version: "9.12.0"
+      mdl: "CREATE MODULE M ( ModuleType: addon ) / ALTER MODULE M SET ( ModuleType: addon )"
+      notes: "An add-on module is ModuleSettings.ExportLevel = Protected with ProtectedModuleType = AddOn; ProtectedModuleType introduced in 9.12.0 (mendixmodelsdk 4.117.0; ako/mxcli#1921)."
 
   scheduled_events:
     schedules:

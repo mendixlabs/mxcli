@@ -102,11 +102,14 @@ func TestJSONFlagKeepsStdoutPureJSON(t *testing.T) {
 		{name: "show entities", args: []string{"show", "entities"}},
 		{name: "show modules", args: []string{"show", "modules"}},
 		{name: "describe", args: []string{"describe", "entity", "System.User"}},
+		// A query on a source-only table builds the source index it needs
+		// (ako/mxcli#2200); it used to answer [] from a catalog without one.
+		// The build's progress must stay off stdout.
+		{name: "select, source-only table", args: []string{"-c", "select QualifiedName from CATALOG.source limit 1"}},
 		{name: "search", args: []string{"search", "User"}},
 		{name: "search, nothing found", args: []string{"search", "zzqqxxnomatch"}, empty: true},
 		{name: "select", args: []string{"-c", "select Name from CATALOG.entities order by Name limit 3"}},
 		{name: "select, nothing found", args: []string{"-c", "select Name from CATALOG.entities where Name = 'zz'"}, empty: true},
-		{name: "select, source-only table", args: []string{"-c", "select QualifiedName from CATALOG.source limit 1"}, empty: true},
 		{name: "-c show references", args: []string{"-c", "show references to System.User"}},
 		{name: "show catalog tables", args: []string{"-c", "show catalog tables"}},
 		{name: "show catalog status", args: []string{"-c", "show catalog status"}},
@@ -211,6 +214,9 @@ func TestTextModeKeepsProgressOnStdout(t *testing.T) {
 		{[]string{"impact", "System.User"}, []string{"Impact analysis for System.User", "Summary:"}},
 		{[]string{"context", "System.User"}, []string{"Connected to:", "## Context: System.User"}},
 		{[]string{"show", "entities"}, []string{"Connected to:", "| Entity"}},
+		// The commands above cached a full catalog; the first search adds the
+		// source index (ako/mxcli#2004), and its progress is on stdout too.
+		{[]string{"search", "User"}, []string{"Building catalog (source mode", "String Matches"}},
 		{[]string{"search", "User"}, []string{"Loading cached catalog", "String Matches"}},
 	}
 	for _, tc := range cases {
@@ -322,8 +328,9 @@ func TestSearchQuietNamesIsOnlyNamesOnAColdCatalog(t *testing.T) {
 			t.Errorf("not a type<TAB>name line: %q", l)
 		}
 	}
-	// The progress is moved, not dropped: a cold build can take minutes.
-	if !strings.Contains(r.stderr, "✓ Entities:") {
-		t.Errorf("build progress vanished instead of moving to stderr:\n%s", r.stderr)
+	// Nor does stderr carry a line per table (#1860): a slow build reports
+	// a heartbeat there instead (catalogHeartbeat).
+	if lines := perTableLines(r.stderr); len(lines) > 0 {
+		t.Errorf("a quiet build printed %d per-table lines on stderr, e.g. %q", len(lines), lines[0])
 	}
 }

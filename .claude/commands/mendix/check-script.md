@@ -10,8 +10,8 @@ Validate an MDL script before executing it.
 ## Commands
 
 ```bash
-# Syntax check only (no project needed)
-mxcli check script.mdl
+# Syntax check only (--no-project: do not auto-detect an .mpr in this directory)
+mxcli check script.mdl --no-project
 
 # Syntax + reference validation (checks entities/modules exist)
 mxcli check script.mdl -p app.mpr --references

@@ -29,6 +29,7 @@ func (b *Builder) ExitCreateEntityStatement(ctx *parser.CreateEntityStatementCon
 	if ctx.NON_PERSISTENT() != nil {
 		stmt.Kind = ast.EntityNonPersistent
 	}
+	stmt.KindStated = ctx.PERSISTENT() != nil || ctx.NON_PERSISTENT() != nil
 
 	// Navigate to parent CreateStatement to get annotations and doc comment
 	createStmt := findParentCreateStatement(ctx)
@@ -1180,6 +1181,10 @@ func (b *Builder) ExitDropStatement(ctx *parser.DropStatementContext) {
 		})
 	} else if ctx.CONSUMED() != nil && ctx.MCP() != nil && ctx.SERVICE() != nil {
 		b.statements = append(b.statements, &ast.DropConsumedMCPServiceStmt{
+			Name: buildQualifiedName(names[0]),
+		})
+	} else if ctx.PUBLISHED() != nil && ctx.MCP() != nil && ctx.SERVICE() != nil {
+		b.statements = append(b.statements, &ast.DropPublishedMCPServiceStmt{
 			Name: buildQualifiedName(names[0]),
 		})
 	} else if ctx.KNOWLEDGE() != nil && ctx.BASE() != nil {

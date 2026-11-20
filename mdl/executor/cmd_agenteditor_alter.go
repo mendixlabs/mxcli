@@ -7,11 +7,13 @@ package executor
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/sdk/agenteditor"
 )
 
@@ -138,7 +140,7 @@ func execAlterConsumedMCPService(ctx *ExecContext, s *ast.AlterConsumedMCPServic
 		return mdlerrors.NewNotFound("consumed mcp service", s.Name.String())
 	}
 	for key, val := range s.Changes {
-		if err := applyConsumedMCPServiceChange(c, key, val); err != nil {
+		if err := applyConsumedMCPServiceChange(ctx, c, key, val); err != nil {
 			return err
 		}
 	}
@@ -150,8 +152,28 @@ func execAlterConsumedMCPService(ctx *ExecContext, s *ast.AlterConsumedMCPServic
 	return nil
 }
 
-func applyConsumedMCPServiceChange(c *agenteditor.ConsumedMCPService, key, val string) error {
+func applyConsumedMCPServiceChange(ctx *ExecContext, c *agenteditor.ConsumedMCPService, key, val string) error {
 	switch strings.ToLower(key) {
+	case "endpoint":
+		if val == "" {
+			c.Endpoint = nil
+			return nil
+		}
+		ref, err := consumedMCPEndpointRef(ctx, parseQualifiedNameStr(val))
+		if err != nil {
+			return fmt.Errorf("alter consumed mcp service %s: %w", c.Name, err)
+		}
+		c.Endpoint = ref
+	case "authenticationmicroflow":
+		if val == "" {
+			c.AuthenticationMicroflow = nil
+			return nil
+		}
+		ref, err := publishedMCPMicroflowRef(ctx, parseQualifiedNameStr(val))
+		if err != nil {
+			return fmt.Errorf("alter consumed mcp service %s: AuthenticationMicroflow: %w", c.Name, err)
+		}
+		c.AuthenticationMicroflow = ref
 	case "protocolversion":
 		c.ProtocolVersion = val
 	case "version":
@@ -187,14 +209,20 @@ func execAlterAgent(ctx *ExecContext, s *ast.AlterAgentStmt) error {
 		return mdlerrors.NewNotFound("agent", s.Name.String())
 	}
 
-	for key, val := range s.Sets {
-		if err := applyAgentChange(ctx, a, key, val); err != nil {
+	// In key order, so SelectedModel is applied before SelectedModelName.
+	keys := make([]string, 0, len(s.Sets))
+	for key := range s.Sets {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return strings.ToLower(keys[i]) < strings.ToLower(keys[j]) })
+	for _, key := range keys {
+		if err := applyAgentChange(ctx, a, key, s.Sets[key]); err != nil {
 			return err
 		}
 	}
 
 	for _, td := range s.AddTools {
-		tool, err := buildAgentToolFromDef(ctx, &s.Name, td)
+		tool, err := buildAgentToolFromDef(ctx, "alter agent", &s.Name, td)
 		if err != nil {
 			return err
 		}
@@ -202,7 +230,7 @@ func execAlterAgent(ctx *ExecContext, s *ast.AlterAgentStmt) error {
 	}
 
 	for _, kbd := range s.AddKBs {
-		kbTool, err := buildAgentKBToolFromDef(ctx, &s.Name, kbd)
+		kbTool, err := buildAgentKBToolFromDef(ctx, "alter agent", &s.Name, kbd)
 		if err != nil {
 			return err
 		}
@@ -267,53 +295,93 @@ func applyAgentChange(ctx *ExecContext, a *agenteditor.Agent, key, val string) e
 		}
 		a.TopP = &f
 	case "model":
-		qn := parseQualifiedNameStr(val)
-		m := findAgentEditorModel(ctx, qn.Module, qn.Name)
-		if m == nil {
-			return fmt.Errorf("alter agent %s: model not found: %s", a.Name, val)
+		ref, err := agentModelRef(ctx, "alter agent", a.Name, parseQualifiedNameStr(val))
+		if err != nil {
+			return err
 		}
-		a.Model = &agenteditor.DocRef{DocumentID: string(m.ID), QualifiedName: qn.String()}
+		a.Model = ref
+	case "enablebackendstreaming", "enableuistreaming":
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return fmt.Errorf("alter agent %s: %s takes true or false (got %q)", a.Name, key, val)
+		}
+		if strings.EqualFold(key, "enablebackendstreaming") {
+			a.EnableBackendStreaming = &b
+		} else {
+			a.EnableUIStreaming = &b
+		}
+	case "selectedmodel":
+		a.SelectedModel = selectedModelFrom(&val, nil, a.SelectedModel)
+	case "selectedmodelname":
+		if a.SelectedModel == nil {
+			return fmt.Errorf("alter agent %s: SelectedModelName needs a SelectedModel; set both", a.Name)
+		}
+		a.SelectedModel.Name = val
 	case "entity":
 		qn := parseQualifiedNameStr(val)
-		a.Entity = &agenteditor.DocRef{QualifiedName: qn.String()}
+		ref, err := agentEntityRef(ctx, "alter agent", a.Name, qn)
+		if err != nil {
+			return err
+		}
+		a.Entity = carryEntityRef(ref, a.Entity)
 	default:
 		return mdlerrors.NewUnsupported(fmt.Sprintf("unknown agent property: %s", key))
 	}
 	return nil
 }
 
-func buildAgentToolFromDef(ctx *ExecContext, agentName *ast.QualifiedName, td ast.AgentToolDef) (*agenteditor.AgentTool, error) {
+// buildAgentToolFromDef turns a tool or mcp service block into a tool entry,
+// on create agent and on alter agent … add. verb names the statement in errors.
+// A new entry gets a fresh id: Agent Editor keys its tools by it.
+func buildAgentToolFromDef(ctx *ExecContext, verb string, agentName *ast.QualifiedName, td ast.AgentToolDef) (*agenteditor.AgentTool, error) {
 	tool := &agenteditor.AgentTool{
+		ID:          types.GenerateID(),
 		Name:        td.Name,
 		Description: td.Description,
 		Enabled:     td.Enabled,
 		ToolType:    td.ToolType,
+
+		UserAccessApproval: td.UserAccessApproval,
+		DisplayTitle:       td.DisplayTitle,
+		DisplayDescription: td.DisplayDescription,
 	}
-	if td.Document != nil && td.ToolType == "MCP" {
+	if td.Document == nil {
+		return tool, nil
+	}
+	switch {
+	case strings.EqualFold(td.ToolType, "MCP"):
 		svc := findAgentEditorConsumedMCPService(ctx, td.Document.Module, td.Document.Name)
 		if svc == nil {
-			return nil, fmt.Errorf("alter agent %s: consumed mcp service not found: %s", agentName, td.Document)
+			return nil, fmt.Errorf("%s %s: consumed mcp service not found: %s", verb, agentName, td.Document)
 		}
-		tool.Document = &agenteditor.DocRef{
-			DocumentID:    string(svc.ID),
-			QualifiedName: td.Document.String(),
+		tool.Document = &agenteditor.DocRef{DocumentID: string(svc.ID), QualifiedName: td.Document.String()}
+	case strings.EqualFold(td.ToolType, "Microflow"):
+		mfID, err := resolveMicroflowByName(ctx, td.Document.String())
+		if err != nil {
+			return nil, fmt.Errorf("%s %s: tool %s: %w", verb, agentName, td.Name, err)
 		}
+		tool.Document = &agenteditor.DocRef{DocumentID: string(mfID), QualifiedName: td.Document.String()}
 	}
 	return tool, nil
 }
 
-func buildAgentKBToolFromDef(ctx *ExecContext, agentName *ast.QualifiedName, kbd ast.AgentKBToolDef) (*agenteditor.AgentKBTool, error) {
+// buildAgentKBToolFromDef turns a knowledge base block into a knowledge base
+// tool entry, with a fresh id.
+func buildAgentKBToolFromDef(ctx *ExecContext, verb string, agentName *ast.QualifiedName, kbd ast.AgentKBToolDef) (*agenteditor.AgentKBTool, error) {
 	akt := &agenteditor.AgentKBTool{
+		ID:                   types.GenerateID(),
 		Name:                 kbd.Name,
 		Description:          kbd.Description,
 		Enabled:              kbd.Enabled,
 		CollectionIdentifier: kbd.Collection,
 		MaxResults:           kbd.MaxResults,
+		MinSimilarity:        kbd.MinSimilarity,
+		IsVisible:            kbd.IsVisible,
 	}
 	if kbd.Source != nil {
 		kb := findAgentEditorKnowledgeBase(ctx, kbd.Source.Module, kbd.Source.Name)
 		if kb == nil {
-			return nil, fmt.Errorf("alter agent %s: knowledge base not found: %s", agentName, kbd.Source)
+			return nil, fmt.Errorf("%s %s: knowledge base not found: %s", verb, agentName, kbd.Source)
 		}
 		akt.Document = &agenteditor.DocRef{
 			DocumentID:    string(kb.ID),

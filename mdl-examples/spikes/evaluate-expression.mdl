@@ -1,0 +1,218 @@
+mdl 1;
+-- ============================================================================
+-- SPIKE: Core.evaluateExpression as the expression engine of a test executor
+-- ============================================================================
+-- Question: can a test executor inside the running app hand Mendix microflow
+-- expressions (an @expect, a computed value) to the runtime instead of
+-- implementing its own evaluator? See the review of mendixlabs/mxcli#1789 and
+-- Phase 2 of docs/11-proposals/proposal-mdl-test-framework.md.
+--
+-- Run (no Postgres needed):
+--   mxcli new EvSpike --version 11.12.1 --output-dir ev --theme none --layout none --skip-build
+--   cd ev && ./mxcli exec <this file> -p EvSpike.mpr
+--   ./mxcli run --local --detach --db-type hsqldb -p EvSpike.mpr
+--   grep -h 'EVAL|' .mxcli/runtime.log
+--
+-- Measured on Mendix 11.12.1 (Java 21), two boots, identical results:
+--
+-- * It works, in a system context, inside an open transaction, on objects that
+--   were never committed: $inv/Amount, an association hop to an uncommitted
+--   object, and a comparison between them all read the in-memory state.
+-- * Variables: map keys WITHOUT the '$' (a key "$x" is not found).
+-- * Return types: Integer and Long both come back as java.lang.Long (also an
+--   Integer attribute and an Integer variable); Decimal as BigDecimal (scale
+--   kept: 250.50); DateTime as java.util.Date; empty as null; an association
+--   member as a MendixIdentifier; an association hop ending in the entity as
+--   the object. An enumeration value comes back as an INTERNAL runtime class
+--   (MetaEnumeration$MetaEnumValue) -- report it with toString()/getKey(),
+--   never by inspecting the object.
+-- * Association paths need the entity step, as in microflows:
+--   $inv/Spike.Invoice_Customer/Spike.Customer/Name works;
+--   $inv/Spike.Invoice_Customer/Name fails ("Entity does not exist: Name").
+-- * SILENT empties, the most important finding: an unknown variable ($nope),
+--   an unknown enumeration value (Spike.Status.NOPE) and an attribute read
+--   through an empty object ($emptyObj/Amount) all return null, not an error.
+--   A typo would make an @expect compare against empty. The offline check in
+--   mxcli (variables, enumeration values, members) is therefore REQUIRED
+--   before anything is sent, not a nicety.
+-- * Errors that do throw: a syntax error (MendixRuntimeException, "could not
+--   be parsed ... line 1 character 3"); division by zero, an unknown member,
+--   and a type mismatch ($inv/Status = 'PAID', $inv/Status = 1) as
+--   MicroflowException whose root cause carries the readable message.
+-- * Lenient where microflows are lenient: $inv/Amount + 'x' is the string
+--   "250.5x".
+-- * $currentUser is empty and [%CurrentUser%] throws in a system context: a
+--   test that needs a user needs a user session, not the system context.
+-- * Speed: 2000 evaluations of a two-part comparison took 128 ms, and of an
+--   association-path comparison 132 ms -- about 65 us per @expect.
+-- ============================================================================
+
+create module Spike;
+
+create enumeration Spike.Status (
+  OPEN 'Open',
+  PAID 'Paid'
+);
+
+create persistent entity Spike.Customer (
+  Name: String(100)
+);
+
+create persistent entity Spike.Invoice (
+  InvoiceNo: String(50),
+  Amount: Decimal,
+  Qty: Integer,
+  BigNumber: Long,
+  Status: Enumeration(Spike.Status),
+  IssuedOn: DateTime
+);
+
+create association Spike.Invoice_Customer from Spike.Invoice to Spike.Customer;
+
+create java action Spike.EvalProbe() returns String
+as $$
+com.mendix.systemwideinterfaces.core.IContext ctx = com.mendix.core.Core.createSystemContext();
+ctx.startTransaction();
+try {
+  com.mendix.systemwideinterfaces.core.IMendixObject cust = com.mendix.core.Core.instantiate(ctx, "Spike.Customer");
+  cust.setValue(ctx, "Name", "Acme");
+  com.mendix.systemwideinterfaces.core.IMendixObject inv = com.mendix.core.Core.instantiate(ctx, "Spike.Invoice");
+  inv.setValue(ctx, "InvoiceNo", "INV-1");
+  inv.setValue(ctx, "Amount", new java.math.BigDecimal("250.50"));
+  inv.setValue(ctx, "Qty", 3);
+  inv.setValue(ctx, "BigNumber", 10000000000L);
+  inv.setValue(ctx, "Status", "PAID");
+  inv.setValue(ctx, "IssuedOn", new java.util.Date(1767225600000L));
+  inv.setValue(ctx, "Spike.Invoice_Customer", cust.getId());
+  com.mendix.systemwideinterfaces.core.IMendixObject inv2 = com.mendix.core.Core.instantiate(ctx, "Spike.Invoice");
+  inv2.setValue(ctx, "InvoiceNo", "INV-2");
+  com.mendix.core.Core.commit(ctx, inv2);
+
+  java.util.Map<String, Object> v = new java.util.HashMap<String, Object>();
+  v.put("inv", inv); v.put("cust", cust); v.put("inv2", inv2);
+  v.put("n", 5L); v.put("i", 7); v.put("d", new java.math.BigDecimal("2.5")); v.put("s", "abc");
+  v.put("b", Boolean.TRUE); v.put("emptyObj", null); v.put("$dollar", "with-dollar-key");
+
+  LOG.info("EVAL|meta|java.version=" + System.getProperty("java.version"));
+  // literals
+  probe(ctx, v, "lit", "1 + 2");
+  probe(ctx, v, "lit", "1.5 * 2");
+  probe(ctx, v, "lit", "10 div 4");
+  probe(ctx, v, "lit", "'a' + 'b'");
+  probe(ctx, v, "lit", "true and false");
+  probe(ctx, v, "lit", "empty");
+  probe(ctx, v, "lit", "dateTime(2026, 1, 15)");
+  probe(ctx, v, "lit", "[%CurrentDateTime%]");
+  probe(ctx, v, "lit", "Spike.Status.PAID");
+  probe(ctx, v, "lit", "9223372036854775807");
+  // variables
+  probe(ctx, v, "var", "$n + 1");
+  probe(ctx, v, "var", "$i + 1");
+  probe(ctx, v, "var", "$d * 2");
+  probe(ctx, v, "var", "$s + '!'");
+  probe(ctx, v, "var", "$b");
+  probe(ctx, v, "var", "$dollar");
+  probe(ctx, v, "var", "$emptyObj = empty");
+  // paths on an uncommitted object
+  probe(ctx, v, "path", "$inv/InvoiceNo");
+  probe(ctx, v, "path", "$inv/Amount");
+  probe(ctx, v, "path", "$inv/Qty");
+  probe(ctx, v, "path", "$inv/BigNumber");
+  probe(ctx, v, "path", "$inv/Status");
+  probe(ctx, v, "path", "$inv/IssuedOn");
+  probe(ctx, v, "path", "$inv/Spike.Invoice_Customer");
+  probe(ctx, v, "path", "$inv/Spike.Invoice_Customer/Name");
+  probe(ctx, v, "path", "$cust/Name");
+  probe(ctx, v, "path", "$inv2/InvoiceNo");
+  // comparisons (what @expect would send)
+  probe(ctx, v, "cmp", "$inv/Status = Spike.Status.PAID");
+  probe(ctx, v, "cmp", "$inv/Status = Spike.Status.OPEN");
+  probe(ctx, v, "cmp", "$inv/Amount = 250.50");
+  probe(ctx, v, "cmp", "$inv/Amount > 100");
+  probe(ctx, v, "cmp", "$inv/Spike.Invoice_Customer = $cust");
+  probe(ctx, v, "cmp", "$inv/Qty = 3");
+  // functions
+  probe(ctx, v, "fn", "toString($inv/Status)");
+  probe(ctx, v, "fn", "getCaption($inv/Status)");
+  probe(ctx, v, "fn", "getKey($inv/Status)");
+  probe(ctx, v, "fn", "formatDecimal($inv/Amount, '#.00')");
+  probe(ctx, v, "fn", "if $inv/Amount > 100 then 'big' else 'small'");
+  probe(ctx, v, "fn", "length($inv/InvoiceNo)");
+  probe(ctx, v, "fn", "contains($inv/InvoiceNo, 'INV')");
+  probe(ctx, v, "fn", "$inv/Amount * 0.9");
+  probe(ctx, v, "fn", "formatDateTime($inv/IssuedOn, 'yyyy-MM-dd')");
+  probe(ctx, v, "fn", "$currentUser");
+  probe(ctx, v, "fn", "[%CurrentUser%]");
+  // round 2: association paths with the entity step, committed vs uncommitted target
+  com.mendix.systemwideinterfaces.core.IMendixObject cust2 = com.mendix.core.Core.instantiate(ctx, "Spike.Customer");
+  cust2.setValue(ctx, "Name", "Globex");
+  com.mendix.core.Core.commit(ctx, cust2);
+  inv2.setValue(ctx, "Spike.Invoice_Customer", cust2.getId());
+  probe(ctx, v, "assoc", "$inv/Spike.Invoice_Customer/Spike.Customer/Name");
+  probe(ctx, v, "assoc", "$inv2/Spike.Invoice_Customer/Spike.Customer/Name");
+  probe(ctx, v, "assoc", "$inv/Spike.Invoice_Customer/Spike.Customer = $cust");
+  probe(ctx, v, "assoc", "$inv/Spike.Invoice_Customer/Spike.Customer");
+  probe(ctx, v, "assoc", "$inv/Spike.Invoice_Customer/Spike.Customer/Name = 'Acme'");
+  probe(ctx, v, "assoc", "$emptyObj/Spike.Invoice_Customer/Spike.Customer/Name");
+  // enum: what the executor should send to report an actual value
+  probe(ctx, v, "enum", "toString($inv/Status) = 'PAID'");
+  probe(ctx, v, "enum", "$inv/Status = empty");
+  // types of the variables matter? an Integer passed as Integer vs Long
+  probe(ctx, v, "type", "$i = 7");
+  probe(ctx, v, "type", "$n = 5");
+  probe(ctx, v, "type", "$d = 2.5");
+  // speed: 2000 evaluations of a typical @expect
+  long t0 = System.nanoTime();
+  for (int k = 0; k < 2000; k++) com.mendix.core.Core.evaluateExpression(ctx, v, "$inv/Amount > 100 and $inv/Status = Spike.Status.PAID");
+  LOG.info("EVAL|speed|2000 evals of a two-part comparison|" + ((System.nanoTime() - t0) / 1000000) + " ms total");
+  long t1 = System.nanoTime();
+  for (int k = 0; k < 2000; k++) com.mendix.core.Core.evaluateExpression(ctx, v, "$inv/Spike.Invoice_Customer/Spike.Customer/Name = 'Acme'");
+  LOG.info("EVAL|speed|2000 evals of an association path|" + ((System.nanoTime() - t1) / 1000000) + " ms total");
+  // errors
+  probe(ctx, v, "err", "1 +");
+  probe(ctx, v, "err", "$nope");
+  probe(ctx, v, "err", "1 div 0");
+  probe(ctx, v, "err", "$emptyObj/Amount");
+  probe(ctx, v, "err", "$inv/NoSuchAttr");
+  probe(ctx, v, "err", "Spike.Status.NOPE");
+  probe(ctx, v, "err", "$inv/Status = 1");
+  probe(ctx, v, "err", "$inv/Status = 'PAID'");
+  probe(ctx, v, "err", "$inv/Amount + 'x'");
+} finally {
+  ctx.rollbackTransaction();
+}
+return "done";
+$$
+extra code $$
+private static final com.mendix.logging.ILogNode LOG = com.mendix.core.Core.getLogger("EvSpike");
+
+private static String oneLine(String s) {
+  return s == null ? "null" : s.replace('\n', ' ').replace('\r', ' ');
+}
+
+private static void probe(com.mendix.systemwideinterfaces.core.IContext ctx, java.util.Map<String, Object> vars, String label, String expr) {
+  try {
+    Object r = com.mendix.core.Core.evaluateExpression(ctx, vars, expr);
+    String cls = r == null ? "null" : r.getClass().getName();
+    String val = String.valueOf(r);
+    if (r instanceof com.mendix.systemwideinterfaces.core.IMendixObject) {
+      com.mendix.systemwideinterfaces.core.IMendixObject o = (com.mendix.systemwideinterfaces.core.IMendixObject) r;
+      val = o.getType() + "#" + o.getId().toLong() + " new=" + o.isNew();
+    }
+    LOG.info("EVAL|" + label + "|" + expr + "|OK|" + cls + "|" + oneLine(val));
+  } catch (Throwable t) {
+    Throwable root = t;
+    while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+    LOG.info("EVAL|" + label + "|" + expr + "|ERR|" + t.getClass().getName() + ": " + oneLine(t.getMessage())
+        + " || root " + root.getClass().getName() + ": " + oneLine(root.getMessage()));
+  }
+}
+$$;
+
+create microflow Spike.AfterStartup () returns Boolean
+begin
+  $Report = call java action Spike.EvalProbe();
+  return true;
+end;
+
+alter settings runtime ( AfterStartupMicroflow: 'Spike.AfterStartup' );

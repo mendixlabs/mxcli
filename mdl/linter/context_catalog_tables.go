@@ -232,6 +232,7 @@ type CatalogString struct {
 	Language      string // "" for text that is not translatable
 	ElementID     string
 	ModuleName    string
+	WidgetID      string // the widget the text belongs to (ako/mxcli#1303); "" outside a widget
 }
 
 // Strings iterates the catalog's strings outside System and Marketplace modules,
@@ -249,7 +250,8 @@ func (ctx *LintContext) Strings(language string) iter.Seq[CatalogString] {
 		rows, err := ctx.db.Query(fmt.Sprintf(`
 			SELECT COALESCE(s.QualifiedName, ''), COALESCE(s.ObjectType, ''),
 			       COALESCE(s.StringValue, ''), COALESCE(s.StringContext, ''),
-			       COALESCE(s.Language, ''), COALESCE(s.ElementId, ''), COALESCE(s.ModuleName, '')
+			       COALESCE(s.Language, ''), COALESCE(s.ElementId, ''), COALESCE(s.ModuleName, ''),
+			       COALESCE(s.WidgetId, '')
 			FROM strings s
 			LEFT JOIN modules m ON s.ModuleName = m.Name
 			WHERE %s AND %s AND %s
@@ -264,7 +266,7 @@ func (ctx *LintContext) Strings(language string) iter.Seq[CatalogString] {
 		for rows.Next() {
 			var s CatalogString
 			if err := rows.Scan(&s.QualifiedName, &s.ObjectType, &s.Value, &s.Context,
-				&s.Language, &s.ElementID, &s.ModuleName); err != nil {
+				&s.Language, &s.ElementID, &s.ModuleName, &s.WidgetID); err != nil {
 				ctx.recordQueryError("Strings (row scan)", err)
 				continue
 			}
@@ -287,6 +289,10 @@ type Layout struct {
 	LayoutType    string // "Responsive", "Phone", "Tablet", "Popup", "ModalPopup", "Default", "Legacy"
 	Platform      string // "Web" or "Native" — LayoutType alone cannot tell ("Popup" is native)
 	Description   string
+	// The layout's own Appearance (full catalog only).
+	Class          string
+	Style          string
+	DynamicClasses string
 }
 
 // Layouts iterates every layout outside System and Marketplace modules.
@@ -294,7 +300,8 @@ func (ctx *LintContext) Layouts() iter.Seq[Layout] {
 	return func(yield func(Layout) bool) {
 		rows, err := ctx.db.Query(fmt.Sprintf(`
 			SELECT l.Name, l.QualifiedName, l.ModuleName, COALESCE(l.Folder, ''),
-			       COALESCE(l.LayoutType, ''), COALESCE(l.Platform, ''), COALESCE(l.Description, '')
+			       COALESCE(l.LayoutType, ''), COALESCE(l.Platform, ''), COALESCE(l.Description, ''),
+			       COALESCE(l.Class, ''), COALESCE(l.Style, ''), COALESCE(l.DynamicClasses, '')
 			FROM layouts l
 			LEFT JOIN modules m ON l.ModuleName = m.Name
 			WHERE %s AND %s
@@ -309,7 +316,8 @@ func (ctx *LintContext) Layouts() iter.Seq[Layout] {
 		for rows.Next() {
 			var l Layout
 			if err := rows.Scan(&l.Name, &l.QualifiedName, &l.ModuleName, &l.Folder,
-				&l.LayoutType, &l.Platform, &l.Description); err != nil {
+				&l.LayoutType, &l.Platform, &l.Description,
+				&l.Class, &l.Style, &l.DynamicClasses); err != nil {
 				ctx.recordQueryError("Layouts (row scan)", err)
 				continue
 			}
@@ -324,7 +332,8 @@ func (ctx *LintContext) Layouts() iter.Seq[Layout] {
 }
 
 // NativePages returns the qualified names of the pages whose layout is a
-// native-mobile one. React-client rules (CE0582) do not apply to them: a native
+// native-mobile one, and of the native layouts themselves (whose widgets the
+// catalog records too, ako/mxcli#1302). React-client rules (CE0582) do not apply to them: a native
 // page is not rendered by the React client, and mxbuild builds a legacy widget
 // there clean (ako/mxcli#953).
 //
@@ -341,6 +350,8 @@ func (ctx *LintContext) NativePages() map[string]bool {
 		FROM pages p
 		JOIN layouts l ON l.QualifiedName = p.LayoutRef
 		WHERE l.Platform = 'Native'
+		UNION
+		SELECT QualifiedName FROM layouts WHERE Platform = 'Native'
 	`)
 	if err != nil {
 		ctx.recordQueryError("NativePages", err)
@@ -451,6 +462,99 @@ func (ctx *LintContext) Modules() iter.Seq[Module] {
 	}
 }
 
+// Annotation is one domain model annotation (ako/mxcli#1300). A microflow's
+// annotations are activities, read through activities_for().
+type Annotation struct {
+	ID         string
+	ModuleName string
+	Caption    string // the full text, newlines kept
+	X, Y       int
+	Width      int
+}
+
+// Annotations iterates the domain model annotations outside System and
+// Marketplace modules.
+func (ctx *LintContext) Annotations() iter.Seq[Annotation] {
+	return func(yield func(Annotation) bool) {
+		rows, err := ctx.db.Query(fmt.Sprintf(`
+			SELECT a.Id, COALESCE(a.ModuleName, ''), COALESCE(a.Caption, ''),
+			       COALESCE(a.X, 0), COALESCE(a.Y, 0), COALESCE(a.Width, 0)
+			FROM annotations a
+			LEFT JOIN modules m ON a.ModuleName = m.Name
+			WHERE %s
+			ORDER BY a.ModuleName, a.Y, a.X, a.Id
+		`, notPlatformModule("m")))
+		if err != nil {
+			ctx.recordQueryError("Annotations", err)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var a Annotation
+			if err := rows.Scan(&a.ID, &a.ModuleName, &a.Caption, &a.X, &a.Y, &a.Width); err != nil {
+				ctx.recordQueryError("Annotations (row scan)", err)
+				continue
+			}
+			if ctx.IsExcluded(a.ModuleName) {
+				continue
+			}
+			if !yield(a) {
+				return
+			}
+		}
+	}
+}
+
+// Folder is one folder of a module, empty folders included (ako/mxcli#1436).
+// A document's Folder field names only folders that hold a document, so an
+// empty folder appears nowhere else.
+type Folder struct {
+	ID            string
+	Name          string
+	ModuleName    string
+	Path          string // "Objects/Order", spelled as a document's Folder field
+	ParentPath    string // "" for a folder directly in the module
+	Depth         int    // 1 for a folder directly in the module
+	DocumentCount int    // documents directly in this folder
+	FolderCount   int    // folders directly in this folder
+}
+
+// Folders iterates the folders outside System and Marketplace modules.
+func (ctx *LintContext) Folders() iter.Seq[Folder] {
+	return func(yield func(Folder) bool) {
+		rows, err := ctx.db.Query(fmt.Sprintf(`
+			SELECT f.Id, COALESCE(f.Name, ''), COALESCE(f.ModuleName, ''), COALESCE(f.Path, ''),
+			       COALESCE(f.ParentPath, ''), COALESCE(f.Depth, 1),
+			       COALESCE(f.DocumentCount, 0), COALESCE(f.FolderCount, 0)
+			FROM folders f
+			LEFT JOIN modules m ON f.ModuleName = m.Name
+			WHERE %s
+			ORDER BY f.ModuleName, f.Path
+		`, notPlatformModule("m")))
+		if err != nil {
+			ctx.recordQueryError("Folders", err)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var f Folder
+			if err := rows.Scan(&f.ID, &f.Name, &f.ModuleName, &f.Path, &f.ParentPath,
+				&f.Depth, &f.DocumentCount, &f.FolderCount); err != nil {
+				ctx.recordQueryError("Folders (row scan)", err)
+				continue
+			}
+			if ctx.IsExcluded(f.ModuleName) {
+				continue
+			}
+			if !yield(f) {
+				return
+			}
+		}
+	}
+}
+
 // ConstantValue is a constant's value in one run configuration
 // (Settings → Configurations), which overrides the constant's default there.
 type ConstantValue struct {
@@ -488,6 +592,182 @@ func (ctx *LintContext) ConstantValues() iter.Seq[ConstantValue] {
 				continue
 			}
 			if !yield(c) {
+				return
+			}
+		}
+	}
+}
+
+// AgentDocument is an agent or consumed MCP service the Agent Editor stores,
+// with the one setting its import cannot do without (ako/mxcli#2089): an
+// agent's selected model id, a consumed MCP service's endpoint constant.
+type AgentDocument struct {
+	QualifiedName string
+	ModuleName    string
+	Setting       string // empty when the document has none
+}
+
+// Agents iterates the agents outside System and the Marketplace, with their
+// selected model id.
+func (ctx *LintContext) Agents() iter.Seq[AgentDocument] {
+	return ctx.agentDocuments("Agents", "agents", "SelectedModel")
+}
+
+// ConsumedMCPServices iterates the consumed MCP services outside System and
+// the Marketplace, with their endpoint constant.
+func (ctx *LintContext) ConsumedMCPServices() iter.Seq[AgentDocument] {
+	return ctx.agentDocuments("ConsumedMCPServices", "consumed_mcp_services", "Endpoint")
+}
+
+func (ctx *LintContext) agentDocuments(what, table, column string) iter.Seq[AgentDocument] {
+	return func(yield func(AgentDocument) bool) {
+		rows, err := ctx.db.Query(fmt.Sprintf(`
+			SELECT d.QualifiedName, d.ModuleName, COALESCE(d.%s, '')
+			FROM %s d
+			LEFT JOIN modules m ON m.Name = d.ModuleName
+			WHERE %s
+			ORDER BY d.QualifiedName
+		`, column, table, notPlatformModule("m")))
+		if err != nil {
+			ctx.recordQueryError(what, err)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var d AgentDocument
+			if err := rows.Scan(&d.QualifiedName, &d.ModuleName, &d.Setting); err != nil {
+				ctx.recordQueryError(what+" (row scan)", err)
+				continue
+			}
+			if ctx.IsExcluded(d.ModuleName) {
+				continue
+			}
+			if !yield(d) {
+				return
+			}
+		}
+	}
+}
+
+// MarketplaceModuleVersion is the Marketplace version of the named module,
+// or "" when the project has no such module or it records none.
+func (ctx *LintContext) MarketplaceModuleVersion(name string) string {
+	var v sql.NullString
+	if err := ctx.db.QueryRow(`SELECT AppStoreVersion FROM modules WHERE Name = ?`, name).Scan(&v); err != nil {
+		if err != sql.ErrNoRows {
+			ctx.recordQueryError("MarketplaceModuleVersion", err)
+		}
+		return ""
+	}
+	return v.String
+}
+
+// Workflow is one workflow the user owns (ako/mxcli#1295).
+type Workflow struct {
+	ID                 string
+	QualifiedName      string
+	Name               string
+	ModuleName         string
+	Description        string
+	ParameterEntity    string
+	ActivityCount      int
+	UserTaskCount      int
+	MicroflowCallCount int
+	DecisionCount      int
+}
+
+// Workflows iterates the workflows outside System and Marketplace modules.
+// --document names the workflow.
+func (ctx *LintContext) Workflows() iter.Seq[Workflow] {
+	return func(yield func(Workflow) bool) {
+		rows, err := ctx.db.Query(fmt.Sprintf(`
+			SELECT w.Id, COALESCE(w.QualifiedName, ''), COALESCE(w.Name, ''), COALESCE(w.ModuleName, ''),
+			       COALESCE(w.Description, ''), COALESCE(w.ParameterEntity, ''),
+			       COALESCE(w.ActivityCount, 0), COALESCE(w.UserTaskCount, 0),
+			       COALESCE(w.MicroflowCallCount, 0), COALESCE(w.DecisionCount, 0)
+			FROM workflows w
+			LEFT JOIN modules m ON w.ModuleName = m.Name
+			WHERE %s AND %s
+			ORDER BY w.QualifiedName
+		`, notPlatformModule("m"), ctx.documentFilterSQL("w.QualifiedName")))
+		if err != nil {
+			ctx.recordQueryError("Workflows", err)
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var w Workflow
+			if err := rows.Scan(&w.ID, &w.QualifiedName, &w.Name, &w.ModuleName, &w.Description,
+				&w.ParameterEntity, &w.ActivityCount, &w.UserTaskCount, &w.MicroflowCallCount,
+				&w.DecisionCount); err != nil {
+				ctx.recordQueryError("Workflows (row scan)", err)
+				continue
+			}
+			if ctx.IsExcluded(w.ModuleName) {
+				continue
+			}
+			if !yield(w) {
+				return
+			}
+		}
+	}
+}
+
+// WorkflowActivity is one activity of a workflow, boundary-event paths and
+// event sub-processes included (ako/mxcli#1295). ActivityType is its kind —
+// UserTask, MultiUserTask, SystemTask, CallMicroflow, AIAgentTask,
+// CallWorkflow, Decision, … — and each slot naming another document is a field
+// of its own, "" when empty.
+type WorkflowActivity struct {
+	ID                    string
+	WorkflowQualifiedName string
+	ModuleName            string
+	Name                  string
+	Caption               string
+	ActivityType          string
+	Microflow             string // a system task's, call-microflow or AI agent task's
+	UserSourceMicroflow   string // a user task's targeting microflow
+	OnCreatedMicroflow    string // a user task's on-created microflow
+	CompletionMicroflow   string // a multi-user task's completion microflow
+	Page                  string // a user task's page
+	UserTaskEntity        string // a user task's task entity
+	CalledWorkflow        string // a call-workflow activity's workflow
+}
+
+// WorkflowActivities iterates the activities of every workflow outside System
+// and Marketplace modules, each workflow's in walk order. --document names
+// the workflow.
+func (ctx *LintContext) WorkflowActivities() iter.Seq[WorkflowActivity] {
+	return func(yield func(WorkflowActivity) bool) {
+		rows, err := ctx.db.Query(fmt.Sprintf(`
+			SELECT a.Id, COALESCE(a.WorkflowQualifiedName, ''), COALESCE(a.ModuleName, ''),
+			       COALESCE(a.Name, ''), COALESCE(a.Caption, ''), COALESCE(a.ActivityType, ''),
+			       COALESCE(a.Microflow, ''), COALESCE(a.UserSourceMicroflow, ''),
+			       COALESCE(a.OnCreatedMicroflow, ''), COALESCE(a.CompletionMicroflow, ''),
+			       COALESCE(a.Page, ''), COALESCE(a.UserTaskEntity, ''), COALESCE(a.CalledWorkflow, '')
+			FROM workflow_activities a
+			LEFT JOIN modules m ON a.ModuleName = m.Name
+			WHERE %s AND %s
+			ORDER BY a.WorkflowQualifiedName, a.Sequence
+		`, notPlatformModule("m"), ctx.documentFilterSQL("a.WorkflowQualifiedName")))
+		if err != nil {
+			ctx.recordQueryError("WorkflowActivities", err)
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var a WorkflowActivity
+			if err := rows.Scan(&a.ID, &a.WorkflowQualifiedName, &a.ModuleName, &a.Name, &a.Caption,
+				&a.ActivityType, &a.Microflow, &a.UserSourceMicroflow, &a.OnCreatedMicroflow,
+				&a.CompletionMicroflow, &a.Page, &a.UserTaskEntity, &a.CalledWorkflow); err != nil {
+				ctx.recordQueryError("WorkflowActivities (row scan)", err)
+				continue
+			}
+			if ctx.IsExcluded(a.ModuleName) {
+				continue
+			}
+			if !yield(a) {
 				return
 			}
 		}

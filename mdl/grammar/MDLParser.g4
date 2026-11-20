@@ -229,6 +229,7 @@ createStatement
       | createDataTransformerStatement
       | createModelStatement
       | createConsumedMCPServiceStatement
+      | createPublishedMCPServiceStatement
       | createKnowledgeBaseStatement
       | createAgentStatement
       | createNanoflowStatement
@@ -290,7 +291,9 @@ alterStatement
     | ALTER aiModelKw qualifiedName SET agentEditorAlterAssignment (COMMA agentEditorAlterAssignment)*
     | ALTER KNOWLEDGE BASE qualifiedName SET agentEditorAlterAssignment (COMMA agentEditorAlterAssignment)*
     | ALTER CONSUMED MCP SERVICE qualifiedName SET agentEditorAlterAssignment (COMMA agentEditorAlterAssignment)*
+    | ALTER PUBLISHED MCP SERVICE qualifiedName alterPublishedMCPServiceAction+
     | ALTER AGENT qualifiedName alterAgentAction+
+    | alterModuleSetStatement
     | alterModuleJarDepStatement
     ;
 
@@ -386,6 +389,8 @@ alterOperation
     | alterInsert SEMICOLON?
     | alterReplace SEMICOLON?
     | alterDrop SEMICOLON?
+    | alterMove SEMICOLON?
+    | alterWrap SEMICOLON?
     | alterPageDropTemplate SEMICOLON?
     | alterPageAddVariable SEMICOLON?
     | alterPageDropVariable SEMICOLON?
@@ -409,6 +414,21 @@ alterInsert
 
 alterReplace
     : REPLACE alterTarget WITH alterFragment
+    ;
+
+// MOVE relocates an existing widget, its stored subtree unchanged; WRAP puts a
+// new container where a widget is and moves the widget into it. Neither
+// rebuilds the moved widget, so a widget MDL cannot re-author (a legacy classic
+// Data grid) can still be moved or wrapped (ako/mxcli#2122).
+//   move txtNote after txtName;
+//   move dgOrders into ctnMain;
+//   wrap dgOrders in { dataview dvOrder (DataSource: $Order) { } }
+alterMove
+    : MOVE alterTarget (AFTER | BEFORE | INTO) alterTarget
+    ;
+
+alterWrap
+    : WRAP alterTarget IN alterFragment
     ;
 
 alterDrop
@@ -582,6 +602,14 @@ alterPageAssignment
     // Whether the key IS an action slot is the stored widget's call, not the
     // grammar's — the mutator refuses one that is not.
     | STRING_LITERAL alterAssignOp actionExprV3                // 'createFileAction': microflow Module.MF
+    // A text template's parameters, as CREATE PAGE writes them (ako/mxcli#1966):
+    // without this, `set (CaptionParams: ({1} = Attr))` did not parse and a
+    // template's parameters could only be changed by REPLACEing the widget.
+    | (CONTENTPARAMS | CAPTIONPARAMS) alterAssignOp paramListV3   // CaptionParams: ({1} = VersionNo)
+    // An attribute over associations, as CREATE PAGE takes a column's or an
+    // input's (ako/mxcli#1644): `Assoc/Attr` parsed as a division and was
+    // refused as an expression.
+    | ATTRIBUTE alterAssignOp attributePathHopV3 SLASH attributePathV3   // Attribute: Order_Customer/City
     | identifierOrKeyword alterAssignOp actionExprV3           // createFileAction: microflow Module.MF
     | identifierOrKeyword alterAssignOp propertyValueV3       // Caption: 'Save'
     | STRING_LITERAL alterAssignOp propertyValueV3             // 'showLabel': false
@@ -910,6 +938,7 @@ dropStatement
     | DROP DATA TRANSFORMER ifExists? qualifiedName
     | DROP aiModelKw ifExists? qualifiedName                           // DROP AI MODEL Module.Name (agent-editor)
     | DROP CONSUMED MCP SERVICE ifExists? qualifiedName                // DROP CONSUMED MCP SERVICE Module.Name
+    | DROP PUBLISHED MCP SERVICE ifExists? qualifiedName               // DROP PUBLISHED MCP SERVICE Module.Name
     | DROP KNOWLEDGE BASE ifExists? qualifiedName                      // DROP KNOWLEDGE BASE Module.Name
     | DROP AGENT ifExists? qualifiedName                               // DROP AGENT Module.Name
     | DROP CONFIGURATION ifExists? STRING_LITERAL
@@ -922,7 +951,7 @@ renameStatement
     ;
 
 renameTarget
-    : ENTITY | MICROFLOW | NANOFLOW | PAGE | ENUMERATION | ASSOCIATION | CONSTANT | JAVA ACTION | WORKFLOW
+    : ENTITY | MICROFLOW | NANOFLOW | PAGE | SNIPPET | ENUMERATION | ASSOCIATION | CONSTANT | JAVA ACTION | WORKFLOW
     ;
 
 /**

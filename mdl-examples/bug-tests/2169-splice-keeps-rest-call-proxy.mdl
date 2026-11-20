@@ -1,0 +1,27 @@
+mdl 1;
+-- ============================================================================
+-- Bug ako/mxcli#2169 (mendixlabs/mxcli#1830): an in-place edit of a REST call
+-- resets its proxy setting, which describe does not print
+-- ============================================================================
+--
+-- MDL cannot set a proxy, so this script only creates the call. To reproduce:
+--   1. exec this script, then in Studio Pro set the call's proxy to Override
+--      (host 'proxy.example', port 3128) — or NoProxy — and add documentation
+--      to the activity.
+--   2. describe microflow BugTest2169.ACT_rest_proxy, change `Timeout: 300` to
+--      `Timeout: 301`, and exec the result: "spliced: 1 edited in place".
+--
+-- Symptom (before fix): bson dump shows RequestProxyType Override -> DefaultProxy,
+-- ProxyConfiguration -> null, and the activity documentation empty.
+-- After fix: the timeout is 301 and the proxy and documentation are as stored;
+-- mx check 0 errors on Mendix 11.14.0.
+-- ============================================================================
+
+create module BugTest2169;
+
+create microflow BugTest2169.ACT_rest_proxy ($location: String)
+begin
+  call rest service get '{1}' with ({1} = $location) (
+    Timeout: 300,
+  ) returns nothing;
+end;

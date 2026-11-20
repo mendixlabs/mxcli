@@ -75,6 +75,17 @@ type DocumentHeader struct {
 	Excluded    bool
 }
 
+// FlowAccess is what deciding a stored flow's access takes: where it is, what
+// it is called, whether it is excluded, and the module roles allowed to run it
+// (qualified names). Kind is "microflow" or "nanoflow".
+type FlowAccess struct {
+	Kind               string
+	ContainerID        model.ID
+	Name               string
+	Excluded           bool
+	AllowedModuleRoles []model.ID
+}
+
 // UnitInfo is a lightweight unit descriptor.
 type UnitInfo struct {
 	ID              model.ID

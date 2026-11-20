@@ -168,6 +168,48 @@ Detailed audit of each workflow activity execution.
 | WorkflowActivityRecord_TaskTargetedUsers | System.User | Many-to-Many |
 | WorkflowActivityRecord_TaskAssignedUsers | System.User | Many-to-Many |
 | WorkflowActivityRecord_TaskTargetedGroups | System.WorkflowGroup | Many-to-Many |
+| WorkflowActivityRecord_WorkflowSubProcess | System.WorkflowSubProcess | Many-to-One (11.8+) |
+| WorkflowActivityRecord_WorkflowSubProcessDefinition | System.WorkflowSubProcessDefinition | Many-to-One (11.8+) |
+
+### System.WorkflowSubProcess
+
+A running or finished sub-process of a workflow. Mendix 11.8 and later
+only: in an older project every name in this section is CE1613 "no longer exists".
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| Caption | String(200) | Sub-process caption |
+| StartTime | DateTime | When it started |
+| EndTime | DateTime | When it ended |
+| State | Enum (WorkflowSubProcessState) | Execution state |
+| Reason | String | State reason |
+
+| Association | Target | Type |
+|-------------|--------|------|
+| WorkflowSubProcess_Workflow | System.Workflow | Many-to-One |
+| WorkflowSubProcess_WorkflowSubProcessDefinition | System.WorkflowSubProcessDefinition | Many-to-One |
+
+`WorkflowUserTask_WorkflowSubProcess`, `WorkflowEndedUserTask_WorkflowSubProcess`
+and `WorkflowCurrentActivity_WorkflowSubProcess` point at it from a task or activity.
+Read its caption from an activity record with
+`$WorkflowActivityRecord/System.WorkflowActivityRecord_WorkflowSubProcess/Caption`.
+
+### System.WorkflowSubProcessDefinition
+
+The definition of a sub-process (Mendix 11.8 and later).
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| Caption | String(200) | Definition caption |
+| IsObsolete | Boolean | Removed from the model |
+| ModelGUID | String(36) | Sub-process GUID in the model |
+
+| Association | Target | Type |
+|-------------|--------|------|
+| WorkflowSubProcessDefinition_WorkflowDefinition | System.WorkflowDefinition | Many-to-One |
+
+`WorkflowUserTaskDefinition_WorkflowSubProcessDefinition` points at it from a user
+task definition.
 
 ### System.WorkflowActivityDetails
 

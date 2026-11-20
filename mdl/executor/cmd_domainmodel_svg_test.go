@@ -182,3 +182,104 @@ func TestDomainModelSVG_SpreadsTheLayoutSoNamesFit(t *testing.T) {
 		t.Errorf("want the left entity kept at 0 and the right one moved out from 150, got %v", m)
 	}
 }
+
+// assocLine returns the endpoints of the one association line drawn for name.
+func assocLine(t *testing.T, svg, name string) (x1, y1, x2, y2 int) {
+	t.Helper()
+	re := regexp.MustCompile(`<g class="association"><title>` + regexp.QuoteMeta(name) +
+		`</title><line x1="(-?\d+)" y1="(-?\d+)" x2="(-?\d+)" y2="(-?\d+)"`)
+	m := re.FindStringSubmatch(svg)
+	if m == nil {
+		t.Fatalf("no line drawn for %s in\n%s", name, svg)
+	}
+	fmt.Sscanf(m[1]+" "+m[2]+" "+m[3]+" "+m[4], "%d %d %d %d", &x1, &y1, &x2, &y2)
+	return
+}
+
+// The stored anchors (ParentConnection/ChildConnection, "x;y" as a percentage
+// of the FROM and TO entity boxes) say where Studio Pro attaches the line. The
+// SVG drew every association centre to centre whatever they held, so it could
+// not be used to check a "corner to corner" layout (ako/mxcli#1841, part 1 of
+// mendixlabs/mxcli#1692). In svgTestModel Order is drawn at (400,120) 90x44 and
+// Customer at (100,100) 90x44.
+func TestDomainModelSVG_AssociationUsesStoredAnchors(t *testing.T) {
+	cases := []struct {
+		name           string
+		from, to       *model.Point
+		x1, y1, x2, y2 int
+	}{
+		// Corner to corner: Order's bottom-right to Customer's top-left.
+		{"corners", &model.Point{X: 100, Y: 100}, &model.Point{X: 0, Y: 0}, 490, 164, 100, 100},
+		// The other two corners, the extreme the report tested with.
+		{"other corners", &model.Point{X: 0, Y: 0}, &model.Point{X: 100, Y: 100}, 400, 120, 190, 144},
+		// Part-way along an edge: Order's top centre, Customer's left at 54%
+		// (Studio Pro's own Administration.AccountPasswordData_Account stores 0;54).
+		{"along an edge", &model.Point{X: 50, Y: 0}, &model.Point{X: 0, Y: 54}, 445, 120, 100, 124},
+		// Mendix's loader does not range-check, so a stored value can lie off
+		// the box; the line still attaches to the box, at the nearest edge.
+		{"out of range", &model.Point{X: -20, Y: 500}, &model.Point{X: 250, Y: -5}, 400, 164, 190, 100},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			entities, _ := svgTestModel()
+			a := &domainmodel.Association{Name: "Order_Customer", ParentID: "o", ChildID: "c",
+				Type: domainmodel.AssociationTypeReference, ParentConnection: c.from, ChildConnection: c.to}
+			svg := renderDomainModelSVG("Sales", entities, []*domainmodel.Association{a})
+			x1, y1, x2, y2 := assocLine(t, svg, "Order_Customer")
+			if x1 != c.x1 || y1 != c.y1 || x2 != c.x2 || y2 != c.y2 {
+				t.Errorf("line (%d,%d)-(%d,%d), want (%d,%d)-(%d,%d) from anchors %v / %v",
+					x1, y1, x2, y2, c.x1, c.y1, c.x2, c.y2, *c.from, *c.to)
+			}
+		})
+	}
+}
+
+// With nothing stored (or nothing readable) the line is drawn as before:
+// along the centre line, from where it leaves one box to where it enters the
+// other. These are the endpoints the renderer drew before #1841.
+func TestDomainModelSVG_UnsetAnchorsKeepCentreLine(t *testing.T) {
+	entities, assocs := svgTestModel()
+	svg := renderDomainModelSVG("Sales", entities, assocs)
+	x1, y1, x2, y2 := assocLine(t, svg, "Order_Customer")
+	if x1 != 400 || y1 != 139 || x2 != 190 || y2 != 125 {
+		t.Errorf("line (%d,%d)-(%d,%d), want the centre line (400,139)-(190,125)", x1, y1, x2, y2)
+	}
+}
+
+var regexpSelfPath = regexp.MustCompile(`<g class="association"><title>Customer_Parent</title><path d="M([^"]*)"`)
+
+// A self-association with anchors leaves the box at one stored anchor and
+// comes back in at the other, routed around the outside of the box rather than
+// through it (centre to centre it was a zero-length line).
+func TestDomainModelSVG_SelfAssociationUsesStoredAnchors(t *testing.T) {
+	entities, _ := svgTestModel()
+	a := &domainmodel.Association{Name: "Customer_Parent", ParentID: "c", ChildID: "c",
+		Type:             domainmodel.AssociationTypeReference,
+		ParentConnection: &model.Point{X: 100, Y: 30}, ChildConnection: &model.Point{X: 50, Y: 100}}
+	svg := renderDomainModelSVG("Sales", entities, []*domainmodel.Association{a})
+	m := regexpSelfPath.FindStringSubmatch(svg)
+	if m == nil {
+		t.Fatalf("no routed path for the self-association in\n%s", svg)
+	}
+	var pts [][2]int
+	for _, seg := range strings.Split(m[1], "L") {
+		var x, y int
+		if _, err := fmt.Sscanf(strings.TrimSpace(seg), "%d %d", &x, &y); err != nil {
+			t.Fatalf("unreadable path %q: %v", m[1], err)
+		}
+		pts = append(pts, [2]int{x, y})
+	}
+	// Customer is drawn at (100,100) 90x44: right edge at 30% is (190,113),
+	// bottom edge at 50% is (145,144).
+	if first, last := pts[0], pts[len(pts)-1]; first != [2]int{190, 113} || last != [2]int{145, 144} {
+		t.Errorf("path runs %v to %v, want (190,113) to (145,144): %s", first, last, m[1])
+	}
+	if len(pts) < 4 {
+		t.Fatalf("want a routed loop with at least two bends, got %v", pts)
+	}
+	for i := 1; i+1 < len(pts); i++ {
+		if p := pts[i]; p[0] > 100 && p[0] < 190 && p[1] > 100 && p[1] < 144 {
+			t.Errorf("bend %v lies inside the entity box", p)
+		}
+	}
+}

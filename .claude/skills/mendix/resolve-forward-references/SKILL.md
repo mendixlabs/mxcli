@@ -11,14 +11,14 @@ description: "Order MDL statements so that every reference resolves — executio
 | lines | section |
 |---|---|
 | 26-52 | Why Forward References Fail |
-| 53-70 | The Placeholder Pattern |
-| 71-137 | Pattern 1 — Shared Navigation Snippet (most common) |
-| 138-185 | Pattern 2 — Page References Another Page (new/edit from overview) |
-| 186-218 | Pattern 3 — Microflow References a Page Not Yet Created |
-| 219-237 | Ordering Rules for Dependency-Free Scripts |
-| 238-261 | Choosing Between CREATE OR MODIFY and ALTER SNIPPET |
-| 262-336 | Script Template for a Full CRUD Module |
-| 337-341 | Related Skills |
+| 53-79 | The Placeholder Pattern |
+| 80-146 | Pattern 1 — Shared Navigation Snippet (most common) |
+| 147-194 | Pattern 2 — Page References Another Page (new/edit from overview) |
+| 195-227 | Pattern 3 — Microflow References a Page Not Yet Created |
+| 228-246 | Ordering Rules for Dependency-Free Scripts |
+| 247-270 | Choosing Between CREATE OR MODIFY and ALTER SNIPPET |
+| 271-346 | Script Template for a Full CRUD Module |
+| 347-351 | Related Skills |
 
 <!-- /skill-index -->
 # Resolving Forward References in MDL Scripts
@@ -54,10 +54,19 @@ This applies to the following reference types:
 
 The standard workaround is a three-step sequence:
 
-1. **Create a minimal placeholder** for the document that will be referenced.
+1. **Create a minimal placeholder** for the document that will be referenced —
+   with `create snippet|page … if not exists`, so the step does nothing once the
+   document exists.
 2. **Create all documents that reference it.** They bind to the placeholder's ID.
 3. **Fill in the placeholder** using `CREATE OR MODIFY` or `ALTER` — both preserve the
    original ID so existing bindings remain valid.
+
+> **The placeholder step must be `if not exists`** (ako/mxcli#2358), or the script never
+> runs clean twice. A plain `create` fails on the second run ("snippet already exists").
+> `create or modify` shrinks the finished document back to the placeholder, and step 3
+> then rebuilds it with new element IDs on every run: `diff` reports "rewritten with only
+> element $IDs changed" and `mprcontents/` churns. With `if not exists` the second run
+> skips step 1, step 3 finds the document as it left it, and nothing is written.
 
 > **Write `CREATE OR MODIFY`, not `CREATE OR REPLACE`.** `OR REPLACE` is the deprecated
 > spelling of `OR MODIFY` (`MDL-DEPR001`, refused from `mdl 2`): it means the same and
@@ -75,8 +84,8 @@ the snippet via `snippetcall` (references the snippet). Both sides reference eac
 
 ```sql
 mdl 1;
--- Step 1: placeholder snippet (minimal valid content)
-create snippet MyModule.NavMenu
+-- Step 1: placeholder snippet (minimal valid content); a no-op once it exists
+create snippet if not exists MyModule.NavMenu
 {
   layoutgrid g { row { column (desktopwidth: 12) {
     dynamictext loading (content: 'Loading...')
@@ -84,7 +93,7 @@ create snippet MyModule.NavMenu
 };
 
 -- Step 2: pages that embed the snippet (snippet already exists → resolves OK)
-create page MyModule.Customer_Overview
+create or modify page MyModule.Customer_Overview
 (
   title: 'Customers',
   layout: Atlas_Core.Atlas_Default
@@ -100,7 +109,7 @@ create page MyModule.Customer_Overview
   }}
 };
 
-create page MyModule.Order_Overview
+create or modify page MyModule.Order_Overview
 (
   title: 'Orders',
   layout: Atlas_Core.Atlas_Default
@@ -144,7 +153,7 @@ page must exist before the overview can reference it.
 mdl 1;
 -- Solution: declare the target page first (even if empty), then the referencing page
 
-create page MyModule.Customer_NewEdit
+create or modify page MyModule.Customer_NewEdit
 (
   params: ( $Customer: MyModule.Customer ),
   title: 'Edit Customer',
@@ -161,7 +170,7 @@ create page MyModule.Customer_NewEdit
 };
 
 -- Now the overview can safely reference the NewEdit page
-create page MyModule.Customer_Overview
+create or modify page MyModule.Customer_Overview
 (
   title: 'Customers',
   layout: Atlas_Core.Atlas_Default
@@ -268,8 +277,9 @@ mdl 1;
 -- Correct declaration order: snippets → pages → microflows → nav
 -- ============================================================
 
--- 1. Placeholder for shared navigation (will reference pages created below)
-create snippet MyModule.AppNav
+-- 1. Placeholder for shared navigation (will reference pages created below);
+--    if not exists keeps a re-run from shrinking the finished snippet
+create snippet if not exists MyModule.AppNav
 {
   layoutgrid g { row { column (desktopwidth: 12) {
     dynamictext placeholder (content: '...')
@@ -277,7 +287,7 @@ create snippet MyModule.AppNav
 };
 
 -- 2. NewEdit page (referenced by Overview's New button)
-create page MyModule.Customer_NewEdit
+create or modify page MyModule.Customer_NewEdit
 (
   params: ( $Customer: MyModule.Customer ),
   title: 'Edit Customer',
@@ -288,7 +298,7 @@ create page MyModule.Customer_NewEdit
 };
 
 -- 3. Overview page (references NewEdit + NavMenu)
-create page MyModule.Customer_Overview
+create or modify page MyModule.Customer_Overview
 (
   title: 'Customers',
   layout: Atlas_Core.Atlas_Default
@@ -316,7 +326,7 @@ create or modify snippet MyModule.AppNav
 };
 
 -- 5. Microflows (pages already exist)
-create microflow MyModule.ACT_Customer_New ()
+create or modify microflow MyModule.ACT_Customer_New ()
 begin
   $c = create MyModule.Customer ();
   show page MyModule.Customer_NewEdit (Customer = $c);

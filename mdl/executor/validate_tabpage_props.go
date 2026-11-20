@@ -32,9 +32,16 @@ var tabPagePropDropped = langver.Change{
 	New:   "a refusal (MDL-WIDGET44), with nothing written",
 }
 
-// tabPageStoredProps are the keys buildTabPageV3 writes.
+// tabPageStoredProps are the keys buildTabPageV3 writes. `visibleroles` is the
+// roles of `Visible: roles (…)`, applied by childVisibility
+// (mendixlabs/mxcli#1460): it was missing here, so check refused — under mdl 1 —
+// or warned "not written" — headerless — about a property that is written, and
+// that MxBuild accepts for a role of the tab page's own module. The badge keys
+// are not listed because they are not page-widget properties at all
+// (isTabPageBadgeProp), so tabPageDroppedProps never reaches them.
 var tabPageStoredProps = map[string]bool{
 	"caption": true, "visible": true, "visibleif": true, "visiblewhen": true,
+	"visibleroles": true,
 }
 
 // tabPageDroppedProps lists, sorted, the keys on a tab page that the page

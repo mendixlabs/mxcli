@@ -119,7 +119,13 @@ func CheckSource(content, path string) (CheckedSource, error) {
 		// `/` is refused under mdl 1, and under mdl 0 it drew an MDL-V1-SLASH
 		// warning for a separator that is the test format's, not a terminator
 		// the author wrote.
-		place(out, first-1, fmt.Sprintf("CREATE OR MODIFY MICROFLOW %s.%s () BEGIN", mxTestModule, checkFlowName(tc, i)))
+		// The wrapper applies entity access as the run's caller does, on the
+		// same line so no body line moves; see callerAppliesEntityAccess.
+		wrapper := fmt.Sprintf("CREATE OR MODIFY MICROFLOW %s.%s () BEGIN", mxTestModule, checkFlowName(tc, i))
+		if callerAppliesEntityAccess(tc) {
+			wrapper = applyEntityAccessAnnotation + " " + wrapper
+		}
+		place(out, first-1, wrapper)
 		place(out, first+len(body), "END;")
 	}
 

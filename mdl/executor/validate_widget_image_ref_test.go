@@ -27,8 +27,8 @@ import (
 // reader to different places.
 
 func TestImageRefErrors_UnknownImageIsReported(t *testing.T) {
-	known := map[string]bool{"myfirstmodule.images._1": true}
-	collections := map[string]bool{"myfirstmodule.images": true}
+	known := map[string]bool{"MyFirstModule.Images._1": true}
+	collections := map[string]bool{"MyFirstModule.Images": true}
 
 	errs := imageRefErrors([]string{"MyFirstModule.Images.NoSuchImage"}, known, collections)
 	if len(errs) != 1 {
@@ -58,15 +58,50 @@ func TestImageRefErrors_UnknownCollectionSaysSo(t *testing.T) {
 // CONTROL: an image that exists is not reported. Without this the check just
 // forbids the feature.
 func TestImageRefErrors_KnownImageIsClean(t *testing.T) {
-	known := map[string]bool{"myfirstmodule.images._1": true}
-	collections := map[string]bool{"myfirstmodule.images": true}
+	known := map[string]bool{"MyFirstModule.Images._1": true}
+	collections := map[string]bool{"MyFirstModule.Images": true}
 
 	if errs := imageRefErrors([]string{"MyFirstModule.Images._1"}, known, collections); len(errs) != 0 {
 		t.Errorf("an existing image was reported: %v", errs)
 	}
-	// Mendix resolves names case-insensitively, and so must this.
-	if errs := imageRefErrors([]string{"myfirstmodule.IMAGES._1"}, known, collections); len(errs) != 0 {
-		t.Errorf("a case difference was reported: %v", errs)
+}
+
+// Mendix resolves an image reference case-SENSITIVELY, in every part. Measured
+// on a blank 11.13.0 app, whose Atlas_Core.Content holds `Mendix`: each of
+// `Atlas_Core.Content.mendix`, `Atlas_Core.content.Mendix` and
+// `atlas_core.Content.Mendix` is CE1613 "The selected image … no longer
+// exists", and `Atlas_Core.Content.Mendix` is clean. The check folded case and
+// passed all three, and its "it holds:" hint printed `mendix` — so following
+// the hint produced the CE1613. A case-only miss names the stored spelling.
+func TestImageRefErrors_CaseMismatchIsReportedWithTheStoredSpelling(t *testing.T) {
+	known := map[string]bool{"Atlas_Core.Content.Mendix": true}
+	collections := map[string]bool{"Atlas_Core.Content": true}
+	for _, tc := range []struct{ ref, want string }{
+		{"Atlas_Core.Content.mendix", "Atlas_Core.Content.Mendix"},
+		{"Atlas_Core.content.Mendix", "Atlas_Core.Content"},
+		{"atlas_core.Content.Mendix", "Atlas_Core.Content"},
+	} {
+		errs := imageRefErrors([]string{tc.ref}, known, collections)
+		if len(errs) != 1 {
+			t.Errorf("%s: got %d errors, want 1 — Mendix reports CE1613 for it: %v", tc.ref, len(errs), errs)
+			continue
+		}
+		for _, want := range []string{tc.want, "case-sensitive"} {
+			if !strings.Contains(errs[0], want) {
+				t.Errorf("%s: the message should say %q: %s", tc.ref, want, errs[0])
+			}
+		}
+	}
+}
+
+// The "it holds:" hint lists the images as stored. Lower-cased, it named
+// `mendix` for a stored `Mendix`, and copying it from the message was CE1613.
+func TestImageRefErrors_HintListsImagesAsStored(t *testing.T) {
+	known := map[string]bool{"Atlas_Core.Content.Mendix": true}
+	collections := map[string]bool{"Atlas_Core.Content": true}
+	errs := imageRefErrors([]string{"Atlas_Core.Content.mendix_logo"}, known, collections)
+	if len(errs) != 1 || !strings.Contains(errs[0], "it holds: Mendix") {
+		t.Errorf("want the hint to list Mendix as stored, got %v", errs)
 	}
 }
 

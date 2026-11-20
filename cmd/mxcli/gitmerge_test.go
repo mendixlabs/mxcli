@@ -1002,3 +1002,41 @@ func TestGitMerge_PlanTemplateFollowsEngineConflictList(t *testing.T) {
 	}
 	gitInE(t, dir, "merge", "--abort")
 }
+
+// ako/mxcli#1981 (mendixlabs/mxcli#1750): when one side's mx diff failed, the
+// whole property report was skipped without a word, so a reader could not tell
+// "no details" from "the diff crashed". The side that worked is reported, and
+// the failing side says why.
+func TestGitMerge_FailedDiffIsReportedNotSkipped(t *testing.T) {
+	dir, mprPath := modelConflictRepo(t)
+	doctorEnv(t, dir)
+	fixture := `{"unitDifferences":[{"id":"` + tDM + `","type":"DomainModels$DomainModel","change":"Modified","changeDetails":[{"change":"Modified","changeDescription":"Attribute 'MyFirstModule.CreatedByMxcli.Nickname'","changeDetails":[{"property":"New type > Length","baseValue":"100","mineValue":"150"}]}]}]}`
+	calls := 0
+	mx := mxRunners{
+		merge: func(base, mine, theirs string, shas [3]string) (int, string, error) {
+			return 2, `[{"ConflictResolutionDetails":"ManualResolutionRequired"}]`, nil
+		},
+		diff: func(base, mine, outJSON string) error {
+			calls++
+			if calls == 2 { // theirs
+				return errors.New("mx diff: exit status 129: Comparing apps\nException during diffing:\nValue cannot be null. (Parameter 'element')")
+			}
+			return os.WriteFile(outJSON, []byte(fixture), 0o644)
+		},
+	}
+	var out bytes.Buffer
+	if err := mergeRun(mprPath, "side", "", "", "", false, mx, &out); err == nil {
+		t.Fatal("a manual conflict must end with the decision error")
+	}
+	report := out.String()
+	for _, want := range []string{
+		"Property-level changes",
+		"150",
+		"(diff unavailable: mx diff: exit status 129: Comparing apps Exception during diffing: Value cannot be null. (Parameter 'element'))",
+	} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report must contain %q:\n%s", want, report)
+		}
+	}
+	gitInE(t, dir, "merge", "--abort") // clean up the fixture
+}

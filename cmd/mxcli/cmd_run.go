@@ -116,7 +116,6 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		local, _ := cmd.Flags().GetBool("local")
 		hub, _ := cmd.Flags().GetString("hub")
-		hubSecret, _ := cmd.Flags().GetString("hub-secret")
 		hubPrefix, _ := cmd.Flags().GetString("hub-prefix")
 		hubProject, _ := cmd.Flags().GetString("hub-project")
 		hubSolution, _ := cmd.Flags().GetString("hub-solution")
@@ -132,7 +131,7 @@ Examples:
 			// the user should learn that before waiting out a runtime start.
 			if !docker.TunnelSupported() {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", docker.ErrTunnelUnsupported)
-				os.Exit(1)
+				exitProcess(1)
 			}
 			local = true
 			// Present a per-user hub API key to an authenticated hub (MXCLI_HUB_KEY
@@ -142,12 +141,12 @@ Examples:
 		}
 		if !local {
 			fmt.Fprintln(os.Stderr, "Error: only --local is supported for now (use 'mxcli docker run' for the container workflow)")
-			os.Exit(1)
+			exitProcess(1)
 		}
 		projectPath, _ := cmd.Flags().GetString("project")
 		if projectPath == "" {
 			fmt.Fprintln(os.Stderr, "Error: --project (-p) is required")
-			os.Exit(1)
+			exitProcess(1)
 		}
 		// MxBuild requires an absolute project path; resolve a relative -p here
 		// rather than surfacing MxBuild's raw "path should be an absolute path"
@@ -155,6 +154,29 @@ Examples:
 		if abs, err := filepath.Abs(projectPath); err == nil {
 			projectPath = abs
 		}
+
+		// A test endpoint an earlier run left behind (killed with its container,
+		// say) is removed by any run, not only by the next --test-endpoint one,
+		// which does it while installing its own: the swapped after-startup
+		// setting otherwise stays in the project file until someone commits it.
+		if hosting, _ := cmd.Flags().GetBool("test-endpoint"); !hosting {
+			if _, err := testrunner.RestoreAbandonedEndpoint(projectPath, os.Stdout); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+			}
+			if msg := testrunner.LeftoverEndpointWarning(projectPath); msg != "" {
+				fmt.Fprintf(os.Stderr, "Warning: %s\n", msg)
+			}
+		}
+
+		// Resolved before --detach as well as in the detached child, so a
+		// missing variable or a world-readable file is reported here, in the
+		// foreground, rather than in a log after the parent has returned.
+		secrets, err := resolveRunSecrets(cmd)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			exitProcess(1)
+		}
+		hubSecret := secrets["hub-secret"]
 
 		watch, _ := cmd.Flags().GetBool("watch")
 		setupOnly, _ := cmd.Flags().GetBool("setup")
@@ -164,7 +186,7 @@ Examples:
 		listenAddr, _ := cmd.Flags().GetString("listen-addr")
 		if err := docker.ValidateListenAddr(listenAddr); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 
 		// --detach: start this same command as a background service and return
@@ -177,14 +199,14 @@ Examples:
 		if detach, _ := cmd.Flags().GetBool("detach"); detach && !detachedChild {
 			if setupOnly {
 				fmt.Fprintln(os.Stderr, "Error: --detach has nothing to do with --setup (which never boots the app)")
-				os.Exit(1)
+				exitProcess(1)
 			}
-			os.Exit(runDetach(projectPath, detachArgs(os.Args[1:], projectPath), os.Stdout))
+			exitProcess(runDetach(projectPath, detachArgs(os.Args[1:], projectPath), os.Stdout))
 		}
 		if !setupOnly {
 			if err := refuseIfRunning(projectPath); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
+				exitProcess(1)
 			}
 		}
 
@@ -192,7 +214,21 @@ Examples:
 		printGitStateWarnings(projectPath, os.Stderr)
 
 		webClientTimeout, _ := cmd.Flags().GetDuration("web-client-timeout")
+		buildTimeout, _ := cmd.Flags().GetDuration("build-timeout")
+		startTimeout, _ := cmd.Flags().GetDuration("start-timeout")
 		testEndpoint, _ := cmd.Flags().GetBool("test-endpoint")
+		allowCall, _ := cmd.Flags().GetBool("allow-call")
+		if allowCall && !testEndpoint {
+			fmt.Fprintln(os.Stderr, "Error: --allow-call switches on a route of the test endpoint; it needs --test-endpoint")
+			exitProcess(1)
+		}
+		if allowCall && hub != "" {
+			// The tunnel client reaches the app from loopback, so the endpoint's
+			// loopback check does not keep hub traffic out of the exec route.
+			fmt.Fprintln(os.Stderr, "Warning: --allow-call with --hub: the hub tunnel reaches the app from loopback, so the test endpoint's\n"+
+				"  loopback check does not keep hub traffic out. The run's token is the only guard on the route that\n"+
+				"  calls microflows in a system context; drop --allow-call when the hub URL is shared.")
+		}
 		ensureDB, _ := cmd.Flags().GetBool("ensure-db")
 		appPort, _ := cmd.Flags().GetInt("app-port")
 		adminPort, _ := cmd.Flags().GetInt("admin-port")
@@ -202,18 +238,18 @@ Examples:
 		dbHost, _ := cmd.Flags().GetString("db-host")
 		dbName, _ := cmd.Flags().GetString("db-name")
 		dbUser, _ := cmd.Flags().GetString("db-user")
-		dbPassword, _ := cmd.Flags().GetString("db-password")
+		dbPassword := secrets["db-password"]
 		dbAdminUser, _ := cmd.Flags().GetString("db-admin-user")
-		dbAdminPassword, _ := cmd.Flags().GetString("db-admin-password")
+		dbAdminPassword := secrets["db-admin-password"]
 		screenshot, _ := cmd.Flags().GetBool("screenshot")
 		pageCheck, _ := cmd.Flags().GetBool("page-check")
 		screenshotPath, _ := cmd.Flags().GetString("screenshot-path")
 		screenshotURLs, _ := cmd.Flags().GetStringArray("screenshot-url")
 		screenshotUser, _ := cmd.Flags().GetString("screenshot-user")
-		screenshotPassword, _ := cmd.Flags().GetString("screenshot-password")
+		screenshotPassword := secrets["screenshot-password"]
 		runtimeLog, _ := cmd.Flags().GetString("runtime-log")
 		debug, _ := cmd.Flags().GetBool("debug")
-		debugPass, _ := cmd.Flags().GetString("debug-pass")
+		debugPass := secrets["debug-pass"]
 		metrics, _ := cmd.Flags().GetBool("metrics")
 		runtimeSettings, _ := cmd.Flags().GetStringArray("runtime-setting")
 		trace, _ := cmd.Flags().GetBool("trace")
@@ -232,15 +268,16 @@ Examples:
 		constantFlags, err := parseConstantFlags(constantArgs)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 		overrides, err := constantChainFor(projectPath, configuration, constantFlags)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitProcess(1)
 		}
 		reportConstantChain(os.Stdout, overrides)
 		reportJVMArgs(os.Stdout, overrides)
+		appPort, adminPort = runPorts(os.Stdout, appPort, adminPort, overrides)
 
 		opts := docker.LocalRunOptions{
 			ProjectPath:        projectPath,
@@ -262,6 +299,8 @@ Examples:
 			MxBuildPath:        mxbuildPath,
 			Watch:              watch,
 			WebClientTimeout:   webClientTimeout,
+			BuildTimeout:       buildTimeout,
+			StartTimeout:       startTimeout,
 			EnsureDB:           ensureDB,
 			SetupOnly:          setupOnly,
 			Screenshot:         screenshot,
@@ -300,13 +339,18 @@ Examples:
 		if testEndpoint {
 			if setupOnly {
 				fmt.Fprintln(os.Stderr, "Error: --test-endpoint has nothing to do with --setup (which never boots the app)")
-				os.Exit(1)
+				exitProcess(1)
+			}
+			// Ignored before the endpoint's Java source exists, so a commit made
+			// while the app runs cannot pick it up (ako/mxcli#2033).
+			if err := ensureTestEndpointIgnored(projectPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not git-ignore the test endpoint's source: %v\n", err)
 			}
 			var err error
-			hosted, err = testrunner.InstallHostedEndpoint(projectPath, os.Stdout)
+			hosted, err = testrunner.InstallHostedEndpoint(projectPath, allowCall, os.Stdout)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
+				exitProcess(1)
 			}
 			// Ctrl-C is the normal way to stop a dev loop, and it must not leave the
 			// endpoint in the project. RunLocal returns on SIGINT, so the deferred
@@ -336,7 +380,7 @@ Examples:
 				AppPort:    info.AppPort,
 				AdminPort:  info.AdminPort,
 				AdminPass:  info.AdminPass,
-				BootConfig: info.BootConfig,
+				BootConfig: bootConfigForHandshake(info.BootConfig),
 				Started:    time.Now(),
 			}); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: could not publish the dev-loop handshake: %v\n", err)
@@ -359,8 +403,11 @@ Examples:
 			if detachedChild {
 				logPath = docker.RunLogPath(projectPath)
 			}
+			// The stored arguments are for `run restart`, not a copy of the
+			// secrets: they stay out of the file (see redactArgs).
+			storedArgs, _ := redactArgs(detachArgs(os.Args[1:], projectPath))
 			state = docker.NewRunStateRecorder(projectPath, os.Getpid(), detachedChild, watch,
-				detachArgs(os.Args[1:], projectPath), logPath)
+				storedArgs, logPath)
 			state.Warn = func(err error) {
 				fmt.Fprintf(os.Stderr, "Warning: could not publish the run state: %v\n", err)
 			}
@@ -378,7 +425,7 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			// os.Exit skips deferred calls, so remove explicitly here.
 			hosted.Remove()
-			os.Exit(1)
+			exitProcess(1)
 		}
 	},
 }
@@ -387,10 +434,10 @@ func init() {
 	runCmd.Flags().String("configuration", "",
 		"Which project configuration's constant values to run with (default: the only one, or \"Default\")")
 	runCmd.Flags().StringArray("constant", nil,
-		"Set a constant for THIS RUN only: Module.Name=value (repeatable). Wins over the configuration and is never written to the project. The value is visible in shell history and in `ps` — see docs/11-proposals/PROPOSAL_constant_values.md")
+		"Set a constant for THIS RUN only: Module.Name=value (repeatable). Wins over the configuration and is never written to the project. A literal value is visible in shell history and in ps; Module.Name=@env:VAR reads an environment variable and Module.Name=@file:path reads a file (owner-only permissions, checked on Unix and not on Windows) instead, and @@ starts a literal value with @ — see docs/11-proposals/PROPOSAL_constant_values.md")
 	runCmd.Flags().Bool("local", false, "Run locally without Docker (warm serve + standalone runtime)")
 	runCmd.Flags().String("hub", "", "Expose the running app in a browser via your own mxcli tunnel-hub URL (e.g. https://hub.example.com). Implies --local; the app stays local and is reverse-tunnelled out")
-	runCmd.Flags().String("hub-secret", "", "Shared auth secret for --hub (\"user:pass\"), matching the hub's --secret")
+	runCmd.Flags().String("hub-secret", "", "Shared auth secret for --hub (\"user:pass\"), matching the hub's --secret"+secretRefHelp)
 	runCmd.Flags().String("hub-prefix", "", "Optional subdomain prefix on the hub (org/solution/team/env): <prefix>-<project>-<branch>")
 	runCmd.Flags().String("hub-project", "", "Project name for the hub subdomain + overview (default: the .mpr name)")
 	runCmd.Flags().String("hub-solution", "", "Solution name to group this app under in the hub overview (multi-app solutions)")
@@ -400,11 +447,14 @@ func init() {
 	runCmd.Flags().Bool("watch", false, "Rebuild and hot-apply on every project change")
 	runCmd.Flags().Bool("detach", false, "Run in the background and return once the app is serving (or failed to boot); manage it with 'mxcli run status|wait|stop|restart'. Output goes to <projectDir>/.mxcli/run.log")
 	runCmd.Flags().Duration("web-client-timeout", 0, "Limit for one web client bundle build, e.g. 10m (default $MXCLI_WEB_CLIENT_TIMEOUT, else 5m); on timeout the tail of deployment/log/web-client-build.log is printed")
+	runCmd.Flags().Duration("build-timeout", 0, "Limit for one mxbuild --serve build, e.g. 45m (default $MXCLI_BUILD_TIMEOUT, else 30m). The cold first build of a large app can take many minutes")
+	runCmd.Flags().Duration("start-timeout", 0, "Limit for the runtime start, after-startup microflow and schema update included, e.g. 30m (default $MXCLI_START_TIMEOUT, else 15m)")
 	runCmd.Flags().Bool("test-endpoint", false, "Host mxcli's token-guarded test endpoint so 'mxcli test --attach' can run tests against this app without booting its own runtime (removed on exit)")
+	runCmd.Flags().Bool("allow-call", false, "With --test-endpoint: let 'mxcli test --attach' run a test straight against this app, without injecting or building it, when every statement of the test is one the endpoint can execute. The endpoint then calls the microflows a test names and reads and writes data in a system context, so it is off unless asked for")
 	runCmd.Flags().Bool("ensure-db", false, "Provision the local Postgres + app database if missing (fresh-session bootstrap)")
 	runCmd.Flags().Bool("setup", false, "Prepare prerequisites (cache MxBuild+runtime, ensure DB) and exit without booting — for a SessionStart hook")
-	runCmd.Flags().Int("app-port", 0, "HTTP port for the app (default 8080)")
-	runCmd.Flags().Int("admin-port", 0, "M2EE admin API port (default 8090)")
+	runCmd.Flags().Int("app-port", 0, "HTTP port for the app (default: the configuration's, else 8080)")
+	runCmd.Flags().Int("admin-port", 0, "M2EE admin API port (default: the configuration's, else 8090)")
 	runCmd.Flags().String("listen-addr", "", "Address the app binds to (default 127.0.0.1, loopback only). Must be an IP address. Set 0.0.0.0 (or :: for IPv6 too) to reach the app from other machines on the network; the URLs it is reachable at are printed once it runs. If the app builds absolute URLs (SSO redirects, links in emails), pair it with a reachable root URL — an ApplicationRootUrl naming a real host in the model, or --runtime-setting ApplicationRootUrl=http://<host>:<port>/ — because the runtime does not derive one from this address (a warning says so). The M2EE admin API is unaffected and always stays on 127.0.0.1.")
 	runCmd.Flags().Int("serve-port", 0, "mxbuild --serve port (default 6543)")
 	runCmd.Flags().String("mxbuild-path", "", "Path to the mxbuild to build with, overriding resolution (Studio Pro's bundled mxbuild on macOS/Windows, the cached CDN download on Linux)")
@@ -412,18 +462,18 @@ func init() {
 	runCmd.Flags().String("db-host", "", "Database host:port (IPv6: [::1]:5432; default 127.0.0.1:5432)")
 	runCmd.Flags().String("db-name", "", "Database name (default derived from the project name)")
 	runCmd.Flags().String("db-user", "", "Database user (default mendix)")
-	runCmd.Flags().String("db-password", "", "Database password (default mendix)")
+	runCmd.Flags().String("db-password", "", "Database password (default mendix)"+secretRefHelp)
 	runCmd.Flags().String("db-admin-user", "", "PostgreSQL superuser --ensure-db creates the role and database with, when it has a password (e.g. every Windows install). Default postgres when --db-admin-password is given")
-	runCmd.Flags().String("db-admin-password", "", "Password for --db-admin-user, used only by --ensure-db and never passed to the runtime. PGPASSWORD or a .pgpass file for postgres works too, and keeps it off the command line")
+	runCmd.Flags().String("db-admin-password", "", "Password for --db-admin-user, used only by --ensure-db and never passed to the runtime. PGPASSWORD or a .pgpass file for postgres works too"+secretRefHelp)
 	runCmd.Flags().Bool("screenshot", false, "Capture a Playwright screenshot after boot and each applied change")
 	runCmd.Flags().Bool("page-check", false, "Print a text verdict for each page (title, headings, error banners, row count, console errors) instead of reading a screenshot — far cheaper, and it reports console errors a PNG cannot show")
 	runCmd.Flags().String("screenshot-path", "", "Screenshot output PNG (default <projectDir>/.mxcli/run-local.png)")
 	runCmd.Flags().StringArray("screenshot-url", nil, "Page to screenshot: a full URL or a path relative to the app root, e.g. /p/customers (default the app root). Repeat for a multi-page set.")
 	runCmd.Flags().String("screenshot-user", "", "Log in with this user before screenshotting (for pages behind login)")
-	runCmd.Flags().String("screenshot-password", "", "Password for --screenshot-user")
+	runCmd.Flags().String("screenshot-password", "", "Password for --screenshot-user"+secretRefHelp)
 	runCmd.Flags().String("runtime-log", "", "Write the Mendix runtime log (server stack traces + microflow LOG output) to this file for debugging (default <projectDir>/.mxcli/runtime.log; \"-\" to disable)")
 	runCmd.Flags().Bool("debug", false, "Enable the microflow debugger at boot and start a session, so 'mxcli debug break/paused/…' works from another terminal (no breakpoints = no behaviour change)")
-	runCmd.Flags().String("debug-pass", "", "Debugger password when --debug is set (default \"mxdebug\")")
+	runCmd.Flags().String("debug-pass", "", "Debugger password when --debug is set (default \"mxdebug\")"+secretRefHelp)
 	runCmd.Flags().Bool("metrics", false, "Register a Prometheus meter registry at boot; the runtime serves metrics at http://127.0.0.1:<admin-port>/prometheus")
 	runCmd.Flags().StringArray("runtime-setting", nil, "Extra runtime setting Key=Value merged into the boot configuration (Value parsed as JSON when possible), e.g. --runtime-setting 'OpenTelemetry._RuntimeSpanFilters=[\"Loop\",\"Gateway\"]'. Repeatable.")
 	runCmd.Flags().Bool("trace", false, "Enable OpenTelemetry tracing: attach the bundled agent (console exporter → the runtime log) and apply default span filters (unfiltered tracing is ~10x slower)")

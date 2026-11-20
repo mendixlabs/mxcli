@@ -35,19 +35,26 @@ func ownContainerFlagged(t *testing.T, src string) []string {
 // container's own direct context it is not a variable at all, and mxbuild
 // 11.14.0 reports `[CE0117] "Error(s) in expression." at Action button 'btnOwn'`
 // while check and exec were clean. This is the issue's reproduction verbatim.
+//
+// Re-measured for ako/mxcli#2149 with the current writer, which stores a bare
+// `$dvGate` argument as a variable reference (#2095), not expression text: the
+// same page builds with 0 errors on mx check 11.12.6 and 11.14.0. The CE0117
+// was the expression form, so btnOwn is no longer flagged; an argument that
+// reads the name inside an expression (btnOwnPath) still is.
 func TestValidatePageButtonContext_OwnDataViewName_Issue1324(t *testing.T) {
 	src := `create page "G52"."GatePage" (Title: 'Gate', Layout: Atlas_Core.PopupLayout, Params: { $Gate: "G52"."Gate" }) {
   dataview dvGate (DataSource: $Gate) {
     actionbutton btnOwn (Caption: 'Own data view name', Action: microflow "G52"."ACT_Open"(Gate: $dvGate))
     actionbutton btnCur (Caption: 'Current object', Action: microflow "G52"."ACT_Open"(Gate: $currentObject))
+    actionbutton btnOwnPath (Caption: 'Own name in an expression', Action: microflow "G52"."ACT_Str"(S: $dvGate/Name))
     dataview dvInner (DataSource: $Gate) {
       actionbutton btnOuter (Caption: 'Enclosing data view name', Action: microflow "G52"."ACT_Open"(Gate: $dvGate))
     }
   }
 };`
 	got := ownContainerFlagged(t, src)
-	if strings.Join(got, ",") != "btnOwn" {
-		t.Fatalf("want only btnOwn flagged (btnCur and btnOuter build clean), got %v", got)
+	if strings.Join(got, ",") != "btnOwnPath" {
+		t.Fatalf("want only btnOwnPath flagged (btnOwn, btnCur and btnOuter build clean), got %v", got)
 	}
 }
 
@@ -56,6 +63,14 @@ func TestValidatePageButtonContext_OwnDataViewName_Issue1324(t *testing.T) {
 // data container decides — a plain container is transparent, a control bar
 // takes the context from ABOVE its grid (so a grid's own selection stays
 // spellable there), and a row or item of a nested list is a new context.
+//
+// btnCtlBar is no longer flagged (ako/mxcli#2109). Its CE0117 was an error in
+// an EXPRESSION `$dvP`; since #2095 the argument is written as the variable
+// pair {Widget: dvP, PageParameter: Gate}, which builds with 0 errors on
+// 11.16 (probe page, with a CE1365 positive control in the same build), and
+// is what Studio Pro stores for a control-bar button there
+// (FactoryManagement OIDC.OIDC_Client_NewEdit actionButton7, which builds).
+// A control bar sits inside its grid, so the container above is an outer one.
 func TestValidatePageButtonContext_OwnContainerName_MeasuredShapes(t *testing.T) {
 	src := `create page G52.Probe (Title: 'Probe', Layout: Atlas_Core.PopupLayout, Params: ( $Gate: G52.Gate )) {
   dataview dvP (DataSource: $Gate) {
@@ -92,9 +107,13 @@ func TestValidatePageButtonContext_OwnContainerName_MeasuredShapes(t *testing.T)
   }
 };`
 	got := strings.Join(ownContainerFlagged(t, src), ",")
-	want := "btnCtlBar,btnDgOwnCol,btnGaOwn,btnInContainer,btnLvOwn,btnOwnPath"
+	// mx check 11.12.6 and 11.14.0 with the current writer (ako/mxcli#2149):
+	// only btnOwnPath, whose argument is expression text, is CE0117. The bare
+	// container variables (btnInContainer, btnLvOwn, btnDgOwnCol, btnGaOwn) are
+	// stored as variable references and build clean.
+	want := "btnOwnPath"
 	if got != want {
-		t.Fatalf("flagged %q, want %q (mx check 11.14.0's CE0117 set)", got, want)
+		t.Fatalf("flagged %q, want %q (mx check 11.12.6 / 11.14.0 CE0117 set)", got, want)
 	}
 }
 
@@ -102,7 +121,7 @@ func TestValidatePageButtonContext_OwnContainerName_MeasuredShapes(t *testing.T)
 func TestValidatePageButtonContext_OwnContainerName_Suggestion(t *testing.T) {
 	prog, errs := visitor.Build(`create page P.X (Title: 'x', Layout: Atlas_Core.PopupLayout, Params: ( $O: P.O )) {
   dataview dvO (DataSource: $O) {
-    actionbutton b1 (Caption: 'b', Action: microflow P.F(O = $dvO))
+    actionbutton b1 (Caption: 'b', Action: microflow P.F(N = $dvO/Name))
   }
 };`)
 	if len(errs) > 0 {
@@ -156,8 +175,10 @@ func TestValidatePageButtonContext_OwnContainerName_OutsideActions(t *testing.T)
   }
 };`
 	got := strings.Join(ownContainerFlagged(t, src), ",")
-	want := "cClsOwn,cVisOwn,dvDsOwn,lvXpOwn,tbEdOwn"
+	// dvDsOwn passes the bare `$dvP` as a data source argument, stored as a
+	// variable reference: 0 errors on 11.12.6 and 11.14.0 (ako/mxcli#2149).
+	want := "cClsOwn,cVisOwn,lvXpOwn,tbEdOwn"
 	if got != want {
-		t.Fatalf("flagged %q, want %q (mx check 11.14.0's CE0117/CE0161 set)", got, want)
+		t.Fatalf("flagged %q, want %q (mx check 11.12.6 / 11.14.0 CE0117/CE0161 set)", got, want)
 	}
 }

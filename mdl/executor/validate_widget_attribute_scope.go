@@ -49,7 +49,7 @@ func validatePluggableAttributeScopes(ctx *ExecContext, layout string, params []
 	registry := pageContextWidgetRegistry(ctx)
 	var templates func(string) map[string]pages.PropertyTypeIDEntry
 	if wb, ok := ctx.Backend.(backend.WidgetBuilderBackend); ok && registry != nil {
-		templates = templatePropertyTypes(wb, ctx.Backend.Path())
+		templates = passTemplatePropertyTypes(ctx, wb)
 	} else {
 		registry = nil
 	}
@@ -75,9 +75,19 @@ func validatePluggableAttributeScopes(ctx *ExecContext, layout string, params []
 		reactClient: usesReactClient(ctx) && !layoutIsNative(ctx, layout),
 		assocs:      checkAssociationShapes(ctx, sc),
 		pb:          &pageBuilder{ctx: ctx, backend: ctx.Backend, execCache: ctx.Cache},
+		members:     newFlowMemberRefs(ctx, sc),
+	}
+	if sc != nil {
+		v.generalizations = sc.entityGeneralizations
+		v.decls = sc.entityDecls
+		v.scriptNames = scriptDeclaredNames(sc)
 	}
 	for _, w := range widgets {
 		v.walk(w, dataContext{})
+	}
+	if sc != nil {
+		// MDL-ATTRPATH01 says what exec stores; it never blocks.
+		sc.warnings = append(sc.warnings, v.warns...)
 	}
 	return v.errs
 }
@@ -89,6 +99,8 @@ type attributeScopeValidator struct {
 	pageParams map[string]string
 	index      attributeIndex
 	errs       []string
+	// warns are reported, never block (validate_qualified_attribute_path.go).
+	warns []string
 
 	// The built-in input widget checks (validate_widget_attribute_type.go).
 	types       memberTypeIndex
@@ -97,9 +109,27 @@ type attributeScopeValidator struct {
 	// assocs feeds MDL-ASSOCDS01 (validate_assoc_list_source.go).
 	assocs map[string]assocShape
 
+	// generalizations are the script's entities' EXTENDS targets (lower-cased
+	// name -> generalization, "" for none), ahead of the project's, for
+	// MDL-ASSOCDS03 (validate_assoc_hop_start.go).
+	generalizations map[string]string
+
 	// pb answers the association-as-attribute question with exec's own
 	// function (validate_assoc_as_attribute.go).
 	pb *pageBuilder
+
+	// decls are the script's entity declarations, for the audit fields'
+	// declared names (validate_expr_system_member.go).
+	decls map[string]*ast.CreateEntityStmt
+
+	// scriptNames are the entities and associations this script declares,
+	// lower-cased, both qualified and short: what the stored model cannot
+	// resolve yet (namesScriptMember).
+	scriptNames map[string]bool
+
+	// members resolves the members a widget expression names, with the
+	// microflow expression check's verdict (validate_expr_system_member.go).
+	members *flowMemberRefs
 }
 
 // paramEntity is the entity of the document parameter `$name`, or "".
@@ -112,10 +142,22 @@ func (v *attributeScopeValidator) walk(w *ast.WidgetV3, enclosing dataContext) {
 		return
 	}
 	inner := childContext(enclosing, w.GetDataSource(), v.sigs, v.pageParams)
+	// A list view's specialization template renders its own entity: its
+	// widgets bind to the specialization, not the list view's (generalized)
+	// source. Judged against the source, a template's own attributes were
+	// "no attribute" errors on Studio Pro-authored pages (TestApp's
+	// Pages.Vehicle templates), and so was every expression naming them.
+	if w.Specialization != "" && !enclosing.unresolved {
+		inner = inner.with(unquoteQualifiedName(w.Specialization))
+	}
 	v.checkInputBinding(w, enclosing)
+	v.checkTemplateParams(w, enclosing)
 	v.checkAssocListSource(w, enclosing)
 	v.checkViewAssocReverse(w, enclosing)
+	v.checkAssocHopStart(w, enclosing)
 	v.checkReactUnsupported(w)
+	v.checkExprSystemMembers(w, enclosing)
+	v.checkQualifiedAttributePaths(w, enclosing)
 	if v.registry == nil {
 		// No registry: the pluggable half cannot run, and a pluggable widget's
 		// slots cannot be told apart, so nothing inside one is judged rather
@@ -130,6 +172,7 @@ func (v *attributeScopeValidator) walk(w *ast.WidgetV3, enclosing dataContext) {
 			// context its own link says; this walk does not model slots, so it
 			// judges nothing inside rather than judging it wrongly.
 			inner = enclosing.withUnresolved()
+			v.checkDataWidgetItemPaths(w)
 		}
 	}
 	for _, c := range w.Children {
@@ -231,6 +274,19 @@ func (v *attributeScopeValidator) checkWidget(w *ast.WidgetV3, def *WidgetDefini
 	for _, key := range order {
 		entry, declared := ids[key]
 		scope := resolveBindingScope(entry.DataSourceProperty, declared, outer, dsEntities, "")
+		if _, isPath := contextAssociationAttributePath(values[key]); isPath {
+			// `Assoc/Attr` from the context object: exec's own resolver and hop
+			// rule (ako/mxcli#2279), judged only where the stored model can
+			// answer — a context this walk could not resolve, or a path naming
+			// what the script creates, is left to exec.
+			if scope.Entity != "" && !v.namesScriptMember(scope.Entity, values[key]) {
+				if _, _, err := v.pb.pluggableAssociationAttributePath(w, key, values[key], scope.Entity,
+					singleValueAttributeProperty(ids, key)); err != nil {
+					v.errs = append(v.errs, err.Error())
+				}
+			}
+			continue
+		}
 		// An association where the attribute belongs: exec refuses it in the
 		// engine's Attribute mapping, so only a value that mapping reads is
 		// judged (mendixlabs/mxcli#1440).
@@ -250,6 +306,30 @@ func (v *attributeScopeValidator) checkWidget(w *ast.WidgetV3, def *WidgetDefini
 	return namedDataSource
 }
 
+// namesScriptMember reports whether entity, or any step of the association
+// path, names an entity or association this script declares: the stored
+// model the resolver reads does not hold them yet.
+func (v *attributeScopeValidator) namesScriptMember(entity, path string) bool {
+	if len(v.scriptNames) == 0 {
+		return false
+	}
+	if v.scriptNames[strings.ToLower(entity)] {
+		return true
+	}
+	p, _ := contextAssociationAttributePath(path)
+	segs := strings.Split(p, "/")
+	for _, seg := range segs[:len(segs)-1] {
+		seg = strings.ToLower(unquoteQualifiedName(seg))
+		if v.scriptNames[seg] {
+			return true
+		}
+		if i := strings.LastIndex(seg, "."); i >= 0 && v.scriptNames[seg[i+1:]] {
+			return true
+		}
+	}
+	return false
+}
+
 // dataSourceEntity is the entity a datasource supplies, by the childContext
 // rules; "" when that cannot be worked out.
 func (v *attributeScopeValidator) dataSourceEntity(ds *ast.DataSourceV3) string {
@@ -261,6 +341,24 @@ func (v *attributeScopeValidator) dataSourceEntity(ds *ast.DataSourceV3) string 
 		return ""
 	}
 	return c.entities[0]
+}
+
+// passTemplatePropertyTypes is templatePropertyTypes shared by the statements
+// of one check. Each call of templatePropertyTypes starts an empty cache, and
+// it was called per statement, so "once per widget for the run" was once per
+// widget per statement: a template load, with its .mpk augmentation, for every
+// widget of every page checked (ako/mxcli#2160).
+func passTemplatePropertyTypes(ctx *ExecContext, wb backend.WidgetBuilderBackend) func(string) map[string]pages.PropertyTypeIDEntry {
+	memo := ctx.checkMemo
+	if memo == nil {
+		return templatePropertyTypes(wb, ctx.Backend.Path())
+	}
+	memo.mu.Lock()
+	defer memo.mu.Unlock()
+	if memo.templates == nil {
+		memo.templates = templatePropertyTypes(wb, ctx.Backend.Path())
+	}
+	return memo.templates
 }
 
 // templatePropertyTypes loads a widget's template property metadata through the
@@ -311,4 +409,27 @@ func checkAttributeIndex(ctx *ExecContext, sc *scriptContext) attributeIndex {
 		}
 	}
 	return ix
+}
+
+// scriptDeclaredNames indexes the entities and associations sc declares,
+// lower-cased, by qualified and by short name.
+func scriptDeclaredNames(sc *scriptContext) map[string]bool {
+	names := map[string]bool{}
+	add := func(qn string) {
+		qn = strings.ToLower(qn)
+		names[qn] = true
+		if i := strings.LastIndex(qn, "."); i >= 0 {
+			names[qn[i+1:]] = true
+		}
+	}
+	for qn := range sc.entityDecls {
+		add(qn)
+	}
+	for qn := range sc.entityAttrs {
+		add(qn)
+	}
+	for qn := range sc.associationShapes {
+		add(qn)
+	}
+	return names
 }

@@ -4,6 +4,7 @@ package visitor
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -44,6 +45,10 @@ func (b *Builder) exitAlterDocumentStatement(ctx *parser.AlterStatementContext) 
 			stmt.Operations = append(stmt.Operations, b.buildAlterInsert(insertCtx.(*parser.AlterInsertContext)))
 		} else if dropCtx := op.AlterDrop(); dropCtx != nil {
 			stmt.Operations = append(stmt.Operations, b.buildAlterDrop(dropCtx.(*parser.AlterDropContext)))
+		} else if moveCtx := op.AlterMove(); moveCtx != nil {
+			stmt.Operations = append(stmt.Operations, b.buildAlterMove(moveCtx.(*parser.AlterMoveContext)))
+		} else if wrapCtx := op.AlterWrap(); wrapCtx != nil {
+			stmt.Operations = append(stmt.Operations, b.buildAlterWrap(wrapCtx.(*parser.AlterWrapContext)))
 		} else if dropTplCtx := op.AlterPageDropTemplate(); dropTplCtx != nil {
 			stmt.Operations = append(stmt.Operations, b.buildAlterPageDropTemplate(dropTplCtx.(*parser.AlterPageDropTemplateContext)))
 		} else if replaceCtx := op.AlterReplace(); replaceCtx != nil {
@@ -99,6 +104,20 @@ func (b *Builder) buildAlterSet(ctx *parser.AlterSetContext) ast.AlterPageOperat
 			op.Properties[name] = value
 		}
 	}
+	// `visible: roles (…) [and <condition>]` is Studio Pro's "Visible for
+	// module roles", a setting of its own beside the condition, as CREATE PAGE
+	// reads it (ako/mxcli#2319). It reached here as the expression text, and
+	// was stored as an invalid expression (ako/mxcli#2371).
+	if text, ok := op.Properties["VisibleIf"].(string); ok {
+		if roles, cond, ok := splitVisibleRoles(text); ok {
+			op.Properties["VisibleRoles"] = roles
+			if cond == "" {
+				delete(op.Properties, "VisibleIf")
+			} else {
+				op.Properties["VisibleIf"] = cond
+			}
+		}
+	}
 	b.recordAlterPageSet(ctx)
 
 	return op
@@ -133,6 +152,19 @@ func (b *Builder) buildAlterSetLayout(ctx *parser.AlterSetContext) *ast.SetLayou
 
 // buildAlterPageAssignment extracts property name and value from an assignment context.
 func (b *Builder) buildAlterPageAssignment(ctx *parser.AlterPageAssignmentContext) (string, interface{}) {
+	// Attribute: Assoc/…/Attr, the path CREATE PAGE takes (ako/mxcli#1644).
+	if hop := ctx.AttributePathHopV3(); hop != nil && ctx.ATTRIBUTE() != nil {
+		return "Attribute", unquoteQualifiedName(hop.GetText()) + "/" + buildAttributePathV3(ctx.AttributePathV3())
+	}
+	// CaptionParams / ContentParams: a text template's parameters, the same
+	// list CREATE PAGE reads (ako/mxcli#1966).
+	if pl := ctx.ParamListV3(); pl != nil {
+		name := "ContentParams"
+		if ctx.CAPTIONPARAMS() != nil {
+			name = "CaptionParams"
+		}
+		return name, buildParamListV3(pl)
+	}
 	// An expression-typed property takes the expression as written, from
 	// whichever value alternative matched (visitor_widget_expression.go).
 	if id := ctx.IdentifierOrKeyword(); id != nil && ctx.STRING_LITERAL() == nil {
@@ -147,6 +179,12 @@ func (b *Builder) buildAlterPageAssignment(ctx *parser.AlterPageAssignmentContex
 			// parameter (ako/mxcli#1622); the executor, which knows the
 			// property's kind, resolves or refuses it.
 			if text := stripExpressionIdentifierQuotes(ruleSourceText(expr.(antlr.ParserRuleContext))); ast.IsParameterAttributeText(text) {
+				return name, &ast.WidgetExpressionV3{Text: text}
+			}
+			// `Assoc/…/Attr` binds an attribute property over associations, as
+			// CREATE PAGE takes it (ako/mxcli#2283); parsed as a division, it
+			// reaches the executor as text, which resolves or refuses it.
+			if text, ok := attributePathText(expr); ok {
 				return name, &ast.WidgetExpressionV3{Text: text}
 			}
 			b.addError(widgetExpressionNotAllowed(name, expr))
@@ -231,6 +269,34 @@ func (b *Builder) buildAlterInsert(ctx *parser.AlterInsertContext) *ast.InsertWi
 	}
 
 	op.Widgets = b.buildAlterFragment(ctx.AlterFragment())
+	return op
+}
+
+// buildAlterMove builds a MoveWidgetOp: MOVE target AFTER|BEFORE|INTO destination.
+func (b *Builder) buildAlterMove(ctx *parser.AlterMoveContext) *ast.MoveWidgetOp {
+	op := &ast.MoveWidgetOp{}
+	switch {
+	case ctx.AFTER() != nil:
+		op.Position = "AFTER"
+	case ctx.BEFORE() != nil:
+		op.Position = "BEFORE"
+	case ctx.INTO() != nil:
+		op.Position = "INTO"
+	}
+	if targets := ctx.AllAlterTarget(); len(targets) == 2 {
+		op.Target = b.buildAlterTarget(targets[0])
+		op.Destination = b.buildAlterTarget(targets[1])
+	}
+	return op
+}
+
+// buildAlterWrap builds a WrapWidgetOp: WRAP target IN { container }.
+func (b *Builder) buildAlterWrap(ctx *parser.AlterWrapContext) *ast.WrapWidgetOp {
+	op := &ast.WrapWidgetOp{}
+	if tr := ctx.AlterTarget(); tr != nil {
+		op.Target = b.buildAlterTarget(tr)
+	}
+	op.Container = b.buildAlterFragment(ctx.AlterFragment())
 	return op
 }
 
@@ -467,4 +533,27 @@ func (b *Builder) exitAlterPagesStylingStatement(ctx *parser.AlterPagesStylingSt
 	}
 
 	b.statements = append(b.statements, stmt)
+}
+
+// attributePathSegment is one segment of an attribute path: a name, quoted
+// when it is a keyword, and module-qualified on a hop.
+const attributePathSegment = `(?:[A-Za-z_][A-Za-z0-9_]*|"[A-Za-z_][A-Za-z0-9_]*")`
+
+// attributePathTextRe is `Assoc/…/Attr` (attributePathV3 with at least one
+// hop), optionally read from `$currentObject/`, and nothing else.
+var attributePathTextRe = regexp.MustCompile(`^(?:\$currentObject\s*/\s*)?(?:` + attributePathSegment +
+	`(?:\.` + attributePathSegment + `)?\s*/\s*)+` + attributePathSegment + `$`)
+
+// attributePathText is the path an expression spells, identifier quotes and
+// the spaces around each `/` removed; ok is false for any other expression.
+func attributePathText(expr parser.IExpressionContext) (string, bool) {
+	raw := strings.TrimSpace(ruleSourceText(expr.(antlr.ParserRuleContext)))
+	if !attributePathTextRe.MatchString(raw) {
+		return "", false
+	}
+	segs := strings.Split(raw, "/")
+	for i, seg := range segs {
+		segs[i] = strings.TrimSpace(seg)
+	}
+	return stripExpressionIdentifierQuotes(strings.Join(segs, "/")), true
 }

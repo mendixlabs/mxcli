@@ -159,6 +159,9 @@ func (fb *flowBuilder) finishCustomErrorHandler(activityID model.ID, activityX i
 			return
 		}
 		mergeID := fb.addErrorHandlerFlow(activityID, activityX, eh.Body)
+		if mergeID.id != "" {
+			fb.rejoinAfterRow(eh, activityID, activityX)
+		}
 		fb.handleErrorHandlerMergeWithSkip(mergeID, activityID, outputVar)
 		return
 	}
@@ -572,10 +575,16 @@ func (fb *flowBuilder) addErrorHandlerRejoinFlowForState(state pendingErrorHandl
 	existing := fb.flows[existingIdx]
 	fb.flows = append(fb.flows[:existingIdx], fb.flows[existingIdx+1:]...)
 
+	computed := fb.mergeOnEdge(originID, destinationID, model.Point{X: fb.posX - HorizontalSpacing/2, Y: fb.baseY})
+	if x, ok := fb.rejoinPastRowX[state.source]; ok && originID == state.source {
+		// The row is too long to rejoin before the next statement: the merge
+		// goes past it, where rejoinAfterRow made the main line wait.
+		computed.X = x
+	}
 	merge := &microflows.ExclusiveMerge{
 		BaseMicroflowObject: microflows.BaseMicroflowObject{
 			BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
-			Position:    fb.rejoinMergePosition(state.source, fb.mergeOnEdge(originID, destinationID, model.Point{X: fb.posX - HorizontalSpacing/2, Y: fb.baseY})),
+			Position:    fb.rejoinMergePosition(state.source, computed),
 			Size:        model.Size{Width: MergeSize, Height: MergeSize},
 		},
 	}
@@ -787,6 +796,8 @@ func errorHandlerStatementVarRefs(stmt ast.MicroflowStatement) []string {
 	case *ast.MfCommitStmt:
 		refs = append(refs, s.Variable)
 	case *ast.DeleteObjectStmt:
+		refs = append(refs, s.Variable)
+	case *ast.ExternalObjectStmt:
 		refs = append(refs, s.Variable)
 	case *ast.DownloadFileStmt:
 		refs = append(refs, s.FileDocument)

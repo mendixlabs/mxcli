@@ -2,6 +2,8 @@
 
 package ast
 
+import "strings"
+
 // ============================================================================
 // Microflow Statements
 // ============================================================================
@@ -627,6 +629,19 @@ type RollbackStmt struct {
 
 func (s *RollbackStmt) isMicroflowStatement() {}
 
+// ExternalObjectStmt represents: SEND EXTERNAL OBJECT $Var [REFRESH] or
+// DELETE EXTERNAL OBJECT $Var [REFRESH] — Studio Pro's "Send external object"
+// and "Delete external object" activities (mendixlabs/mxcli#1735).
+type ExternalObjectStmt struct {
+	Delete          bool                 // DELETE EXTERNAL OBJECT; otherwise SEND
+	Variable        string               // The external object
+	RefreshInClient bool                 // Whether to refresh in client
+	Annotations     *ActivityAnnotations // Optional @position, @caption, @color, @annotation
+	ErrorHandling   *ErrorHandlingClause // Optional ON ERROR clause
+}
+
+func (s *ExternalObjectStmt) isMicroflowStatement() {}
+
 // RetrieveStmt represents: RETRIEVE $Var FROM Entity [WHERE condition] [SORT BY ...] [FIRST | [LIMIT n] [OFFSET n]] [ON ERROR ...]
 // or: RETRIEVE $Var FROM $Parent/Module.Association (association retrieve)
 type RetrieveStmt struct {
@@ -750,6 +765,41 @@ type CallArgument struct {
 	// a Java action's text-template parameter: `Subject = 'Order {1}' with
 	// ({1} = $Order/Number)` (ako/mxcli#1451). Only call java action takes it.
 	TemplateParams []TemplateParam
+	// IncludeAssociations is a call external action argument's Associations to
+	// include, `include associations ( … )` (ako/mxcli#1914). nil when the
+	// clause is not written; a non-nil empty clause states "none".
+	IncludeAssociations *IncludeAssociationsClause
+}
+
+// IncludeAssociationsClause is `include associations (M.A (M.B), M.C)`: the
+// tree of associations whose objects an OData external action call serialises
+// with the argument. Each node's children are reached from the entity at its
+// association's far end.
+type IncludeAssociationsClause struct {
+	Associations []*IncludedAssociationDef
+}
+
+// IncludedAssociationDef is one node of the tree.
+type IncludedAssociationDef struct {
+	Name     QualifiedName
+	Children []*IncludedAssociationDef
+}
+
+// QueueRetry is the retry policy of a queued call (mendixlabs/mxcli#1729):
+//
+//	IN QUEUE Mod.Q RETRY FIXED (Retries: 5, Interval: 10, IntervalType: Minutes)
+//	IN QUEUE Mod.Q RETRY EXPONENTIAL (Retries: 20, InitialInterval: 1,
+//	                                  MaximumInterval: 60, IntervalType: Minutes)
+//
+// Kind is "Fixed" or "Exponential"; IntervalType is Seconds, Minutes or Hours.
+// The visitor requires every property of the kind, so nothing is defaulted.
+type QueueRetry struct {
+	Kind            string
+	Retries         int
+	Interval        int
+	InitialInterval int
+	MaximumInterval int
+	IntervalType    string
 }
 
 // CallMicroflowStmt represents: [$Result =] CALL MICROFLOW Name (args) [ON ERROR ...]
@@ -758,6 +808,7 @@ type CallMicroflowStmt struct {
 	MicroflowName  QualifiedName        // Microflow to call
 	Arguments      []CallArgument       // Arguments
 	Queue          *QualifiedName       // Optional IN QUEUE clause (task queue to run the call on)
+	QueueRetry     *QueueRetry          // Optional RETRY clause after IN QUEUE
 	ErrorHandling  *ErrorHandlingClause // Optional ON ERROR clause
 	Annotations    *ActivityAnnotations // Optional @position, @caption, @color, @annotation
 }
@@ -781,6 +832,7 @@ type CallJavaActionStmt struct {
 	ActionName     QualifiedName        // Java action name
 	Arguments      []CallArgument       // Arguments
 	Queue          *QualifiedName       // Optional IN QUEUE clause (task queue to run the call on)
+	QueueRetry     *QueueRetry          // Optional RETRY clause after IN QUEUE
 	ErrorHandling  *ErrorHandlingClause // Optional ON ERROR clause
 	Annotations    *ActivityAnnotations // Optional @position, @caption, @color, @annotation
 }
@@ -1460,3 +1512,28 @@ type TransformJsonStmt struct {
 }
 
 func (s *TransformJsonStmt) isMicroflowStatement() {}
+
+// MemberEqualityCondition returns cond in the shape IsMemberEquality tests for
+// when it is a `Member = value` condition wrapped whole in a SourceExpr.
+//
+// The visitor wraps an expression in a SourceExpr when its spelling differs
+// from the printed form — `$N-1`, `-1`, `$Item/Number-1` without the spaces
+// around the operator — so it is written back as the author spelled it. A
+// whole-condition wrapper hid the BinaryExpr from IsMemberEquality, and
+// `find $L by Number = $N-1` was written as the find-by-EXPRESSION operation
+// while `$N - 1` was a find by attribute (mendixlabs/mxcli#1740,
+// ako/mxcli#1943). The wrapper moves onto the value, which keeps its spelling;
+// any other condition is returned unchanged.
+func MemberEqualityCondition(cond Expression) Expression {
+	src, ok := cond.(*SourceExpr)
+	if !ok || !IsMemberEquality(src.Expression) {
+		return cond
+	}
+	binary := src.Expression.(*BinaryExpr)
+	_, value, found := strings.Cut(src.Source, "=")
+	value = strings.TrimSpace(value)
+	if !found || value == "" {
+		return src.Expression
+	}
+	return &BinaryExpr{Left: binary.Left, Operator: "=", Right: &SourceExpr{Expression: binary.Right, Source: value}}
+}

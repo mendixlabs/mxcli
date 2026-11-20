@@ -1,0 +1,54 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#2097 (mendixlabs/mxcli#1798) — the refused side.
+-- ============================================================================
+--
+-- Dropping 'Reject' leaves Review with one outcome, 'Approve', that holds an
+-- activity; nothing later adds a second one. mx check 11.14.0 on the same
+-- shape: [error] [CE1876] "Single outcome must not contain any activities in
+-- its flow." at User task 'Review'.
+--
+-- The script creates the workflow itself, so this is decided without a
+-- project; against a STORED workflow the same drop needs `-p`, since only the
+-- project knows the task's other outcomes.
+--
+-- EXPECTED: `mxcli check` fails with MDL-WF02.
+-- Legal side: 2097-alter-workflow-single-outcome.mdl
+-- ============================================================================
+
+create module BugSingleOutcomeFail2097;
+
+create persistent entity BugSingleOutcomeFail2097.Request (
+  Title: String(200)
+);
+
+create page BugSingleOutcomeFail2097.WF_Review
+(
+  params: ( $WorkflowUserTask: System.WorkflowUserTask ),
+  title: 'Review',
+  layout: Atlas_Core.Atlas_Default
+)
+{
+  dataview dvTask (DataSource: $WorkflowUserTask) {
+    actionbutton btnApprove (Caption: 'Approve', Action: complete task 'Approve')
+  }
+};
+
+create microflow BugSingleOutcomeFail2097.ACT_Notify ($WorkflowContext: BugSingleOutcomeFail2097.Request)
+begin
+  log info node 'WF' 'notified';
+end;
+
+create workflow BugSingleOutcomeFail2097.WF
+  parameter $WorkflowContext: BugSingleOutcomeFail2097.Request
+begin
+  user task Review 'Review'
+    page BugSingleOutcomeFail2097.WF_Review
+    outcomes
+      'Approve' { call microflow BugSingleOutcomeFail2097.ACT_Notify; }
+      'Reject' { };
+end workflow;
+
+alter workflow BugSingleOutcomeFail2097.WF {
+  drop Review outcome 'Reject'
+};

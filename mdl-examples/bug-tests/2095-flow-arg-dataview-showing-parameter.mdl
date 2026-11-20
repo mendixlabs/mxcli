@@ -1,0 +1,71 @@
+mdl 1;
+-- ============================================================================
+-- Bug ako/mxcli#2095 (mendixlabs/mxcli#1796): a flow argument naming an enclosing
+-- data view that shows a page/snippet parameter is written as PageVariable { Widget } only
+-- ============================================================================
+--
+-- Symptom (before fix): check and exec pass, then mx check reports
+--   [CE0115] "The arguments that are passed to microflow 'ModV.ACT_Open' do not
+--   match the expected parameters and need to be refreshed." at Action button 'btnDv'
+-- on every `Item = $dvOuter` (button microflow/nanoflow, container on-click,
+-- list view data source, Badge on-click, snippet button) — 6 errors here.
+--
+-- After fix: the mapping stores the pair Widget = 'dvOuter' + PageParameter
+-- (or SnippetParameter) = 'Item', as a `$dvOuter.Attr` binding does; mx check
+-- 0 errors. `$dvMf` (a data view fed by a microflow) keeps Widget alone, which
+-- passes. describe prints `$dvOuter` back, and describe -> exec is unchanged.
+--
+-- Usage:
+--   mxcli exec mdl-examples/bug-tests/2095-flow-arg-dataview-showing-parameter.mdl -p app.mpr
+--   mxcli docker check -p app.mpr        -- expect 0 errors
+-- ============================================================================
+create module BugTest2095;
+create persistent entity BugTest2095.Item (Name: String(50));
+create non-persistent entity BugTest2095.Row (Line: String(200));
+
+create microflow BugTest2095.ACT_Open ($Item: BugTest2095.Item)
+begin
+  log info node 'BugTest2095' 'open';
+end;
+create nanoflow BugTest2095.NF_Open ($Item: BugTest2095.Item)
+begin
+  log info node 'BugTest2095' 'open';
+end;
+create microflow BugTest2095.DS_Rows ($Item: BugTest2095.Item) returns List of BugTest2095.Row as $Rows
+begin
+  $Rows = create list of BugTest2095.Row;
+  return $Rows;
+end;
+create microflow BugTest2095.DS_One ($Item: BugTest2095.Item) returns BugTest2095.Item as $One
+begin
+  return $Item;
+end;
+
+create page BugTest2095.PageA ( Title: 'A', Layout: Atlas_Core.Atlas_Default, Params: ( $Item: BugTest2095.Item ) ) {
+  dataview dvOuter (DataSource: $Item) {
+    dataview dvInner (DataSource: $Item) {
+      badge bdgDv  ( type: 'badge', onClick: CALL MICROFLOW BugTest2095.ACT_Open(Item = $dvOuter) )
+      actionbutton btnDv    (Caption: 'dv',     Action: CALL MICROFLOW BugTest2095.ACT_Open(Item = $dvOuter))
+      actionbutton btnPar   (Caption: 'par',    Action: CALL MICROFLOW BugTest2095.ACT_Open(Item = $Item))
+      actionbutton btnNfDv  (Caption: 'nf dv',  Action: CALL NANOFLOW BugTest2095.NF_Open(Item = $dvOuter))
+      container ctDv  (OnClick: CALL MICROFLOW BugTest2095.ACT_Open(Item = $dvOuter)) { dynamictext ctDvT (Content: 'dv') }
+      listview lvDv  (DataSource: MICROFLOW BugTest2095.DS_Rows(Item = $dvOuter)) { dynamictext lvDvT (Content: '{1}', ContentParams: ({1} = Line)) }
+    }
+  }
+};
+
+create page BugTest2095.PageB ( Title: 'B', Layout: Atlas_Core.Atlas_Default, Params: ( $Item: BugTest2095.Item ) ) {
+  dataview dvMf (DataSource: MICROFLOW BugTest2095.DS_One(Item = $Item)) {
+    dataview dvMfInner (DataSource: $Item) {
+      actionbutton btnMf (Caption: 'mf', Action: CALL MICROFLOW BugTest2095.ACT_Open(Item = $dvMf))
+    }
+  }
+};
+
+create snippet BugTest2095.SN_V ( Params: ( $Item: BugTest2095.Item ) ) {
+  dataview dvSnip (DataSource: $Item) {
+    dataview dvSnipInner (DataSource: $Item) {
+      actionbutton btnSn (Caption: 'sn', Action: CALL MICROFLOW BugTest2095.ACT_Open(Item = $dvSnip))
+    }
+  }
+};

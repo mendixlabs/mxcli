@@ -135,6 +135,7 @@ var typeCoverageExceptions = map[string]string{
 	"Workflows$NotifyWaitForNotificationActivityTarget": "lowered: below 11.7 notify workflow stores its target as the action's Activity (setNotifyTarget)",
 	// Unreachable: the type is written only for something a project below
 	// its floor cannot hold.
+	"Settings$ThemeModuleEntry": "unreachable: written only into a stored ThemeModuleOrder list; below 9.3 the Web UI part has none, and ALTER SETTINGS WEBUI refuses ThemeModuleOrder there (ako/mxcli#1286)",
 	"Workflows$NonInterruptingNotificationEventSubProcessStartActivityTarget": "unreachable: a notify target of that kind, which the stored workflow holds only from 11.8 (notifyTargetType)",
 	"Workflows$InterruptingNotificationEventSubProcessStartActivityTarget":    "unreachable: a notify target of that kind, which the stored workflow holds only from 11.10 (notifyTargetType)",
 	"Workflows$NotifyNotificationActivityTarget":                              "unreachable: a notify target of that kind, which the stored workflow holds only from 11.11 (notifyTargetType)",
@@ -142,6 +143,7 @@ var typeCoverageExceptions = map[string]string{
 	"Forms$SnippetParameterMapping":                                           "unreachable: a snippet call maps only the parameters the called snippet declares, and a snippet holds parameters from 9.21 (Forms$Snippet.Parameters)",
 	"CodeActions$CustomBlobDocumentParameterType":                             "unreachable: carried only from a stored Java action parameter of that type, which a project below 11.6 cannot hold",
 	"Microflows$CustomBlobDocumentCodeActionParameterValue":                   "unreachable: written only for a Java action parameter of a custom document type, which a project below 11.6 cannot hold",
+	"Microflows$IncludedAssociation":                                          "unreachable: carried only from a stored external action parameter's associations to include, which a project below 10.11 cannot hold (#1914)",
 	// Residual: the statement does not say which shape the writer picks, so
 	// no gate can; the write refuses it below its floor.
 	"Forms$ToggleDesignPropertyValue":                "lowered below 10.2 to a flat DesignPropertyValue (canon lowerDesignProperty)",

@@ -1,0 +1,9 @@
+-- ako/mxcli#1367: `list features` had no `mxcli syntax` topic, a three-part
+-- version was a parse error, and `in <area>` failed for the areas that are
+-- lexer keywords (workflows, microflows, pages, …). All of these parse now;
+-- `mxcli syntax features` documents them, and each topic's "Requires" lines
+-- come from the same registry (sdk/versions/*.yaml).
+mdl 1;
+list features for version 10.20.0;
+list features for version 10.24;
+list features added since 11.0.0;

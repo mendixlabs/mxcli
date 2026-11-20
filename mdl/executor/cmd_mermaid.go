@@ -539,6 +539,10 @@ func mermaidActionLabel(a *microflows.ActionActivity, entityNames map[model.ID]s
 			return "rollback $" + sanitizeMermaidLabel(act.RollbackVariable)
 		}
 		return "Rollback"
+	case *microflows.SendExternalObjectAction:
+		return "send external object $" + sanitizeMermaidLabel(act.Variable)
+	case *microflows.DeleteExternalObjectAction:
+		return "delete external object $" + sanitizeMermaidLabel(act.Variable)
 	case *microflows.CreateVariableAction:
 		if act.VariableName != "" {
 			return "declare $" + sanitizeMermaidLabel(act.VariableName)
@@ -709,6 +713,12 @@ func mermaidActionDetails(a *microflows.ActionActivity, entityNames map[model.ID
 		if act.RollbackVariable != "" {
 			lines = append(lines, "Variable: $"+act.RollbackVariable)
 		}
+
+	case *microflows.SendExternalObjectAction:
+		lines = append(lines, "Variable: $"+act.Variable)
+
+	case *microflows.DeleteExternalObjectAction:
+		lines = append(lines, "Variable: $"+act.Variable)
 
 	case *microflows.RetrieveAction:
 		if act.OutputVariable != "" {

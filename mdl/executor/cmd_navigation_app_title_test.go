@@ -108,7 +108,10 @@ func TestAppIconMustResolveAtExec(t *testing.T) {
 		want string // "" = written
 	}{
 		{"MyFirstModule.Images.Logo", ""},
-		{"myfirstmodule.images.logo", ""}, // Mendix resolves names case-insensitively
+		// Mendix resolves an image reference case-sensitively: an app icon
+		// spelled `Atlas_Core.Content.mendix` for the stored `Mendix` is CE1613
+		// at the navigation profile (measured on 11.13.0).
+		{"myfirstmodule.images.logo", "app icon: image collection not found: myfirstmodule.images"},
 		{"none", ""},
 		{"MyFirstModule.Images.Nope", "app icon: image not found: Nope in image collection MyFirstModule.Images"},
 		{"Shop.Images.Logo", "app icon: image collection not found: Shop.Images"},

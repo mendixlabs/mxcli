@@ -103,10 +103,7 @@ func (r *SnippetCallAppearanceRule) Check(ctx *linter.LintContext) []linter.Viol
 		if len(c.fields) == 0 {
 			continue
 		}
-		docType := "page"
-		if c.w.ContainerType == "SNIPPET" {
-			docType = "snippet"
-		}
+		docType := widgetDocType(c.w.ContainerType)
 		violations = append(violations, linter.Violation{
 			RuleID:   r.ID(),
 			Severity: r.DefaultSeverity(),

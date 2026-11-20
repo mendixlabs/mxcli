@@ -63,7 +63,7 @@ create persistent entity Module.Photo (
 | Show modules | `list modules;` | List all modules |
 | Describe module | `describe module ModuleName;` | All contents (entities, microflows, pages, etc.) |
 | Create module | `create module ModuleName;` | |
-| Module documentation | `/** text */ create or modify module ModuleName;` | Stored as the module's **domain model** documentation (a module has none of its own) — what lint reads as `modules().domain_model_documentation`. `describe module` prints it the same way. No comment leaves it as stored; `/** */` clears it; a plain `create module` of an existing module changes nothing |
+| Module documentation | `/** text */ create or modify module ModuleName;` or `alter module ModuleName set documentation 'text';` | Stored as the module's **domain model** documentation (a module has none of its own) — what lint reads as `modules().domain_model_documentation`. `describe module` prints it the same way. No comment leaves it as stored; `/** */` clears it; a plain `create module` of an existing module changes nothing |
 | Drop module | `drop module [if exists] ModuleName;` | |
 | Rename module | `rename module OldName to NewName;` | Updates all qualified name references |
 
@@ -74,6 +74,7 @@ create persistent entity Module.Photo (
 | List dependencies | `list jar dependencies [in ModuleName];` | All modules or filtered by module |
 | Describe dependency | `describe jar dependency ModuleName 'group:artifact';` | Full MDL output (roundtrippable) |
 | Add dependency | `alter module Name add jar dependency (group = '...', artifact = '...', version = '...', included = true);` | `included` defaults to `true` |
+| Add, re-runnable | `alter module Name add jar dependency if not exists (group = '...', artifact = '...', version = '...', included = true);` | A declared `group:artifact` is left untouched ("skipped", even with another version — the notice names the `set … version` to run); a second exec writes nothing |
 | Update version | `alter module Name set jar dependency 'group:artifact' version '...';` | Change version string |
 | Toggle inclusion | `alter module Name set jar dependency 'group:artifact' included true\|false;` | Enable/disable in classpath |
 | Add exclusion | `alter module Name set jar dependency 'group:artifact' add exclusion 'group:artifact';` | Transitive exclusion |
@@ -518,6 +519,7 @@ rather than updating the first.
 | Rename microflow | `rename microflow Module.Old to New;` | Updates all references |
 | Rename nanoflow | `rename nanoflow Module.Old to New;` | Updates all references |
 | Rename page | `rename page Module.Old to New;` | Updates all references |
+| Rename snippet | `rename snippet Module.Old to New;` | Updates every snippet call |
 | Rename constant | `rename constant Module.Old to New;` | Updates all references |
 | Drop microflow | `drop microflow [if exists] Module.Name;` | |
 | Drop nanoflow | `drop nanoflow [if exists] Module.Name;` | |
@@ -573,7 +575,7 @@ it is for pages.
 | Call microflow on a queue | `call microflow Module.Name (Param = $value) in queue Module.Queue;` | Background execution; the queue must exist (CE1613), and the called microflow must return nothing, else CE7033 (**MDL088**) |
 | Call Java action on a queue | `call java action Module.Name (Param = $value) in queue Module.Queue;` | The Java action must `returns void`, else CE7038 |
 | Call nanoflow | `$Result = call nanoflow Module.Name (Param = $value);` | |
-| Blank call argument | `call microflow Module.Name (A = $a, B = nothing);` | Keeps the parameter mapping with an **empty** expression — what Studio Pro stores for an argument field left blank. Not `B = empty` (the Mendix value `empty`, stored as that text) and not omitting `B` (no mapping at all). Call microflow / call nanoflow only. It exists so `describe` can round-trip such a call: Mendix reports a blank argument as **CE0127** "Missing argument" |
+| Blank call argument | `call microflow Module.Name (A = $a, B = nothing);` | Keeps the parameter mapping with an **empty** expression — what Studio Pro stores for an argument field left blank. Not `B = empty` (the Mendix value `empty`, stored as that text) and not omitting `B` (no mapping at all). Call microflow / call nanoflow / call external action only. It exists so `describe` can round-trip such a call: Mendix reports a blank flow-call argument as **CE0127** "Missing argument"; on `call external action` it is how Studio Pro 11.16 stores an optional (nullable) OData parameter left blank, where 11.14 stored `empty` (ako/mxcli#1915) |
 | Call JS action | `$Result = call javascript action Module.Name (Param = $value);` | JavaScript action (nanoflow/microflow) |
 | Call Java action | `$Result = call java action Module.Name (Param = $value);` | Java action (microflow only) |
 | Call web service | `$Result = call web service Module.Service operation OperationName;` | Legacy SOAP; quoted refs are fallback for dangling raw IDs |
@@ -619,7 +621,7 @@ it is for pages.
 | Shared annotation | `@annotation(id: n1, text: 'note')` then `@annotation(id: n1)` | ONE note wired to several activities, which is how Mendix stores it. Without the `id:` the two lines are two separate notes, even with identical text. The id is scoped to the flow being authored and is not stored (#1077) |
 | Stored annotation | `@annotation(existing: 'note')` | **`alter` fragments only.** Attaches the note of the stored flow whose text is `'note'` — it must be the only one — instead of creating a note. Never printed by `describe`, which declares every note of a whole flow (ako/mxcli#1695) |
 | Annotation geometry | `@annotation(text: 'note', position: (x, y), size: (w, h))` | The note's own place and box on the canvas. Both are omitted whenever they match what a rewrite re-derives — 100px above the activity, stacked 60px per extra note, at 200×50 — so an ordinary note stays on the short form |
-| Free annotation | `@annotation 'text'` before `@position(...)` | Free-floating visual note preserved by order. A free note has no activity to be placed relative to, so DESCRIBE always emits its `position:` |
+| Free annotation | `@annotation 'text'` before `@position(...)` | Free-floating visual note preserved by order. A free note has no activity to be placed relative to, so DESCRIBE always emits its `position:`. A note linked only to the start event or to another note is described this way too, after a `-- WARNING` line: MDL has no form for that link, so a rewrite drops it (ako/mxcli#1933) |
 | IF | `if condition then ... [else ...] end if;` | |
 | Enum split | `case $Var when Value then ... end case;` | Enumeration decision branches. Bare enum values (never quoted or qualified), one branch per value **including `(empty)`** (MDL056), no `else` (MDL008), no `AS` alias |
 | Type split | `split type $Var when Module.Entity then ... when (empty) then ... end split;` | Runtime specialization branches. Same `when ... then` shape as the enum split. Needs a branch per subtype **and** the base entity (CE0090); `when (empty) then` is the **null-object** flow, not a default, and cannot be omitted (CE0089). Legacy `case Module.Entity` / `else` still parse (MDL065 warns) |
@@ -711,7 +713,7 @@ Nested folders use `/` separator: `'Parent/Child/Grandchild'`. Missing folders a
 | Revoke nanoflow access | `revoke execute on nanoflow Mod.NF from Mod.Role, ...;` | |
 | Grant page access | `grant view on page Mod.Page to Mod.Role, ...;` | |
 | Revoke page access | `revoke view on page Mod.Page from Mod.Role, ...;` | |
-| Grant entity access | `grant create, delete, read *, write * on entity Mod.Entity to Mod.Role;` / `grant read * on entity Mod.Entity to Mod.Role where [Status = 'Open'];` | The XPath is in brackets, quotes written once; the old `grant Mod.Role on Mod.Entity (…) where '…'` warns MDL-DEPR030 (`fmt --upgrade` rewrites it). Additive — merges with existing. A module role must be qualified: a bare `Role` parses but is refused (MDL-GRANT02). Inherited members are named like the entity's own (`read *` covers them); an unknown name is an error. Entities extending `System.User` are the exception — their platform members must not be granted |
+| Grant entity access | `grant create, delete, read *, write * on entity Mod.Entity to Mod.Role;` / `grant read * on entity Mod.Entity to Mod.Role where [Status = 'Open'];` | The XPath is in brackets, quotes written once; the old `grant Mod.Role on Mod.Entity (…) where '…'` warns MDL-DEPR030 (`fmt --upgrade` rewrites it). Additive — merges with existing; a `where` makes a second rule beside the role's unconstrained one and narrows nothing (MDL-GRANT03) — revoke first, then grant. A module role must be qualified: a bare `Role` parses but is refused (MDL-GRANT02). Inherited members are named like the entity's own (`read *` covers them); an unknown name is an error. Entities extending `System.User` are the exception — their platform members must not be granted |
 | Access for members added later | — | A rule's default for new members is derived from the grant: `write *` → ReadWrite, `read *` → ReadOnly, member lists alone → **None**. So an attribute added later is granted None on a member-listed rule — clean build, blank field. `alter entity … add attribute` warns and prints the widening grant. The rule's *default* decides this, not how narrow its member list is |
 | Revoke entity access | `revoke all on entity Mod.Entity from Mod.Role;` | Full revoke — removes entire rule |
 | Revoke entity access (partial) | `revoke read (attr) on entity Mod.Entity from Mod.Role;` | Partial — downgrades specific rights |
@@ -771,7 +773,7 @@ mandatory and a misplaced clause failed with a token error
 - `notification [<name>] [caption '<caption>'];` — an intermediate notification event (Mendix 11.11+)
 - `end workflow [caption '<caption>'];` — only inside a `{ }` block; ends the whole workflow
 - `caption '…'` sets the caption Studio Pro shows on an activity; `comment '…'`, the old spelling, is a deprecated alias (`MDL-DEPR104`)
-- Boundary events, after `outcomes`: `boundary event [non] interrupting timer <expr> [repeat every <n> <unit> at most <m> times] [caption '<caption>'] { … }` or `boundary event [non] interrupting notification <name> ['<caption>'] { … }` (11.11+). One interrupting event per activity (CE6697, MDL-WF15).
+- Boundary events, after `outcomes`: `boundary event [non] interrupting timer <expr> [repeat every <n> <unit> at most <m> times] [caption '<caption>'] { … }` or `boundary event [non] interrupting notification <name> ['<caption>'] { … }` (11.11+). One interrupting event per activity (CE6697, MDL-WF15), at most five events in all (CE6696, MDL-WF23).
 - **Variables in a workflow expression**: `$WorkflowContext` (or the header's declared name) and `$WorkflowInstance`, the running `System.Workflow` — `call microflow M.ACT(Workflow = $WorkflowInstance)`. Anything else (`$Workflow`, `$currentUser`, `$WorkflowUserTask`, …) is CE0117 (MDL-WF19); the workflow's own `due date` sees only the context.
 
 **Notifying a workflow** (a microflow statement): `[$Notified =] notify workflow $Workflow target Module.Workflow.ElementName;` — the element is a notification-started event sub-process's start, a notification activity, a notification boundary event or a wait for notification, and mxcli resolves which. The target is required (CE0166, MDL-WF16).
@@ -869,9 +871,9 @@ Modify an existing workflow's properties, activities, outcomes, paths, condition
 | Insert decision outcome | `insert into activity { outcomes 'Module.Enum.Value' -> { body } }` (or `true`, `false`, `default`) | Decision or call microflow |
 | Insert path | `insert into activity { path { body } }` | Parallel split; `path n` must be the next number |
 | Insert boundary event | `insert into activity { boundary event interrupting timer <expr> [caption '<caption>'] { body } }` | Boundary timer |
-| Drop outcome | `drop activity outcome 'name';` / `drop activity outcome true;` | `true`, `false`, `default` for a decision's Boolean or default outcome |
+| Drop outcome | `drop activity outcome 'name';` / `drop activity outcome true;` | `true`, `false`, `default` for a decision's Boolean or default outcome; refused as ambiguous when two outcomes have that value |
 | Drop path | `drop activity path 2;` | Parallel split path by number, as `describe` numbers them; refused on any other activity (a user task's branches are its outcomes) |
-| Drop boundary event | `drop activity boundary event;` | For an activity with one boundary event; with several, refused under `mdl 1` and the first dropped with warning MDL-V1-BOUNDARYDROP under `mdl 0` |
+| Drop boundary event | `drop activity boundary event [n];` | `n` picks one by number, as `describe` lists them. Without it: for an activity with one boundary event; with several, refused under `mdl 1` and the first dropped with warning MDL-V1-BOUNDARYDROP under `mdl 0` |
 
 **Activity references** are names (`ReviewOrder`) or captions in quotes (`'Review the order'`). Add `@n` to choose one of several matches (`ACT_Process@2`); without it a name wins over a caption that repeats it, and an ambiguous reference is refused with the matches listed. Every target is resolved before anything changes.
 
@@ -1107,6 +1109,7 @@ the `AgentEditorCommons` marketplace module and Mendix 11.9+.
 create agent Module.MyAgent (
   UsageType: task,
   model: Module.MyModel,
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   MaxTokens: 4096,
   Temperature: 0.7,
   TopP: 0.9,
@@ -1160,7 +1163,8 @@ An `image` widget's default source **is** an image collection entry, so a bare
 image selected."); `mxcli check` reports it as MDL-WIDGET22. A name that does not
 resolve is reported by `mxcli check --references` rather than by the build
 (CE1613). The other two sources are `ImageType: imageUrl, ImageUrl: '…'` and
-`ImageType: icon`; any other `ImageType` is a MDL-WIDGET22 warning, because mx
+`ImageType: icon, Icon: '…'` (the icon in a button's spelling — `Icon: 'M.C.I'`,
+`Icon: image 'M.C.I'`, `Icon: glyph N`; without one, "No icon selected."); any other `ImageType` is a MDL-WIDGET22 warning, because mx
 check accepts it. An uploaded image is not a separate `ImageType` — it is the
 default source bound to the object: `Image: $currentObject`.
 
@@ -1514,6 +1518,9 @@ MDL uses explicit property declarations for pages:
 | Text area lines / autocomplete | `NumberOfLines: n, Autocomplete: true\|false` | `textarea t (Attribute: Notes, NumberOfLines: 2, Autocomplete: false)` — defaults 5 and true; `0` lines is a value Studio Pro stores. Also settable with `alter page … set` |
 | Input read-only style | `ReadOnlyStyle: Inherit\|Control\|Text` | `textbox t (Attribute: Name, ReadOnlyStyle: Text)` — on a text box, text area, date picker, check box and radio buttons. **Inherit** is the default; also `alter page … set (ReadOnlyStyle: Text) on t` |
 | DataView read-only style | `ReadOnlyStyle: Inherit\|Control\|Text` | `dataview dv (datasource: $O, ReadOnlyStyle: Text)` — a DataView's own, distinct from a checkbox's. **Control** is Studio Pro's default here, not Inherit |
+| Check box label position | `LabelPosition: Default\|BeforeControl\|AfterControl` | `checkbox c (Attribute: Done, LabelPosition: AfterControl)` |
+| Radio buttons orientation | `RenderHorizontal: true\|false` | `radiobuttons r (Attribute: Kind, RenderHorizontal: false)` — vertical; default horizontal |
+| Show page closes pages | `with (NumberOfPagesToClose: n)` | `Action: show page M.Next(Item = $currentObject) with (NumberOfPagesToClose: 1)` |
 | Page CSS class / style | `Class: 'css-class', Style: 'css: rule'` | `(Title: 'Home', Class: 'container-fluid bg-light', Style: 'min-height: 100vh')` — the page's Appearance |
 | Page variables | `variables: ( $name: type = <expr> )` | `variables: ( $show: boolean = true )` |
 | Page parameters | `params: ( $name: type, … )` | `params: ( $Order: Shop.Order )` — a map, in `( )`; `params: { … }` is the deprecated spelling (MDL-DEPR123) |

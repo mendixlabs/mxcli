@@ -111,8 +111,8 @@ func TestReactUnsupportedWidgetRule_SkipsNativePages(t *testing.T) {
 			('p2', 'Login_Native', 'MyFirstModule.Login_Native', 'MyFirstModule', '', '', '', 'Atlas_Core.NativePhone_Default', '', 1)`,
 		`CREATE TABLE widgets (Id TEXT, Name TEXT, WidgetType TEXT, ContainerId TEXT, ContainerQualifiedName TEXT,
 			ContainerType TEXT, ModuleName TEXT, EntityRef TEXT, AttributeRef TEXT, MicroflowRef TEXT, NanoflowRef TEXT,
-			PageRef TEXT, ParentWidgetId TEXT, Depth INTEGER, Class TEXT, Style TEXT, DynamicClasses TEXT,
-			ActionType TEXT, HasConfirmation INTEGER)`,
+			PageRef TEXT, SnippetRef TEXT, ParentWidgetId TEXT, Depth INTEGER, Class TEXT, Style TEXT, DynamicClasses TEXT,
+			ActionType TEXT, HasConfirmation INTEGER, Caption TEXT, Tooltip TEXT)`,
 		`INSERT INTO widgets (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
 			ModuleName, EntityRef, AttributeRef, MicroflowRef, NanoflowRef) VALUES
 			('w1', 'imgWith', 'Forms$StaticImageViewer', 'p1', 'MyFirstModule.Logboek_Images', 'PAGE', 'MyFirstModule', '', '', '', ''),
@@ -129,5 +129,45 @@ func TestReactUnsupportedWidgetRule_SkipsNativePages(t *testing.T) {
 			got = append(got, v.Location.DocumentName)
 		}
 		t.Fatalf("want only the web page Logboek_Images reported, got %v", got)
+	}
+}
+
+// ako/mxcli#1302: a layout's widgets are catalogued too (ContainerType LAYOUT).
+// One in a web layout is reported against the layout — not a page of that
+// name — and one in a native layout is skipped like a widget on a native page.
+func TestReactUnsupportedWidgetRule_LayoutWidgets(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, stmt := range []string{
+		`CREATE TABLE modules (Id TEXT, Name TEXT PRIMARY KEY, Source TEXT)`,
+		`INSERT INTO modules VALUES ('m1', 'MyFirstModule', '')`,
+		`CREATE TABLE layouts (Id TEXT, Name TEXT, QualifiedName TEXT, ModuleName TEXT, Folder TEXT,
+			LayoutType TEXT, Platform TEXT, Description TEXT)`,
+		`INSERT INTO layouts VALUES
+			('l1', 'Lay_Web', 'MyFirstModule.Lay_Web', 'MyFirstModule', '', 'Responsive', 'Web', ''),
+			('l2', 'Lay_Native', 'MyFirstModule.Lay_Native', 'MyFirstModule', '', 'Default', 'Native', '')`,
+		`CREATE TABLE pages (Id TEXT, Name TEXT, QualifiedName TEXT, ModuleName TEXT, Folder TEXT,
+			Title TEXT, URL TEXT, LayoutRef TEXT, Description TEXT, WidgetCount INTEGER)`,
+		`CREATE TABLE widgets (Id TEXT, Name TEXT, WidgetType TEXT, ContainerId TEXT, ContainerQualifiedName TEXT,
+			ContainerType TEXT, ModuleName TEXT, EntityRef TEXT, AttributeRef TEXT, MicroflowRef TEXT, NanoflowRef TEXT,
+			PageRef TEXT, SnippetRef TEXT, ParentWidgetId TEXT, Depth INTEGER, Class TEXT, Style TEXT, DynamicClasses TEXT,
+			ActionType TEXT, HasConfirmation INTEGER, Caption TEXT, Tooltip TEXT)`,
+		`INSERT INTO widgets (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType, ModuleName) VALUES
+			('w1', 'imgLogoWeb', 'Forms$StaticImageViewer', 'l1', 'MyFirstModule.Lay_Web', 'LAYOUT', 'MyFirstModule'),
+			('w2', 'imgLogoNative', 'Forms$StaticImageViewer', 'l2', 'MyFirstModule.Lay_Native', 'LAYOUT', 'MyFirstModule')`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("%s: %v", stmt, err)
+		}
+	}
+	violations := NewReactUnsupportedWidgetRule().Check(linter.NewLintContextFromDB(catalog.WrapSqlDB(db)))
+	if len(violations) != 1 {
+		t.Fatalf("want one violation (the web layout), got %d: %+v", len(violations), violations)
+	}
+	if loc := violations[0].Location; loc.DocumentType != "layout" || loc.DocumentName != "Lay_Web" {
+		t.Errorf("location = %s %s, want layout Lay_Web", loc.DocumentType, loc.DocumentName)
 	}
 }

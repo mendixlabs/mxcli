@@ -1,0 +1,45 @@
+mdl 1;
+-- ============================================================================
+-- ako/mxcli#1932 (mendixlabs/mxcli#1730) — Delete button in a grid control bar
+-- ============================================================================
+--
+-- A Delete button in a Data grid 2 control bar deletes the grid's selection.
+-- Studio Pro stores Forms$DeleteClientAction.SourceVariable =
+-- Forms$PageVariable{Widget: "grid1"}. A bare `action: delete` there wrote no
+-- source, which mx check reports as CE7005 "No value selection has been made",
+-- and describe printed a stored source as plain `delete`, so a describe → exec
+-- round trip dropped it.
+--
+-- `delete $grid1` names the selection, as `$grid1` names it in a flow argument;
+-- describe prints it back the same way. A bare `delete` inside a data view
+-- still deletes the context object. The bare form in a control bar is refused
+-- (MDL-PAGEDEL01) — see 1932-delete-in-control-bar-without-source.fail.mdl.
+--
+-- Measured on mx 11.12.1: this script → 0 errors; the same script with the
+-- source not written → CE7005 on both control-bar buttons. The grid needs a
+-- selection: with itemSelection left at None, mx reports CE7001 "Widget should
+-- be placed inside Data grid 2 'grid1' to use it as a source widget".
+-- ============================================================================
+
+create module Probe1932;
+
+create persistent entity Probe1932.Order (
+  Name: String(200)
+);
+
+create page Probe1932.Orders (
+  params: ( $Order: Probe1932.Order ),
+  title: 'Orders',
+  layout: Atlas_Core.Atlas_Default
+) {
+  datagrid grid1 (datasource: database from Probe1932.Order, itemSelection: Single) {
+    controlbar {
+      actionbutton btnDelete (caption: 'Delete', action: delete $grid1)
+      actionbutton btnDeleteClose (caption: 'Delete and close', action: delete $grid1 close page)
+    }
+    column (attribute: Name, caption: 'Name')
+  }
+  dataview dv (datasource: $Order) {
+    actionbutton btnDvDelete (caption: 'Delete', action: delete)
+  }
+};

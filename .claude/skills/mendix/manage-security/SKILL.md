@@ -11,13 +11,13 @@ description: "Configure Mendix security in MDL — module and user roles, access
 | lines | section |
 |---|---|
 | 27-35 | When to Use This Skill |
-| 36-43 | Security Concepts |
-| 44-120 | The System-module ceiling — decide the role model around this FIRST |
-| 121-560 | Syntax Reference |
-| 561-575 | Starlark Lint Rule APIs |
-| 576-637 | Common Workflow: Setting Up Module Security |
-| 638-647 | Common Mistakes |
-| 648-657 | Validation |
+| 36-44 | Security Concepts |
+| 45-121 | The System-module ceiling — decide the role model around this FIRST |
+| 122-570 | Syntax Reference |
+| 571-585 | Starlark Lint Rule APIs |
+| 586-647 | Common Workflow: Setting Up Module Security |
+| 648-657 | Common Mistakes |
+| 658-667 | Validation |
 
 <!-- /skill-index -->
 # Security Management Skill
@@ -40,6 +40,7 @@ Use when the user asks to:
 - **Access Rules** control CRUD rights on entities per module role
 - **Microflow/Page Access** controls which module roles can execute/view specific elements
 - **Project Security Level** determines enforcement: `off`, `prototype`, or `production`
+  - **A blank app (`mxcli new`) ships at `off`.** At `off` the runtime applies no access rule, page or microflow grant, and creates no demo user — every user sees every page and every row. `prototype` guards pages and microflows but **not entity access**, so XPath constraints on access rules have no effect. Only `production` applies entity access. check, `mx check` and `test --local` all pass at every level; lint SEC013 reports the gap. Set `alter app security ( SecurityLevel: production );` before writing access rules you mean to rely on.
 
 ## The System-module ceiling — decide the role model around this FIRST
 
@@ -300,7 +301,9 @@ A rule is identified by its role set **and** its `where` constraint. Two grants
 with the same constraint update one rule; with different constraints they make
 two, which Mendix combines at runtime (a role's access is the union of every rule
 naming it). So adding a `where` to an existing grant creates a second rule — it
-does not narrow the first.
+does not narrow the first. To narrow, `revoke all on entity … from <role>;` first,
+then grant with the `where`. `check` and exec warn **MDL-GRANT03** when a role
+ends up with a constrained rule beside an unconstrained one.
 
 ```sql
 mdl 1;
@@ -501,6 +504,13 @@ alter app security ( AdminUserName: 'appadmin' );
 -- as written (as Studio Pro stores it), so keep real secrets out of committed
 -- scripts. `describe app security` says whether one is set, never what.
 alter app security ( AdminPassword: 'N3w-Admin-Passw0rd' );
+
+-- Its user role. `drop user role` refuses the administrator's role (a dangling
+-- one passes mx check and crashes every build), so move it before dropping the
+-- template role. `describe app security` prints it as "Admin User Role".
+-- It also refuses a role a demo user holds (CE1613): drop the demo user first.
+alter app security ( AdminUserRole: AppAdmin );
+drop user role Administrator;
 ```
 
 ### Guest (Anonymous) Access

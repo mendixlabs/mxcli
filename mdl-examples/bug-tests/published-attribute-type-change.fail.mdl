@@ -1,0 +1,33 @@
+mdl 1;
+-- NEGATIVE TEST — `mxcli check` must REFUSE this file (MDL102), with no project.
+--
+-- Changing the type of an attribute a published OData service already exposes
+-- leaves the published type stale. `check` and `exec` accepted it, and the build
+-- reported one
+--
+--   [CE5016] "Attribute '...' has type ..., but is published as ..."
+--
+-- per attribute. Measured on MxBuild 11.16.1: String to Integer, Decimal to
+-- Integer, Boolean to String, DateTime to String, String to Decimal. A change
+-- inside one EDM type is clean, and so is re-publishing the service AFTER the
+-- alter (see published-attribute-type-change.mdl).
+create persistent entity MyFirstModule.PaFail (
+  Code: integer unique error message 'u' required error message 'r',
+  Label: string(50),
+  Amount: decimal
+);
+
+create published odata service MyFirstModule.PaFailSvc (
+  path: 'odata/pafail/', version: '1.0.0', ODataVersion: OData4,
+  namespace: 'MyFirstModule.PaFail', ServiceName: 'PaFailSvc', PublishAssociations: Yes,
+  Authentication: (basic, session)
+)
+{
+  publish entity MyFirstModule.PaFail as 'Items' (
+    ReadMode: source, InsertMode: not_supported, UpdateMode: not_supported, DeleteMode: not_supported
+  )
+  expose (Code as 'id' (KEY, Filterable, Sortable), Label, Amount);
+};
+
+alter entity MyFirstModule.PaFail modify attribute Label: integer;
+alter entity MyFirstModule.PaFail modify attribute Amount: string(30);

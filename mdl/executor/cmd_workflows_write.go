@@ -95,6 +95,11 @@ func execCreateWorkflow(ctx *ExecContext, s *ast.CreateWorkflowStmt) error {
 	if vs := checkWorkflowRecurrences(workflowRecurrenceSites(s), workflowLocation(s.Name)); len(vs) > 0 {
 		return mdlerrors.NewValidationf("workflow '%s': %s [%s]\n  → %s", s.Name.String(), vs[0].Message, vs[0].RuleID, vs[0].Suggestion)
 	}
+	// MDL-WF23: more boundary events on one activity than Studio Pro allows
+	// (ako/mxcli#2242).
+	if vs := workflowBoundaryCountViolations(s, workflowLocation(s.Name)); len(vs) > 0 {
+		return mdlerrors.NewValidationf("workflow '%s': %s [%s]\n  → %s", s.Name.String(), vs[0].Message, vs[0].RuleID, vs[0].Suggestion)
+	}
 	if err := checkVersionGates(ctx, s); err != nil {
 		return err
 	}

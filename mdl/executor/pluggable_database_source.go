@@ -36,7 +36,32 @@ func (pb *pageBuilder) customWidgetDatabaseSourceSupported() bool {
 // CustomWidgetDatabaseSource, its WHERE stored as constraint rows
 // (mendixlabs/mxcli#1399). A widget with its own builder keeps
 // buildDataSourceV3's refusal.
-func (pb *pageBuilder) buildPluggableDataSourceV3(ds *ast.DataSourceV3) (pages.DataSource, string, error) {
+//
+// widgetName is the widget the source belongs to. A direct-entity source
+// (`database from E where …`) is written as an XPath source on every version —
+// the two are equivalent — EXCEPT where the stored widget of that name already
+// holds a 9.x database source: then the rewrite keeps it, when its WHERE fits
+// constraint rows (ako/mxcli#1208, ADR-0008: a rewrite keeps what it was not
+// asked to change; describe prints both alike, so the statement cannot say).
+func (pb *pageBuilder) buildPluggableDataSourceV3(ds *ast.DataSourceV3, widgetName string) (pages.DataSource, string, error) {
+	if ds != nil && ds.Type == "database" && ds.AssociationPath == "" &&
+		pb.customWidgetDatabaseSourceSupported() && pb.storedPluggables.storedUsesDatabaseSource(widgetName) {
+		built, entity, err := pb.buildDataSourceV3(ds)
+		if err != nil {
+			return nil, "", err
+		}
+		if src, ok := built.(*pages.DatabaseSource); ok {
+			if constraints, cerr := parseDatabaseConstraints(src.XPathConstraint, entity); cerr == nil {
+				src.TypeName = "CustomWidgets$CustomWidgetDatabaseSource"
+				src.UseConstraints = true
+				src.Constraints = constraints
+				src.XPathConstraint = ""
+			}
+			// A WHERE the rows cannot hold stays an XPath source: changing the
+			// type is the lesser drift than dropping a term.
+		}
+		return built, entity, nil
+	}
 	if ds == nil || ds.Type != "database" || ds.AssociationPath == "" {
 		return pb.buildDataSourceV3(ds)
 	}

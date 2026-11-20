@@ -9,6 +9,9 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -46,6 +49,118 @@ func TestParseConstantFlags_RejectsMalformed(t *testing.T) {
 	}
 	if _, err := parseConstantFlags([]string{"A.Key=1", "A.Key=2"}); err == nil {
 		t.Error("the same constant given twice was accepted; which one wins is a coin flip")
+	}
+}
+
+func TestParseConstantFlags_EnvIndirection(t *testing.T) {
+	t.Setenv("MXCLI_TEST_TOKEN", "tok-from-env")
+	t.Setenv("MXCLI_TEST_EMPTY", "")
+	got, err := parseConstantFlags([]string{"A.Key=@env:MXCLI_TEST_TOKEN"})
+	if err != nil {
+		t.Fatalf("parseConstantFlags: %v", err)
+	}
+	if got["A.Key"] != "tok-from-env" {
+		t.Errorf("A.Key = %q, want the variable's value", got["A.Key"])
+	}
+	// A variable that is set but empty is refused, like an unset one.
+	if _, err := parseConstantFlags([]string{"A.Url=@env:MXCLI_TEST_EMPTY"}); err == nil ||
+		!strings.Contains(err.Error(), "MXCLI_TEST_EMPTY") || !strings.Contains(err.Error(), "empty") {
+		t.Errorf("an empty variable: err = %v, want a refusal naming it", err)
+	}
+
+	// Unset is an error, not a silent empty value, and it names the variable.
+	os.Unsetenv("MXCLI_TEST_UNSET")
+	_, err = parseConstantFlags([]string{"A.Key=@env:MXCLI_TEST_UNSET"})
+	if err == nil || !strings.Contains(err.Error(), "MXCLI_TEST_UNSET") || !strings.Contains(err.Error(), "A.Key") {
+		t.Errorf("unset variable: %v", err)
+	}
+	if _, err := parseConstantFlags([]string{"A.Key=@env:"}); err == nil {
+		t.Error("@env: without a name was accepted")
+	}
+}
+
+func writeSecretFile(t *testing.T, body string, mode os.FileMode) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(path, []byte(body), mode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, mode); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestParseConstantFlags_FileIndirection(t *testing.T) {
+	// One trailing newline is dropped; the rest of the content is the value.
+	for body, want := range map[string]string{
+		"sk-123\n":    "sk-123",
+		"sk-123\r\n":  "sk-123",
+		"sk-123":      "sk-123",
+		"a\nb\n":      "a\nb",
+		"sk-123\n\n":  "sk-123\n",
+		"with space ": "with space ",
+	} {
+		path := writeSecretFile(t, body, 0o600)
+		got, err := parseConstantFlags([]string{"A.Key=@file:" + path})
+		if err != nil || got["A.Key"] != want {
+			t.Errorf("file %q: got %q, %v; want %q", body, got["A.Key"], err, want)
+		}
+	}
+
+	if _, err := parseConstantFlags([]string{"A.Key=@file:" + filepath.Join(t.TempDir(), "missing")}); err == nil {
+		t.Error("a missing file was accepted")
+	}
+	if _, err := parseConstantFlags([]string{"A.Key=@file:" + t.TempDir()}); err == nil {
+		t.Error("a directory was accepted")
+	}
+	if _, err := parseConstantFlags([]string{"A.Key=@file:"}); err == nil {
+		t.Error("@file: without a path was accepted")
+	}
+}
+
+func TestParseConstantFlags_FileMustBePrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows has no group/other permission bits")
+	}
+	for _, mode := range []os.FileMode{0o644, 0o640, 0o604, 0o660} {
+		path := writeSecretFile(t, "super-secret-value", mode)
+		_, err := parseConstantFlags([]string{"A.Key=@file:" + path})
+		if err == nil {
+			t.Errorf("mode %04o was accepted", mode)
+			continue
+		}
+		if !strings.Contains(err.Error(), "chmod 600") || strings.Contains(err.Error(), "super-secret-value") {
+			t.Errorf("mode %04o: the error must say how to fix it and never carry the value: %v", mode, err)
+		}
+	}
+	for _, mode := range []os.FileMode{0o600, 0o400} {
+		path := writeSecretFile(t, "v", mode)
+		if _, err := parseConstantFlags([]string{"A.Key=@file:" + path}); err != nil {
+			t.Errorf("mode %04o was refused: %v", mode, err)
+		}
+	}
+}
+
+func TestParseConstantFlags_AtEscape(t *testing.T) {
+	got, err := parseConstantFlags([]string{"A.Key=@@literal", "A.Url=@@env:X", "A.Other=a@b"})
+	if err != nil {
+		t.Fatalf("parseConstantFlags: %v", err)
+	}
+	if got["A.Key"] != "@literal" || got["A.Url"] != "@env:X" {
+		t.Errorf("@@ must give a literal leading @: %v", got)
+	}
+	// Only a LEADING @ means anything.
+	if got["A.Other"] != "a@b" {
+		t.Errorf("A.Other = %q", got["A.Other"])
+	}
+	// An @ value that is neither form is refused, so a mistyped @evn:TOKEN is not
+	// quietly applied as the constant's literal value.
+	for _, bad := range []string{"A.Key=@evn:TOKEN", "A.Key=@", "A.Key=@secret"} {
+		_, err := parseConstantFlags([]string{bad})
+		if err == nil || !strings.Contains(err.Error(), "@@") {
+			t.Errorf("parseConstantFlags(%q): %v", bad, err)
+		}
 	}
 }
 
@@ -241,5 +356,38 @@ func TestReportConstantChain_NamesTheMachineLayerAndStaleEntries(t *testing.T) {
 	}
 	if strings.Contains(out, "SECRETVALUE") {
 		t.Errorf("the report printed a machine-local value:\n%s", out)
+	}
+}
+
+func TestParseConstantFlags_EmptyFileIsRefused(t *testing.T) {
+	for _, body := range []string{"", "\n", "\r\n"} {
+		path := writeSecretFile(t, body, 0o600)
+		_, err := parseConstantFlags([]string{"A.Key=@file:" + path})
+		if err == nil || !strings.Contains(err.Error(), "empty") || !strings.Contains(err.Error(), path) {
+			t.Errorf("file %q: err = %v, want a refusal naming the file", body, err)
+		}
+	}
+}
+
+func TestDetachArgs_RelativeFileConstantBecomesAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = real
+	}
+	wd, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Skip(err)
+	}
+	defer os.Chdir(wd)
+	in := []string{"run", "--local", "--constant", "A.Key=@file:tok", "--constant=A.Url=@file:sub/u", "--constant", "A.X=@env:T", "--constant", "A.Y=@file:/abs/f"}
+	got := detachArgs(in, "/x/App.mpr")
+	want := []string{"run", "--local", "--constant", "A.Key=@file:" + filepath.Join(dir, "tok"),
+		"--constant=A.Url=@file:" + filepath.Join(dir, "sub", "u"), "--constant", "A.X=@env:T",
+		"--constant", "A.Y=@file:/abs/f", "-p", "/x/App.mpr"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Errorf("detachArgs:\n got  %q\n want %q", got, want)
+	}
+	if in[3] != "A.Key=@file:tok" {
+		t.Error("detachArgs modified its input")
 	}
 }

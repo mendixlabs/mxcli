@@ -11,12 +11,12 @@ description: "The SCSS workflow and its traps — where styling actually compile
 | lines | section |
 |---|---|
 | 24-43 | When to Use This Skill |
-| 44-297 | SCSS Compilation Chain |
-| 298-316 | CSS Hot-Reload Workflow |
-| 317-416 | Caveats |
-| 417-431 | Validation with `mxcli check -p` |
-| 432-440 | Checklist |
-| 441-443 | Default styling + runtime theme switching (`mxcli theme list/show/create/apply/remove/switcher`, `mxcli new --theme`) |
+| 44-306 | SCSS Compilation Chain |
+| 307-325 | CSS Hot-Reload Workflow |
+| 326-421 | Caveats |
+| 422-436 | Validation with `mxcli check -p` |
+| 437-445 | Checklist |
+| 446-448 | Default styling + runtime theme switching (`mxcli theme list/show/create/apply/remove/switcher`, `mxcli new --theme`) |
 
 <!-- /skill-index -->
 # Theme & Styling — SCSS Workflow and Caveats
@@ -106,6 +106,15 @@ mxbuild walks the model's modules and pulls each one's theme source; it never
 globs the directory. An invented folder (`themesource/my_theme/`) is **silently
 skipped** — build succeeds, rules simply absent. Use a module's theme source only
 when the styling belongs to that module (it then exports with the `.mpk`).
+
+**3. The order of module theme sources is App Settings > Theme > module order.**
+A module marked **UI resources** (`alter module X set (UIResources: true)`) can be
+placed in it with `alter settings webui (ThemeModuleOrder: ('Atlas_Core', …, 'X'))`;
+a module listed later compiles later and wins. Measured on 11.12.6 with
+`mxbuild --target=deploy`: listed last, a module's rules land after Atlas Core's
+and DataWidgets'; listed first, before them. Modules the list leaves out keep
+Mendix's default place, and with no order set (the blank app) a user module's
+theme source already compiles after Atlas. `describe settings` prints the order.
 
 > Debugging "my CSS doesn't apply": first prove the file is compiled *at all* —
 > grep a unique probe selector in `theme-cache/web/theme.compiled.css`. Absent and
@@ -316,19 +325,15 @@ mxcli docker reload -p app.mpr
 
 ## Caveats
 
-### DYNAMICTEXT + Style Crash
+### DYNAMICTEXT + Style
 
-**Never** apply `style` directly to a DYNAMICTEXT widget — it crashes MxBuild with a NullReferenceException. Wrap in a CONTAINER:
-
-```sql
--- WRONG: crashes MxBuild
-dynamictext txt (content: 'Hello', style: 'color: red;')
-
--- CORRECT: style the container
-container ctn (style: 'color: red;') {
-  dynamictext txt (content: 'Hello')
-}
-```
+A DYNAMICTEXT takes an inline `style` like any other widget:
+`dynamictext txt (content: 'Hello', style: 'color: red;')` builds, and Studio Pro
+stores the same (Marketplace WorkflowCommons, PlatformDesignSystem). Older
+guidance said it crashed MxBuild; that does not reproduce (measured on 11.12.1,
+ako/mxcli#2183), and `mxcli check` no longer refuses it. As everywhere, prefer
+`class:` with a theme class over an inline style, so the design system stays in
+one place.
 
 This also applies to `alter styling` and `alter page set style` — never target a DYNAMICTEXT widget with Style.
 
@@ -424,7 +429,7 @@ validated against the project's theme registry (`themesource/*/web/design-proper
 - **MDL-WIDGET12** — an option value that isn't allowed; the message **lists the
   allowed values** (case-sensitive), which is the fastest way to fix a casing typo.
 
-Both are warnings (a newer theme may add keys/values), so they inform without blocking.
+Both are **errors**: the registry is the project's own theme, and mxbuild refuses an unknown key (CE6083) and an unknown option (CE6085), so `exec` writes nothing. An old name of a renamed property is a warning (CE6087, not on an excluded page).
 `list design properties <widget>` lists the same allowed keys/values up front. On the
 write side, the value's BSON type is taken from the registry (a `ColorPicker` /
 `ToggleButtonGroup` property serializes as a custom value, not a plain option).

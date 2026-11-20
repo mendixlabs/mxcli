@@ -1,0 +1,45 @@
+mdl 1;
+-- NEGATIVE TEST — `mxcli check` must REFUSE this file (MDL104), with no project.
+--
+-- An import mapping's custom object handler (`find … by M.MF ( … )`) that leaves a
+-- parameter of the microflow out. `check` and `exec` accepted it, and the build
+-- reported
+--
+--   [CE0277] "Parameter mapping of microflow for obtaining objects needs to be refreshed."
+--
+-- Measured on MxBuild 11.16.1: one of two parameters named, and none named on a
+-- one-parameter microflow, are both CE0277; naming every parameter is clean, and so is
+-- naming none on a microflow that has none (see mapping-handler-unknown-parameter.mdl).
+-- Kept apart from the unknown-name fixture: CE1613 hides every other error.
+create persistent entity MyFirstModule.HmFailRoot (Name: string(50));
+create persistent entity MyFirstModule.HmFailChild (Code: string(50));
+create association MyFirstModule.HmFailChild_HmFailRoot from MyFirstModule.HmFailChild to MyFirstModule.HmFailRoot type reference;
+create json structure MyFirstModule.JS_HmFail sample '{"name": "n", "items": [{"code": "c", "idx": 1}]}';
+create microflow MyFirstModule.HmFailTwo ($A: integer, $B: integer) returns MyFirstModule.HmFailChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+create microflow MyFirstModule.HmFailOne ($Index: integer) returns MyFirstModule.HmFailChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+
+create import mapping MyFirstModule.IMM_HmFailOneOfTwo with json structure MyFirstModule.JS_HmFail {
+  create MyFirstModule.HmFailRoot {
+    Name = name,
+    find MyFirstModule.HmFailChild_HmFailRoot/MyFirstModule.HmFailChild by MyFirstModule.HmFailTwo ( A: idx ) = items {
+      Code = code
+    }
+  }
+};
+
+create import mapping MyFirstModule.IMM_HmFailNoneNamed with json structure MyFirstModule.JS_HmFail {
+  create MyFirstModule.HmFailRoot {
+    Name = name,
+    find MyFirstModule.HmFailChild_HmFailRoot/MyFirstModule.HmFailChild by MyFirstModule.HmFailOne () = items {
+      Code = code
+    }
+  }
+};

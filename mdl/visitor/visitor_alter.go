@@ -66,6 +66,12 @@ func (b *Builder) ExitAlterStatement(ctx *parser.AlterStatementContext) {
 		return
 	}
 
+	// Handle ALTER PUBLISHED MCP SERVICE (ako/mxcli#2020)
+	if ctx.PUBLISHED() != nil && ctx.MCP() != nil && ctx.SERVICE() != nil {
+		b.exitAlterPublishedMCPServiceStatement(ctx)
+		return
+	}
+
 	// Handle agent-editor ALTER statements
 	if ctx.AiModelKw() != nil || ctx.AGENT() != nil ||
 		(ctx.KNOWLEDGE() != nil && ctx.BASE() != nil) ||

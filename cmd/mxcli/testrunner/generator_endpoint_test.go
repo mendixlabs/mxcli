@@ -25,8 +25,9 @@ func TestGenerateTestFlowsOneMicroflowPerTest(t *testing.T) {
 			t.Errorf("generated MDL is missing %q", want)
 		}
 	}
-	if n := strings.Count(mdl, "CREATE OR MODIFY MICROFLOW"); n != 2 {
-		t.Errorf("got %d microflows, want one per test (2)", n)
+	// Plus the one errorMessageFlow every handler shares (ako/mxcli#2100).
+	if n := strings.Count(mdl, "CREATE OR MODIFY MICROFLOW "+testFlowPrefix+"test_"); n != 2 {
+		t.Errorf("got %d test microflows, want one per test (2)", n)
 	}
 }
 
@@ -113,9 +114,15 @@ func TestGenerateTestFlowsFailVerdictCarriesErrorMessage(t *testing.T) {
 	}}}
 	mdl := GenerateTestFlows(suite)
 
-	want := "SET $Verdict = '" + verdictFailPrefix + "exception during execution: ' + " + latestErrorMessage + ";"
-	if !strings.Contains(mdl, want) {
-		t.Errorf("the error handler does not carry $latestError/Message into the verdict; want %q in:\n%s", want, mdl)
+	// The message comes through errorMessageFlow: the test flow applies entity
+	// access and may not read $latestError/Message itself (ako/mxcli#2100).
+	for _, want := range []string{
+		readErrorMessage("$MxTestErrorMessage_1"),
+		"SET $Verdict = '" + verdictFailPrefix + "exception during execution: ' + $MxTestErrorMessage_1;",
+	} {
+		if !strings.Contains(mdl, want) {
+			t.Errorf("the error handler does not carry the raised message into the verdict; want %q in:\n%s", want, mdl)
+		}
 	}
 }
 
@@ -200,6 +207,7 @@ func TestEndpointCleanupCommands(t *testing.T) {
 				"ALTER SETTINGS RUNTIME (AfterStartupMicroflow: '')",
 				"DROP MICROFLOW MxTest.Test_test_1",
 				"DROP MICROFLOW MxTest.Test_test_2",
+				"DROP MICROFLOW " + errorMessageFlow,
 				"DROP MICROFLOW " + endpointStartupFlow,
 				"DROP JAVA ACTION " + endpointRegisterAction,
 			},

@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
 	"io"
 	"os"
 	"strings"
@@ -36,6 +37,22 @@ func runCommandLine(cmd *cobra.Command, commands, projectPath string, continueOn
 			"e.g. -c \"list modules;\"; run mxcli without -c for the interactive REPL.")
 		return 1
 	}
+
+	// As in `exec`: one writer of a project at a time (ako/mxcli#2326);
+	// statements that only read take no lock. Released after exec.Close.
+	if projectPath != "" {
+		if early, _ := visitor.Build(commands); early == nil || programWritesModel(early) {
+			release, code := acquireProjectWriteLock(projectPath, "-c", errOut)
+			if code != 0 {
+				return code
+			}
+			defer release()
+		}
+	}
+
+	// As in `exec`: a watching dev loop builds as soon as these statements
+	// are done (ako/mxcli#2151). Deferred first, so it runs after exec.Close.
+	defer docker.BeginModelWrite(projectPath)()
 
 	exec, logger := newLoggedExecutor("batch")
 	defer logger.Close()

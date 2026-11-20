@@ -15,14 +15,14 @@ description: "Make a Mendix app look designed rather than default-Atlas: layout,
 | 60-77 | Contents |
 | 78-97 | The thesis: be Atlas-first |
 | 98-156 | The 4-layer architecture |
-| 157-217 | The workflow: discover → inspect → use |
-| 218-235 | Brand re-tune (Layer 1) — where most of the win is |
-| 236-321 | Layer 1 in practice — start from the shipped theme |
-| 322-362 | Dark mode — Mendix 11 makes this cheap |
-| 363-405 | Verify at runtime — this is mandatory |
-| 406-470 | Gotchas catalog |
-| 471-488 | Validation Checklist |
-| 489-496 | Related skills |
+| 157-222 | The workflow: discover → inspect → use |
+| 223-240 | Brand re-tune (Layer 1) — where most of the win is |
+| 241-326 | Layer 1 in practice — start from the shipped theme |
+| 327-367 | Dark mode — Mendix 11 makes this cheap |
+| 368-410 | Verify at runtime — this is mandatory |
+| 411-474 | Gotchas catalog |
+| 475-492 | Validation Checklist |
+| 493-500 | Related skills |
 
 <!-- /skill-index -->
 # Atlas Design — Make a Mendix App Look Designed, Not Bland
@@ -202,6 +202,11 @@ with `alter page` (their names are deterministic thanks to the prefix):
 ```mdl
 alter page Sales.CustomerOverview set cust_text22 (content: 'Customers');
 ```
+
+Many blocks carry text-template parameters nobody has bound yet — `DESCRIBE` shows
+them as `ContentParams: ({1} = <unbound>)`. They are placed unbound, as Studio Pro
+places them, and mxbuild reports CE0402 "No value specified." on each until you
+bind it, e.g. `alter page Sales.CustomerOverview { set (ContentParams: ({1} = Name)) on cust_text11 };`.
 
 > **Capability reality.** Discovery (`SHOW`/`DESCRIBE BUILDING BLOCK`,
 > `CATALOG.building_blocks`) **and** instantiation (`USE BUILDING BLOCK`) both work
@@ -417,7 +422,6 @@ row before opening files.
 | `sort by` not allowed on **association-sourced** listviews | sort the parent, or use a DB datasource |
 | Reserved widget identifiers exist (e.g. `v3`) | prefix names (`sv3`); avoid bare `v<n>` |
 | Pluggable widgets impose their own DOM (charts / timeline / treenode) | for pixel-fidelity use a native `listview` / `gallery` you fully style |
-| Inline `style:` on a `dynamictext` crashes MxBuild (NullReferenceException) | use `class:`, or wrap the text in a styled `container` |
 | `alter styling` can't find widgets in MDL-builder-created pages | apply classes via `Class:` / `DynamicClasses:` in `create page` / `alter page` |
 | Full-screen page wanted (no Atlas sidebar) but no blank layout resolves | keep a normal Atlas layout; hide the shell per-page with `.mx-page:has(.my-app) .region-sidebar { display:none }` |
 | "Colour by state" (status pills / cards) | one `dynamicclasses` enum→class expression + one `--st` CSS var cascaded into pill/number/dot/border |

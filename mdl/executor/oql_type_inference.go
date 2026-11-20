@@ -1159,7 +1159,23 @@ func inferAttributeType(ctx *ExecContext, attrPath string, col *OQLColumnInfo) a
 }
 
 // findEntity looks up an entity by module and name.
+//
+// It reads the named module's domain model alone. It used to list and convert
+// every domain model of the project to find the one, and CREATE ASSOCIATION
+// calls it four times (ako/mxcli#2160). The listing remains for what the
+// direct read does not answer: a module the module list does not carry (the
+// virtual System module, #610) and a backend that serves no single domain
+// model.
 func findEntity(ctx *ExecContext, moduleName, entityName string) (*domainmodel.Entity, error) {
+	if dm := moduleDomainModel(ctx, moduleName); dm != nil {
+		for _, entity := range dm.Entities {
+			if entity != nil && entity.Name == entityName {
+				return entity, nil
+			}
+		}
+		return nil, mdlerrors.NewNotFound("entity", moduleName+"."+entityName)
+	}
+
 	// Get all entities
 	dms, err := ctx.Backend.ListDomainModels()
 	if err != nil {
@@ -1190,6 +1206,30 @@ func findEntity(ctx *ExecContext, moduleName, entityName string) (*domainmodel.E
 	}
 
 	return nil, mdlerrors.NewNotFound("entity", moduleName+"."+entityName)
+}
+
+// moduleDomainModel reads the domain model of the module with exactly this
+// name, or returns nil when it cannot be read that way — the caller then lists
+// the project, which is what every caller did before.
+func moduleDomainModel(ctx *ExecContext, moduleName string) *domainmodel.DomainModel {
+	if ctx == nil || ctx.Backend == nil || moduleName == "" {
+		return nil
+	}
+	modules, err := getModulesFromCache(ctx)
+	if err != nil {
+		return nil
+	}
+	for _, m := range modules {
+		if m == nil || m.Name != moduleName {
+			continue
+		}
+		dm, err := ctx.Backend.GetDomainModel(m.ID)
+		if err != nil || dm == nil {
+			return nil
+		}
+		return dm
+	}
+	return nil
 }
 
 // convertDomainModelTypeToAST converts a domainmodel.AttributeType to ast.DataType.
@@ -1515,6 +1555,27 @@ func ValidateOQLSyntax(oql string) []linter.Violation {
 		})
 	}
 
+	// `empty` is the microflow/XPath literal; OQL has none. It reads the word
+	// as a path, and mxbuild rejects the view with CE0174 "Cannot resolve path
+	// part 'empty'" (measured on 11.16.0, ako/mxcli#2208). String literals are
+	// blanked first so `= 'empty'` is not mistaken for it.
+	if m := oqlEmptyComparisonRe.FindStringSubmatch(blankOQLStringLiterals(oql)); m != nil {
+		op := strings.TrimSpace(m[1] + m[2])
+		fix := "is null"
+		if op == "!=" || op == "<>" {
+			fix = "is not null"
+		}
+		violations = append(violations, linter.Violation{
+			RuleID:   "MDL030",
+			Severity: linter.SeverityError,
+			Message: fmt.Sprintf(
+				"'%s empty' is not OQL: OQL has no empty literal and reads 'empty' as a path, "+
+					"so MxBuild rejects the view with CE0174 (\"Cannot resolve path part 'empty'\")", op),
+			Location:   linter.Location{DocumentType: "viewentity"},
+			Suggestion: fmt.Sprintf("Write '%s' instead", fix),
+		})
+	}
+
 	// Check for correlated subquery pattern
 	correlatedPattern := regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)/([A-Z][a-zA-Z0-9_]*\.[A-Z][a-zA-Z0-9_]*_[A-Z][a-zA-Z0-9_]*)\s*=\s*([a-zA-Z_][a-zA-Z0-9_]*)(?:\s|$|and|or|\))`)
 	correlatedMatches := correlatedPattern.FindAllStringSubmatch(oql, -1)
@@ -1555,7 +1616,7 @@ func ValidateOQLSyntax(oql string) []linter.Violation {
 	// identifier there for ANY name (`as "Total"` is CE0174 too). So a view
 	// column carrying the name has to be renamed. Warning, not error: the set is
 	// the common date-part list, not an exhaustive mirror of Mendix's grammar.
-	reservedIdentRe := regexp.MustCompile(`(?i)(?:\.\s*|\bas\s+)(` + oqlReservedWordAlternation + `)\b`)
+	reservedIdentRe := regexp.MustCompile(`(?i)(?:\.\s*|\bas\s+)(` + oqlReservedIdentAlternation + `)\b`)
 	seenReserved := map[string]bool{}
 	for _, m := range reservedIdentRe.FindAllStringSubmatch(oql, -1) {
 		word := m[1]
@@ -1580,7 +1641,7 @@ func ValidateOQLSyntax(oql string) []linter.Violation {
 			// quotes through unchanged. It is NOT available for an alias: the
 			// MDL grammar rejects `as "X"` for any X, reserved or not. So a view
 			// column cannot carry the name, and only that case needs a rename.
-			Suggestion: fmt.Sprintf("In a source position, quote it: `s.%q`, `from Module.%q as s` — OQL takes double-quoted identifiers like SQL. For an ALIAS / view column name this is not available (MDL cannot express `as %q`), so rename that one, e.g. %qValue. MDL071 reports the collision at CREATE time, before the name spreads", word, word, word, word),
+			Suggestion: reservedWordSuggestion(word),
 		})
 	}
 
@@ -1600,6 +1661,65 @@ var oqlReservedWords = []string{
 	"DAYOFYEAR", "DAYOFMONTH", "DAYOFWEEK", "HOUR", "MINUTE", "SECOND",
 }
 
-// oqlReservedWordAlternation is the regex alternation of oqlReservedWords, e.g.
-// "YEAR|QUARTER|...". Built once so the MDL032 check regex stays a literal join.
-var oqlReservedWordAlternation = strings.Join(oqlReservedWords, "|")
+// oqlReservedSQLWords are the OQL keywords that are plausible ENTITY or
+// ATTRIBUTE names (an `Order` entity, a `Key` or `Count` attribute). Each was
+// measured on mxbuild 11.16.0, unquoted both as an entity (`from M.Order as o`,
+// `…/M.Order as o`) and as an attribute (`x.Order`): every one is CE0174 "The
+// 'Order' part is incomplete or incorrect", and the quoted form builds. In the
+// same run Status, Value, Date, Position, Index, Coalesce and Top built
+// unquoted, so they are deliberately absent (ako/mxcli#2208, where `Order` hit
+// a real project twice).
+//
+// Only words that make sense as a name are listed: the regex below matches a
+// word after `.` or `as`, and type names such as DECIMAL or STRING follow `as`
+// inside cast(), so they must never be added here.
+var oqlReservedSQLWords = []string{
+	"ORDER", "GROUP", "LIMIT", "OFFSET", "END", "KEY", "COUNT", "SUM",
+	"DISTINCT", "SELECT", "LIKE", "ASC", "DESC", "HAVING", "WHERE", "JOIN",
+	"EXISTS", "CAST",
+}
+
+// oqlReservedIdentAlternation is the regex alternation MDL032 matches: the
+// date-part words plus the SQL keywords above, e.g. "YEAR|...|ORDER|...".
+//
+// MDL071 (validate_oql_reserved_names.go), which warns when an entity or
+// attribute is CREATED with such a name, keeps to oqlReservedWords. The SQL
+// list holds names nearly every app has (Order, Key, Count), and warning on
+// each of them at create time, for a view most of them never get, would be
+// noise; MDL032 still reports the unquoted use where it actually breaks.
+var oqlReservedIdentAlternation = strings.Join(append(append([]string{}, oqlReservedWords...), oqlReservedSQLWords...), "|")
+
+// oqlEmptyComparisonRe matches a comparison with the bare word `empty` on
+// either side: `x != empty`, `x = empty`, `empty = x`. Group 1 is the operator
+// before the word, group 2 the one after it; one of them is empty.
+var oqlEmptyComparisonRe = regexp.MustCompile(`(?i)(?:(!=|<>|=)\s*\bempty\b|\bempty\b\s*(!=|<>|=))`)
+
+// blankOQLStringLiterals replaces the contents of every '…' literal with
+// spaces, keeping offsets, so a pattern cannot match inside a string. OQL
+// escapes a quote by doubling it, which this treats as closing and reopening
+// the literal — the doubled quote itself stays, so the result is the same.
+func blankOQLStringLiterals(oql string) string {
+	b := []byte(oql)
+	in := false
+	for i, c := range b {
+		switch {
+		case c == '\'':
+			in = !in
+		case in:
+			b[i] = ' '
+		}
+	}
+	return string(b)
+}
+
+// reservedWordSuggestion is MDL032's advice for one word. Only the date-part
+// words are also reported at CREATE time (MDL071), so only they mention it.
+func reservedWordSuggestion(word string) string {
+	msg := fmt.Sprintf("In a source position, quote it: `s.%q`, `from Module.%q as s` — OQL takes "+
+		"double-quoted identifiers like SQL. For an ALIAS / view column name this is not available "+
+		"(MDL cannot express `as %q`), so rename that one, e.g. %sValue.", word, word, word, word)
+	if isOQLReservedName(word) {
+		msg += " MDL071 reports the collision at CREATE time, before the name spreads."
+	}
+	return msg
+}

@@ -172,7 +172,10 @@ func withNavItemAddresses(inner widgetFinder) widgetFinder {
 func resolveNavItem(rawData bson.D, find widgetFinder, sel backend.NavItemSelector) (*bsonWidgetResult, error) {
 	list := find(rawData, sel.List)
 	if list == nil {
-		return nil, fmt.Errorf("%s: navigation list %q not found", sel, sel.List)
+		// The owner may be a navigation list or a pluggable widget with an
+		// object list (an Accordion); calling every miss a "navigation list"
+		// sent an Accordion's author looking in the wrong place (#2173).
+		return nil, fmt.Errorf("%s: widget %q not found (an item address names a navigation list or a widget with an item list, such as an Accordion)", sel, sel.List)
 	}
 	if !isNavigationList(list.widget) {
 		// A pluggable widget's object-list item (an Accordion group) has no

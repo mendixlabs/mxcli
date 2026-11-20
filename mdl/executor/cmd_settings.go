@@ -290,6 +290,35 @@ func writeProjectSettingsMDL(ctx *ExecContext, ps *model.ProjectSettings, consta
 			fmt.Fprintf(ctx.Output, "alter settings webui (\n  OptimizedClient: %s\n);\n\n", mdlQuoted(ps.WebUI.UseOptimizedClient))
 		}
 	}
+	// An empty order is Mendix's default and has no statement.
+	if ps.WebUI != nil && len(ps.WebUI.ThemeModuleOrder) > 0 {
+		quoted := make([]string, len(ps.WebUI.ThemeModuleOrder))
+		for i, n := range ps.WebUI.ThemeModuleOrder {
+			quoted[i] = mdlQuoted(n)
+		}
+		fmt.Fprintf(ctx.Output, "alter settings webui (\n  ThemeModuleOrder: (%s)\n);\n\n", strings.Join(quoted, ", "))
+	}
+}
+
+// checkThemeModuleOrderModules refuses a theme module order naming a module the
+// project does not have: Mendix compiles each listed module's themesource, and
+// an entry naming nothing is a typo no build reports (ako/mxcli#1286).
+func checkThemeModuleOrderModules(ctx *ExecContext, names []string) error {
+	modules, err := ctx.Backend.ListModules()
+	if err != nil {
+		return mdlerrors.NewBackend("list modules", err)
+	}
+	known := map[string]bool{}
+	for _, m := range modules {
+		known[m.Name] = true
+	}
+	for _, n := range names {
+		if !known[n] {
+			return mdlerrors.NewNotFoundMsg("module", n, fmt.Sprintf(
+				"ThemeModuleOrder names module %s, which the project does not have", n))
+		}
+	}
+	return nil
 }
 
 // modelSettingKeys names every property the ALTER SETTINGS MODEL switch below
@@ -392,7 +421,7 @@ var configurationSettingKeys = []string{
 // webUISettingKeys names every property ALTER SETTINGS WEBUI assigns.
 // OptimizedClient is the spelling `show settings` prints and the skills point to;
 // it is stored as UseOptimizedClient.
-var webUISettingKeys = []string{"OptimizedClient"}
+var webUISettingKeys = []string{"OptimizedClient", "ThemeModuleOrder"}
 
 // settingsEnumValues maps "<section>/<key>" to the enumeration members accepted for
 // it, for the properties validated as settingsKindEnum.
@@ -714,6 +743,17 @@ func alterSettings(ctx *ExecContext, stmt *ast.AlterSettingsStmt) error {
 					return err
 				}
 				ps.WebUI.UseOptimizedClient = v
+			case "ThemeModuleOrder":
+				if storedWebUI != nil && !settingsoverlay.Has(storedWebUI, "ThemeModuleOrder") {
+					return mdlerrors.NewUnsupported(
+						"this project does not store the theme module order\n" +
+							"  mxcli will not introduce a property the project's Mendix version does not define.")
+				}
+				names, _ := val.([]string)
+				if err := checkThemeModuleOrderModules(ctx, names); err != nil {
+					return err
+				}
+				ps.WebUI.ThemeModuleOrder = names
 			default:
 				return unknownSettingsKey("webui", key)
 			}
@@ -784,21 +824,41 @@ func validateLanguageCode(ls *model.LanguageSettings, code string) error {
 		code, strings.Join(avail, ", "))
 }
 
+// findConfigurationByName resolves a configuration the way MDL addresses it, by
+// name (case-insensitive). Studio Pro does not keep names unique: two
+// configurations called "Default" arrive through a merge (ako/mxcli#2184). A
+// statement naming one of them cannot say which it means, so it is refused
+// rather than applied to whichever comes first; writes that address no
+// configuration are unaffected.
+func findConfigurationByName(ps *model.ProjectSettings, name string) (*model.ServerConfiguration, int, error) {
+	found, idx, n := (*model.ServerConfiguration)(nil), -1, 0
+	for i, c := range ps.Configuration.Configurations {
+		if strings.EqualFold(c.Name, name) {
+			if n == 0 {
+				found, idx = c, i
+			}
+			n++
+		}
+	}
+	switch n {
+	case 0:
+		return nil, -1, mdlerrors.NewNotFound("configuration", name)
+	case 1:
+		return found, idx, nil
+	}
+	return nil, -1, mdlerrors.NewValidationf(
+		"configuration name '%s' is not unique: the project has %d configurations with that name; rename or remove one in Studio Pro (App Settings > Configurations) first",
+		name, n)
+}
+
 func alterSettingsConfiguration(ctx *ExecContext, ps *model.ProjectSettings, stmt *ast.AlterSettingsStmt) error {
 	if ps.Configuration == nil {
 		return mdlerrors.NewNotFound("settings section", "configuration")
 	}
 
-	// Find the named configuration
-	var cfg *model.ServerConfiguration
-	for _, c := range ps.Configuration.Configurations {
-		if strings.EqualFold(c.Name, stmt.ConfigName) {
-			cfg = c
-			break
-		}
-	}
-	if cfg == nil {
-		return mdlerrors.NewNotFound("configuration", stmt.ConfigName)
+	cfg, _, err := findConfigurationByName(ps, stmt.ConfigName)
+	if err != nil {
+		return err
 	}
 
 	for key, val := range stmt.Properties {
@@ -900,15 +960,9 @@ func alterSettingsConstant(ctx *ExecContext, ps *model.ProjectSettings, stmt *as
 		}
 	}
 
-	var cfg *model.ServerConfiguration
-	for _, c := range ps.Configuration.Configurations {
-		if strings.EqualFold(c.Name, targetConfig) {
-			cfg = c
-			break
-		}
-	}
-	if cfg == nil {
-		return mdlerrors.NewNotFound("configuration", targetConfig)
+	cfg, _, err := findConfigurationByName(ps, targetConfig)
+	if err != nil {
+		return err
 	}
 
 	if stmt.DropConstant {
@@ -1083,21 +1137,19 @@ func dropConfiguration(ctx *ExecContext, stmt *ast.DropConfigurationStmt) error 
 		return mdlerrors.NewNotFound("settings section", "configuration")
 	}
 
-	for i, cfg := range ps.Configuration.Configurations {
-		if strings.EqualFold(cfg.Name, stmt.Name) {
-			ps.Configuration.Configurations = append(
-				ps.Configuration.Configurations[:i],
-				ps.Configuration.Configurations[i+1:]...,
-			)
-			if err := ctx.Backend.UpdateProjectSettings(ps); err != nil {
-				return mdlerrors.NewBackend("update project settings", err)
-			}
-			fmt.Fprintf(ctx.Output, "Dropped configuration: %s\n", stmt.Name)
-			return nil
-		}
+	_, i, err := findConfigurationByName(ps, stmt.Name)
+	if err != nil {
+		return err
 	}
-
-	return mdlerrors.NewNotFound("configuration", stmt.Name)
+	ps.Configuration.Configurations = append(
+		ps.Configuration.Configurations[:i],
+		ps.Configuration.Configurations[i+1:]...,
+	)
+	if err := ctx.Backend.UpdateProjectSettings(ps); err != nil {
+		return mdlerrors.NewBackend("update project settings", err)
+	}
+	fmt.Fprintf(ctx.Output, "Dropped configuration: %s\n", stmt.Name)
+	return nil
 }
 
 // settingsInt parses an Integer-typed settings value. The error used to be

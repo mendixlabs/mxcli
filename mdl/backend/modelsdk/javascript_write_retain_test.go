@@ -64,7 +64,7 @@ func TestWriteJavaScriptSourceFile_EditedBodyKeepsImportsAndExtraCode(t *testing
 	if err := b.WriteJavaScriptSourceFile("WebMod", "GetDistance", "return deg2rad(latitude).times(2);", params, &types.DecimalType{}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := os.ReadFile(path)
+	got, err := readLF(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestWriteJavaScriptSourceFile_EditedBodyKeepsImportsAndExtraCode(t *testing
 	if err := b.WriteJavaScriptSourceFile("WebMod", "GetDistance", "return deg2rad(latitude).times(2);", params, &types.DecimalType{}); err != nil {
 		t.Fatal(err)
 	}
-	again, _ := os.ReadFile(path)
+	again, _ := readLF(path)
 	if string(again) != src {
 		t.Errorf("second regeneration changed the file:\n%s", again)
 	}
@@ -103,11 +103,13 @@ func TestWriteJavaScriptSourceFile_NewFileHasEmptySections(t *testing.T) {
 	if err := b.WriteJavaScriptSourceFile("WebMod", "Fresh", "return 1;", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	got, err := os.ReadFile(filepath.Join(b.jsActionSourceDir("WebMod"), "Fresh.js"))
+	got, err := readLF(filepath.Join(b.jsActionSourceDir("WebMod"), "Fresh.js"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(got), "\nimport ") || !strings.Contains(string(got), "// BEGIN EXTRA CODE\n// END EXTRA CODE") {
+	// mxbuild writes the Big import in every file, and nothing else is there.
+	if strings.Count(string(got), "\nimport ") != 1 || !strings.Contains(string(got), "\nimport { Big } from \"big.js\";\n") ||
+		!strings.Contains(string(got), "// BEGIN EXTRA CODE\n// END EXTRA CODE") {
 		t.Errorf("new stub has unexpected sections:\n%s", got)
 	}
 }
@@ -126,13 +128,14 @@ func TestWriteJavaScriptSourceFile_ParametersAreLowerFirst(t *testing.T) {
 	if err := b.WriteJavaScriptSourceFile("Demo", "JS_Open", `return url + (readOnly ? " (read only)" : "");`, params, &types.StringType{}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := os.ReadFile(filepath.Join(b.jsActionSourceDir("Demo"), "JS_Open.js"))
+	got, err := readLF(filepath.Join(b.jsActionSourceDir("Demo"), "JS_Open.js"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		" * @param {string} url\n",
-		" * @param {boolean} readOnly\n",
+		// Not marked required, so optional, as mxbuild writes it.
+		" * @param {string} [url]\n",
+		" * @param {boolean} [readOnly]\n",
 		"export async function JS_Open(url, readOnly) {\n",
 	} {
 		if !strings.Contains(string(got), want) {
@@ -182,14 +185,22 @@ export async function Locate(address, geocodingProvider, providerApiKey) {
 	if err := b.WriteJavaScriptSourceFile("Demo", "Locate", "return address + geocodingProvider + providerApiKey;", params, &types.StringType{}); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := os.ReadFile(path)
+	got, _ := readLF(path)
 	const sig = "export async function Locate(address, geocodingProvider, providerApiKey) {\n"
 	if !strings.Contains(string(got), sig) {
 		t.Errorf("rewrite changed the Studio Pro signature:\n%s", got)
 	}
 	for _, name := range []string{"address", "geocodingProvider", "providerApiKey"} {
-		if !strings.Contains(string(got), " "+name+"\n") {
+		if !strings.Contains(string(got), " ["+name+"]\n") {
 			t.Errorf("JSDoc lost @param %s:\n%s", name, got)
 		}
 	}
+}
+
+// readLF reads a file with CRLF turned into LF: mxbuild, and so mxcli, write a
+// JavaScript action's file in CRLF (ako/mxcli#2357), and these tests compare
+// content, not line endings.
+func readLF(path string) ([]byte, error) {
+	b, err := os.ReadFile(path)
+	return []byte(strings.ReplaceAll(string(b), "\r\n", "\n")), err
 }

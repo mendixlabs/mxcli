@@ -5,8 +5,8 @@ mxcli provides a multi-level validation pipeline. The agent uses these tools to 
 ## Validation Steps
 
 ```bash
-# 1. Syntax check (fast, no project needed)
-mxcli check script.mdl
+# 1. Syntax check (fast, no project used)
+mxcli check script.mdl --no-project
 
 # 2. Reference validation (checks entity/microflow names exist)
 mxcli check script.mdl -p app.mpr --references
@@ -39,7 +39,7 @@ The linter covers 6 categories:
 
 ## Quality Reports
 
-The `assess-quality` skill guides the agent to run `mxcli report` and interpret the scores. A migration is ready for handoff when:
+The `report-quality` skill guides the agent to run `mxcli report` and interpret the scores; `assess-quality` adds the manual review no rule can do. A migration is ready for handoff when:
 
 - No critical lint issues (SEC, QUAL categories)
 - Quality score above 70 across all categories

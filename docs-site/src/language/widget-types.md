@@ -486,7 +486,8 @@ workflow` takes `ClosePage` (default `true`) and a `Confirmation`, `open user
 task` takes `AssignOnOpen` (Studio Pro's "Auto-assign", default `true`) and
 `OpenWhenAssigned` (`true` is "Who can open: Users with access", default
 `false`), and `open workflow` requires `DefaultPage` (without it Mendix reports
-CE1834). `open user task` must sit inside a data container of
+CE1834). `show page` takes `NumberOfPagesToClose`, the pages to close as it opens
+(a whole number, default none). `open user task` must sit inside a data container of
 `System.WorkflowUserTask` and `open workflow` inside one of `System.Workflow`, or
 mx check reports CE1843. A task inbox opens each task from its row:
 

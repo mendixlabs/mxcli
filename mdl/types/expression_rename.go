@@ -106,3 +106,66 @@ func isNameStartByte(c byte) bool {
 func isNameByte(c byte) bool {
 	return isNameStartByte(c) || c >= '0' && c <= '9'
 }
+
+// RewritePathSteps renames oldQN where it is a step of a path — in an XPath
+// constraint (`[Src.Order_Customer/Src.Customer/Name = 'x']`) or an expression
+// (`$O/Src.Order_Customer/Name`) — returning the rewritten text and how many
+// steps it rewrote.
+//
+// RewriteExpressionReferences deliberately leaves path steps alone: an
+// enumeration renamed must not rewrite an association that shares its name.
+// This is the rewrite for when the renamed element IS an entity or an
+// association, which is the caller's to establish (ako/mxcli#1836: a MOVE of
+// entities between modules left every access-rule XPath naming the old module).
+//
+// A step is oldQN as a whole token: not preceded by a name character, `.`, `$`
+// or `@`, and not followed by a name character or `.` — so neither a longer
+// name, another module's element, a variable, a constant nor a member access.
+// Text inside a string literal is data and is left alone.
+func RewritePathSteps(text, oldQN, newQN string) (string, int) {
+	if !isQualifiedName(oldQN) || !isQualifiedName(newQN) || !strings.Contains(text, oldQN) {
+		return text, 0
+	}
+	var b strings.Builder
+	count := 0
+	inLiteral := false
+	for i := 0; i < len(text); {
+		c := text[i]
+		if c == '\'' {
+			if inLiteral && i+1 < len(text) && text[i+1] == '\'' {
+				b.WriteString("''")
+				i += 2
+				continue
+			}
+			inLiteral = !inLiteral
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		if !inLiteral && strings.HasPrefix(text[i:], oldQN) && startsPathStep(text, i) {
+			if next := byteAt(text, i+len(oldQN)); !isNameByte(next) && next != '.' {
+				b.WriteString(newQN)
+				i += len(oldQN)
+				count++
+				continue
+			}
+		}
+		b.WriteByte(c)
+		i++
+	}
+	if count == 0 {
+		return text, 0
+	}
+	return b.String(), count
+}
+
+// startsPathStep reports whether a path step may begin at text[i]: after a
+// step separator or an operator, not in the middle of a name, a variable or a
+// constant.
+func startsPathStep(text string, i int) bool {
+	if i == 0 {
+		return true
+	}
+	p := text[i-1]
+	return !isNameByte(p) && p != '.' && p != '$' && p != '@'
+}

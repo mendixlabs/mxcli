@@ -3,11 +3,11 @@
 package modelsdkbackend
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/model"
 	genDm "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
 )
@@ -298,7 +298,7 @@ func assertNoDanglingAssociations(t *testing.T, b *Backend) {
 func copyPedAppFixture(t *testing.T) string {
 	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../../testdata/pedapp")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../../testdata/pedapp"); err != nil {
 		t.Fatalf("copy PedApp fixture: %v", err)
 	}
 	return filepath.Join(dst, "PedApp.mpr")

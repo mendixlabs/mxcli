@@ -28,7 +28,11 @@ type PropertyDef struct {
 	// OnChange names the sibling action property Studio Pro runs when this
 	// property changes. Part of the widget DEFINITION, so a stale value makes
 	// Mendix report CE0463 "definition of this widget has changed" (#716).
-	OnChange     string
+	OnChange string
+	// AllowUpload is an image/file property's allowUpload="true": part of the
+	// widget DEFINITION (ValueType.AllowUpload), CE0463 when it differs
+	// (Native Mobile Resources 12.6.0's Signature).
+	AllowUpload  bool
 	DefaultValue string // for enumeration/boolean/integer types
 	// DefaultType is the KIND of the default — `defaultType` in the widget XML,
 	// e.g. an action defaulting to a nanoflow call ("CallNanoflow") or a
@@ -76,7 +80,12 @@ type ActionVariable struct {
 // EnumValue is one option of an enumeration-typed widget property.
 type EnumValue struct {
 	Key     string
-	Caption string
+	Caption string // trimmed, for display
+	// RawCaption is the caption as the package writes it. Mendix stores that
+	// text verbatim — a multi-line element keeps its trailing newline and
+	// indentation — and a trimmed copy in the definition is CE0463 (Native
+	// Mobile Resources 12.6.0's Maps).
+	RawCaption string
 }
 
 // Translation is one localized caption/template string of a widget property.
@@ -236,6 +245,7 @@ type xmlProperty struct {
 	DefaultType       string             `xml:"defaultType,attr"`
 	Required          string             `xml:"required,attr"`
 	OnChange          string             `xml:"onChange,attr"`
+	AllowUpload       string             `xml:"allowUpload,attr"`
 	IsList            string             `xml:"isList,attr"`
 	Multiline         string             `xml:"multiline,attr"`
 	DataSource        string             `xml:"dataSource,attr"`
@@ -252,6 +262,30 @@ type xmlProperty struct {
 	ActionVariables []xmlActionVariable `xml:"actionVariables>actionVariable"`
 	// Nested properties for object type
 	NestedProps []xmlPropGroup `xml:"properties>propertyGroup"`
+	// Nested properties an object type lists directly, with no propertyGroup
+	// around them (the Marketplace Calendar's toolbarItems, PopupMenu
+	// basicItems, Maps markers) — see nestedGroups. sdk/widgets/mpk already
+	// reads both shapes.
+	NestedDirectProps []xmlProperty `xml:"properties>property"`
+	// Category of such a direct sub-property (<category>Appearance</category>);
+	// grouped properties take theirs from the group captions instead.
+	Category string `xml:"category"`
+}
+
+// nestedGroups returns an object property's sub-properties as property groups.
+// The direct ones come back as one caption-less group, so each takes its own
+// <category>. Without them the object had no Children, its generated ObjectType
+// stayed nil, and mx check reported CE0463 (mendixlabs/mxcli#1632). Groups come
+// first, then the direct ones, the order sdk/widgets/mpk reads them in.
+func nestedGroups(p xmlProperty) []xmlPropGroup {
+	if len(p.NestedDirectProps) == 0 {
+		return p.NestedProps
+	}
+	direct := xmlPropGroup{Properties: p.NestedDirectProps}
+	for i := range p.NestedDirectProps {
+		direct.Children = append(direct.Children, xmlPropGroupChild{Property: &p.NestedDirectProps[i]})
+	}
+	return append(append([]xmlPropGroup(nil), p.NestedProps...), direct)
 }
 
 // xmlActionVariable represents <actionVariable key="…" caption="…" type="…"/>.
@@ -423,7 +457,7 @@ func walkPropertyGroup(pg xmlPropGroup, parentCategory string, def *WidgetDefini
 		}
 		var enumValues []EnumValue
 		for _, ev := range p.EnumValues {
-			enumValues = append(enumValues, EnumValue{Key: ev.Key, Caption: strings.TrimSpace(ev.Caption)})
+			enumValues = append(enumValues, EnumValue{Key: ev.Key, Caption: strings.TrimSpace(ev.Caption), RawCaption: ev.Caption})
 		}
 		prop := PropertyDef{
 			Key:         p.Key,
@@ -438,6 +472,7 @@ func walkPropertyGroup(pg xmlPropGroup, parentCategory string, def *WidgetDefini
 			// caused within-key CE0463 drift on augment-added keys (issue #600).
 			Required:               p.Required != "false",
 			OnChange:               p.OnChange,
+			AllowUpload:            p.AllowUpload == "true",
 			DefaultValue:           p.DefaultValue,
 			DefaultType:            p.DefaultType,
 			IsList:                 p.IsList == "true",
@@ -455,8 +490,8 @@ func walkPropertyGroup(pg xmlPropGroup, parentCategory string, def *WidgetDefini
 		}
 
 		// Parse nested properties for object-type properties
-		if p.Type == "object" && len(p.NestedProps) > 0 {
-			for _, npg := range p.NestedProps {
+		if p.Type == "object" {
+			for _, npg := range nestedGroups(p) {
 				collectNestedProperties(npg, &prop, "")
 			}
 		}
@@ -503,6 +538,11 @@ func collectNestedProperties(pg xmlPropGroup, parent *PropertyDef, parentCategor
 		category = parentCategory
 	}
 	for _, p := range pg.Properties {
+		// A sub-property outside any group names its category itself.
+		childCategory := category
+		if childCategory == "" {
+			childCategory = strings.TrimSpace(p.Category)
+		}
 		var allowedTypes []string
 		for _, at := range p.AttributeTypes {
 			if at.Name != "" {
@@ -511,14 +551,14 @@ func collectNestedProperties(pg xmlPropGroup, parent *PropertyDef, parentCategor
 		}
 		var enumValues []EnumValue
 		for _, ev := range p.EnumValues {
-			enumValues = append(enumValues, EnumValue{Key: ev.Key, Caption: strings.TrimSpace(ev.Caption)})
+			enumValues = append(enumValues, EnumValue{Key: ev.Key, Caption: strings.TrimSpace(ev.Caption), RawCaption: ev.Caption})
 		}
 		child := PropertyDef{
 			Key:         p.Key,
 			Type:        p.Type,
 			Caption:     p.Caption,
 			Description: p.Description,
-			Category:    category,
+			Category:    childCategory,
 			// Mendix pluggable-widget spec: `required` defaults to true when the
 			// attribute is absent (mxbuild's update-widgets emits Required=true for
 			// every property that omits required=, e.g. DataGrid2 showContentAs). Only
@@ -526,6 +566,7 @@ func collectNestedProperties(pg xmlPropGroup, parent *PropertyDef, parentCategor
 			// caused within-key CE0463 drift on augment-added keys (issue #600).
 			Required:               p.Required != "false",
 			OnChange:               p.OnChange,
+			AllowUpload:            p.AllowUpload == "true",
 			DefaultValue:           p.DefaultValue,
 			DefaultType:            p.DefaultType,
 			IsList:                 p.IsList == "true",
@@ -542,8 +583,8 @@ func collectNestedProperties(pg xmlPropGroup, parent *PropertyDef, parentCategor
 			ActionVariables:        toActionVariables(p.ActionVariables),
 		}
 		// Nested object-type properties can themselves contain object lists.
-		if p.Type == "object" && len(p.NestedProps) > 0 {
-			for _, npg := range p.NestedProps {
+		if p.Type == "object" {
+			for _, npg := range nestedGroups(p) {
 				collectNestedProperties(npg, &child, "")
 			}
 		}

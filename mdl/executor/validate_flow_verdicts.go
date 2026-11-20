@@ -173,6 +173,17 @@ func checkFlowVerdicts(ctx *ExecContext, prog *ast.Program) FlowVerdictReport {
 		case ruled:
 			vs, dep, apply := flowModifyViolations(ctx, d)
 			r.Violations = append(r.Violations, vs...)
+			// A rebuild exec runs instead of the splice (mdl 0) would delete
+			// what MDL cannot express; exec refuses it when it gets there,
+			// so refuse the script now, before anything is written.
+			for _, v := range vs {
+				if v.RuleID == FlowRebuildRule && v.Severity != linter.SeverityError {
+					if types := storedFlowUnsupportedActions(ctx, d.kind(), d.name.String()); len(types) > 0 {
+						r.Violations = append(r.Violations, unsupportedRebuildViolation(d.kind(), d.name, types))
+					}
+					break
+				}
+			}
 			if dep != "" {
 				unpredicted(d.nanoflow, d.name, dep)
 			}

@@ -78,7 +78,7 @@ func checkAssociationCatalog(ctx *ExecContext, sc *scriptContext) associationCat
 	cat := associationCatalog{shapes: map[string]assocShape{}, unnamed: map[string]bool{}}
 	if ctx != nil && ctx.Backend != nil {
 		if modules, err := getModulesFromCache(ctx); err == nil {
-			if dms, err := ctx.Backend.ListDomainModels(); err == nil {
+			if dms, err := projectDomainModels(ctx); err == nil {
 				cat = projectAssociationCatalog(modules, dms)
 			}
 		}

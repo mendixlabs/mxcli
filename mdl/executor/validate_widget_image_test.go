@@ -85,11 +85,25 @@ func TestImageWidget_UrlFormIsClean(t *testing.T) {
 	}
 }
 
-// CONTROL 2: an icon source needs no image either.
+// CONTROL 2: an icon source needs no image — it needs an icon instead.
 func TestImageWidget_IconFormIsClean(t *testing.T) {
-	w := imageWidget(map[string]any{"ImageType": "icon"})
+	w := imageWidget(map[string]any{"ImageType": "icon", "Icon": "Atlas_Core.Atlas_Filled.user"})
 	if got := imageViolations(validateImageSource(w, "page X")); len(got) != 0 {
-		t.Errorf("an icon source needs no image: %+v", got)
+		t.Errorf("an icon source with an icon builds clean: %+v", got)
+	}
+}
+
+// ako/mxcli#2174: an icon source with no `Icon:` is the image mxbuild refuses
+// with "No icon selected." — measured on 11.16, once per such image.
+func TestImageWidget_IconFormWithNoIconIsReported(t *testing.T) {
+	w := imageWidget(map[string]any{"ImageType": "icon"})
+	got := imageViolations(validateImageSource(w, "page X"))
+	if len(got) != 1 || got[0].Severity != linter.SeverityError ||
+		!strings.Contains(got[0].Message, "No icon selected.") {
+		t.Fatalf("want one MDL-WIDGET22 error naming \"No icon selected.\", got %+v", got)
+	}
+	if !strings.Contains(got[0].Suggestion, "Icon:") {
+		t.Errorf("the suggestion should name the `Icon:` spelling: %s", got[0].Suggestion)
 	}
 }
 

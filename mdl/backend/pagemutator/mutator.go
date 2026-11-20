@@ -1667,6 +1667,15 @@ func findInWidgetChildren(wDoc bson.D, widgetName string) *bsonWidgetResult {
 		return result
 	}
 
+	// ListView specialization templates: Templates[] hold no Name, but the
+	// widgets inside each one do. A template's widgets were unreachable — every
+	// `set … on`, `insert after` and `drop` on one answered "widget not found",
+	// though the alter-page skill documents them as ordinary named widgets
+	// (ako/mxcli#2173). findInWidgetArray descends into Templates[].Widgets[].
+	if result := findInWidgetArray(wDoc, "Templates", widgetName); result != nil {
+		return result
+	}
+
 	// NavigationList: Items[] hold no Name, but the widgets inside each one do
 	// (mendixlabs/mxcli#1388); findInWidgetArray descends into Items[].Widgets[].
 	if isNavigationList(wDoc) {
@@ -1677,8 +1686,10 @@ func findInWidgetChildren(wDoc bson.D, widgetName string) *bsonWidgetResult {
 
 	// ControlBar
 	if controlBar := bsonnav.DGetDoc(wDoc, "ControlBar"); controlBar != nil {
-		if result := findInWidgetArray(controlBar, "Items", widgetName); result != nil {
-			return result
+		for _, key := range controlBarItemKeys {
+			if result := findInWidgetArray(controlBar, key, widgetName); result != nil {
+				return result
+			}
 		}
 	}
 	// Legacy DataGrid: Columns and the source's search bar (#1459).
@@ -2223,6 +2234,27 @@ func buildPropKeyMap(widgetDoc bson.D) map[string]string {
 	return m
 }
 
+// pluggableDeclaresOwnKey reports whether widget is a pluggable widget whose
+// definition declares name, in any case, as a property of its own — not a
+// system property (a PropertyType of ValueType System, such as a combo box's
+// Label), which is the widget-level setting of that name.
+func pluggableDeclaresOwnKey(widget bson.D, name string) bool {
+	if bsonnav.DGetString(widget, "$Type") != "CustomWidgets$CustomWidget" {
+		return false
+	}
+	objType := bsonnav.DGetDoc(bsonnav.DGetDoc(widget, "Type"), "ObjectType")
+	for _, pt := range bsonnav.DGetArrayElements(bsonnav.DGet(objType, "PropertyTypes")) {
+		ptDoc, ok := pt.(bson.D)
+		if !ok || !strings.EqualFold(bsonnav.DGetString(ptDoc, "PropertyKey"), name) {
+			continue
+		}
+		if bsonnav.DGetString(bsonnav.DGetDoc(ptDoc, "ValueType"), "Type") != "System" {
+			return true
+		}
+	}
+	return false
+}
+
 // buildPropKindMap builds a TypePointer ID -> declared value kind map
 // (PropertyTypes[].ValueType.Type) for a widget's top-level properties. Kept
 // apart from buildPropKeyMap, which has many callers that want only the key.
@@ -2458,6 +2490,23 @@ func findNearestDSInChildren(wDoc bson.D, widgetName string, curDS bson.D) (bson
 	if ds, found := findNearestDSInWidgets(wDoc, "TabPages", widgetName, curDS); found {
 		return ds, true
 	}
+	// A list view's specialization template renders its own entity: its widgets
+	// bind to the specialization, not to the list view's (generalized) source
+	// (ako/mxcli#2173). The template stores the entity and no data source, so it
+	// is handed down as a direct entity reference.
+	for _, el := range bsonnav.DGetArrayElements(bsonnav.DGet(wDoc, "Templates")) {
+		tmpl, ok := el.(bson.D)
+		if !ok {
+			continue
+		}
+		tmplDS := curDS
+		if entity := bsonnav.DGetString(tmpl, "Entity"); entity != "" {
+			tmplDS = bson.D{{Key: "EntityRef", Value: bson.D{{Key: "Entity", Value: entity}}}}
+		}
+		if ds, found := findNearestDSInWidgets(tmpl, "Widgets", widgetName, tmplDS); found {
+			return ds, true
+		}
+	}
 	if ds, found := findNearestDSInWidgets(wDoc, "Cells", widgetName, curDS); found {
 		return ds, true
 	}
@@ -2467,8 +2516,10 @@ func findNearestDSInChildren(wDoc bson.D, widgetName string, curDS bson.D) (bson
 		}
 	}
 	if controlBar := bsonnav.DGetDoc(wDoc, "ControlBar"); controlBar != nil {
-		if ds, found := findNearestDSInWidgets(controlBar, "Items", widgetName, curDS); found {
-			return ds, true
+		for _, key := range controlBarItemKeys {
+			if ds, found := findNearestDSInWidgets(controlBar, key, widgetName, curDS); found {
+				return ds, true
+			}
 		}
 	}
 	if strings.Contains(typeName, "CustomWidget") {
@@ -2663,12 +2714,15 @@ func collectWidgetScopeInChildren(wDoc bson.D, scope map[string]model.ID) {
 		}
 	}
 	collectWidgetScope(wDoc, "TabPages", scope)
-	collectWidgetScope(wDoc, "Cells", scope) // legacy table cells (#1453)
+	collectWidgetScope(wDoc, "Templates", scope) // list view specialization templates (#2173)
+	collectWidgetScope(wDoc, "Cells", scope)     // legacy table cells (#1453)
 	if isNavigationList(wDoc) {
 		collectWidgetScope(wDoc, "Items", scope)
 	}
 	if controlBar := bsonnav.DGetDoc(wDoc, "ControlBar"); controlBar != nil {
-		collectWidgetScope(controlBar, "Items", scope)
+		for _, key := range controlBarItemKeys {
+			collectWidgetScope(controlBar, key, scope)
+		}
 	}
 	for _, l := range legacyGridItemLists(wDoc) {
 		collectWidgetScope(l.doc, l.key, scope)
@@ -2844,6 +2898,11 @@ func setColumnPropertyMut(colDoc bson.D, propKeyMap map[string]string, propKindM
 			return fmt.Errorf("column property %q has no Value", propName)
 		}
 
+		// A column's attribute, resolved by the executor against the grid's
+		// data source as CREATE resolves it (ako/mxcli#1644).
+		if b, ok := value.(backend.AttributeBinding); ok {
+			return setColumnAttributeBinding(valDoc, propName, propKindMap[typePointerID], b)
+		}
 		field, settable := columnValueField(propKindMap[typePointerID])
 		if !settable {
 			return fmt.Errorf(
@@ -3171,6 +3230,14 @@ func setRawWidgetPropertyMut(widget bson.D, propName string, value any) error {
 	// so the ALTER path behaves the same. The pluggable fallback (default) passes
 	// the author's spelling through and resolves it case-insensitively against the
 	// widget's own template keys — see setPluggableWidgetPropertyMut.
+	//
+	// A core name the pluggable widget declares as a key of its own — PDS
+	// Button's `caption`/`buttonStyle`/`icon`, PDS Form label's `label` — can
+	// only mean that key: the CustomWidget stores no core property of the name
+	// (ako/mxcli#2180, mendixlabs/mxcli#1833).
+	if pages.PluggableKeyShadowsCoreName(propName) && pluggableDeclaresOwnKey(widget, propName) {
+		return setPluggableWidgetPropertyMut(widget, propName, value)
+	}
 	switch strings.ToLower(propName) {
 	case "caption":
 		return setWidgetCaptionMut(widget, value)
@@ -3180,7 +3247,7 @@ func setRawWidgetPropertyMut(widget bson.D, propName string, value any) error {
 		return setWidgetLabelMut(widget, value)
 	case "tooltip":
 		return setWidgetTooltipMut(widget, value)
-	case "placeholder", "password", "validation", "validationmessage":
+	case "placeholder", "password", "validation", "validationmessage", "noentitymessage":
 		// A built-in input widget's own properties, which CREATE writes and
 		// DESCRIBE prints (mendixlabs/mxcli#414). A widget that does not store
 		// the key — a pluggable one above all — keeps its old route.
@@ -3251,6 +3318,27 @@ func setRawWidgetPropertyMut(widget bson.D, propName string, value any) error {
 			"Forms$ConditionalVisibilitySettings", expr, true) {
 			return fmt.Errorf("widget does not support conditional visibility")
 		}
+		return nil
+	case "visibleroles":
+		// `visible: roles (…)`: "Visible for module roles", stored on the
+		// visibility node beside the condition, which it leaves as it is
+		// (ako/mxcli#2371). A by-name list: Studio Pro writes marker 1.
+		roles, ok := value.([]string)
+		if !ok || len(roles) == 0 {
+			return fmt.Errorf("VisibleRoles takes a list of module roles, got %T", value)
+		}
+		if _, has := bsonnav.DGet(widget, "ConditionalVisibilitySettings").(bson.D); !has {
+			if !setWidgetConditionalSettingMut(widget, "ConditionalVisibilitySettings",
+				"Forms$ConditionalVisibilitySettings", "", true) {
+				return fmt.Errorf("widget does not support conditional visibility")
+			}
+		}
+		list := bson.A{int32(1)}
+		for _, r := range roles {
+			list = append(list, r)
+		}
+		cvs := bsonnav.DGet(widget, "ConditionalVisibilitySettings").(bson.D)
+		bsonnav.DSet(cvs, "ModuleRoles", list)
 		return nil
 	case "editableif":
 		expr, _ := value.(string)
@@ -3590,13 +3678,12 @@ func setWidgetFormattingMut(widget bson.D, propName string, value any) error {
 		if !isString || !ok {
 			return fmt.Errorf("DateFormat is one of Date, Time, DateTime, Custom, not %v", value)
 		}
-		// mxbuild: CE0493 "Date format is custom but no format string is
-		// specified." Set the pattern in the same statement — properties are
-		// applied in name order, so CustomDateFormat lands first.
-		if canon == "Custom" && strings.TrimSpace(bsonnav.DGetString(fi, "CustomDateFormat")) == "" {
-			return fmt.Errorf("`DateFormat: Custom` needs a pattern: set CustomDateFormat in the same statement, " +
-				"e.g. `set (DateFormat: Custom, CustomDateFormat: 'dd-MM-yyyy HH:mm') on …` (mxbuild CE0493)")
-		}
+		// mxbuild CE0493 "Date format is custom but no format string is
+		// specified" is judged on the widget the whole statement leaves
+		// (CheckDateFormat, after the SET; check does the same), not here:
+		// this sees one property, and refusing on the stored pattern refused
+		// `set (DateFormat: Custom, CustomDateFormat: …)` in check's
+		// one-property dry run (ako/mxcli#1965).
 		bsonnav.DSet(fi, "DateFormat", canon)
 	case "CustomDateFormat":
 		s, isString := value.(string)
@@ -3908,6 +3995,26 @@ func setWidgetTooltipMut(widget bson.D, value any) error {
 func setInputWidgetPropertyMut(widget bson.D, propName string, value any) (bool, error) {
 	typ := widgetTypeLabel(bsonnav.DGetString(widget, "$Type"))
 	switch strings.ToLower(propName) {
+	case "noentitymessage":
+		// A data view's "no entity" message, a Texts$Text (ako/mxcli#2133).
+		if t := bsonnav.DGetString(widget, "$Type"); t != "Forms$DataView" && t != "Pages$DataView" {
+			return false, nil
+		}
+		msg := bsonnav.DGetDoc(widget, "NoEntityMessage")
+		if msg == nil {
+			msg = bson.D{
+				{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
+				{Key: "$Type", Value: "Texts$Text"},
+				{Key: "Items", Value: bson.A{int32(3)}},
+			}
+		}
+		if err := setTranslatableText(msg, "NoEntityMessage", value); err != nil {
+			return true, err
+		}
+		if !bsonnav.DSet(widget, "NoEntityMessage", msg) {
+			return true, fmt.Errorf("data view has no NoEntityMessage slot")
+		}
+		return true, nil
 	case "placeholder":
 		tmpl := bsonnav.DGetDoc(widget, "PlaceholderTemplate")
 		if tmpl == nil {
@@ -3997,22 +4104,34 @@ func setWidgetLabelMut(widget bson.D, value any) error {
 	return fmt.Errorf("widget has no Label property")
 }
 
+// setWidgetAttributeRefMut writes a built-in input widget's AttributeRef. The
+// executor hands it a backend.AttributeBinding resolved by create page's rule
+// — the final attribute plus the association hops, written as the EntityRef
+// exactly as create page writes `Assoc/Attr` (ako/mxcli#2278). A plain string
+// is still taken as an already-qualified attribute. A value that is not a
+// qualified attribute is refused: it used to be stored as a null AttributeRef,
+// leaving the input bound to nothing while ALTER reported success.
 func setWidgetAttributeRefMut(widget bson.D, value any) error {
-	attrPath, ok := value.(string)
-	if !ok {
+	var b backend.AttributeBinding
+	switch v := value.(type) {
+	case backend.AttributeBinding:
+		b = v
+	case string:
+		b = backend.AttributeBinding{Path: v}
+	default:
 		return fmt.Errorf("Attribute value must be a string")
 	}
-
-	var attrRefValue any
-	if strings.Count(attrPath, ".") >= 2 {
-		attrRefValue = bson.D{
-			{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
-			{Key: "$Type", Value: "DomainModels$AttributeRef"},
-			{Key: "Attribute", Value: attrPath},
-			{Key: "EntityRef", Value: nil},
-		}
-	} else {
-		attrRefValue = nil
+	if b.SourceVariable != nil {
+		return fmt.Errorf("an input's attribute read from a parameter cannot be set in place — replace the widget instead")
+	}
+	if strings.Count(b.Path, ".") < 2 || strings.Contains(b.Path, "/") {
+		return fmt.Errorf("attribute %q is not a qualified attribute of the widget's entity", b.Path)
+	}
+	attrRefValue := bson.D{
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
+		{Key: "$Type", Value: "DomainModels$AttributeRef"},
+		{Key: "Attribute", Value: b.Path},
+		{Key: "EntityRef", Value: widgetobj.AttributeEntityRefBSON(b.Steps)},
 	}
 
 	for i, elem := range widget {
@@ -4412,4 +4531,27 @@ func (m *Mutator) PageVariableNames() []string {
 		}
 	}
 	return names
+}
+
+// setColumnAttributeBinding writes a Data grid 2 column's attribute: the
+// AttributeRef CREATE writes for `column (Attribute: …)`, with the association
+// hops as its EntityRef (ako/mxcli#1644). A column attribute reads the grid's
+// items, so a SourceVariable — a page parameter's — is never written here.
+func setColumnAttributeBinding(valDoc bson.D, propName, kind string, b backend.AttributeBinding) error {
+	if kind != "Attribute" {
+		return fmt.Errorf("column property %q holds a value of kind %s, not an attribute", propName, kind)
+	}
+	if strings.Count(b.Path, ".") < 2 {
+		return fmt.Errorf("column property %q: %q is not a qualified attribute", propName, b.Path)
+	}
+	if !hasKey(valDoc, "AttributeRef") {
+		return fmt.Errorf("column property %q stores no AttributeRef to set — replace the column instead", propName)
+	}
+	bsonnav.DSet(valDoc, "AttributeRef", bson.D{
+		{Key: "$ID", Value: bsonutil.NewIDBsonBinary()},
+		{Key: "$Type", Value: "DomainModels$AttributeRef"},
+		{Key: "Attribute", Value: b.Path},
+		{Key: "EntityRef", Value: widgetobj.AttributeEntityRefBSON(b.Steps)},
+	})
+	return nil
 }

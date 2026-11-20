@@ -140,6 +140,10 @@ type PageMutator interface {
 	// DropWidget removes widgets by ref from the tree.
 	DropWidget(refs []WidgetRef) error
 
+	// MoveWidget moves a widget's stored subtree before or after another
+	// widget, or into a container, without rebuilding it (ako/mxcli#2122).
+	MoveWidget(widgetRef, destRef string, position InsertPosition) error
+
 	// ReplaceWidget replaces the target widget or column with the given widgets.
 	// columnRef is "" for widget targeting.
 	ReplaceWidget(widgetRef string, columnRef string, widgets []pages.Widget) error
@@ -163,6 +167,12 @@ type PageMutator interface {
 	// page lives in the container's TabPages list and is not a widget, so it
 	// cannot go through InsertWidget (#1215).
 	InsertTabPages(targetRef string, position InsertPosition, tabPages []*pages.TabPage) error
+
+	// InsertLayoutGridRows appends rows to a layout grid. A row lives in the
+	// grid's Rows list and is not a widget, so it cannot go through
+	// InsertWidget; it has no stored Name, so INTO the grid is the only
+	// position (mendixlabs/mxcli#1791).
+	InsertLayoutGridRows(gridRef string, rows []*pages.LayoutGridRow) error
 
 	// InsertNavigationListItems adds items to a navigation list: INTO the list
 	// appends, BEFORE/AFTER an item places them next to it. An item lives in the
@@ -351,7 +361,9 @@ type WorkflowMutator interface {
 	InsertBoundaryEvent(activityRef string, atPos int, eventType string, delay string, caption string, recurrence *workflows.Recurrence, activities []workflows.WorkflowActivity) error
 
 	// DropBoundaryEvent removes the boundary event from the referenced activity.
-	DropBoundaryEvent(activityRef string, atPos int) error
+	// DropBoundaryEvent removes an activity's boundary event: the index-th
+	// (1-based, describe order), or the first when index is 0.
+	DropBoundaryEvent(activityRef string, atPos int, index int) error
 
 	// Save persists the mutations to the backend.
 	Save() error
@@ -384,6 +396,10 @@ type WidgetObjectBuilder interface {
 	// and deferred to Finalize, which returns the aggregate result.
 
 	SetAttribute(propertyKey string, attributePath string)
+	// SetAttributeWithSteps is SetAttribute for an attribute reached over
+	// associations: the AttributeRef's EntityRef holds one step per hop, as
+	// a rooted path `$Name/Assoc/Attr` stores it beside its SourceVariable.
+	SetAttributeWithSteps(propertyKey string, attributePath string, steps []pages.AttributeRefStep)
 	SetAssociation(propertyKey string, assocPath string, entityName string)
 	// SetSourceVariable names the object an attribute or association property
 	// reads, when that is not the enclosing data context: a page or snippet
@@ -398,6 +414,9 @@ type WidgetObjectBuilder interface {
 	// SetImageEntity binds an image-typed property to the object in context,
 	// an entity specializing System.Image, rather than a collection entry.
 	SetImageEntity(propertyKey string, entityName string)
+	// SetIcon stores an icon element (collection, image or glyph) on an
+	// icon-typed property — the Image widget's `imageIcon` (ako/mxcli#2174).
+	SetIcon(propertyKey string, icon *pages.Icon)
 	SetExpression(propertyKey string, value string)
 	SetDataSource(propertyKey string, ds pages.DataSource)
 	SetChildWidgets(propertyKey string, children []pages.Widget)
@@ -442,6 +461,11 @@ type WidgetObjectBuilder interface {
 	// property the rules mark as hidden under the widget's current property
 	// values, matching Studio Pro's editorConfig.js-driven behavior (#574).
 	ApplyPropertyVisibility(rules []types.WidgetVisibilityRule)
+
+	// NullTemplatesOfUnsetDataSources stores TextTemplate: null for an unset
+	// TextTemplate bound to a data source property that holds none, as Studio
+	// Pro does (ako/mxcli#1967); an empty template there is CE0463.
+	NullTemplatesOfUnsetDataSources()
 
 	// --- Gallery-specific ---
 
@@ -529,6 +553,10 @@ type PluggablePropertyScoper interface {
 type AttributeBinding struct {
 	Path           string
 	SourceVariable *pages.WidgetVariable
+	// Steps are the association hops of an attribute reached over
+	// associations (`Assoc/Attr`), written as the AttributeRef's EntityRef as
+	// CREATE writes a multi-hop column (ako/mxcli#1644).
+	Steps []pages.AttributeRefStep
 }
 
 // ObjectListItemSpec describes one item of an object-list property (e.g. one

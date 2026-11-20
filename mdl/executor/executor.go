@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"time"
@@ -65,6 +66,8 @@ type executorCache struct {
 	defaultLangLoaded bool
 
 	// Pre-warmed name lookup maps for parallel describe (goroutine-safe after init)
+	// diffNames is set for the length of a diff-local run (buildNameLookups).
+	diffNames      *diffNames
 	entityNames    map[model.ID]string // entity ID -> "Module.EntityName"
 	microflowNames map[model.ID]string // microflow ID -> "Module.MicroflowName"
 	pageNames      map[model.ID]string // page ID -> "Module.PageName"
@@ -297,6 +300,7 @@ type Executor struct {
 	cache            *executorCache
 	catalog          *catalog.Catalog
 	quiet            bool            // suppress connection and status messages
+	terminal         bool            // output is a terminal (catalog progress in full)
 	tally            *mutationTally  // collapses a program run's "Unchanged" reports into one line
 	accessRun        *accessRuleRun  // the open run of access-rule statements, if any (#872, #890)
 	format           OutputFormat    // output format (table, json)
@@ -309,8 +313,11 @@ type Executor struct {
 	registry         *Registry                          // statement dispatch registry
 	catalogMu        sync.RWMutex                       // protects catalog field from background goroutine writes
 	untimedMu        sync.Mutex                         // protects untimed
-	untimed          *untimedWork                       // the running statement's untimed-work tracker (see untimed_work.go)
-	catalogGen       uint64                             // monotonic generation counter for catalog swaps
+	// running counts statement goroutines still running, including one the
+	// wall-clock guard gave up on: Close waits for them (ako/mxcli#2043).
+	running    sync.WaitGroup
+	untimed    *untimedWork // the running statement's untimed-work tracker (see untimed_work.go)
+	catalogGen uint64       // monotonic generation counter for catalog swaps
 
 	// Files changed beside the model (ako/mxcli#1618): a program run's, for
 	// its summary line, and whether the caller wants them reported at all —
@@ -323,6 +330,7 @@ type Executor struct {
 func New(output io.Writer) *Executor {
 	guard := newOutputGuard(output, maxOutputLines)
 	return &Executor{
+		terminal: isTerminal(output),
 		output:   guard,
 		guard:    guard,
 		settings: make(map[string]any),
@@ -434,6 +442,12 @@ func (e *Executor) Execute(stmt ast.Statement) error {
 		stmt = s
 	}
 
+	// Another process may have written to the project since the last
+	// statement (ako/mxcli#2121).
+	if err := e.syncWithDisk(); err != nil {
+		return err
+	}
+
 	// Announce the MDL command so the PED calls it triggers (reported by the MCP
 	// client) group under it (--mcp-trace, level 2; no-op otherwise).
 	e.tracer.Statement(stmtSummary(stmt))
@@ -469,7 +483,7 @@ func (e *Executor) Execute(stmt ast.Statement) error {
 	if executeTimeout <= 0 {
 		// No wall-clock guard for exempt statements (e.g. REFRESH CATALOG on a
 		// large project). The output-line guard still bounds runaway output.
-		err = e.executeInner(baseCtx, stmt)
+		err = e.executeRecovered(baseCtx, stmt)
 	} else {
 		ctx, cancel := context.WithCancel(baseCtx)
 		defer cancel()
@@ -477,8 +491,14 @@ func (e *Executor) Execute(stmt ast.Statement) error {
 		type result struct{ err error }
 		ch := make(chan result, 1)
 		begun := time.Now()
+		// The goroutine outlives a timeout: handlers are not context-aware, so
+		// the statement runs on after Execute has returned. Close waits for it,
+		// and a panic in it is recovered — unrecovered, a panic in any goroutine
+		// ends the process, and exec's rollback with it (ako/mxcli#2043).
+		e.running.Add(1)
 		go func() {
-			ch <- result{e.executeInner(ctx, stmt)}
+			defer e.running.Done()
+			ch <- result{e.executeRecovered(ctx, stmt)}
 		}()
 
 		timer := time.NewTimer(executeTimeout)
@@ -514,6 +534,46 @@ func (e *Executor) Execute(stmt ast.Statement) error {
 		e.logger.Command(stmtTypeName(stmt), stmtSummary(stmt), time.Since(start), err)
 	}
 	return err
+}
+
+// executeRecovered is executeInner with a panic turned into the statement's
+// error. A handler defect must fail its statement, not the process: `exec`
+// rolls the script back on a statement's error, and a panic used to skip that
+// and leave every earlier statement written (ako/mxcli#2043).
+func (e *Executor) executeRecovered(ctx context.Context, stmt ast.Statement) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = statementPanicError(r, debug.Stack())
+		}
+	}()
+	return e.executeInner(ctx, stmt)
+}
+
+// statementPanicError is the error for a statement whose handler panicked. The
+// stack goes with it: it is the defect report.
+func statementPanicError(r any, stack []byte) error {
+	return fmt.Errorf("internal error while running the statement: %v\n"+
+		"This is a defect in mxcli; please report it with the stack below.\n%s", r, stack)
+}
+
+// abandonedStatementWait bounds how long Close waits for a statement the
+// wall-clock guard gave up on. A variable so a test need not wait it out.
+var abandonedStatementWait = 2 * time.Minute
+
+// WaitForAbandonedStatements waits up to limit for the statements Execute
+// returned from on a timeout to stop, and reports whether they did.
+func (e *Executor) WaitForAbandonedStatements(limit time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		e.running.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(limit):
+		return false
+	}
 }
 
 // executeTimeoutError is the error for a statement the wall-clock guard
@@ -568,6 +628,11 @@ func (e *Executor) ExecuteProgramReportingStop(prog *ast.Program) (stoppedAt int
 	}
 	defer e.enterLanguage(prog.LanguageVersion)()
 	defer e.enterScriptFlows(prog)()
+	// A script's statements list the same document types one after another,
+	// so the run reads each unit file once and again only after rewriting it
+	// (ako/mxcli#2160). The cache ends with the run: a session that stays
+	// open must not keep serving bytes Studio Pro has since rewritten.
+	defer e.CacheUnitReads()()
 
 	// Collect all names defined in the script for forward-reference hints.
 	allDefined := newScriptContext()
@@ -582,14 +647,16 @@ func (e *Executor) ExecuteProgramReportingStop(prog *ast.Program) (stoppedAt int
 	// it cannot land, that is returned with the statement's error — those
 	// statements already reported success.
 	var rules accessRuleRun
+	// A run of entity and association statements likewise (entity_run.go).
+	var entities entityRun
 	defer func() {
-		if ferr := rules.end(); ferr != nil {
+		if ferr := errors.Join(entities.end(), rules.end()); ferr != nil {
 			err = errors.Join(err, ferr)
 		}
 	}()
 
 	for i, stmt := range prog.Statements {
-		if err := rules.step(e, stmt); err != nil {
+		if err := stepRuns(e, &rules, &entities, stmt); err != nil {
 			return -1, err
 		}
 		if err := e.Execute(stmt); err != nil {
@@ -597,7 +664,7 @@ func (e *Executor) ExecuteProgramReportingStop(prog *ast.Program) (stoppedAt int
 		}
 		created.collectSingle(stmt)
 	}
-	if err := rules.end(); err != nil {
+	if err := errors.Join(entities.end(), rules.end()); err != nil {
 		return -1, err
 	}
 	return -1, e.finalizeProgramExecution()
@@ -686,12 +753,13 @@ func (e *Executor) ExecuteProgramContinueOnError(prog *ast.Program, w io.Writer)
 	created := newScriptContext()
 
 	var rules accessRuleRun // see ExecuteProgram
-	defer func() { _ = rules.end() }()
+	var entities entityRun
+	defer func() { _ = entities.end(); _ = rules.end() }()
 
 	var res ExecuteProgramResult
 	for i, stmt := range prog.Statements {
 		res.Total++
-		if err := rules.step(e, stmt); err != nil {
+		if err := stepRuns(e, &rules, &entities, stmt); err != nil {
 			return res, err
 		}
 		if err := e.Execute(stmt); err != nil {
@@ -705,7 +773,7 @@ func (e *Executor) ExecuteProgramContinueOnError(prog *ast.Program, w io.Writer)
 		res.Succeeded++
 		created.collectSingle(stmt)
 	}
-	if err := rules.end(); err != nil {
+	if err := errors.Join(entities.end(), rules.end()); err != nil {
 		return res, err
 	}
 	if err := e.finalizeProgramExecution(); err != nil {
@@ -770,8 +838,16 @@ func (e *Executor) CacheUnitReads() (release func()) {
 // Close closes the connection to the project and all SQL connections.
 func (e *Executor) Close() error {
 	var closeErr error
+	// A statement the wall-clock guard gave up on may still be reading or
+	// writing the project. Disconnecting under it made it read a nil reader and
+	// panic, and a caller's rollback could run alongside it (ako/mxcli#2043).
+	if !e.WaitForAbandonedStatements(abandonedStatementWait) {
+		closeErr = fmt.Errorf("a statement that timed out was still running after %v; closing the project under it", abandonedStatementWait)
+	}
 	if e.backend != nil && e.backend.IsConnected() {
-		closeErr = e.backend.Disconnect()
+		if err := disconnectBackend(e.backend); err != nil && closeErr == nil {
+			closeErr = err
+		}
 		e.backend = nil
 	}
 	if e.sqlMgr != nil {

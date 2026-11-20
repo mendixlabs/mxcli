@@ -1,0 +1,41 @@
+mdl 1;
+-- Control for enum-split-duplicate-values.fail.mdl: the valid forms of an enumeration
+-- split — every value once plus (empty), several values in one branch, on an attribute
+-- and on a parameter typed by the enumeration. Builds with 0 errors on MxBuild 11.16.1.
+create enumeration MyFirstModule.EsvColor (R 'R', G 'G', B 'B');
+create persistent entity MyFirstModule.EsvShape (C: Enumeration(MyFirstModule.EsvColor));
+
+create microflow MyFirstModule.EsvOnAttribute ($S: MyFirstModule.EsvShape) returns Integer as $N
+begin
+  declare $N Integer = 0;
+  case $S/C
+    when R then set $N = 1;
+    when G then set $N = 2;
+    when B then set $N = 3;
+    when (empty) then set $N = 4;
+  end case;
+  return $N;
+end;
+
+create microflow MyFirstModule.EsvSeveralValuesInOneBranch ($S: MyFirstModule.EsvShape) returns Integer as $N
+begin
+  declare $N Integer = 0;
+  case $S/C
+    when R, G then set $N = 1;
+    when B then set $N = 2;
+    when (empty) then set $N = 3;
+  end case;
+  return $N;
+end;
+
+create microflow MyFirstModule.EsvOnParameter ($P: MyFirstModule.EsvColor) returns Integer as $N
+begin
+  declare $N Integer = 0;
+  case $P
+    when R then set $N = 1;
+    when G then set $N = 2;
+    when B then set $N = 3;
+    when (empty) then set $N = 4;
+  end case;
+  return $N;
+end;

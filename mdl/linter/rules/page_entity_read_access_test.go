@@ -76,10 +76,13 @@ func (f *readAccessFixture) widget(page, name, widgetType, entity string) {
 		"w"+string(rune('a'+f.n)), name, widgetType, "c-"+page, page, "PAGE", moduleFromQualified(page), entity, "default", "s1")
 }
 
+func (f *readAccessFixture) ctx() *linter.LintContext {
+	return linter.NewLintContext(f.cat, navSecurityReader{sec: f.sec})
+}
+
 func (f *readAccessFixture) check() []linter.Violation {
 	f.t.Helper()
-	ctx := linter.NewLintContext(f.cat, navSecurityReader{sec: f.sec})
-	return NewPageEntityReadAccessRule().Check(ctx)
+	return NewPageEntityReadAccessRule().Check(f.ctx())
 }
 
 const (

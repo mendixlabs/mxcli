@@ -23,7 +23,7 @@ func TestScanWidgetOwnRefs(t *testing.T) {
 			},
 		},
 	}
-	ent, mf, nf, _ := scanWidgetOwnRefs(dataView)
+	ent, mf, nf, _, _ := scanWidgetOwnRefs(dataView)
 	if ent != "Sales.Order" {
 		t.Errorf("entity = %q, want Sales.Order", ent)
 	}
@@ -40,7 +40,7 @@ func TestScanWidgetOwnRefs(t *testing.T) {
 		"Action": map[string]any{"Settings": map[string]any{"Microflow": "M.DoThing"}},
 		"Extra":  map[string]any{"Nanoflow": "M.DoNano"},
 	}
-	if _, mf, nf, _ := scanWidgetOwnRefs(button); mf != "M.DoThing" || nf != "M.DoNano" {
+	if _, mf, nf, _, _ := scanWidgetOwnRefs(button); mf != "M.DoThing" || nf != "M.DoNano" {
 		t.Errorf("button refs = (%q,%q), want (M.DoThing, M.DoNano)", mf, nf)
 	}
 
@@ -51,13 +51,13 @@ func TestScanWidgetOwnRefs(t *testing.T) {
 		"B": map[string]any{"Microflow": "M.Alpha"},
 	}
 	for range 5 {
-		if _, mf, _, _ := scanWidgetOwnRefs(multi); mf != "M.Alpha" {
+		if _, mf, _, _, _ := scanWidgetOwnRefs(multi); mf != "M.Alpha" {
 			t.Fatalf("non-deterministic microflow pick: got %q, want M.Alpha", mf)
 		}
 	}
 
 	// No refs.
-	if e, m, n, p := scanWidgetOwnRefs(map[string]any{"$Type": "Forms$Label"}); e != "" || m != "" || n != "" || p != "" {
+	if e, m, n, p, _ := scanWidgetOwnRefs(map[string]any{"$Type": "Forms$Label"}); e != "" || m != "" || n != "" || p != "" {
 		t.Errorf("expected no refs, got (%q,%q,%q)", e, m, n)
 	}
 }
@@ -574,7 +574,7 @@ func TestScanWidgetOwnRefs_PageReference(t *testing.T) {
 			"PageSettings": map[string]any{"$Type": "Forms$PageSettings", "Form": "Sales.OrderDetail"},
 		},
 	}
-	if _, _, _, page := scanWidgetOwnRefs(showPage); page != "Sales.OrderDetail" {
+	if _, _, _, page, _ := scanWidgetOwnRefs(showPage); page != "Sales.OrderDetail" {
 		t.Errorf("page = %q, want Sales.OrderDetail", page)
 	}
 
@@ -589,7 +589,7 @@ func TestScanWidgetOwnRefs_PageReference(t *testing.T) {
 			"PageSettings": map[string]any{"$Type": "Forms$PageSettings", "Form": "Sales.OrderDetail"},
 		},
 	}
-	ent, _, _, page := scanWidgetOwnRefs(createThenShow)
+	ent, _, _, page, _ := scanWidgetOwnRefs(createThenShow)
 	if ent != "Sales.Order" {
 		t.Errorf("entity = %q, want Sales.Order", ent)
 	}
@@ -609,12 +609,12 @@ func TestScanWidgetOwnRefs_PageReference(t *testing.T) {
 			},
 		},
 	}
-	if _, _, _, page := scanWidgetOwnRefs(container); page != "" {
+	if _, _, _, page, _ := scanWidgetOwnRefs(container); page != "" {
 		t.Errorf("page = %q, want empty — a child button's page must not leak to the container", page)
 	}
 
 	// A widget with no action references no page.
-	if _, _, _, page := scanWidgetOwnRefs(map[string]any{"$Type": "Forms$Label"}); page != "" {
+	if _, _, _, page, _ := scanWidgetOwnRefs(map[string]any{"$Type": "Forms$Label"}); page != "" {
 		t.Errorf("page = %q, want empty", page)
 	}
 }

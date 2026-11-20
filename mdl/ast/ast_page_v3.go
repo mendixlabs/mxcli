@@ -193,6 +193,14 @@ type WidgetV3 struct {
 	// diagnostic. Keyed by the property name as written; read it through
 	// ExpressionSource, which matches case-insensitively.
 	ValueSource map[string]string
+
+	// FromBuildingBlock records that the widget was copied in by `use building
+	// block` rather than written by the author: Studio Pro authored it, and its
+	// values are the block's stored ones. A message about what the author must
+	// still configure (a list view with no data source) says so, since the
+	// author never wrote that widget (ako/mxcli#2183). Set by the
+	// building-block expander only.
+	FromBuildingBlock bool
 }
 
 // ExpressionSource returns the source text the visitor kept for key (see
@@ -342,6 +350,10 @@ type ActionV3 struct {
 	LinkVariable  string
 	LinkAttribute string
 	OutcomeValue  string // For COMPLETE_TASK
+	// For DELETE $source: the object deleted when it is not the context
+	// object — a widget's selection or a page/snippet parameter, written
+	// without the "$" (ako/mxcli#1932). Empty is the context object.
+	SourceVariable string
 	// Settings is the action's `with ( … )` list, nil when none was written.
 	Settings *ActionSettingsV3
 	// Returns is a flow call's `returns ( … )` list: Studio Pro's "Return value
@@ -378,6 +390,9 @@ type ActionSettingsV3 struct {
 	ClosePage        *bool  // complete task, call workflow
 	Commit           *bool  // complete task
 	DefaultPage      string // open workflow: a page qualified name
+	// NumberOfPagesToClose is show page's "number of pages to close", a whole
+	// number of at least one; "" leaves Studio Pro's default (ako/mxcli#2106).
+	NumberOfPagesToClose string
 }
 
 // ColumnV3 represents a V3 datagrid column.
@@ -392,10 +407,17 @@ type ColumnV3 struct {
 }
 
 // ParamAssignmentV3 represents a template parameter: {1} = value
+//
+// `{1} = <unbound>` is a parameter with no binding yet — Value is nil and
+// Unbound is set. It is what `describe` prints for a stored parameter whose
+// AttributeRef, Expression and SourceVariable are all empty (normal in a
+// building block), and it writes back to that same empty parameter, keeping
+// its position so `{2}` does not shift onto `{1}`'s slot (ako/mxcli#2181).
 type ParamAssignmentV3 struct {
-	Index  int            // Parameter index (1, 2, 3, ...)
-	Value  any            // Expression value
-	Format *ParamFormatV3 // Optional per-parameter formatting (dynamic text), else nil
+	Index   int            // Parameter index (1, 2, 3, ...)
+	Value   any            // Expression value; nil when Unbound
+	Unbound bool           // `{n} = <unbound>`: the parameter is kept, with no binding
+	Format  *ParamFormatV3 // Optional per-parameter formatting (dynamic text), else nil
 }
 
 // ParamFormatV3 holds the optional per-parameter formatting of a dynamic-text

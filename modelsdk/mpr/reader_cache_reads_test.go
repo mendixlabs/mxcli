@@ -4,6 +4,8 @@ package mpr
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -119,5 +121,97 @@ func TestCacheUnitReads_WriteIsSeen(t *testing.T) {
 	}
 	if !bytes.Equal(units[0].Contents, written) {
 		t.Errorf("a read after a write returned the cached bytes from before it")
+	}
+}
+
+// A write by another process is read from disk even while the cache is held,
+// and even when that writer left the unit's row hash as it was: a cached unit
+// is keyed by its row hash, which only shows a rewrite by a writer that moves
+// it (ako/mxcli#2160), so what SyncWithDisk reports as a foreign change drops
+// the cached bytes outright (ako/mxcli#2121).
+func TestCacheUnitReads_AnotherProcessesWriteIsSeen(t *testing.T) {
+	w := newListableV2Writer(t, unitDoc(t, "Stored"))
+	r := w.reader
+	defer r.CacheUnitReads()()
+	listTwice(t, r)
+	before := r.fileReads.Load()
+	listTwice(t, r)
+	if n := r.fileReads.Load() - before; n != 0 {
+		t.Fatalf("control: the listing is not served from the cache (%d file reads), so the test below proves nothing", n)
+	}
+
+	// The other process: rewrites the unit file, and commits to the .mpr
+	// without touching the unit's ContentsHash.
+	foreign := unitDoc(t, "Rewritten elsewhere")
+	file := filepath.Join(r.contentsDir, cacheTestUnit[0:2], cacheTestUnit[2:4], cacheTestUnit+".mxunit")
+	if err := os.WriteFile(file, foreign, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	other := otherProcess(t, r.path)
+	if _, err := other.Exec(`CREATE TABLE probe2160 (x)`); err != nil {
+		t.Fatal(err)
+	}
+	_ = other.Close()
+
+	if got := r.SyncWithDisk(); got != DiskChanged {
+		t.Fatalf("SyncWithDisk: %v, want changed", got)
+	}
+	units, err := r.ListUnitsByType("Projects$Folder")
+	if err != nil || len(units) != 1 {
+		t.Fatalf("list: %v", err)
+	}
+	if !bytes.Equal(units[0].Contents, foreign) {
+		t.Errorf("after another process rewrote the unit, the listing still returned the cached bytes")
+	}
+}
+
+// The decoder is on the path of every listing and only reads the bytes it is
+// given, so while the cache is held it is handed the cache's own slice: no
+// copy per unit per listing, and the same slice each time, which is how the
+// decode cache sees that a unit is unchanged without comparing its bytes
+// (ako/mxcli#2160). Every other caller still gets bytes of its own.
+func TestCacheUnitReads_SharedListingCopiesNothing(t *testing.T) {
+	w := newListableV2Writer(t, unitDoc(t, "Stored"))
+	r := w.reader
+	defer r.CacheUnitReads()()
+
+	shared := func() []byte {
+		t.Helper()
+		units, err := r.ListUnitsByTypeShared("Projects$Folder", nil)
+		if err != nil || len(units) != 1 {
+			t.Fatalf("shared list: %d units, %v", len(units), err)
+		}
+		return units[0].Contents
+	}
+	first := shared()
+	copies := r.UnitContentCopies()
+	second := shared()
+	if n := r.UnitContentCopies() - copies; n != 0 {
+		t.Errorf("a shared listing copied %d unit(s) out of the cache", n)
+	}
+	if &first[0] != &second[0] {
+		t.Error("two shared listings of an unchanged unit returned different slices")
+	}
+
+	// Control: the ordinary listing copies, and its bytes are its own.
+	copies = r.UnitContentCopies()
+	units, err := r.ListUnitsByType("Projects$Folder")
+	if err != nil || len(units) != 1 {
+		t.Fatalf("list: %v", err)
+	}
+	if n := r.UnitContentCopies() - copies; n != 1 {
+		t.Errorf("control: the ordinary listing made %d copies, want 1", n)
+	}
+	if &units[0].Contents[0] == &first[0] {
+		t.Error("the ordinary listing handed out the cache's own slice")
+	}
+
+	// A rewrite is still seen: the unit's row hash moved, so its slice is new.
+	written := unitDoc(t, "Written")
+	if err := w.UpdateRawUnit(cacheTestUnit, written); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if got := shared(); !bytes.Equal(got, written) {
+		t.Error("a shared listing after a write returned the bytes from before it")
 	}
 }

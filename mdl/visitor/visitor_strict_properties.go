@@ -205,6 +205,11 @@ var businessEventServiceSchema = propSchema{on: "a business event service", keys
 	{"ServiceName", []propShape{shapeString}},
 	{"EventNamePrefix", []propShape{shapeString}},
 	{"Folder", []propShape{shapeString}},
+	// A consumed service names the producer's AsyncAPI contract instead
+	// (#2384 §5.1). Contract carries the document, usually as a $$…$$ block
+	// since it is YAML; ContractFile a path to it.
+	{"Contract", textShapes},
+	{"ContractFile", []propShape{shapeString}},
 }}
 
 // The model visitor reads each value by one alternative only: a Provider
@@ -236,6 +241,29 @@ var consumedMCPServiceSchema = propSchema{on: "a consumed MCP service", keys: []
 	{"Version", []propShape{shapeString}},
 	{"ConnectionTimeoutSeconds", []propShape{shapeNumber}},
 	{"Documentation", textShapes},
+	{"Endpoint", []propShape{shapeConstant, shapeQName}},
+	{"AuthenticationMicroflow", []propShape{shapeQName}},
+}}
+
+// ServerName is stored but not in Studio Pro's editor: a new document gets its
+// own name, a duplicate keeps the original's.
+var publishedMCPServiceSchema = propSchema{on: "a published MCP service", keys: []propKey{
+	{"ServerName", []propShape{shapeString}},
+	{"EndpointPath", []propShape{shapeString}},
+	{"Version", []propShape{shapeString}},
+	{"ProtocolVersion", nameShapes},
+	{"AuthenticationEnabled", []propShape{shapeBool}},
+	{"AuthenticationMicroflow", []propShape{shapeQName}},
+	{"AuthorizationServerUrl", []propShape{shapeString}},
+	{"Scopes", []propShape{shapeString}},
+	{"Documentation", textShapes},
+}}
+
+var publishedMCPToolSchema = propSchema{on: "a published MCP service's tool block", keys: []propKey{
+	{"Microflow", []propShape{shapeQName}},
+	{"Description", textShapes},
+	{"Title", []propShape{shapeString}},
+	{"Schema", textShapes},
 }}
 
 var agentSchema = propSchema{on: "an agent", keys: []propKey{
@@ -250,20 +278,28 @@ var agentSchema = propSchema{on: "an agent", keys: []propKey{
 	{"TopP", []propShape{shapeNumber}},
 	{"SystemPrompt", textShapes},
 	{"UserPrompt", textShapes},
+	{"EnableBackendStreaming", []propShape{shapeBool}},
+	{"EnableUIStreaming", []propShape{shapeBool}},
+	{"SelectedModel", []propShape{shapeString}},
+	{"SelectedModelName", []propShape{shapeString}},
 }}
 
 var agentMCPServiceSchema = propSchema{on: "an agent's mcp service block", keys: []propKey{
 	{"Enabled", []propShape{shapeBool}},
 	{"Description", textShapes},
+	{"UserAccessApproval", []propShape{shapeName}},
+	{"DisplayTitle", textShapes},
+	{"DisplayDescription", textShapes},
 }}
 
-// ToolType and Document are what describe writes for a tool; create does not
-// read them yet, the tool's kind and target coming from the block itself.
 var agentToolSchema = propSchema{on: "an agent's tool block", keys: []propKey{
 	{"Enabled", []propShape{shapeBool}},
 	{"Description", textShapes},
 	{"ToolType", []propShape{shapeName}},
 	{"Document", []propShape{shapeQName}},
+	{"UserAccessApproval", []propShape{shapeName}},
+	{"DisplayTitle", textShapes},
+	{"DisplayDescription", textShapes},
 }}
 
 var agentKnowledgeBaseSchema = propSchema{on: "an agent's knowledge base block", keys: []propKey{
@@ -272,6 +308,8 @@ var agentKnowledgeBaseSchema = propSchema{on: "an agent's knowledge base block",
 	{"Description", textShapes},
 	{"MaxResults", []propShape{shapeNumber}},
 	{"Enabled", []propShape{shapeBool}},
+	{"MinSimilarity", []propShape{shapeNumber}},
+	{"IsVisible", []propShape{shapeBool}},
 }}
 
 // ---------------------------------------------------------------------------
@@ -406,6 +444,8 @@ func odataPropertyShape(pc *parser.OdataPropertyAssignmentContext) propShape {
 	switch {
 	case v.STRING_LITERAL() != nil:
 		return shapeString
+	case v.DOLLAR_STRING() != nil:
+		return shapeDollar
 	case v.NUMBER_LITERAL() != nil:
 		return shapeNumber
 	case v.TRUE() != nil || v.FALSE() != nil:

@@ -35,6 +35,8 @@ func stmtSummary(stmt ast.Statement) string {
 		return fmt.Sprintf("create module %s", s.Name)
 	case *ast.DropModuleStmt:
 		return fmt.Sprintf("drop module %s", s.Name)
+	case *ast.AlterModuleSetStmt:
+		return fmt.Sprintf("alter module %s set", s.ModuleName)
 	case *ast.AlterModuleJarDepStmt:
 		return fmt.Sprintf("alter module %s jar dep (%d actions)", s.ModuleName, len(s.Actions))
 

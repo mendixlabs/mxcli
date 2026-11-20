@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	genWf "github.com/mendixlabs/mxcli/modelsdk/gen/workflows"
 	"github.com/mendixlabs/mxcli/sdk/workflows"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -105,7 +106,7 @@ func TestCreateWorkflow_EventSubProcessesRoundTrip(t *testing.T) {
 	// fixture: on the 11.6 one the storage layer refuses the workflow
 	// (TestCreateWorkflow_EventSubProcessesRefusedBeforeTheirVersion).
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../../testdata/testapp-views")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../../testdata/testapp-views"); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	proj := filepath.Join(dst, "TestApp.mpr")

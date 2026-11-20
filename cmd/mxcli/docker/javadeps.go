@@ -53,8 +53,46 @@ func SyncJavaDependencies(projectPath, mxPath, version string, w io.Writer) erro
 		return fmt.Errorf("mx not found for Mendix %s (needed to resolve managed Java dependencies); run 'mxcli setup mxbuild --version %s'", version, version)
 	}
 
-	cmd := syncJavaDepsCommand(mxPath, projectPath)
+	out, err := syncJavaDepsOnce(mxPath, projectPath, w)
+	// "Failed to find some hosts" is mx's word for a repository it could not
+	// reach. Measured in ako/mxcli#2028 while Maven Central answered 429: the
+	// first sync failed with it and a retry a moment later worked. Once, so a
+	// network that is really down still fails promptly.
+	if err != nil && strings.Contains(out, unreachableHostsMarker) {
+		if w != nil {
+			fmt.Fprintf(w, "  mx could not reach the Maven repository; retrying in %s...\n", syncJavaDepsRetryDelay)
+		}
+		time.Sleep(syncJavaDepsRetryDelay)
+		out, err = syncJavaDepsOnce(mxPath, projectPath, w)
+	}
+	if err != nil {
+		var werr *WatchdogError
+		if errors.As(err, &werr) {
+			return err // already names the step, the cause and the last output
+		}
+		return fmt.Errorf("mx sync-java-dependencies failed: %w\n%s", err, lastLines(out, 20))
+	}
+	if w != nil {
+		if s := strings.TrimSpace(out); s != "" {
+			fmt.Fprintln(w, "  "+strings.ReplaceAll(s, "\n", "\n  "))
+		}
+	}
+	return nil
+}
 
+// unreachableHostsMarker is how mx reports a Maven repository it could not
+// reach: "Failed to find some hosts. Either the network is down or the custom
+// repository configuration contains an unknown host name."
+const unreachableHostsMarker = "Failed to find some hosts"
+
+// syncJavaDepsRetryDelay is the pause before retrying an unreachable-hosts
+// failure. A variable so a test need not wait it out.
+var syncJavaDepsRetryDelay = 10 * time.Second
+
+// syncJavaDepsOnce runs one `mx sync-java-dependencies` and returns its
+// combined output.
+func syncJavaDepsOnce(mxPath, projectPath string, w io.Writer) (string, error) {
+	cmd := syncJavaDepsCommand(mxPath, projectPath)
 	out := &syncBuffer{}
 	cmd.Stdout = out
 	cmd.Stderr = out
@@ -65,19 +103,11 @@ func SyncJavaDependencies(projectPath, mxPath, version string, w io.Writer) erro
 	// Bounded, and not silent: the step used to wait for as long as Gradle did,
 	// which behind a stale daemon was ten minutes and more with no output at
 	// all (ako/mxcli#1340). The process tree is killed at the bound.
-	if err := runWithWatchdog(cmd, syncJavaDepsLimits(w), ""); err != nil && !errors.Is(err, exec.ErrWaitDelay) {
-		var werr *WatchdogError
-		if errors.As(err, &werr) {
-			return err // already names the step, the cause and the last output
-		}
-		return fmt.Errorf("mx sync-java-dependencies failed: %w\n%s", err, lastLines(out.String(), 20))
+	err := runWithWatchdog(cmd, syncJavaDepsLimits(w), "")
+	if errors.Is(err, exec.ErrWaitDelay) {
+		err = nil
 	}
-	if w != nil {
-		if s := strings.TrimSpace(out.String()); s != "" {
-			fmt.Fprintln(w, "  "+strings.ReplaceAll(s, "\n", "\n  "))
-		}
-	}
-	return nil
+	return out.String(), err
 }
 
 // DefaultSyncJavaDepsTimeout bounds one `mx sync-java-dependencies`. A healthy
@@ -138,12 +168,152 @@ func syncJavaDepsCommand(mxPath, projectPath string) *exec.Cmd {
 func UnvendoredJarDependencies(projectDir string, deps []JarDependencyRef) []string {
 	var missing []string
 	for _, d := range resolveJarDependencies(deps) {
-		jar := filepath.Join(projectDir, "vendorlib", fmt.Sprintf("%s-%s.jar", d.Artifact, d.Version))
-		if _, err := os.Stat(jar); err != nil {
+		if !jarVendored(filepath.Join(projectDir, "vendorlib"), d) {
 			missing = append(missing, fmt.Sprintf("%s:%s:%s", d.Group, d.Artifact, d.Version))
 		}
 	}
 	return missing
+}
+
+// jarVendored reports whether vendorlib holds the jar d resolves to. A plain
+// version names one file. A Maven range ("[2.21.2,3)", ako/mxcli#2028) is
+// resolved by Gradle to a concrete version, so any vendored version of the
+// artifact inside the range satisfies it — looking for a file named after the
+// range made a successful sync report the dependency "still missing".
+func jarVendored(vendorlib string, d JarDependencyRef) bool {
+	if !isJarVersionRange(d.Version) {
+		if _, err := os.Stat(filepath.Join(vendorlib, fmt.Sprintf("%s-%s.jar", d.Artifact, d.Version))); err == nil {
+			return true
+		}
+		// Gradle keeps the newest version a dependency graph asks for, and
+		// another jar's transitive dependency can ask for a newer patch than
+		// the one declared: a declared bcprov-jdk18on 1.81 is vendored as
+		// 1.81.1, and reporting it "still missing" after a clean sync was
+		// wrong (ako/mxcli#2248). A newer patch of the same major.minor
+		// satisfies the declaration; another minor is a different jar.
+		for _, v := range vendoredJarVersions(vendorlib, d.Artifact) {
+			if newerPatch(v, d.Version) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, v := range vendoredJarVersions(vendorlib, d.Artifact) {
+		if jarVersionInRange(v, d.Version) {
+			return true
+		}
+	}
+	return false
+}
+
+// vendoredJarVersions returns the versions of artifact that vendorlib holds,
+// read from the <artifact>-<version>.jar file names.
+func vendoredJarVersions(vendorlib, artifact string) []string {
+	entries, err := os.ReadDir(vendorlib)
+	if err != nil {
+		return nil
+	}
+	prefix := artifact + "-"
+	var out []string
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, ".jar") {
+			continue
+		}
+		v := strings.TrimSuffix(strings.TrimPrefix(name, prefix), ".jar")
+		// A version starts with a digit; "jackson-databind-nullable-0.2.6.jar"
+		// is another artifact sharing the name as a prefix.
+		if v == "" || v[0] < '0' || v[0] > '9' {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// newerPatch reports whether vendored is a newer release of the same
+// major.minor as declared: 1.81 -> 1.81.1, 3.18.0 -> 3.18.1, not 1.81 -> 1.82
+// and never a qualifier such as 1.81-beta.
+func newerPatch(vendored, declared string) bool {
+	pv, pd := splitJarVersion(vendored), splitJarVersion(declared)
+	if len(pd) < 2 || len(pv) < 2 {
+		return false
+	}
+	for i := 0; i < 2; i++ {
+		if !isJarVersionNumber(pd[i]) || compareJarVersionPart(pv[i], pd[i]) != 0 {
+			return false
+		}
+	}
+	return compareJarVersions(vendored, declared) > 0
+}
+
+// DescribeUnvendored adds to each missing coordinate the versions of that
+// artifact vendorlib does hold, so a "still missing" names the cause:
+// "org.x:y:1.2 (vendorlib has y-1.4.jar)".
+func DescribeUnvendored(projectDir string, missing []string) []string {
+	vendorlib := filepath.Join(projectDir, "vendorlib")
+	out := make([]string, 0, len(missing))
+	for _, m := range missing {
+		parts := strings.Split(m, ":")
+		if len(parts) < 3 {
+			out = append(out, m)
+			continue
+		}
+		vs := vendoredJarVersions(vendorlib, parts[1])
+		if len(vs) == 0 {
+			out = append(out, m)
+			continue
+		}
+		jars := make([]string, len(vs))
+		for i, v := range vs {
+			jars[i] = parts[1] + "-" + v + ".jar"
+		}
+		out = append(out, fmt.Sprintf("%s (vendorlib has %s)", m, strings.Join(jars, ", ")))
+	}
+	return out
+}
+
+// trimJarZeros drops trailing ".0" parts, so a range bound "3" and the
+// version "3.0.0" compare equal, as Maven compares them.
+func trimJarZeros(v string) string {
+	for strings.HasSuffix(v, ".0") {
+		v = strings.TrimSuffix(v, ".0")
+	}
+	return v
+}
+
+// isJarVersionRange reports whether v is a Maven version range: "[1.0,2.0)",
+// "(,1.5]", "[1.2]".
+func isJarVersionRange(v string) bool {
+	return strings.HasPrefix(v, "[") || strings.HasPrefix(v, "(")
+}
+
+// jarVersionInRange reports whether version v lies in the Maven range r. An
+// empty bound is open; "[1.2]" is exactly 1.2.
+func jarVersionInRange(v, r string) bool {
+	if len(r) < 2 {
+		return false
+	}
+	lowIncl, highIncl := r[0] == '[', r[len(r)-1] == ']'
+	body := r[1 : len(r)-1]
+	low, high, isPair := strings.Cut(body, ",")
+	if !isPair {
+		return compareJarVersions(trimJarZeros(v), trimJarZeros(strings.TrimSpace(body))) == 0
+	}
+	low, high = strings.TrimSpace(low), strings.TrimSpace(high)
+	if low != "" {
+		c := compareJarVersions(trimJarZeros(v), trimJarZeros(low))
+		if c < 0 || (c == 0 && !lowIncl) {
+			return false
+		}
+	}
+	if high != "" {
+		c := compareJarVersions(trimJarZeros(v), trimJarZeros(high))
+		if c > 0 || (c == 0 && !highIncl) {
+			return false
+		}
+	}
+	return true
 }
 
 // JarDependencyRef is the coordinate of a managed Java dependency, decoupled

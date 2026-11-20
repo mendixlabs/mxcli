@@ -366,15 +366,23 @@ func (m *Mutator) spliceOnFlow(g *graph, f flowRef, frag *backend.MicroflowFragm
 	setPointer(f.doc, "DestinationPointer", frag.Entry)
 	setInt(f.doc, "DestinationConnectionIndex", entrySide)
 	setVector(f.doc, "DestinationControlVector", sideVector(entrySide))
+	if c := frag.InCurve; c != nil {
+		setVector(f.doc, "OriginControlVector", c.Origin)
+		setVector(f.doc, "DestinationControlVector", c.Destination)
+	}
 	// And a new flow carries on from the fragment to Y.
+	outOrigin, outDest := sideVector(exitSide), destVec
+	if c := frag.OutCurve; c != nil {
+		outOrigin, outDest = c.Origin, c.Destination
+	}
 	if err := m.addFlow(&microflows.SequenceFlow{
 		BaseElement:                model.BaseElement{ID: model.ID(types.GenerateID())},
 		OriginID:                   frag.Exit,
 		DestinationID:              model.ID(y.id),
 		OriginConnectionIndex:      exitSide,
 		DestinationConnectionIndex: destIdx,
-		OriginControlVector:        sideVector(exitSide),
-		DestinationControlVector:   destVec,
+		OriginControlVector:        outOrigin,
+		DestinationControlVector:   outDest,
 		CaseValue:                  frag.ExitCase,
 	}); err != nil {
 		return err

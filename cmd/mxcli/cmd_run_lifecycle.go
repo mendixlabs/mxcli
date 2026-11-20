@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
+	"github.com/mendixlabs/mxcli/cmd/mxcli/testrunner"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // cmd_run_lifecycle.go makes `mxcli run --local` a background service an agent
@@ -80,7 +82,7 @@ Exit codes: 0 running, 3 not running, 4 still starting.`,
   mxcli run status -p app.mpr || mxcli run --local --watch --detach -p app.mpr`,
 	Run: func(cmd *cobra.Command, args []string) {
 		projectPath := lifecycleProject(cmd)
-		os.Exit(runStatus(projectPath, os.Stdout))
+		exitProcess(runStatus(projectPath, os.Stdout))
 	},
 }
 
@@ -92,7 +94,9 @@ and the web client bundler. It asks the run to shut down (so it tears down its
 own children and removes anything it installed, like --test-endpoint), waits
 until they are gone, and for a --detach run then checks the run's whole process
 session, so no orphaned runtimelauncher or mxbuild JVM is left behind — even
-from a run that was killed with -9 and never cleaned up.
+from a run that was killed with -9 and never cleaned up. A --test-endpoint the
+run could not remove itself (on Windows the stop is always a forced one) is
+removed from the project here, from what the run recorded when it installed it.
 
 Stopping when nothing runs is a no-op that exits 0.
 
@@ -101,7 +105,7 @@ runs in.`,
 	Example: `  mxcli run stop -p app.mpr`,
 	Run: func(cmd *cobra.Command, args []string) {
 		projectPath := lifecycleProject(cmd)
-		os.Exit(runStop(projectPath, os.Stdout))
+		exitProcess(runStop(projectPath, os.Stdout))
 	},
 }
 
@@ -136,9 +140,9 @@ started without --watch never applies a change: wait says so and exits 1.`,
 		ready, _ := cmd.Flags().GetBool("ready")
 		since, _ := cmd.Flags().GetInt("since")
 		if ready {
-			os.Exit(runWaitReady(projectPath, timeout, os.Stdout))
+			exitProcess(runWaitReady(projectPath, timeout, os.Stdout))
 		}
-		os.Exit(runWait(projectPath, timeout, since, os.Stdout))
+		exitProcess(runWait(projectPath, timeout, since, os.Stdout))
 	},
 }
 
@@ -151,24 +155,39 @@ start it again in the background with the arguments it was started with (as
 
 The arguments come from the project's run state, so this also restarts a run
 that has already stopped or crashed. To change a flag, stop it and start a new
-one: mxcli run stop -p app.mpr && mxcli run --local --watch --detach -p app.mpr …`,
+one: mxcli run stop -p app.mpr && mxcli run --local --watch --detach -p app.mpr …
+
+Secrets written literally on the command line (--constant values, --db-password,
+--db-admin-password, --screenshot-password, --hub-secret, --debug-pass) are not
+stored with the run, so a run started with them cannot be restarted: restart says
+so and changes nothing. Written as @env:VAR or @file:path they are stored as that
+reference and resolved again on restart, in the environment of the restarting
+shell.`,
 	Example: `  mxcli run restart -p app.mpr`,
 	Run: func(cmd *cobra.Command, args []string) {
 		projectPath := lifecycleProject(cmd)
 		st, err := docker.ReadRunState(projectPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(runExitFailed)
+			exitProcess(runExitFailed)
 		}
+		noteForeignRunState(projectPath, os.Stderr)
 		if st == nil || len(st.Args) == 0 {
 			fmt.Fprintf(os.Stderr, "nothing to restart: no run of this project is recorded\n"+
 				"  start one: mxcli run --local --watch --detach -p %s\n", projectPath)
-			os.Exit(runExitNotRunning)
+			exitProcess(runExitNotRunning)
+		}
+		// Secrets given on the command line are not stored with the run, so a
+		// restart would hand the app the placeholder instead of the value. Say so
+		// before stopping anything.
+		if hasRedactedArgs(st.Args) {
+			fmt.Fprint(os.Stderr, restartSecretRefusal(projectPath, redactedArgNames(st.Args)))
+			exitProcess(runExitFailed)
 		}
 		if code := runStop(projectPath, os.Stdout); code != runExitOK {
-			os.Exit(code)
+			exitProcess(code)
 		}
-		os.Exit(runDetach(projectPath, st.Args, os.Stdout))
+		exitProcess(runDetach(projectPath, st.Args, os.Stdout))
 	},
 }
 
@@ -184,7 +203,7 @@ func lifecycleProject(cmd *cobra.Command) string {
 	projectPath, _ := cmd.Flags().GetString("project")
 	if projectPath == "" {
 		fmt.Fprintln(os.Stderr, "Error: --project (-p) is required")
-		os.Exit(runExitFailed)
+		exitProcess(runExitFailed)
 	}
 	if abs, err := filepath.Abs(projectPath); err == nil {
 		projectPath = abs
@@ -192,13 +211,47 @@ func lifecycleProject(cmd *cobra.Command) string {
 	return projectPath
 }
 
+// restartSecretRefusal is why `run restart` refuses a run whose stored
+// arguments had a literal secret redacted, and what to do instead.
+//
+// It used to suggest the PGPASSWORD environment variable, which the runtime's
+// database password never reads (only --ensure-db's psql does): a run started
+// that way connected as the default password. A reference is what restart can
+// resolve again.
+//
+// literal names the flags whose value was stored redacted (redactedArgNames):
+// a reference — @env:VAR, @file:path — is stored and replayed, so the
+// refusal says which values were not one (ako/mxcli#2313).
+func restartSecretRefusal(projectPath string, literal []string) string {
+	which := "a --constant value, --db-password, ..."
+	if len(literal) > 0 {
+		which = strings.Join(literal, ", ")
+	}
+	return fmt.Sprintf("cannot restart: this run was started with a secret written literally on the command line "+
+		"(%s), and a literal secret is not stored. The values given as @env:VAR or @file:path are stored and replayed.\n"+
+		"  Stop it and start it again with each of those as a reference too:\n"+
+		"    mxcli run stop -p %s\n"+
+		"    mxcli run --local --detach -p %s --constant Module.Key=@env:VAR --db-password @env:MX_DB_PASSWORD ...   (or @file:path)\n",
+		which, projectPath, projectPath)
+}
+
 // --- detach ------------------------------------------------------------
+
+// runFlagLookup finds a `run` flag by name. It is set in init rather than
+// calling runCmd.Flag directly, because runCmd's Run refers to detachArgs and
+// a direct reference would be an initialization cycle.
+var runFlagLookup = func(string) *pflag.Flag { return nil }
+
+func init() {
+	runFlagLookup = func(name string) *pflag.Flag { return runCmd.Flag(name) }
+}
 
 // detachArgs turns the parent's arguments into the child's: --detach removed,
 // and the project pinned to an absolute path so the child (and a later
 // `run restart` from another directory) runs the same project.
 func detachArgs(args []string, projectPath string) []string {
 	var out []string
+	args = absoluteFileRefArgs(args)
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
@@ -211,8 +264,28 @@ func detachArgs(args []string, projectPath string) []string {
 			continue // --project=X, -p=X, -pX
 		}
 		out = append(out, a)
+		// A flag that takes a value keeps it, even when the value looks like
+		// one of the flags dropped above (`--db-password -pX`). From
+		// mendixlabs/mxcli#1761.
+		if name, ok := strings.CutPrefix(a, "--"); ok && i+1 < len(args) {
+			if f := runFlagLookup(name); f != nil && f.NoOptDefVal == "" {
+				i++
+				out = append(out, args[i])
+			}
+		}
 	}
 	return append(out, "-p", projectPath)
+}
+
+// noteForeignRunState says so when the run state in this project's .mxcli/ was
+// written for another project, which a copied folder brings along. Every reader
+// treats such a state as no run at all (docker.ReadRunState), so a command
+// that goes on to report "not running" is not leaving the user guessing why.
+func noteForeignRunState(projectPath string, out io.Writer) {
+	if st := docker.ForeignRunState(projectPath); st != nil {
+		fmt.Fprintf(out, "note: .mxcli/run-state.json here belongs to the run of %s (pid %d), not this project; ignoring it\n",
+			st.Project, st.PID)
+	}
 }
 
 // refuseIfRunning returns an error when a live run already serves the project
@@ -372,12 +445,13 @@ func printLogWarnings(out io.Writer, logPath string, max int) {
 // --- status ------------------------------------------------------------
 
 func runStatus(projectPath string, out io.Writer) int {
+	noteForeignRunState(projectPath, out)
 	st, err := docker.ReadRunState(projectPath)
 	if err != nil {
 		fmt.Fprintf(out, "unknown: %v\n", err)
 		return runExitFailed
 	}
-	line, code := statusLine(st, liveStatusProbes(), docker.SourceMTime(projectPath), time.Now())
+	line, code := statusLine(st, liveStatusProbes(), docker.SourceMTimeOf(projectPath, st), time.Now())
 	fmt.Fprintln(out, line)
 	return code
 }
@@ -389,7 +463,7 @@ func runStatusSummary(projectPath string) string {
 	if err != nil || st == nil {
 		return ""
 	}
-	line, _ := statusLine(st, liveStatusProbes(), docker.SourceMTime(projectPath), time.Now())
+	line, _ := statusLine(st, liveStatusProbes(), docker.SourceMTimeOf(projectPath, st), time.Now())
 	return line
 }
 
@@ -528,6 +602,8 @@ func statusLine(st *docker.RunState, p statusProbes, source, now time.Time) (str
 		covered = st.Last.Source
 	}
 	switch {
+	case st.HeldBy != 0 && p.alive(st.HeldBy):
+		parts = append(parts, fmt.Sprintf("held by a test run (pid %d); a change waits for it", st.HeldBy))
 	case st.Building:
 		parts = append(parts, fmt.Sprintf("building #%d", st.Gen))
 	case source.After(covered) && st.Watch:
@@ -548,7 +624,11 @@ func statusLine(st *docker.RunState, p statusProbes, source, now time.Time) (str
 // --- wait --------------------------------------------------------------
 
 func runWait(projectPath string, timeout time.Duration, since int, out io.Writer) int {
-	target := docker.SourceMTime(projectPath)
+	// The run's own signal, without the theme scaffold its builds wrote: judged
+	// by the unfiltered one, a hosted dev loop's MxTest scaffold was a change no
+	// build would ever cover, and the wait ran into its timeout.
+	first, _ := docker.ReadRunState(projectPath)
+	target := docker.SourceMTimeOf(projectPath, first)
 	deadline := time.Now().Add(timeout)
 	for {
 		st, err := docker.ReadRunState(projectPath)
@@ -625,6 +705,7 @@ func runWaitReady(projectPath string, timeout time.Duration, out io.Writer) int 
 // --- stop --------------------------------------------------------------
 
 func runStop(projectPath string, out io.Writer) int {
+	noteForeignRunState(projectPath, out)
 	st, err := docker.ReadRunState(projectPath)
 	if err != nil {
 		fmt.Fprintf(out, "failed: %v\n", err)
@@ -661,6 +742,13 @@ func runStop(projectPath string, out io.Writer) int {
 
 	if left := remaining(st); len(left) > 0 {
 		fmt.Fprintf(out, "failed: %d process(es) of pid %d's run are still alive: %v\n", len(left), st.PID, left)
+		return runExitFailed
+	}
+	// A run stopped without its teardown — always on Windows, where the stop is
+	// taskkill /F, and after the SIGKILL fallback above — leaves --test-endpoint
+	// in the project; the run recorded how to take it out (ako/mxcli#1917).
+	if _, err := testrunner.RestoreAbandonedEndpoint(projectPath, out); err != nil {
+		fmt.Fprintf(out, "failed: %v\n", err)
 		return runExitFailed
 	}
 	extra := ""

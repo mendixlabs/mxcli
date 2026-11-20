@@ -40,7 +40,8 @@ func v1UnitContents(t *testing.T, i int, typeName string, pad int) []byte {
 
 func newTypedListingFixture(t *testing.T, types []string) *typedListingFixture {
 	t.Helper()
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "v1.mpr"))
+	path := filepath.Join(t.TempDir(), "v1.mpr")
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +51,7 @@ func newTypedListingFixture(t *testing.T, types []string) *typedListingFixture {
 		TreeConflict LONG, ContentsHash TEXT, ContentsConflicts TEXT, Contents BLOB)`); err != nil {
 		t.Fatal(err)
 	}
-	f := &typedListingFixture{db: db, r: &Reader{db: db, version: MPRVersionV1}}
+	f := &typedListingFixture{db: db, r: &Reader{db: db, version: MPRVersionV1, path: path}}
 	for i, ty := range types {
 		f.insert(t, i+1, ty, 8000)
 	}
@@ -129,9 +130,9 @@ func TestListUnitsByTypeV1MatchesFullScan(t *testing.T) {
 	}
 }
 
-// The type index must not go stale: v1's updateUnit writes the Unit table
-// without invalidating any cache, and another process (Studio Pro) can change
-// the file under a long-lived reader.
+// The type index must not go stale even after a write nobody announced: the
+// writes here go through the reader's own handle without InvalidateCache, and
+// the kept scan of the table (ako/mxcli#2094) must still notice the file moved.
 func TestListUnitsByTypeV1SeesWritesWithoutInvalidate(t *testing.T) {
 	f := newTypedListingFixture(t, fixtureTypes(10, 3, "Microflows$Microflow", "Forms$Page"))
 	if _, err := f.r.listUnitsByType("Microflows$Microflow"); err != nil { // warm the index

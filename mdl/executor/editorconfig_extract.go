@@ -161,6 +161,18 @@ func extractVisibilityRulesFromJS(js string) ([]types.WidgetVisibilityRule, edit
 			stats.SkippedComplex++
 			continue
 		}
+		// A list computed by a switch (the native Image's image source).
+		if lifted, ok := iifeSwitchHideRules(js, callStart, args, consts); ok {
+			stats.Recognized++
+			for _, r := range lifted {
+				sig := "\x00" + r.PropertyKey + "\x00" + r.HiddenWhen.PropertyKey + r.HiddenWhen.Operator + r.HiddenWhen.Value
+				if !seen[sig] {
+					seen[sig] = true
+					rules = append(rules, r)
+				}
+			}
+			continue
+		}
 		listKey, keys, condKeys, ok := hideTargetKeys(args, consts)
 		if !ok || (len(keys) == 0 && len(condKeys) == 0) {
 			stats.SkippedComplex++
@@ -859,7 +871,19 @@ func parseGuard(js string, callStart int, itemIdent string) (types.WidgetVisibil
 		return types.WidgetVisibilityCondition{}, pre, false, false, nil
 	case '&':
 		if !falsy {
-			return types.WidgetVisibilityCondition{}, guard, false, false, nil
+			// `A && B && hide(…)`: the hide fires when every conjunct holds.
+			// The rule's And carries the earlier ones. Combo box hides
+			// noOptionsText this way — `"none"===filterType && "rowclick"!==
+			// selectionMethod && hide(["noOptionsText"])` — and the rule was
+			// dropped, so mxcli wrote a text template Studio Pro stores as
+			// null there, and mx check reported CE0463 (ako/mxcli#2264).
+			// Every conjunct must read and the chain must start a statement;
+			// otherwise no rule, as before.
+			terms, ok := andChainTerms(pre, boundaryAt, enclosingAliases(js, callStart), itemIdent)
+			if !ok {
+				return types.WidgetVisibilityCondition{}, guard, false, false, nil
+			}
+			chain = terms
 		}
 	case '(':
 		// The paren heads a STATEMENT rather than grouping a guarded branch:
@@ -1019,6 +1043,41 @@ func lastGuardExprAt(pre string) (string, byte, int) {
 	}
 done:
 	return strings.TrimSpace(pre[i+1:]), boundary, i
+}
+
+// andChainTerms reads the conjuncts before a guard that follows `&&` at index
+// at (the second `&`) in pre: `A && B && <guard>` gives [B, A]. It fails unless
+// each conjunct is a condition the guard vocabulary can represent and the chain
+// begins a statement (start of input, `,`, `;` or `{`) — a chain inside a
+// larger expression or behind a `||` cannot be lifted without changing what
+// the rule claims.
+func andChainTerms(pre string, at int, aliases map[string]string, itemIdent string) ([]types.WidgetVisibilityCondition, bool) {
+	var out []types.WidgetVisibilityCondition
+	for depth := 0; depth < maxGroupNesting; depth++ {
+		if at < 1 || pre[at-1] != '&' {
+			return nil, false
+		}
+		before := pre[:at-1]
+		text, boundary, next := lastGuardExprAt(before)
+		text = stripReturnPrefix(text)
+		if text == "" {
+			return nil, false
+		}
+		c, ok := guardToCondition(text, false, aliases, itemIdent)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, c)
+		switch boundary {
+		case '&':
+			pre, at = before, next
+		case 0, ',', ';', '{':
+			return out, true
+		default:
+			return nil, false
+		}
+	}
+	return nil, false
 }
 
 // elseChainTerms returns the conditions under which an ELSE branch runs, for

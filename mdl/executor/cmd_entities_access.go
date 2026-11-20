@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 )
@@ -255,7 +256,7 @@ func formatAccessRuleResult(ctx *ExecContext, moduleName, entityName string, rol
 		// A role may hold one rule per XPath constraint (#936), and the backend
 		// keys the rule by role set plus constraint — echoing any other match
 		// would report a different rule's rights back to the user.
-		if !anyXPath && (rule.XPathConstraint != xpath || !sameRoleSet(rule.ModuleRoleNames, roleNames)) {
+		if !anyXPath && (!types.SameXPathConstraint(rule.XPathConstraint, xpath) || !sameRoleSet(rule.ModuleRoleNames, roleNames)) {
 			continue
 		}
 		// Found a matching rule

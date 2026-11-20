@@ -143,7 +143,10 @@ it" was kept onto an element kind that cannot legally hold one. And enumerate
 the paths: there were two statements rebuilding one document kind, and a carry
 wired into `create or modify` alone was missed by `alter … modify attribute`
 rebuilding the same element through the same converter. Grep the **converter's**
-call sites, not the reported statement.
+call sites, not the reported statement. Carrying an element's *identity* is not
+carrying its *content*: an activity edited in place kept every `$ID` and still
+wrote a REST call's proxy at the default, because the content came from the
+statement and the statement cannot spell a proxy.
 
 **Where a field-by-field carry cannot be trusted, make replaying the description
 a no-op.** If the statement parses to exactly what the stored document's own
@@ -215,7 +218,13 @@ printed *after its enclosing branch*, not on the node: an activity with no way
 out ends a loop iteration, and needs `continue` exactly when the description
 goes on after the branch closes — at any level up to the loop body. When a
 sweep turns up a new shape, ask which two walks disagree about it before
-adding a case to one of them.
+adding a case to one of them. Inside a `while true` every node
+is on a cycle, so a walk asked on behalf of one split must stop at that split:
+past it, it has gone round the loop and "reaches" the split's own branches. The
+rule has to hold for **all** the walks for that split at once — applying it to
+the one the report exercised moved the step after a join back out of the THEN
+arm and pulled another flow's loop exit out of its ELSE arm, which only the
+whole-corpus baseline diff showed.
 
 Three further measurement rules, each of which hid a defect until it was applied:
 

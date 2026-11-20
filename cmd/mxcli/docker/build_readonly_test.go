@@ -62,20 +62,23 @@ func stubMxBuild(t *testing.T) (sawModel *string, sawPath *string) {
 
 func TestBuildOnCopy_DoesNotModifyProject(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		fixture    func(*testing.T) string
-		skipCheck  bool
-		skipUpdate bool
-		dryRun     bool
+		name        string
+		fixture     func(*testing.T) string
+		skipCheck   bool
+		skipUpdate  bool
+		dryRun      bool
+		updateFirst bool
 	}{
-		{"v1", v1Fixture, false, false, false},
-		{"v2", v2Fixture, false, false, false},
-		{"v1 --no-update-widgets", v1Fixture, false, true, false},
-		{"v2 --no-update-widgets", v2Fixture, false, true, false},
-		{"v1 --skip-check", v1Fixture, true, false, false},
-		{"v2 --skip-check", v2Fixture, true, false, false},
-		{"v1 --dry-run", v1Fixture, false, false, true},
-		{"v2 --dry-run", v2Fixture, false, false, true},
+		{"v1", v1Fixture, false, false, false, false},
+		{"v2", v2Fixture, false, false, false, false},
+		{"v1 --no-update-widgets", v1Fixture, false, true, false, false},
+		{"v2 --no-update-widgets", v2Fixture, false, true, false, false},
+		{"v1 --update-widgets", v1Fixture, false, false, false, true},
+		{"v2 --update-widgets", v2Fixture, false, false, false, true},
+		{"v1 --skip-check", v1Fixture, true, false, false, false},
+		{"v2 --skip-check", v2Fixture, true, false, false, false},
+		{"v1 --dry-run", v1Fixture, false, false, true, false},
+		{"v2 --dry-run", v2Fixture, false, false, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mprPath := tc.fixture(t)
@@ -102,13 +105,14 @@ func TestBuildOnCopy_DoesNotModifyProject(t *testing.T) {
 			}
 			var out bytes.Buffer
 			if err := buildOnCopy(buildSteps{
-				ProjectPath:       mprPath,
-				MxPath:            mxPath,
-				MxBuildPath:       "mxbuild",
-				JavaHome:          "/jdk",
-				OutputDir:         outputDir,
-				SkipUpdateWidgets: tc.skipUpdate,
-				DryRun:            tc.dryRun,
+				ProjectPath:        mprPath,
+				MxPath:             mxPath,
+				MxBuildPath:        "mxbuild",
+				JavaHome:           "/jdk",
+				OutputDir:          outputDir,
+				SkipUpdateWidgets:  tc.skipUpdate,
+				UpdateWidgetsFirst: tc.updateFirst,
+				DryRun:             tc.dryRun,
 			}, &out, io.Discard); err != nil {
 				t.Fatalf("buildOnCopy: %v\n%s", err, out.String())
 			}
@@ -144,9 +148,10 @@ func TestBuildOnCopy_DoesNotModifyProject(t *testing.T) {
 				if _, err := os.Stat(filepath.Join(outputDir, "Dockerfile")); err != nil {
 					t.Errorf("the PAD was not written to the output directory: %v", err)
 				}
-				// MxBuild builds the widget-normalised model, which is what
-				// update-widgets is there for — on the copy, not the project.
-				wantNormalised := !tc.skipCheck && !tc.skipUpdate
+				// MxBuild builds the project as stored; only --update-widgets
+				// builds a widget-normalised model — on the copy, not the
+				// project (ako/mxcli#1794).
+				wantNormalised := !tc.skipCheck && tc.updateFirst
 				if got := *sawModel == "rewritten by update-widgets"; got != wantNormalised {
 					t.Errorf("MxBuild saw the normalised model = %v, want %v", got, wantNormalised)
 				}

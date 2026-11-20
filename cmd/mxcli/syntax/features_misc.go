@@ -110,6 +110,119 @@ func init() {
 		SeeAlso: []string{"microflow", "domain-model.entity", "page", "document-folder", "create-if-not-exists"},
 	})
 
+	// `show features` had no topic, so a reader who checked the index concluded
+	// there was no way to ask which Mendix version a statement needs
+	// (ako/mxcli#1367). The same registry answers it, the topics' "Requires"
+	// lines, and the exec-time version gate.
+	Register(SyntaxFeature{
+		Path:    "features",
+		Summary: "LIST FEATURES — which MDL features a Mendix version supports, and since when",
+		Keywords: []string{
+			"show features", "list features", "features", "version", "mendix version",
+			"supported", "support", "requires", "since", "added since", "min version", "compatibility",
+		},
+		Syntax: "LIST FEATURES;                         -- the connected project's version\n" +
+			"LIST FEATURES IN <area>;               -- one area, e.g. workflows, microflows, pages\n" +
+			"LIST FEATURES FOR VERSION 10.24;       -- any version, no project needed\n" +
+			"LIST FEATURES FOR VERSION 10.24.3;\n" +
+			"LIST FEATURES ADDED SINCE 11.0;        -- what is new from a version on\n\n" +
+			"-- Areas: agent_documents, domain_model, integration, microflows, modules,\n" +
+			"-- mpr_format, navigation, oql_functions, pages, scheduled_events,\n" +
+			"-- security, workflows. SHOW FEATURES is the older spelling (MDL-DEPR002).\n" +
+			"--\n" +
+			"-- The table is sdk/versions/*.yaml, the registry `exec` and `check -p`\n" +
+			"-- gate on: a statement whose feature the project's version lacks is\n" +
+			"-- refused before anything is written. Each `mxcli syntax <topic>` page\n" +
+			"-- prints its own \"Requires: Mendix X+\" from the same registry.",
+		Example: "LIST FEATURES FOR VERSION 10.24;\nLIST FEATURES ADDED SINCE 11.0;",
+		SeeAlso: []string{"language-header", "status"},
+	})
+
+	// Every DROP statement, in one place. They used to be spread over the topic of
+	// each document type, and several (DROP ENTITY, DROP MICROFLOW, DROP NANOFLOW,
+	// DROP SNIPPET) were in none: `mxcli syntax drop` found three unrelated
+	// topics, and DROP ASSOCIATION could only be found by trial (#1716).
+	// drop_statements_drift_test.go holds this list to the grammar's
+	// dropStatement rule.
+	Register(SyntaxFeature{
+		Path:    "drop",
+		Summary: "DROP — remove a document (entity, association, microflow, page, …)",
+		Keywords: []string{
+			"drop", "delete", "remove", "destroy", "drop entity", "drop association",
+			"drop microflow", "drop nanoflow", "drop page", "drop snippet", "drop module",
+			"drop enumeration", "drop constant", "drop index", "drop annotation",
+		},
+		Syntax: "-- Domain model\n" +
+			"DROP ENTITY Module.Name;\n" +
+			"DROP EXTERNAL ENTITY Module.Name;\n" +
+			"DROP ASSOCIATION Module.Name;\n" +
+			"DROP ENUMERATION Module.Name;\n" +
+			"DROP CONSTANT Module.Name;\n" +
+			"DROP VALIDATION RULE FOR Module.Entity.Attribute [REGEX | RANGE];\n" +
+			"DROP REGULAR EXPRESSION Module.Name;\n" +
+			"DROP INDEX Module.IndexName ON Module.Entity;\n" +
+			"DROP ANNOTATION 'first line of the caption' IN Module;\n" +
+			"DROP ANNOTATION AT (x, y) IN Module;\n\n" +
+			"-- Logic\n" +
+			"DROP MICROFLOW Module.Name;\n" +
+			"DROP NANOFLOW Module.Name;\n" +
+			"DROP RULE Module.Name;\n" +
+			"DROP JAVA ACTION Module.Name;\n" +
+			"DROP JAVASCRIPT ACTION Module.Name;\n" +
+			"DROP WORKFLOW Module.Name;\n" +
+			"DROP TASK QUEUE Module.Name;\n" +
+			"DROP SCHEDULED EVENT Module.Name;\n\n" +
+			"-- Pages and resources\n" +
+			"DROP PAGE Module.Name;\n" +
+			"DROP SNIPPET Module.Name;\n" +
+			"DROP LAYOUT Module.Name;\n" +
+			"DROP MENU Module.Name;\n" +
+			"DROP IMAGE COLLECTION Module.Name;\n\n" +
+			"-- Integration\n" +
+			"DROP CONSUMED ODATA SERVICE Module.Name;\n" +
+			"DROP PUBLISHED ODATA SERVICE Module.Name;\n" +
+			"DROP CONSUMED REST SERVICE Module.Name;\n" +
+			"DROP PUBLISHED REST SERVICE Module.Name;\n" +
+			"DROP BUSINESS EVENT SERVICE Module.Name;\n" +
+			"DROP DATABASE CONNECTION Module.Name;\n" +
+			"DROP JSON STRUCTURE Module.Name;\n" +
+			"DROP MESSAGE DEFINITION COLLECTION Module.Name;\n" +
+			"DROP MESSAGE DEFINITION Module.Name;\n" +
+			"DROP IMPORT MAPPING Module.Name;\n" +
+			"DROP EXPORT MAPPING Module.Name;\n" +
+			"DROP DATA TRANSFORMER Module.Name;\n\n" +
+			"-- Agents\n" +
+			"DROP AI MODEL Module.Name;\n" +
+			"DROP CONSUMED MCP SERVICE Module.Name;\n" +
+			"DROP PUBLISHED MCP SERVICE Module.Name;\n" +
+			"DROP KNOWLEDGE BASE Module.Name;\n" +
+			"DROP AGENT Module.Name;\n\n" +
+			"-- Project structure\n" +
+			"DROP MODULE ModuleName;\n" +
+			"DROP FOLDER 'path' IN Module;\n" +
+			"DROP CONFIGURATION 'Name';\n\n" +
+			"-- Every form but INDEX and ANNOTATION takes IF EXISTS after the type\n" +
+			"-- (DROP ENTITY IF EXISTS Module.Name;) -- see drop-if-exists. Without it\n" +
+			"-- a missing target is an error, as in SQL.\n" +
+			"--\n" +
+			"-- Members of a document are removed with ALTER, not DROP:\n" +
+			"--   ALTER ENTITY … DROP ATTRIBUTE | DROP INDEX | DROP EVENT HANDLER\n" +
+			"--   ALTER ENUMERATION … DROP VALUE\n" +
+			"--   ALTER MESSAGE DEFINITION … DROP MEMBER\n" +
+			"--   ALTER PAGE / ALTER SNIPPET … DROP WIDGET\n" +
+			"--   ALTER WORKFLOW … DROP ACTIVITY | DROP OUTCOME | DROP PATH …\n" +
+			"-- Security has its own: DROP USER ROLE, DROP MODULE ROLE, DROP DEMO USER\n" +
+			"-- (see security).\n" +
+			"--\n" +
+			"-- DROP ASSOCIATION reconciles the entity access rules that named it, and is\n" +
+			"-- refused while a message definition still exposes it.",
+		Example: "mdl 1;\n" +
+			"DROP ASSOCIATION Shop.Order_Customer;\n" +
+			"DROP ENTITY Shop.OrderLine;\n" +
+			"DROP MICROFLOW IF EXISTS Shop.ACT_Old;",
+		SeeAlso: []string{"drop-if-exists", "domain-model.entity.alter", "security"},
+	})
+
 	// IF EXISTS sits on every document-level alternative of dropStatement, so it
 	// is documented once here for the same reason OR MODIFY is (#531).
 	Register(SyntaxFeature{
@@ -314,8 +427,9 @@ DISCONNECT;`,
 	// ── Navigation ──────────────────────────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "navigation",
-		Summary: "Navigation profiles — home pages, menus, login pages per device type",
+		Path:     "navigation",
+		Features: []string{"navigation/profiles", "navigation/home_pages", "navigation/menu_items", "navigation/menu_item_icons", "navigation/native_home_page", "navigation/not_found_page", "navigation/progressive_web_app"},
+		Summary:  "Navigation profiles — home pages, menus, login pages per device type",
 		Keywords: []string{
 			"navigation", "nav", "profile", "responsive", "phone", "tablet",
 			"home page", "menu", "login page",
@@ -558,6 +672,11 @@ LIST NAVIGATION MENU <profile> prints every item's shortest address.
 -- carries the item itself, sub-items included. Fragment items are written
 -- exactly as in CREATE NAVIGATION, so DESCRIBE output pastes in.
 --
+-- INSERT is re-runnable: an item the target list already holds, as the
+-- statement builds it, is already there and is not added again (a second
+-- run reports Unchanged). An item of that caption built differently (another
+-- action, other sub-items) is refused -- REPLACE changes it.
+--
 -- mxcli never guesses: an address that matches nothing or several items is
 -- refused, listing the address of each candidate. Positional addresses do
 -- not exist.
@@ -704,7 +823,7 @@ create or modify translations in Administration for nl_NL (
 			"add language", "remove language", "enable language", "translations",
 			"optimistic locking", "concurrency", "lost update",
 			"workflow group", "workflow groups", "add group", "task assignment",
-			"web ui", "webui", "react client", "optimized client", "classic client", "jvm parameters", "proxy",
+			"web ui", "webui", "react client", "optimized client", "classic client", "theme module order", "theme order", "jvm parameters", "proxy",
 		},
 		Syntax: `ALTER SETTINGS RUNTIME (<key>: <value>, ...);
 ALTER SETTINGS CONFIGURATION '<name>' (<key>: <value>, ...);
@@ -720,6 +839,7 @@ ALTER SETTINGS WORKFLOWS ADD [OR MODIFY] GROUP '<name>' [(Description: '<text>')
 ALTER SETTINGS WORKFLOWS MODIFY GROUP '<name>' (Description: '<text>');
 ALTER SETTINGS WORKFLOWS DROP GROUP '<name>';
 ALTER SETTINGS WEBUI (OptimizedClient: 'Yes' | 'No' | 'MigrationMode');
+ALTER SETTINGS WEBUI (ThemeModuleOrder: ('<module>', ...));
 CREATE [OR MODIFY] CONFIGURATION '<name>' [(<key>: <value>, ...)];
 DROP CONFIGURATION '<name>';
 
@@ -748,6 +868,13 @@ ALTER SETTINGS CONFIGURATION 'Default' (
 -- classic (Dojo) one, MigrationMode Mendix's mixed mode. Widgets differ per
 -- client, so check it (LIST SETTINGS) before choosing one.
 ALTER SETTINGS WEBUI (OptimizedClient: 'Yes');
+
+-- ThemeModuleOrder is App Settings > Theme > module order: the theme compiles
+-- the listed modules' themesource in this order, so a module listed last wins.
+-- Mark your own module UI resources first; modules left out keep Mendix's
+-- default place. An empty order (the default) has no statement.
+ALTER MODULE BrandTheme SET (UIResources: true);
+ALTER SETTINGS WEBUI (ThemeModuleOrder: ('Atlas_Core', 'DataWidgets', 'BrandTheme'));
 
 -- LANGUAGE ADD/REMOVE change the ENABLED languages — the list under App
 -- Settings > Languages, and the only languages a build emits anything for. A
@@ -865,8 +992,19 @@ CALL JAVA ACTION (see: mxcli syntax microflow.call):
   CALL MICROFLOW Ops.ACT_Process(Order = $Order) IN QUEUE Ops.OrderProcessing;
 
 A rewrite that does NOT restate a stored binding is refused, because it would
-drop it silently. A retry policy on a queued call has no MDL spelling and is
-also refused rather than reset — change those in Studio Pro.`,
+drop it silently.
+
+A queued call's retry policy (Mendix 9.10+) follows the queue:
+
+  CALL MICROFLOW Ops.POST_Message(Body = $Body) IN QUEUE Ops.SendQueue
+    RETRY EXPONENTIAL (Retries: 20, InitialInterval: 1, MaximumInterval: 60, IntervalType: Minutes);
+  CALL JAVA ACTION Ops.Refresh(Url = $Url) IN QUEUE Ops.SendQueue
+    RETRY FIXED (Retries: 5, Interval: 10, IntervalType: Minutes);
+
+Every property is required (IntervalType: Seconds | Minutes | Hours); Retries
+must be at least 1 (CE7044). DESCRIBE prints a stored retry, so it round-trips.
+A rewrite that still calls into the queue but leaves the retry out is refused
+rather than reset: restate it, or state a new one.`,
 		Example: `mdl 1;
 CREATE TASK QUEUE Ops.OrderProcessing (
   Parallelism: 3,
@@ -1018,8 +1156,9 @@ CREATE VALIDATION RULE FOR Shop.Product.Price
 	// ── Scheduled events ────────────────────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "scheduled-event",
-		Summary: "Scheduled events — Mendix's cron: run a microflow on a repeating schedule",
+		Path:     "scheduled-event",
+		Features: []string{"scheduled_events/schedules"},
+		Summary:  "Scheduled events — Mendix's cron: run a microflow on a repeating schedule",
 		Keywords: []string{
 			"scheduled event", "scheduled events", "schedule", "cron", "recurring",
 			"create scheduled event", "drop scheduled event", "describe scheduled event",
@@ -1106,9 +1245,11 @@ DROP SCHEDULED EVENT Ops.HourlyPing;`,
 		Summary: "DESCRIBE STRUCTURE — compact project overview at configurable depth",
 		Keywords: []string{
 			"structure", "describe structure", "project overview",
-			"repo map", "module summary", "depth",
+			"repo map", "module summary", "depth", "folders",
 		},
-		Syntax: "DESCRIBE STRUCTURE [DEPTH 1|2|3] [IN <module>] [ALL];",
+		Syntax: "DESCRIBE STRUCTURE [DEPTH 1|2|3] [IN <module>] [ALL];\n" +
+			"-- At depth 2 and 3 documents are nested under their folders (`Orders/`),\n" +
+			"-- after the module root's; entities stay at the root (no folders in a domain model).",
 		Example: `-- Module counts only
 DESCRIBE STRUCTURE DEPTH 1;
 
@@ -1203,14 +1344,14 @@ LIST FOLDERS IN MyModule;`,
 		Path:    "rename",
 		Summary: "RENAME — rename a document, entity, association or module and update every reference",
 		Keywords: []string{
-			"rename", "rename microflow", "rename nanoflow", "rename page",
+			"rename", "rename microflow", "rename nanoflow", "rename page", "rename snippet",
 			"rename entity", "rename enumeration", "rename association",
 			"rename constant", "rename java action", "rename workflow",
 			"rename module", "dry run", "refactor", "update references",
 		},
 		Syntax: `RENAME <target> Module.OldName TO NewName [DRY RUN];
--- target: ENTITY | MICROFLOW | NANOFLOW | PAGE | ENUMERATION | ASSOCIATION
---         | CONSTANT | JAVA ACTION | WORKFLOW
+-- target: ENTITY | MICROFLOW | NANOFLOW | PAGE | SNIPPET | ENUMERATION
+--         | ASSOCIATION | CONSTANT | JAVA ACTION | WORKFLOW
 RENAME MODULE OldModule TO NewModule [DRY RUN];
 
 -- The new name is BARE: the element stays in its module (use MOVE to change
@@ -1220,7 +1361,8 @@ RENAME MODULE OldModule TO NewModule [DRY RUN];
 -- project that IS the old qualified name, or starts with it plus '.', is
 -- rewritten (Module.Old -> Module.New, Module.Old.Attr -> Module.New.Attr).
 -- That covers calls, page and microflow parameters, show-page actions,
--- navigation, security, attribute types, association ends.
+-- snippet calls (in pages, layouts and snippets), navigation, security,
+-- attribute types, association ends.
 -- Inside an expression or XPath, a constant (@Module.Old) and an enumeration
 -- value (Module.Old.Value) are rewritten too; text in a string literal is not.
 -- Any other name inside free text is left as it was; build or
@@ -1239,8 +1381,8 @@ RENAME MODULE OldModule TO NewModule [DRY RUN];
 --
 -- From the shell, the same statement for one element:
 --   mxcli rename -p app.mpr <type> Module.OldName NewName [--dry-run]
---   type: entity | microflow | nanoflow | page | enumeration | association
---         | constant | java-action | workflow | module
+--   type: entity | microflow | nanoflow | page | snippet | enumeration
+--         | association | constant | java-action | workflow | module
 --   (it also updates docs/brain/ anchors; see 'mxcli help rename')`,
 		Example: `mdl 1;
 -- See what would change first
@@ -1249,6 +1391,7 @@ RENAME MICROFLOW Shop.ACT_Old TO ACT_ProcessOrder DRY RUN;
 RENAME MICROFLOW Shop.ACT_Old TO ACT_ProcessOrder;
 RENAME NANOFLOW Shop.NF_Old TO NF_Validate;
 RENAME PAGE Shop.OldPage TO Order_Edit;
+RENAME SNIPPET Shop.Combo TO SNIPPET_Combo;
 RENAME ENTITY Shop.Customer TO Client;
 RENAME ENUMERATION Shop.Status TO OrderStatus;
 RENAME ASSOCIATION Shop.Order_Customer TO Order_Client;
@@ -1496,21 +1639,82 @@ mxcli check script.mdl -p app.mpr --references  -- With reference validation`,
 	})
 
 	Register(SyntaxFeature{
-		Path:    "module.jar-dependencies",
-		Summary: "Manage Maven/JAR dependencies in a module's settings",
+		Path:     "module.settings",
+		Features: []string{"modules/module_type"},
+		Summary:  "A module's version and module type (Studio Pro's Module settings, General tab)",
+		Keywords: []string{
+			"module settings", "module version", "module type", "add-on module",
+			"addon", "app module", "semver", "export module",
+			"ui resources", "theme module", "uiresources",
+		},
+		Syntax: `CREATE [OR MODIFY] MODULE <name> ( Version: 'x.y.z', ModuleType: app | addon, UIResources: true | false );
+ALTER MODULE <name> SET ( Version: 'x.y.z', ModuleType: app | addon, UIResources: true | false );
+DESCRIBE MODULE <name>;   -- prints the settings that differ from App / 1.0.0 / not UI resources
+
+-- UIResources is Studio Pro's "UI resources package": the module's themesource
+-- styling is part of the theme. Its place in the compile order is
+-- ALTER SETTINGS WEBUI (ThemeModuleOrder: (…)), see settings.alter.`,
+		Example: `mdl 1;
+-- A versioned add-on module
+create or modify module Inventory (
+  Version: '2.3.1',
+  ModuleType: addon,
+);
+
+-- Bump the version before exporting it
+alter module Inventory set (Version: '2.4.0');
+
+-- An add-on hides elements not marked Usable from other modules (CE1406);
+-- check -p --references reports the references that breaks.`,
+	})
+
+	Register(SyntaxFeature{
+		Path:    "module.documentation",
+		Summary: "A module's documentation: one sentence on what the module is for (shown by reports and Studio Pro)",
+		Keywords: []string{
+			"module documentation", "module description", "module purpose", "domain model documentation",
+			"doc comment", "describe module",
+		},
+		Syntax: `/** <documentation> */
+CREATE [OR MODIFY] MODULE <name>;
+ALTER MODULE <name> SET DOCUMENTATION '<documentation>';   -- '' clears it
+DESCRIBE MODULE <name>;   -- prints it as the doc comment
+-- Mendix keeps a module's documentation on its domain model
+-- (DomainModels$DomainModel.Documentation); CATALOG.MODULES.DomainModelDocumentation
+-- has it, and report map / report architecture show it as the module's purpose.
+-- A plain CREATE of an existing module leaves it unchanged; CREATE OR MODIFY sets it.
+-- Stating the stored text again writes nothing.`,
+		Example: `mdl 1;
+/** Shift swaps between colleagues: proposals, approval and the marketplace. */
+create or modify module Swaps;
+
+alter module Swaps set documentation 'Shift swaps between colleagues, with approval.';`,
+	})
+
+	Register(SyntaxFeature{
+		Path:     "module.jar-dependencies",
+		Features: []string{"modules/jar_dependencies", "modules/jar_dependency_exclusions"},
+		Summary:  "Manage Maven/JAR dependencies in a module's settings",
 		Keywords: []string{
 			"jar dependency", "maven", "jar dep", "module settings",
-			"group", "artifact", "classpath", "exclusion",
+			"group", "artifact", "classpath", "exclusion", "if not exists", "re-runnable",
 		},
 		Syntax: `LIST JAR DEPENDENCIES [IN <module>];
 DESCRIBE JAR DEPENDENCY <module> '<group:artifact>';
 ALTER MODULE <name>
-  ADD JAR DEPENDENCY (
+  ADD JAR DEPENDENCY [IF NOT EXISTS] (
     group    = '<group>',
     artifact = '<artifact>',
     version  = '<version>',
     included = true|false,
   );
+-- Bare ADD errors when the module already declares group:artifact.
+-- IF NOT EXISTS makes the script re-runnable: an existing coordinate is left
+-- UNTOUCHED with a "skipped" notice, even when its stored version or included
+-- flag differs (the notice names the difference and the SET that changes it),
+-- and a statement whose every ADD skipped writes nothing and reports Unchanged.
+-- Same semantics as ADD ATTRIBUTE / ADD VALUE / CREATE ENTITY IF NOT EXISTS.
+-- To also move an existing dependency to a new version, follow it with SET … VERSION.
 ALTER MODULE <name> SET JAR DEPENDENCY '<group:artifact>' VERSION '<version>';
 ALTER MODULE <name> SET JAR DEPENDENCY '<group:artifact>' INCLUDED true|false;
 ALTER MODULE <name> SET JAR DEPENDENCY '<group:artifact>' ADD EXCLUSION '<group:artifact>';
@@ -1526,7 +1730,16 @@ ALTER MODULE MyModule
     included = true,
   );
 
--- Update the version
+-- Re-runnable form for a project script: the second exec writes nothing
+ALTER MODULE MyModule
+  ADD JAR DEPENDENCY IF NOT EXISTS (
+    group    = 'org.duckdb',
+    artifact = 'duckdb_jdbc',
+    version  = '1.1.3',
+    included = true,
+  );
+
+-- Update the version (also re-runnable: restating it writes nothing)
 ALTER MODULE MyModule SET JAR DEPENDENCY 'org.duckdb:duckdb_jdbc' VERSION '1.2.0';
 
 -- Exclude a transitive dependency

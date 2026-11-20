@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sort"
 
@@ -54,7 +55,10 @@ is not installed.
 Examples:
   mxcli widget sync -p app.mpr --dry-run
   mxcli widget sync -p app.mpr --dry-run --widget com.mendix.widget.web.datagrid.Datagrid
-  mxcli widget sync -p app.mpr --dry-run --page MyModule.Overview`,
+  mxcli widget sync -p app.mpr --dry-run --page MyModule.Overview
+
+--page takes the qualified name; a bare name is accepted when only one module
+has a page or snippet of that name.`,
 	RunE: runWidgetSync,
 }
 
@@ -73,6 +77,9 @@ func runWidgetSync(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	widgetID, _ := cmd.Flags().GetString("widget")
 	page, _ := cmd.Flags().GetString("page")
+	// Past flag parsing, an error is about the project, not the invocation:
+	// the usage text would bury it.
+	cmd.SilenceUsage = true
 
 	exec, logger := newLoggedExecutor("subcommand")
 	defer logger.Close()
@@ -95,7 +102,7 @@ func runWidgetSync(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		renderSyncPlan(plan)
+		renderSyncPlan(os.Stdout, plan, true)
 		return nil
 	}
 
@@ -103,7 +110,7 @@ func runWidgetSync(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	renderSyncPlan(plan)
+	renderSyncPlan(os.Stdout, plan, false)
 	fmt.Printf("\nApplied: %d property change(s) on %d widget(s) in %d unit(s).\n",
 		res.PropertiesFixed, res.WidgetsChanged, res.UnitsChanged)
 	if n := len(res.Skipped); n > 0 {
@@ -114,9 +121,10 @@ func runWidgetSync(cmd *cobra.Command, args []string) error {
 
 // renderSyncPlan prints the plan. Every property is named rather than counted:
 // removing a property discards its stored value, and that is exactly what a user
-// needs to see before it happens.
-func renderSyncPlan(plan *executor.SyncPlan) {
-	out := os.Stdout
+// needs to see before it happens. dryRun says whether the plan is only a
+// preview: an applying run printed "nothing was written" right before
+// reporting what it wrote (ako/mxcli#1997).
+func renderSyncPlan(out io.Writer, plan *executor.SyncPlan, dryRun bool) {
 
 	if len(plan.Unresolved) > 0 {
 		fmt.Fprintln(out, "Widgets used in the model with no installed .mpk (skipped, never modified):")
@@ -156,7 +164,9 @@ func renderSyncPlan(plan *executor.SyncPlan) {
 
 	fmt.Fprintf(out, "\n%d widget instance(s), %d property change(s) across %d container(s).\n",
 		len(plan.Widgets), plan.TotalChanges(), countContainers(plan))
-	fmt.Fprintln(out, "Read-only: nothing was written.")
+	if dryRun {
+		fmt.Fprintln(out, "Read-only: nothing was written.")
+	}
 }
 
 func changeMarker(k executor.SyncChangeKind) string {

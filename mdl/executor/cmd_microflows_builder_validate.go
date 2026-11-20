@@ -310,6 +310,11 @@ func (fb *flowBuilder) validateStatement(stmt ast.MicroflowStatement) {
 	case *ast.RollbackStmt:
 		// No error handling to validate
 
+	case *ast.ExternalObjectStmt:
+		if s.ErrorHandling != nil && len(s.ErrorHandling.Body) > 0 {
+			fb.validateStatements(s.ErrorHandling.Body)
+		}
+
 	case *ast.RetrieveStmt:
 		fb.validateOutputVariable(s.Variable, "retrieve")
 		// Register retrieved variable

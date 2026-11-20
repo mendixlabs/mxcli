@@ -24,9 +24,15 @@ var checkCmd = &cobra.Command{
 	Long: `Check an MDL script file for syntax errors and optionally validate references.
 
 Without a project it checks syntax and the semantic rules that need no model.
-Pass -p and it also resolves every reference — modules, entities, pages,
-microflows and icons — against that project; --references is implied by -p and
-is kept only for compatibility.
+With a project it also resolves every reference — modules, entities, pages,
+microflows and icons — against that project; --references is implied by a
+project and is kept only for compatibility.
+
+The project is the one passed with -p or, without -p, the single .mpr in the
+current directory, auto-detected as for every mxcli command (the "Using
+project:" line says which). Run from a project directory, a plain
+"mxcli check script.mdl" therefore checks references too. Pass --no-project to
+check syntax and the no-model rules only, wherever it is run.
 
 It also resolves MEMBER names, not just the entity they belong to: an attribute
 named in a create/change activity is looked up on that entity and its
@@ -122,11 +128,14 @@ for legacy native widgets that have pluggable replacements — Studio Pro does
 not auto-migrate these on a Mendix major-version upgrade.
 
 Examples:
-  # Check syntax only (no project needed)
-  mxcli check script.mdl
+  # Check syntax only, even in a directory holding an .mpr
+  mxcli check script.mdl --no-project
 
   # Check syntax, resolve references, and type-check expressions
   mxcli check script.mdl -p app.mpr
+
+  # The same, against the .mpr auto-detected in the current directory
+  mxcli check script.mdl
 
   # Scan the project for legacy native widgets after a Mendix upgrade
   mxcli check script.mdl -p app.mpr --post-migration
@@ -150,10 +159,30 @@ Examples:
 `,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		if err := checkNoProjectConflicts(cmd); err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
 		if code := runCheckFiles(cmd, args); code != 0 {
 			os.Exit(code)
 		}
 	},
+}
+
+// checkNoProjectConflicts refuses --no-project together with a flag that asks
+// for a project, rather than letting one of the two silently win. -p is only
+// "changed" when the user gave it: auto-detection does not run under
+// --no-project, so it cannot set it.
+func checkNoProjectConflicts(cmd *cobra.Command) error {
+	if !skipsProjectDiscovery(cmd) {
+		return nil
+	}
+	for _, name := range []string{"project", "references", "post-migration"} {
+		if cmd.Flags().Changed(name) {
+			return fmt.Errorf("--%s asks for a project and --%s for none; pass one or the other", name, noProjectFlag)
+		}
+	}
+	return nil
 }
 
 // runCheckFile checks one script and returns the exit code: 0 when it passed.
@@ -313,6 +342,14 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 	//   - MDL067 is dropped for a flow already stored the way the script
 	//     commits — the filter exec's preflight applies.
 	//   - MDL-WORKFLOW10 reads a called microflow the script does not create.
+	// A test endpoint left in the project by a run that never removed it would
+	// be committed with the script's changes; say so while it can still be undone.
+	if projectPath != "" && !isStructured {
+		if msg := testrunner.LeftoverEndpointWarning(projectPath); msg != "" {
+			fmt.Fprintf(os.Stderr, "Warning: %s\n", msg)
+		}
+	}
+
 	var exec *executor.Executor
 	if projectPath != "" {
 		e, logger := newLoggedExecutorTo("check", progressSink(format))
@@ -330,6 +367,11 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 			}
 		}
 		exec = e
+		// check writes nothing, and its tiers each list the project's flows
+		// and pages: one span over all of them, so a unit is read once per
+		// run rather than once per tier (ako/mxcli#2160). The tiers' own
+		// spans nest inside it. Released before the deferred Close.
+		defer e.CacheUnitReads()()
 		if b := exec.Backend(); b != nil {
 			violations = executor.DropSettledCommitNotes(violations, prog, executor.NewStoredCommitEvents(b))
 			// MDL004 on a void microflow's end-event value is a warning for a flow
@@ -409,6 +451,9 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 			for _, w := range refWarnings {
 				fmt.Fprintf(os.Stderr, "  %s\n", w)
 			}
+			// Printed here, not through report, but part of the total the
+			// closing summary gives (ako/mxcli#1928).
+			printed = append(printed, warnViolations...)
 		} else if len(warnViolations) > 0 && len(validationErrors) == 0 {
 			structured = append(structured, warnViolations...)
 		}
@@ -430,8 +475,32 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 					fmt.Fprintf(os.Stderr, "  %v\n", err)
 				}
 				fmt.Fprintf(os.Stderr, "\n✗ %d reference error(s) found\n", len(validationErrors))
+				// The closing summary is the run's total; it read "0 errors"
+				// after this line, because these are printed here rather than
+				// through report (ako/mxcli#1928).
+				for _, err := range validationErrors {
+					printed = append(printed, linter.Violation{
+						RuleID:   "MDL-REF",
+						Severity: linter.SeverityError,
+						Message:  err.Error(),
+					})
+				}
 				if hint := testFileMissingTargetHint(filePath, validationErrors); hint != "" {
 					fmt.Fprint(os.Stderr, hint)
+				}
+			}
+			// The flow verdicts still run (ako/mxcli#2014): they are what exec
+			// would refuse, and stopping here hid them behind the reference
+			// error — fixed, re-checked, and only then the next problem, or an
+			// `exec --no-check` that ran far and rolled back. The rest of the
+			// project tier stays skipped: a name that does not resolve mostly
+			// makes the type checks repeat the reference error.
+			if verdicts := executor.ApplyV1Policy(exec.CheckFlowVerdictsReport(prog).Violations, v1); len(verdicts) > 0 {
+				if isStructured {
+					structured = append(structured, verdicts...)
+				} else {
+					fmt.Fprintln(os.Stderr)
+					report(verdicts)
 				}
 			}
 			return finish(1)
@@ -471,6 +540,11 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 		// mdl 0, and an alter whose patch fails is refused under both. They
 		// run the verdict exec and diff run, so the three agree.
 		projectViolations := exec.CheckEntityMemberDrops(prog)
+		// MDL-ODATA10: a call external action argument whose stored Associations
+		// to include a create or modify keeps because the statement does not
+		// write the clause (ako/mxcli#1914) — the omitted-clause warning exec
+		// prints, said before the write.
+		projectViolations = append(projectViolations, exec.CheckCarriedIncludedAssociations(prog)...)
 		projectViolations = append(projectViolations, exec.TypeCheckProgram(prog)...)
 		flowReport := exec.CheckFlowVerdictsReport(prog)
 		projectViolations = append(projectViolations, flowReport.Violations...)
@@ -484,6 +558,10 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 		// A consistency rule between two documents, not a reference, so the
 		// reference check above cannot see it.
 		projectViolations = append(projectViolations, exec.CheckEntityAccessCalls(prog)...)
+		// MDL-GRANT03: a grant whose where clause narrows nothing because the
+		// role already holds an unconstrained rule on the entity in the
+		// project, or the reverse (ako/mxcli#2320).
+		projectViolations = append(projectViolations, exec.CheckAccessRuleOverlap(prog)...)
 		// MDL-I18N01 (MxBuild CE4899): a script that changes the default
 		// language leaves every required caption written in the old one empty
 		// in the new one (ako/mxcli#944).

@@ -12,25 +12,45 @@ type GlyphIcon struct {
 	Code int
 	// Name is the icon's name without the `glyphicon-` prefix.
 	Name string
-	// Aliases are further names for the same code (only `bitcoin` has any).
+	// Aliases are further names for the same code (bitcoin, yen, euro, ruble).
 	Aliases []string
 }
 
-// glyphIcons is every icon the Mendix glyph font defines: 247 codes, sorted.
+// glyphIcons is every icon the Mendix glyph font defines: 258 codes, sorted.
 //
 // Both halves come from assets Mendix ships rather than from a hand-written
-// list. The CODES are the private-use range of the cmap in Atlas_Core's
-// glyphicons-halflings-regular.woff — the same table mxbuild resolves against,
-// verified on two full deploy builds (see validateGlyphCodes) and against the
-// cmap of mxbuild's own modeler/glyphicons-halflings-regular.ttf, which is
-// byte-identical in 9.24, 10.12, 11.6.6 and 11.15.0 and holds exactly these
-// codes (mendixlabs/mxcli#1522). The NAMES
-// are the `.glyphicon-<name>:before { content: "\eXXX" }` rules in Atlas_Core's
-// bundled Bootstrap stylesheet, which covers all 247 with none left over.
+// list. The CODES are the cmap of Atlas_Core's glyphicons-halflings-regular.woff
+// — the same table mxbuild resolves against, verified on full deploy builds
+// (see validateGlyphCodes) and against the cmap of mxbuild's own
+// modeler/glyphicons-halflings-regular.ttf, which is byte-identical in 9.24,
+// 10.12, 11.6.6, 11.12.6, 11.14.0 and 11.15.0 (mendixlabs/mxcli#1522). The
+// NAMES are the `.glyphicon-<name>:before { content: "\XXXX" }` rules in
+// Atlas_Core's bundled Bootstrap stylesheet.
+//
+// That is 247 codes in the private-use range and 11 named icons at ordinary
+// code points: asterisk, plus, yen, euro, ruble, minus, hourglass, cloud, tent,
+// envelope and pencil (ako/mxcli#2112). The table held only the private-use
+// range at first, and MDL078 refused glyph 9999 and 43, which Marketplace
+// modules store. Measured on mxbuild 11.12.6, one deploy build per code: each
+// of the 11 builds clean, and so does 57377 (control); 57562 crashes with
+// "Sequence contains no matching element" (control), and so does every other
+// code point the cmap maps — the whitespace ones (32, 160, U+2000–U+200A,
+// U+202F, U+205F) and U+25FC, which the stylesheet does not name either.
 //
 // One table, not two: glyphCodeDefined searches this, so the set MDL078 accepts
 // and the set `show glyphs` lists cannot drift apart.
 var glyphIcons = []GlyphIcon{
+	{42, "asterisk", nil},
+	{43, "plus", nil},
+	{165, "yen", []string{"jpy"}},
+	{8364, "euro", []string{"eur"}},
+	{8381, "ruble", []string{"rub"}},
+	{8722, "minus", nil},
+	{8987, "hourglass", nil},
+	{9729, "cloud", nil},
+	{9978, "tent", nil},
+	{9993, "envelope", nil},
+	{9999, "pencil", nil},
 	{57345, "glass", nil},
 	{57346, "music", nil},
 	{57347, "search", nil},

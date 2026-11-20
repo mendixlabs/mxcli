@@ -11,12 +11,12 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | lines | section |
 |---|---|
 | 24-50 | Overview |
-| 51-137 | Syntax |
-| 138-164 | Altering existing documents |
-| 165-193 | Gotchas |
-| 194-215 | Common Patterns |
-| 216-251 | Calling Agents from Microflows |
-| 252-254 | AI agent documents |
+| 51-195 | Syntax |
+| 196-222 | Altering existing documents |
+| 223-284 | Gotchas |
+| 285-307 | Common Patterns |
+| 308-375 | Calling Agents from Microflows |
+| 376-378 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -60,21 +60,23 @@ create ai model Module.MyModel (
 );
 ```
 
-**`Provider` is free-form, and nothing validates it.** MDL passes the value
-straight through; `MxCloudGenAI` is only the default applied when you omit the
-property, not the only accepted value. `Provider: OpenAI` parses, writes, and
-round-trips through `describe ai model` — as does `Provider: TotallyMadeUp`.
+**`Provider` is free-form; `check` warns on a value Agent Editor rejects (MDL-AGENT01).**
 
-That means a typo is caught by **nothing** in the headless path. Agent Editor
-documents are stored as custom blobs, and mxbuild contains no agent-editor
-strings at all, so `mx check` and the build both stay green and the fault
-surfaces only when Studio Pro opens the document.
+| Document | Provider | Connector it imports through |
+|---|---|---|
+| AI model | `MxCloudGenAI` | MxGenAIConnector |
+| AI model | `Azure` (Azure AI Foundry) | OpenAIConnector |
+| AI model | `Fuse` (Agent Editor 2.7+) | FuseConnector |
+| Knowledge base | `MxCloudGenAI` only | MxGenAIConnector |
 
-mxcli deliberately does not enforce an allowlist, because the authoritative set
-of provider values is not available to it: the agent editor is a Studio Pro
-*extension*, its enum is not in `generated/metamodel` and not in mxbuild. Guessing
-a list risks rejecting a value Mendix accepts. **Take the value from a model
-document Studio Pro created**, rather than from memory or from this file.
+MDL passes the value straight through, and mxbuild contains no agent-editor
+strings, so `mx check` and the build stay green on a typo. The fault surfaces at
+startup, when `ASU_AgentEditor` fails the import with "Model provider is not
+one of the allowed types". `mxcli check` therefore warns, without a project, on
+any other value or the wrong case. The values come from
+`javasource/agenteditorcommons/actions/ImportDeployedModel.java`, whose
+`getImportMicroflow` switch is the authority; read it in the app when a newer
+Agent Editor may have added one. It warns rather than refuses for that reason.
 
 ### Knowledge Base
 
@@ -90,12 +92,55 @@ create knowledge base Module.ProductDocs (
 
 ```sql
 mdl 1;
+create constant Module.WebSearchUrl (Type: string, DefaultValue: 'https://example.com/mcp');
 create consumed mcp service Module.WebSearch (
   ProtocolVersion: v2025_03_26,
+  Endpoint: @Module.WebSearchUrl,                -- String constant: the server URL
+  AuthenticationMicroflow: Module.GetMcpHeaders, -- optional: returns the request headers
   version: '1.0',
   ConnectionTimeoutSeconds: 30,
   documentation: 'Web search MCP server'
 );
+```
+
+**`Endpoint` is what makes it connect.** It names a String constant holding the
+server URL. At startup Agent Editor reads the constant's value and, when there
+is none, skips the service ("No value could be found for the local
+configuration for the constant"), so an agent's `mcp service` block gets no
+tools. `check` warns on a `create` without it (MDL-AGENT03), and
+`check --references` and `exec` on a `create or modify` that leaves a new or
+stored service without one; `check --references` refuses a constant that is
+not a String. `mxcli lint` reports a stored service without one (MPR015).
+
+`AuthenticationMicroflow` supplies credentials: MCP Client calls it with **no
+parameters** and sends the `List of System.HttpHeader` it returns with every
+request (`check --references` refuses any other signature):
+
+```sql
+mdl 1;
+create microflow Module.GetMcpHeaders ()
+returns list of System.HttpHeader as $Headers
+begin
+  $Headers = create list of System.HttpHeader;
+  call microflow MCPClient.HttpHeader_CreateAndAddToList(HttpHeaderList = $Headers, Key = 'Authorization', Value = 'Bearer ' + @Module.WebSearchToken);
+  return $Headers;
+end;
+```
+
+### Published MCP Service
+
+The other direction: the app publishes its microflows as an MCP server
+(Agent Editor 2.6+, MCP Server 5.x). `./mxcli syntax agents.published-mcp-service`
+has the full syntax; the `mcp-server` skill covers the contracts of the tool and
+authentication microflows and the runtime-configured alternative.
+
+```sql
+mdl 1;
+create published mcp service Module.CustomerMCP (
+  EndpointPath: 'customers', Version: '1.0.0', ProtocolVersion: v2025_03_26
+) {
+  tool count_customers ( Microflow: Module.MCPTool_CountCustomers, Description: 'Count customers.' )
+};
 ```
 
 ### Agent (full syntax)
@@ -105,11 +150,13 @@ mdl 1;
 create agent Module.MyAgent (
   UsageType: task,              -- Task | Conversational
   model: Module.MyModel,        -- must exist
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   description: 'Agent description',
   MaxTokens: 4096,
   Temperature: 0.7,             -- float
   TopP: 0.9,                    -- float
   ToolChoice: Auto,
+  Entity: Module.Customer,      -- must exist; stored with the entity's $ID
   variables: ("Language": EntityAttribute, "Name": string),
   SystemPrompt: $$multi-line
 prompt here.$$,
@@ -128,12 +175,23 @@ prompt here.$$,
     Enabled: true
   )
 
-  tool MyMicroflowTool (
+  tool FetchCustomer (
+    Document: Module.Tool_FetchCustomer,   -- the microflow the tool runs
     description: 'Fetch customer data',
-    Enabled: true
+    Enabled: true,
+    UserAccessApproval: UserConfirmationRequired,  -- or HiddenForUser | VisibleForUser
+    DisplayTitle: 'Look up customer'               -- shown to the user, not the model
   )
 };
 ```
+
+Human-in-the-loop and streaming (Agent Editor 2.2+): `UserAccessApproval` and
+`DisplayTitle` / `DisplayDescription` on a `tool` or `mcp service` block;
+`MinSimilarity` and `IsVisible` on a `knowledge base` block;
+`EnableBackendStreaming` / `EnableUIStreaming` on the **agent**, not the model.
+Streaming is not shown in Studio Pro's playground; it works at runtime with a
+chat agent in Conversational UI. On `create or modify`, a setting left out keeps
+its stored value.
 
 ## Altering existing documents
 
@@ -152,7 +210,7 @@ alter consumed mcp service Module.MyMCP
 -- Agent: SET for scalars, ADD/DROP for tools, MCP services, knowledge bases
 alter agent Module.MyAgent
     set SystemPrompt = 'New prompt', Temperature = 0.7, MaxTokens = 4096
-    add tool MyMicroflow ( Description: '...', Enabled: true )
+    add tool MyTool ( Document: Module.MyMicroflow, Description: '...', Enabled: true )
     add mcp service Module.WeatherSvc ( Description: '...', Enabled: true )
     add knowledge base Docs ( Source: Module.MyKB, Collection: 'docs', MaxResults: 5 )
     drop tool OldTool
@@ -164,6 +222,39 @@ Property names match `CREATE` (`SystemPrompt`, `UserPrompt`, `Temperature`, `Max
 
 ## Gotchas
 
+### An agent needs `SelectedModel`, or no agent imports
+Agent Editor 2.2+ imports an agent only with a selected model: the id of one of
+the models the Model document's resource offers. Without it, `ASU_AgentEditor`
+logs "Model with name  is referenced but could not be found for the Agent" at
+startup and **stops importing every agent document**, not just that one. `mx
+check` and the build stay green, but Studio Pro reports AE018 "Model version
+is required for an agent". So for an agent that names a `Model`, MDL-AGENT02 is
+an **error** and `exec` refuses the statement: on a `create agent` without it
+(`mxcli check`), and on a `create or modify agent` that leaves a new or stored
+agent without one (`check --references` and `exec`). A `create or modify` that
+leaves the key out keeps a stored selected model and is not flagged. With no
+`Model` at all it is a warning. `mxcli lint` reports a stored agent without
+one (MPR014). Agent Editor 1.x does not read it, so the project check is
+silent there.
+
+```sql
+mdl 1;
+alter agent Module.MyAgent set SelectedModel = 'eu.anthropic.claude-sonnet-5';
+```
+
+The runtime reads only the id and matches it against
+`GenAICommons.DeployedModel.Model`. `SelectedModelName` is the display name
+Studio Pro stores; it defaults to the id. To list the ids a resource offers,
+with the app running (reported in ako/mxcli#2031, not measured here):
+`mxcli oql "select Model from MxGenAIConnector.MxCloudDeployedModel"`. Or read
+an agent Studio Pro saved: `describe agent` prints its `SelectedModel`.
+
+### Agent Commons lengths: a longer value leaves the old agent running
+At startup the agent is copied into Agent Commons: name (without module) ≤ 50
+characters (`Agent.Title`), `Description` ≤ 200, a tool's name and `DisplayTitle`
+≤ 200, its `Description` ≤ 4096. Over that the import fails and the previous
+version stays in use, build green; `mxcli check` warns (MDL-AGENT04).
+
 ### Dollar-quoting for multi-line prompts
 Single-quoted strings cannot span lines. Use `$$...$$` for any SystemPrompt or UserPrompt that contains newlines. DESCRIBE always emits `$$...$$` when the value contains newlines, so DESCRIBE output re-parses cleanly.
 
@@ -171,7 +262,7 @@ Single-quoted strings cannot span lines. Use `$$...$$` for any SystemPrompt or U
 `DisplayName`, `KeyName`, `KeyID`, `Environment`, `ResourceName`, `DeepLinkURL` are populated by the Mendix portal at sync time. Do not set them manually in CREATE statements — they will be overwritten.
 
 ### documentId vs qualifiedName
-Each document has both a `qualifiedName` (e.g. `Module.MyModel`) and an opaque `documentId` UUID. The UUID is assigned by ASU_AgentEditor at runtime. Only `qualifiedName` is set by CREATE; cross-reference lookups resolve by scanning all documents for a matching name.
+Each reference stores a `qualifiedName` (e.g. `Module.MyModel`) and a `documentId`. A document reference's id is that document's unit id; an agent's `Entity` holds the entity element's `$ID`, which mxcli resolves and writes as Studio Pro does. For a **System** entity the id comes from a measured table (`modelsdk/meta/system_entity_ids.go`): System.User, System.Language and the other System entities have a fixed `$ID` that is the same in 10.24 and 11.16 builds. A dozen — System.Thumbnail, PrivateFileDocument, BackgroundJob, ChangeHash, WorkflowVersion and others — get an `$ID` minted each time the model loads, so there is none to write: those are stored by name with an empty `documentId`, and a rewrite keeps whatever id is already stored.
 
 ### Drop order
 Agents reference Model, Knowledge Base, and MCP Service documents. Always drop Agents before dropping their dependencies:
@@ -200,6 +291,7 @@ create ai model Module.M (Provider: MxCloudGenAI, key: @Module.K);
 create agent Module.A (
   UsageType: task,
   model: Module.M,
+  SelectedModel: 'eu.anthropic.claude-sonnet-5',
   SystemPrompt: 'You are a helpful assistant.',
   UserPrompt: 'Ask me anything.'
 );
@@ -215,39 +307,71 @@ list agents in module;
 
 ## Calling Agents from Microflows
 
-Dedicated `call agent` MDL syntax is **not yet implemented**. Use `call java action` with the AgentCommons Java actions instead:
+Registering models, seeding runtime agents from JSON, chat pages and loading
+knowledge bases at runtime are in the `genai-runtime` skill.
+
+Studio Pro's *Call Agent* and *New Chat for Agent* toolbox actions are **Java
+actions exposed as microflow actions**, so `call java action` writes exactly the
+activity the toolbox inserts. There is no separate `call agent` statement, and
+none is needed (ako/mxcli#2024, measured on 11.16 projects).
+
+For an agent made with `create agent` (an Agent Editor document), use the
+**AgentEditorCommons** actions. They take the agent document by its qualified
+name, in quotes, with no retrieve:
 
 ```sql
--- Single-call (Task) agent — no chat history
-$response = call java action AgentCommons.Agent_Call_WithoutHistory(
-  agent = $agent,
-  UserMessage = $UserInput
+-- Task agent, no chat history. Pass a FileCollection to send a PDF or image.
+$Response = call java action AgentEditorCommons.Agent_CallDocument_WithoutHistory(
+  Agent = 'Module.MyAgent',
+  OptionalContextObject = $Invoice,
+  OptionalRequest = empty,
+  OptionalFileCollection = empty
 );
 
--- Conversational agent — with chat history
-$response = call java action AgentCommons.Agent_Call_WithHistory(
-  agent = $agent,
-  ChatContext = $ChatContext,
-  UserMessage = $UserInput
+-- Chat agent, with history: the Request comes from the chat's preprocessing.
+$Response = call java action AgentEditorCommons.Agent_CallDocument_WithHistory(
+  Agent = 'Module.MyAgent',
+  Request = $Request,
+  OptionalContextObject = empty
 );
 
--- Create a ChatContext wired to an agent (for ConversationalUI)
-$ChatContext = call java action AgentCommons.ChatContext_Create_ForAgent(
-  agent = $agent,
-  ActionMicroflow = Module.HandleToolCall,
-  context = $ContextObject
+-- A ChatContext wired to the agent, for Conversational UI.
+$ChatContext = call java action AgentEditorCommons.ChatContext_Create_ForAgentDocument(
+  Agent = 'Module.MyAgent',
+  ActionMicroflow = 'Module.ChatContext_ActionMicroflow',
+  ContextObject = $Customer,
+  OverwritingDeployedModel = empty
 );
 ```
 
-Retrieve the `AgentCommons.Agent` entity by qualified name before calling:
+`OptionalContextObject` / `ContextObject` fills the prompt's `{{variables}}` from
+the object's attributes; its entity must be the agent's `Entity`.
+
+The **AgentCommons** actions take an `AgentCommons.Agent` object instead of the
+document: an agent built at runtime, or one `ASU_AgentEditor` imported from a
+document. They have the same parameters: `Agent_Call_WithoutHistory(Agent, OptionalContextObject,
+OptionalRequest, OptionalFileCollection)`,
+`Agent_Call_WithHistory(Agent, Request, OptionalContextObject)` and
+`ChatContext_Create_ForAgent(Agent, ActionMicroflow, ContextObject,
+OverwritingDeployedModel)`.
 
 ```sql
-retrieve $agent from AgentCommons.Agent
-  where [QualifiedName = 'Module.MyAgent']
+-- _QualifiedName is the document's name, filled by ASU_AgentEditor; Title is not a stable key.
+retrieve $Agent from AgentCommons.Agent
+  where _QualifiedName = 'Module.MyAgent'
   first;
+$Response = call java action AgentCommons.Agent_Call_WithoutHistory(
+  Agent = $Agent, OptionalContextObject = $Invoice,
+  OptionalRequest = empty, OptionalFileCollection = empty
+);
 ```
 
-The `AgentCommons.Agent` entity is populated at runtime by `ASU_AgentEditor` from the agent documents you create with `create agent`.
+**A document reference is checked, a runtime retrieve is not.** `check
+--references` resolves `Agent = 'Module.MyAgent'`, so a script that calls an
+agent by document passes only once that agent exists. When a tool microflow
+calls a flow that calls the agent that uses the tool, no statement order works
+on a fresh project: break the cycle with the AgentCommons form and a retrieve
+by `_QualifiedName`, which is what `Agent_CallDocument_*` does internally.
 
 ## AI agent documents
 

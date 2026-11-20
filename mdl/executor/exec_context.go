@@ -65,6 +65,11 @@ type ExecContext struct {
 	// not the stored project, which does not hold it yet. Nil otherwise.
 	scriptFlows map[string]*selfFlow
 
+	// checkMemo is what the check in progress has listed from the project,
+	// set for the length of one validateProgramWithWarnings and nil otherwise
+	// (validate_pass_memo.go).
+	checkMemo *checkPassMemo
+
 	// forwardFlowCalls mirrors Executor.forwardFlowCalls: whether a call to a
 	// flow the script creates further down is accepted (mendixlabs/mxcli#1405).
 	forwardFlowCalls bool
@@ -80,6 +85,10 @@ type ExecContext struct {
 
 	// Quiet suppresses connection and status messages.
 	Quiet bool
+
+	// terminal is set when Output is a terminal. A catalog build then prints
+	// a line per table; anywhere else it prints a heartbeat (#1860).
+	terminal bool
 
 	// Logger is the session diagnostics logger (nil = no logging).
 	Logger *diaglog.Logger

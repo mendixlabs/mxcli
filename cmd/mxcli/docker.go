@@ -86,17 +86,19 @@ Examples:
 		wait, _ := cmd.Flags().GetBool("wait")
 		waitTimeout, _ := cmd.Flags().GetInt("wait-timeout")
 		portOffset, _ := cmd.Flags().GetInt("port-offset")
+		updateWidgets, _ := cmd.Flags().GetBool("update-widgets")
 
 		opts := docker.RunOptions{
-			ProjectPath: projectPath,
-			MxBuildPath: mxbuildPath,
-			SkipCheck:   skipCheck,
-			Fresh:       fresh,
-			Wait:        wait,
-			WaitTimeout: time.Duration(waitTimeout) * time.Second,
-			PortOffset:  portOffset,
-			Stdout:      os.Stdout,
-			Stderr:      os.Stderr,
+			ProjectPath:        projectPath,
+			MxBuildPath:        mxbuildPath,
+			SkipCheck:          skipCheck,
+			UpdateWidgetsFirst: updateWidgets,
+			Fresh:              fresh,
+			Wait:               wait,
+			WaitTimeout:        time.Duration(waitTimeout) * time.Second,
+			PortOffset:         portOffset,
+			Stdout:             os.Stdout,
+			Stderr:             os.Stderr,
 		}
 
 		if err := docker.Run(opts); err != nil {
@@ -115,16 +117,20 @@ This command:
 1. Detects the Mendix project version (requires >= 11.6.1)
 2. Locates MxBuild and a JDK matching the project's JavaVersion (auto-downloads
    MxBuild from CDN if not found)
-3. Copies the project to a temporary directory and runs 'mx update-widgets',
-   'mx check' and MxBuild (--target=portable-app-package) on that copy
+3. Copies the project to a temporary directory and runs 'mx check' and
+   MxBuild (--target=portable-app-package) on that copy
 4. Applies version-aware patches to fix known PAD issues
 
 The project itself is not modified; only the output directory is written.
 Each of the mx tools writes into the project it is given (update-widgets
 rewrites the model, mx check and MxBuild write theme-cache/, deployment/
-and javasource/ proxies), so they never run on the original. Widget
-definitions are normalised on the copy only; 'mxcli fix widgets' applies
-that to the project.
+and javasource/ proxies), so they never run on the original.
+
+The project is checked and built as stored, as 'docker check' checks it: a
+project whose stored widget definitions are stale (CE0463) fails the build,
+with each CE0463 labelled as one 'mxcli fix widgets' clears or one that
+persists. --update-widgets builds a widget-normalised copy instead (the
+behaviour before ako/mxcli#1794), leaving the project as it is.
 
 MxBuild is cached at ~/.mxcli/mxbuild/{version}/ and reused across builds.
 You can also pre-download with: mxcli setup mxbuild -p app.mpr
@@ -152,15 +158,17 @@ Examples:
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		skipCheck, _ := cmd.Flags().GetBool("skip-check")
 		noUpdateWidgets, _ := cmd.Flags().GetBool("no-update-widgets")
+		updateWidgets, _ := cmd.Flags().GetBool("update-widgets")
 
 		opts := docker.BuildOptions{
-			ProjectPath:       projectPath,
-			MxBuildPath:       mxbuildPath,
-			OutputDir:         outputDir,
-			DryRun:            dryRun,
-			SkipCheck:         skipCheck,
-			SkipUpdateWidgets: noUpdateWidgets,
-			Stdout:            os.Stdout,
+			ProjectPath:        projectPath,
+			MxBuildPath:        mxbuildPath,
+			OutputDir:          outputDir,
+			DryRun:             dryRun,
+			SkipCheck:          skipCheck,
+			SkipUpdateWidgets:  noUpdateWidgets,
+			UpdateWidgetsFirst: updateWidgets,
+			Stdout:             os.Stdout,
 		}
 
 		if err := docker.Build(opts); err != nil {
@@ -485,6 +493,7 @@ Examples:
 		mxbuildPath, _ := cmd.Flags().GetString("mxbuild-path")
 		skipCheck, _ := cmd.Flags().GetBool("skip-check")
 		modelOnly, _ := cmd.Flags().GetBool("model-only")
+		updateWidgets, _ := cmd.Flags().GetBool("update-widgets")
 		cssOnly, _ := cmd.Flags().GetBool("css")
 		host, _ := cmd.Flags().GetString("host")
 		port, _ := cmd.Flags().GetInt("port")
@@ -492,17 +501,18 @@ Examples:
 		direct, _ := cmd.Flags().GetBool("direct")
 
 		opts := docker.ReloadOptions{
-			ProjectPath: projectPath,
-			MxBuildPath: mxbuildPath,
-			SkipCheck:   skipCheck,
-			SkipBuild:   modelOnly,
-			CSSOnly:     cssOnly,
-			Host:        host,
-			Port:        port,
-			Token:       token,
-			Direct:      direct,
-			Stdout:      os.Stdout,
-			Stderr:      os.Stderr,
+			ProjectPath:        projectPath,
+			MxBuildPath:        mxbuildPath,
+			SkipCheck:          skipCheck,
+			UpdateWidgetsFirst: updateWidgets,
+			SkipBuild:          modelOnly,
+			CSSOnly:            cssOnly,
+			Host:               host,
+			Port:               port,
+			Token:              token,
+			Direct:             direct,
+			Stdout:             os.Stdout,
+			Stderr:             os.Stderr,
 		}
 
 		if err := docker.Reload(opts); err != nil {
@@ -547,6 +557,7 @@ func init() {
 	// Run command flags
 	dockerRunCmd.Flags().String("mxbuild-path", "", "Path to MxBuild executable")
 	dockerRunCmd.Flags().Bool("skip-check", false, "Skip 'mx check' pre-build validation")
+	dockerRunCmd.Flags().Bool("update-widgets", false, "Build a widget-normalised copy (see 'docker build --update-widgets')")
 	dockerRunCmd.Flags().Bool("fresh", false, "Remove volumes and rebuild from scratch")
 	dockerRunCmd.Flags().BoolP("wait", "w", false, "Wait for runtime to start before returning")
 	dockerRunCmd.Flags().Int("wait-timeout", 300, "Timeout in seconds for --wait (default: 300)")
@@ -557,7 +568,9 @@ func init() {
 	dockerBuildCmd.Flags().StringP("output", "o", "", "Output directory for PAD package")
 	dockerBuildCmd.Flags().Bool("dry-run", false, "Detect tools and show patch plan without building")
 	dockerBuildCmd.Flags().Bool("skip-check", false, "Skip 'mx check' pre-build validation")
-	dockerBuildCmd.Flags().Bool("no-update-widgets", false, "Skip 'mx update-widgets' (run on the temporary copy) before check and build")
+	dockerBuildCmd.Flags().Bool("no-update-widgets", false, "Check the project as stored without the update-widgets re-check that labels its CE0463 errors")
+	dockerBuildCmd.Flags().Bool("update-widgets", false, "Run 'mx update-widgets' on the temporary copy first, then check and build that normalised copy (builds a project whose stored widgets are stale)")
+	dockerBuildCmd.MarkFlagsMutuallyExclusive("no-update-widgets", "update-widgets")
 
 	// Check command flags
 	dockerCheckCmd.Flags().String("mxbuild-path", "", "Path to MxBuild/Mendix installation (used to find mx)")
@@ -589,6 +602,7 @@ func init() {
 	// Reload command flags
 	dockerReloadCmd.Flags().String("mxbuild-path", "", "Path to MxBuild executable")
 	dockerReloadCmd.Flags().Bool("skip-check", false, "Skip 'mx check' pre-build validation")
+	dockerReloadCmd.Flags().Bool("update-widgets", false, "Build a widget-normalised copy (see 'docker build --update-widgets')")
 	dockerReloadCmd.Flags().Bool("model-only", false, "Skip build, just call reload_model")
 	dockerReloadCmd.Flags().Bool("css", false, "CSS hot reload only (update_styling, no build)")
 	dockerReloadCmd.Flags().String("host", "", "M2EE admin API host")

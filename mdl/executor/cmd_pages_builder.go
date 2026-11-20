@@ -65,6 +65,10 @@ type pageBuilder struct {
 
 	// Entity context for resolving short attribute names inside DataViews
 	entityContext string // Qualified entity name (e.g., "Module.Entity")
+	// outerEntityContexts are the entities of the data containers enclosing the
+	// current one, outermost first: a snippet parameter a call omits is taken
+	// from any of them, not only the nearest (ako/mxcli#2055).
+	outerEntityContexts []string
 
 	// What this point of the walk knows about the object a SHOW_PAGE widget
 	// action would bind its argument to: whether it is knowable at all, whether
@@ -101,6 +105,13 @@ type pageBuilder struct {
 	// resolving TextTemplate parameters — local variables must be stored as
 	// Forms$PageVariable.LocalVariable in BSON, not as a literal Expression.
 	localVariables map[string]bool
+
+	// primitiveParams are the page's primitive-typed parameters (String,
+	// Integer, …). paramScope holds only the entity-typed ones, so without this
+	// a bare `{1} = $IpAddress` template parameter was stored as the attribute
+	// path "$IpAddress", bound nothing, and mxbuild reported CE0402 "No value
+	// specified." (ako/mxcli#2132). Snippets cannot declare one (CE0046).
+	primitiveParams map[string]bool
 
 	// isDocumentWidget reports whether a name is a widget of the document being
 	// built. A flow argument `$name` naming one passes that widget's selection,

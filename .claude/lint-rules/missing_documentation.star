@@ -4,6 +4,9 @@
 # nothing fails, so nothing reminds you. This rule is the reminder, and it
 # covers every document type a user authors, not just the domain model.
 #
+# Modules (check_modules): the domain model's documentation, which is the only
+# documentation a Mendix module has.
+#
 # Documents swept generically (one option each, all default True):
 #   Entity, Page, Snippet, BuildingBlock, Layout, Enumeration,
 #   JavaScriptAction, ImageCollection, DataTransformer, Workflow,
@@ -176,6 +179,24 @@ def check():
                 "{} '{}' has no documentation.".format(noun, el.name),
                 suggestion,
             )
+
+    # ---- modules: a module's documentation is its domain model's ------------
+    # It is the one sentence that says what a module is for; the architecture
+    # report and the software map show it as the module's purpose, and an
+    # empty one leaves them nothing to show (ako/mxcli#2305). modules() lists
+    # the app's own modules only: no Marketplace module, no System.
+    if get_option("check_modules", True):
+        for mod in modules():
+            if _blank(mod.domain_model_documentation):
+                _flag(
+                    violations,
+                    mod.name,
+                    "Module",
+                    mod.name,
+                    "Module '{}' has no documentation.".format(mod.name),
+                    "Say in one sentence what the module is for: " +
+                    "alter module {} set documentation '...', or a /** ... */ comment before create or modify module.".format(mod.name),
+                )
 
     # ---- microflows: exempt nanoflows and trivial flows ---------------------
     if get_option("check_microflows", True):

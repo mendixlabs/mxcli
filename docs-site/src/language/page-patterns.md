@@ -13,7 +13,7 @@ CREATE PAGE MyModule.Customer_Overview FOLDER 'Customers'
   Layout: Atlas_Core.Atlas_Default
 )
 {
-  DATAGRID dgCustomers (DataSource: DATABASE MyModule.Customer, PageSize: 20) {
+  DATAGRID dgCustomers (DataSource: DATABASE MyModule.Customer, PageSize: 20, itemSelection: Single) {
     COLUMN (Attribute: Name, Caption: 'Name')
     COLUMN (Attribute: Email, Caption: 'Email')
     COLUMN (Attribute: Status, Caption: 'Status')
@@ -25,7 +25,7 @@ CREATE PAGE MyModule.Customer_Overview FOLDER 'Customers'
         ButtonStyle: Primary
       )
       ACTIONBUTTON btnEdit (Caption: 'Edit', Action: SHOW PAGE MyModule.Customer_Edit)
-      ACTIONBUTTON btnDelete (Caption: 'Delete', Action: DELETE, ButtonStyle: Danger)
+      ACTIONBUTTON btnDelete (Caption: 'Delete', Action: DELETE $dgCustomers, ButtonStyle: Danger)
     }
   }
 };
@@ -223,7 +223,7 @@ CREATE PAGE HR.Employee_Overview FOLDER 'Employees'
   Layout: Atlas_Core.Atlas_Default
 )
 {
-  DATAGRID dgEmployees (DataSource: DATABASE HR.Employee, PageSize: 20) {
+  DATAGRID dgEmployees (DataSource: DATABASE HR.Employee, PageSize: 20, itemSelection: Single) {
     COLUMN (Attribute: FullName, Caption: 'Name')
     COLUMN (Attribute: Department, Caption: 'Department')
     COLUMN (Attribute: HireDate, Caption: 'Hire Date')
@@ -234,7 +234,7 @@ CREATE PAGE HR.Employee_Overview FOLDER 'Employees'
         ButtonStyle: Primary
       )
       ACTIONBUTTON btnEdit (Caption: 'Edit', Action: SHOW PAGE HR.Employee_Edit)
-      ACTIONBUTTON btnDelete (Caption: 'Delete', Action: DELETE, ButtonStyle: Danger)
+      ACTIONBUTTON btnDelete (Caption: 'Delete', Action: DELETE $dgEmployees, ButtonStyle: Danger)
     }
   }
 };

@@ -68,6 +68,47 @@ SELECT Name FROM CATALOG.MODULES
 WHERE Source = '' AND COALESCE(DomainModelDocumentation, '') = '';
 ```
 
+### CATALOG.FOLDERS
+
+One row per folder, in every module, empty folders included. A document's
+`Folder` column names only the folders that hold a document, so an empty folder
+appears nowhere else.
+
+| Column | Description |
+|--------|-------------|
+| `Id` | Folder UUID |
+| `Name` | Folder name |
+| `ModuleName` | Module the folder is in |
+| `Path` | `Objects/Order` — spelled as a document's `Folder` column, so the two join. A folder name that itself holds `/` is not escaped (`LIST FOLDERS` prints it as `\/`) |
+| `ParentPath` | Path of the enclosing folder; `''` directly in the module |
+| `Depth` | `1` directly in the module |
+| `DocumentCount` | Documents directly in the folder, not in its subfolders |
+| `FolderCount` | Folders directly in the folder |
+
+```sql
+-- Empty folders in your own modules
+SELECT f.ModuleName, f.Path FROM CATALOG.FOLDERS f
+JOIN CATALOG.MODULES m ON m.Name = f.ModuleName
+WHERE m.Source = '' AND f.DocumentCount = 0 AND f.FolderCount = 0;
+```
+
+### CATALOG.ANNOTATIONS
+
+One row per **domain model** annotation, in every module. A microflow's
+annotations are rows of `CATALOG.ACTIVITIES` (`ActivityType = 'Annotation'`).
+
+| Column | Description |
+|--------|-------------|
+| `Id` | Annotation UUID |
+| `DomainModelId` | The domain model holding it |
+| `ModuleName` | Module of that domain model |
+| `Caption` | The full text, newlines kept |
+| `X`, `Y`, `Width` | Place and width on the domain model canvas |
+
+```sql
+SELECT ModuleName, Caption FROM CATALOG.ANNOTATIONS WHERE Caption LIKE '%TODO%';
+```
+
 ### CATALOG.ASSOCIATIONS
 
 Information about entity associations, same-module and cross-module.
@@ -152,7 +193,7 @@ query written then that should keep its old result filters on
 | `AutoGenerateCaption` | 1 when Studio Pro generates the activity's caption |
 | `Description` | Documentation of an action activity, split or loop |
 | `EntityRef` | Entity of a create object, a database retrieve, or a delete (the deleted variable's entity, when the flow types it) |
-| `ServiceRef`, `ActionRef` | Called service and operation: REST, web service, OData action. For a microflow, nanoflow, Java or JavaScript action call, `ActionRef` is the called document and `ServiceRef` is empty |
+| `ServiceRef`, `ActionRef` | Called service and operation: REST, web service, OData action. For a microflow, nanoflow, Java or JavaScript action call, `ActionRef` is the called document and `ServiceRef` is empty. For an import or export action it is the mapping, and for a REST call that uses mappings the response (import) mapping, else the request one; every mapping is a `mapping_call` row in `refs` |
 | `QueueRef` | Task queue a microflow or Java action call runs in; empty when it runs in place |
 | `UseRequestTimeout`, `TimeoutExpression` | "Use a timeout" and its seconds, for a REST or web service call |
 | `ConditionExpression` | An exclusive split's expression |
@@ -162,6 +203,8 @@ query written then that should keep its old result filters on
 | `CommitType` | Create/change object: `Yes`, `YesWithoutEvents` or `No` |
 | `WithEvents` | 1 for a commit with events, and a create/change with `CommitType` `Yes` |
 | `RetrieveSource` | `database` or `association` |
+| `X`, `Y` | The object's stored middle point on the canvas, as `describe` prints it in `@position`. Y grows downwards. Inside a loop it is relative to the loop's box, not to the canvas |
+| `Width`, `Height` | The object's box size |
 
 ```sql
 -- Database retrieves inside a loop (N+1 queries)
@@ -173,6 +216,69 @@ WHERE ActionType = 'RetrieveAction' AND RetrieveSource = 'database' AND ParentLo
 SELECT MicroflowQualifiedName, ActionRef
 FROM CATALOG.ACTIVITIES
 WHERE ActionType = 'MicroflowCallAction' AND ParentLoopId <> '' AND QueueRef = '';
+```
+
+### CATALOG.FLOWS
+
+One row per sequence flow and annotation flow of a microflow, nanoflow or rule,
+loop bodies included. Populated by `REFRESH CATALOG FULL`. Both ends are
+`CATALOG.ACTIVITIES.Id` values.
+
+| Column | Description |
+|--------|-------------|
+| `Id` | The flow's ID |
+| `FlowType` | `SequenceFlow` or `AnnotationFlow` |
+| `MicroflowId`, `MicroflowQualifiedName`, `ModuleName` | The flow document it belongs to |
+| `Sequence` | Stored order: each collection's sequence flows, then its annotation flows |
+| `OriginId`, `DestinationId` | The activity the line leaves and enters. An annotation flow runs from the annotation to the object it is attached to |
+| `IsErrorHandler` | 1 for the flow into an activity's custom error handler (`on error … begin … end error` in `describe`) |
+| `CaseValue` | The branch a split's flow takes: `true` / `false`, an enumeration value or `(empty)`, or an inheritance split's entity. Empty for an unconditional flow |
+| `OriginConnectionIndex`, `DestinationConnectionIndex` | The side the line leaves and enters: 0 top, 1 right, 2 bottom, 3 left |
+
+```sql
+-- Custom error handlers whose first activity logs below level Error
+SELECT f.MicroflowQualifiedName, a.LogLevel
+FROM CATALOG.FLOWS f
+JOIN CATALOG.ACTIVITIES a ON a.Id = f.DestinationId
+WHERE f.IsErrorHandler = 1 AND a.ActionType = 'LogMessageAction' AND a.LogLevel <> 'Error';
+
+-- The activity each annotation is attached to
+SELECT f.MicroflowQualifiedName, n.Caption, a.ActionType
+FROM CATALOG.FLOWS f
+JOIN CATALOG.ACTIVITIES n ON n.Id = f.OriginId
+JOIN CATALOG.ACTIVITIES a ON a.Id = f.DestinationId
+WHERE f.FlowType = 'AnnotationFlow';
+```
+
+### CATALOG.WORKFLOW_ACTIVITIES
+
+One row per activity of a workflow, in walk order: the main flow, each
+activity followed by the paths of its boundary events, then the event
+sub-processes. Populated by every catalog build. A slot that names nothing is
+NULL.
+
+| Column | Description |
+|--------|-------------|
+| `Id` | The activity's ID |
+| `WorkflowId`, `WorkflowQualifiedName`, `ModuleName` | The workflow it belongs to (`CATALOG.WORKFLOWS.Id`) |
+| `Sequence` | Walk order within the workflow |
+| `Name`, `Caption` | As in Studio Pro |
+| `ActivityType` | `UserTask`, `MultiUserTask`, `SystemTask`, `CallMicroflow`, `AIAgentTask`, `CallWorkflow`, `Decision`, `ParallelSplit`, `JumpTo`, `WaitForTimer`, `WaitForNotification`, `StartWorkflow`, `EndWorkflow`, and the event sub-process and path-end kinds |
+| `Microflow` | The microflow a system task, call-microflow activity or AI agent task runs |
+| `UserSourceMicroflow` | A user task's targeting microflow (users or groups) |
+| `OnCreatedMicroflow` | A user task's on-created microflow |
+| `CompletionMicroflow` | A multi-user task's completion microflow |
+| `Page`, `UserTaskEntity` | A user task's page and task entity |
+| `CalledWorkflow` | The workflow a call-workflow activity calls |
+
+`CATALOG.REFS` records that a workflow calls a microflow; this table says from
+which kind of activity and which slot.
+
+```sql
+-- Microflows that system tasks run, without the WF_SYS_ prefix
+SELECT WorkflowQualifiedName, Name, Microflow
+FROM CATALOG.WORKFLOW_ACTIVITIES
+WHERE ActivityType = 'SystemTask' AND Microflow NOT LIKE '%.WF_SYS_%';
 ```
 
 ### CATALOG.PAGES
@@ -193,6 +299,7 @@ Information about pages and their properties.
 | `ParameterCount` | Number of page parameters |
 | `WidgetCount` | Number of widgets (full build only; 0 otherwise) |
 | `Excluded` | 1 when the page is excluded from the project |
+| `Class`, `Style`, `DynamicClasses` | The page's own Appearance: CSS class, inline style and dynamic-classes expression (full build only) |
 
 ```sql
 SELECT Name, Title, URL
@@ -204,6 +311,29 @@ ORDER BY Name;
 Page **templates** are not pages and are not in this table — see
 `CATALOG.PAGE_TEMPLATES`.
 
+### CATALOG.SNIPPETS
+
+Snippets (`Forms$Snippet`).
+
+| Column | Description |
+|--------|-------------|
+| `Id` | Unique identifier |
+| `Name` | Snippet name |
+| `QualifiedName` | Full qualified name |
+| `ModuleName` | Module containing the snippet |
+| `Folder` | Folder path within the module |
+| `Description` | Documentation text |
+| `ParameterCount` | Number of snippet parameters |
+| `WidgetCount` | Number of widgets (full build only; 0 otherwise) |
+| `Excluded` | 1 when the snippet is excluded from the project |
+
+```sql
+-- UI documents excluded from the project, for cleanup
+SELECT 'PAGE' AS Kind, QualifiedName FROM CATALOG.PAGES WHERE Excluded
+UNION ALL SELECT 'SNIPPET', QualifiedName FROM CATALOG.SNIPPETS WHERE Excluded
+UNION ALL SELECT 'LAYOUT', QualifiedName FROM CATALOG.LAYOUTS WHERE Excluded;
+```
+
 ### CATALOG.WIDGETS
 
 One row per widget **instance** on a page or snippet. Full build only
@@ -214,14 +344,16 @@ One row per widget **instance** on a page or snippet. Full build only
 | `Id` | The widget's element ID |
 | `Name` | Widget name |
 | `WidgetType` | Storage type (`Forms$DataView`, `Forms$ActionButton`, …); a pluggable widget's id (`com.mendix.widget.web.datagrid.Datagrid`) |
-| `ContainerId`, `ContainerQualifiedName`, `ContainerType` | The page or snippet holding the widget; `ContainerType` is `PAGE` or `SNIPPET` |
+| `ContainerId`, `ContainerQualifiedName`, `ContainerType` | The page, snippet or layout holding the widget; `ContainerType` is `PAGE`, `SNIPPET` or `LAYOUT`. `UPDATE WIDGETS` changes page and snippet widgets only |
 | `ModuleName`, `Folder` | The container's module and folder |
-| `EntityRef`, `AttributeRef`, `MicroflowRef`, `NanoflowRef`, `PageRef` | What the widget's own content references: datasource entity, bound attribute, action or datasource flow, the page its action opens |
+| `EntityRef`, `AttributeRef`, `MicroflowRef`, `NanoflowRef`, `PageRef`, `SnippetRef` | What the widget's own content references: datasource entity, bound attribute, action or datasource flow, the page its action opens, the snippet a snippet call places |
 | `ParentWidgetId` | `Id` of the nearest widget **in this table** that encloses it; empty at the page or snippet root. What the catalog skips is transparent: the synthetic `conditionalVisibilityWidget…` container, layout grid rows and columns, tab pages, a pluggable widget's properties and object-list items. A widget in a layout grid column or a data grid 2 column has the grid as its parent |
 | `Depth` | Number of ancestors in this table: 0 at the root. A list view **template** is a row of its own, so its widgets are two below the list view. A snippet call is not entered: a snippet's widgets have their own rows, depth 0 at the snippet root |
 | `Class`, `Style`, `DynamicClasses` | The widget's Appearance |
 | `ActionType` | Stored type of the primary action — `Action` (buttons), else `OnClickAction` (containers), else `ClickAction` (list views, images): `Forms$DeleteClientAction`, `Forms$MicroflowAction`, `Forms$CallNanoflowClientAction`, `Forms$FormAction` (show page), `Forms$NoAction`, …; empty for a widget without one. A pluggable widget's actions are not read |
 | `HasConfirmation` | 1 when the primary action asks for confirmation. Only microflow, nanoflow and workflow calls have that setting; a delete action never does |
+| `Caption` | The widget's own caption in the project's default language (buttons and labels; an input's label and a dynamic text's content are not its caption); `''` when it has none |
+| `Tooltip` | The widget's tooltip in the project's default language; `''` when none is set |
 
 ```sql
 -- Widgets nested more than five deep, deepest first
@@ -270,6 +402,8 @@ Atlas_Core.
 | `LayoutType` | `Responsive`, `Phone`, `Tablet`, `ModalPopup` (web); `Default`, `Popup` (native) |
 | `Platform` | `Web` or `Native` — the platform every page on this layout renders on. React-client errors such as CE0582 apply to `Web` pages only |
 | `Description` | Documentation text |
+| `Excluded` | 1 when the layout is excluded from the project |
+| `Class`, `Style`, `DynamicClasses` | The layout's own Appearance (full build only). Its widgets are in `CATALOG.WIDGETS` with `ContainerType = 'LAYOUT'` |
 
 ```sql
 -- pages on a native layout (needs a full build for LayoutRef)
@@ -427,6 +561,78 @@ with the suggestion *Remove if unused* — on code that runs on every commit
 The edge carries neither the moment nor the event; `refs` has no column for
 them, and a kind per combination would put eight kinds into every consumer's
 list to say one thing. Which moment and which event is this table's question.
+
+## Agent Tables
+
+The Agent Editor's documents, with the settings their JSON contents hold
+([ako/mxcli#2075](https://github.com/ako/mxcli/issues/2075)). A boolean that a
+document does not store, as an older Agent Editor does not, is `NULL` rather
+than `0`, so a query can tell "off" from "never set".
+
+**Absent is `NULL`.** Every reference column (`Model`, `Entity`, `Document`,
+`KnowledgeBase`, `KeyConstant`, `Endpoint`, `AuthenticationMicroflow`) and
+every optional number or switch is `NULL` when there is none, so "no endpoint"
+and "no selected model" are both `IS NULL`. A plain text setting (`ToolChoice`,
+`ToolType`, `UserAccessApproval`) is the stored text, `''` when the document
+stores none ([ako/mxcli#2093](https://github.com/ako/mxcli/issues/2093)).
+
+### CATALOG.AGENTS
+
+| Column | Description |
+|--------|-------------|
+| `UsageType` | `Chat` or `Task` |
+| `Model` | The AI model document, qualified name (`NULL` if none) |
+| `SelectedModel`, `SelectedModelName` | The model picked from the provider's list, by id and display name (`NULL` if none) |
+| `ToolChoice`, `MaxTokens`, `Temperature`, `TopP` | Generation settings: `MaxTokens`, `Temperature` and `TopP` are `NULL` when not set, `ToolChoice` is `''` |
+| `EnableBackendStreaming`, `EnableUIStreaming` | `1`, `0`, or `NULL` when the document does not store the switch |
+| `Entity` | The context entity, qualified name (`NULL` if none) |
+| `Variables` | The prompt variable keys, comma-separated |
+| `ToolCount`, `KnowledgeBaseCount`, `MCPServiceCount` | Entries in the agent's tool lists. `ToolCount` excludes MCP services |
+
+### CATALOG.AGENT_TOOLS
+
+One row per entry of an agent's tools list that `ToolCount` counts: a
+microflow, nanoflow or agent it calls. Its consumed MCP services are in
+`CATALOG.AGENT_MCP_SERVICES`, as `MCPServiceCount` counts them.
+
+| Column | Description |
+|--------|-------------|
+| `AgentId`, `Agent` | The agent's id and qualified name |
+| `Name`, `Description` | What the model sees |
+| `ToolType` | `Microflow`, or empty |
+| `Document` | The microflow, nanoflow or agent, qualified name |
+| `Enabled` | `1` or `0` |
+| `UserAccessApproval` | `HiddenForUser`, `VisibleForUser`, `UserConfirmationRequired`, or empty when not stored |
+| `DisplayTitle`, `DisplayDescription` | What the user sees of the call, `NULL` when not stored |
+
+`CATALOG.AGENT_MCP_SERVICES` has the same columns for the agent's MCP services,
+with `Document` named `Service` and no `ToolType`.
+
+```sql
+-- Tools an agent can run without the user's approval
+SELECT Agent, Name, Document FROM CATALOG.AGENT_TOOLS
+WHERE Enabled = 1 AND UserAccessApproval <> 'UserConfirmationRequired';
+```
+
+### CATALOG.AGENT_KNOWLEDGE_BASES
+
+One row per entry of an agent's knowledge base tools list: `Agent`, `Name`,
+`Description`, `KnowledgeBase` (qualified name), `Collection`, `MaxResults`,
+`MinSimilarity`, `IsVisible` and `Enabled`.
+
+### Models, knowledge bases and MCP services
+
+| Table | Columns beyond the document's |
+|-------|-------------------------------|
+| `CATALOG.AI_MODELS` | `Provider`, `ModelType`, `DisplayName`, `KeyConstant` |
+| `CATALOG.KNOWLEDGE_BASES` | `Provider`, `KeyConstant` |
+| `CATALOG.CONSUMED_MCP_SERVICES` | `ProtocolVersion`, `Version`, `ConnectionTimeoutSeconds`, `Endpoint` (the String constant holding the server URL, `NULL` when none: the service connects nowhere), `AuthenticationMicroflow` |
+| `CATALOG.PUBLISHED_MCP_SERVICES` | `ServerName`, `EndpointPath`, `Version`, `ProtocolVersion`, `AuthenticationEnabled`, `AuthenticationMicroflow`, `ToolCount` |
+
+What an agent references (its tools, model, knowledge bases and context entity),
+what a consumed MCP service reads and calls (its endpoint constant and
+credentials microflow) and what a published MCP service runs are also edges in `CATALOG.REFS`, so
+`show callers` and `show impact` see them.
 
 ## Graph-Analysis Tables
 

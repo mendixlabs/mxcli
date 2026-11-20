@@ -1,0 +1,2 @@
+mdl 1;
+create microflow Sp.F05 () returns Integer as $R begin return $Nope + 1; end;

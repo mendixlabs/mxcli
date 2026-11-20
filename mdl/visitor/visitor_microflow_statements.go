@@ -65,6 +65,8 @@ func buildMicroflowStatement(ctx parser.IMicroflowStatementContext) ast.Microflo
 		stmt = buildDeleteObjectStatement(del)
 	} else if rollback := mfCtx.RollbackStatement(); rollback != nil {
 		stmt = buildRollbackStatement(rollback)
+	} else if ext := mfCtx.ExternalObjectStatement(); ext != nil {
+		stmt = buildExternalObjectStatement(ext)
 	} else if retr := mfCtx.RetrieveStatement(); retr != nil {
 		stmt = buildRetrieveStatement(retr)
 	} else if ifStmt := mfCtx.IfStatement(); ifStmt != nil {
@@ -943,7 +945,7 @@ func buildListOrAggregateStatement(targetVar string, funcCall *ast.FunctionCallE
 		// (CE0111). Ledger #63. When both arguments are plain variables the kind
 		// is ambiguous here; the flow builder disambiguates String-typed inputs.
 		if !isStringLiteralArg(funcCall.Arguments, 1) {
-			cond := getArgumentExpression(funcCall.Arguments, 1)
+			cond := ast.MemberEqualityCondition(getArgumentExpression(funcCall.Arguments, 1))
 			return &ast.ListOperationStmt{
 				OutputVariable: targetVar,
 				Operation:      ast.ListOpFind,
@@ -954,7 +956,7 @@ func buildListOrAggregateStatement(targetVar string, funcCall *ast.FunctionCallE
 		}
 		// Falls through to the default MfSetStmt (string find expression).
 	case "FILTER":
-		cond := getArgumentExpression(funcCall.Arguments, 1)
+		cond := ast.MemberEqualityCondition(getArgumentExpression(funcCall.Arguments, 1))
 		return &ast.ListOperationStmt{
 			OutputVariable: targetVar,
 			Operation:      ast.ListOpFilter,
@@ -1371,6 +1373,24 @@ func buildDeleteObjectStatement(ctx parser.IDeleteObjectStatementContext) *ast.D
 		stmt.ErrorHandling = buildOnErrorClause(errClause)
 	}
 
+	return stmt
+}
+
+// buildExternalObjectStatement converts SEND/DELETE EXTERNAL OBJECT to an
+// ExternalObjectStmt.
+func buildExternalObjectStatement(ctx parser.IExternalObjectStatementContext) *ast.ExternalObjectStmt {
+	if ctx == nil {
+		return nil
+	}
+	c := ctx.(*parser.ExternalObjectStatementContext)
+	stmt := &ast.ExternalObjectStmt{Delete: c.DELETE() != nil}
+	if v := c.VARIABLE(); v != nil {
+		stmt.Variable = strings.TrimPrefix(v.GetText(), "$")
+	}
+	stmt.RefreshInClient = c.REFRESH() != nil
+	if errClause := c.OnErrorClause(); errClause != nil {
+		stmt.ErrorHandling = buildOnErrorClause(errClause)
+	}
 	return stmt
 }
 

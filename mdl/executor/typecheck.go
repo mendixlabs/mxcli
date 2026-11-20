@@ -70,6 +70,8 @@ func (e *Executor) TypeCheckProgram(prog *ast.Program) []linter.Violation {
 			out = append(out, adapter.CheckNanoflow(s).AsViolations()...)
 		}
 	}
+	// Enumeration splits against the members of the enumeration they split on.
+	out = append(out, enumSplitValueViolations(reader, prog)...)
 	return out
 }
 
@@ -101,6 +103,63 @@ func declareScriptTypes(reader *exprcatalog.Reader, prog *ast.Program) {
 			}
 		}
 	}
+	// Flows second, so a parameter typed by an enumeration or entity the
+	// script creates resolves whichever order the statements come in.
+	for _, stmt := range prog.Statements {
+		switch s := stmt.(type) {
+		case *ast.CreateMicroflowStmt:
+			reader.DeclareFlow(s.Name.String(), scriptFlowParams(reader, s.Parameters))
+		case *ast.CreateNanoflowStmt:
+			reader.DeclareFlow(s.Name.String(), scriptFlowParams(reader, s.Parameters))
+		}
+	}
+}
+
+// scriptFlowParams types the parameters of a flow the script creates, so a
+// call to it is checked against them (ako/mxcli#2096). A bare `Module.Name`
+// type is ambiguous — the parser cannot tell an entity from an enumeration —
+// and is settled only by what the reader knows; otherwise it is left out, and
+// its arguments are not checked.
+func scriptFlowParams(reader *exprcatalog.Reader, params []ast.MicroflowParam) []exprcatalog.FlowParam {
+	out := make([]exprcatalog.FlowParam, 0, len(params))
+	for _, p := range params {
+		fp := exprcatalog.FlowParam{Name: p.Name}
+		dt := p.Type
+		switch {
+		case dt.Kind == ast.TypeListOf && dt.EntityRef != nil:
+			fp.Kind, fp.Ref = exprcheck.KindList, dt.EntityRef.String()
+		case dt.Kind == ast.TypeEntity && dt.EntityRef != nil:
+			// A bare `Module.Name` parses as an entity reference whatever it
+			// names; one the reader knows as an enumeration IS the
+			// enumeration, as the writer resolves it — stored, describe prints
+			// `enum Module.Name`. Read as an object, every enumeration value
+			// passed to it was E009 (ako/mxcli#2259).
+			qn := dt.EntityRef.String()
+			if _, isEnum := reader.EnumCases(qn); isEnum && !reader.KnowsEntity(qn) {
+				fp.Kind, fp.Ref = exprcheck.KindEnumeration, qn
+			} else {
+				fp.Kind, fp.Ref = exprcheck.KindObject, qn
+			}
+		case dt.Kind == ast.TypeEnumeration && dt.EnumRef != nil:
+			qn := dt.EnumRef.String()
+			_, isEnum := reader.EnumCases(qn)
+			switch {
+			case dt.ExplicitEnum || isEnum:
+				fp.Kind, fp.Ref = exprcheck.KindEnumeration, qn
+			case reader.KnowsEntity(qn):
+				fp.Kind, fp.Ref = exprcheck.KindObject, qn
+			}
+		case dt.Kind == ast.TypeEnumeration:
+			// No reference to compare: the kind alone.
+			fp.Kind = exprcheck.KindEnumeration
+		default:
+			if k, ok := adapters.DataTypeKind(dt.Kind); ok {
+				fp.Kind = k
+			}
+		}
+		out = append(out, fp)
+	}
+	return out
 }
 
 func declareScriptAttribute(reader *exprcatalog.Reader, entityQN, attr string, dt ast.DataType) {

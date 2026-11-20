@@ -98,27 +98,77 @@ func vendoredFamilies(scss string) []string {
 	return out
 }
 
-// unusedVendoredFamilies returns the vendored families the seeded font stacks no
-// longer name.
+// fontTokens are the tokens a theme's font stacks are declared under.
+var fontTokens = []string{"--mxt-font", "--mxt-font-heading", "--mxt-font-mono"}
+
+// fontVarRe matches a var() reference to one of the font tokens, with any
+// fallback.
+var fontVarRe = regexp.MustCompile(`var\(\s*(--mxt-font[a-z-]*)\s*(?:,[^)]*)?\)`)
+
+// resultingFontStacks returns the font stack each font token will hold in the
+// new theme: the seeded value where the design sets the token, otherwise the
+// base theme's value. A var() reference to another font token is resolved
+// against those same resulting stacks, so a base heading of var(--mxt-font)
+// follows a seeded body font.
+func resultingFontStacks(base TokenSet, tokens *Tokens) map[string]string {
+	raw := map[string]string{}
+	for _, name := range fontTokens {
+		if v, ok := tokens.Base[name]; ok && strings.TrimSpace(v) != "" {
+			raw[name] = v
+		} else if v, ok := base[name]; ok {
+			raw[name] = v
+		}
+	}
+	var resolve func(name string, depth int) string
+	resolve = func(name string, depth int) string {
+		v := raw[name]
+		if depth > len(fontTokens) {
+			return v // a reference cycle; leave it unresolved
+		}
+		return fontVarRe.ReplaceAllStringFunc(v, func(m string) string {
+			ref := fontVarRe.FindStringSubmatch(m)[1]
+			return m + " " + resolve(ref, depth+1)
+		})
+	}
+	out := map[string]string{}
+	for name := range raw {
+		out[name] = resolve(name, 0)
+	}
+	return out
+}
+
+// unusedVendoredFamilies returns the vendored families none of the new theme's
+// font stacks name.
 //
-// The test is on the SEEDED value only. A design that does not mention fonts at
-// all seeds none, every family stays, and the theme keeps working — which is the
-// right default, because dropping a font nobody asked to change would break the
-// scaffold's own rendering.
-func unusedVendoredFamilies(scss string, tokens *Tokens) []string {
+// A design that does not mention fonts at all seeds none, every family stays,
+// and the theme keeps working — which is the right default, because dropping
+// a font nobody asked to change would break the scaffold's own rendering.
+//
+// When fonts ARE seeded, the test is on the RESULTING stacks, not the seeded
+// ones: a token the design leaves alone keeps the base's value, and if that
+// value names a vendored family the family is still loaded. Comparing only the
+// seeded stacks dropped console's JetBrains Mono when a design set just
+// --mxt-font, leaving --mxt-font-mono naming a font with no @font-face
+// (ako/mxcli#2210). base is the base theme's own declarations.
+func unusedVendoredFamilies(scss string, base TokenSet, tokens *Tokens) []string {
 	if tokens == nil {
 		return nil
 	}
-	var stacks []string
-	for _, name := range []string{"--mxt-font", "--mxt-font-heading", "--mxt-font-mono"} {
-		if v, ok := tokens.Base[name]; ok {
-			stacks = append(stacks, strings.ToLower(v))
+	seeded := false
+	for _, name := range fontTokens {
+		if _, ok := tokens.Base[name]; ok {
+			seeded = true
 		}
 	}
-	if len(stacks) == 0 {
+	if !seeded {
 		return nil // fonts were not seeded; nothing to drop
 	}
-	declared := strings.ToLower(strings.Join(stacks, " | "))
+	stacks := resultingFontStacks(base, tokens)
+	var parts []string
+	for _, name := range fontTokens {
+		parts = append(parts, stacks[name])
+	}
+	declared := strings.ToLower(strings.Join(parts, " | "))
 
 	var unused []string
 	for _, fam := range vendoredFamilies(scss) {
@@ -274,7 +324,15 @@ func (r *rewriter) planFonts(src source, root string, tokens *Tokens) error {
 	scss := string(body)
 	r.unvendoredFonts = unvendoredSeededFamilies(scss, tokens)
 
-	r.droppedFonts = unusedVendoredFamilies(scss, tokens)
+	// The base's own font stacks stand wherever the design does not seed
+	// one, so they decide what is still loaded as much as the seeded ones.
+	// A base without a readable custom-variables.scss contributes nothing,
+	// which degrades to comparing the seeded stacks alone.
+	var baseTokens TokenSet
+	if vars, err := fs.ReadFile(src.fsys, root+"/theme/web/custom-variables.scss"); err == nil {
+		baseTokens = ExtractTokens("custom-variables.scss", string(vars)).Base
+	}
+	r.droppedFonts = unusedVendoredFamilies(scss, baseTokens, tokens)
 	r.keptAnyFont = len(r.droppedFonts) < len(vendoredFamilies(scss))
 	return nil
 }

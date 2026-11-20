@@ -63,6 +63,14 @@ func (b *Builder) buildModules() error {
 				source = "Marketplace"
 			}
 		}
+		if m.PackageFile != "" {
+			// ako/mxcli#1780: held as modules/<Name>.mxmodule. A non-empty
+			// Source is also what keeps lint off a module the user cannot edit.
+			if source != "" {
+				source += ", "
+			}
+			source += "Packaged"
+		}
 		_, err := stmt.Exec(
 			string(m.ID),
 			m.Name,

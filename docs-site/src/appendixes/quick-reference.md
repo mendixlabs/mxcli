@@ -230,6 +230,7 @@ Nested folders use `/` separator: `'Parent/Child/Grandchild'`. Missing folders a
 | Toggle demo users | `ALTER APP SECURITY ( EnableDemoUsers: TRUE\|FALSE );` | |
 | Toggle guest access | `ALTER APP SECURITY ( EnableGuestAccess: TRUE, GuestUserRole: UserRole );` / `( EnableGuestAccess: FALSE )` | Anonymous users; role required (CE0133) |
 | Rename admin user | `ALTER APP SECURITY ( AdminUserName: 'appadmin' );` | Default `MxAdmin` |
+| Set admin user role | `ALTER APP SECURITY ( AdminUserRole: AppAdmin );` | Must exist; `DROP USER ROLE` refuses the administrator's role, so move it first |
 | Set admin password | `ALTER APP SECURITY ( AdminPassword: 'N3w-Admin-Passw0rd' );` | Resolves CE0129 "Administrator password has not been set"; `''` is refused |
 | Create demo user | `CREATE DEMO USER 'name' ( Password: 'pass', [Entity: Module.Entity,] UserRoles: (UserRole, ...) );` | The clause form `PASSWORD … (…)` warns MDL-DEPR137 |
 | Drop demo user | `DROP DEMO USER [IF EXISTS] 'name';` | `IF EXISTS` makes a cleanup script re-runnable |

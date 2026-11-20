@@ -34,7 +34,9 @@ import (
 // flows by the objects they connect, and a reference from one element to
 // another is compared through that pairing. Everything else is compared
 // exactly, so a graph that differs in anything a write would change goes on to
-// the statement diff.
+// the statement diff. A graph the layout pass of another release drew, where
+// the script states no position, is paired by its flows instead
+// (flow_built_match_layout.go, ako/mxcli#2259).
 
 // sameBuiltFlow reports whether a built object collection is the stored one,
 // up to element IDs. why says where they first differ, for tests.
@@ -94,6 +96,10 @@ func (p *idPairing) of(id model.ID) string {
 type builtComparer struct {
 	b, s *idPairing
 	why  string
+	// layoutFree sets aside the geometry the script leaves to the layout
+	// pass, beyond what stated says it states (flow_built_match_layout.go).
+	layoutFree bool
+	stated     layoutStatements
 }
 
 func (c *builtComparer) fail(format string, args ...any) bool {
@@ -155,7 +161,7 @@ func (c *builtComparer) flows(b, s []*microflows.SequenceFlow, path string) bool
 			}
 			// Two flows between the same pair of objects are told apart by
 			// their other properties; the first that is alike is the one.
-			probe := &builtComparer{b: c.b, s: c.s}
+			probe := &builtComparer{b: c.b, s: c.s, layoutFree: c.layoutFree, stated: c.stated}
 			if probe.value(reflect.ValueOf(f), reflect.ValueOf(g), k) {
 				used[j], found = true, true
 				break
@@ -230,6 +236,9 @@ func (c *builtComparer) value(b, s reflect.Value, path string) bool {
 				continue
 			}
 			if b.Type() == baseElementType && f.Name == "ID" {
+				continue
+			}
+			if c.layoutField(b.Type(), f.Name, b) {
 				continue
 			}
 			if expressionFields[b.Type()][f.Name] {

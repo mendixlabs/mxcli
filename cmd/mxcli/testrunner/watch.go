@@ -19,6 +19,13 @@ import (
 // filesystems do not reliably deliver inotify events for host-mounted paths.
 const watchPollInterval = 1 * time.Second
 
+// Seams for the loop's two project-touching steps, so a test can drive the loop
+// without a project, a runtime or a build.
+var (
+	runSuiteFn      = runSuite
+	reinjectTestsFn = reinjectTests
+)
+
 // runEndpointWatch keeps the runtime and the build server up across runs,
 // re-running the suite on every change to a test file or to the app's model.
 //
@@ -71,31 +78,54 @@ func watchLoop(opts RunOptions, target testTarget, suite *TestSuite, w io.Writer
 	injected := suite
 	var last *SuiteResult
 	gen := 0
+	// failedChange is set when the last change could not be applied. The running
+	// app still has the model from before it, so running the suite would test
+	// code the author has already replaced and could report green for a broken
+	// edit. The failure is the result instead, and the loop waits for the next
+	// change.
+	var failedChange *SuiteResult
+	// carry is the change baseline of a round that ended in failedChange. It is
+	// taken when the change was detected (and again after the injection, which
+	// writes the project itself), not after the round, so a save made while the
+	// rebuild was failing still counts as a new change.
+	var carry time.Time
 
 	for {
-		gen++
-		result, err := runSuite(target.endpoint(), target.adminOptions(), injected, opts, w)
-		if err != nil {
-			// The endpoint stopped answering — the runtime is probably gone, and
-			// nothing further will work. Bail rather than spin.
-			return shutdown(last, err)
+		result := failedChange
+		failedChange = nil
+		if result == nil {
+			gen++
+			var err error
+			result, err = runSuiteFn(target.endpoint(), target.adminOptions(), injected, opts, w)
+			if err != nil {
+				// The endpoint stopped answering — the runtime is probably gone, and
+				// nothing further will work. Bail rather than spin.
+				return shutdown(last, err)
+			}
+			// A file that does not parse is carried into the results rather than
+			// ending the loop, so the tests that do parse keep running while it is
+			// being fixed — and the run stays red until it is (#903).
+			result.Tests = append(result.Tests, suiteFileErrorResults(injected.FileErrors)...)
 		}
-		// A file that does not parse is carried into the results rather than
-		// ending the loop, so the tests that do parse keep running while it is
-		// being fixed — and the run stays red until it is (#903).
-		result.Tests = append(result.Tests, suiteFileErrorResults(injected.FileErrors)...)
 		last = result
 		PrintResults(w, result, opts.Color)
 		if err := writeJUnit(opts, result, w); err != nil {
 			fmt.Fprintf(w, "  %v\n", err)
 		}
 
-		// Baseline AFTER the run, so an edit made while tests were executing is
-		// still caught on the next tick.
-		baseline := watchMTime(opts)
+		// Baseline AFTER a run, so an edit made while tests were executing is
+		// still caught on the next tick. After a round that ran nothing it is the
+		// one taken at detection, so a save made during the failed rebuild is not
+		// absorbed into it.
+		baseline := carry
+		if baseline.IsZero() {
+			baseline = watchMTime(opts)
+		}
+		carry = time.Time{}
 		fmt.Fprintf(w, "\nWatching tests + model for changes (run #%d; Ctrl-C to stop)...\n", gen)
 
 		changed := false
+		var detected time.Time
 		for !changed {
 			select {
 			case <-sigCh:
@@ -104,6 +134,7 @@ func watchLoop(opts RunOptions, target testTarget, suite *TestSuite, w io.Writer
 			case <-ticker.C:
 				if now := watchMTime(opts); now.After(baseline) {
 					changed = true
+					detected = now
 				}
 			}
 		}
@@ -115,6 +146,8 @@ func watchLoop(opts RunOptions, target testTarget, suite *TestSuite, w io.Writer
 		reparsed, err := parseTestFiles(opts.TestFiles)
 		if err != nil {
 			fmt.Fprintf(w, "  test files do not parse: %v\n", err)
+			failedChange = changeFailedResult(injected, "test files do not parse", err)
+			carry = detected
 			continue
 		}
 		for _, fe := range reparsed.FileErrors {
@@ -125,9 +158,18 @@ func watchLoop(opts RunOptions, target testTarget, suite *TestSuite, w io.Writer
 		// cleanup must still know about the microflows that did land. Dropping a
 		// microflow that was never created is harmless; leaving one behind is not.
 		onInject(reparsed)
-		if err := reinjectTests(opts, injected, reparsed, w); err != nil {
-			fmt.Fprintf(w, "  injecting tests: %v\n", err)
+		injectErr := reinjectTestsFn(opts, injected, reparsed, w)
+		// The injection writes the project, which is the signal being polled, so
+		// the baseline moves past it here: after the injection, but before the
+		// long rebuild, whose duration is where a new save is likely to land.
+		carry = watchMTime(opts)
+		if carry.Before(detected) {
+			carry = detected
+		}
+		if injectErr != nil {
+			fmt.Fprintf(w, "  injecting tests: %v\n", injectErr)
 			injected = reparsed
+			failedChange = changeFailedResult(injected, "injecting the tests", injectErr)
 			continue
 		}
 		injected = reparsed
@@ -135,11 +177,33 @@ func watchLoop(opts RunOptions, target testTarget, suite *TestSuite, w io.Writer
 		action, err := target.applyModelChange(opts.ProjectPath)
 		if err != nil {
 			// Not fatal: a build error is usually the edit that just happened, and
-			// the next save is likely to fix it. Report and keep watching.
+			// the next save is likely to fix it. Report it as the result and keep
+			// watching; the suite does not run against the previous model.
 			fmt.Fprintf(w, "  %v\n", err)
+			failedChange = changeFailedResult(injected, "rebuilding the app", err)
 			continue
 		}
+		carry = time.Time{} // a run follows; its baseline is taken after it
 		fmt.Fprintf(w, "  rebuilt and applied via %s in %s\n", action, time.Since(start).Round(time.Millisecond))
+	}
+}
+
+// changeFailedResult is the result of a watch round whose change could not be
+// applied: one test-sized error naming the step and why, so the round is red in
+// the terminal and in the JUnit file instead of showing the previous green.
+func changeFailedResult(suite *TestSuite, step string, err error) *SuiteResult {
+	name := ""
+	if suite != nil {
+		name = suite.Name
+	}
+	return &SuiteResult{
+		Name: name,
+		Tests: []TestResult{{
+			ID:      "watch-change",
+			Name:    "the change could not be applied (" + step + "); the tests did not run",
+			Status:  StatusError,
+			Message: err.Error(),
+		}},
 	}
 }
 

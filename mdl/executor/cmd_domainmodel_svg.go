@@ -117,6 +117,109 @@ func (b svgBox) edgePointFrom(sx, sy, tx, ty float64) (float64, float64) {
 	return sx + dx*scale, sy + dy*scale
 }
 
+// anchorPoint is where a stored association anchor sits on the drawn box.
+//
+// Mendix stores an association's anchors (ParentConnection on the FROM entity,
+// ChildConnection on the TO entity) as "x;y", a PERCENTAGE of the entity box
+// (see sdk/domainmodel/connection.go for the measurement). The box here is this
+// renderer's estimate, not Studio Pro's, so the percentage is applied to the
+// box as drawn — the line attaches to the same edge, the same fraction along.
+// Mendix's loader does not range-check, so a value outside 0..100 is clamped
+// onto the box: a connector attaches to its entity. nil means nothing (or
+// nothing readable) was stored, and the caller keeps the centre-line drawing.
+func (b svgBox) anchorPoint(p *model.Point) (x, y float64, ok bool) {
+	if p == nil {
+		return 0, 0, false
+	}
+	fx := math.Max(0, math.Min(100, float64(p.X))) / 100
+	fy := math.Max(0, math.Min(100, float64(p.Y))) / 100
+	return b.x + fx*b.w, b.y + fy*b.h, true
+}
+
+// outward is the unit normal of the box edge nearest to (x, y), a point on it.
+func (b svgBox) outward(x, y float64) (float64, float64) {
+	nx, ny, best := -1.0, 0.0, x-b.x
+	if d := b.x + b.w - x; d < best {
+		nx, ny, best = 1, 0, d
+	}
+	if d := y - b.y; d < best {
+		nx, ny, best = 0, -1, d
+	}
+	if d := b.y + b.h - y; d < best {
+		nx, ny = 0, 1
+	}
+	return nx, ny
+}
+
+// selfLoop routes a self-association from anchor (x1, y1) back to anchor
+// (x2, y2) of the same box: a short stub straight out of each anchor's edge,
+// joined the shorter way round a rectangle `d` outside the box, so the line
+// never crosses the entity it belongs to.
+func (b svgBox) selfLoop(x1, y1, x2, y2 float64) [][2]float64 {
+	const d = 20.0
+	r := svgBox{x: b.x - d, y: b.y - d, w: b.w + 2*d, h: b.h + 2*d}
+	n1x, n1y := b.outward(x1, y1)
+	n2x, n2y := b.outward(x2, y2)
+	s1 := [2]float64{x1 + n1x*d, y1 + n1y*d}
+	s2 := [2]float64{x2 + n2x*d, y2 + n2y*d}
+	// Position along r's perimeter, clockwise from its top-left corner.
+	per := 2 * (r.w + r.h)
+	at := func(p [2]float64) float64 {
+		switch {
+		case p[1] <= r.y:
+			return p[0] - r.x
+		case p[0] >= r.x+r.w:
+			return r.w + p[1] - r.y
+		case p[1] >= r.y+r.h:
+			return r.w + r.h + r.x + r.w - p[0]
+		default:
+			return 2*r.w + r.h + r.y + r.h - p[1]
+		}
+	}
+	corners := []struct {
+		t float64
+		p [2]float64
+	}{
+		{0, [2]float64{r.x, r.y}},
+		{r.w, [2]float64{r.x + r.w, r.y}},
+		{r.w + r.h, [2]float64{r.x + r.w, r.y + r.h}},
+		{2*r.w + r.h, [2]float64{r.x, r.y + r.h}},
+	}
+	t1, t2 := at(s1), at(s2)
+	cw := math.Mod(t2-t1+per, per)
+	clockwise := cw <= per-cw
+	walk := cw
+	if !clockwise {
+		walk = per - cw
+	}
+	// The corners passed on the way, each with its distance from s1 along the
+	// walk; at most four, so sorting them by insertion is enough.
+	type passed struct {
+		p    [2]float64
+		dist float64
+	}
+	var via []passed
+	for _, c := range corners {
+		dc := math.Mod(c.t-t1+per, per)
+		if !clockwise {
+			dc = math.Mod(t1-c.t+per, per)
+		}
+		if dc <= 0 || dc >= walk {
+			continue
+		}
+		i := len(via)
+		via = append(via, passed{c.p, dc})
+		for ; i > 0 && via[i-1].dist > via[i].dist; i-- {
+			via[i-1], via[i] = via[i], via[i-1]
+		}
+	}
+	pts := [][2]float64{{x1, y1}, s1}
+	for _, v := range via {
+		pts = append(pts, v.p)
+	}
+	return append(pts, s2, [2]float64{x2, y2})
+}
+
 func svgNum(f float64) string { return fmt.Sprintf("%.0f", f) }
 
 func svgText(s string) string {
@@ -239,11 +342,44 @@ func renderDomainModelSVG(moduleName string, entities []*domainmodel.Entity, ass
 		}
 		x1, y1 := from.edgePointFrom(fcx, fcy, tcx, tcy)
 		x2, y2 := to.edgePointFrom(tcx, tcy, fcx, fcy)
+		// The stored anchors say where Studio Pro attaches each end; an end
+		// with none stored keeps the centre-line point. (ako/mxcli#1841)
+		ax1, ay1, okA1 := from.anchorPoint(a.ParentConnection)
+		ax2, ay2, okA2 := to.anchorPoint(a.ChildConnection)
+		if okA1 {
+			x1, y1 = ax1, ay1
+		}
+		if okA2 {
+			x2, y2 = ax2, ay2
+		}
 		fromMult, toMult := "*", "1"
 		if a.Type == domainmodel.AssociationTypeReferenceSet {
 			toMult = "*"
 		}
 		fmt.Fprintf(&sb, `<g class="association"><title>%s</title>`, svgText(a.Name))
+		if a.ParentID == a.ChildID && okA1 && okA2 {
+			// A self-association leaves its box and comes back in, round
+			// the outside; a straight line would cross the entity.
+			route := from.selfLoop(x1, y1, x2, y2)
+			sb.WriteString(`<path d="`)
+			for i, p := range route {
+				if i == 0 {
+					sb.WriteString("M")
+				} else {
+					sb.WriteString("L")
+				}
+				sb.WriteString(svgNum(p[0]) + " " + svgNum(p[1]))
+			}
+			sb.WriteString(`" fill="none" stroke="#6B7684" stroke-width="1.5"/>`)
+			n := len(route)
+			writeEndLabel(&sb, x1, y1, route[1][0], route[1][1], fromMult)
+			writeEndLabel(&sb, x2, y2, route[n-2][0], route[n-2][1], toMult)
+			mid := route[n/2]
+			fmt.Fprintf(&sb, `<text x="%s" y="%s" font-size="10" fill="#6B7684" text-anchor="middle">%s</text>`,
+				svgNum(mid[0]), svgNum(mid[1]-4+offset/16*12), svgText(a.Name))
+			sb.WriteString(`</g>`)
+			continue
+		}
 		fmt.Fprintf(&sb, `<line x1="%s" y1="%s" x2="%s" y2="%s" stroke="#6B7684" stroke-width="1.5"/>`, svgNum(x1), svgNum(y1), svgNum(x2), svgNum(y2))
 		writeEndLabel(&sb, x1, y1, x2, y2, fromMult)
 		writeEndLabel(&sb, x2, y2, x1, y1, toMult)

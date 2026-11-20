@@ -3,11 +3,11 @@
 package modelsdkbackend
 
 import (
-	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 )
@@ -31,7 +31,7 @@ func TestGetDomainModel_ReadsOnlyItsModulesDomainModel(t *testing.T) {
 	}
 	stored := 0
 	for _, dm := range all {
-		if dm.ContainerID != buildSystemDomainModel().ContainerID {
+		if dm.ContainerID != buildSystemDomainModel(nil).ContainerID {
 			stored++
 		}
 	}
@@ -104,7 +104,7 @@ func TestGetDomainModel_AgreesWithTheFullListing(t *testing.T) {
 func copyV1Project(t *testing.T) string {
 	t.Helper()
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../../modelsdk/mpr/testdata/v1-project")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../../modelsdk/mpr/testdata/v1-project"); err != nil {
 		t.Fatalf("copy v1 fixture: %v", err)
 	}
 	return filepath.Join(dst, "App.mpr")

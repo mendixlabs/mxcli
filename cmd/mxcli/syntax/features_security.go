@@ -16,8 +16,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "security.module-role",
-		Summary: "Create and manage module-level security roles",
+		Path:     "security.module-role",
+		Features: []string{"security/module_roles"},
+		Summary:  "Create and manage module-level security roles",
 		Keywords: []string{
 			"module role", "create role", "drop role",
 		},
@@ -27,8 +28,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "security.entity-access",
-		Summary: "Grant or revoke entity-level access (CRUD, attribute-level, XPath rules)",
+		Path:     "security.entity-access",
+		Features: []string{"security/entity_access"},
+		Summary:  "Grant or revoke entity-level access (CRUD, attribute-level, XPath rules)",
 		Keywords: []string{
 			"entity access", "grant", "revoke", "read", "write",
 			"create", "delete", "xpath", "row-level security",
@@ -45,6 +47,13 @@ func init() {
 			"MDL-DEPR082 and is rewritten the same way.\n\n" +
 			"A module role is always Module.Role. A bare role name parses but is\n" +
 			"refused (MDL-GRANT02) — mxcli cannot tell which module it belongs to.\n\n" +
+			"Grants add rules:\n" +
+			"  A rule is keyed by its roles and its WHERE constraint, and a role's\n" +
+			"  access is the union of every rule naming it. A GRANT with a WHERE\n" +
+			"  beside the role's unconstrained rule narrows nothing; check and exec\n" +
+			"  warn MDL-GRANT03. To narrow, revoke first, then grant:\n" +
+			"    REVOKE ALL ON ENTITY Shop.Customer FROM Shop.Clerk;\n" +
+			"    GRANT READ * ON ENTITY Shop.Customer TO Shop.Clerk WHERE [Name != ''];\n\n" +
 			"Members added later:\n" +
 			"  A rule also carries a default for members added AFTER it was written,\n" +
 			"  derived from the grant: WRITE * gives ReadWrite, READ * gives ReadOnly,\n" +
@@ -129,8 +138,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "security.user-role",
-		Summary: "Create and manage application-level user roles that bundle module roles",
+		Path:     "security.user-role",
+		Features: []string{"security/user_roles"},
+		Summary:  "Create and manage application-level user roles that bundle module roles",
 		Keywords: []string{
 			"user role", "application role", "manage roles",
 			"add module roles", "remove module roles",
@@ -142,11 +152,11 @@ func init() {
 
 	Register(SyntaxFeature{
 		Path:    "security.project-security",
-		Summary: "Set project security level, strict mode, demo user and guest access toggles, admin user name and password",
+		Summary: "Set project security level, strict mode, demo user and guest access toggles, admin user name, role and password",
 		Keywords: []string{
 			"project security", "app security", "alter app security", "security level", "prototype",
 			"production", "off", "strict mode", "SEC005", "admin user", "AdminUserName", "MxAdmin",
-			"admin password", "AdminPassword", "CE0129",
+			"admin password", "AdminPassword", "CE0129", "admin user role", "AdminUserRole", "CE0130",
 		},
 		Syntax: "ALTER APP SECURITY (\n" +
 			"  [SecurityLevel: OFF|PROTOTYPE|PRODUCTION,]\n" +
@@ -155,6 +165,7 @@ func init() {
 			"  [GuestUserRole: <UserRole>,]\n" +
 			"  [StrictMode: TRUE|FALSE,]         -- clears lint rule SEC005\n" +
 			"  [AdminUserName: '<name>',]        -- the built-in administrator (default MxAdmin)\n" +
+			"  [AdminUserRole: <UserRole>,]      -- its user role (App Security > Administrator)\n" +
 			"  [AdminPassword: '<password>']     -- its password; empty is CE0129\n" +
 			");\n\n" +
 			"-- Set any subset of the properties, in create's ( Key: value ) list. The\n" +
@@ -163,13 +174,18 @@ func init() {
 			"-- AdminPassword is stored in the model as written, as Studio Pro stores it;\n" +
 			"-- '' is refused (CE0129 \"Administrator password has not been set\" at\n" +
 			"-- prototype and production level). mxbuild does not check it against the\n" +
-			"-- password policy. `describe app security` says whether one is set.",
+			"-- password policy. `describe app security` says whether one is set.\n" +
+			"-- AdminUserRole must name an existing user role. DROP USER ROLE refuses the\n" +
+			"-- administrator's role: mx check does not report the dangling name and\n" +
+			"-- every build then crashes. Move the administrator first, then drop.",
 		Example: "mdl 1;\n" +
 			"ALTER APP SECURITY ( SecurityLevel: PRODUCTION );\n" +
 			"ALTER APP SECURITY ( EnableDemoUsers: FALSE );\n" +
 			"ALTER APP SECURITY ( StrictMode: TRUE );\n" +
 			"ALTER APP SECURITY ( AdminUserName: 'appadmin' );\n" +
-			"ALTER APP SECURITY ( AdminPassword: 'N3w-Admin-Passw0rd' );  -- resolves CE0129",
+			"ALTER APP SECURITY ( AdminPassword: 'N3w-Admin-Passw0rd' );  -- resolves CE0129\n" +
+			"ALTER APP SECURITY ( AdminUserRole: AppAdmin );  -- then the template role can go\n" +
+			"DROP USER ROLE Administrator;",
 		SeeAlso: []string{"security.demo-user", "security.guest-access"},
 	})
 
@@ -198,8 +214,9 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
-		Path:    "security.demo-user",
-		Summary: "Create and manage demo users for testing",
+		Path:     "security.demo-user",
+		Features: []string{"security/demo_users"},
+		Summary:  "Create and manage demo users for testing",
 		Keywords: []string{
 			"demo user", "test user", "demo account",
 			"password", "login",

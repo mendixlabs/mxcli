@@ -1,0 +1,59 @@
+{
+  "description": "Trimmed description.",
+  "systemPrompt": "You answer questions about {{GeneralInfo}}.",
+  "userPrompt": "",
+  "usageType": "Chat",
+  "variables": [
+    {
+      "key": "EnvironmentUrl",
+      "isAttributeInEntity": true
+    },
+    {
+      "key": "GraphmartUri",
+      "isAttributeInEntity": true
+    },
+    {
+      "key": "GeneralInfo",
+      "isAttributeInEntity": true
+    },
+    {
+      "key": "OntologyOverview",
+      "isAttributeInEntity": true
+    },
+    {
+      "key": "Questions",
+      "isAttributeInEntity": true
+    }
+  ],
+  "tools": [
+    {
+      "description": "Trimmed description.",
+      "displayDescription": "",
+      "displayTitle": "Tool: Execute Sparql",
+      "document": {
+        "documentId": "ba612318-93a2-45b8-9788-2728314ad980",
+        "qualifiedName": "GraphPilot_Explorer.Tool_ExecuteSparql"
+      },
+      "enabled": true,
+      "id": "aed6208e-29df-4f9f-999e-f47b47b25109",
+      "name": "Tool_ExceuteSparql",
+      "toolType": "Microflow",
+      "userAccessApproval": "VisibleForUser"
+    }
+  ],
+  "knowledgebaseTools": [],
+  "enableBackendStreaming": true,
+  "enableUIStreaming": false,
+  "model": {
+    "documentId": "6122ba4c-970e-435a-ad71-671fbe10773d",
+    "qualifiedName": "GraphPilot_Explorer.LLM_GenAIResource"
+  },
+  "selectedModel": {
+    "id": "eu.anthropic.claude-sonnet-5",
+    "name": "Anthropic Claude Sonnet 5"
+  },
+  "entity": {
+    "documentId": "a2ab7baa-69bc-47b1-95b6-931a3e693a82",
+    "qualifiedName": "GraphPilot_Explorer.OnboardingHelper"
+  }
+}

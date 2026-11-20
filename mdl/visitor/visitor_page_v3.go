@@ -923,7 +923,16 @@ func parseWidgetPropertyV3(ctx parser.IWidgetPropertyV3Context, widget *ast.Widg
 		if xc := propCtx.XpathConstraint(); xc != nil {
 			widget.Properties["VisibleIf"] = buildConditionalExpression(xc) // MDL-DEPR081
 		} else if e := propCtx.Expression(); e != nil {
-			widget.Properties["VisibleIf"] = bareArgumentText(e)
+			text := bareArgumentText(e)
+			// `roles (Mod.A, …) and <condition>` is both settings at once:
+			// Studio Pro keeps the roles beside the condition, and both
+			// apply (ako/mxcli#2319). Stored whole, the text was an invalid
+			// expression and the roles were lost.
+			if roles, cond, ok := splitLeadingVisibleRoles(text); ok {
+				widget.Properties["VisibleRoles"] = roles
+				text = cond
+			}
+			widget.Properties["VisibleIf"] = text
 		} else if valCtx := propCtx.PropertyValueV3(); valCtx != nil {
 			widget.Properties["Visible"] = buildPropertyValueV3(valCtx)
 		}
@@ -932,6 +941,21 @@ func parseWidgetPropertyV3(ctx parser.IWidgetPropertyV3Context, widget *ast.Widg
 
 	// Editable: [expression] (conditional editability) or Editable: Never (static)
 	if propCtx.EDITABLE() != nil {
+		// `Editable: Attr in (v1, …)` — Studio Pro's "based on attribute
+		// value", read as `Visible: Attr in (…)` is (ako/mxcli#2111).
+		if propCtx.IN() != nil {
+			ew := &ast.VisibleWhenV3{}
+			if refCtx := propCtx.WidgetAttributeRefV3(); refCtx != nil {
+				ew.Attribute = buildWidgetAttributeRefV3(refCtx)
+			} else {
+				ew.Attribute = getQualifiedNameText(propCtx.QualifiedName())
+			}
+			for _, v := range propCtx.AllVisibleValueV3() {
+				ew.Values = append(ew.Values, unquoteIdentifier(v.GetText()))
+			}
+			widget.Properties["EditableWhen"] = ew
+			return
+		}
 		if xc := propCtx.XpathConstraint(); xc != nil {
 			widget.Properties["EditableIf"] = buildConditionalExpression(xc) // MDL-DEPR081
 		} else if e := propCtx.Expression(); e != nil {
@@ -1194,7 +1218,8 @@ func buildActionV3(ctx parser.IActionExprV3Context) *ast.ActionV3 {
 	// snake-case one (R8, ako/mxcli#752); both build the same action, and
 	// ExitActionExprV3 reports the old one.
 	closePage := actCtx.ClosePageV3() != nil
-	if v := actCtx.VARIABLE(); v != nil && actCtx.OpenLinkV3() == nil {
+	isDelete := actCtx.DELETE_OBJECT() != nil || actCtx.DELETE() != nil
+	if v := actCtx.VARIABLE(); v != nil && actCtx.OpenLinkV3() == nil && !isDelete {
 		// $handler — a fragment action parameter; resolved at expansion.
 		// (open link $currentObject/Attr also carries a VARIABLE.)
 		action.Type = "param"
@@ -1212,9 +1237,12 @@ func buildActionV3(ctx parser.IActionExprV3Context) *ast.ActionV3 {
 	} else if actCtx.CANCEL_CHANGES() != nil {
 		action.Type = "cancel"
 		action.ClosePage = closePage
-	} else if actCtx.DELETE_OBJECT() != nil || actCtx.DELETE() != nil {
+	} else if isDelete {
 		action.Type = "delete"
 		action.ClosePage = closePage
+		if v := actCtx.VARIABLE(); v != nil {
+			action.SourceVariable = strings.TrimPrefix(v.GetText(), "$")
+		}
 	} else if closePage {
 		action.Type = "close"
 	} else if actCtx.CREATE_OBJECT() != nil || actCtx.CREATE() != nil {
@@ -1492,6 +1520,11 @@ func buildParamAssignmentV3(ctx parser.IParamAssignmentV3Context) ast.ParamAssig
 	}
 	if expr := paCtx.Expression(); expr != nil {
 		param.Value = stripExpressionIdentifierQuotes(expressionSourceText(expr))
+	}
+	// `{1} = <unbound>`: no value; the builder writes the parameter with every
+	// binding slot empty, as Studio Pro stores it (ako/mxcli#2181).
+	if paCtx.UNBOUND_PARAM() != nil {
+		param.Unbound = true
 	}
 	if fmtCtx := paCtx.ParamFormatV3(); fmtCtx != nil {
 		param.Format = buildParamFormatV3(fmtCtx)

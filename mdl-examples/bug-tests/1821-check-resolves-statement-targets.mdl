@@ -1,0 +1,19 @@
+-- ako/mxcli#1821: `check --references` resolved the target document of alter
+-- entity and alter page only. Each statement below names a document that does
+-- not exist; exec refuses every one ("microflow not found", …), and check now
+-- reports each in the alter entity style, with what the module does have:
+--   microflow not found: BugTest1821.NoSuchFlow (referenced by drop microflow) — BugTest1821 has …
+-- Run against a project with a BugTest1821 module: every statement is reported.
+-- `drop … if exists`, a document the script creates first, and one an earlier
+-- rename or move lands under the name are not reported.
+mdl 1;
+drop microflow BugTest1821.NoSuchFlow;
+drop page BugTest1821.NoSuchPage;
+drop entity BugTest1821.NoSuchEntity;
+drop enumeration BugTest1821.NoSuchEnum;
+drop association BugTest1821.NoSuchAssoc;
+rename microflow BugTest1821.NoSuchFlow to Other;
+move microflow BugTest1821.NoSuchFlow to folder 'X';
+alter enumeration BugTest1821.NoSuchEnum add value V caption 'V';
+alter microflow BugTest1821.NoSuchFlow { drop $X; };
+drop microflow if exists BugTest1821.NoSuchFlow;

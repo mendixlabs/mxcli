@@ -29,6 +29,10 @@ type describedAnnotation struct {
 	// Only a shared note needs a label, so the everyday `@annotation 'text'`
 	// form is left exactly as it was.
 	Shared bool
+
+	// Unstated names, for a note described as free, each link of it that MDL
+	// has no form for (to the start event, to another note).
+	Unstated []string
 }
 
 // annotationEmitter renders the @annotation lines for a describe traversal.
@@ -213,30 +217,85 @@ func (e *annotationEmitter) lines(target model.ID, activityPos model.Point, targ
 	return out
 }
 
-// collectFreeAnnotations returns the annotations no AnnotationFlow points at —
-// notes that sit on the canvas documenting the flow as a whole.
+// collectFreeAnnotations returns the annotations the describer has no activity
+// to print under — notes that sit on the canvas documenting the flow as a
+// whole, and notes whose only links end where no `@annotation` is ever printed.
+//
+// The second kind used to vanish (ako/mxcli#1933, mendixlabs/mxcli#1731): a
+// note linked only to the start event, or to another note, counted as linked,
+// so it was not free, and its target prints nothing, so it was not attached
+// either. Each is now described as a free note, with Unstated naming the link
+// MDL cannot say.
 func collectFreeAnnotations(oc *microflows.MicroflowObjectCollection) []describedAnnotation {
 	if oc == nil {
 		return nil
 	}
 
-	referencedAnnotations := make(map[model.ID]bool)
+	objects := map[model.ID]microflows.MicroflowObject{}
+	var collect func(c *microflows.MicroflowObjectCollection)
+	collect = func(c *microflows.MicroflowObjectCollection) {
+		if c == nil {
+			return
+		}
+		for _, o := range c.Objects {
+			if o == nil {
+				continue
+			}
+			objects[o.GetID()] = o
+			if loop, ok := o.(*microflows.LoopedActivity); ok {
+				collect(loop.ObjectCollection)
+			}
+		}
+	}
+	collect(oc)
+
+	attached := make(map[model.ID]bool)
+	unstated := make(map[model.ID][]string)
 	for _, af := range oc.AnnotationFlows {
-		referencedAnnotations[af.OriginID] = true
+		if af == nil {
+			continue
+		}
+		if kind := unstatableNoteEnd(objects[af.DestinationID]); kind == "" {
+			attached[af.OriginID] = true
+		} else {
+			unstated[af.OriginID] = append(unstated[af.OriginID], kind)
+		}
+		// A link drawn the other way round (from an element to the note) is
+		// not read as attaching the note by buildAnnotationsByTarget either.
+		if _, isNote := objects[af.DestinationID].(*microflows.Annotation); isNote {
+			if _, fromNote := objects[af.OriginID].(*microflows.Annotation); !fromNote {
+				unstated[af.DestinationID] = append(unstated[af.DestinationID], "an element by a line drawn from that element")
+			}
+		}
 	}
 
 	var result []describedAnnotation
 	for _, obj := range oc.Objects {
 		if annot, ok := obj.(*microflows.Annotation); ok {
-			if !referencedAnnotations[annot.ID] && annot.Caption != "" {
+			if !attached[annot.ID] && annot.Caption != "" {
 				result = append(result, describedAnnotation{
 					ID: annot.ID, Caption: annot.Caption,
 					Position: annot.Position, Size: annot.Size,
+					Unstated: unstated[annot.ID],
 				})
 			}
 		}
 	}
 	return result
+}
+
+// unstatableNoteEnd names the far end of a note's link when DESCRIBE cannot
+// print the note there: the start event (no statement of its own) or another
+// note. "" for an element that carries its notes as `@annotation` — and for
+// one the collection does not hold, which is left to the traversal as before.
+func unstatableNoteEnd(o microflows.MicroflowObject) string {
+	switch o.(type) {
+	case *microflows.StartEvent:
+		return "the start event"
+	case *microflows.Annotation:
+		return "another note"
+	}
+	return ""
 }
 
 func prependFreeAnnotationLines(ctx *ExecContext, oc *microflows.MicroflowObjectCollection, activityLines []string) []string {
@@ -247,6 +306,14 @@ func prependFreeAnnotationLines(ctx *ExecContext, oc *microflows.MicroflowObject
 
 	prefix := make([]string, 0, len(freeAnnots))
 	for _, note := range freeAnnots {
+		for _, end := range note.Unstated {
+			// A link MDL has no form for is dropped by any rewrite; say so
+			// rather than let the round trip lose it quietly.
+			prefix = append(prefix, fmt.Sprintf(
+				"-- WARNING: the note %s is linked to %s, which MDL cannot state. It is described "+
+					"unattached, and re-executing this description drops the link",
+				commentLine(mdlQuote(ctx, note.Caption)), end))
+		}
 		// A free note is attached to nothing, so there is no activity position
 		// to derive its default from — the writer places it from wherever the
 		// cursor happens to be. Its geometry is therefore always spelled out.
@@ -258,6 +325,16 @@ func prependFreeAnnotationLines(ctx *ExecContext, oc *microflows.MicroflowObject
 	}
 	return append(prefix, activityLines...)
 }
+
+// commentLine folds the line breaks of a value quoted into a `--` comment
+// into a visible ⏎. A break ended the comment mid-quote and the rest of the
+// text parsed as MDL, so neither `check` on the description nor the splice's
+// comparison against the stored flow could read it (ako/mxcli#2166).
+func commentLine(s string) string {
+	return commentLineBreaks.Replace(s)
+}
+
+var commentLineBreaks = strings.NewReplacer("\r\n", "⏎", "\n", "⏎", "\r", "⏎")
 
 // anchorSideKeyword returns the MDL keyword (top/right/bottom/left) for a
 // connection-index value. Returns "" for unknown values.
@@ -1309,18 +1386,13 @@ func traverseFlow(
 			continueAfterSplitJoin(ctx, mergeID, activityMap, flowsByOrigin, flowsByDest, splitMergeMap, visited, entityNames, microflowNames, lines, indent, sourceMap, headerLineCount, annotationsByTarget, labels)
 			return
 		}
+		// A decision whose true path goes straight on is printed as stored —
+		// `if X then else <false path> end if;` — not folded into
+		// `if not(X) then …`: executing the folded form stored not(X) with
+		// the outcomes swapped, so describe -> exec changed the model
+		// (ako/mxcli#1963), and a condition edit had to undo the fold
+		// (#1930). The builder builds the unfolded form as Studio Pro stores it.
 		trueFlow, falseFlow := findBranchFlows(flows)
-
-		// Empty-then swap: when the true branch goes directly to the merge
-		// (empty then body) and the false branch has real content, negate
-		// the condition and swap branches for more readable output.
-		// "if cond then else <body> end if;" → "if not(cond) then <body> end if;"
-		if trueFlow != nil && falseFlow != nil && mergeID != "" {
-			if trueFlow.DestinationID == mergeID && falseFlow.DestinationID != mergeID {
-				stmt = negateIfCondition(stmt)
-				trueFlow, falseFlow = falseFlow, trueFlow
-			}
-		}
 
 		if stmt != "" {
 			emitObjectAnnotations(obj, lines, indentStr, annotationsByTarget, flowsByOrigin, flowsByDest, activityMap)
@@ -1534,16 +1606,8 @@ func traverseFlowUntilMerge(
 			return
 		}
 		trueFlow, falseFlow := findBranchFlows(flows)
-		nestedMergeID = resolveNestedMergeID(nestedMergeID, mergeID, trueFlow, falseFlow, flowsByOrigin)
-
-		// Empty-then swap: negate when true branch is empty but false branch has content.
-		// Skip when both branches go directly to merge (both empty).
-		if trueFlow != nil && falseFlow != nil && nestedMergeID != "" && nestedMergeID == mergeID {
-			if trueFlow.DestinationID == nestedMergeID && falseFlow.DestinationID != nestedMergeID {
-				stmt = negateIfCondition(stmt)
-				trueFlow, falseFlow = falseFlow, trueFlow
-			}
-		}
+		nestedMergeID = resolveNestedMergeID(currentID, nestedMergeID, mergeID, trueFlow, falseFlow, flowsByOrigin)
+		// Printed as stored, never folded into not(X) (ako/mxcli#1963).
 
 		if stmt != "" {
 			emitObjectAnnotations(obj, lines, indentStr, annotationsByTarget, flowsByOrigin, flowsByDest, activityMap)
@@ -1855,7 +1919,18 @@ func emitJoinAsLoopHeader(
 	return true
 }
 
+// resolveNestedMergeID decides where a nested split's branches stop: at its own
+// join, or at the enclosing one (parentMergeID) when the nested join lies past
+// the enclosing join.
+//
+// "Lies past" is the parent reaching the nested join WITHOUT going through the
+// split. Inside a `while true` the parent is the loop header and is on a cycle,
+// so it reaches everything in the body — but only round the loop, through this
+// very split. Counting that path paired the split with the header, and the step
+// after its own join was printed inside the THEN branch (mendixlabs/mxcli#1829):
+// rebuilt, the ELSE branch skipped it.
 func resolveNestedMergeID(
+	splitID model.ID,
 	nestedMergeID model.ID,
 	parentMergeID model.ID,
 	trueFlow *microflows.SequenceFlow,
@@ -1863,7 +1938,7 @@ func resolveNestedMergeID(
 	flowsByOrigin map[model.ID][]*microflows.SequenceFlow,
 ) model.ID {
 	if nestedMergeID != "" && parentMergeID != "" && nestedMergeID != parentMergeID &&
-		canReachNode(parentMergeID, nestedMergeID, flowsByOrigin, make(map[model.ID]bool)) {
+		canReachNode(parentMergeID, nestedMergeID, flowsByOrigin, map[model.ID]bool{splitID: true}) {
 		for _, flow := range []*microflows.SequenceFlow{trueFlow, falseFlow} {
 			if flow == nil {
 				continue
@@ -3113,41 +3188,6 @@ func (e *Executor) traverseFlow(
 	// the pre-refactor behaviour. Nil labels likewise: a caller that does not
 	// compute them describes exactly as before.
 	traverseFlow(e.newExecContext(context.Background()), currentID, activityMap, flowsByOrigin, nil, splitMergeMap, visited, entityNames, microflowNames, lines, indent, sourceMap, headerLineCount, annotationsByTarget, mergeLabels{})
-}
-
-// negateIfCondition transforms "if <cond> then" into "if not(<cond>) then".
-// Used by the empty-then swap to produce readable output when Studio Pro stores
-// the flow with an inverted condition (true branch empty, false branch has body).
-func negateIfCondition(stmt string) string {
-	// stmt is always "if <condition> then" from formatActivity.
-	const prefix = "if "
-	const suffix = " then"
-	if strings.HasPrefix(stmt, prefix) && strings.HasSuffix(stmt, suffix) {
-		cond := stmt[len(prefix) : len(stmt)-len(suffix)]
-		// Avoid double-negation: not(not(x)) → x
-		// Only unwrap if the outer parens are balanced (depth returns to 0 at the final char)
-		if strings.HasPrefix(cond, "not(") && strings.HasSuffix(cond, ")") {
-			inner := cond[4 : len(cond)-1]
-			depth := 0
-			balanced := true
-			for _, ch := range inner {
-				if ch == '(' {
-					depth++
-				} else if ch == ')' {
-					depth--
-					if depth < 0 {
-						balanced = false
-						break
-					}
-				}
-			}
-			if balanced && depth == 0 {
-				return prefix + inner + suffix
-			}
-		}
-		return prefix + "not(" + cond + ")" + suffix
-	}
-	return stmt
 }
 
 func (e *Executor) collectErrorHandlerStatements(

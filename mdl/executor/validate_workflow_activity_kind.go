@@ -274,11 +274,26 @@ func findStoredWorkflow(ctx *ExecContext, qn ast.QualifiedName) *workflows.Workf
 
 // resolveStoredActivity mirrors the mutator's own addressing
 // (wfmutator.findActivityByCaption): match on Name or Caption, search nested
-// flows too, and use @N to pick among several. It returns nil rather than
-// guessing when the reference is ambiguous, so the mutator's message wins.
+// flows too, and use @N to pick among several. Without @N a Name match wins
+// over caption matches, as the mutator's preferNameMatches does — without that
+// a jump captioned with its target's name made the reference look ambiguous
+// here, and every check-time guard went silent on a target the mutator
+// resolved (ako/mxcli#808). It returns nil rather than guessing when the
+// reference is ambiguous, so the mutator's message wins.
 func resolveStoredActivity(flow *workflows.Flow, ref string, atPos int) workflows.WorkflowActivity {
 	var matches []workflows.WorkflowActivity
 	collectStoredActivities(flow, ref, &matches)
+	if atPos == 0 {
+		var named []workflows.WorkflowActivity
+		for _, a := range matches {
+			if a.GetName() == ref {
+				named = append(named, a)
+			}
+		}
+		if len(named) > 0 {
+			matches = named
+		}
+	}
 	switch {
 	case len(matches) == 0:
 		return nil

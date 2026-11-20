@@ -6321,7 +6321,11 @@ func NewAllUserInput() *AllUserInput {
 // When a storage alias exists, init uses the STORAGE name (what Mendix uses in BSON).
 func initAnnotation() *Annotation {
 	o := &Annotation{}
-	o.SetTypeName("Workflows$AnnotationActivity")
+	// STORAGE-NAME OVERRIDE (ako/mxcli#1784): the out-of-tree generator emitted
+	// Workflows$AnnotationActivity, which mxbuild 9.24.30 and 11.12.6 both
+	// refuse with TypeCacheUnknownTypeException; Workflows$Annotation is what
+	// Mendix loads (and what the writer always wrote).
+	o.SetTypeName("Workflows$Annotation")
 	o.description = property.NewPrimitive[string]("Description", property.DecodeString)
 	o.description.Bind(&o.Base, 0)
 	o.SetProperties([]element.Property{o.description})
@@ -8305,13 +8309,10 @@ func init() {
 		return initAllUserInput()
 	})
 	codec.DefaultRegistry.Register("Workflows$Annotation", func() element.Element {
-		o := initAnnotation()
-		o.SetTypeName("Workflows$Annotation")
-		return o
-	})
-	codec.DefaultRegistry.Register("Workflows$AnnotationActivity", func() element.Element {
 		return initAnnotation()
 	})
+	// No Workflows$AnnotationActivity registration: it is not a Mendix storage
+	// name (TypeCacheUnknownTypeException on 9.24.30 and 11.12.6, #1784).
 	codec.DefaultRegistry.Register("Workflows$BezierCurve", func() element.Element {
 		return initBezierCurve()
 	})

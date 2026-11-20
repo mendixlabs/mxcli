@@ -176,3 +176,34 @@ end;`)
 	}
 	t.Fatal("no call java action in body")
 }
+
+// TestBuildJavaScriptAction_QuotedEntityTypeArgument is mendixlabs/mxcli#1785
+// (ako/mxcli#2057) verbatim: quoted identifiers, which the report said were
+// stored with their MDL quotes (`"CustomModule"."NPActivity"`), giving CE1613
+// at mxbuild on mxcli 0.26.0. Measured on main: the stored Entity is the bare
+// qualified name and `mx check` (11.14, TestApp) reports 0 errors. This pins
+// it — a quoted name must never reach storage with its quotes.
+func TestBuildJavaScriptAction_QuotedEntityTypeArgument(t *testing.T) {
+	for name, src := range map[string]string{
+		"reporter's MDL": `CREATE OR MODIFY NANOFLOW "CustomModule"."TEST_RefreshEntity_NF" (
+  $Obj: "CustomModule"."NPActivity"
+)
+BEGIN
+  $r = CALL JAVASCRIPT ACTION "NanoflowCommons"."RefreshEntity" (
+    EntityToRefresh = "CustomModule"."NPActivity"
+  );
+  RETURN;
+END;`,
+		"quoted, one line": `create nanoflow CustomModule.ACT_Example ()
+begin
+  call javascript action NanoflowCommons.RefreshEntity(EntityToRefresh = "CustomModule"."NPActivity");
+end;`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			fb := &flowBuilder{posX: 100, posY: 100, spacing: HorizontalSpacing, backend: refreshEntityBackend()}
+			if got := jsEntityArgument(t, fb, src); got != "CustomModule.NPActivity" {
+				t.Errorf("Entity = %q, want CustomModule.NPActivity", got)
+			}
+		})
+	}
+}

@@ -58,7 +58,7 @@ func TestGenerateJavaScriptSource_SignatureMatchesMxbuild(t *testing.T) {
 			}
 			golden := strings.ReplaceAll(string(b), "\r\n", "\n")
 			imports, extra := JavaScriptRetainedSections(golden)
-			got := GenerateJavaScriptSource(c.name, "return 1;", c.params, &StringType{}, imports, extra)
+			got := strings.ReplaceAll(GenerateJavaScriptSource(c.name, "return 1;", c.params, &StringType{}, imports, extra), "\r\n", "\n")
 
 			wantSig, wantDoc := jsIdentifiers(golden)
 			gotSig, gotDoc := jsIdentifiers(got)

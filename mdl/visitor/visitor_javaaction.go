@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/codesection"
 	"github.com/mendixlabs/mxcli/mdl/grammar/parser"
 )
 
@@ -66,15 +67,10 @@ func (b *Builder) ExitCreateJavaActionStatement(ctx *parser.CreateJavaActionStat
 		}
 	}
 
-	// Get Java code from dollar-quoted string
-	if dollarStr := ctx.DOLLAR_STRING(); dollarStr != nil {
-		code := dollarStr.GetText()
-		// Remove the $$ delimiters
-		if len(code) >= 4 && strings.HasPrefix(code, "$$") && strings.HasSuffix(code, "$$") {
-			code = code[2 : len(code)-2]
-		}
+	// Get Java code from the dollar-quoted (or string) body
+	if body := ctx.SourceCodeText(); body != nil {
 		// Trim leading/trailing whitespace but preserve internal formatting
-		code = strings.TrimSpace(code)
+		code := strings.TrimSpace(sourceCodeTextValue(body))
 		// Extract import lines so they go into the file-level import section,
 		// not into the executeAction() method body (a common AI agent mistake).
 		stmt.JavaCode, stmt.Imports = extractJavaImports(code)
@@ -84,9 +80,9 @@ func (b *Builder) ExitCreateJavaActionStatement(ctx *parser.CreateJavaActionStat
 	// Kept as written apart from the blank lines around it — describe prints
 	// the section as the file holds it, so trimming indentation would shift
 	// every round trip. An import line goes to the import list, as in the body.
-	if ec := ctx.JavaActionExtraCode(); ec != nil && ec.DOLLAR_STRING() != nil {
+	if ec := ctx.JavaActionExtraCode(); ec != nil && ec.SourceCodeText() != nil {
 		var imports []string
-		stmt.ExtraCode, imports = extractJavaExtraCode(ec.DOLLAR_STRING().GetText())
+		stmt.ExtraCode, imports = extractJavaExtraCode(sourceCodeTextValue(ec.SourceCodeText()))
 		stmt.Imports = append(stmt.Imports, imports...)
 		stmt.ExtraCodeSet = true
 	}
@@ -166,12 +162,10 @@ func (b *Builder) ExitCreateJavaScriptActionStatement(ctx *parser.CreateJavaScri
 		}
 	}
 
-	if dollarStr := ctx.DOLLAR_STRING(); dollarStr != nil {
-		code := dollarStr.GetText()
-		if len(code) >= 4 && strings.HasPrefix(code, "$$") && strings.HasSuffix(code, "$$") {
-			code = code[2 : len(code)-2]
-		}
-		stmt.JavaScriptCode = strings.TrimSpace(code)
+	if body := ctx.SourceCodeText(); body != nil {
+		// Relative: trimming only the first line's indentation kept every
+		// other line's, and the writer's tab then went on top (ako/mxcli#2131).
+		stmt.JavaScriptCode = codesection.Normalize(sourceCodeTextValue(body))
 	}
 
 	if parent, ok := ctx.GetParent().(*parser.CreateStatementContext); ok {
@@ -257,15 +251,29 @@ func extractJavaImports(code string) (body string, imports []string) {
 			bodyLines = append(bodyLines, line)
 		}
 	}
-	return strings.TrimSpace(strings.Join(bodyLines, "\n")), imports
+	return codesection.Normalize(strings.Join(bodyLines, "\n")), imports
 }
 
-// extractJavaExtraCode returns the text of an `extra code $$ … $$` clause, its
-// import lines taken out, with the blank lines at either end dropped and every
-// other line as written — apart from the spaces between a `$$` and text on its
-// own line, which are not indentation.
+// sourceCodeTextValue is the text of a Java or JavaScript action's source
+// literal: a `$$ … $$` without its delimiters, or a string literal read under
+// the escape rule it was lexed with — the form describe writes for a text
+// holding `$$` (ako/mxcli#1003).
+func sourceCodeTextValue(c parser.ISourceCodeTextContext) string {
+	if sl := c.STRING_LITERAL(); sl != nil {
+		return unquoteStringLit(sl)
+	}
+	if ds := c.DOLLAR_STRING(); ds != nil {
+		return unquoteDollarString(ds.GetText())
+	}
+	return ""
+}
+
+// extractJavaExtraCode returns the text of an `extra code $$ … $$` clause
+// (its delimiters already removed), its import lines taken out, with the
+// blank lines at either end dropped and every other line as written — apart
+// from the spaces between a `$$` and text on its own line, which are not
+// indentation.
 func extractJavaExtraCode(dollar string) (code string, imports []string) {
-	dollar = strings.TrimSuffix(strings.TrimPrefix(dollar, "$$"), "$$")
 	dollar = strings.TrimRight(strings.TrimLeft(dollar, " \t"), " \t")
 	var lines []string
 	for _, line := range strings.Split(strings.ReplaceAll(dollar, "\r\n", "\n"), "\n") {

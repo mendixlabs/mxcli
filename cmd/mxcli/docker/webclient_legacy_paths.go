@@ -92,12 +92,17 @@ var bundlerConfigs = []string{"rollup.config.mjs", "rspack.config.mjs"}
 // goes quiet on its own and no unrelated build failure is explained away.
 func legacyClientBuildHint(deployDir, message, raw string) string {
 	if missing := missingClientDirs(deployDir, message); len(missing) > 0 {
-		return hintText("this build wants " + strings.Join(missing, " and ") +
-			", which this Mendix version's first build does not create")
+		return hintText("this build wants "+strings.Join(missing, " and ")+
+			", which this Mendix version's first build does not create",
+			"  Seen on Mendix 11.12.5, 11.14 and 11.15.0 (macOS).\n")
 	}
 	if name := missingBundlerConfig(deployDir, message+raw); name != "" {
-		return hintText("mxbuild's own bundler cannot find web/" + name +
-			", which its own first build does not leave behind")
+		return hintText("mxbuild's own bundler cannot find web/"+name+
+			", which its own first build does not leave behind",
+			// Measured on BankV1 (ako/mxcli#606, 2026-10-03): converted from
+			// 11.14.0 to 11.15.0, builds #2-#4 reloaded in 2.8-3.9 s each.
+			"  This half is fixed in Mendix 11.15.0: on 11.14 a project converted to 11.15.0\n"+
+				"  rebuilt warm in ~3 s per change (upgrade in Studio Pro, or `mx convert`).\n")
 	}
 	return ""
 }
@@ -105,7 +110,11 @@ func legacyClientBuildHint(deployDir, message, raw string) string {
 // missingClientDirs returns the per-document client directories the failure
 // names and the deployment genuinely lacks.
 func missingClientDirs(deployDir, message string) []string {
-	if !strings.Contains(message, "Could not find a part of the path") {
+	// macOS and Linux builds of mxbuild report the same failure with the resource
+	// key instead of the English text: "AggregateException_ctor_DefaultMessage
+	// (IO_PathNotFound_Path, <path>)" (measured on 11.15.0, macOS).
+	byKey := strings.Contains(message, "IO_PathNotFound_Path")
+	if !strings.Contains(message, "Could not find a part of the path") && !byKey {
 		return nil
 	}
 	var named []string
@@ -115,6 +124,11 @@ func missingClientDirs(deployDir, message string) []string {
 		}
 		if _, err := os.Stat(filepath.Join(deployDir, "web", dir)); os.IsNotExist(err) {
 			named = append(named, "web/"+dir+"/")
+		} else if byKey {
+			// The key form names a file, not a directory, and the directory can exist
+			// (an earlier mxbuild left some pages) while the file the build wants is
+			// not there: the same first-build-only state.
+			named = append(named, "web/"+dir+"/ files")
 		}
 	}
 	return named
@@ -137,16 +151,22 @@ func missingBundlerConfig(deployDir, body string) string {
 	return ""
 }
 
-func hintText(what string) string {
+// hintText is the shared explanation; versions says where this half of the
+// failure was seen and, where one is measured, which version fixes it. The two
+// halves differ (ako/mxcli#606): the bundler-config one is gone on 11.15.0, the
+// per-document client one was still seen there on macOS, so an upgrade is only
+// offered for the half it was measured to fix.
+func hintText(what, versions string) string {
 	return fmt.Sprintf(
 		"  This is not a problem with your model, and deployment/ is not corrupt:\n"+
 			"  %s.\n"+
-			"  On Mendix 11.12.5 and 11.14 the first build in a serve process succeeds and\n"+
+			"  On the affected Mendix versions the first build in a serve process succeeds and\n"+
 			"  every later one fails this way — measured with the model untouched between two\n"+
 			"  identical builds, and with either app bundler, so switching bundlers does not help.\n"+
 			"  Deleting deployment/ does not either: the next second build fails the same way.\n"+
+			"%s"+
 			"  mxcli already retried on a fresh mxbuild --serve; if this persists, drop --watch\n"+
 			"  and restart per change:\n"+
 			"    mxcli run --local --screenshot\n",
-		what)
+		what, versions)
 }

@@ -1,0 +1,17 @@
+-- ako/mxcli#1931 (mendixlabs/mxcli#1729): a queued call's retry policy had no
+-- MDL spelling, so a flow with one was locked for MDL. Measured on mxbuild
+-- 11.12.6: both forms below build at 0 errors; Retries: 0 is CE7044.
+mdl 1;
+create module BugTest1931;
+create task queue BugTest1931.SendQueue ( Parallelism: 1, ClusterWide: true );
+create microflow BugTest1931.Send ($Body: String)
+begin
+  log info node 'Send' '{1}' with ({1} = $Body);
+end;
+create microflow BugTest1931.ACT_Enqueue ()
+begin
+  call microflow BugTest1931.Send(Body = 'x') in queue BugTest1931.SendQueue
+    retry exponential (Retries: 20, InitialInterval: 1, MaximumInterval: 60, IntervalType: Minutes);
+  call microflow BugTest1931.Send(Body = 'y') in queue BugTest1931.SendQueue
+    retry fixed (Retries: 5, Interval: 10, IntervalType: Seconds);
+end;

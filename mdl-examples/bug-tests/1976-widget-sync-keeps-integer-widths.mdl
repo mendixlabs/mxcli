@@ -1,0 +1,41 @@
+mdl 1;
+-- ============================================================================
+-- Regression: ako/mxcli#1976 (mendixlabs/mxcli#1748) - widget sync wrote
+-- every integer inside a changed widget as a BSON double
+-- ============================================================================
+--
+-- Symptom (before fix):
+--   When `mxcli widget sync` changed a pluggable widget, every int32/int64 in
+--   its Type and Object came back as a double, including a text box held in
+--   the widget's slot. MaxLengthCode -1.0 reads as "unlimited" where -1 means
+--   "the attribute's length", so mx check reported
+--     CE6510 Maximum length of text box is 'unlimited' but the attribute is
+--     limited to 200 characters.
+--   A later sync with nothing to change did not repair the unit.
+--
+-- After fix:
+--   Stored integers keep their width through the sync; numbers the sync adds
+--   are written as int32, as `create` writes them.
+--
+-- Usage (needs a stale Fieldset definition to give the sync a change):
+--   mxcli exec mdl-examples/bug-tests/1976-widget-sync-keeps-integer-widths.mdl -p app.mpr
+--   -- remove <property key="legend"> from Fieldset.xml in widgets/com.mendix.widget.web.Fieldset.mpk
+--   mxcli widget sync -p app.mpr --widget com.mendix.widget.web.fieldset.Fieldset
+--   mxcli docker check -p app.mpr   -- expect 0 errors (CE6510 before the fix)
+-- ============================================================================
+
+create module BugTest1976;
+create persistent entity BugTest1976.Item ( Name: String(200) );
+
+-- A text box INSIDE a pluggable widget's widgets slot.
+create page BugTest1976.PageD ( Title: 'D', Layout: Atlas_Core.PopupLayout, Params: ( $Item: BugTest1976.Item ) ) {
+  layoutgrid lg { row { column (DesktopWidth: autofill) {
+    dataview dv (DataSource: $Item) {
+      fieldset fs {
+        template slot1 {
+          textbox tbInner (Label: 'Name', Attribute: Name)
+        }
+      }
+    }
+  } } }
+};

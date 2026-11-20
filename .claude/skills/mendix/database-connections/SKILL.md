@@ -11,18 +11,18 @@ description: "Connect a Mendix app to an external database over JDBC with the Ex
 | lines | section |
 |---|---|
 | 30-32 | Purpose |
-| 33-49 | When to Use This Skill |
-| 50-84 | Prerequisites |
-| 85-199 | Database Connection Syntax |
-| 200-261 | Query Definition Syntax |
-| 262-359 | Complete Examples |
-| 360-375 | Viewing Connections |
-| 376-396 | Best Practices |
-| 397-410 | Troubleshooting |
-| 411-422 | Related Commands |
-| 423-548 | Executing Queries from Microflows |
-| 549-563 | Importing Data from External Databases |
-| 564-567 | References |
+| 33-52 | When to Use This Skill |
+| 53-87 | Prerequisites |
+| 88-202 | Database Connection Syntax |
+| 203-264 | Query Definition Syntax |
+| 265-362 | Complete Examples |
+| 363-378 | Viewing Connections |
+| 379-399 | Best Practices |
+| 400-413 | Troubleshooting |
+| 414-425 | Related Commands |
+| 426-551 | Executing Queries from Microflows |
+| 552-566 | Importing Data from External Databases |
+| 567-570 | References |
 
 <!-- /skill-index -->
 # Skill: Create External Database Connections
@@ -46,6 +46,9 @@ Create and manage external database connections in Mendix using the External Dat
 > SQL source GENERATE CONNECTOR INTO MyModule TABLES (employees, departments) EXEC;
 > ```
 > For manual exploration, use `sql source show tables;` and `sql source describe tablename;`.
+> From the shell, `mxcli sql --alias <alias> "<query>"` is **read-only**: a write is refused
+> unless `--write` is passed. Ask the user before passing `--write` to a database you were
+> pointed at to explore.
 
 ## Prerequisites
 

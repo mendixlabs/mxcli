@@ -57,6 +57,11 @@ type Reader struct {
 	enumCase map[string][]string
 	mfReturn map[string]exprcheck.TypeKind
 	mfParam  map[string]exprcheck.TypeKind
+	// mfParamRef is the element a parameter's type names — the enumeration of
+	// an Enumeration parameter, the entity of an Object or List one — keyed
+	// like mfParam. A call argument of the wrong enumeration is only
+	// detectable with it (ako/mxcli#2096).
+	mfParamRef map[string]string
 	// assoc maps an association's qualified name to its two ends, FROM first.
 	assoc map[string][2]string
 }
@@ -74,12 +79,13 @@ func Load(db Querier) (*Reader, error) {
 		return nil, fmt.Errorf("exprcatalog: nil catalog")
 	}
 	r := &Reader{
-		attrKind: map[string]exprcheck.TypeKind{},
-		attrEnum: map[string]string{},
-		enumCase: map[string][]string{},
-		mfReturn: map[string]exprcheck.TypeKind{},
-		mfParam:  map[string]exprcheck.TypeKind{},
-		assoc:    map[string][2]string{},
+		attrKind:   map[string]exprcheck.TypeKind{},
+		attrEnum:   map[string]string{},
+		enumCase:   map[string][]string{},
+		mfReturn:   map[string]exprcheck.TypeKind{},
+		mfParam:    map[string]exprcheck.TypeKind{},
+		mfParamRef: map[string]string{},
+		assoc:      map[string][2]string{},
 	}
 	for _, load := range []func(Querier) error{
 		r.loadAttributes, r.loadEnumValues, r.loadMicroflows, r.loadParameters,
@@ -175,7 +181,11 @@ func (r *Reader) loadParameters(db Querier) error {
 			continue
 		}
 		if k, ok := flowKind(paramType.String); ok {
-			r.mfParam[qn.String+"("+name.String] = k
+			key := qn.String + "(" + name.String
+			r.mfParam[key] = k
+			if _, ref, ok := strings.Cut(paramType.String, ":"); ok && ref != "" {
+				r.mfParamRef[key] = ref
+			}
 		}
 	}
 	return rows.Err()
@@ -234,6 +244,68 @@ func (r *Reader) DeclareAttribute(entityQN, attrName string, kind exprcheck.Type
 	}
 }
 
+// FlowParam is one parameter of a flow a script creates, as DeclareFlow
+// records it. Ref names the enumeration or entity the type refers to, when it
+// has one.
+type FlowParam struct {
+	Name string
+	Kind exprcheck.TypeKind
+	Ref  string
+}
+
+// DeclareFlow records the parameters of a microflow or nanoflow a script
+// creates, replacing whatever the catalog held for that name — a CREATE OR
+// REPLACE can change the parameter list, and a parameter that is gone must not
+// keep its stored type.
+//
+// Without it a call to a flow created in the same script had no parameter to
+// compare its arguments with, and the issue's own reproduction — target and
+// caller in one script — checked clean (ako/mxcli#2096). A parameter whose
+// kind could not be established is left out, so its arguments stay unchecked.
+func (r *Reader) DeclareFlow(qn string, params []FlowParam) {
+	if qn == "" {
+		return
+	}
+	prefix := qn + "("
+	for k := range r.mfParam {
+		if strings.HasPrefix(k, prefix) {
+			delete(r.mfParam, k)
+		}
+	}
+	for k := range r.mfParamRef {
+		if strings.HasPrefix(k, prefix) {
+			delete(r.mfParamRef, k)
+		}
+	}
+	for _, p := range params {
+		name := strings.TrimPrefix(p.Name, "$")
+		if name == "" || p.Kind == exprcheck.KindUnknown {
+			continue
+		}
+		r.mfParam[prefix+name] = p.Kind
+		if p.Ref != "" {
+			r.mfParamRef[prefix+name] = p.Ref
+		}
+	}
+}
+
+// KnowsEntity reports whether any attribute of entityQN is indexed. It is how
+// a script's bare `Module.Name` parameter type — which the parser cannot tell
+// from an enumeration — is settled as an entity; an entity with no attributes
+// stays unsettled, and its arguments unchecked.
+func (r *Reader) KnowsEntity(entityQN string) bool {
+	if entityQN == "" {
+		return false
+	}
+	prefix := entityQN + "."
+	for k := range r.attrKind {
+		if strings.HasPrefix(k, prefix) && !strings.Contains(k[len(prefix):], ".") {
+			return true
+		}
+	}
+	return false
+}
+
 // AssociationTarget returns the entity at the other end of an association.
 //
 // Both directions resolve: a Mendix expression follows an association from its
@@ -290,6 +362,14 @@ func (r *Reader) MicroflowReturn(qn string) (exprcheck.TypeKind, bool) {
 func (r *Reader) MicroflowParam(qn, paramName string) (exprcheck.TypeKind, bool) {
 	k, ok := r.mfParam[qn+"("+strings.TrimPrefix(paramName, "$")]
 	return k, ok
+}
+
+// MicroflowParamRef returns the enumeration or entity a parameter's type
+// names: "Mod.Color" for an Enumeration(Mod.Color) parameter. It is the
+// optional exprcheck.FlowParamRefReader half of the reader.
+func (r *Reader) MicroflowParamRef(qn, paramName string) (string, bool) {
+	ref, ok := r.mfParamRef[qn+"("+strings.TrimPrefix(paramName, "$")]
+	return ref, ok && ref != ""
 }
 
 // attributeKind maps a domain-model attribute's stored type name.

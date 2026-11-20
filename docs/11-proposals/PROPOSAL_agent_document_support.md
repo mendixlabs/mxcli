@@ -136,6 +136,47 @@ For MCP tool discovery inside Studio Pro, user can add headers in the UI. Those 
 
 Enum values for `protocolVersion`: `"v2024_11_05"` or `"v2025_03_26"`. Use `v2025_03_26` for newer MCP servers that support streamable http transport, `v2024_11_05` for servers that only support SSE transport.
 
+### PUBLISHED MCP SERVICE — `Contents` JSON schema
+
+> **Status 2026-11-08 (ako/mxcli#2020): implemented** as `create published mcp service`.
+> Measured on Studio Pro 11.16 with Agent Editor 2.6.0 and MCP Server 5.4.0
+> (mx-test-projects/AgentBuilderStarterApp). `CustomDocumentType` is
+> `agenteditor.publishedMCPService`, `ReadableTypeName` "Published MCP service",
+> Contents indented by two spaces:
+
+```json
+{
+  "serverName": "Published_MCP_service",
+  "endpointPath": "published_mcp_service",
+  "version": "1.0.0",
+  "protocolVersion": "v2025_03_26",
+  "authenticationEnabled": false,
+  "tools": [
+    {
+      "uuid": "06e34e7d-8103-43f3-aa12-4243d3858956",
+      "name": "tool1",
+      "description": "tool1 is cool",
+      "sourceMicroflow": { "qualifiedName": "AgentTest.mcptool1", "documentId": "<microflow unit ID>" },
+      "title": "ewdwe"
+    }
+  ],
+  "documentation": "this is an mcp server"
+}
+```
+
+With *Requires authentication* on, Studio Pro writes `"authenticationEnabled": true` and
+appends `"authenticationMicroflow": { "documentId": "<microflow unit ID>", "qualifiedName":
+"AgentTest.auth_mf" }` after `documentation`, documentId first (the reverse of a tool's
+`sourceMicroflow`). A Studio Pro duplicate (`Published_MCP_service_2`) keeps the original's
+`serverName`, which the editor does not show, and its tool keeps the original's `uuid`: a uuid is
+unique per document, not per app. `AgentDocumentUtils.initPublishedMCPService` (AgentEditorCommons
+2.6.0) also reads `authorizationServerUrl` and `scopes`, and a tool's optional `schema`; no saved
+document holds them yet, so their position (after `authenticationMicroflow`) is inferred. It passes them to `MCPServer.CreateMCPServer(Path, Name,
+Version, ProtocolVersion, AuthenticationMicroflow, AuthorizationServerUrl, Scopes)` and
+`MCPServer.AddTool(McpServer, Name, Description, ExecutingMicroflow, Schema, Title)`, so model
+configuration and a startup microflow calling those actions (runtime configuration) map one to
+one. The document holds no prompts.
+
 ### AGENT — `Contents` JSON schema
 
 Simple agent (observed in `AgentEditorCommons.TranslationAgent`):
@@ -230,11 +271,12 @@ Agent schema observations:
 - **`tools[]`**: Optional. Array of tool references. Each entry has a UUID `id`, unique `name`, `description`, `enabled` boolean, and a `toolType` discriminator. Observed `toolType` values: `"MCP"` (a whole MCP service attached as tools) or a microflow-tool `"Microflow"` where `document` referencces a microflow document. Tool microflows need to return a String and can only have primitive types and GenAICommons.Request or GenAICommons.Tool objects as input parameters.
 - **`knowledgebaseTools[]`**: Optional. Array of KB references. Same base fields plus `collectionIdentifier`, `maxResults` and `minSimilarity`. ToolType is irrelevant for knowledgebaseTools. MaxResults needs to be a positive integer, minSimilarity is a decimal between 0 and 1.
 - **`variables[]`**: Should be left empty this will be automatically populated by the extension based on the detected variables in the user or system prompt.
+- **`entity`**: `documentId` is the entity element's `$ID` (not its domain model's unit id, and not an id Agent Editor fills in at runtime) — measured in a Studio Pro-saved project, where AgentCommons' example agents store their entities' `$ID`s (ako/mxcli#2289). A System entity's `$ID` comes from `meta.SystemEntityID`, measured from built models (fixed for 42 System entities, identical in 10.24 and 11.16; ako/mxcli#2292); the dozen whose `$ID` mxbuild mints at load are written by name and a stored id is kept.
 - **`entity`**: Optional. Present on older agents with `isAttributeInEntity: true` variables; absent on `Agent007`.
 - **`maxTokens`**: Optional. Can be set by the user to restrict the number of tokens to consume in one agent call.
 - **`toolChoice`**: Optional. Agent-level inference parameters. Enum values for `toolChoice` observed: `"Auto"` (capitalized, not the lowercase `auto` used by `GenAICommons.ENUM_ToolChoice` at runtime). Other values: `"None"`, `"Any"`, `"Tool"`. If tool choice is set to `Tool`, then also the `toolChoiceToolName` needs to be set by the unique name referencing one tool in `tools[]`. Only tools where `toolType` = "Microflow" can become tool choice.
 - **`temperature`**, **`topP`**: Optional. Can be set by the user to influence the randomness of the response.
-- **No `UserAccessApproval`/`Access` field** on tools. That's a runtime-only concern (set on `AgentCommons.Tool` entity, not the document). **This is a correction to earlier versions of this proposal.**
+- **`userAccessApproval`, `displayTitle`, `displayDescription`** on tools (Agent Editor 2.2+). *Superseded 2026-11-08 (ako/mxcli#2021):* an earlier version of this section called approval runtime-only. Studio Pro 11.12–11.16 documents store it per tool, with values `HiddenForUser`, `VisibleForUser` and `UserConfirmationRequired`. MDL keys: `UserAccessApproval`, `DisplayTitle`, `DisplayDescription`. Knowledge base tools have no approval key; they store `isVisible`. The agent also stores `enableBackendStreaming`, `enableUIStreaming` (#2022) and `selectedModel`.
 
 ### Observed documents in test3 project
 
@@ -400,7 +442,7 @@ CALL AGENT WITHOUT HISTORY $Agent CONTEXT $Review INTO $Response;
 | `KNOWLEDGE BASE <Name> { Source: <doc>, Collection, MaxResults, ... }` | `<Name>` is the per-agent identifier stored in JSON `name`; `Source:` references the KB document. Matches `Agent007`'s `My_mem` KB entry |
 | `TOOL <Name> { Microflow: <QualifiedName>, Description, Enabled }` | Microflow tool references a microflow by qualified name; the writer encodes this in `tools[]` with `toolType: "Microflow"` and `document: { qualifiedName: <microflow>, documentId: <uuid> }`. Target microflows must return a `String`; input parameters are restricted to primitives and `GenAICommons.Request`/`GenAICommons.Tool` types. |
 | `Variables: (...)` is the input-schema analog of REST CLIENT's `Parameters: (...)` | Declares what the caller must supply; values flow in via the `CONTEXT` object at the `CALL AGENT` site. Inline form matches REST CLIENT's `Parameters: ($id: String)` |
-| No `Access:` on tool blocks | `UserAccessApproval` is NOT stored in the agent document JSON — it's a runtime-only concern on the `AgentCommons.Tool` entity. (Earlier drafts of this proposal incorrectly placed it on the block.) |
+| `UserAccessApproval:` on tool and mcp service blocks | Stored per tool in the agent document (measured on 11.12–11.16, ako/mxcli#2021). Keyed by the document property name, not `Access`. |
 | Body omitted when there are no tools/KB/MCP | Same concession REST CLIENT makes implicitly — empty bodies are awkward; drop them |
 | Prompts as string literals | Consistent with other MDL string properties; `{{var}}` placeholders are just text |
 | Auto-generated `id` UUIDs on block entries | Each tool/KB entry has a UUID `id` in the JSON (Studio Pro-generated). The MDL writer will generate these; they round-trip stably through `DESCRIBE` |
@@ -460,7 +502,7 @@ type Variable struct {
 }
 
 type EntityRef struct {
-    DocumentID    string // UUID of the entity's domain model
+    DocumentID    string // the entity element's $ID, as canonical GUID text (ako/mxcli#2289)
     QualifiedName string // Module.EntityName
 }
 
@@ -769,6 +811,16 @@ At runtime, `AgentEditorCommons.ASU_AgentEditor` reads the constant and creates 
 > **Note:** `Documentation` as a top-level property maps to the JSON `documentation` field (inside `Contents`), not to the outer BSON `Documentation` field on the CustomBlobDocument wrapper. Two different fields with the same name — the MDL writer sets both consistently.
 
 #### 4.4 `CALL AGENT` / `NEW CHAT FOR AGENT` Microflow Activities
+
+> **Status 2026-11-08 (ako/mxcli#2024): not needed as a new activity.** Measured on
+> 11.16 projects, Studio Pro's *Call Agent* and *New Chat for Agent* toolbox actions
+> are `Microflows$JavaActionCallAction`s to Java actions exposed as microflow
+> actions, with no marker. For Agent Editor documents those are
+> `AgentEditorCommons.Agent_CallDocument_WithHistory` / `_WithoutHistory` and
+> `ChatContext_Create_ForAgentDocument`, whose `Agent` argument is a
+> `Microflows$CustomBlobDocumentCodeActionParameterValue`. `call java action`
+> already writes them (`Agent = 'Module.Agent'`). The statements below would only
+> be shorthand for those calls.
 
 New MDL microflow statements mapping to the Agents Kit toolbox actions (see the "New MDL Statement" section under "Building Smart Apps" for syntax):
 

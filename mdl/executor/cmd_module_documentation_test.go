@@ -213,3 +213,40 @@ func TestShowProjectSecurity_AdminPasswordSetNotShown(t *testing.T) {
 		}
 	}
 }
+
+// ako/mxcli#2305: `alter module … set documentation '…'` writes the same
+// property as the doc comment on create, and stating the stored text again
+// writes nothing — the re-run of a script must not report a write it skipped.
+func TestAlterModuleSetDocumentation(t *testing.T) {
+	for _, tc := range []struct {
+		name, stored, doc string
+		want              []string
+		out               string
+	}{
+		{"sets it", "", "Sales data", []string{"Sales data"}, "Set documentation of module: Sales"},
+		{"replaces it", "old text", "Sales data", []string{"Sales data"}, "Set documentation of module: Sales"},
+		{"clears it", "old text", "", []string{""}, "Set documentation of module: Sales"},
+		{"control: same text writes nothing", "Sales data", "Sales data", nil, "Documentation of module Sales unchanged"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mb, cap := moduleDocBackend(true, tc.stored)
+			mb.GetModuleByNameFunc = func(name string) (*model.Module, error) {
+				mods, _ := mb.ListModulesFunc()
+				for _, m := range mods {
+					if m.Name == name {
+						return m, nil
+					}
+				}
+				return nil, nil
+			}
+			ctx, buf := newMockCtx(t, withBackend(mb))
+			assertNoError(t, execAlterModuleSet(ctx, &ast.AlterModuleSetStmt{ModuleName: "Sales", DocumentationSet: true, Documentation: tc.doc}))
+			if strings.Join(cap.calls, "|") != strings.Join(tc.want, "|") || len(cap.calls) != len(tc.want) {
+				t.Fatalf("SetDomainModelDocumentation calls = %q, want %q", cap.calls, tc.want)
+			}
+			if !strings.Contains(buf.String(), tc.out) {
+				t.Errorf("output %q, want %q", buf.String(), tc.out)
+			}
+		})
+	}
+}

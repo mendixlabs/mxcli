@@ -314,4 +314,34 @@ create page MyFirstModule.ProbePage (Title: 'P', Layout: Atlas_Core.Atlas_Defaul
 `); err != nil {
 		t.Fatalf("setup probes: %v\n%s", err, out.String())
 	}
+	// ako/mxcli#1829: documents in another module that name a MyFirstModule
+	// entity or enumeration through exactly one construct each, so no other
+	// edge into its domain model covers the read. The enumeration value Blue is
+	// named before "add an enumeration value" creates it.
+	if err := agreeExec(t, exec, `mdl 1;
+create association FeedbackModule.Feedback_ProbeA from FeedbackModule.Feedback to MyFirstModule.ProbeA;
+create microflow FeedbackModule.ProbeCreateList ()
+begin
+  $Ds = create list of MyFirstModule.ProbeD;
+end;
+create microflow MyFirstModule.ProbeResultType ($Json: String)
+begin
+  $R = import from mapping FeedbackModule.IMM_PostResponse($Json);
+end;
+create microflow FeedbackModule.ProbePathEnd ($F: FeedbackModule.Feedback) returns Boolean as $B
+begin
+  declare $B Boolean = $F/FeedbackModule.Feedback_ProbeA/MyFirstModule.ProbeA != empty;
+  return $B;
+end;
+create microflow FeedbackModule.ProbeMissingValue () returns Boolean as $B
+begin
+  declare $B Boolean = MyFirstModule.ProbeColor.Blue = MyFirstModule.ProbeColor.Blue;
+  return $B;
+end;
+create snippet FeedbackModule.ProbeSnippet (Params: ($D: MyFirstModule.ProbeD)) {
+  container ctnProbe {}
+};
+`); err != nil {
+		t.Fatalf("setup #1829 probes: %v\n%s", err, out.String())
+	}
 }

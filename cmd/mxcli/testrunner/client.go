@@ -3,6 +3,7 @@
 package testrunner
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -98,6 +99,46 @@ func (c *endpointClient) get(route string, params url.Values, out any) error {
 		return fmt.Errorf("decoding response (HTTP %d): %w: %s", resp.StatusCode, err, truncate(string(body), 200))
 	}
 	return nil
+}
+
+// exec sends one compiled test to the endpoint's exec route (interp.go) and
+// returns its reply, in the run route's shape. A POST, so the test travels in
+// the body: a query string has a length limit and lands in access logs.
+func (c *endpointClient) exec(p *execProgram) (*runResponse, error) {
+	body, err := json.Marshal(p)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, c.baseURL+endpointExecRoute, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set(endpointTokenHeader, c.token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, fmt.Errorf("reading response: %w", err)
+	}
+	var rr runResponse
+	if resp.StatusCode != http.StatusOK {
+		var e struct {
+			Error string `json:"error"`
+		}
+		_ = json.Unmarshal(data, &e)
+		if e.Error == "" {
+			e.Error = truncate(strings.TrimSpace(string(data)), 200)
+		}
+		return nil, fmt.Errorf("the test endpoint refused the test (HTTP %d): %s", resp.StatusCode, e.Error)
+	}
+	if err := json.Unmarshal(data, &rr); err != nil {
+		return nil, fmt.Errorf("decoding response: %w: %s", err, truncate(string(data), 200))
+	}
+	return &rr, nil
 }
 
 // ping reports whether the endpoint is up and accepting our token.

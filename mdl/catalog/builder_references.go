@@ -13,37 +13,46 @@ import (
 
 // Reference kinds for the refs table
 const (
-	RefKindCall       = "call"       // Microflow calls microflow (also: a workflow's handler, a consumed OData service's configuration microflow)
-	RefKindCreate     = "create"     // Microflow creates entity
-	RefKindRetrieve   = "retrieve"   // Microflow retrieves entity
-	RefKindShowPage   = "show_page"  // Microflow shows page
-	RefKindGeneralize = "generalize" // Entity extends entity
-	RefKindAssociate  = "associate"  // Association targets entity
-	RefKindLayout     = "layout"     // Page uses layout
-	RefKindDatasource = "datasource" // Page/widget uses entity via datasource
-	RefKindParameter  = "parameter"  // Page parameter entity type
-	RefKindAction     = "action"     // Widget calls microflow/nanoflow
-	RefKindHomePage   = "home_page"  // Navigation home page reference
-	RefKindLoginPage  = "login_page" // Navigation login page reference
-	RefKindMenuItem   = "menu_item"  // Navigation menu item page reference
-	RefKindChange     = "change"     // Microflow changes an entity object
-	RefKindDelete     = "delete"     // Microflow deletes an entity object
-	RefKindCommit     = "commit"     // Microflow commits an entity object (commit action, or create/change with commit)
-	RefKindCalculate  = "calculate"  // Calculated attribute uses a microflow
-	RefKindReturn     = "return"     // Microflow/nanoflow returns an entity type
-	RefKindSchedule   = "schedule"   // Scheduled event runs a microflow
-	RefKindValidate   = "validate"   // Attribute validation rule uses a regular expression
-	RefKindWidget     = "widget"     // Page/snippet uses a pluggable or custom widget
-	RefKindSettings   = "settings"   // A project setting names a microflow
-	RefKindSync       = "sync"       // An offline navigation profile synchronizes an entity
-	RefKindPublish    = "publish"    // A published service runs a microflow (REST operation, OData resource or action, authentication)
-	RefKindEvent      = "event"      // An event handler runs a microflow (entity event, or a business event a service subscribes to)
-	RefKindMember     = "member"     // A document binds, reads or writes an attribute, or navigates an association
-	RefKindXPath      = "xpath"      // An XPath constraint names an attribute, association or enumeration value
-	RefKindType       = "type"       // An attribute, parameter or variable is typed as an enumeration
-	RefKindValue      = "value"      // An expression names an enumeration value
-	RefKindMapping    = "mapping"    // An import or export mapping maps an entity, or a message definition exposes one
-	RefKindSplit      = "split"      // A decision branches on an object being a specialization
+	RefKindCall        = "call"         // Microflow calls microflow (also: a workflow's handler, a consumed OData service's configuration microflow)
+	RefKindCreate      = "create"       // Microflow creates entity
+	RefKindRetrieve    = "retrieve"     // Microflow retrieves entity
+	RefKindShowPage    = "show_page"    // Microflow shows page
+	RefKindGeneralize  = "generalize"   // Entity extends entity
+	RefKindAssociate   = "associate"    // Association targets entity
+	RefKindLayout      = "layout"       // Page uses layout
+	RefKindSnippetCall = "snippet_call" // Page, snippet or layout calls a snippet
+	RefKindDatasource  = "datasource"   // Page/widget uses entity via datasource
+	RefKindParameter   = "parameter"    // Page, snippet or flow parameter entity type
+	RefKindAction      = "action"       // Widget calls microflow/nanoflow
+	RefKindHomePage    = "home_page"    // Navigation home page reference
+	RefKindLoginPage   = "login_page"   // Navigation login page reference
+	RefKindMenuItem    = "menu_item"    // Navigation menu item page reference
+	RefKindChange      = "change"       // Microflow changes an entity object
+	RefKindDelete      = "delete"       // Microflow deletes an entity object
+	RefKindCommit      = "commit"       // Microflow commits an entity object (commit action, or create/change with commit)
+	RefKindCalculate   = "calculate"    // Calculated attribute uses a microflow
+	RefKindReturn      = "return"       // Microflow/nanoflow returns an entity type
+	RefKindSchedule    = "schedule"     // Scheduled event runs a microflow
+	RefKindValidate    = "validate"     // Attribute validation rule uses a regular expression
+	RefKindWidget      = "widget"       // Page/snippet uses a pluggable or custom widget
+	RefKindSettings    = "settings"     // A project setting names a microflow
+	RefKindSync        = "sync"         // An offline navigation profile synchronizes an entity
+	RefKindPublish     = "publish"      // A published service runs a microflow (REST operation, OData resource or action, authentication)
+	RefKindEvent       = "event"        // An event handler runs a microflow (entity event, or a business event a service subscribes to)
+	RefKindMember      = "member"       // A document binds, reads or writes an attribute, navigates an association, or reaches the entity an association step arrives at
+	RefKindXPath       = "xpath"        // An XPath constraint names an attribute, association or enumeration value
+	RefKindType        = "type"         // An attribute, parameter or variable is typed as an enumeration, or a result variable, created list or entity-type argument as an entity
+	RefKindValue       = "value"        // An expression names an enumeration value (an ENUMERATION target when that value does not exist)
+	RefKindMapping     = "mapping"      // An import or export mapping maps an entity, or a message definition exposes one
+	RefKindSplit       = "split"        // A decision branches on an object being a specialization
+	RefKindMappingCall = "mapping_call" // A flow applies an import or export mapping (import/export action, REST or web service call)
+	RefKindStructure   = "structure"    // An import or export mapping is built on a JSON structure
+	RefKindTool        = "tool"         // An agent draws on a knowledge base or consumed MCP service (a tool microflow, nanoflow or agent is a call)
+	RefKindModel       = "model"        // An agent runs on an AI model
+	RefKindKey         = "key"          // An AI model or knowledge base reads its key from a constant
+	RefKindEndpoint    = "endpoint"     // A consumed MCP service reads its server URL from a constant
+	RefKindByName      = "by_name"      // A constant's value (default or a configuration's) is a flow's qualified name: the flow is called by name
+	RefKindQueue       = "queue"        // A task queue runs a microflow or Java action a call places in it
 )
 
 // RefKinds is every value that reaches refs.RefKind. It is the vocabulary a
@@ -60,7 +69,9 @@ var RefKinds = []string{
 	RefKindCalculate, RefKindReturn, RefKindSchedule, RefKindValidate,
 	RefKindWidget, RefKindSettings, RefKindSync, RefKindPublish,
 	RefKindEvent, RefKindMember, RefKindXPath, RefKindType,
-	RefKindValue, RefKindMapping, RefKindSplit,
+	RefKindValue, RefKindMapping, RefKindSplit, RefKindSnippetCall,
+	RefKindMappingCall, RefKindStructure, RefKindTool, RefKindModel,
+	RefKindKey, RefKindEndpoint, RefKindByName, RefKindQueue,
 }
 
 // Object types recorded in refs.SourceType and refs.TargetType — the catalog's
@@ -100,15 +111,26 @@ const (
 	RefObjectEnumerationValue       = "ENUMERATION_VALUE"
 	RefObjectImportMapping          = "IMPORT_MAPPING"
 	RefObjectExportMapping          = "EXPORT_MAPPING"
+	RefObjectJsonStructure          = "JSON_STRUCTURE"
 	// Message definitions: the pre-11.15 collection and the 11.15+ document.
 	RefObjectMessageDefinitionCollection = "MESSAGE_DEFINITION_COLLECTION"
 	RefObjectMessageDefinition           = "MESSAGE_DEFINITION"
+	// Agent-editor documents and the constant a model's key is read from
+	// (ako/mxcli#2074), named as the objects view names them.
+	RefObjectAgent               = "AGENT"
+	RefObjectAIModel             = "AI_MODEL"
+	RefObjectKnowledgeBase       = "KNOWLEDGE_BASE"
+	RefObjectConsumedMCPService  = "CONSUMED_MCP_SERVICE"
+	RefObjectPublishedMCPService = "PUBLISHED_MCP_SERVICE"
+	RefObjectConstant            = "CONSTANT"
+	RefObjectTaskQueue           = "TASK_QUEUE"
 )
 
 // RefSourceObjectTypes is every value that reaches refs.SourceType, and
 // RefTargetObjectTypes every value that reaches refs.TargetType. The two differ:
-// a LAYOUT or a WIDGET is only ever pointed AT, and a SCHEDULED_EVENT or a
-// PROJECT_SETTINGS only ever points. Documenting one list for both would put
+// a WIDGET is only ever pointed AT, and a SCHEDULED_EVENT or a
+// PROJECT_SETTINGS only ever points. A LAYOUT is both: a page uses one, and
+// since ako/mxcli#1302 a layout's own widgets make edges of their own. Documenting one list for both would put
 // values in front of rule authors that their filter can never match.
 var (
 	RefSourceObjectTypes = []string{
@@ -119,6 +141,7 @@ var (
 		RefObjectRule,
 		RefObjectPage,
 		RefObjectSnippet,
+		RefObjectLayout,
 		RefObjectWorkflow,
 		RefObjectNavigation,
 		RefObjectScheduledEvent,
@@ -132,6 +155,12 @@ var (
 		RefObjectExportMapping,
 		RefObjectMessageDefinitionCollection,
 		RefObjectMessageDefinition,
+		RefObjectAgent,
+		RefObjectAIModel,
+		RefObjectKnowledgeBase,
+		RefObjectPublishedMCPService,
+		RefObjectConstant,
+		RefObjectTaskQueue,
 	}
 
 	RefTargetObjectTypes = []string{
@@ -141,6 +170,7 @@ var (
 		RefObjectNanoflow,
 		RefObjectRule,
 		RefObjectPage,
+		RefObjectSnippet,
 		RefObjectLayout,
 		RefObjectWorkflow,
 		RefObjectWidget,
@@ -151,6 +181,14 @@ var (
 		RefObjectAttribute,
 		RefObjectEnumeration,
 		RefObjectEnumerationValue,
+		RefObjectImportMapping,
+		RefObjectExportMapping,
+		RefObjectJsonStructure,
+		RefObjectAgent,
+		RefObjectAIModel,
+		RefObjectKnowledgeBase,
+		RefObjectConsumedMCPService,
+		RefObjectConstant,
 	}
 )
 
@@ -299,6 +337,50 @@ func microflowActionRef(action microflows.MicroflowAction) (targetType, targetNa
 		}
 	}
 	return "", "", "", false
+}
+
+// mappingRef is one mapping an action applies: IMPORT_MAPPING or EXPORT_MAPPING
+// and its qualified name.
+type mappingRef struct{ targetType, name string }
+
+// microflowMappingRefs returns every mapping an action applies. Each holder
+// stores the mapping by qualified name — the field is typed model.ID but the
+// reader fills it from the BY_NAME key. A REST or web service call can name an
+// export mapping for the request AND an import mapping for the response, so
+// this returns a list rather than joining microflowActionRef's single target.
+// Without these edges a mapping in use had no inbound reference and read as
+// dead (ako/mxcli#1861).
+func microflowMappingRefs(action microflows.MicroflowAction) []mappingRef {
+	var out []mappingRef
+	add := func(targetType string, id model.ID) {
+		if id != "" {
+			out = append(out, mappingRef{targetType, string(id)})
+		}
+	}
+	importOf := func(rh microflows.ResultHandling) {
+		if m, ok := rh.(*microflows.ResultHandlingMapping); ok && m != nil {
+			add(RefObjectImportMapping, m.MappingID)
+		}
+	}
+	switch a := action.(type) {
+	case *microflows.ImportXmlAction:
+		if a.ResultHandling != nil {
+			add(RefObjectImportMapping, a.ResultHandling.MappingID)
+		}
+	case *microflows.ExportXmlAction:
+		if a.RequestHandling != nil {
+			add(RefObjectExportMapping, a.RequestHandling.MappingID)
+		}
+	case *microflows.RestCallAction:
+		if m, ok := a.RequestHandling.(*microflows.MappingRequestHandling); ok && m != nil {
+			add(RefObjectExportMapping, m.MappingID)
+		}
+		importOf(a.ResultHandling)
+	case *microflows.WebServiceCallAction:
+		add(RefObjectExportMapping, a.SendMappingID)
+		add(RefObjectImportMapping, a.ReceiveMappingID)
+	}
+	return out
 }
 
 // entityOfDataType returns the entity qualified name a microflow data type refers
@@ -516,6 +598,7 @@ func (b *Builder) buildReferences() error {
 	snapshotID := b.snapshot.ID
 	refCount := 0
 	assocs := b.associationEnds()
+	resolveDoc := b.agentEditorResolver()
 
 	// emitActionRefs walks the action activities of a microflow or nanoflow and
 	// records the document reference each action makes. Nanoflows share the same
@@ -565,6 +648,12 @@ func (b *Builder) buildReferences() error {
 			if qn, ok := microflowCommitRef(act.Action, varEntity); ok {
 				emit(RefObjectEntity, qn, RefKindCommit)
 			}
+			for _, m := range microflowMappingRefs(act.Action) {
+				emit(m.targetType, m.name, RefKindMappingCall)
+			}
+			for _, r := range codeActionParameterRefs(act.Action, resolveDoc) {
+				emit(r.targetType, r.target, r.kind)
+			}
 		}
 	}
 
@@ -590,6 +679,34 @@ func (b *Builder) buildReferences() error {
 				continue
 			}
 			emitActionRefs(RefObjectNanoflow, string(nf.ID), nf.ContainerID, nf.Name, nf.Parameters, nf.ReturnType, nf.ObjectCollection)
+		}
+		b.disown()
+	}
+
+	// Mapping → JSON structure: the structure an import or export mapping is
+	// built on. Without the edge a JSON structure only mappings use had no
+	// inbound reference and read as dead (ako/mxcli#1861). XML schemas and
+	// message definitions are not catalogued as documents, so they get no edge.
+	emitStructure := func(sourceType string, id model.ID, containerID model.ID, name, structure string) {
+		if structure == "" || !b.own(string(id)) {
+			return
+		}
+		moduleName := b.hierarchy.getModuleName(b.hierarchy.findModuleID(containerID))
+		if _, err := stmt.Exec(sourceType, string(id), moduleName+"."+name,
+			RefObjectJsonStructure, "", structure,
+			RefKindStructure, moduleName, projectID, snapshotID); err == nil {
+			refCount++
+		}
+	}
+	if ims, err := b.lister().ListImportMappings(); err == nil {
+		for _, im := range ims {
+			emitStructure(RefObjectImportMapping, im.ID, im.ContainerID, im.Name, im.JsonStructure)
+		}
+		b.disown()
+	}
+	if ems, err := b.lister().ListExportMappings(); err == nil {
+		for _, em := range ems {
+			emitStructure(RefObjectExportMapping, em.ID, em.ContainerID, em.Name, em.JsonStructure)
 		}
 		b.disown()
 	}
@@ -733,6 +850,9 @@ func (b *Builder) buildReferences() error {
 			// only from a button had no inbound reference and `show callers` /
 			// `show references` reported it as unused (issue #773).
 			{"PageRef", RefObjectPage, RefKindShowPage},
+			// A snippet call: page, snippet or layout → the snippet it places
+			// (ako/mxcli#2017).
+			{"SnippetRef", RefObjectSnippet, RefKindSnippetCall},
 		}
 		for _, p := range widgetProjections {
 			res, perr := b.tx.Exec(
@@ -891,6 +1011,10 @@ func (b *Builder) buildReferences() error {
 	// "Remove if unused" — on a microflow that runs nightly in production.
 	refCount += b.extractScheduledEventRefs(stmt, projectID, snapshotID)
 
+	// Agent-editor documents call their tools and use their model, knowledge
+	// bases and MCP services (ako/mxcli#2074).
+	refCount += b.extractAgentEditorRefs(stmt, resolveDoc, projectID, snapshotID)
+
 	// Attribute validation rules use a named regular expression, so
 	// `show references to <regex>` can answer which entities depend on a shared
 	// pattern.
@@ -909,6 +1033,15 @@ func (b *Builder) buildReferences() error {
 	// dangling name that `mx check` did not catch either — it surfaced only when
 	// the runtime refused to start (ako/CapTrackV4 049).
 	refCount += b.extractProjectSettingsRefs(stmt, projectID, snapshotID)
+
+	// Two more ways the platform reaches a flow that no call names. A constant
+	// whose value is a flow's qualified name is how a module is told which
+	// microflow to run (OIDC.GlobalUserProvisioningMicroflow): the flow read as
+	// dead while it provisioned every user. And a call placed in a task queue
+	// runs from the queue, which only activities.QueueRef recorded
+	// (ako/mxcli#2297).
+	refCount += b.extractByNameRefs(stmt, projectID, snapshotID)
+	refCount += b.extractQueueRefs(stmt, projectID, snapshotID)
 
 	// A published REST operation runs a microflow the same way a scheduled event
 	// does — the platform invokes it, so nothing in the model calls it. Without
@@ -1327,6 +1460,89 @@ func (b *Builder) resolveMicroflowID(mfID model.ID) string {
 	}
 	b.dependsOn(siteFlowByID, qualifiedName)
 	return qualifiedName
+}
+
+// extractByNameRefs emits one `by_name` edge from a constant to each flow its
+// value names — the default or any configuration's value, trimmed and compared
+// whole. A value that merely contains a name is not an edge: a URL or a message
+// mentioning a flow is not a call. Read from the rows the constants and
+// microflows passes wrote, so it is project-wide and rebuilt every time.
+func (b *Builder) extractByNameRefs(stmt *Stmt, projectID, snapshotID string) int {
+	b.disown()
+	rows, err := b.tx.Query(`SELECT DISTINCT c.QualifiedName, c.ModuleName, m.QualifiedName, m.MicroflowType
+		FROM (SELECT QualifiedName, ModuleName, trim(COALESCE(DefaultValue, '')) AS V FROM constants_data
+			UNION SELECT cv.ConstantName, COALESCE(cd.ModuleName, ''), trim(COALESCE(cv.Value, ''))
+			FROM constant_values cv LEFT JOIN constants_data cd ON cd.QualifiedName = cv.ConstantName) c
+		JOIN microflows_data m ON m.QualifiedName = c.V
+		WHERE c.V != '' ORDER BY 1, 3`)
+	if err != nil {
+		return 0
+	}
+	type edge struct{ constant, module, target, typ string }
+	var edges []edge
+	for rows.Next() {
+		var e edge
+		if rows.Scan(&e.constant, &e.module, &e.target, &e.typ) == nil {
+			edges = append(edges, e)
+		}
+	}
+	rows.Close()
+	count := 0
+	for _, e := range edges {
+		target := RefObjectMicroflow
+		switch e.typ {
+		case "NANOFLOW":
+			target = RefObjectNanoflow
+		case "RULE":
+			target = RefObjectRule
+		}
+		if _, err := stmt.Exec(RefObjectConstant, "", e.constant, target, "", e.target,
+			RefKindByName, e.module, projectID, snapshotID); err == nil {
+			count++
+		}
+	}
+	return count
+}
+
+// extractQueueRefs emits one `queue` edge from a task queue to each microflow
+// or Java action a call runs in it. The caller's own `call` edge is kept: the
+// caller still decides THAT it runs, the queue decides WHEN.
+func (b *Builder) extractQueueRefs(stmt *Stmt, projectID, snapshotID string) int {
+	b.disown()
+	rows, err := b.tx.Query(`SELECT DISTINCT a.QueueRef, a.ActionRef,
+			CASE WHEN EXISTS (SELECT 1 FROM microflows_data m WHERE m.QualifiedName = a.ActionRef) THEN 1 ELSE 0 END
+		FROM activities_data a WHERE COALESCE(a.QueueRef, '') != '' AND COALESCE(a.ActionRef, '') != '' ORDER BY 1, 2`)
+	if err != nil {
+		return 0
+	}
+	type edge struct {
+		queue, target string
+		isFlow        bool
+	}
+	var edges []edge
+	for rows.Next() {
+		var e edge
+		if rows.Scan(&e.queue, &e.target, &e.isFlow) == nil {
+			edges = append(edges, e)
+		}
+	}
+	rows.Close()
+	count := 0
+	for _, e := range edges {
+		target := RefObjectJavaAction
+		if e.isFlow {
+			target = RefObjectMicroflow
+		}
+		module := ""
+		if i := strings.Index(e.queue, "."); i > 0 {
+			module = e.queue[:i]
+		}
+		if _, err := stmt.Exec(RefObjectTaskQueue, "", e.queue, target, "", e.target,
+			RefKindQueue, module, projectID, snapshotID); err == nil {
+			count++
+		}
+	}
+	return count
 }
 
 // projectSettingsMicroflowRefs lists the project settings whose value is the

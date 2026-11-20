@@ -34,6 +34,10 @@ func TestCanonicalFlow_SpellingsOfOneGraphMatch(t *testing.T) {
 		{"nested guard sharing the outer merge",
 			"if $A then if $B then return 'b'; end if; end if; return '';",
 			"if $A then if $B then return 'b'; end if; end if; join shared1; merge shared1; return '';"},
+		// ako/mxcli#2259: describe prints the empty else inside a handler too.
+		{"an if without else in an error handler",
+			"$R = call microflow M.G () on error without rollback begin if $A then log info 'a'; end if; return 'e'; end error; return $R;",
+			"$R = call microflow M.G () on error without rollback begin if $A then log info 'a'; else end if; return 'e'; end error; return $R;"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, d := canonicalFlow(flowBody(t, c.authored)), canonicalFlow(flowBody(t, c.described))
@@ -58,6 +62,9 @@ func TestCanonicalFlow_DifferentGraphsStayDifferent(t *testing.T) {
 		{"another return value",
 			"if $N < 0 then return 'n'; end if; return 'p';",
 			"if $N < 0 then return 'n'; else return 'q'; end if;"},
+		{"an else that does something, in an error handler",
+			"$R = call microflow M.G () on error without rollback begin if $A then log info 'a'; end if; return 'e'; end error; return $R;",
+			"$R = call microflow M.G () on error without rollback begin if $A then log info 'a'; else log info 'b'; end if; return 'e'; end error; return $R;"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if declaredMatches(canonicalFlow(flowBody(t, c.a)), canonicalFlow(flowBody(t, c.b))) {

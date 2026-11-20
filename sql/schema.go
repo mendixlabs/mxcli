@@ -24,6 +24,74 @@ type TableSchema struct {
 	IsView  bool
 }
 
+// QualifiedName is how the table must be addressed in a generated query: the
+// schema it was discovered in, when one is known. A database reports no schema
+// for some drivers, and there the bare name is the address (ako/mxcli#2414).
+func (t *TableSchema) QualifiedName() string {
+	name := quoteIdent(t.Name)
+	if t.Schema == "" {
+		return name
+	}
+	return quoteIdent(t.Schema) + "." + name
+}
+
+// tableAddresses is the address of every object a SHOW TABLES / SHOW VIEWS
+// result names. The readers go through it rather than reading the rows
+// themselves, so a schema cannot be dropped again without changing a function
+// a test covers (ako/mxcli#2414).
+func tableAddresses(rows [][]any) []string {
+	var out []string
+	for _, o := range discoveredObjects(rows) {
+		out = append(out, o.address)
+	}
+	return out
+}
+
+// discoveredObject is one row of a SHOW TABLES listing: where the object is and
+// what it is. Every driver's listing returns table_type as its third column,
+// and reading it is what keeps a view out of the set of tables -- the
+// conflation that made one view generate two entities (ako/mxcli#2415).
+type discoveredObject struct {
+	address string
+	isView  bool
+}
+
+func discoveredObjects(rows [][]any) []discoveredObject {
+	var out []discoveredObject
+	for _, row := range rows {
+		addr := qualifiedTableName(row)
+		if addr == "" {
+			continue
+		}
+		isView := false
+		if len(row) > 2 {
+			isView = strings.EqualFold(strings.TrimSpace(fmt.Sprintf("%v", row[2])), "VIEW")
+		}
+		out = append(out, discoveredObject{address: addr, isView: isView})
+	}
+	return out
+}
+
+// qualifiedTableName is the address in a SHOW TABLES / SHOW VIEWS row, whose
+// columns are (table_schema, table_name). The schema is part of the address,
+// so dropping it leaves a name that cannot be selected from (ako/mxcli#2414).
+func qualifiedTableName(row []any) string {
+	if len(row) < 2 {
+		if len(row) == 1 {
+			return quoteIdent(fmt.Sprintf("%v", row[0]))
+		}
+		return ""
+	}
+	// Quoted, so the address can be split back into the same two parts: a
+	// listed name may contain dots of its own (ako/mxcli#2422).
+	name := quoteIdent(fmt.Sprintf("%v", row[1]))
+	schema := fmt.Sprintf("%v", row[0])
+	if schema == "" {
+		return name
+	}
+	return quoteIdent(schema) + "." + name
+}
+
 // pkQuery returns the query to find primary key columns for a given table.
 var pkQuery = map[DriverName]string{
 	DriverPostgres: `SELECT a.attname
@@ -65,8 +133,24 @@ func ReadTableSchema(ctx context.Context, conn *Connection, tableName string, is
 		}
 	}
 
+	// tableName may be qualified, either because discovery qualified it or
+	// because the user wrote TABLES (sales.customers). The schema belongs in
+	// Schema and the bare name in Name: the name is what every Mendix entity
+	// and query is called after (ako/mxcli#2414).
+	schemaName, bareName := splitTableName(tableName)
+	if schemaName == "" {
+		// A name the user wrote bare still has a schema, and the generated
+		// query has to address it. DescribeTable has already refused a name
+		// more than one schema holds, so there is at most one here. Resolving
+		// it is also what makes `TABLES (customer)` and `VIEWS (sales.customer)`
+		// the same object rather than two entities of one name (ako/mxcli#2415).
+		if holders := schemasHolding(ctx, conn, bareName); len(holders) == 1 {
+			schemaName = holders[0]
+		}
+	}
 	schema := &TableSchema{
-		Name:   tableName,
+		Schema: schemaName,
+		Name:   bareName,
 		IsView: isView,
 	}
 
@@ -90,26 +174,54 @@ func ReadTableSchema(ctx context.Context, conn *Connection, tableName string, is
 	return schema, nil
 }
 
-// ReadAllTableSchemas reads schemas for all user tables from the connection.
-func ReadAllTableSchemas(ctx context.Context, conn *Connection) ([]*TableSchema, error) {
+// ReadAllSchemas reads every object the connection's table listing names --
+// base tables and views alike -- each marked with what it is. This is what a
+// GENERATE CONNECTOR with no TABLES/VIEWS clause enumerates: filtering views
+// out here would empty the output on a database whose objects are all views,
+// which is what a CDC lake is.
+//
+// On SQL Server the listing itself is restricted to base tables, so no views
+// come back; name them in a VIEWS clause there.
+func ReadAllSchemas(ctx context.Context, conn *Connection) ([]*TableSchema, error) {
+	schemas, _, err := readListed(ctx, conn, false)
+	return schemas, err
+}
+
+// readListed reads the listed objects, optionally only the base tables. Its
+// second return is every listed object it could not read, as "address: reason".
+// Dropping those silently is what hid ako/mxcli#2422 and the ambiguous-name
+// half of ako/mxcli#2414: an object the listing names and the output omits is
+// invisible to everything downstream, so the caller has to be able to say so.
+func readListed(ctx context.Context, conn *Connection, tablesOnly bool) ([]*TableSchema, []string, error) {
 	result, err := ShowTables(ctx, conn)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
-	var schemas []*TableSchema
-	for _, row := range result.Rows {
-		if len(row) < 2 {
+	var (
+		schemas []*TableSchema
+		skipped []string
+	)
+	for _, o := range discoveredObjects(result.Rows) {
+		if tablesOnly && o.isView {
 			continue
 		}
-		tableName := fmt.Sprintf("%v", row[1])
-		ts, err := ReadTableSchema(ctx, conn, tableName, false)
+		ts, err := ReadTableSchema(ctx, conn, o.address, o.isView)
 		if err != nil {
-			continue // skip tables that fail
+			skipped = append(skipped, fmt.Sprintf("%s: %v", o.address, err))
+			continue
 		}
+		ts.IsView = o.isView
 		schemas = append(schemas, ts)
 	}
-	return schemas, nil
+	return schemas, skipped, nil
+}
+
+// ReadAllTableSchemas reads schemas for the connection's base tables. A view is
+// not a table: handing one back here is what let a view named in a VIEWS clause
+// be generated twice (ako/mxcli#2415). Use ReadAllSchemas for everything.
+func ReadAllTableSchemas(ctx context.Context, conn *Connection) ([]*TableSchema, error) {
+	schemas, _, err := readListed(ctx, conn, true)
+	return schemas, err
 }
 
 // ReadAllViewSchemas reads schemas for all user views from the connection.
@@ -120,12 +232,8 @@ func ReadAllViewSchemas(ctx context.Context, conn *Connection) ([]*TableSchema, 
 	}
 
 	var schemas []*TableSchema
-	for _, row := range result.Rows {
-		if len(row) < 2 {
-			continue
-		}
-		viewName := fmt.Sprintf("%v", row[1])
-		ts, err := ReadTableSchema(ctx, conn, viewName, true)
+	for _, addr := range tableAddresses(result.Rows) {
+		ts, err := ReadTableSchema(ctx, conn, addr, true)
 		if err != nil {
 			continue // skip views that fail
 		}

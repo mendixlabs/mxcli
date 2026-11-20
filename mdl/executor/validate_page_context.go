@@ -23,15 +23,81 @@ func validatePageContextTree(ctx *ExecContext, params []ast.PageParameter, widge
 		paramNames[p.Name] = true
 	}
 
+	// The names the page will hold are the names AFTER `use building block` /
+	// `use fragment` expansion: a reference is not a widget, and a prefixed
+	// copy is named by its prefix (ako/mxcli#559).
+	built := expandUseRefsForCheck(ctx, widgets)
+
 	// Collect all widget names (first pass) for SELECTION validation
 	widgetNames := make(map[string]bool)
-	collectWidgetNames(widgets, widgetNames)
+	collectWidgetNames(built, widgetNames)
 
 	// Walk the widget tree with context tracking
 	var errors []string
-	errors = append(errors, checkDuplicateWidgetNames(widgets, pageContextWidgetRegistry(ctx))...)
-	walkWidgetsWithContext(widgets, paramNames, widgetNames, false, &errors)
+	errors = append(errors, checkDuplicateWidgetNames(built, pageContextWidgetRegistry(ctx))...)
+	walkWidgetsWithContext(widgets, paramNames, widgetNames, false, pageContextWidgetRegistry(ctx), nil, &errors)
 	return errors
+}
+
+// expandUseRefsForCheck returns the widget tree with each `use building block`
+// and `use fragment` reference replaced by the widgets exec will write for it,
+// prefix applied — the tree whose names Mendix will see. The input is not
+// modified.
+//
+// The reference itself carries the BLOCK's name in Name, and counting that as a
+// widget name refused four prefixed copies of one block as a CE0495 duplicate
+// of 'Atlas_Web_Content.Card' while exec and mx check had none (ako/mxcli#559).
+// Expanding instead of merely skipping keeps the real collision — the same
+// block placed twice with no prefix — which exec refuses as a duplicate name.
+//
+// A reference that cannot be expanded here (no project, an unknown block, a
+// fragment defined in the script being checked) contributes no names; a
+// fragment's content-slot payload is kept, since those are page widgets
+// whatever the fragment holds. Expansion errors are exec's to report.
+func expandUseRefsForCheck(ctx *ExecContext, widgets []*ast.WidgetV3) []*ast.WidgetV3 {
+	return expandUseRefsForCheckReporting(ctx, widgets, nil)
+}
+
+// expandUseRefsForCheckReporting is expandUseRefsForCheck, calling unexpanded
+// (when non-nil) with the prefix of each reference it could NOT expand — ""
+// for none. A caller asking whether a widget name can exist needs to know that
+// the names under that prefix are unknown, not absent (ako/mxcli#2182).
+func expandUseRefsForCheckReporting(ctx *ExecContext, widgets []*ast.WidgetV3, unexpanded func(prefix string)) []*ast.WidgetV3 {
+	var pb *pageBuilder
+	if ctx != nil && ctx.Connected() {
+		pb = &pageBuilder{ctx: ctx, backend: ctx.Backend, fragments: ctx.Fragments}
+	}
+	var walk func(ws []*ast.WidgetV3) []*ast.WidgetV3
+	walk = func(ws []*ast.WidgetV3) []*ast.WidgetV3 {
+		var out []*ast.WidgetV3
+		for _, w := range ws {
+			if w == nil {
+				continue
+			}
+			switch w.Type {
+			case "USE_BUILDING_BLOCK", "USE_FRAGMENT":
+				if pb != nil {
+					if expanded, err := pb.expandIfFragment(w); err == nil {
+						out = append(out, walk(expanded)...)
+						continue
+					}
+				}
+				if unexpanded != nil {
+					prefix, _ := w.Properties["Prefix"].(string)
+					unexpanded(prefix)
+				}
+				out = append(out, walk(w.Children)...)
+			case "SLOT":
+				out = append(out, walk(w.Children)...)
+			default:
+				c := *w
+				c.Children = walk(w.Children)
+				out = append(out, &c)
+			}
+		}
+		return out
+	}
+	return walk(widgets)
 }
 
 // pageContextWidgetRegistry returns the widget registry for the run, or nil.
@@ -173,7 +239,16 @@ func collectWidgetNames(widgets []*ast.WidgetV3, names map[string]bool) {
 // walkWidgetsWithContext validates each widget's DataSource and attribute bindings,
 // tracking whether the current position is inside a data container (DataView,
 // DataGrid, ListView, etc.) that provides entity context.
-func walkWidgetsWithContext(widgets []*ast.WidgetV3, paramNames map[string]bool, widgetNames map[string]bool, hasEntityContext bool, errors *[]string) {
+//
+// itemKinds are the container keywords the enclosing widget's definition
+// declares (unstoredContainerKinds): a child of one of those types is an
+// object-list ITEM or a slot block, not a widget, and its properties are the
+// item's own. An item property may be named `attribute` without being an
+// attribute binding — AccessibilityHelper's attributesList.attribute is the
+// HTML attribute's name, a string — and reading it as one refused the
+// describe output of every such widget (ako/mxcli#904). registry may be nil;
+// then no item resolves and the rule behaves as before.
+func walkWidgetsWithContext(widgets []*ast.WidgetV3, paramNames map[string]bool, widgetNames map[string]bool, hasEntityContext bool, registry *WidgetRegistry, itemKinds map[string]bool, errors *[]string) {
 	for _, w := range widgets {
 		ds := w.GetDataSource()
 		childHasContext := hasEntityContext
@@ -212,7 +287,7 @@ func walkWidgetsWithContext(widgets []*ast.WidgetV3, paramNames map[string]bool,
 		}
 
 		// Validate attribute binding: needs entity context
-		if attr := w.GetAttribute(); attr != "" {
+		if attr := w.GetAttribute(); attr != "" && !itemKinds[strings.ToLower(w.Type)] {
 			// `$Param.Attr` names its object; validateNamedObjectBindings
 			// judges the name.
 			if _, _, named := namedObjectBinding(attr); !hasEntityContext && !named {
@@ -222,7 +297,7 @@ func walkWidgetsWithContext(widgets []*ast.WidgetV3, paramNames map[string]bool,
 		}
 
 		// Recurse into children
-		walkWidgetsWithContext(w.Children, paramNames, widgetNames, childHasContext, errors)
+		walkWidgetsWithContext(w.Children, paramNames, widgetNames, childHasContext, registry, unstoredContainerKinds(registry, w), errors)
 	}
 }
 

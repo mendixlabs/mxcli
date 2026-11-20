@@ -134,7 +134,7 @@ func TestReachablePageRead_ReachabilityMatchesMxbuild(t *testing.T) {
 	f.ref("Probe.P_Menu", "action", "MICROFLOW", "Probe.MF_OpenNoAccess")
 	f.ref("Probe.P_Menu", "action", "MICROFLOW", "Probe.MF_Outer")
 	f.ref("Probe.P_Menu", "action", "NANOFLOW", "Probe.NF_Open")
-	f.ref("Probe.P_Menu", "show_page", "PAGE", "Probe.S_Buttons") // a snippet call
+	f.ref("Probe.P_Menu", "snippet_call", "SNIPPET", "Probe.S_Buttons") // a snippet call (ako/mxcli#2017)
 	f.snippetDoc("Probe.S_Buttons")
 	f.ref("Probe.S_Buttons", "show_page", "PAGE", "Probe.P_FromSnippet")
 	f.execute("Probe.MF_Open", "Probe.User")

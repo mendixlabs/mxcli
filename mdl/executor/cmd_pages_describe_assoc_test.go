@@ -55,7 +55,7 @@ func TestAssociationTemplateParamPath(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := associationTemplateParamPath(tc.attrRef); got != tc.want {
+			if got := associationTemplateParamPath(nil, tc.attrRef); got != tc.want {
 				t.Errorf("associationTemplateParamPath = %q, want %q", got, tc.want)
 			}
 		})

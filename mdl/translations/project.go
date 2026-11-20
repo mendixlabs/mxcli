@@ -5,6 +5,7 @@ package translations
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
@@ -33,6 +34,43 @@ func (s Scope) includes(id model.ID) bool { return s == nil || s(id) }
 // Dictionary is source string → translation, for one language. An empty value
 // means "present but not translated yet".
 type Dictionary map[string]string
+
+// matcher finds a source's entry in a Dictionary, exactly or with line
+// endings ignored: Marketplace texts carry CRLF ("{1} days\r\n"), and a file
+// whose CRs an editor, an agent or git normalised away named each of them as
+// unknown (ako/mxcli#2383).
+type matcher struct {
+	dict Dictionary
+	byLF map[string]string // source with CRLF as LF → the dictionary key
+}
+
+func (d Dictionary) matcher() matcher {
+	m := matcher{dict: d, byLF: make(map[string]string, len(d))}
+	for k := range d {
+		m.byLF[lf(k)] = k
+	}
+	return m
+}
+
+// lookup returns the dictionary key naming src, its translation, and whether
+// there is one. A translation for a CRLF source takes CRLF line breaks, as
+// Studio Pro stores them.
+func (m matcher) lookup(src string) (key, translation string, ok bool) {
+	if t, ok := m.dict[src]; ok {
+		return src, t, true
+	}
+	key, ok = m.byLF[lf(src)]
+	if !ok {
+		return "", "", false
+	}
+	t := m.dict[key]
+	if strings.Contains(src, "\r\n") && !strings.Contains(t, "\r") {
+		t = strings.ReplaceAll(t, "\n", "\r\n")
+	}
+	return key, t, true
+}
+
+func lf(s string) string { return strings.ReplaceAll(s, "\r\n", "\n") }
 
 // Stats is what an Apply did across the project.
 type Stats struct {
@@ -148,6 +186,7 @@ func Apply(p Project, sourceLang, lang string, dict Dictionary, mode Mode, scope
 
 	matched := map[string]bool{}
 	removed := map[string]bool{}
+	m := dict.matcher()
 	for _, u := range units {
 		if u == nil || !scope.includes(u.ID) {
 			continue
@@ -157,8 +196,8 @@ func Apply(p Project, sourceLang, lang string, dict Dictionary, mode Mode, scope
 			continue
 		}
 		for _, e := range CollectFromUnit(raw, sourceLang) {
-			if _, ok := dict[e.Source]; ok {
-				matched[e.Source] = true
+			if key, _, ok := m.lookup(e.Source); ok {
+				matched[key] = true
 			}
 		}
 		out, us := PatchUnit(raw, sourceLang, lang, dict, mode)

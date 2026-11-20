@@ -3,6 +3,7 @@
 package rules
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/mendixlabs/mxcli/mdl/linter"
@@ -202,5 +203,55 @@ func TestOverlapComparesEvents(t *testing.T) {
 	}
 	if got := len(overlapPlanes(nodes)[0]); got != len(nodes) {
 		t.Errorf("%d of %d nodes are on the canvas", got, len(nodes))
+	}
+}
+
+// ako/mxcli#1839 (mendixlabs/mxcli#1690): when one of the overlapping boxes is a
+// loop, the overlap is the loop's BOX — sized by its content — reaching into the
+// activity before or after it, not two statements sharing one @position. The
+// generic "each statement needs its own @position" sent users adding
+// annotations that were already there.
+func TestOverlapMessageNamesTheLoop(t *testing.T) {
+	act := &microflows.ActionActivity{}
+	act.Position = model.Point{X: 300, Y: 200}
+	act.Caption = "Retrieve orders"
+	loop := &microflows.LoopedActivity{}
+	loop.Position = model.Point{X: 420, Y: 200}
+	loop.Size = model.Size{Width: 400, Height: 200}
+	loop.Caption = "Iterate orders"
+
+	planes := overlapPlanes([]microflows.MicroflowObject{act, loop})
+	a, b := planes[0][0], planes[0][1]
+	if !boxesOverlap(a, b) {
+		t.Fatal("fixture does not overlap")
+	}
+	msg, sug := overlapViolationText(a, b, "microflow", "M", "ProcessOrders")
+	for _, want := range []string{"loop 'Iterate orders'", "400x200", "overlaps 'Retrieve orders'"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message %q does not contain %q", msg, want)
+		}
+	}
+	if strings.Contains(msg, "needs its own @position") {
+		t.Errorf("loop overlap still blames missing @position: %q", msg)
+	}
+	if !strings.Contains(sug, "gap") || !strings.Contains(sug, "@position") {
+		t.Errorf("suggestion %q should say to widen the gap or drop the @position", sug)
+	}
+	// Order of the pair must not matter.
+	if msg2, _ := overlapViolationText(b, a, "microflow", "M", "ProcessOrders"); !strings.Contains(msg2, "loop 'Iterate orders'") {
+		t.Errorf("loop hint lost when the loop is the first box: %q", msg2)
+	}
+}
+
+// Control: two plain activities keep the generic @position message.
+func TestOverlapMessageGenericForActivities(t *testing.T) {
+	a := actInfo{x: 100, y: 100, w: 120, h: 60, caption: "Declare"}
+	b := actInfo{x: 150, y: 100, w: 120, h: 60, caption: "Set"}
+	msg, sug := overlapViolationText(a, b, "microflow", "M", "MF")
+	if !strings.Contains(msg, "needs its own @position") || strings.Contains(msg, "loop") {
+		t.Errorf("generic overlap message changed: %q", msg)
+	}
+	if !strings.Contains(sug, "190px") {
+		t.Errorf("generic suggestion changed: %q", sug)
 	}
 }

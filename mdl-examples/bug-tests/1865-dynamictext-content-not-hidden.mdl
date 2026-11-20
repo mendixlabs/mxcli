@@ -1,0 +1,28 @@
+mdl 1;
+-- ako/mxcli#1865 (mendixlabs/mxcli#1707): `mxcli check -p` on 0.28.0 warned
+-- MDL-WIDGET10 "property `content` is hidden … — the value will be ignored" on
+-- a dynamictext's Content, top-level and in a Data grid 2 column, while the page
+-- rendered it and mx check accepted it. No warning without a project.
+--
+-- `dynamictext` is built by the page builder's own switch; on 0.28.0 a
+-- `.mxcli/widgets/dynamictext.def.json` generated for a package widget could
+-- take the keyword over in the registry, and check validated the built-in
+-- against that widget's editorConfig rules. mendixlabs/mxcli#1463 refuses a
+-- builder-owned keyword in the registry, so current main is clean;
+-- TestCheck1865_DynamicTextContentIsNotHidden pins it.
+--
+--   mxcli check mdl-examples/bug-tests/1865-dynamictext-content-not-hidden.mdl -p app.mpr --references
+--     -- no MDL-WIDGET10
+
+create or modify module BugDyn1865;
+
+create persistent entity BugDyn1865.Item (Name: String(100));
+
+create page BugDyn1865.Item_Overview (Title: 'Items', Layout: Atlas_Core.Atlas_Default) {
+  dynamictext txtIntro (Content: 'All items')
+  datagrid dgItems (DataSource: database from BugDyn1865.Item) {
+    column (Attribute: Name, Caption: 'Name') {
+      dynamictext txtName (Content: 'Item {1}', ContentParams: ({1} = Name))
+    }
+  }
+};

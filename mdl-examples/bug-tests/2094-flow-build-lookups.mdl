@@ -1,0 +1,52 @@
+mdl 1;
+-- ako/mxcli#2094 (mendixlabs/mxcli#1795): building a flow resolved each
+-- entity-typed parameter and return type by decoding every domain model in the
+-- project, and `create or modify microflow` found the stored flow by decoding
+-- every microflow. Both now read only what they need: the domain model of the
+-- module a type names, and the microflows of that local name.
+--
+-- This script checks the narrower lookups still find the right thing: entity
+-- types from two modules in a microflow, a nanoflow and a rule, and a
+-- `create or modify` of a microflow whose name another module also uses.
+--
+-- Run on a fresh app:
+--   mxcli exec mdl-examples/bug-tests/2094-flow-build-lookups.mdl -p App.mpr
+-- Expected: every statement succeeds; the last one reports
+-- "Modified microflow: Bug2094A.Pick", and
+--   mxcli -p App.mpr -c "describe microflow Bug2094B.Pick"
+-- still shows the one-statement body (`return $o;`).
+
+create module Bug2094A;
+create module Bug2094B;
+
+create persistent entity Bug2094A.Customer (Name: String(100));
+create persistent entity Bug2094B.Order (Number: Integer);
+
+create microflow Bug2094A.Pick ($c: Bug2094A.Customer, $orders: list of Bug2094B.Order) returns Bug2094B.Order
+begin
+  $o = head $orders;
+  return $o;
+end;
+
+create microflow Bug2094B.Pick ($o: Bug2094B.Order) returns Bug2094B.Order
+begin
+  return $o;
+end;
+
+create nanoflow Bug2094A.NF_Pick ($c: Bug2094A.Customer, $o: Bug2094B.Order) returns Bug2094B.Order
+begin
+  return $o;
+end;
+
+create rule Bug2094A.RL_Has ($c: Bug2094A.Customer, $o: Bug2094B.Order) returns boolean
+begin
+  return $o != empty;
+end;
+
+-- Finds Bug2094A.Pick, not its namesake in Bug2094B.
+create or modify microflow Bug2094A.Pick ($c: Bug2094A.Customer, $orders: list of Bug2094B.Order) returns Bug2094B.Order
+begin
+  $o = head $orders;
+  log info node 'Bug2094' 'picked';
+  return $o;
+end;

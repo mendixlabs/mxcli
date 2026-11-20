@@ -65,6 +65,11 @@ dynamictext day  (content: '{1}', contentparams: ({1} = DueOn format (dateFormat
 > (MDL-WIDGET04), MxBuild fails with CE0720, and Studio Pro throws a
 > NullReferenceException when the widget is opened. Bind every placeholder, or use
 > a plain static `content: 'text'`.
+>
+> `{1} = <unbound>` is what `describe` prints for a parameter that exists but has
+> no binding (building blocks are full of them). It parses back and writes the
+> parameter unbound, so describe -> exec round-trips — but mxbuild still reports
+> CE0402 "No value specified." until it is bound. Do not author it in new MDL.
 
 ### LABEL Widget
 
@@ -121,7 +126,8 @@ describe icon collection Atlas_Core.Atlas_Filled;   -- every icon + its referenc
 - `action: save changes close page` - Save and close page
 - `action: cancel changes` - Cancel changes
 - `action: close page` - Close the page
-- `action: delete` - Delete object
+- `action: delete` - Delete the enclosing data container's object
+- `action: delete $grid1` - Delete grid1's selection: the form for a button in a data grid's `controlbar`, which has no context object (bare `delete` there is CE7005; check reports MDL-PAGEDEL01). The grid needs `itemSelection: Single` or `Multi`, or mx check reports CE7001. `delete $Param` deletes an object parameter of the page or snippet
 - `action: call microflow Module.MicroflowName` - Call microflow
 - `action: call microflow Module.MicroflowName(Param = $value)` - Call microflow with parameters
 - `action: call nanoflow Module.NanoflowName` - Call nanoflow (client-side)
@@ -175,6 +181,7 @@ describe icon collection Atlas_Core.Atlas_Filled;   -- every icon + its referenc
 **Button Styles:** `default`, `primary`, `success`, `info`, `warning`, `danger`, `inverse`
 - Case-insensitive (`primary` and `Primary` both work).
 - These are the only values Mendix recognizes — anything else (a typo, or `secondary`/`link`, which Mendix has no button style for) is rejected by `mxcli check` (MDL-WIDGET02). Previously an unknown value was silently rendered as `btn-default`.
+- A **pluggable** widget that declares a property of its own named `buttonStyle` (PlatformDesignSystem's `pdsbutton`: `fill`, `fillBlue`, `outline`, …) takes its own values instead; the same holds for its own `caption`, `label`, `icon` and `tooltip` — in `create page`, `alter page … set` and `check` alike. `mxcli describe page` prints them as the widget stores them.
 
 **Examples:**
 ```sql
@@ -421,6 +428,8 @@ column (caption: 'Actions') {
 > **A list widget needs an association that yields a list.** A list view, data grid or gallery over `$currentObject/M.Assoc` is CE8812 ("A grid association path must result in a list") when the association is a Reference followed from its FROM entity, or a Reference with owner Both from either end (one-to-one). Use a data view for the single object, or a ReferenceSet. `check` reports it as MDL-ASSOCDS01. The reverse of a default Reference (from the TO entity) is a list and fine.
 
 > **A view entity's association is one-way for a page.** The association a view entity derives from its OQL (`select c.ID as Stats_Customer`) can be followed from the view entity only. A data source that follows it from the entity it points at, in any widget and at any hop (`database from $currentObject/M.Stats_Customer/M.Stats`, `$currentObject/M.Stats_Customer`), is CE8812 "Entity 'M.Customer' has no association 'M.Stats_Customer'". Query the view entity instead: `datasource: database M.Stats where [M.Stats_Customer = $currentObject]`. `check` reports it as MDL-ASSOCDS02. A microflow `retrieve … from $Cust/M.Stats_Customer` is accepted.
+
+> **Each hop starts where the path is.** The first association must have the context entity (or a generalization of it) at one end, and each later one the entity the previous hop arrives at. `$Order/M.Flag_Account/M.Flag` from an Order names an association between Flag and Account, which cannot be followed from an Order; `check` reports it as MDL-ASSOCDS03 and `exec` refuses it.
 
 **With WHERE and SORT BY (inline in DataSource):**
 ```sql
@@ -1248,14 +1257,18 @@ pass parameters" changes the rendering for no reason (mendixlabs/mxcli#1082).
 **A data container's name is a variable only *below* it.** `$dvOrder` reads data
 view `dvOrder`'s object from a data view, list or grid nested inside it. In the
 container's own context — directly inside it, through plain containers, or in the
-control bar of a grid inside it — the object is `$currentObject`, and
-`$dvOrder` is **CE0117** "Error(s) in expression." (`mxcli check` reports
-MDL-BUTTON02). That holds for every slot evaluated there, not only action
-arguments: a nested widget's microflow data-source arguments, `Visible:`,
-`Editable:` and `DynamicClasses:` (CE0117), and a nested list's XPath `where`
-(**CE0161**). The same goes for a list view, gallery or grid read by its own
-name from its item or row. A grid's own name *is* valid from its control bar —
-that is the selection, above (mendixlabs/mxcli#1324).
+control bar of a grid inside it — the object is `$currentObject`, and reading
+`$dvOrder` in an expression there (`$dvOrder/Total`) is **CE0117** "Error(s) in
+expression." (`mxcli check` reports MDL-BUTTON02). That holds for every
+expression evaluated there: an action argument such as `$dvOrder/Total`,
+`Visible:`, `Editable:` and `DynamicClasses:` (CE0117), and a nested list's
+XPath `where` (**CE0161**). The same goes for a list view, gallery or grid read
+by its own name from its item or row (mendixlabs/mxcli#1324).
+
+Passing the bare name as an action or data-source argument, `Order = $dvOrder`,
+is fine: it is stored as a variable reference, not expression text, and builds
+clean (measured on 11.12.6 and 11.14.0, ako/mxcli#2149). A grid's own name is
+also valid from its control bar — that is the selection, above.
 
 ### Charts (Charts.mpk — ColumnChart / BarChart / AreaChart / PieChart)
 

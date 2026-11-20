@@ -216,12 +216,17 @@ end;`)
 	}
 }
 
-// The catalog's source build does not run the derivation (#766). Its text feeds
-// a search index, where layout lines are harmless, and the derivation rebuilds
-// every flow several times — it made `refresh catalog full source` 2.3x slower.
-// Observable as the full layout in the catalog text of a flow whose canonical
-// description has none; the canonical describe of the same flow is the control.
-func TestCatalogSource_SkipsDerivedLayout(t *testing.T) {
+// ako/mxcli#2036 (mendixlabs/mxcli#1779): the catalog's source text of a flow
+// is exactly what DESCRIBE prints. It used to keep every stored layout
+// annotation (#766, to skip the derivation for speed), so the catalog said
+// `@anchor(from: right, to: left)` where DESCRIBE said nothing — for 55 of
+// TestApp's 226 microflows and 376 of the reporter's 858. Scripts generated from
+// the catalog then stated layout the canonical description leaves out. The
+// catalog text is re-runnable MDL, so it is the canonical description.
+//
+// Every microflow and nanoflow of the fixture is compared, after laying one out
+// so the canonical description provably drops lines (the control).
+func TestCatalogSource_MatchesDescribe(t *testing.T) {
 	exec, out := describeExecutor(t)
 	const name = "Administration.ChangeMyPassword"
 	if res, err := exec.LayoutFlow("microflow", flowQN(name), false); err != nil || res.Refused != "" {
@@ -231,12 +236,35 @@ func TestCatalogSource_SkipsDerivedLayout(t *testing.T) {
 		t.Fatalf("control: the canonical description keeps layout, so this cannot tell the two apart:\n  %s",
 			strings.Join(got, "\n  "))
 	}
-	src, err := captureDescribeParallel(exec.newExecContext(t.Context()), "MICROFLOW", name, "")
-	if err != nil {
-		t.Fatal(err)
+
+	rows, buildOut := sourceBuild(t, exec, true)
+	compared, differ := 0, 0
+	for key, text := range rows {
+		parts := strings.SplitN(key, "|", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		kind := map[string]string{"MICROFLOW": "microflow", "NANOFLOW": "nanoflow"}[parts[2]]
+		if kind == "" {
+			continue
+		}
+		compared++
+		// DESCRIBE leads with the language header it was printed under; the
+		// catalog keeps the statement. Both are compared without it.
+		want := describeText(t, exec, out, "describe "+kind+" "+parts[1]+";")
+		want = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(want), "mdl 1;"))
+		if text = strings.TrimSpace(text); text != want {
+			differ++
+			if differ <= 3 {
+				t.Errorf("catalog source of %s %s differs from DESCRIBE:\ncatalog:\n%s\ndescribe:\n%s", kind, parts[1], text, want)
+			}
+		}
 	}
-	if len(layoutLines(src)) == 0 {
-		t.Errorf("the catalog source ran the derived-layout check:\n%s", src)
+	if compared == 0 {
+		t.Fatalf("control: no flow in the source index\n%s", buildOut)
+	}
+	if differ > 0 {
+		t.Errorf("%d of %d flows' catalog source differs from DESCRIBE", differ, compared)
 	}
 }
 

@@ -49,6 +49,8 @@ func checkDisallowedRuleAction(stmt ast.MicroflowStatement) string {
 		return "a rule cannot commit objects"
 	case *ast.RollbackStmt:
 		return "a rule cannot roll back objects"
+	case *ast.ExternalObjectStmt:
+		return "a rule cannot send or delete external objects"
 
 	// Client interaction — a rule has no client to talk to.
 	case *ast.ShowPageStmt:

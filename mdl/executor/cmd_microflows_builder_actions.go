@@ -296,6 +296,39 @@ func (fb *flowBuilder) addDeleteAction(s *ast.DeleteObjectStmt) model.ID {
 	return activity.ID
 }
 
+// addExternalObjectAction creates a SEND or DELETE EXTERNAL OBJECT activity
+// (mendixlabs/mxcli#1735).
+func (fb *flowBuilder) addExternalObjectAction(s *ast.ExternalObjectStmt) model.ID {
+	activityX := fb.posX
+	var action microflows.MicroflowAction
+	id := model.BaseElement{ID: model.ID(types.GenerateID())}
+	eh := explicitErrorHandling(fb, s.ErrorHandling)
+	if s.Delete {
+		action = &microflows.DeleteExternalObjectAction{BaseElement: id, Variable: s.Variable, RefreshInClient: s.RefreshInClient, ErrorHandlingType: eh}
+	} else {
+		action = &microflows.SendExternalObjectAction{BaseElement: id, Variable: s.Variable, RefreshInClient: s.RefreshInClient, ErrorHandlingType: eh}
+	}
+
+	activity := &microflows.ActionActivity{
+		BaseActivity: microflows.BaseActivity{
+			BaseMicroflowObject: microflows.BaseMicroflowObject{
+				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
+				Position:    model.Point{X: fb.posX, Y: fb.posY},
+				Size:        model.Size{Width: ActivityWidth, Height: ActivityHeight},
+			},
+			AutoGenerateCaption: true,
+		},
+		Action: action,
+	}
+
+	fb.objects = append(fb.objects, activity)
+	fb.posX += fb.spacing
+
+	fb.finishCustomErrorHandler(activity.ID, activityX, s.ErrorHandling, "")
+
+	return activity.ID
+}
+
 // addRollbackAction creates a ROLLBACK statement.
 func (fb *flowBuilder) addRollbackAction(s *ast.RollbackStmt) model.ID {
 	activityX := fb.posX
@@ -1476,7 +1509,10 @@ func (fb *flowBuilder) addRetrieveAction(s *ast.RetrieveStmt) model.ID {
 				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 				RangeType:   microflows.RangeTypeFirst,
 			}
-		} else if s.Limit != "" {
+		} else if s.Limit != "" || s.Offset != "" {
+			// An offset alone is a Custom range too; testing the limit only
+			// wrote `offset 5000` as the "all" range, and the retrieve
+			// returned the first objects instead (mendixlabs/mxcli#1737).
 			dbSource.Range = &microflows.Range{
 				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 				RangeType:   microflows.RangeTypeCustom,
@@ -2115,6 +2151,24 @@ func listOperationResult(op microflows.ListOperation) listResult {
 		*microflows.SubtractOperation, *microflows.ListRangeOperation:
 		return listResultList
 	case *microflows.HeadOperation, *microflows.FindOperation, *microflows.FindByAttributeOperation:
+		return listResultElement
+	}
+	return listResultNone
+}
+
+// listOperationStmtResult is listOperationResult for the statement, before
+// any activity is built: the same answer, so a check that types variables from
+// the text (flowObjectTypes, behind MDL-SET01) and the build that types them
+// from the activity agree on what a list operation's output holds
+// (ako/mxcli#2176). The string-overloaded find/contains on a String input is
+// not a list operation at all; callers type an output only when the input is
+// a list.
+func listOperationStmtResult(op ast.ListOperationType) listResult {
+	switch op {
+	case ast.ListOpFilter, ast.ListOpSort, ast.ListOpTail, ast.ListOpUnion, ast.ListOpIntersect,
+		ast.ListOpSubtract, ast.ListOpRange:
+		return listResultList
+	case ast.ListOpHead, ast.ListOpFind:
 		return listResultElement
 	}
 	return listResultNone
@@ -3297,4 +3351,12 @@ func qualifyNamesInSource(source string, names map[string]string) string {
 		i = end
 	}
 	return out.String()
+}
+
+// RetrieveXPathConstraint is the XPath constraint a `retrieve … where` stores,
+// for a caller outside the executor that runs the retrieve itself: the test
+// runner's interpreter route sends it to the running app instead of writing a
+// Retrieve activity, and must send the same constraint the activity would hold.
+func RetrieveXPathConstraint(where ast.Expression, entity string) string {
+	return retrieveXPathConstraint(where, entity)
 }

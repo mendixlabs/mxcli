@@ -54,6 +54,14 @@ func validateNanoflowStatements(stmts []ast.MicroflowStatement, errors *[]string
 // The manual QA test plan (docs/15-testing/nanoflow-test-cases.md §4.1) lists
 // all disallowed actions and should be updated in parallel.
 func checkDisallowedNanoflowAction(stmt ast.MicroflowStatement) string {
+	// Measured on mxbuild 11.12.6: CE0009 "This action is not supported in
+	// nanoflows." on both external-object activities (mendixlabs/mxcli#1735).
+	if s, ok := stmt.(*ast.ExternalObjectStmt); ok {
+		if s.Delete {
+			return "delete external object is not allowed in nanoflows"
+		}
+		return "send external object is not allowed in nanoflows"
+	}
 	switch stmt.(type) {
 	case *ast.RaiseErrorStmt:
 		return "ErrorEvent is not allowed in nanoflows"

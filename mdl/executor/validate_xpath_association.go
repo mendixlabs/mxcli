@@ -136,7 +136,7 @@ func buildAssociationIndex(ctx *ExecContext) map[string]string {
 	for _, m := range modules {
 		moduleNames[m.ID] = m.Name
 	}
-	dms, err := ctx.Backend.ListDomainModels()
+	dms, err := projectDomainModels(ctx)
 	if err != nil {
 		return nil
 	}

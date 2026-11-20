@@ -1,0 +1,32 @@
+-- ako/mxcli#2100 (upstream mendixlabs/mxcli#1805): the setup script for
+-- test-runner-2100-applying-callee.test.mdl. Apply it before running the tests:
+--
+--   mxcli exec mdl-examples/bug-tests/test-runner-2100-setup.mdl -p app.mpr
+--
+-- Production microflows that apply entity access, which the generated test
+-- microflows (and check's wrappers) could not call. One raises an error, so
+-- the runner's handlers have to read its message from an applying flow.
+mdl 1;
+create module Acc;
+
+create java action Acc.JA_Fail(Message: String) returns Boolean
+as $$
+throw new com.mendix.core.CoreException(Message);
+$$;
+
+/** Applies entity access, as many production actions do. */
+@applyentityaccess
+create microflow Acc.ACT_IsReady () returns Boolean
+begin
+  return true;
+end;
+
+/** Applies entity access and refuses a negative amount. */
+@applyentityaccess
+create microflow Acc.ACT_Refuse (Amount: Decimal) returns Boolean
+begin
+  if $Amount < 0 then
+    $Failed = call java action Acc.JA_Fail(Message = 'Amount must be positive');
+  end if;
+  return true;
+end;

@@ -6,6 +6,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -49,21 +50,33 @@ which is why 'brain plan' can report progress derived from the model instead of
 from a status column that goes stale the moment someone builds something.
 
 An agent captures; a person promotes. The queue is in .mxcli/ and is git-ignored,
-so nothing reaches a pull request until someone has looked at it.`,
+so nothing reaches a pull request until someone has looked at it.
+
+The brain can exist before the project. Name its directory with -C <dir>, or with
+-p <app.mpr> for the directory an .mpr is (or will be) in; neither needs the
+project to exist. 'mxcli new' into that directory adopts the brain, and from then
+on 'plan' and 'check' with the same -C count against the model.`,
 	Example: `  mxcli brain init -p app.mpr
+  mxcli brain init -C ./workspace          # before the project exists
   mxcli brain capture "Orders are committed by Finance, not Sales" -a @Sales.Order -a @Finance.ACT_Post -p app.mpr
   mxcli brain staged -p app.mpr
   mxcli brain promote a1b2c3 -p app.mpr
+  mxcli brain edit a1b2c3 "Orders are committed by Finance, never by Sales" -p app.mpr
   mxcli brain capture "Orders must be approvable by a manager" --slice 02-approvals -a @Sales.ACT_Order_Approve -p app.mpr
+  mxcli brain capture "A planner can create a visit" -s 01-scheduling --source docs/prd.md#L18-21 -p app.mpr
   mxcli brain brief --slice 02-approvals -p app.mpr
   mxcli brain plan -p app.mpr
   mxcli brain check -p app.mpr
+  mxcli brain list -p app.mpr --json
   mxcli brain show -p app.mpr`,
 }
 
 var brainInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Create docs/brain/ (refuses a docs/brain/ it did not write)",
+	// No arguments: the directory is -C. Accepting one and ignoring it wrote
+	// the store wherever -p pointed instead of where the caller asked.
+	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := brainProjectDir(cmd)
 		written, err := brain.NewStore(dir).Init()
@@ -82,11 +95,34 @@ var brainInitCmd = &cobra.Command{
 }
 
 var brainCaptureCmd = &cobra.Command{
-	Use:   "capture <text>",
+	Use:   "capture <text> | --from-json <file|->",
 	Short: "Queue something worth remembering (does not commit it)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Queue an entry for a person to review and promote.
+
+--from-json <file|-> queues a JSON array of entries in one act, each
+{"text" | "title"+"body", "anchors": [...], "slice"?, "open"?, "source"?}.
+Every item is validated before anything is queued, so one bad item fails the
+batch with its index named. A duplicate of something committed, queued or
+earlier in the batch is skipped and reported with the existing id, so the same
+list captured twice is a no-op.`,
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := brainProjectDir(cmd)
+		if from, _ := cmd.Flags().GetString("from-json"); from != "" {
+			if len(args) > 0 {
+				brainFatal(fmt.Errorf("give the entry as text or --from-json, not both"))
+			}
+			for _, f := range []string{"anchor", "slice", "open", "source", "changes", "partly-meets", "accepts"} {
+				if cmd.Flags().Changed(f) {
+					brainFatal(fmt.Errorf("--%s does not combine with --from-json; set it per item in the JSON", f))
+				}
+			}
+			runBrainCaptureBatch(dir, from)
+			return
+		}
+		if len(args) != 1 {
+			brainFatal(fmt.Errorf("capture needs the entry's text, or --from-json <file|->"))
+		}
 		anchors, _ := cmd.Flags().GetStringSlice("anchor")
 		slice, _ := cmd.Flags().GetString("slice")
 		// --slice is the only signal needed: a requirement is a requirement
@@ -108,9 +144,69 @@ var brainCaptureCmd = &cobra.Command{
 		if err != nil {
 			brainFatal(err)
 		}
-		added, err := brain.NewQueue(dir).Append(e)
+		if raw, _ := cmd.Flags().GetString("source"); raw != "" {
+			if e.Source, err = brainSource(dir, raw); err != nil {
+				brainFatal(err)
+			}
+		}
+		if e, err = applyVerdictFlags(cmd, dir, e); err != nil {
+			brainFatal(err)
+		}
+		if accepts, _ := cmd.Flags().GetStringArray("accepts"); len(accepts) > 0 {
+			if e, err = brain.AddAcceptances(e, accepts); err != nil {
+				brainFatal(err)
+			}
+		}
+		store, queue := brain.NewStore(dir), brain.NewQueue(dir)
+		// Already committed is a duplicate too, found by content: an edited
+		// entry's id no longer matches its text (ako/mxcli#1950).
+		if store.Exists() {
+			if dup, err := store.FindContent(e.ContentKey()); err != nil {
+				brainFatal(err)
+			} else if dup.ID != "" {
+				if globalJSONFlag {
+					brainJSON(newCaptureReport(dup, false, "already_committed"))
+					return
+				}
+				fmt.Printf("Already committed as %s — not added again.\n", dup.ID)
+				return
+			}
+		}
+		// Already queued, found by content before an id is minted: the id below
+		// is free of the queued twin's by construction, so reporting the
+		// duplicate after Append named an id no entry has (ako/mxcli#1953).
+		if staged, err := queue.Load(); err != nil {
+			brainFatal(err)
+		} else {
+			for _, q := range staged {
+				if q.ContentKey() == e.ContentKey() {
+					if globalJSONFlag {
+						brainJSON(newCaptureReport(q, false, "already_queued"))
+						return
+					}
+					fmt.Printf("Already queued as %s — not added again.\n", q.ID)
+					return
+				}
+			}
+		}
+		// The content-derived id may already be the handle of an entry whose
+		// text has since changed; a new fact gets an id of its own.
+		taken, err := brain.TakenIDs(store, queue)
 		if err != nil {
 			brainFatal(err)
+		}
+		e = brain.AssignFreeID(e, taken)
+		added, err := queue.Append(e)
+		if err != nil {
+			brainFatal(err)
+		}
+		if globalJSONFlag {
+			status := "queued"
+			if !added {
+				status = "already_queued"
+			}
+			brainJSON(newCaptureReport(e, added, status))
+			return
 		}
 		if !added {
 			fmt.Printf("Already queued as %s — not added again.\n", e.ID)
@@ -122,6 +218,9 @@ var brainCaptureCmd = &cobra.Command{
 		}
 		fmt.Printf("%s %s -> would promote into %s\n", what, e.ID, shardLabel(e.Shard()))
 		fmt.Println("Review with 'mxcli brain staged'; commit it with 'mxcli brain promote " + e.ID + "'.")
+		if e.EntryKind() == brain.KindRequirement && !e.Open && len(e.Anchors) > 0 {
+			warnUnprovableAtCapture(brainLocationOf(cmd).MPR, e)
+		}
 	},
 }
 
@@ -188,34 +287,113 @@ append-only, so its own order is the honest timeline.`,
 }
 
 var brainPromoteCmd = &cobra.Command{
-	Use:   "promote <id>",
-	Short: "Write a staged entry into its shard (the human step)",
-	Args:  cobra.ExactArgs(1),
+	Use:   "promote <id>...",
+	Short: "Write staged entries into their shards (the human step)",
+	Long: `Commit staged entries into the shards their anchors route them to.
+
+Several ids are promoted as one act: every id is resolved and every target
+shard's cap is checked with all of the batch's additions before anything is
+written, so a batch either lands whole or not at all. --to applies to every id.
+
+If a promote is interrupted after the shards are written and before the queue
+is, the entries are both committed and still queued; re-running the same
+command completes it. An id already in its shard with the same content counts
+as promoted.`,
+	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		dir := brainProjectDir(cmd)
 		store, queue := brain.NewStore(dir), brain.NewQueue(dir)
-		if !store.Exists() {
-			brainFatal(fmt.Errorf("no store yet — run 'mxcli brain init' first"))
-		}
-		e, ok, err := queue.Get(args[0])
+		to, _ := cmd.Flags().GetString("to")
+		results, err := brain.PromoteBatch(store, queue, args, to)
 		if err != nil {
 			brainFatal(err)
 		}
-		if !ok {
-			brainFatal(fmt.Errorf("no staged entry with id %s", args[0]))
+		reports := make([]promoteReport, 0, len(results))
+		promoted := 0
+		for _, r := range results {
+			if r.Status == brain.StatusPromoted {
+				promoted++
+			}
+			reports = append(reports, promoteReport{ID: r.Entry.ID, Kind: string(r.Entry.EntryKind()),
+				Shard: r.Shard, Path: store.ShardPath(r.Shard), Status: r.Status})
 		}
-		shard := e.Shard()
-		if to, _ := cmd.Flags().GetString("to"); to != "" {
-			shard = to
+		if globalJSONFlag {
+			// One id keeps the single object #2032 introduced, so existing
+			// callers are unaffected; several get one result per id.
+			if len(args) == 1 && len(reports) == 1 {
+				brainJSON(reports[0])
+				return
+			}
+			brainJSON(map[string]any{"results": reports, "promoted": promoted,
+				"already_promoted": len(reports) - promoted, "total": len(reports)})
+			return
 		}
-		if err := store.Promote(e, shard); err != nil {
-			brainFatal(err)
+		for _, r := range reports {
+			if r.Status == brain.StatusPromoted {
+				fmt.Printf("Promoted %s into %s\n", r.ID, r.Path)
+			} else {
+				fmt.Printf("Already promoted %s in %s\n", r.ID, r.Path)
+			}
 		}
-		if _, err := queue.Drop(e.ID); err != nil {
-			brainFatal(err)
+		if len(reports) > 1 {
+			fmt.Printf("\n%d promoted, %d already promoted.\n", promoted, len(reports)-promoted)
 		}
-		fmt.Printf("Promoted %s into %s\n", e.ID, store.ShardPath(shard))
 	},
+}
+
+// runBrainCaptureBatch is `capture --from-json`: read, validate every item,
+// then queue the survivors in one write.
+func runBrainCaptureBatch(dir, from string) {
+	var (
+		r   io.Reader = os.Stdin
+		err error
+	)
+	if from != "-" {
+		f, ferr := os.Open(from)
+		if ferr != nil {
+			brainFatal(ferr)
+		}
+		defer f.Close()
+		r = f
+	}
+	items, err := brain.ParseBatch(r)
+	if err != nil {
+		brainFatal(err)
+	}
+	entries, err := brain.BuildBatch(items, time.Now(), func(raw string) (string, error) {
+		return brainSource(dir, raw)
+	})
+	if err != nil {
+		brainFatal(err)
+	}
+	results, err := brain.CaptureBatch(brain.NewStore(dir), brain.NewQueue(dir), entries)
+	if err != nil {
+		brainFatal(err)
+	}
+	added := 0
+	reports := make([]captureReport, 0, len(results))
+	for _, res := range results {
+		if res.Added {
+			added++
+		}
+		reports = append(reports, newCaptureReport(res.Entry, res.Added, res.Status))
+	}
+	if globalJSONFlag {
+		brainJSON(map[string]any{"results": reports, "added": added,
+			"skipped": len(reports) - added, "total": len(reports)})
+		return
+	}
+	for _, rep := range reports {
+		switch rep.Status {
+		case brain.StatusQueued:
+			fmt.Printf("Queued %s -> would promote into %s\n", rep.ID, shardLabel(rep.Shard))
+		case brain.StatusAlreadyCommitted:
+			fmt.Printf("Already committed as %s — not added again.\n", rep.ID)
+		default:
+			fmt.Printf("Already queued as %s — not added again.\n", rep.ID)
+		}
+	}
+	fmt.Printf("\n%d queued, %d already present.\n", added, len(reports)-added)
 }
 
 var brainDropCmd = &cobra.Command{
@@ -241,6 +419,205 @@ var brainDropCmd = &cobra.Command{
 		if deletedFile {
 			fmt.Printf("%s had no entries left and was removed.\n", shardLabel(shard))
 		}
+	},
+}
+
+var brainEditCmd = &cobra.Command{
+	Use:   "edit <id> [<text>] [-a @Anchor]…",
+	Short: "Change an entry's wording (and with -a its anchors), keeping its id",
+	Long: `Rewrite an entry in place. The id does not change.
+
+An id is a handle — 'brain promote <id>', 'brain resolve <id>' and prose cite
+it — so correcting a word must not turn the entry into a different one. The text
+replaces the title (first line) and body (the rest); -a, if given, replaces the
+anchors, and is checked as 'capture' checks it. With -a the text may be left
+out, to re-anchor an entry without retyping it.
+
+A staged entry is edited in the queue, keeping its place there. A committed one
+is edited in its shard, keeping its position — unless re-anchoring a decision
+points it at another module, in which case it moves to that module's file, so
+'check' does not report it misfiled. A decision put in project.md on purpose
+('promote --to project') stays there.
+
+An edit that would make the entry say the same as another is refused.`,
+	Example: `  mxcli brain edit 66dcf4 "A planner can create a visit for one named engineer" -C ./App
+  mxcli brain edit a1b2c3 -a @Finance.ACT_Post -p app.mpr     # re-anchor, keep the text`,
+	Args: cobra.RangeArgs(1, 2),
+	Run: func(cmd *cobra.Command, args []string) {
+		anchors, _ := cmd.Flags().GetStringSlice("anchor")
+		replace := cmd.Flags().Changed("anchor")
+		var source string
+		if raw, _ := cmd.Flags().GetString("source"); raw != "" {
+			var err error
+			if source, err = brainSource(brainProjectDir(cmd), raw); err != nil {
+				brainFatal(err)
+			}
+		}
+		verdicts := cmd.Flags().Changed("changes") || cmd.Flags().Changed("partly-meets")
+		if len(args) == 1 && !replace && source == "" && !verdicts {
+			brainFatal(fmt.Errorf("nothing to change: give the new text, -a anchors, --source, --changes / --partly-meets, or a combination"))
+		}
+		runBrainChange(cmd, args[0], "Edited", func(e brain.Entry) (brain.Entry, error) {
+			if source != "" {
+				e.Source = source
+			}
+			text := e.Title
+			if e.Body != "" {
+				text += "\n\n" + e.Body
+			}
+			if len(args) == 2 {
+				text = args[1]
+			}
+			edited, err := e.Edit(text, anchors, replace)
+			if err != nil {
+				return edited, err
+			}
+			return applyVerdictFlags(cmd, brainProjectDir(cmd), edited)
+		})
+	},
+}
+
+var brainMoveCmd = &cobra.Command{
+	Use:   "move <id> --slice <slice>",
+	Short: "Move a requirement to another slice, keeping its id",
+	Long: `Move a requirement (or a question filed against a slice) to another slice.
+
+The id does not change. A decision has no slice — its file follows its anchors,
+so re-anchor it with 'brain edit <id> <text> -a …' instead; giving it a slice
+would turn it into a requirement, which is a change of meaning, not of place.`,
+	Example: `  mxcli brain move 66dcf4 --slice 02-dispatch -C ./App`,
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		slice, _ := cmd.Flags().GetString("slice")
+		if slice == "" {
+			brainFatal(fmt.Errorf("say where to: --slice <slice>"))
+		}
+		runBrainChange(cmd, args[0], "Moved", func(e brain.Entry) (brain.Entry, error) {
+			return e.MoveToSlice(slice)
+		})
+	},
+}
+
+// brainSource resolves a --source the way a shell user means it — a relative
+// path is relative to where they ran the command — and stores it relative to
+// the project directory, so it means the same on every checkout.
+func brainSource(projectDir, raw string) (string, error) {
+	path, locator, hasLocator := strings.Cut(raw, "#")
+	if path != "" && !filepath.IsAbs(path) {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return "", err
+		}
+		path = abs
+	}
+	if hasLocator {
+		path += "#" + locator
+	}
+	return brain.NormalizeSource(projectDir, path)
+}
+
+// runBrainChange applies a change to an entry wherever it is — the queue first,
+// as 'drop' looks, then the store — and reports where it ended up.
+func runBrainChange(cmd *cobra.Command, id, verb string, change func(brain.Entry) (brain.Entry, error)) {
+	dir := brainProjectDir(cmd)
+	queue := brain.NewQueue(dir)
+	ok, err := queue.Update(id, change)
+	if err != nil {
+		brainFatal(err)
+	}
+	if ok {
+		e, _, err := queue.Get(id)
+		if err != nil {
+			brainFatal(err)
+		}
+		if globalJSONFlag {
+			brainJSON(map[string]any{"id": id, "staged": true, "shard": e.Shard()})
+			return
+		}
+		fmt.Printf("%s staged %s -> would promote into %s\n", verb, id, shardLabel(e.Shard()))
+		return
+	}
+	store := brain.NewStore(dir)
+	if !store.Exists() {
+		brainFatal(fmt.Errorf("no entry with id %s, staged or committed", id))
+	}
+	moved, err := store.Update(id, change)
+	if err != nil {
+		brainFatal(err)
+	}
+	if globalJSONFlag {
+		brainJSON(map[string]any{"id": id, "staged": false, "shard": moved.To, "from": moved.From})
+		return
+	}
+	if moved.From != moved.To {
+		fmt.Printf("%s %s, and moved it from %s to %s\n", verb, id, shardLabel(moved.From), shardLabel(moved.To))
+		return
+	}
+	fmt.Printf("%s %s in %s\n", verb, id, shardLabel(moved.To))
+}
+
+var brainListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "The committed entries as data, filterable (the structured read of docs/brain/)",
+	Long: `List the committed entries — the promoted side of what 'staged' shows.
+
+With --json each entry is the object 'staged --json' returns (id, kind, slice,
+open, title, body, anchors, source, date) plus the shard it is in, so a tool can
+render the store without parsing its markdown. 'brief --json' is for a prompt;
+this is for a program.
+
+  --slice <s>       one slice: its requirements and the questions filed on it
+  --kind <k>        decision or requirement
+  --open            only open questions; --open=false only settled entries
+
+Blocks whose metadata line cannot be read are listed under "malformed" rather
+than dropped, so a listing never silently shows fewer entries than the files
+hold. No model is needed.`,
+	Example: `  mxcli brain list -C ./App --json
+  mxcli brain list --slice 01-scheduling -p app.mpr --json
+  mxcli brain list --open -p app.mpr`,
+	Args: cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		store := brain.NewStore(brainProjectDir(cmd))
+		var f brain.ListFilter
+		f.Slice, _ = cmd.Flags().GetString("slice")
+		kind, _ := cmd.Flags().GetString("kind")
+		f.Kind = brain.Kind(kind)
+		if cmd.Flags().Changed("open") {
+			open, _ := cmd.Flags().GetBool("open")
+			f.Open = &open
+		}
+		res, err := store.List(f)
+		if err != nil {
+			brainFatal(err)
+		}
+		if globalJSONFlag {
+			brainJSON(map[string]any{
+				"entries":   res.Entries,
+				"count":     len(res.Entries),
+				"malformed": res.Malformed,
+			})
+			return
+		}
+		if !store.Exists() {
+			fmt.Println("No store yet. Create one with 'mxcli brain init'.")
+			return
+		}
+		for _, m := range res.Malformed {
+			fmt.Printf("MALFORMED   %s\n", m)
+		}
+		if len(res.Entries) == 0 {
+			fmt.Println("No committed entries match.")
+			return
+		}
+		for _, e := range res.Entries {
+			open := ""
+			if e.Open {
+				open = "  OPEN"
+			}
+			fmt.Printf("%s  %-18s  %s%s\n", e.ID, shardLabel(e.Shard), e.Title, open)
+		}
+		fmt.Printf("\n%d committed.\n", len(res.Entries))
 	},
 }
 
@@ -310,10 +687,29 @@ is reported by 'brain check' and by 'mxcli lint' until someone does.`,
 		if err != nil {
 			brainFatal(err)
 		}
+		// A verdict on the question ("partly meets X until answered") must
+		// not silently outlive the answer (ako/mxcli#2301). On a slice the
+		// answered question becomes a requirement, which cannot carry a
+		// verdict: the lines go, and the user is told how to keep one. On a
+		// module question it becomes a decision and the verdict stays.
+		var dropped []brain.VerdictRef
+		if resolved.EntryKind() == brain.KindRequirement {
+			resolved, dropped = brain.StripVerdicts(resolved)
+		}
 		if err := store.Replace(shard, resolved); err != nil {
 			brainFatal(err)
 		}
 		fmt.Printf("Resolved %s in %s\n", resolved.ID, shardLabel(shard))
+		for _, v := range dropped {
+			fmt.Printf("Dropped its verdict: %s requirement %s. If the requirement is still not met as asked, record that on a decision:\n"+
+				"  mxcli brain capture \"<why>\" --%s %s:<reason> -a @Module.Element\n", v.Verdict, v.RequirementID, verdictFlag(v.Verdict), v.RequirementID)
+		}
+		if resolved.EntryKind() != brain.KindRequirement {
+			for _, v := range brain.Verdicts(resolved) {
+				fmt.Printf("Kept its verdict: %s requirement %s, now on decision %s. If the answer settles it, remove the line with 'mxcli brain edit %s'.\n",
+					v.Verdict, v.RequirementID, resolved.ID, resolved.ID)
+			}
+		}
 	},
 }
 
@@ -328,10 +724,14 @@ maintain or to go stale. Building the thing is what moves the number.
 
 Slices are listed in name order, so a numeric prefix is how a roadmap is
 sequenced: 01-accounts, 02-approvals. That is the user's choice, not a field
-mxcli maintains.`,
+mxcli maintains.
+
+The brain can exist before the project does. With no .mpr at the -p path,
+nothing is built: every anchored requirement counts as planned, and the output
+says the model is absent.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		projectPath := brainProjectPath(cmd)
-		store := brain.NewStore(filepath.Dir(projectPath))
+		loc := brainLocationOf(cmd)
+		store := brain.NewStore(loc.Dir)
 		sliceShards, err := store.ListSlices()
 		if err != nil {
 			brainFatal(err)
@@ -348,7 +748,7 @@ mxcli maintains.`,
 			fmt.Println("  mxcli brain capture \"<requirement>\" --slice 01-<name> -a @Module.Element")
 			return
 		}
-		resolver, closeFn, err := openBrainResolver(projectPath)
+		resolver, closeFn, err := openBrainResolverOrNoModel(loc.MPR)
 		if err != nil {
 			brainFatal(err)
 		}
@@ -359,8 +759,12 @@ mxcli maintains.`,
 			brainFatal(err)
 		}
 		if globalJSONFlag {
-			brainJSON(planReport(rep.Slices))
+			brainJSON(planReport(rep))
 			return
+		}
+		if rep.ModelAbsent {
+			printNoModel(rep, loc)
+			fmt.Println()
 		}
 		printBrainPlan(rep.Slices)
 	},
@@ -374,13 +778,25 @@ func printBrainPlan(slices []brain.SliceProgress) {
 		}
 	}
 	var built, total int
-	fmt.Printf("%-*s %8s %8s %12s\n", width, "SLICE", "BUILT", "PLANNED", "UNANCHORED")
+	withMilestones := false
+	for _, sl := range slices {
+		withMilestones = withMilestones || sl.Milestone != ""
+	}
+	header := fmt.Sprintf("%-*s %8s %8s %12s", width, "SLICE", "BUILT", "PLANNED", "UNANCHORED")
+	if withMilestones {
+		header += "  MILESTONE"
+	}
+	fmt.Println(header)
 	for _, sl := range slices {
 		un := ""
 		if sl.Unanchored > 0 {
 			un = fmt.Sprint(sl.Unanchored)
 		}
-		fmt.Printf("%-*s %8d %8d %12s\n", width, sl.Slice, sl.Built, sl.Planned, un)
+		line := fmt.Sprintf("%-*s %8d %8d %12s", width, sl.Slice, sl.Built, sl.Planned, un)
+		if withMilestones {
+			line += "  " + sl.Milestone
+		}
+		fmt.Println(strings.TrimRight(line, " "))
 		built += sl.Built
 		total += sl.Total()
 	}
@@ -465,10 +881,16 @@ perfectly current.
 Separately, each entry is checked for being in the right shard. That is a second
 axis, not a fourth state — an anchor can resolve perfectly and the entry still
 sit in the wrong file. At least one anchor must belong to the entry's shard;
-anchors into other modules are fine, because a fact can genuinely span two.`,
+anchors into other modules are fine, because a fact can genuinely span two.
+
+An entry recorded with --source must still find that document in the project;
+one whose source file is gone fails the check, like an anchor that names nothing.
+
+With no .mpr at the -p path there is nothing to resolve against: every anchor
+is UNVERIFIABLE, which is counted and reported once and does not fail.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		projectPath := brainProjectPath(cmd)
-		store := brain.NewStore(filepath.Dir(projectPath))
+		loc := brainLocationOf(cmd)
+		store := brain.NewStore(loc.Dir)
 		if !store.Exists() {
 			fmt.Println("No store yet. Create one with 'mxcli brain init'.")
 			return
@@ -478,7 +900,7 @@ anchors into other modules are fine, because a fact can genuinely span two.`,
 			brainFatal(err)
 		}
 		if changed, _ := cmd.Flags().GetBool("changed"); changed {
-			shards, err = changedShards(filepath.Dir(projectPath), shards)
+			shards, err = changedShards(loc.Dir, shards)
 			if err != nil {
 				brainFatal(err)
 			}
@@ -488,7 +910,7 @@ anchors into other modules are fine, because a fact can genuinely span two.`,
 			}
 		}
 
-		resolver, closeFn, err := openBrainResolver(projectPath)
+		resolver, closeFn, err := openBrainResolverOrNoModel(loc.MPR)
 		if err != nil {
 			brainFatal(err)
 		}
@@ -498,6 +920,8 @@ anchors into other modules are fine, because a fact can genuinely span two.`,
 		if err != nil {
 			brainFatal(err)
 		}
+		rep.BadAcceptances = append(rep.BadAcceptances, unknownAcceptedRules(store, shards, loc.Dir)...)
+		strict, _ := cmd.Flags().GetBool("strict")
 		switch ci, _ := cmd.Flags().GetBool("ci"); {
 		case globalJSONFlag:
 			// --json wins over --ci: both exist for a machine, and one of them
@@ -505,10 +929,17 @@ anchors into other modules are fine, because a fact can genuinely span two.`,
 			brainJSON(rep)
 		case ci:
 			printBrainReportCI(rep)
+			if strict {
+				// Only under --strict is an unprovable requirement a problem,
+				// and a CI log prints problems only.
+				for _, u := range rep.Unprovable {
+					fmt.Printf("brain: %s: %s: unprovable: anchored only on %s\n", shardLabel(u.Shard), u.EntryID, strings.Join(u.Kinds, ", "))
+				}
+			}
 		default:
-			printBrainReport(rep)
+			printBrainReport(rep, loc)
 		}
-		if rep.Failed() {
+		if rep.Failed() || (strict && len(rep.Unprovable) > 0) {
 			os.Exit(1)
 		}
 	},
@@ -519,6 +950,11 @@ anchors into other modules are fine, because a fact can genuinely span two.`,
 // (a not-indexable anchor) are omitted rather than printed, because a line in a
 // CI log reads as something to fix.
 func printBrainReportCI(rep brain.Report) {
+	if rep.ModelAbsent {
+		// stderr: in CI an absent model is worth seeing, but it is not a
+		// problem line, and stdout stays empty for a clean store.
+		fmt.Fprintf(os.Stderr, "brain: no model; %d anchor(s) not checked\n", rep.Unverifiable)
+	}
 	for _, m := range rep.Malformed {
 		fmt.Printf("brain: malformed entry: %s\n", m)
 	}
@@ -531,9 +967,40 @@ func printBrainReportCI(rep brain.Report) {
 	for _, m := range rep.Misfiled {
 		fmt.Printf("brain: %s: %s: misfiled, resolves in %s\n", shardLabel(m.Shard), m.EntryID, m.Belongs)
 	}
+	for _, m := range rep.MissingSources {
+		fmt.Printf("brain: %s: %s: source %s not found\n", shardLabel(m.Shard), m.EntryID, brain.SourcePath(m.Source))
+	}
+	for _, v := range rep.UnknownRequirementRefs {
+		fmt.Printf("brain: %s: %s: %s requirement %s, which the plan does not have\n", shardLabel(v.Shard), v.EntryID, v.Verdict, v.RequirementID)
+	}
+	for _, c := range rep.ConflictingVerdicts {
+		fmt.Printf("brain: requirement %s: conflicting verdicts: %s\n", c.RequirementID, verdictList(c.Verdicts))
+	}
+	for _, a := range rep.BadAcceptances {
+		fmt.Printf("brain: %s: %s: acceptance of %s on @%s: %s\n", shardLabel(a.Shard), a.EntryID, a.Rule, a.Element, a.Problem)
+	}
+	for _, v := range rep.MisplacedVerdicts {
+		fmt.Printf("brain: %s: %s: verdict on a requirement (%s %s); record it on a decision or open question\n", shardLabel(v.Shard), v.EntryID, v.Verdict, v.RequirementID)
+	}
 }
 
-func printBrainReport(rep brain.Report) {
+// printNoModel says, once, that nothing could be checked. Without it a plan of
+// "0 built" reads as "nothing has been done" when the truth is "there is no
+// project yet", and the two call for different actions.
+func printNoModel(rep brain.Report, loc brainLocation) {
+	if !rep.ModelAbsent {
+		return
+	}
+	where := "at " + loc.MPR
+	if loc.MPR == "" {
+		where = "in " + loc.Dir
+	}
+	fmt.Printf("No model %s yet: %d anchor(s) not checked, so nothing counts as built.\n",
+		where, rep.Unverifiable)
+}
+
+func printBrainReport(rep brain.Report, loc brainLocation) {
+	printNoModel(rep, loc)
 	for _, m := range rep.Malformed {
 		fmt.Printf("MALFORMED   %s\n", m)
 	}
@@ -551,6 +1018,28 @@ func printBrainReport(rep brain.Report) {
 		}
 		fmt.Printf("MISFILED      %s: %q is in %s but resolves in %s\n",
 			m.EntryID, m.Title, shardLabel(m.Shard), belongs)
+	}
+	for _, m := range rep.MissingSources {
+		fmt.Printf("NO SOURCE     %s: %q cites %s, which is not in the project\n",
+			m.EntryID, m.Title, brain.SourcePath(m.Source))
+	}
+	for _, v := range rep.UnknownRequirementRefs {
+		fmt.Printf("NO REQUIREMENT %s: %q says it %s requirement %s, which no plan slice has\n",
+			v.EntryID, v.Title, v.Verdict, v.RequirementID)
+	}
+	for _, a := range rep.BadAcceptances {
+		fmt.Printf("ACCEPTANCE    %s: %q accepts %s on @%s, which cannot hold: %s\n", a.EntryID, a.Title, a.Rule, a.Element, a.Problem)
+	}
+	for _, v := range rep.MisplacedVerdicts {
+		fmt.Printf("MISPLACED     %s: %q is a requirement but says it %s requirement %s — record that on the decision or open question that explains it\n",
+			v.EntryID, v.Title, v.Verdict, v.RequirementID)
+	}
+	for _, u := range rep.Unprovable {
+		fmt.Printf("UNPROVABLE    %s: %q — %s\n", u.EntryID, u.Title, brain.UnprovableHint(u.EntryID, u.Kinds))
+	}
+	for _, c := range rep.ConflictingVerdicts {
+		fmt.Printf("CONFLICT      requirement %s is both changed and partly met: %s — keep one verdict\n",
+			c.RequirementID, verdictList(c.Verdicts))
 	}
 	if len(rep.Slices) > 0 {
 		fmt.Println()
@@ -720,6 +1209,20 @@ func brainCell(v any) string {
 	return fmt.Sprint(v)
 }
 
+// openBrainResolverOrNoModel opens the project, or answers for a project that
+// does not exist yet. Only a missing file means "no model": an .mpr that is
+// there but will not open is still an error, or a corrupt project would be
+// reported as merely unbuilt.
+func openBrainResolverOrNoModel(projectPath string) (brain.Resolver, func(), error) {
+	if projectPath == "" {
+		return brain.NoModel{}, func() {}, nil // -C on a directory with no .mpr yet
+	}
+	if _, err := os.Stat(projectPath); os.IsNotExist(err) {
+		return brain.NoModel{}, func() {}, nil
+	}
+	return openBrainResolver(projectPath)
+}
+
 func openBrainResolver(projectPath string) (brain.Resolver, func(), error) {
 	// Catalog progress goes to stderr so stdout carries only the report — the
 	// same split cmd_lint.go makes, and what lets `brain check` be piped.
@@ -765,28 +1268,87 @@ func shardLabel(shard string) string {
 	}
 }
 
-func brainProjectPath(cmd *cobra.Command) string {
-	p, _ := cmd.Flags().GetString("project")
-	if p == "" {
-		fmt.Fprintln(os.Stderr, "Error: --project (-p) is required")
-		os.Exit(1)
-	}
-	return p
+// brainLocation is where a brain lives and which model, if any, it is checked
+// against.
+//
+// The store is in Dir; the .mpr is only ever needed by plan and check. That
+// split is deliberate and load-bearing (ako/mxcli#1949): a brain is routinely
+// started before its project exists — requirements first, app second — so no
+// store command may open, or even stat, the .mpr. MPR is empty when -C names a
+// directory that holds no project yet.
+type brainLocation struct {
+	Dir string
+	MPR string
 }
 
-func brainProjectDir(cmd *cobra.Command) string { return filepath.Dir(brainProjectPath(cmd)) }
+// resolveBrainLocation turns -p / -C into a location.
+//
+//   - -p <app.mpr> is the shorthand: the directory that .mpr is (or will be)
+//     in. The file need not exist.
+//   - -C <dir> names the directory. The model is the one .mpr in it, if there
+//     is one, so the same command keeps working after `mxcli new` creates the
+//     project there; more than one is refused rather than guessed between.
+func resolveBrainLocation(project, dir string) (brainLocation, error) {
+	switch {
+	case project != "" && dir != "":
+		return brainLocation{}, fmt.Errorf("pass -p <app.mpr> or -C <dir>, not both")
+	case project != "":
+		return brainLocation{Dir: filepath.Dir(project), MPR: project}, nil
+	case dir != "":
+		matches, err := filepath.Glob(filepath.Join(dir, "*.mpr"))
+		if err != nil {
+			return brainLocation{}, err
+		}
+		switch len(matches) {
+		case 0:
+			return brainLocation{Dir: dir}, nil
+		case 1:
+			return brainLocation{Dir: dir, MPR: matches[0]}, nil
+		default:
+			names := make([]string, len(matches))
+			for i, m := range matches {
+				names[i] = filepath.Base(m)
+			}
+			return brainLocation{}, fmt.Errorf("%s holds more than one project (%s); name one with -p",
+				dir, strings.Join(names, ", "))
+		}
+	default:
+		return brainLocation{}, fmt.Errorf("say where the brain is: -p <app.mpr> or -C <dir>")
+	}
+}
+
+func brainLocationOf(cmd *cobra.Command) brainLocation {
+	project, _ := cmd.Flags().GetString("project")
+	dir, _ := cmd.Flags().GetString("dir")
+	loc, err := resolveBrainLocation(project, dir)
+	if err != nil {
+		brainFatal(err)
+	}
+	return loc
+}
+
+func brainProjectDir(cmd *cobra.Command) string { return brainLocationOf(cmd).Dir }
 
 func brainFatal(err error) {
 	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 	os.Exit(1)
 }
 
-func init() {
-	for _, c := range []*cobra.Command{
+// brainLocatedCommands is every brain command that needs to know where the
+// brain is — all of them, which is why -p and -C are registered from one list.
+func brainLocatedCommands() []*cobra.Command {
+	return []*cobra.Command{
 		brainInitCmd, brainCaptureCmd, brainStagedCmd, brainPromoteCmd,
-		brainDropCmd, brainShowCmd, brainCheckCmd,
-	} {
-		c.Flags().StringP("project", "p", "", "Path to the .mpr file")
+		brainDropCmd, brainShowCmd, brainCheckCmd, brainPlanCmd,
+		brainResolveCmd, brainBriefCmd, brainEditCmd, brainMoveCmd,
+		brainListCmd, brainMilestoneCmd,
+	}
+}
+
+func init() {
+	for _, c := range brainLocatedCommands() {
+		c.Flags().StringP("project", "p", "", "Path to the .mpr file (need not exist yet; the brain lives beside it)")
+		c.Flags().StringP("dir", "C", "", "Directory holding the brain; its one .mpr, if any, is the model")
 	}
 	brainCaptureCmd.Flags().StringSliceP("anchor", "a", nil,
 		"Anchor into the model (@Module, @Module.Element, @Module.Entity.Attribute); repeatable")
@@ -794,6 +1356,26 @@ func init() {
 		"Record this as an OPEN QUESTION — something not decided yet, so its anchors are not checked")
 	brainCaptureCmd.Flags().StringP("slice", "s", "",
 		"Record this as a requirement of the named slice (plan/<slice>.md) instead of a decision")
+	brainCaptureCmd.Flags().String("source", "",
+		"Where this came from: a document in the project, optionally #<locator> (docs/prd.md#L18-21)")
+	brainCaptureCmd.Flags().StringArray("accepts", nil,
+		"Record that this decision accepts a lint finding on each of its anchors: adds \"Accepts lint `<RULE>` on `@<anchor>`: <reason>\" (value <RULE> or <RULE>:<reason>; repeatable). mxcli lint then leaves it out of the open findings")
+	for _, c := range []*cobra.Command{brainCaptureCmd, brainEditCmd} {
+		c.Flags().StringArray("changes", nil,
+			"Record that this entry changes requirement <id>: adds the line \"Changes requirement `<id>`: <reason>\" (value <id> or <id>:<reason>; repeatable)")
+		c.Flags().StringArray("partly-meets", nil,
+			"Record that this entry partly meets requirement <id> (on an open question: until it is answered); value <id> or <id>:<reason>; repeatable")
+	}
+	brainEditCmd.Flags().String("source", "",
+		"Set where this came from: a document in the project, optionally #<locator>")
+	brainEditCmd.Flags().StringSliceP("anchor", "a", nil,
+		"Replace the anchors with these (repeatable); without -a the anchors are kept")
+	brainMoveCmd.Flags().StringP("slice", "s", "", "The slice to move the requirement to")
+	brainListCmd.Flags().String("slice", "", "Only this slice's entries")
+	brainListCmd.Flags().String("kind", "", "Only decisions or only requirements (decision|requirement)")
+	brainListCmd.Flags().Bool("open", false, "Only open questions; --open=false for only settled entries")
+	brainCaptureCmd.Flags().String("from-json", "",
+		"Queue a JSON array of entries from a file, or - for stdin, as one act")
 	brainPromoteCmd.Flags().String("to", "",
 		"Override the derived shard (use 'project' for a cross-cutting fact)")
 	brainStagedCmd.Flags().String("since", "",
@@ -804,19 +1386,17 @@ func init() {
 		"Exit 1 when nothing matches, so a dispatcher can refuse to advance on a slice that recorded nothing")
 	brainCheckCmd.Flags().Bool("changed", false, "Only check shards touched by the working tree")
 	brainCheckCmd.Flags().Bool("ci", false, "Machine-friendly output for CI")
+	brainCheckCmd.Flags().Bool("strict", false, "Also fail on requirements no test can ever be linked to (anchored only on module roles, enumerations, constants, …)")
 
-	brainPlanCmd.Flags().StringP("project", "p", "", "Path to the .mpr file")
 	brainPlanCmd.Flags().String("slice", "",
 		"Report only this slice, instead of every slice in the plan")
-	brainBriefCmd.Flags().StringP("project", "p", "", "Path to the .mpr file")
 	brainBriefCmd.Flags().String("slice", "",
 		"The slice being worked; its modules are derived from its requirements' anchors")
 	brainBriefCmd.Flags().StringSlice("module", nil,
 		"Modules being worked, for a session with no slice; repeatable")
-	brainResolveCmd.Flags().StringP("project", "p", "", "Path to the .mpr file")
 	brainCmd.AddCommand(brainInitCmd, brainCaptureCmd, brainStagedCmd,
 		brainPromoteCmd, brainDropCmd, brainShowCmd, brainCheckCmd, brainPlanCmd,
-		brainResolveCmd, brainBriefCmd)
+		brainResolveCmd, brainBriefCmd, brainEditCmd, brainMoveCmd, brainListCmd)
 	rootCmd.AddCommand(brainCmd)
 }
 
@@ -836,6 +1416,38 @@ func brainJSON(v any) {
 	fmt.Println(string(b))
 }
 
+// captureReport is `brain capture --json` (ako/mxcli#1953): the id a caller
+// promotes by, what the entry is and where it would land, and whether this
+// call added it. A duplicate is still an object — Added false, Status saying
+// whether the twin is queued or already committed — and exits as it always
+// has, so a script never has to read a sentence to learn the id.
+type captureReport struct {
+	ID     string `json:"id"`
+	Kind   string `json:"kind"`
+	Slice  string `json:"slice,omitempty"`
+	Open   bool   `json:"open,omitempty"`
+	Shard  string `json:"shard"`
+	Added  bool   `json:"added"`
+	Status string `json:"status"` // queued | already_queued | already_committed
+}
+
+func newCaptureReport(e brain.Entry, added bool, status string) captureReport {
+	return captureReport{ID: e.ID, Kind: string(e.EntryKind()), Slice: e.Slice, Open: e.Open,
+		Shard: e.Shard(), Added: added, Status: status}
+}
+
+// promoteReport is `brain promote --json`: the entry and the shard file it was
+// written into.
+type promoteReport struct {
+	ID    string `json:"id"`
+	Kind  string `json:"kind"`
+	Shard string `json:"shard"`
+	Path  string `json:"path"`
+	// Status is promoted, or already_promoted for an id already committed
+	// with the same content (a re-run after an interrupted promote).
+	Status string `json:"status"`
+}
+
 // stagedEntry is one queued entry as a machine sees it. The shard is included
 // because it is derived (an entry's first anchor names its file), so a caller
 // would otherwise have to reimplement the routing rule to know where a promote
@@ -851,7 +1463,11 @@ type stagedEntry struct {
 func stagedReport(all, shown []brain.Entry, filter brain.StagedFilter) map[string]any {
 	out := make([]stagedEntry, 0, len(shown))
 	for _, e := range shown {
-		out = append(out, stagedEntry{Entry: e, Shard: e.Shard()})
+		shard := e.Shard()
+		// Explicit, as 'list' gives it: a consumer must not have to know
+		// that an empty kind means a decision.
+		e.Kind = e.EntryKind()
+		out = append(out, stagedEntry{Entry: e, Shard: shard})
 	}
 	rep := map[string]any{"staged": out, "count": len(out)}
 
@@ -881,15 +1497,116 @@ func stagedReport(all, shown []brain.Entry, filter brain.StagedFilter) map[strin
 // planReport carries the totals as well as the slices. A dispatcher's question
 // is usually "is this slice done", and the answer is a comparison it should not
 // have to assemble from four counters.
-func planReport(slices []brain.SliceProgress) map[string]any {
+func planReport(rep brain.Report) map[string]any {
 	var built, total int
-	for _, sl := range slices {
+	for _, sl := range rep.Slices {
 		built += sl.Built
 		total += sl.Total()
 	}
-	return map[string]any{
-		"slices": slices,
-		"built":  built,
-		"total":  total,
+	out := map[string]any{
+		"slices":       rep.Slices,
+		"built":        built,
+		"total":        total,
+		"requirements": rep.Requirements,
 	}
+	if rep.ModelAbsent {
+		out["model_absent"] = true
+	}
+	return out
+}
+
+// verdictList names each verdict and the entry it is in.
+func verdictList(vs []brain.VerdictRef) string {
+	parts := make([]string, len(vs))
+	for i, v := range vs {
+		parts[i] = fmt.Sprintf("%s %s (%s)", v.EntryID, v.Verdict, shardLabel(v.Shard))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// warnUnprovableAtCapture says, while the author still knows where the thing is
+// built, that a requirement's anchors can never be linked to a test
+// (ako/mxcli#2303). It needs the model to know the anchors' kinds, so with no
+// .mpr yet it says nothing; resolving uses the cached catalog.
+func warnUnprovableAtCapture(mpr string, e brain.Entry) {
+	if mpr == "" {
+		return
+	}
+	if _, err := os.Stat(mpr); err != nil {
+		return
+	}
+	resolver, closeFn, err := openBrainResolver(mpr)
+	if err != nil {
+		return // a hint is not worth failing a capture for
+	}
+	defer closeFn()
+	var results []brain.AnchorResult
+	for _, a := range e.ParsedAnchors() {
+		res, err := resolver.Resolve(a)
+		if err != nil {
+			return
+		}
+		results = append(results, brain.AnchorResult{Anchor: a.String(), State: res.State, Kind: res.Kind})
+	}
+	if kinds, ok := brain.Unprovable(results); ok {
+		fmt.Fprintln(os.Stderr, "Hint: "+brain.UnprovableHint(e.ID, kinds))
+	}
+}
+
+// applyVerdictFlags adds the --changes / --partly-meets lines to an entry.
+// When the store exists the requirement id must be one the plan has: a verdict
+// on nothing is refused here rather than left for 'brain check' to find.
+func applyVerdictFlags(cmd *cobra.Command, dir string, e brain.Entry) (brain.Entry, error) {
+	changes, _ := cmd.Flags().GetStringArray("changes")
+	partly, _ := cmd.Flags().GetStringArray("partly-meets")
+	if len(changes) == 0 && len(partly) == 0 {
+		return e, nil
+	}
+	if store := brain.NewStore(dir); store.Exists() {
+		known, err := store.RequirementIDs()
+		if err != nil {
+			return e, err
+		}
+		for _, spec := range append(append([]string{}, changes...), partly...) {
+			id, _, _ := strings.Cut(spec, ":")
+			if !known[strings.ToLower(strings.TrimSpace(id))] {
+				return e, fmt.Errorf("no requirement %s in the plan ('brain list --kind requirement' lists them)", id)
+			}
+		}
+	}
+	e, err := brain.AddVerdicts(e, brain.VerdictChanges, changes)
+	if err != nil {
+		return e, err
+	}
+	return brain.AddVerdicts(e, brain.VerdictPartly, partly)
+}
+
+func verdictFlag(kind string) string {
+	if kind == brain.VerdictChanges {
+		return "changes"
+	}
+	return "partly-meets"
+}
+
+// unknownAcceptedRules reports acceptances naming a rule lint does not have —
+// a typo, or a rule since removed. Checked here rather than in the brain
+// package, because only the command knows the project's rules.
+func unknownAcceptedRules(store *brain.Store, checked []string, projectDir string) []brain.AcceptanceFinding {
+	accepted, _, err := store.LoadAcceptances()
+	if err != nil || len(accepted) == 0 {
+		return nil
+	}
+	in := map[string]bool{}
+	for _, sh := range checked {
+		in[sh] = true
+	}
+	known := knownLintRuleIDs(projectDir)
+	var out []brain.AcceptanceFinding
+	for _, a := range accepted {
+		if in[a.Shard] && !known[strings.ToUpper(a.Rule)] {
+			out = append(out, brain.AcceptanceFinding{Acceptance: a,
+				Problem: "lint has no rule " + a.Rule + " ('mxcli lint --list-rules' lists them)"})
+		}
+	}
+	return out
 }

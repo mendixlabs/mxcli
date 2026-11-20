@@ -36,7 +36,7 @@ GO_BUILD_FLAGS = -trimpath
 # Clean version for VS Code extension (must be valid semver: major.minor.patch)
 VSCE_VERSION = $(shell echo "$(VERSION)" | sed 's/^v//; s/-.*//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$$' || echo "0.0.0")
 
-.PHONY: build build-debug size release clean test ci-local test-mdl check-mdl check-skill-mdl check-conformance conformance-shrink gen-migration-reference check-migration-reference check-skill-pack-js check-findings check-wiki-pages digest-status check-tunnel-deps check-test-timeouts check-widget-versions test-integration test-integration-executor test-integration-roundtrip test-integration-parity test-integration-upgrade test-integration-other grammar completions sync-skills sync-skill-packs sync-commands sync-mods sync-lint-rules sync-changelog sync-all docs documentation docs-site docs-serve vscode-ext vscode-install source-tree sbom sbom-report lint lint-go lint-ts fmt fmt-check vet skill-index check-skill-index
+.PHONY: build build-debug size release clean test ci-local test-mdl check-mdl check-skill-mdl check-conformance conformance-shrink gen-migration-reference check-migration-reference check-skill-pack-js check-findings check-wiki-pages digest-status diag-coverage mask-matrix check-tunnel-deps check-test-timeouts check-widget-versions test-integration test-integration-executor test-integration-roundtrip test-integration-parity test-integration-upgrade test-integration-other grammar completions sync-skills sync-skill-packs sync-commands sync-mods sync-lint-rules sync-changelog sync-all docs documentation docs-site docs-serve vscode-ext vscode-install source-tree sbom sbom-report lint lint-go lint-ts fmt fmt-check vet skill-index check-skill-index bench bench-trend
 
 # Helper: copy file only if content differs (avoids mtime updates that invalidate go build cache)
 # Usage: $(call copy-if-changed,src,dst)
@@ -356,6 +356,21 @@ check-skill-pack-js:
 	done; \
 	[ $$found -eq 1 ] || echo "  (no skill-pack JS tests)"
 
+# Which of Mendix's consistency diagnostics (the codes mx check can raise) mxcli's check
+# names, ranked by how often bug reports hit the ones it does not. Needs a MxBuild
+# installed (`mxcli setup mxbuild -p app.mpr`); reads code IDs only. Advisory.
+#   make diag-coverage ARGS="--top 50"      make diag-coverage ARGS=--all
+diag-coverage:
+	@go run ./scripts/diagcoverage $(ARGS)
+
+# Which errors a Mendix checker hides until others are fixed: every defect and every
+# ordered pair of them in one project, checked once. Needs a healthy project and a
+# MxBuild. Advisory. See scripts/maskmatrix and the staging section of
+# docs/11-proposals/PROPOSAL_check_diagnostics_catalog.md.
+#   make mask-matrix ARGS="--project /path/to/App.mpr --mx ~/.mxcli/mxbuild/11.16.1/modeler/mx"
+mask-matrix:
+	@go run ./scripts/maskmatrix $(ARGS)
+
 # How far docs-wiki/bug-patterns/ has fallen behind the findings it digests.
 # Advisory, always exits 0 — see the header in the script for why.
 digest-status:
@@ -431,6 +446,40 @@ test-integration-other:
 	echo "integration packages: $$pkgs"; \
 	$(INTEGRATION_GO_TEST) -timeout 40m $$pkgs
 
+# Agent dev-loop benchmark: a fixed, scripted session of mxcli commands -- the
+# ones an agent runs while building an app -- one process per command, at two
+# project sizes, no model in the loop. Those sessions need no mxbuild: they
+# start from the committed PedApp fixture.
+#
+#   make bench                                  # time this checkout's binary
+#   make bench BASELINE=/path/to/other/mxcli    # A/B against another build
+#   make bench BENCH_FLAGS='-sizes small -reps 3 -out record.json'
+#   make bench BENCH_RUNTIME=11.13.0            # also the running-app session
+#
+# BENCH_RUNTIME adds the session on a running app -- boot, a hot change, an
+# entity change, a page check, tests -- on a project `mxcli new` creates for
+# that Mendix version. mxcli downloads mxbuild and the runtime when they are
+# not cached (about 800 MB); it needs JDK 21, and node with playwright and a
+# Chromium for the page check (BENCH_FLAGS=-page-check=false to leave it out).
+#
+# With BASELINE the two binaries run interleaved on this machine and the table
+# shows the ratio, which is the only figure comparable between two machines or
+# two nights. The nightly `bench` job does exactly this against the previous
+# nightly release and commits the record to the `benchmarks` branch.
+# docs-site/src/internals/agent-benchmark.md explains how to read it.
+BASELINE ?=
+BENCH_RUNTIME ?=
+BENCH_FLAGS ?=
+bench: build
+	go run ./scripts/agentbench -mxcli $(BUILD_DIR)/$(BINARY_NAME) $(if $(BASELINE),-baseline $(BASELINE)) \
+		$(if $(BENCH_RUNTIME),-runtime-version $(BENCH_RUNTIME)) $(BENCH_FLAGS)
+
+# The trend over the benchmark's records, and its alerts, on stdout.
+# Usage: make bench-trend RECORDS=path/to/benchmarks/results
+RECORDS ?=
+bench-trend:
+	go run ./scripts/agentbench/trend -records $(RECORDS)
+
 # Run MDL integration tests (requires Docker and a Mendix project)
 # Usage: make test-mdl MPR=path/to/app.mpr
 MPR ?= app.mpr
@@ -461,8 +510,9 @@ lint: lint-go lint-ts check-conformance check-test-timeouts
 # check-skill-index and the rest run only in CI unless someone remembers them.
 # check-skill-mdl is a superset of the job's three skill/docs MDL steps.
 #
-# Left out: govulncheck (the job installs it @latest, over the network) and the
-# integration jobs, which need mxbuild -- `make test-integration` runs those.
+# Left out: govulncheck (the job installs a pinned version and reads its
+# database over the network) and the integration jobs, which need mxbuild --
+# `make test-integration` runs those.
 # A step added to the job belongs here too.
 ci-local: fmt-check check-findings check-wiki-pages check-skill-index check-test-timeouts \
 		build vet test check-tunnel-deps check-mdl check-skill-pack-js check-skill-mdl \

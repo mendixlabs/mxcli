@@ -93,7 +93,8 @@ func NewClient(opts ClientOptions) (*Client, error) {
 
 // dialPlan is the decision behind the client's dialer: the TCP addresses to
 // try, in order. An explicit --mcp-dial is the only one. Otherwise the URL's
-// own host comes first, and a localhost/127.0.0.1 endpoint falls back to
+// own host comes first (preceded by 127.0.0.1 when that host is localhost),
+// and a localhost/127.0.0.1 endpoint falls back to
 // host.docker.internal:<port> when that name resolves, so the same command
 // works from a devcontainer, where loopback is the container and Studio Pro is
 // on the Docker host.
@@ -112,8 +113,18 @@ func dialPlan(urlHost, explicit string, dockerResolves bool) []string {
 	if err != nil { // no port
 		h, port = urlHost, "80"
 	}
-	plan := []string{net.JoinHostPort(h, port)}
-	if (h == "localhost" || h == "127.0.0.1") && dockerResolves {
+	var plan []string
+	localhost := strings.EqualFold(h, "localhost")
+	if localhost {
+		// Studio Pro on Windows listens on 127.0.0.1 only, and a resolver may
+		// answer localhost with a LAN address first, so a plain
+		// `--mcp http://localhost:<port>/mcp` timed out (mendixlabs/mxcli#1684).
+		// Only the dial address changes: the request URL, and so the Host
+		// header Studio Pro insists on, stays "localhost".
+		plan = append(plan, net.JoinHostPort("127.0.0.1", port))
+	}
+	plan = append(plan, net.JoinHostPort(h, port))
+	if (localhost || h == "127.0.0.1") && dockerResolves {
 		plan = append(plan, net.JoinHostPort(dockerHostName, port))
 	}
 	return plan

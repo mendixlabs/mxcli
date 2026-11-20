@@ -61,6 +61,7 @@ var createGuardCases = map[string]createGuardCase{
 	"datatransformer":             {src: "create data transformer if not exists M.X source json '{\"id\": 1}' { jslt '{\"id\": .id}'; };", lister: "ListDataTransformersFunc"},
 	"model":                       {src: "create model if not exists M.X (Provider: MxCloudGenAI, Key: @M.K);", lister: "ListAgentEditorModelsFunc"},
 	"consumedmcpservice":          {src: "create consumed mcp service if not exists M.X (ProtocolVersion: v2025_03_26, Version: '1.0');", lister: "ListAgentEditorConsumedMCPServicesFunc"},
+	"publishedmcpservice":         {src: "create published mcp service if not exists M.X (EndpointPath: 'x', Version: '1.0', ProtocolVersion: v2025_03_26);", lister: "ListAgentEditorPublishedMCPServicesFunc"},
 	"knowledgebase":               {src: "create knowledge base if not exists M.X (Provider: MxCloudGenAI, Key: @M.K);", lister: "ListAgentEditorKnowledgeBasesFunc"},
 	"agent":                       {src: "create agent if not exists M.X (UsageType: Task, Model: M.GPT4, SystemPrompt: 'S.', UserPrompt: 'U.');", lister: "ListAgentEditorAgentsFunc"},
 	"menu":                        {src: "create menu if not exists M.X (menu item 'Plain';);", lister: "ListMenuDocumentsFunc"},

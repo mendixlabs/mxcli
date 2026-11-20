@@ -1,0 +1,18 @@
+mdl 1;
+-- ako/mxcli#1300: a domain model annotation was in no catalog table, so a
+-- Starlark rule looking for "TODO" notes saw microflow annotations only.
+--
+-- Run on a fresh app, then:
+--   mxcli -p App.mpr -c "refresh catalog force"
+--   mxcli -p App.mpr -c "select ModuleName, Caption, X, Y, Width from CATALOG.ANNOTATIONS where ModuleName = 'Bug1300'"
+-- Expected: Bug1300 | TODO split sales per region | 60 | 40 | 400
+-- and annotations() in a lint rule returns the same row, the caption with its
+-- newline. Before the fix the table did not exist and annotations() was
+-- undefined.
+
+create module Bug1300;
+
+create persistent entity Bug1300.Sale (Amount: Integer);
+
+create annotation in Bug1300 (Caption: 'TODO split sales
+per region', Position: (60, 40), Width: 400);

@@ -1,0 +1,37 @@
+mdl 1;
+-- Control for mapping-handler-unknown-parameter.fail.mdl and
+-- mapping-handler-missing-parameter.fail.mdl: a custom handler that names exactly the
+-- microflow's parameters, and one on a microflow that has none. Builds with 0 errors
+-- on MxBuild 11.16.1.
+create persistent entity MyFirstModule.HpOkRoot (Name: string(50));
+create persistent entity MyFirstModule.HpOkChild (Code: string(50));
+create association MyFirstModule.HpOkChild_HpOkRoot from MyFirstModule.HpOkChild to MyFirstModule.HpOkRoot type reference;
+create json structure MyFirstModule.JS_HpOk sample '{"name": "n", "items": [{"code": "c", "idx": 1}]}';
+create microflow MyFirstModule.HpOkTwo ($A: integer, $B: integer) returns MyFirstModule.HpOkChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+create microflow MyFirstModule.HpOkNone () returns MyFirstModule.HpOkChild begin
+  @start(100, 200)
+  @position(400, 200)
+  return empty;
+end;
+
+create import mapping MyFirstModule.IMM_HpOkBoth with json structure MyFirstModule.JS_HpOk {
+  create MyFirstModule.HpOkRoot {
+    Name = name,
+    find MyFirstModule.HpOkChild_HpOkRoot/MyFirstModule.HpOkChild by MyFirstModule.HpOkTwo ( A: idx, B: idx ) = items {
+      Code = code
+    }
+  }
+};
+
+create import mapping MyFirstModule.IMM_HpOkNone with json structure MyFirstModule.JS_HpOk {
+  create MyFirstModule.HpOkRoot {
+    Name = name,
+    find MyFirstModule.HpOkChild_HpOkRoot/MyFirstModule.HpOkChild by MyFirstModule.HpOkNone () = items {
+      Code = code
+    }
+  }
+};

@@ -19,11 +19,11 @@ description: "Project-specific knowledge mxcli cannot compute — the requiremen
 | 255-274 | Write the anchor, not the name |
 | 275-296 | Checking it |
 | 297-312 | Size |
-| 313-329 | Commands |
-| 330-344 | Renaming |
-| 345-354 | What not to record |
-| 355-380 | Handing a slice to another agent |
-| 381-383 | Project brain (`mxcli brain init/capture/staged/promote/drop/check/show`) |
+| 313-330 | Commands |
+| 331-345 | Renaming |
+| 346-355 | What not to record |
+| 356-381 | Handing a slice to another agent |
+| 382-384 | Project brain (`mxcli brain init/capture/staged/promote/drop/check/show`) |
 
 <!-- /skill-index -->
 # Project brain
@@ -317,7 +317,8 @@ cap: the cap is what stops the store becoming a file nobody reads.
 | `mxcli brain init -p app.mpr` | Creates `docs/brain/`. Refuses a `docs/brain/` it did not write |
 | `mxcli brain capture "<text>" [-a @Anchor]…` | Queues an entry. Never commits |
 | `mxcli brain staged [--since <id>] [--slice <n>] [--fail-if-empty]` | Lists the queue with the shard each entry would land in. `--since` is the slice boundary — see below |
-| `mxcli brain promote <id> [--to <shard>]` | Writes it into its shard. The human step |
+| `mxcli brain capture --from-json <file\|->` | Queues a JSON array of entries as one act: every item validated first, duplicates skipped. Use it for a list, not a loop of captures |
+| `mxcli brain promote <id>… [--to <shard>]` | Writes them into their shards, all or none. The human step. Re-run after an interruption completes it |
 | `mxcli brain drop <id>` | Removes it from the queue or from its shard |
 | `mxcli brain capture "<text>" --slice <name> [-a @Anchor]…` | Queues a **requirement** of that slice |
 | `mxcli brain capture "<text>" --open [-a @Anchor]…` | Queues an **open question**; its anchors are not checked |

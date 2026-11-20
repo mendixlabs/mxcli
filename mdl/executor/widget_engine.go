@@ -278,9 +278,16 @@ type BuildContext struct {
 	// SourceVariable names the parameter an attribute or association binding
 	// reads (`$Param.Attr`); nil for one read from the enclosing object.
 	SourceVariable *pages.WidgetVariable
+	// AttributeSteps are the association hops of a rooted attribute path,
+	// `$Name/Assoc/Attr`, stored as the AttributeRef's EntityRef beside
+	// SourceVariable (ako/mxcli#2107).
+	AttributeSteps []pages.AttributeRefStep
 	// ImageEntity is the entity an image-typed property binds to when it was
 	// written `$currentObject` rather than as a collection entry (#1476).
 	ImageEntity string
+	// Icon is the icon element an icon-typed property holds, read from the
+	// widget's `Icon:` with the kind the author wrote (ako/mxcli#2174).
+	Icon        *pages.Icon
 	pageBuilder *pageBuilder
 }
 
@@ -357,7 +364,9 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	// Save and restore entity context (DataSource mappings may change it)
 	oldEntityContext := e.pageBuilder.entityContext
 	oldArgCtx := e.pageBuilder.argCtx
+	e.pageBuilder.enterOuterEntityContext(oldEntityContext)
 	defer func() {
+		e.pageBuilder.leaveOuterEntityContext()
 		e.pageBuilder.entityContext = oldEntityContext
 		e.pageBuilder.argCtx = oldArgCtx
 	}()
@@ -517,7 +526,7 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 					w.Name, def.MDLName, len(dsProps), strings.Join(dsProps, ", "))
 			}
 			for _, propKey := range dsProps {
-				dataSource, entityName, err := e.pageBuilder.buildPluggableDataSourceV3(ds)
+				dataSource, entityName, err := e.pageBuilder.buildPluggableDataSourceV3(ds, w.Name)
 				if err != nil {
 					return nil, mdlerrors.NewBackend("auto datasource for "+propKey, err)
 				}
@@ -525,7 +534,7 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 				e.recordDataSourceEntity(propKey, entityName)
 				if entityName != "" {
 					e.pageBuilder.entityContext = entityName
-					e.pageBuilder.argCtx = enteringDataWidget(ds, entityName).inDataWidget(w.Name)
+					e.pageBuilder.argCtx = enteringDataWidgetOf(w, ds, entityName)
 				}
 			}
 		}
@@ -677,7 +686,14 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	sort.Strings(authoredNames)
 	for _, authored := range authoredNames {
 		propVal := w.Properties[authored]
-		if mappedKeys[authored] || selectionKeys[strings.ToLower(authored)] || isBuiltinPropName(authored) {
+		if mappedKeys[authored] || selectionKeys[strings.ToLower(authored)] {
+			continue
+		}
+		// A core name is skipped — unless the widget declares it as a key of its
+		// own, which is then all it can mean (ako/mxcli#2180): a PDS Button's
+		// string `caption` has no mapping to write it, so this pass is its only
+		// route.
+		if isBuiltinPropName(authored) && !templateOwnsCoreName(propertyTypeIDs, authored) {
 			continue
 		}
 		// The template's own spelling of the key the author named, in any case
@@ -745,6 +761,17 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 			// re-applies a property authored by its schema key AFTER every
 			// datasource has run, so the shared context here is always the LAST
 			// datasource's entity, which is what #647 wrote for every name.
+			if _, _, rooted := rootedAssociationPath(strVal); rooted {
+				// `$Name/Assoc/Attr`: an association path read from a named
+				// object (ako/mxcli#833, #2107).
+				wv, finalQN, steps, err := e.rootedAttributeBinding(w, propName, strVal)
+				if err != nil {
+					return nil, err
+				}
+				builder.SetAttributeWithSteps(propName, finalQN, steps)
+				builder.SetSourceVariable(propName, &wv)
+				break
+			}
 			if name, rest, named := namedObjectBinding(strVal); named {
 				// `$Param.Attr`: the attribute of a page or snippet parameter,
 				// whatever encloses the widget — the AttributeRef plus a
@@ -765,6 +792,15 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 			}
 			attrPath := ""
 			scope := e.bindingScopeFor(propName)
+			if _, isPath := contextAssociationAttributePath(strVal); isPath {
+				// `Assoc/Attr` from the context object (ako/mxcli#2279).
+				finalQN, steps, err := e.contextAssociationAttributeBinding(w, propName, strVal, scope)
+				if err != nil {
+					return nil, err
+				}
+				builder.SetAttributeWithSteps(propName, finalQN, steps)
+				break
+			}
 			if strings.Count(strVal, ".") >= 2 {
 				// Qualified: stored as written, so an attribute of an entity
 				// other than the bound one is refused (CE7247).
@@ -833,10 +869,20 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	if len(visibility) > 0 {
 		builder.ApplyPropertyVisibility(visibility)
 	}
+	// 4.11 A TextTemplate bound to an optional data source the statement does
+	// not set is null, as Studio Pro stores it (ako/mxcli#1967, CE0463).
+	builder.NullTemplatesOfUnsetDataSources()
 
 	// 5. Build CustomWidget
 	widgetID := model.ID(types.GenerateID())
-	cw := builder.Finalize(widgetID, w.Name, w.GetLabel(), def.DefaultEditable)
+	// `label:` on a widget that declares a `label` of its own (a PDS Form
+	// label, the Badge button) is that key, written above by its mapping — not
+	// also a widget-level LabelTemplate beside it (ako/mxcli#2180).
+	label := w.GetLabel()
+	if templateOwnsCoreName(propertyTypeIDs, "label") {
+		label = ""
+	}
+	cw := builder.Finalize(widgetID, w.Name, label, def.DefaultEditable)
 
 	if err := e.pageBuilder.registerWidgetName(w.Name, cw.ID); err != nil {
 		return nil, err
@@ -1054,7 +1100,11 @@ var templateAttrPlaceholderRe = regexp.MustCompile(`\{[A-Za-z][A-Za-z0-9_]*\}`)
 func (e *PluggableWidgetEngine) applyOperation(builder backend.WidgetObjectBuilder, opName string, propKey string, ctx *BuildContext) error {
 	switch opName {
 	case "attribute":
-		builder.SetAttribute(propKey, ctx.AttributePath)
+		if len(ctx.AttributeSteps) > 0 {
+			builder.SetAttributeWithSteps(propKey, ctx.AttributePath, ctx.AttributeSteps)
+		} else {
+			builder.SetAttribute(propKey, ctx.AttributePath)
+		}
 		if ctx.SourceVariable != nil && ctx.AttributePath != "" {
 			builder.SetSourceVariable(propKey, ctx.SourceVariable)
 		}
@@ -1075,6 +1125,10 @@ func (e *PluggableWidgetEngine) applyOperation(builder backend.WidgetObjectBuild
 			builder.SetImageEntity(propKey, ctx.ImageEntity)
 		} else {
 			builder.SetImage(propKey, ctx.PrimitiveVal)
+		}
+	case "icon":
+		if ctx.Icon != nil {
+			builder.SetIcon(propKey, ctx.Icon)
 		}
 	case "expression":
 		// No MDL value: keep the template's default expression rather than
@@ -1492,13 +1546,15 @@ func refuseAmbiguousGenericDataSource(def *WidgetDefinition, w *ast.WidgetV3, ds
 }
 
 // parameterBinding resolves the `$name` of a `$name.Attr` binding on a pluggable
-// widget property to the page or snippet parameter it names: the SourceVariable
-// to store beside the reference, and the parameter's entity. A name that is no
-// parameter is refused — the data-view pair (#826) is measured on the built-in
-// inputs only, and anything else would be written as a binding that reads
+// widget property to the object it names: a page or snippet parameter, or an
+// enclosing data view — the data-view pair Studio Pro stores on a markdown
+// viewer in an inner data view (FactoryManagement ConversationalUI
+// Span_*_SlideIn, ako/mxcli#2107) as on the built-in inputs (#826). It returns
+// the SourceVariable to store beside the reference and the object's entity.
+// Any other name is refused: it would be written as a binding that reads
 // nothing.
 func (e *PluggableWidgetEngine) parameterBinding(w *ast.WidgetV3, propertyKey, attr, name string) (pages.WidgetVariable, string, error) {
-	wv, entity, ok := e.pageBuilder.parameterVariable(name)
+	wv, entity, ok := e.pageBuilder.namedObjectVariable(name)
 	if !ok {
 		return pages.WidgetVariable{}, "", notAParameterError(
 			fmt.Sprintf("%s `%s` property `%s`", strings.ToLower(w.Type), w.Name, propertyKey),
@@ -1507,12 +1563,144 @@ func (e *PluggableWidgetEngine) parameterBinding(w *ast.WidgetV3, propertyKey, a
 	return wv, entity, nil
 }
 
+// rootedAttributeBinding resolves `$Name/Assoc/Attr` on a pluggable widget's
+// attribute property — an association path read from a parameter or an
+// enclosing data view, the shape Studio Pro stores as the AttributeRef's
+// steps beside a SourceVariable naming the object (FactoryManagement
+// ConversationalUI.Span_TextGeneration_SlideIn, ako/mxcli#2107).
+func (e *PluggableWidgetEngine) rootedAttributeBinding(w *ast.WidgetV3, propertyKey, attr string) (pages.WidgetVariable, string, []pages.AttributeRefStep, error) {
+	wv, finalQN, steps, ok := e.pageBuilder.resolveRootedAssociationPath(attr)
+	if !ok {
+		root, _, _ := rootedAssociationPath(attr)
+		return pages.WidgetVariable{}, "", nil, mdlerrors.NewValidationf(
+			"%s `%s` property `%s`: `%s` — `$%s/…` reads an association path from a parameter of this %s or an "+
+				"enclosing data view, and `$%s` is neither, or the path does not resolve from it",
+			strings.ToLower(w.Type), w.Name, propertyKey, attr, root, e.pageBuilder.documentKind(), root)
+	}
+	return wv, finalQN, steps, nil
+}
+
+// contextAssociationAttributePath reports whether attr is a context-relative
+// association path — `Assoc/…/Attr`, `$currentObject/Assoc/…/Attr`, or either
+// fully qualified — rather than a plain attribute name or a `$Root/…` path.
+func contextAssociationAttributePath(attr string) (path string, ok bool) {
+	path = strings.TrimPrefix(strings.TrimSpace(attr), "$currentObject/")
+	if path == "" || strings.HasPrefix(path, "$") || !strings.Contains(path, "/") {
+		return "", false
+	}
+	return path, true
+}
+
+// contextAssociationAttributeBinding resolves a context-relative association
+// path on a pluggable widget's attribute property against the entity the
+// property binds to. See pageBuilder.pluggableAssociationAttributePath.
+func (e *PluggableWidgetEngine) contextAssociationAttributeBinding(w *ast.WidgetV3, propertyKey, attr string, scope bindingScope) (string, []pages.AttributeRefStep, error) {
+	return e.pageBuilder.pluggableAssociationAttributePath(w, propertyKey, attr, scope.Entity,
+		singleValueAttributeProperty(e.currentPropertyTypeIDs, propertyKey))
+}
+
+// singleValueAttributeProperty reports whether the template declares
+// propertyKey as an attribute property linked to no datasource: one value of
+// the context object (the widget gets an EditableValue), as opposed to a
+// per-item value of a datasource it is linked to (a ListAttributeValue).
+func singleValueAttributeProperty(ids map[string]pages.PropertyTypeIDEntry, propertyKey string) bool {
+	entry, declared := ids[propertyKey]
+	return declared && entry.DataSourceProperty == ""
+}
+
+// pluggableAssociationAttributePath resolves `Assoc/…/Attr` on a pluggable
+// widget's attribute property, read from entity, into the final attribute and
+// the hops Studio Pro stores as the AttributeRef's IndirectEntityRef (PedApp
+// Administration.Account_Overview: a Data grid 2 column over System.UserRoles,
+// a CustomWidgets$WidgetValue whose AttributeRef carries an EntityRef of
+// EntityRefSteps). The qualified spellings normalise to the same steps, as on
+// the built-in inputs (#2255, #2277). Shared by exec and check, so the two
+// refuse the same paths with the same words.
+//
+// Which paths a property takes is decided by its link, not by a path flag:
+// pluggable widget XML has no per-property path declaration, and the
+// WidgetValueType's IsPath / PathType — a legacy custom-widget field — are
+// "No" / "None" on every template and on that Studio Pro-authored column,
+// which stores a path all the same. Measured on mxbuild 11.16.0:
+//
+//   - linked to no datasource (singleValue): every hop must be a Reference
+//     followed from its owner — a reference set is CE7247 "Association … should
+//     be of type 'Reference'", a reference followed backwards CE7247 "Entity …
+//     has no association …". A reference with owner Both is followed either way.
+//   - linked to a datasource: a reference set is what the Studio Pro column
+//     above follows, so no hop rule is applied.
+//
+// A path that does not resolve is refused too: written as it stood it was one
+// flat attribute name the entity does not have, CE1613 (ako/mxcli#2279).
+func (pb *pageBuilder) pluggableAssociationAttributePath(w *ast.WidgetV3, propertyKey, attr, entity string, singleValue bool) (string, []pages.AttributeRefStep, error) {
+	where := fmt.Sprintf("%s `%s` property `%s`", strings.ToLower(w.Type), w.Name, propertyKey)
+	return pb.pluggableAssociationAttributePathAt(where, attr, entity, singleValue)
+}
+
+// pluggableAssociationAttributePathAt is pluggableAssociationAttributePath for
+// a caller that names the property itself: ALTER … SET, which holds the stored
+// widget rather than its AST (ako/mxcli#2283).
+func (pb *pageBuilder) pluggableAssociationAttributePathAt(where, attr, entity string, singleValue bool) (string, []pages.AttributeRefStep, error) {
+	if entity == "" {
+		return "", nil, mdlerrors.NewValidationf(
+			"%s: `%s` is an association path, which is read from the object of an enclosing data container, "+
+				"and this widget has none. Place it in a data view, or read it from a parameter with `$Param/Assoc/Attr`",
+			where, attr)
+	}
+	path, _ := contextAssociationAttributePath(attr)
+	finalQN, steps, ok := pb.resolveAssociationPathFrom(path, entity)
+	if !ok {
+		return "", nil, mdlerrors.NewValidationf(
+			"%s: `%s` does not resolve from %s, the entity this property binds to — each step before the "+
+				"attribute must be an association of the entity the step before arrives at, and the last an "+
+				"attribute of the entity the path ends at. Written as it stands it would be one flat attribute "+
+				"name %s does not have: CE1613 \"The selected attribute no longer exists\"",
+			where, attr, entity, entity)
+	}
+	if singleValue {
+		if err := pb.singleObjectHopsError(where, attr, entity, steps); err != nil {
+			return "", nil, err
+		}
+	}
+	return finalQN, steps, nil
+}
+
+// singleObjectHopsError refuses a hop that does not arrive at ONE object: a
+// reference set, or a reference followed from the end that does not own it.
+// An association no domain model declares (System.owner, System.changedBy) is
+// a plain reference and passes.
+func (pb *pageBuilder) singleObjectHopsError(where, attr, start string, steps []pages.AttributeRefStep) error {
+	cur := start
+	for _, s := range steps {
+		refSet, ownerBoth, known := pb.associationKind(s.Association)
+		if known {
+			if refSet {
+				return mdlerrors.NewValidationf(
+					"%s: `%s` follows %s, a reference set, and this property holds one value of the context object "+
+						"— mxbuild reports CE7247 \"Association '%s' should be of type 'Reference'\". Show the "+
+						"associated objects in a list view or data grid over that association instead",
+					where, attr, s.Association, s.Association)
+			}
+			if from, _, ok := pb.associationEndpoints(s.Association); ok && !ownerBoth && !pb.entityIsOrDescendsFrom(cur, from) {
+				return mdlerrors.NewValidationf(
+					"%s: `%s` follows %s from %s, the end that does not own it — that direction reaches a list of "+
+						"%s objects, not one, and mxbuild reports CE7247 \"Entity '%s' has no association '%s'\". "+
+						"Read the attribute from %s's side, or list the objects with a data source over the association",
+					where, attr, s.Association, cur, from, cur, s.Association, from)
+			}
+		}
+		cur = s.DestinationEntity
+	}
+	return nil
+}
+
 // notAParameterError refuses a `$name.Attr` binding whose name is no page or
 // snippet parameter. where names the widget property, for the message.
 func notAParameterError(where, attr, name, documentKind string) error {
 	return mdlerrors.NewValidationf(
-		"%s: `%s` — `$%s` is not a parameter of this %s; `$Param.Attr` reads an attribute "+
-			"of a page or snippet parameter. Inside a data container, name the attribute bare",
+		"%s: `%s` — `$%s` is not a parameter of this %s or an enclosing data view; `$Param.Attr` reads an "+
+			"attribute of a page or snippet parameter, `$dataView1.Attr` one of a data view the widget is inside. "+
+			"For the nearest data container's object, name the attribute bare",
 		where, attr, name, documentKind)
 }
 
@@ -1613,6 +1801,20 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 		return ctx, nil
 	}
 
+	// An icon-typed property takes the widget's `Icon:` in the same three
+	// spellings a button's does — collection, `image`, `glyph` — and is built
+	// into the same element, so the kind the author wrote is the $Type stored
+	// (ako/mxcli#2174). Read before the generic scalar path, which has no shape
+	// for a typed icon value.
+	if mapping.Operation == "icon" {
+		icon, err := buildWidgetIcon(w)
+		if err != nil {
+			return nil, err
+		}
+		ctx.Icon = icon
+		return ctx, nil
+	}
+
 	source := mapping.Source
 	if source == "" {
 		// A named action slot: no Source, addressed by the widget's own property
@@ -1683,7 +1885,14 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 				}
 			}
 		}
-		if name, rest, named := namedObjectBinding(attr); named {
+		if _, _, rooted := rootedAssociationPath(attr); rooted {
+			// `$Name/Assoc/Attr` (ako/mxcli#833, #2107).
+			wv, finalQN, steps, err := e.rootedAttributeBinding(w, mapping.PropertyKey, attr)
+			if err != nil {
+				return nil, err
+			}
+			ctx.AttributePath, ctx.AttributeSteps, ctx.SourceVariable = finalQN, steps, &wv
+		} else if name, rest, named := namedObjectBinding(attr); named {
 			// `$Param.Attr`: read from a page or snippet parameter, whatever
 			// encloses the widget (see cmd_pages_parameter_binding.go).
 			wv, entity, err := e.parameterBinding(w, mapping.PropertyKey, attr, name)
@@ -1704,6 +1913,18 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 			// none (#647).
 			scope := e.bindingScopeFor(mapping.PropertyKey)
 			entity := scope.Entity
+			if _, isPath := contextAssociationAttributePath(attr); isPath {
+				// `Assoc/Attr` read from the context object: the final attribute
+				// plus the association steps, as a built-in input stores it.
+				// Resolved as one name, it was written as the flat attribute
+				// `Entity.Assoc/Attr` (ako/mxcli#2279).
+				finalQN, steps, err := e.contextAssociationAttributeBinding(w, mapping.PropertyKey, attr, scope)
+				if err != nil {
+					return nil, err
+				}
+				ctx.AttributePath, ctx.AttributeSteps = finalQN, steps
+				break
+			}
 			// An association named where an attribute belongs cannot be stored;
 			// refuse it here rather than writing a dangling AttributeRef (#830).
 			if err := e.pageBuilder.rejectAssociationAsAttributeOn(
@@ -1760,7 +1981,7 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 			ds = w.GetDataSource()
 		}
 		if ds != nil {
-			dataSource, entityName, err := e.pageBuilder.buildPluggableDataSourceV3(ds)
+			dataSource, entityName, err := e.pageBuilder.buildPluggableDataSourceV3(ds, w.Name)
 			if err != nil {
 				return nil, mdlerrors.NewBackend("build datasource", err)
 			}
@@ -1771,7 +1992,7 @@ func (e *PluggableWidgetEngine) resolveMapping(mapping PropertyMapping, w *ast.W
 			e.recordDataSourceEntity(mapping.PropertyKey, entityName)
 			if entityName != "" {
 				e.pageBuilder.entityContext = entityName
-				e.pageBuilder.argCtx = enteringDataWidget(ds, entityName).inDataWidget(w.Name)
+				e.pageBuilder.argCtx = enteringDataWidgetOf(w, ds, entityName)
 				if w.Name != "" {
 					e.pageBuilder.paramEntityNames[w.Name] = entityName
 				}
@@ -2626,6 +2847,18 @@ func stringifyAny(v any) string {
 		return fmt.Sprintf("%d", x)
 	case float64:
 		return fmt.Sprintf("%g", x)
+	case *ast.WidgetIcon:
+		// `icon: 'bookmark'` — the visitor types every `icon:` as a core icon,
+		// but on a pluggable widget it reaches here only for the widget's own
+		// key (a PDS Button's string `icon`), whose value is the quoted text.
+		// Returning "" dropped it from create page and from a building block
+		// copied through describe (ako/mxcli#2180). A glyph or an image icon
+		// has no text form a plain property could hold.
+		if x != nil && x.Kind == types.MenuIconCollection {
+			return x.Name
+		}
+	case ast.WidgetIcon:
+		return stringifyAny(&x)
 	}
 	return ""
 }
@@ -2739,7 +2972,7 @@ func isBuiltinPropName(name string) bool {
 		// The expression and attribute forms of the two above, as the visitor
 		// lowers them. Stored on the CustomWidget itself, never in its Object;
 		// MDL-WIDGET41 refuses them where the package declares no such setting.
-		"EditableIf", "VisibleIf", "VisibleWhen", "VisibleRoles",
+		"EditableIf", "EditableWhen", "VisibleIf", "VisibleWhen", "VisibleRoles",
 		"WidgetType", "DesignProperties", "Association", "CaptionAttribute",
 		"Content", "RenderMode", "ContentParams", "CaptionParams",
 		"ButtonStyle", "DesktopWidth", "DesktopColumns", "TabletColumns",

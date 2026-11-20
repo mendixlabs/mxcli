@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/mdl/executor"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 )
@@ -110,22 +111,9 @@ func runScriptOn(t *testing.T, mprPath, script string) error {
 func copyFixtureTree(t *testing.T, src string) string {
 	t.Helper()
 	dst := t.TempDir()
-	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, _ := filepath.Rel(src, p)
-		target := filepath.Join(dst, rel)
-		if d.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, 0o644)
-	})
-	if err != nil {
+	// Not .mxcli: other packages' tests write their caches into the fixture in
+	// place (testutil.CopyFixture), and hashTree ignores it anyway.
+	if err := testutil.CopyFixture(dst, src); err != nil {
 		t.Fatal(err)
 	}
 	return dst

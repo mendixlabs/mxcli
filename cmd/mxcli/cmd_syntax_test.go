@@ -177,3 +177,36 @@ func TestSyntaxQualifiedTopicFromIssue1389(t *testing.T) {
 		t.Errorf("mxcli syntax integration message-definition does not show the page:\n%s", firstLines(out, 6))
 	}
 }
+
+// ako/mxcli#2140: `mxcli syntax message-definition` documented only the
+// collection form, which an 11.15+ project refuses; the per-document form it
+// stores instead — and its FOLDER clause, which goes before FOR — appeared only
+// in an exec error's hint. The page leads with the document form and marks the
+// collection form as pre-11.15.
+func TestSyntaxMessageDefinitionLeadsWithDocumentForm(t *testing.T) {
+	out := runSyntax(t, "message-definition")
+	doc := strings.Index(out, "CREATE [OR MODIFY] MESSAGE DEFINITION Module.Name [FOLDER 'path']")
+	if doc >= 0 && !strings.HasPrefix(strings.TrimSpace(strings.SplitN(out[doc:], "\n", 3)[1]), "FOR Module.Entity") {
+		doc = -1
+	}
+	if doc < 0 {
+		t.Fatalf("the 11.15+ document form (with FOLDER before FOR) is not shown:\n%s", out)
+	}
+	if coll := strings.Index(out, "MESSAGE DEFINITION COLLECTION"); coll >= 0 && coll < doc {
+		t.Errorf("the collection form is shown before the 11.15+ document form:\n%s", out)
+	}
+	for _, want := range []string{
+		"DESCRIBE MESSAGE DEFINITION Module.Name;",
+		"DROP MESSAGE DEFINITION [IF EXISTS] Module.Name;",
+		"LIST MESSAGE DEFINITIONS [IN Module];",
+		"ALTER MESSAGE DEFINITION Module.Name",
+		"[EXAMPLE 'text']",
+		"Mendix 11.14 and earlier",
+		// The Requires block states the ceiling, not "10.0.0+".
+		"Mendix 10.0.0 to 11.14.99 integration/message_definition_collection",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("mxcli syntax message-definition does not show %q", want)
+		}
+	}
+}

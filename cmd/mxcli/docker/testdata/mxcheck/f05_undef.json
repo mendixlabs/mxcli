@@ -1,0 +1,22 @@
+{
+  "serialization_version": 1,
+  "errors": [
+    {
+      "code": "CE0109",
+      "message": "Undefined variable 'Nope'.",
+      "locations": [
+        {
+          "module-id": "eb9312a5-53fc-4290-9527-dcb445b6a024",
+          "module-name": "Sp",
+          "document-name": "Microflow 'F05'",
+          "element-name": "End event",
+          "element-id": "389d91af-39cb-4e5c-8dd1-4e4864cc05c8",
+          "unit-id": "edda7090-416b-4db5-ba81-aada9115570c"
+        }
+      ]
+    }
+  ],
+  "warnings": [],
+  "deprecations": [],
+  "total-problems": 1
+}

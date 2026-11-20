@@ -1,0 +1,57 @@
+mdl 1;
+-- Bug ako/mxcli#2099 (mendixlabs/mxcli#1803): an access rule's WHERE whose
+-- members all exist still failed the build, while `check -p` and exec passed it:
+--
+--   [error] [CE0161] "Error(s) in XPath constraint." at Access rule of entity 'M.E'
+--
+-- Measured on mxbuild 11.14.0, security level Production, one entity and one
+-- rule per constraint. Each of the issue's seven is CE0161, and `check` now
+-- reports it at the grant:
+--
+--   [Title = $x]                          a variable (MDL-XPATH04, no project needed;
+--                                         $currentUser too — use '[%CurrentUser%]')
+--   [M.E_Kid = empty]                     empty on an association (MDL047)
+--   [Title = '[%CurrentUser%]']           the user token on an attribute (any type)
+--   [Cnt = '5']                           a quoted value on an Integer
+--   [Status = 'red']                      the key is Red — case-sensitive; a caption
+--                                         is not a key either
+--   [System.owner = '[%CurrentUser%]']    on an entity that stores no owner
+--   [E_Kid/M.Kid/Name = 'a']              an association without its module (MDL-XPATH01)
+--
+-- This file holds the legal twins, every one measured at 0 errors on the same
+-- app. It must pass `check` (with and without a project) and build clean.
+
+create module M;
+alter app security ( SecurityLevel: production );
+
+create enumeration M.Color ( Red 'Red', Grn 'Green' );
+create persistent entity M.Kid ( Name: String(100) );
+create persistent entity M.E (
+  Title: String(100), Cnt: Integer, Big: Long, Amt: Decimal,
+  Flag: Boolean, D: DateTime, Status: Enumeration(M.Color)
+);
+create persistent entity M.O ( Title: String(100), owner: AutoOwner );
+create association M.E_Kid from M.E to M.Kid;
+create association M.E_User from M.E to System.User;
+
+create module role M.User;
+create module role M.Viewer;
+create module role M.Auditor;
+create module role M.Clerk;
+
+grant read * on entity M.Kid to M.User, M.Viewer, M.Auditor, M.Clerk;
+
+-- the user token on an association to System.User, and on an owner the entity stores
+grant read * on entity M.E to M.User where [M.E_User = '[%CurrentUser%]'];
+grant read * on entity M.O to M.User where [System.owner = '[%CurrentUser%]'];
+
+-- an association tested by a path, qualified
+grant read * on entity M.E to M.Viewer where [not(M.E_Kid/M.Kid) or M.E_Kid/M.Kid/Name = 'a'];
+
+-- each literal in a type its attribute takes; `empty` on attributes
+grant read * on entity M.E to M.Auditor
+  where [Status = 'Red' and Cnt = 5 and Big = 5.5 and Amt = 5 and Flag = 'false'
+         and D = '2020-01-01' and Title = '5'];
+grant read * on entity M.E to M.Clerk
+  where [(Status = 'Grn' or Status = empty) and Cnt != empty and Flag = true()
+         and D > '[%BeginOfCurrentDay%]'];

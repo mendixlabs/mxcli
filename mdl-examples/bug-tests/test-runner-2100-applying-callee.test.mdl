@@ -1,0 +1,44 @@
+-- ako/mxcli#2100 (upstream mendixlabs/mxcli#1805): the generated test
+-- microflows did not apply entity access, so a test could not call a
+-- production microflow that does: MxBuild refused every one with CE0114, and
+-- `mxcli check` with MDL-SEC22. Applying it alone then failed CE0150 on the
+-- runner's own handlers, which read $latestError/Message.
+--
+-- Setup: test-runner-2100-setup.mdl. Then:
+--
+--   mxcli test mdl-examples/bug-tests/test-runner-2100-applying-callee.test.mdl -p app.mpr --local
+--
+-- Measured on 11.12.1 (--local --db-type hsqldb). Before the fix: every test
+-- calling Acc.* reported "CE0114 … (at Call microflow activity 'ACT_…')" and
+-- none ran. After: 01 and 03 PASS, 02 FAILs with "exception during execution:
+-- Amount must be positive" and 04 with "expected an error containing
+-- 'something else', actual: Amount must be positive" — the messages arrive
+-- through the generated MxTest.Test_ErrorMessage helper.
+mdl 1;
+/**
+ * @test 01 calls a microflow that applies entity access
+ * @expect $ok
+ */
+$ok = call microflow Acc.ACT_IsReady();
+/
+
+/**
+ * @test 02 an unexpected error fails with its message
+ * @expect $ok
+ */
+$ok = call microflow Acc.ACT_Refuse(Amount = -1.0);
+/
+
+/**
+ * @test 03 @throws matches the message of an applying microflow
+ * @throws 'must be positive'
+ */
+$ok = call microflow Acc.ACT_Refuse(Amount = -1.0);
+/
+
+/**
+ * @test 04 @throws with the wrong message fails, naming the actual one
+ * @throws 'something else'
+ */
+$ok = call microflow Acc.ACT_Refuse(Amount = -1.0);
+/

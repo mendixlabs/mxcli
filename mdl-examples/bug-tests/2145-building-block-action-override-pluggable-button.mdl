@@ -1,0 +1,29 @@
+mdl 1;
+-- Bug ako/mxcli#2145 (mendixlabs/mxcli#1821): the `action:` override of
+-- `use building block` only recognised the core buttons (actionbutton,
+-- linkbutton, button). A PlatformDesignSystem block is a pluggable PDS Button,
+-- so
+--   use building block PlatformDesignSystem.Button (action: call microflow PDSRepro.ACT_Noop) as b_
+-- failed with
+--   Error: failed to build page: use building block PlatformDesignSystem.Button:
+--   action override supplied, but the block has no button to rebind
+--
+-- Fix: with no core button in the block, the override binds the first pluggable
+-- widget whose definition has a CLICK action (Source OnClick — PDS Button's
+-- onClickAction, Badge Button's onClickEvent, Image's onClick), skipping data
+-- containers. A block with a core button binds it as before.
+--
+-- PlatformDesignSystem is a marketplace module this repo cannot fetch without a
+-- marketplace token, so the regression case uses the equivalent Atlas block:
+-- Card_WithImage has no core button, only a pluggable Image whose definition
+-- declares an onClick action. Verify (project with Atlas_Web_Content, e.g.
+-- `mxcli new`): exec writes `image w_image1 (…, OnClick: call microflow
+-- BugTest2145.ACT_Noop, …)`; mxcli docker check reports 0 errors.
+
+create module BugTest2145;
+
+create microflow BugTest2145.ACT_Noop () begin end;
+
+create page BugTest2145.Action_Rebind (Title: 'Rebind', Layout: Atlas_Core.Atlas_Default) {
+  use building block Atlas_Web_Content.Card_WithImage (action: call microflow BugTest2145.ACT_Noop) as w_
+};

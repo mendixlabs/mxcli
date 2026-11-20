@@ -379,6 +379,32 @@ fragment S : [sS] ;
 
 This allows `show`, `show`, `show`, etc. to all match the same token.
 
+### Two-Stage Prediction (SLL first)
+
+`visitor.build` parses every input in ANTLR's SLL prediction mode first, and
+parses it again with full LL prediction only when the first parse reported a
+syntax error (`parseProgram` in `visitor.go`).
+
+ANTLR's default mode also starts in SLL, but where SLL sees a conflict it
+decides again with the full context, and that decision is not cached. On this
+grammar it was taken for nearly every statement and was four fifths of the
+time of a parse (ako/mxcli#2160).
+
+What makes it safe is the direction of the difference. SLL is the weaker mode:
+on input it accepts, it builds the tree full LL builds; on input full LL
+accepts, it may still report an error. So an SLL error decides nothing and the
+input is parsed again, and that second parse supplies the tree and the
+messages. Input with a syntax error is parsed twice.
+
+`TestBuild_SLLFirstBuildsWhatFullContextBuilds` compares the two on every
+script under `mdl-examples/`, whole and cut off in the middle. A grammar change
+that makes a statement need full context is not a defect, only a slower parse
+for that statement; one that made the two modes build different programs would
+fail that test.
+
+The parsers of fragments (`flow_statements.go`, `visitor_xpath_public.go`,
+`visitor_argument_binding.go`, `keyword_case.go`) still use the default mode.
+
 ## Extending the Parser
 
 ### Adding a New Statement Type

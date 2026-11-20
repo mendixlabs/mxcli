@@ -10,6 +10,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/modelsdk/canon"
 )
 
 // # Editing an activity in place (ako/mxcli#1761)
@@ -69,14 +70,117 @@ func sameKind(d, stored bson.D) bool {
 // under it that pair up (carryPairs), put on at Bytes.
 func (m *Mutator) swapKeeping(g *graph, x *node, oc, d bson.D, id model.ID) error {
 	same := sameKind(d, x.doc)
+	if same {
+		d = carryTranslations(d, x.doc)
+	}
 	if err := m.swapInPlace(g, x, oc, d, id); err != nil {
 		return err
 	}
 	if same {
+		// The carried translations are the stored elements, still in the unit.
+		m.unmarkRemoved(d)
+		m.carryUnstated(d, x.doc)
 		carryPairs(d, x.doc, m.carried)
 		m.edited[x.id] = true
 	}
 	return nil
+}
+
+// carryTranslations returns d, the serialized replacement of stored, with the
+// languages of stored's texts that d does not write put back
+// (ako/mxcli#2327, mendixlabs/mxcli#1870). The statement writes one language
+// per text, and the splice saves as a patch, which canon does not carry
+// translations onto — so an edited show message kept only that language. The
+// carry is canon.CarryTranslations, the one a rebuild's write gets, applied to
+// the activity: it pairs texts by place, never overwrites a language the
+// statement wrote, and keeps a carried translation's stored $ID. On anything
+// it cannot read, d is returned as it is.
+func carryTranslations(d, stored bson.D) bson.D {
+	nb, err := bson.Marshal(d)
+	if err != nil {
+		return d
+	}
+	ob, err := bson.Marshal(stored)
+	if err != nil {
+		return d
+	}
+	out := canon.CarryTranslations(nb, ob)
+	if bytes.Equal(out, nb) {
+		return d
+	}
+	var carried bson.D
+	if bson.Unmarshal(out, &carried) != nil {
+		return d
+	}
+	return carried
+}
+
+// unstated are the properties, by element $Type, that MDL has no spelling for:
+// describe does not print them, so no statement states them, and the writer puts
+// its default where they go. On an edit the stored value is the only one there
+// is, and it is kept (ako/mxcli#2169, mendixlabs/mxcli#1830) — a REST call whose
+// proxy was set to Override went back to the JVM default when only its timeout
+// was edited, and an activity lost its documentation.
+//
+// A property belongs here only while MDL cannot state it. Once it can, the
+// statement is the authority and the entry has to go, or an edit that removes
+// the value would be silently undone.
+var unstated = map[string][]string{
+	"Microflows$ActionActivity": {"Documentation"},
+	"Microflows$RestCallAction": {"RequestProxyType", "ProxyConfiguration"},
+}
+
+// carryUnstated copies onto d, the serialized replacement of stored, the
+// stored value of every unstated property of the activity and of its action.
+// A carried element keeps its $IDs: it is the stored element, still in the
+// unit, so it is no longer among the removed ones.
+func (m *Mutator) carryUnstated(d, stored bson.D) {
+	carry := func(nd, sd bson.D) {
+		for _, key := range unstated[dString(nd, "$Type")] {
+			v := dGet(sd, key)
+			if v == nil && !hasKey(sd, key) {
+				continue
+			}
+			if !dSet(nd, key, v) {
+				continue
+			}
+			m.unmarkRemoved(v)
+		}
+	}
+	carry(d, stored)
+	if na, sa := dDoc(d, "Action"), dDoc(stored, "Action"); na != nil && sa != nil {
+		carry(na, sa)
+	}
+}
+
+// hasKey reports whether d has key, whatever its value (null included).
+func hasKey(d bson.D, key string) bool {
+	for _, e := range d {
+		if e.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// unmarkRemoved is markRemoved undone, for an element that stays in the unit.
+func (m *Mutator) unmarkRemoved(v any) {
+	switch t := v.(type) {
+	case bson.D:
+		for _, e := range t {
+			if e.Key == "$ID" {
+				if b, ok := e.Value.(bson.Binary); ok {
+					delete(m.removed, string(b.Data))
+				}
+				continue
+			}
+			m.unmarkRemoved(e.Value)
+		}
+	case bson.A:
+		for _, el := range t {
+			m.unmarkRemoved(el)
+		}
+	}
 }
 
 // EditedInPlace reports whether a Replace of target edited the stored

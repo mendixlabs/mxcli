@@ -149,3 +149,34 @@ func TestSnippetCallMappingLocalVariableSlot(t *testing.T) {
 		}
 	}
 }
+
+// ako/mxcli#1968: a data view's object passed by naming the data view is the
+// Widget slot alone; in PageParameter it named a page parameter that does not
+// exist, and mx check 11.14 reported CE0115.
+func TestSnippetCallMappingWidgetSlot(t *testing.T) {
+	sc := &pages.SnippetCallWidget{
+		SnippetName: "M.Snip",
+		ParameterMappings: []pages.SnippetParamMapping{
+			{ParamName: "Item", Argument: "$dvOuter", IsWidget: true},
+			{ParamName: "Car", Argument: "$Car"},
+		},
+	}
+	sc.Name = "sc1"
+	call, _ := docGet(encodeWidget(t, sc), "FormCall").(bson.D)
+	mappings, _ := docGet(call, "ParameterMappings").(bson.A)
+	if len(mappings) != 3 {
+		t.Fatalf("ParameterMappings = %#v, want [marker, 2 mappings]", mappings)
+	}
+	for i, want := range []map[string]any{
+		{"Widget": "dvOuter", "PageParameter": "", "SnippetParameter": "", "LocalVariable": ""},
+		{"Widget": "", "PageParameter": "Car"}, // control
+	} {
+		m, _ := mappings[i+1].(bson.D)
+		got := pageVariableSlots(t, docGet(m, "Variable"))
+		for k, v := range want {
+			if got[k] != v {
+				t.Errorf("mapping %d Variable.%s = %v, want %q", i+1, k, got[k], v)
+			}
+		}
+	}
+}

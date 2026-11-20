@@ -281,9 +281,10 @@ func TestPruneDisabledByZero(t *testing.T) {
 // javascriptsource/ and javasource/ are read by DESCRIBE; everything else in a
 // reference project is bulk nothing reads.
 //
-// The negative half matters as much as the positive: if widgets/ started being
-// copied again the cache would quietly double in size, and if the .mpr stopped
-// being copied every hit would serve an unreadable reference.
+// The negative half matters as much as the positive: if the theme trees started
+// being copied the cache would quietly grow, and if the .mpr stopped being
+// copied every hit would serve an unreadable reference. widgets/ is kept: its
+// definitions decide how DESCRIBE renders a pluggable widget (ako/mxcli#2367).
 func TestModelOnlyCopyKeepsWhatIsRead(t *testing.T) {
 	src, dst := t.TempDir(), filepath.Join(t.TempDir(), "out")
 
@@ -313,7 +314,10 @@ func TestModelOnlyCopyKeepsWhatIsRead(t *testing.T) {
 	if got := readFile(t, filepath.Join(dst, "javasource", "mod", "actions", "A.java")); got != "java" {
 		t.Errorf("javasource action = %q, want %q", got, "java")
 	}
-	for _, bulk := range []string{"widgets", "themesource", "theme-cache"} {
+	if got := readFile(t, filepath.Join(dst, "widgets", "big.mpk")); got != "bulk" {
+		t.Errorf("widgets/ definition = %q, want it kept (ako/mxcli#2367)", got)
+	}
+	for _, bulk := range []string{"themesource", "theme-cache"} {
 		if _, err := os.Stat(filepath.Join(dst, bulk)); !os.IsNotExist(err) {
 			t.Errorf("%s/ was copied into the cache entry; nothing reads it", bulk)
 		}

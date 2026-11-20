@@ -12,27 +12,27 @@ description: "The warm Docker-free dev loop, `mxcli run --local` — model chang
 |---|---|
 | 40-47 | Overview |
 | 48-60 | When to Use This Skill |
-| 61-126 | Usage |
-| 127-139 | How apply is chosen |
-| 140-230 | Prerequisites |
-| 231-248 | The intended loop |
-| 249-276 | Editing themes (SCSS) — rebuild, never clear caches |
-| 277-303 | `--watch` waits for a write to finish before it builds |
-| 304-332 | "My edit didn't show up" — stale process, not stale cache |
-| 333-363 | Flags |
-| 364-417 | Metrics and OpenTelemetry |
-| 418-475 | Pages render in the browser |
-| 476-493 | Pixel-perfect page loop |
-| 494-514 | Debugging a server-side error |
-| 515-538 | "Sign in failed" that is not about the password |
-| 539-571 | The same licence also stops the app after a few hours |
-| 572-651 | External browser preview (`--hub`) |
-| 652-660 | Validation checklist |
-| 661-717 | Constant values come from a configuration |
-| 718-721 | Warm local dev loop (`mxcli run --local [--watch] [--screenshot]`) |
-| 722-725 | External browser preview (`mxcli run --hub <url>` + `mxcli tunnel-hub`) |
-| 726-729 | Tunnel-hub GitHub authentication (opt-in, gated on `--github-oauth-client-id`; absent = today's open hub) |
-| 730-732 | Runtime metrics + settings passthrough (`mxcli run --local --metrics` / `--runtime-setting Key=Value`) |
+| 61-127 | Usage |
+| 128-140 | How apply is chosen |
+| 141-231 | Prerequisites |
+| 232-249 | The intended loop |
+| 250-277 | Editing themes (SCSS) — rebuild, never clear caches |
+| 278-304 | `--watch` waits for a write to finish before it builds |
+| 305-333 | "My edit didn't show up" — stale process, not stale cache |
+| 334-364 | Flags |
+| 365-418 | Metrics and OpenTelemetry |
+| 419-476 | Pages render in the browser |
+| 477-494 | Pixel-perfect page loop |
+| 495-515 | Debugging a server-side error |
+| 516-539 | "Sign in failed" that is not about the password |
+| 540-572 | The same licence also stops the app after a few hours |
+| 573-652 | External browser preview (`--hub`) |
+| 653-661 | Validation checklist |
+| 662-718 | Constant values come from a configuration |
+| 719-722 | Warm local dev loop (`mxcli run --local [--watch] [--screenshot]`) |
+| 723-726 | External browser preview (`mxcli run --hub <url>` + `mxcli tunnel-hub`) |
+| 727-730 | Tunnel-hub GitHub authentication (opt-in, gated on `--github-oauth-client-id`; absent = today's open hub) |
+| 731-733 | Runtime metrics + settings passthrough (`mxcli run --local --metrics` / `--runtime-setting Key=Value`) |
 
 <!-- /skill-index -->
 # Warm Local Dev Loop — `mxcli run --local`
@@ -112,9 +112,10 @@ What each one does, precisely:
 - **`run stop`** asks the run to shut down (it removes `--test-endpoint`, turns the
   debugger off), waits until it is gone, then sweeps the run's process session, so an
   orphaned `runtimelauncher` or mxbuild JVM is stopped too — including the leftovers of
-  a run that was killed with `-9`. Stopping when nothing runs is a no-op (exit 0).
-- **`run restart`** reuses the arguments recorded in the state file; to change a flag,
-  `run stop` and `--detach` again.
+  a run that was killed with `-9` (and its `--test-endpoint`, as on Windows, where the
+  stop is always forced). Stopping when nothing runs is a no-op (exit 0).
+- **`run restart`** reuses the recorded arguments (`@env:`/`@file:` secrets as references;
+  a literal one is refused, by flag name); to change a flag, `run stop` and `--detach` again.
 
 - **`.mxcli/run-local.json`** (ports, admin password — how `oql`, `log` and `constant set
   --apply` reach the app) is written when the app serves and removed only by the run
@@ -344,14 +345,14 @@ run's process session), and `run status` reports them. Do **not**
 | `--db-admin-user` / `--db-admin-password` | postgres / — | Superuser login for `--ensure-db` when it has a password (Windows); only with `--ensure-db` |
 | `--app-port` / `--admin-port` / `--serve-port` | 8080 / 8090 / 6543 | Ports |
 | `--listen-addr` | `127.0.0.1` | IP the app binds to. `0.0.0.0` (or `::`) makes it reachable from other machines; the network URLs are printed once it runs. If the app builds absolute URLs (SSO redirects, email links), pair it with `--runtime-setting ApplicationRootUrl=http://<host>:<port>/` (or a real host in the configuration): the runtime does not derive one from the bind address — a warning says so. The M2EE admin API always stays on loopback |
-| `--db-host` / `--db-name` / `--db-user` / `--db-password` | 127.0.0.1:5432 / derived / mendix / mendix | Database; bracket IPv6 endpoints (`[::1]:5432`) |
+| `--db-host` / `--db-name` / `--db-user` / `--db-password` | 127.0.0.1:5432 / derived / mendix / mendix | Database; bracket IPv6 endpoints (`[::1]:5432`). Never type a real password: `--db-password @env:VAR` or `@file:path` (owner-only) keeps it out of `ps`, history and run state, and `run restart` still works; same for `--db-admin-password`, `--screenshot-password`, `--hub-secret`, `--debug-pass` |
 | `--db-type` | `postgresql` | `hsqldb` runs on the runtime's built-in file database: no database server, no `--ensure-db`, works offline. Data lives in `<project>/deployment/data/database/hsqldb/`. Refused together with `--db-host`/`--db-user`/`--db-password`/`--ensure-db`. Local development only |
 | `--setup` | off | Cache MxBuild+runtime + ensure DB, then exit (SessionStart bring-up) |
 | `--screenshot` | off | Playwright PNG after boot + each change |
 | `--screenshot-path` / `--screenshot-url` | `.mxcli/run-local.png` / app root | Screenshot output / page (URL or `/path`) |
 | `--screenshot-user` / `--screenshot-password` | — | Log in once, reuse session (pages behind login) |
 | `--runtime-log` | `.mxcli/runtime.log` | Runtime log file: JVM stdout/stderr **and** the application log (microflow `LOG` output + server stack traces, via an attached file log subscriber). `-` disables. |
-| `--test-endpoint` | off | Host mxcli's token-guarded test endpoint so `mxcli test … --attach` can run a suite against this app with no boot of its own. Installed **before** the boot (the handler registers from after-startup), your own after-startup microflow is chained not displaced, and both are removed on exit. See `test-microflows`. |
+| `--test-endpoint` | off | Host mxcli's token-guarded test endpoint so `mxcli test … --attach` can run a suite against this app with no boot of its own. Installed **before** the boot (the handler registers from after-startup), your own after-startup microflow is chained not displaced, and both are removed on exit. Add `--allow-call` and `test --attach` runs a test **without injecting or building it** when the endpoint can execute all its statements (it then calls the microflows a test names in a system context, hence opt-in). See `test-microflows`. |
 | `--debug` | off | Enable the microflow debugger at boot + start a session, so `mxcli debug break/paused/…` works from another terminal (see `debug-microflows`). No breakpoints = no behaviour change; disabled on shutdown. |
 | `--debug-pass` | `mxdebug` | Debugger password when `--debug` is set |
 | `--metrics` | off | Register a Prometheus meter registry at boot; the runtime serves metrics at `http://127.0.0.1:<admin-port>/prometheus` |
@@ -529,7 +530,7 @@ password in the model. `--screenshot-user` and `mxcli playwright check` do this
 for you — a rejected sign-in reads the log and says so instead of quietly
 screenshotting or checking the login page.
 
-Sessions are held until they expire; restarting `run --local` clears them all.
+The cap is 6; `mxcli run clear-sessions -p app.mpr` frees them all at once, no restart.
 A script that drives the app through a browser should **sign out at the end**,
 otherwise each run leaks a slot and the fifth or sixth run is the one that fails —
 which makes it look like a change you just made broke authentication.
@@ -681,7 +682,7 @@ encryption key while the model said otherwise.
   developer's workstation), so the default is used and the constant is named.
 - The line prints in every case, including "no overrides" — silence used to mean
   "your override is in effect" when it was not.
-- `--constant Module.Name=value` (repeatable) sets a value for **this run only**.
+- `--constant Module.Name=value` (repeatable) sets a value for **this run only**; `=@env:VAR` / `=@file:path` read a secret from the environment or an owner-only file (`@@` = literal `@`), keeping it out of `ps`.
   It wins over the configuration, is never written to the project, and is
   reported as coming from `--constant` so the output says which layer won. A
   constant the project does not declare is refused before the app boots: the

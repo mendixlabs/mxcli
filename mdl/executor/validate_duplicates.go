@@ -107,7 +107,10 @@ func stmtCreateInfo(stmt ast.Statement) (docType, name string, idempotent bool) 
 func stmtCreateKind(stmt ast.Statement) (docType, name string, idempotent bool) {
 	switch s := stmt.(type) {
 	case *ast.CreateModuleStmt:
-		return "module", s.Name, false
+		// `or modify` applies the module's documentation and settings to a
+		// module that exists (ako/mxcli#1921), so restating it is not a
+		// redefinition.
+		return "module", s.Name, s.CreateOrModify
 	case *ast.CreateModuleRoleStmt:
 		// Not a document, which is why it was missed when the document types
 		// were swept (mendixlabs/mxcli#1067). exec refuses a plain CREATE of an
@@ -161,6 +164,8 @@ func stmtCreateKind(stmt ast.Statement) (docType, name string, idempotent bool) 
 		return "knowledge-base", s.Name.String(), s.CreateOrModify
 	case *ast.CreateConsumedMCPServiceStmt:
 		return "consumed-mcp-service", s.Name.String(), s.CreateOrModify
+	case *ast.CreatePublishedMCPServiceStmt:
+		return "published-mcp-service", s.Name.String(), s.CreateOrModify
 	case *ast.CreateAgentStmt:
 		return "agent", s.Name.String(), s.CreateOrModify
 	case *ast.CreateImageCollectionStmt:
@@ -264,6 +269,8 @@ func stmtDropInfo(stmt ast.Statement) (docType, name string) {
 		return "knowledge-base", s.Name.String()
 	case *ast.DropConsumedMCPServiceStmt:
 		return "consumed-mcp-service", s.Name.String()
+	case *ast.DropPublishedMCPServiceStmt:
+		return "published-mcp-service", s.Name.String()
 	case *ast.DropAgentStmt:
 		return "agent", s.Name.String()
 	case *ast.DropImageCollectionStmt:
@@ -316,6 +323,8 @@ func renameDocType(objectType string) string {
 		return "nanoflow"
 	case "page":
 		return "page"
+	case "snippet":
+		return "snippet"
 	case "workflow":
 		return "workflow"
 	case "javaaction":
@@ -333,6 +342,8 @@ func friendlyDocType(docType string) string {
 		return "business event service"
 	case "consumed-mcp-service":
 		return "consumed MCP service"
+	case "published-mcp-service":
+		return "published MCP service"
 	case "data-transformer":
 		return "data transformer"
 	case "export-mapping":
@@ -517,6 +528,8 @@ func (ps *projectNameSets) setFor(docType string) map[string]bool {
 		set = listedQualifiedNames(h, ctx.Backend.ListAgentEditorKnowledgeBases)
 	case "consumed-mcp-service":
 		set = listedQualifiedNames(h, ctx.Backend.ListAgentEditorConsumedMCPServices)
+	case "published-mcp-service":
+		set = listedQualifiedNames(h, ctx.Backend.ListAgentEditorPublishedMCPServices)
 	case "agent":
 		set = listedQualifiedNames(h, ctx.Backend.ListAgentEditorAgents)
 	case "image-collection":

@@ -43,7 +43,7 @@ func (b *Builder) ExitAlterSettingsClause(ctx *parser.AlterSettingsClauseContext
 			stmt.ConfigName = unquoteStringLit(lit)
 		}
 		eachSettingsProperty(ctx.SettingsItemOptions(), ctx.AllSettingsAssignment(), func(key string, sv *parser.SettingsValueContext) {
-			stmt.Properties[key] = settingsValueText(sv)
+			stmt.Properties[key] = settingsPropertyValue(sv)
 		})
 	} else if ctx.SettingsSection() != nil && ctx.GROUP() != nil {
 		// ALTER SETTINGS WORKFLOWS ADD [OR MODIFY] GROUP 'Approvers' [( Description: '…' )]
@@ -159,6 +159,21 @@ func collectSettingsItemOptions(opts parser.ISettingsItemOptionsContext, into ma
 	}
 }
 
+// settingsPropertyValue is a settings property's value: a []string for a
+// parenthesised list (ThemeModuleOrder, ako/mxcli#1286), else the text.
+func settingsPropertyValue(ctx *parser.SettingsValueContext) any {
+	if ctx.LPAREN() == nil {
+		return settingsValueText(ctx)
+	}
+	items := []string{}
+	for _, v := range ctx.AllSettingsValue() {
+		if vc, ok := v.(*parser.SettingsValueContext); ok && vc != nil {
+			items = append(items, settingsValueText(vc))
+		}
+	}
+	return items
+}
+
 // settingsValueText extracts the string value from a SettingsValue context.
 func settingsValueText(ctx *parser.SettingsValueContext) string {
 	if sl := ctx.STRING_LITERAL(); sl != nil {
@@ -178,6 +193,9 @@ func settingsValueText(ctx *parser.SettingsValueContext) string {
 
 // settingsValueToInterface extracts a typed value from a SettingsValue context.
 func settingsValueToInterface(ctx *parser.SettingsValueContext) any {
+	if ctx.LPAREN() != nil {
+		return settingsPropertyValue(ctx)
+	}
 	if sl := ctx.STRING_LITERAL(); sl != nil {
 		return unquoteStringLit(sl)
 	}

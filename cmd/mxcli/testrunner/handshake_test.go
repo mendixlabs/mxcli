@@ -149,7 +149,7 @@ func TestGenerateEndpointMDLNoChainWhenNone(t *testing.T) {
 
 func TestDropTestFlows(t *testing.T) {
 	got := dropTestFlows("", &TestSuite{Tests: []TestCase{{ID: "test_1"}, {ID: "test_2"}}})
-	want := []string{"DROP MICROFLOW MxTest.Test_test_1", "DROP MICROFLOW MxTest.Test_test_2"}
+	want := []string{"DROP MICROFLOW MxTest.Test_test_1", "DROP MICROFLOW MxTest.Test_test_2", "DROP MICROFLOW " + errorMessageFlow}
 	if len(got) != len(want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -241,5 +241,38 @@ func TestAttachUsesTheAdminPasswordNotTheEndpointToken(t *testing.T) {
 	}
 	if got.AdminPass == got.Token {
 		t.Error("the admin password and the endpoint token are the same value; they are different secrets")
+	}
+}
+
+// A copied app folder carries the original's handshake; attaching with it would
+// run the copy's tests against another app, with that app's token.
+func TestReadHandshake_ForeignProject(t *testing.T) {
+	orig := tempProject(t)
+	if err := WriteHandshake(orig, Handshake{
+		Project: orig, PID: os.Getpid(), AppPort: 8080, AdminPort: 8090, Token: "tok", Started: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cp := filepath.Join(t.TempDir(), "App.mpr")
+	if err := os.MkdirAll(filepath.Dir(HandshakePath(cp)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(HandshakePath(orig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(HandshakePath(cp), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ReadHandshake(orig); err != nil {
+		t.Fatalf("the original's own handshake was refused: %v", err)
+	}
+	_, err = ReadHandshake(cp)
+	if err == nil {
+		t.Fatal("the copy accepted the original's handshake")
+	}
+	if !strings.Contains(err.Error(), orig) || !strings.Contains(err.Error(), "ignoring") {
+		t.Errorf("the error does not name the other project: %v", err)
 	}
 }

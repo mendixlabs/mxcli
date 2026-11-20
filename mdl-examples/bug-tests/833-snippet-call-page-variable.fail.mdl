@@ -1,0 +1,15 @@
+mdl 1;
+-- ako/mxcli#833: a page variable passed to a snippet parameter passed check and
+-- exec, then mx check reported
+--   [CE0115] "The arguments that are passed to snippet 'BugTest833f.SN' do not
+--   match the expected parameters and need to be refreshed." at Snippet call 'sc1'
+-- Page variables are primitive and a snippet parameter is an object, so it can
+-- never match: check and exec now refuse it (MDL-WIDGET34).
+create module BugTest833f;
+create persistent entity BugTest833f.Item (Name: String(50));
+create snippet BugTest833f.SN (Params: ($Item: BugTest833f.Item)) {
+  dataview dvIn (DataSource: $Item) { dynamictext t (Content: '{1}', ContentParams: ({1} = Name)) }
+};
+create page BugTest833f.P (Title: 'P', Layout: Atlas_Core.Atlas_Default, Params: ($Item: BugTest833f.Item), Variables: ($Flag: Boolean = 'true')) {
+  snippetcall sc1 (Snippet: BugTest833f.SN, Params: (Item = $Flag))
+};

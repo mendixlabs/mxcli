@@ -47,6 +47,7 @@ type MockBackend struct {
 	ListModuleSettingsFunc   func() ([]*types.ModuleSettings, error)
 	GetModuleSettingsFunc    func(moduleID model.ID) (*types.ModuleSettings, error)
 	UpdateModuleSettingsFunc func(ms *types.ModuleSettings) error
+	SetModuleUIResourcesFunc func(id model.ID, on bool) error
 
 	// FolderBackend
 	ListFoldersFunc  func() ([]*types.FolderInfo, error)
@@ -57,6 +58,7 @@ type MockBackend struct {
 	// DocumentPlacementBackend
 	MoveDocumentFunc      func(unitID, containerID model.ID) error
 	FindDocumentUnitFunc  func(moduleName, name string) (*types.DocumentUnit, error)
+	FindDocumentUnitsFunc func(moduleName, name string) ([]*types.DocumentUnit, error)
 	ListDocumentUnitsFunc func() ([]*types.DocumentUnit, error)
 
 	// DomainModelBackend
@@ -159,6 +161,7 @@ type MockBackend struct {
 	SetProjectDemoUsersEnabledFunc       func(unitID model.ID, enabled bool) error
 	SetProjectStrictModeFunc             func(unitID model.ID, enabled bool) error
 	SetProjectAdminUserNameFunc          func(unitID model.ID, name string) error
+	SetProjectAdminUserRoleFunc          func(unitID model.ID, role string) error
 	SetProjectAdminPasswordFunc          func(unitID model.ID, password string) error
 	SetProjectGuestAccessFunc            func(unitID model.ID, enabled bool, guestUserRole string) error
 	AddUserRoleFunc                      func(unitID model.ID, name string, moduleRoles []string, manageAllRoles bool) error
@@ -376,20 +379,24 @@ type MockBackend struct {
 	BuildFilterWidgetFunc           func(spec backend.FilterWidgetSpec, projectPath string) (pages.Widget, error)
 
 	// AgentEditorBackend
-	ListAgentEditorModelsFunc               func() ([]*agenteditor.Model, error)
-	ListAgentEditorKnowledgeBasesFunc       func() ([]*agenteditor.KnowledgeBase, error)
-	ListAgentEditorConsumedMCPServicesFunc  func() ([]*agenteditor.ConsumedMCPService, error)
-	ListAgentEditorAgentsFunc               func() ([]*agenteditor.Agent, error)
-	CreateAgentEditorModelFunc              func(m *agenteditor.Model) error
-	UpdateAgentEditorModelFunc              func(m *agenteditor.Model) error
-	DeleteAgentEditorModelFunc              func(id string) error
-	CreateAgentEditorKnowledgeBaseFunc      func(kb *agenteditor.KnowledgeBase) error
-	UpdateAgentEditorKnowledgeBaseFunc      func(kb *agenteditor.KnowledgeBase) error
-	DeleteAgentEditorKnowledgeBaseFunc      func(id string) error
-	CreateAgentEditorConsumedMCPServiceFunc func(svc *agenteditor.ConsumedMCPService) error
-	UpdateAgentEditorConsumedMCPServiceFunc func(svc *agenteditor.ConsumedMCPService) error
-	DeleteAgentEditorConsumedMCPServiceFunc func(id string) error
-	CreateAgentEditorAgentFunc              func(a *agenteditor.Agent) error
-	UpdateAgentEditorAgentFunc              func(a *agenteditor.Agent) error
-	DeleteAgentEditorAgentFunc              func(id string) error
+	ListAgentEditorModelsFunc                func() ([]*agenteditor.Model, error)
+	ListAgentEditorKnowledgeBasesFunc        func() ([]*agenteditor.KnowledgeBase, error)
+	ListAgentEditorConsumedMCPServicesFunc   func() ([]*agenteditor.ConsumedMCPService, error)
+	ListAgentEditorAgentsFunc                func() ([]*agenteditor.Agent, error)
+	CreateAgentEditorModelFunc               func(m *agenteditor.Model) error
+	UpdateAgentEditorModelFunc               func(m *agenteditor.Model) error
+	DeleteAgentEditorModelFunc               func(id string) error
+	CreateAgentEditorKnowledgeBaseFunc       func(kb *agenteditor.KnowledgeBase) error
+	UpdateAgentEditorKnowledgeBaseFunc       func(kb *agenteditor.KnowledgeBase) error
+	DeleteAgentEditorKnowledgeBaseFunc       func(id string) error
+	CreateAgentEditorConsumedMCPServiceFunc  func(svc *agenteditor.ConsumedMCPService) error
+	UpdateAgentEditorConsumedMCPServiceFunc  func(svc *agenteditor.ConsumedMCPService) error
+	DeleteAgentEditorConsumedMCPServiceFunc  func(id string) error
+	ListAgentEditorPublishedMCPServicesFunc  func() ([]*agenteditor.PublishedMCPService, error)
+	CreateAgentEditorPublishedMCPServiceFunc func(svc *agenteditor.PublishedMCPService) error
+	UpdateAgentEditorPublishedMCPServiceFunc func(svc *agenteditor.PublishedMCPService) error
+	DeleteAgentEditorPublishedMCPServiceFunc func(id string) error
+	CreateAgentEditorAgentFunc               func(a *agenteditor.Agent) error
+	UpdateAgentEditorAgentFunc               func(a *agenteditor.Agent) error
+	DeleteAgentEditorAgentFunc               func(id string) error
 }

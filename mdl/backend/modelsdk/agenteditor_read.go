@@ -147,6 +147,7 @@ func (b *Backend) ListAgentEditorKnowledgeBases() ([]*agenteditor.KnowledgeBase,
 			if err := json.Unmarshal([]byte(u.wrap.Contents), &p); err != nil {
 				return nil, fmt.Errorf("unmarshal KnowledgeBase Contents: %w", err)
 			}
+			k.InnerName = p.Name
 			k.Provider = p.Provider
 			k.Environment = p.ProviderFields.Environment
 			k.DeepLinkURL = p.ProviderFields.DeepLinkURL
@@ -178,14 +179,18 @@ func (b *Backend) ListAgentEditorConsumedMCPServices() ([]*agenteditor.ConsumedM
 		c.ExportLevel = u.wrap.ExportLevel
 		if u.wrap.Contents != "" {
 			var p struct {
-				ProtocolVersion          string `json:"protocolVersion"`
-				Documentation            string `json:"documentation"`
-				Version                  string `json:"version"`
-				ConnectionTimeoutSeconds int    `json:"connectionTimeoutSeconds"`
+				ProtocolVersion          string              `json:"protocolVersion"`
+				Documentation            string              `json:"documentation"`
+				Version                  string              `json:"version"`
+				ConnectionTimeoutSeconds int                 `json:"connectionTimeoutSeconds"`
+				Endpoint                 *agenteditor.DocRef `json:"endpoint"`
+				AuthenticationMicroflow  *agenteditor.DocRef `json:"authenticationMicroflow"`
 			}
 			if err := json.Unmarshal([]byte(u.wrap.Contents), &p); err != nil {
 				return nil, fmt.Errorf("unmarshal ConsumedMCPService Contents: %w", err)
 			}
+			c.Endpoint = p.Endpoint
+			c.AuthenticationMicroflow = p.AuthenticationMicroflow
 			c.ProtocolVersion = p.ProtocolVersion
 			c.InnerDocumentation = p.Documentation
 			c.Version = p.Version
@@ -194,6 +199,60 @@ func (b *Backend) ListAgentEditorConsumedMCPServices() ([]*agenteditor.ConsumedM
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+func (b *Backend) ListAgentEditorPublishedMCPServices() ([]*agenteditor.PublishedMCPService, error) {
+	units, err := b.listCustomBlobs(agenteditor.CustomTypePublishedMCPService)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*agenteditor.PublishedMCPService, 0, len(units))
+	for _, u := range units {
+		p := &agenteditor.PublishedMCPService{}
+		p.ID = model.ID(u.unitID)
+		p.TypeName = customBlobDocType
+		p.ContainerID = model.ID(u.containerID)
+		p.Name = u.wrap.Name
+		p.Documentation = u.wrap.Documentation
+		p.Excluded = u.wrap.Excluded
+		p.ExportLevel = u.wrap.ExportLevel
+		if u.wrap.Contents != "" {
+			if err := decodePublishedMCPServiceContents(u.wrap.Contents, p); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+func decodePublishedMCPServiceContents(contents string, p *agenteditor.PublishedMCPService) error {
+	var c struct {
+		ServerName              string                         `json:"serverName"`
+		EndpointPath            string                         `json:"endpointPath"`
+		Version                 string                         `json:"version"`
+		ProtocolVersion         string                         `json:"protocolVersion"`
+		AuthenticationEnabled   bool                           `json:"authenticationEnabled"`
+		AuthenticationMicroflow *agenteditor.DocRef            `json:"authenticationMicroflow"`
+		AuthorizationServerURL  string                         `json:"authorizationServerUrl"`
+		Scopes                  string                         `json:"scopes"`
+		Tools                   []agenteditor.PublishedMCPTool `json:"tools"`
+		Documentation           string                         `json:"documentation"`
+	}
+	if err := json.Unmarshal([]byte(contents), &c); err != nil {
+		return fmt.Errorf("unmarshal PublishedMCPService Contents: %w", err)
+	}
+	p.ServerName = c.ServerName
+	p.EndpointPath = c.EndpointPath
+	p.Version = c.Version
+	p.ProtocolVersion = c.ProtocolVersion
+	p.AuthenticationEnabled = c.AuthenticationEnabled
+	p.AuthenticationMicroflow = c.AuthenticationMicroflow
+	p.AuthorizationServerURL = c.AuthorizationServerURL
+	p.Scopes = c.Scopes
+	p.Tools = c.Tools
+	p.InnerDocumentation = c.Documentation
+	return nil
 }
 
 func (b *Backend) ListAgentEditorAgents() ([]*agenteditor.Agent, error) {
@@ -213,19 +272,22 @@ func (b *Backend) ListAgentEditorAgents() ([]*agenteditor.Agent, error) {
 		a.ExportLevel = u.wrap.ExportLevel
 		if u.wrap.Contents != "" {
 			var p struct {
-				Description        string                    `json:"description"`
-				SystemPrompt       string                    `json:"systemPrompt"`
-				UserPrompt         string                    `json:"userPrompt"`
-				UsageType          string                    `json:"usageType"`
-				Variables          []agenteditor.AgentVar    `json:"variables"`
-				Tools              []agenteditor.AgentTool   `json:"tools"`
-				KnowledgebaseTools []agenteditor.AgentKBTool `json:"knowledgebaseTools"`
-				Model              *agenteditor.DocRef       `json:"model"`
-				Entity             *agenteditor.DocRef       `json:"entity"`
-				MaxTokens          *int                      `json:"maxTokens"`
-				ToolChoice         string                    `json:"toolChoice"`
-				Temperature        *float64                  `json:"temperature"`
-				TopP               *float64                  `json:"topP"`
+				Description        string                     `json:"description"`
+				SystemPrompt       string                     `json:"systemPrompt"`
+				UserPrompt         string                     `json:"userPrompt"`
+				UsageType          string                     `json:"usageType"`
+				Variables          []agenteditor.AgentVar     `json:"variables"`
+				Tools              []agenteditor.AgentTool    `json:"tools"`
+				KnowledgebaseTools []agenteditor.AgentKBTool  `json:"knowledgebaseTools"`
+				Model              *agenteditor.DocRef        `json:"model"`
+				Entity             *agenteditor.DocRef        `json:"entity"`
+				MaxTokens          *int                       `json:"maxTokens"`
+				ToolChoice         string                     `json:"toolChoice"`
+				Temperature        *float64                   `json:"temperature"`
+				TopP               *float64                   `json:"topP"`
+				EnableBackend      *bool                      `json:"enableBackendStreaming"`
+				EnableUI           *bool                      `json:"enableUIStreaming"`
+				SelectedModel      *agenteditor.SelectedModel `json:"selectedModel"`
 			}
 			if err := json.Unmarshal([]byte(u.wrap.Contents), &p); err != nil {
 				return nil, fmt.Errorf("unmarshal Agent Contents: %w", err)
@@ -243,6 +305,9 @@ func (b *Backend) ListAgentEditorAgents() ([]*agenteditor.Agent, error) {
 			a.ToolChoice = p.ToolChoice
 			a.Temperature = p.Temperature
 			a.TopP = p.TopP
+			a.EnableBackendStreaming = p.EnableBackend
+			a.EnableUIStreaming = p.EnableUI
+			a.SelectedModel = p.SelectedModel
 		}
 		out = append(out, a)
 	}

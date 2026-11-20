@@ -540,9 +540,31 @@ func dataSourceExpr(ctx *ExecContext, ds *rawDataSource) string {
 		if ds.Reference == "" {
 			return ""
 		}
-		return associationDataSourceExpr(ds)
+		return associationDataSourceExpr(withSpecialisedDestination(ctx, ds))
 	}
 	return ""
+}
+
+// withSpecialisedDestination returns ds with its single hop spelled
+// `Assoc/Destination` when the stored destination is neither end of the
+// association — a specialisation of the end, which re-deriving from the
+// association alone loses. Measured on TestApp's
+// WorkflowCommons.ManageTaskAssignments (11.14): `TaskAssignmentHelper_User`
+// stored with DestinationEntity Administration.Account was described as the
+// bare association, rebuilt to System.User, and the labels bound to Account's
+// FullName became CE1613 (ako/mxcli#2055). A hop that arrives at an end keeps
+// its short spelling.
+func withSpecialisedDestination(ctx *ExecContext, ds *rawDataSource) *rawDataSource {
+	if ds.Destination == "" || strings.Contains(ds.Reference, "/") || ctx == nil || ctx.Backend == nil {
+		return ds
+	}
+	ends, ok := projectAssociationEnds(ctx)[ds.Reference]
+	if !ok || ends[0] == "" || ends[1] == "" || ds.Destination == ends[0] || ds.Destination == ends[1] {
+		return ds
+	}
+	cp := *ds
+	cp.Reference = ds.Reference + "/" + ds.Destination
+	return &cp
 }
 
 // dataSourceProp renders the whole `DataSource: …` property, or "" when the

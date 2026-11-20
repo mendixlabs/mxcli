@@ -78,12 +78,12 @@ failures need reading differently.
 
 - **`build-and-test`:** reproduce with `make ci-local`.
 - **`integration (<suite>)`:** reproduce with `make test-integration-<suite>`.
-- **`tunnel-seam-cross-platform (macos-latest | windows-latest)`:** the one
-  known runner flake. The hosted macOS queue sometimes cancels the job before
-  it gets a runner (the job shows runner id 0 and no step ran). That is a job
-  that died before any test body ran: re-run the failed jobs **once**. A test
-  failure in this job is real: it runs the tunnel seam's own tests on that
-  platform (ADR-0009).
+- **`tunnel-seam-cross-platform (windows-latest)`:** runs the tunnel seam's
+  own tests on Windows (ADR-0009), so a failure is real. The macOS leg runs
+  only in the nightly (`tunnel-seam-macos`): its hosted queue often never
+  delivers a runner (runner id 0, no step ran, cancelled after ~15 min). If
+  that job is red there with no step run, re-run it once; it is no PR's
+  concern.
 - **`AI PR Review`** is always green: it posts a comment, it does not gate.
 
 ## Conflicts this repo keeps hitting

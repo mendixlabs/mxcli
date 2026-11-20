@@ -17,15 +17,15 @@ description: "Nanoflow syntax in MDL — shared with microflows, but client-side
 | 118-141 | Nanoflow Structure |
 | 142-150 | Naming Convention |
 | 151-219 | Supported Activities |
-| 220-486 | Real-World Patterns |
-| 487-557 | NanoflowCommons JavaScript Actions Reference |
-| 558-596 | Disallowed Activities |
-| 597-600 | Return Type Restrictions |
-| 601-645 | Error Handling in Nanoflows |
-| 646-653 | Security (GRANT/REVOKE) |
-| 654-666 | Management Commands |
-| 667-677 | Common Mistakes |
-| 678-692 | Validation Checklist |
+| 220-489 | Real-World Patterns |
+| 490-560 | NanoflowCommons JavaScript Actions Reference |
+| 561-599 | Disallowed Activities |
+| 600-603 | Return Type Restrictions |
+| 604-648 | Error Handling in Nanoflows |
+| 649-656 | Security (GRANT/REVOKE) |
+| 657-669 | Management Commands |
+| 670-680 | Common Mistakes |
+| 681-695 | Validation Checklist |
 
 <!-- /skill-index -->
 # Mendix Nanoflow Skill
@@ -170,7 +170,7 @@ $JsResult = CALL JAVASCRIPT ACTION NanoflowCommons.SignIn (userName = $Name, pas
 ```mdl
 SHOW PAGE Sales.CartDetail (Cart = $Cart);
 CLOSE PAGE;
-SHOW MESSAGE WARNING 'Connection unavailable. Working offline.';
+SHOW MESSAGE 'Connection unavailable. Working offline.' TYPE Warning;
 VALIDATION FEEDBACK $Item/Quantity MESSAGE 'Quantity must be at least 1';
 ```
 
@@ -279,6 +279,7 @@ END;
 Wrap a slow server call with progress indicators.
 
 ```mdl
+mdl 1;
 /**
  * Shows progress, calls the server, hides progress.
  * @param $Order The order to submit
@@ -292,7 +293,7 @@ BEGIN
   $Result = CALL MICROFLOW Sales.ACT_SubmitOrder (Order = $Order);
   CALL JAVASCRIPT ACTION NanoflowCommons.HideProgress ();
   IF $Result THEN
-    SHOW MESSAGE SUCCESS 'Order submitted successfully.';
+    SHOW MESSAGE 'Order submitted successfully.' TYPE Information;
   END IF;
 END;
 ```
@@ -345,9 +346,9 @@ BEGIN
   IF $StatusCode = 200 THEN
     SHOW PAGE Home.HomePage ();
   ELSE IF $StatusCode = 401 THEN
-    SHOW MESSAGE ERROR 'Incorrect username or password.';
+    SHOW MESSAGE 'Incorrect username or password.' TYPE Error;
   ELSE
-    SHOW MESSAGE WARNING 'Could not connect to server (status: ' + toString($StatusCode) + ')';
+    SHOW MESSAGE 'Could not connect to server (status: {1})' TYPE Warning WITH ({1} = toString($StatusCode));
   END IF;
 END;
 ```
@@ -357,6 +358,7 @@ END;
 Common in field-service and factory-management apps where offline is normal.
 
 ```mdl
+mdl 1;
 /**
  * Submits inspection results, warns user if offline.
  * @param $Inspection The inspection to submit
@@ -368,7 +370,7 @@ FOLDER 'Inspections'
 BEGIN
   $IsOnline = CALL JAVASCRIPT ACTION NanoflowCommons.IsConnectedToServer ();
   IF NOT ($IsOnline) THEN
-    SHOW MESSAGE WARNING 'You are offline. Changes will sync when reconnected.';
+    SHOW MESSAGE 'You are offline. Changes will sync when reconnected.' TYPE Warning;
     COMMIT $Inspection;
     RETURN;
   END IF;
@@ -463,6 +465,7 @@ END;
 ### Pattern 10: Device Communication (Field Apps)
 
 ```mdl
+mdl 1;
 /**
  * Lets the user call the on-site contact directly.
  * @param $Contact The site contact to call
@@ -473,7 +476,7 @@ CREATE OR MODIFY NANOFLOW Factory.NAV_CallContact (
 FOLDER 'Communication'
 BEGIN
   IF $Contact/Phone = '' THEN
-    SHOW MESSAGE WARNING 'No phone number on record for ' + $Contact/Name;
+    SHOW MESSAGE 'No phone number on record for {1}' TYPE Warning WITH ({1} = $Contact/Name);
     RETURN;
   END IF;
   CALL JAVASCRIPT ACTION NanoflowCommons.CallPhoneNumber (
@@ -610,7 +613,7 @@ $Location = CALL JAVASCRIPT ACTION NanoflowCommons.GetCurrentLocation (
 ) ON ERROR CONTINUE;
 
 IF $Location = empty THEN
-  SHOW MESSAGE WARNING 'Could not get your location.';
+  SHOW MESSAGE 'Could not get your location.' TYPE Warning;
   RETURN;
 END IF;
 ```

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/mendixlabs/mxcli/modelsdk/element"
 	genDm "github.com/mendixlabs/mxcli/modelsdk/gen/domainmodels"
@@ -27,8 +28,14 @@ import (
 // faithful member counts); full attribute-type / association-detail fidelity
 // (DESCRIBE level) is a later phase.
 
+// DomainModelListings is how many times this backend has listed and converted
+// every domain model of the project. A statement that makes one per lookup
+// costs the project once per lookup (ako/mxcli#2160). For tests.
+func (b *Backend) DomainModelListings() int64 { return atomic.LoadInt64(&b.domainModelListings) }
+
 // ListDomainModels reads every domain model through the codec engine.
 func (b *Backend) ListDomainModels() ([]*domainmodel.DomainModel, error) {
+	atomic.AddInt64(&b.domainModelListings, 1)
 	units, err := listUnits[*genDm.DomainModel](b)
 	if err != nil {
 		return nil, err
@@ -40,7 +47,7 @@ func (b *Backend) ListDomainModels() ([]*domainmodel.DomainModel, error) {
 	b.populateViewEntityOql(out)
 	// The System module is virtual (not stored in the project); inject its domain
 	// model so platform entities (System.WorkflowUserTask, User, …) resolve.
-	out = append(out, buildSystemDomainModel())
+	out = append(out, buildSystemDomainModel(b.systemVersionAtLeast()))
 	b.resolveInheritedPersistability(b.persistabilityIndexOf(units), out...)
 	return out, nil
 }
@@ -281,7 +288,7 @@ func (b *Backend) GetDomainModel(moduleID model.ID) (*domainmodel.DomainModel, e
 	// The System module is virtual — its domain model is not stored in the project,
 	// so serve the injected one (matching ListDomainModels) so DESCRIBE System.* and
 	// any lookup of a platform entity's domain model resolves instead of erroring.
-	if sys := buildSystemDomainModel(); sys.ContainerID == moduleID {
+	if sys := buildSystemDomainModel(b.systemVersionAtLeast()); sys.ContainerID == moduleID {
 		b.resolveInheritedPersistability(b.lazyPersistabilityIndex("", nil), sys)
 		return sys, nil
 	}
@@ -701,9 +708,10 @@ func odataKeyFromGen(key element.Element) []*domainmodel.RemoteKeyPart {
 			continue
 		}
 		kp := &domainmodel.RemoteKeyPart{
-			Name:       p.EntityKeyPartName(),
-			RemoteName: p.Name(),
-			RemoteType: p.RemoteType(),
+			Name:          p.EntityKeyPartName(),
+			RemoteName:    p.Name(),
+			RemoteType:    p.RemoteType(),
+			NotFilterable: !storedKeyPartFilterable(p),
 		}
 		if t := p.Type(); t != nil {
 			kp.Type = attributeTypeFromGen(t)
@@ -711,6 +719,18 @@ func odataKeyFromGen(key element.Element) []*domainmodel.RemoteKeyPart {
 		parts = append(parts, kp)
 	}
 	return parts
+}
+
+// storedKeyPartFilterable reads a key part's Filterable. A document that does
+// not store it is read as filterable, the value every earlier mxcli wrote: reading
+// the absent property as false would mark the key not filterable on the next write.
+func storedKeyPartFilterable(p *genRest.ODataKeyPart) bool {
+	if raw := p.Raw(); raw != nil {
+		if _, err := raw.LookupErr("Filterable"); err != nil {
+			return true
+		}
+	}
+	return p.Filterable()
 }
 
 // storedLocalizeDate reads DateTimeAttributeType.LocalizeDate. An absent property

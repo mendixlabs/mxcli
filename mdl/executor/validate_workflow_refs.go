@@ -27,13 +27,16 @@ func validateWorkflowParameterMappings(ctx *ExecContext, s *ast.CreateWorkflowSt
 	if err != nil {
 		return nil
 	}
-	mfs, err := ctx.Backend.ListMicroflows()
+	mfs, err := projectMicroflows(ctx)
 	if err != nil {
 		return nil
 	}
 	paramsByMF := make(map[string][]*microflows.MicroflowParameter, len(mfs))
-	for _, mf := range mfs {
-		paramsByMF[h.GetQualifiedName(mf.ContainerID, mf.Name)] = mf.Parameters
+	for _, mf := range liveFirst(mfs, microflowExcluded) {
+		key := h.GetQualifiedName(mf.ContainerID, mf.Name)
+		if _, seen := paramsByMF[key]; !seen { // live before an excluded twin (#1928)
+			paramsByMF[key] = mf.Parameters
+		}
 	}
 	contextEntity := s.ParameterEntity.String()
 

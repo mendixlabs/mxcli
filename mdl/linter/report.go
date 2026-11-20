@@ -22,6 +22,10 @@ type Report struct {
 	// Modules is the --modules selection the report was scored over; empty
 	// for a whole-project report.
 	Modules []string `json:"modules,omitempty"`
+	// Accepted counts the findings decisions in the project brain accept.
+	// They are not scored and not in Summary: an accepted finding is a
+	// decision, not an open problem (ako/mxcli#2304).
+	Accepted int `json:"accepted,omitempty"`
 }
 
 // CategoryScore tracks the score for a lint category.
@@ -58,6 +62,7 @@ var categoryMapping = map[string]string{
 	"SEC010":  "Security",
 	"SEC011":  "Security",
 	"SEC012":  "Security",
+	"SEC013":  "Security",
 	"CONV006": "Security",
 	"CONV007": "Security",
 	"CONV008": "Security",
@@ -206,6 +211,11 @@ func BuildReport(projectName, date string, all []Violation) *Report {
 
 	return report
 }
+
+// CategoryOf is the report category a rule scores under ("Security",
+// "Quality", …). Exported so `report security` groups exactly the rules the
+// scored report counts as security.
+func CategoryOf(ruleID string) string { return resolveCategory(ruleID) }
 
 func resolveCategory(ruleID string) string {
 	if cat, ok := categoryMapping[ruleID]; ok {

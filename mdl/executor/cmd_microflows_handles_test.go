@@ -167,10 +167,9 @@ func TestDescribeMicroflowWithHandles_Statement(t *testing.T) {
 	}
 }
 
-// Describe prints an if whose then-branch is empty with its condition negated
-// and the branches swapped. A target written from that output must still find
-// the split, and so must one written from the stored condition.
-func TestMicroflowTargets_NegatedIfMatchesBothForms(t *testing.T) {
+// An if whose then-branch is empty is printed as stored (ako/mxcli#1963), so
+// the stored condition is both the printed form and the handle.
+func TestMicroflowTargets_EmptyThenIfIsAddressedAsStored(t *testing.T) {
 	mf := handlesFixture()
 	// Swap the branches: true now goes straight to the merge.
 	for _, f := range mf.ObjectCollection.Flows {
@@ -184,11 +183,11 @@ func TestMicroflowTargets_NegatedIfMatchesBothForms(t *testing.T) {
 	}
 	ctx := &ExecContext{}
 	got := strings.Join(formatMicroflowActivities(ctx, mf, nil, nil), "\n")
-	if !strings.Contains(got, "if not($N > 1) then") {
-		t.Fatalf("fixture should describe the split negated:\n%s", got)
+	if !strings.Contains(got, "if $N > 1 then") || strings.Contains(got, "not(") {
+		t.Fatalf("fixture should describe the split as stored:\n%s", got)
 	}
 	cands, _, _, _ := microflowTargets(ctx, mf, nil, nil)
-	for _, target := range []string{"if not($N > 1) then", "if $N > 1 then", "if * then"} {
+	for _, target := range []string{"if $N > 1 then", "if * then"} {
 		c, err := mfmutator.ResolveText(cands, target)
 		if err != nil {
 			t.Errorf("%s: %v", target, err)
@@ -203,7 +202,7 @@ func TestMicroflowTargets_NegatedIfMatchesBothForms(t *testing.T) {
 		if c.ID == "split" {
 			c.Caption = ""
 			cands[i] = c
-			if h := mfmutator.Handle(cands, i); h != "if not($N > 1) then" {
+			if h := mfmutator.Handle(cands, i); h != "if $N > 1 then" {
 				t.Errorf("handle %q, want the printed form", h)
 			}
 		}

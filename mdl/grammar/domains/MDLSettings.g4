@@ -102,6 +102,7 @@ settingsValue
     | NUMBER_LITERAL
     | booleanLiteral
     | qualifiedName
+    | LPAREN (settingsValue (COMMA settingsValue)*)? RPAREN   // a list: ThemeModuleOrder: ('Atlas_Core', 'Brand')
     ;
 
 // =============================================================================
@@ -663,7 +664,7 @@ keyword
     | STORE | STRUCTURE | STRUCTURES | VIEW
 
     // Agent editor
-    | AGENT | AGENTS | KNOWLEDGE | BASES | CONSUMED | MCP | TOOL
+    | AGENT | AGENTS | KNOWLEDGE | BASES | CONSUMED | CONSUME | MCP | TOOL
 
     // Workflow user task settings — words, so still usable as names
     | DECIDE | CONSENSUS | MAJORITY | MORE_KW | THAN | HALF | MOST | CHOSEN | THRESHOLD
@@ -679,6 +680,7 @@ keyword
     | MERGE
     | NORMALIZED
     | HANDLES
+    | INCLUDE
 
     // Query / SQL
     | SELECT | FROM | WHERE | JOIN | LEFT | RIGHT | INNER | OUTER | FULL | CROSS
@@ -821,7 +823,7 @@ keyword
     | ANCHOR | TOP | BOTTOM
 
     // Fragment / ALTER PAGE
-    | AFTER | BEFORE | DEFINE | FRAGMENT | FRAGMENTS | SLOT
+    | AFTER | BEFORE | DEFINE | FRAGMENT | FRAGMENTS | SLOT | WRAP
 
     // General-purpose words (only tokens not already listed above)
     | ACTION | BLOCKING | BOTH | CELL | CONTEXT | DATA | FORMAT | ITEM | LIST

@@ -31,6 +31,21 @@ func unitFileReads(t *testing.T, e *Executor) int64 {
 	return b.UnitFileReads()
 }
 
+// unitReadsNotFromMemory is every unit read the backend did not serve from
+// its in-memory cache: the files it opened and the reads its persisted store
+// answered. A run that ends inside a cache scope flushes what it read to that
+// store, so afterwards an uncached read of the same unit is a store read, not
+// a file read — and counting files alone would call a pass that reads each
+// flow nine times a pass that reads almost nothing.
+func unitReadsNotFromMemory(t *testing.T, e *Executor) int64 {
+	t.Helper()
+	b, ok := e.Backend().(interface{ UnitStoreHits() int64 })
+	if !ok {
+		t.Fatalf("backend %T does not count its store reads", e.Backend())
+	}
+	return unitFileReads(t, e) + b.UnitStoreHits()
+}
+
 // redeclareChain is the issue's generator: n microflows, each calling the one
 // before it.
 func redeclareChain(n int, verb string) string {
@@ -75,9 +90,12 @@ func TestCheckPasses_ReadEachUnitFileOnce(t *testing.T) {
 	// the unit index names flows without opening them (ako/mxcli#1791) it
 	// reads only flows it looks up, but each of them several times — 103
 	// reads for these 12 flows, against 12 with the cache.
-	before := unitFileReads(t, exec)
+	// Counted as reads not served from memory: the setup above ran as a
+	// script, which holds the cache and leaves what it read in the persisted
+	// store (ako/mxcli#2160).
+	before := unitReadsNotFromMemory(t, exec)
 	CheckFlowVerdicts(exec.newExecContext(context.Background()), prog)
-	if reads := unitFileReads(t, exec) - before; reads <= 2*n {
+	if reads := unitReadsNotFromMemory(t, exec) - before; reads <= 2*n {
 		t.Fatalf("control: the uncached verdict pass read %d files for %d flows; the bound below would prove nothing", reads, n)
 	}
 

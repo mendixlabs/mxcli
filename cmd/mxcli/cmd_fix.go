@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 
 	modelsdk "github.com/mendixlabs/mxcli"
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
@@ -111,9 +112,16 @@ func runFixTool(cmd *cobra.Command, subcommand, what string) error {
 	mendixVer, _ := reader.GetMendixVersion()
 	_ = reader.Disconnect()
 
-	mxPath, err := docker.ResolveMxForVersion(mxOverride, mendixVer)
-	if err != nil {
-		return fmt.Errorf("locate mx for Mendix %s: %w\nhint: run 'mxcli setup mxbuild -p %s'", mendixVer, err, mprPath)
+	var mxPath string
+	if mxOverride != "" || mendixVer == "" {
+		mxPath, err = docker.ResolveMxForVersion(mxOverride, mendixVer)
+		if err != nil {
+			return fmt.Errorf("locate mx for Mendix %s: %w\nhint: run 'mxcli setup mxbuild -p %s'", mendixVer, err, mprPath)
+		}
+	} else if mxPath, err = resolveFixMx("", mendixVer, runtime.GOOS, docker.LocalMxForVersion, func(v string) (string, error) {
+		return docker.ResolveMxForNewProject(v, out)
+	}); err != nil {
+		return err
 	}
 
 	fmt.Fprintf(out, "Updating %s in %s (Mendix %s)...\n", what, mprPath, mendixVer)
@@ -151,5 +159,39 @@ func reportFix(out io.Writer, what string, res *docker.HarvestResult) {
 	for _, r := range res.Removed {
 		fmt.Fprintf(out, "  Note: the tool removed a unit this did not remove: %s\n", r)
 	}
+	if n := len(res.LeftAsStored); n > 0 {
+		fmt.Fprintf(out, "  Left as stored: %d unit(s) the tool re-saved that hold no widget (re-encoded only):\n", n)
+		for _, u := range res.LeftAsStored {
+			fmt.Fprintf(out, "    %s\n", u)
+		}
+	}
 	fmt.Fprintln(out, "\n  Next: 'mxcli docker check -p <project.mpr>'")
+}
+
+// resolveFixMx finds the mx a fix tool runs. `mx update-widgets` and `mx
+// rename-design-properties` work on a project of their own version only and
+// refuse any other ("Project is in different Mendix version", exit 4), so the
+// version is a requirement here, not the preference docker.ResolveMxForVersion
+// takes it as: on macOS that fell back to an mx on PATH or another Studio Pro
+// and fix widgets failed (ako/mxcli#2321). An explicit override is used as
+// given; otherwise an exact-version local mx, then — on Linux, where the CDN's
+// mx runs — a download of that version; on macOS and Windows, a refusal that
+// names the version and how to provide it.
+func resolveFixMx(override, version, goos string, exact func(string) string, download func(string) (string, error)) (string, error) {
+	if override != "" {
+		return override, nil
+	}
+	if p := exact(version); p != "" {
+		return p, nil
+	}
+	if goos == "linux" && download != nil {
+		p, err := download(version)
+		if err != nil {
+			return "", fmt.Errorf("download mx %s, which this project's version needs: %w", version, err)
+		}
+		return p, nil
+	}
+	return "", fmt.Errorf("this project is Mendix %s, and no mx %s is installed: the fix tools run only on their own "+
+		"version (another refuses with \"Project is in different Mendix version\"). Install Studio Pro %s, or pass "+
+		"--mx with the mx of an MxBuild %s (in a Linux container, the one MxBuild ships)", version, version, version, version)
 }

@@ -61,7 +61,18 @@ type widgetStorageTyper interface {
 // that decides where a value gets written.
 func storedWidgetDesignPropsKey(mutator backend.PageMutator, widgetRef string) string {
 	typer, ok := mutator.(widgetStorageTyper)
-	if !ok || widgetRef == "" {
+	if !ok {
+		return ""
+	}
+	return designPropsKeyOfStored(typer, widgetRef)
+}
+
+// designPropsKeyOfStored is storedWidgetDesignPropsKey for a caller that already
+// holds the capability — the pageProbe a check pass opened (ako/mxcli#613). One
+// derivation, two entry points: ALTER STYLING's check and ALTER PAGE SET's
+// routing resolve a stored widget to the same theme group by construction.
+func designPropsKeyOfStored(typer widgetStorageTyper, widgetRef string) string {
+	if typer == nil || widgetRef == "" {
 		return ""
 	}
 	bsonType, widgetID := typer.WidgetStorageType(widgetRef)
@@ -85,7 +96,13 @@ type documentPlatformReporter interface {
 // or layout, the web ones otherwise (ako/mxcli#1679). A page is native when its
 // layout is.
 func documentTheme(ctx *ExecContext, mutator backend.PageMutator) *ThemeRegistry {
-	reg := ctx.GetThemeRegistry()
+	return documentThemeOf(ctx, ctx.GetThemeRegistry(), mutator)
+}
+
+// documentThemeOf is documentTheme for a registry the caller already holds and
+// a document opened as a pageProbe rather than a backend.PageMutator — ALTER
+// STYLING's stored-type check (ako/mxcli#613).
+func documentThemeOf(ctx *ExecContext, reg *ThemeRegistry, mutator any) *ThemeRegistry {
 	r, ok := mutator.(documentPlatformReporter)
 	if reg == nil || !ok {
 		return reg

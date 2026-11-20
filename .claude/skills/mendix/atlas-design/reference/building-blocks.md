@@ -262,7 +262,10 @@ more idiomatic form to mirror from a `describe building block`. Notes:
 - Design-property **keys are case-sensitive** — match the `describe` output exactly.
 - Compound properties (Spacing, Border) take a **nested list**:
   `['Spacing': ['margin-top': 'Large', 'margin-bottom': 'None']]`.
-- **Never** put inline `style:` on a `dynamictext` — it crashes MxBuild. Use `class:`
-  or wrap in a styled `container`. (`theme-styling`.)
+- A block's own stored inline styles (a `dynamictext` included) are placed as
+  stored. For your own changes prefer `class:` over inline `style:` (`theme-styling`).
+- A block's list view whose data source is not configured is placed unconfigured
+  (`exec` warns); `mx check` then reports CE0488 until you set one — bind it with
+  `use building block … (datasource: database from Module.Entity)`.
 
 ---

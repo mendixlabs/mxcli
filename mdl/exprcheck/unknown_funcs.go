@@ -2,7 +2,10 @@
 
 package exprcheck
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // FuncRef identifies a function call found in an expression whose name is not a
 // known Mendix built-in — a hallucinated or misspelled function (e.g. randomInt).
@@ -86,7 +89,14 @@ func walkCalls(e RobustExpr, fn func(*CallExpr)) {
 func nearestFunc(name string) string {
 	lower := strings.ToLower(name)
 	best, bestDist := "", 1<<30
+	// Sorted, so a tie (replace is one edit from replaceAll and from replaceFirst)
+	// gives the same suggestion every run rather than whichever the map yielded.
+	cands := make([]string, 0, len(funcTable))
 	for cand := range funcTable {
+		cands = append(cands, cand)
+	}
+	sort.Strings(cands)
+	for _, cand := range cands {
 		cl := strings.ToLower(cand)
 		// A prefix relationship is a strong signal (randomInt / random).
 		if strings.HasPrefix(lower, cl) || strings.HasPrefix(cl, lower) {
@@ -186,4 +196,26 @@ func SourceRejectedForIntegerTarget(src string, vars map[string]TypeKind) bool {
 		}
 	}
 	return false
+}
+
+// ToStringOfDecimal reports whether src is `toString(x)` with x provably a
+// Decimal: a Decimal-returning built-in such as minutesBetween(), Decimal
+// arithmetic, or a Decimal variable from vars. Mendix renders such a value with
+// its full fraction — 43 characters were seen at runtime for a minutesBetween —
+// so writing it to a short String attribute overflows (mendixlabs/mxcli#1515).
+// Unknown inference answers false.
+func ToStringOfDecimal(src string, vars map[string]TypeKind) bool {
+	if strings.TrimSpace(src) == "" {
+		return false
+	}
+	ctx := Context{}
+	if vars != nil {
+		ctx.Scope = mapScope(vars)
+	}
+	root, _ := (&parserImpl{}).Parse(src, ctx)
+	call, ok := unwrapParens(root).(*CallExpr)
+	if !ok || call.Name != "toString" || call.Qualified || len(call.Args) != 1 {
+		return false
+	}
+	return inferKind(call.Args[0], ctx) == KindDecimal
 }

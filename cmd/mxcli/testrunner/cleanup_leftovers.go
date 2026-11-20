@@ -95,6 +95,9 @@ func suiteTestFlowNames(suite *TestSuite) []string {
 	for _, tc := range suite.Tests {
 		names = append(names, testFlowName(tc))
 	}
+	if len(names) > 0 {
+		names = append(names, errorMessageFlow)
+	}
 	return names
 }
 

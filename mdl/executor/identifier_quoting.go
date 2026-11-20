@@ -48,6 +48,37 @@ func mdlQuote(ctx *ExecContext, s string) string {
 	return mdl0Quote(s)
 }
 
+// mdlDollarQuote writes s as a `$$ … $$` literal where one can hold it, and as
+// the single-quoted literal mdlQuote writes where it cannot: the lexer ends a
+// DOLLAR_STRING at the first `$$` it meets and has no escape, so a text
+// containing `$$` (a Teamcenter UID, ako/mxcli#1003) — or ending in `$`, whose
+// last `$` the closing delimiter would pair with — would end the literal early
+// and the rest would fail to lex. Every describer that emits a dollar-quoted
+// value at a position that also accepts a STRING_LITERAL goes through here.
+func mdlDollarQuote(ctx *ExecContext, s string) string {
+	if dollarQuotable(s) {
+		return "$$" + s + "$$"
+	}
+	return mdlQuote(ctx, s)
+}
+
+// mdlSourceBlock writes a block of source code (a Java or JavaScript action
+// body, its EXTRA CODE, a JSLT step) as `$$` on its own line, the code, and
+// `$$` on its own line — or, for code that holds `$$`, as mdlQuote's string
+// literal, which those positions accept as well (ako/mxcli#1003).
+func mdlSourceBlock(ctx *ExecContext, code string) string {
+	if dollarQuotable("\n" + code + "\n") {
+		return "$$\n" + code + "\n$$"
+	}
+	return mdlQuote(ctx, code)
+}
+
+// dollarQuotable reports whether `$$` + s + `$$` lexes as one DOLLAR_STRING
+// whose content is s.
+func dollarQuotable(s string) bool {
+	return !strings.Contains(s, "$$") && !strings.HasSuffix(s, "$")
+}
+
 // mdlIdent renders name as an MDL identifier suitable for DESCRIBE output,
 // double-quoting it when it would not lex as a bare IDENTIFIER — e.g. when it
 // collides with a reserved keyword ("List", "Column", "Template", …). This keeps

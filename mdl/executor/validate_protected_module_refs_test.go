@@ -77,6 +77,10 @@ func protectedModuleFixture(t *testing.T, settingsErr error) *ExecContext {
 		app.ID:   mkDomainModel(app.ID),
 	}
 	pgs := []*pages.Page{mkPage(addOn.ID, "Home_Page"), mkPage(open.ID, "P"), mkPage(app.ID, "Home_Web")}
+	// Readme is stored Hidden, Banner API: mxbuild refuses a call into either
+	// from another module (measured), so the stored level must not matter.
+	readme, banner := mkSnippet(addOn.ID, "Readme"), mkSnippet(addOn.ID, "Banner")
+	snips := []*pages.Snippet{readme, banner, mkSnippet(open.ID, "Sn")}
 	enum := func(mod *model.Module, name, level string) *model.Enumeration {
 		e := mkEnumeration(mod.ID, name, "A")
 		e.ExportLevel = level
@@ -100,6 +104,7 @@ func protectedModuleFixture(t *testing.T, settingsErr error) *ExecContext {
 		},
 		ListMicroflowsFunc:   func() ([]*microflows.Microflow, error) { return flows, nil },
 		ListPagesFunc:        func() ([]*pages.Page, error) { return pgs, nil },
+		ListSnippetsFunc:     func() ([]*pages.Snippet, error) { return snips, nil },
 		ListEnumerationsFunc: func() ([]*model.Enumeration, error) { return enums, nil },
 		GetDomainModelFunc:   func(id model.ID) (*domainmodel.DomainModel, error) { return dms[id], nil },
 		ListDomainModelsFunc: func() ([]*domainmodel.DomainModel, error) {
@@ -157,6 +162,27 @@ func TestValidateProtectedModuleRefs(t *testing.T) {
 			"create microflow MyFirstModule.TakesReq ($r: MyAddOn.Secret) begin end;",
 			[]string{"CE1406", "parameter 'r' is not allowed to use entity 'MyAddOn.Secret'"}},
 		{"parameter of usable entity", "create microflow MyFirstModule.TakesReq ($r: MyAddOn.Pub) begin end;", nil},
+
+		// --- CE1406, a snippet call from an app module (ako/mxcli#1998
+		// follow-up). Measured on 11.12.6: refused from a page and from a
+		// snippet whether the snippet stores Hidden or API; accepted from inside
+		// the add-on and with the module set back to App. ---
+		{"page calls add-on snippet",
+			"create page MyFirstModule.UsesReadme (title: 'T', layout: Atlas_Core.Atlas_Default) { snippetcall sc1 (Snippet: MyAddOn.Readme) };",
+			[]string{"CE1406", "snippet call 'sc1' is not allowed to use snippet 'MyAddOn.Readme'", "app modules cannot reference hidden elements"}},
+		{"page calls add-on snippet stored with export level api",
+			"create page MyFirstModule.UsesBanner (title: 'T', layout: Atlas_Core.Atlas_Default) { snippetcall b1 (Snippet: MyAddOn.Banner) };",
+			[]string{"CE1406", "snippet 'MyAddOn.Banner'"}},
+		{"snippet calls add-on snippet, nested in a container",
+			"create snippet MyFirstModule.Outer { container c1 { snippetcall inner1 (Snippet: MyAddOn.Readme) } };",
+			[]string{"CE1406", "snippet call 'inner1' is not allowed to use snippet 'MyAddOn.Readme'"}},
+		{"page calls ordinary module snippet",
+			"create page MyFirstModule.UsesOpen (title: 'T', layout: Atlas_Core.Atlas_Default) { snippetcall sc1 (Snippet: Open.Sn) };", nil},
+		{"add-on snippet calls its own module's snippet",
+			"create snippet MyAddOn.Own { snippetcall own1 (Snippet: MyAddOn.Readme) };", nil},
+		{"script snippet in the add-on",
+			"create snippet MyAddOn.Fresh { dynamictext t1 (Content: 'x') };\ncreate page MyFirstModule.UsesFresh (title: 'T', layout: Atlas_Core.Atlas_Default) { snippetcall f1 (Snippet: MyAddOn.Fresh) };",
+			[]string{"statement 2", "CE1406", "snippet 'MyAddOn.Fresh'"}},
 
 		// --- CE5400, a Usable flow in the add-on exposing a Hidden entity ---
 		{"api microflow, hidden entity parameter (the reported shape)",

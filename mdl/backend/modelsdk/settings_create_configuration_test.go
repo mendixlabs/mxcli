@@ -3,10 +3,10 @@
 package modelsdkbackend
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/model"
 )
 
@@ -17,7 +17,7 @@ import (
 // 11.6 and 11.13 fixtures have no such part, which is why it went unnoticed.
 func TestUpdateProjectSettings_CreateConfigurationOn1114(t *testing.T) {
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../../testdata/testapp-views")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../../testdata/testapp-views"); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	proj := filepath.Join(dst, "TestApp.mpr")

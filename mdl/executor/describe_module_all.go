@@ -224,6 +224,10 @@ var moduleDocKindsAfterDomainModel = []moduleDocKind{
 		l, err := ctx.Backend.ListAgentEditorConsumedMCPServices()
 		return docs(l, err, func(x *agenteditor.ConsumedMCPService) moduleDoc { return moduleDoc{x.ID, x.ContainerID, x.Name} })
 	}},
+	{ast.DescribePublishedMCPService, func(ctx *ExecContext) ([]moduleDoc, error) {
+		l, err := ctx.Backend.ListAgentEditorPublishedMCPServices()
+		return docs(l, err, func(x *agenteditor.PublishedMCPService) moduleDoc { return moduleDoc{x.ID, x.ContainerID, x.Name} })
+	}},
 	{ast.DescribeAgent, func(ctx *ExecContext) ([]moduleDoc, error) {
 		l, err := ctx.Backend.ListAgentEditorAgents()
 		return docs(l, err, func(x *agenteditor.Agent) moduleDoc { return moduleDoc{x.ID, x.ContainerID, x.Name} })

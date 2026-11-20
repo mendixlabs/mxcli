@@ -191,7 +191,11 @@ func toEntry(area, name string, f Feature) (FeatureEntry, error) {
 }
 
 // dedup removes duplicate entries (same area+name+min_version), keeping the
-// entry with the most information (longest MDL or notes).
+// entry with the most information: a stated max_version first — the file that
+// records a removal knows more than one written before it (mendix-10.yaml and
+// mendix-11.yaml both list message_definition_collection from 10.0.0, and only
+// the 11 file closes it at 11.14.99, ako/mxcli#2140) — then the longest MDL or
+// notes.
 func dedup(entries []FeatureEntry) []FeatureEntry {
 	seen := make(map[string]int) // min_version string -> index in result
 	var result []FeatureEntry
@@ -200,6 +204,12 @@ func dedup(entries []FeatureEntry) []FeatureEntry {
 		if idx, ok := seen[key]; ok {
 			// Keep the entry with more detail.
 			existing := result[idx]
+			if (e.MaxVersion != nil) != (existing.MaxVersion != nil) {
+				if e.MaxVersion != nil {
+					result[idx] = e
+				}
+				continue
+			}
 			if len(e.MDL) > len(existing.MDL) || len(e.Notes) > len(existing.Notes) {
 				result[idx] = e
 			}
@@ -228,6 +238,34 @@ func (r *Registry) IsAvailable(area, name string, projectVersion SemVer) bool {
 		}
 	}
 	return false
+}
+
+// Lookup returns the feature area/name, or false when the registry has none:
+// the entry with the lowest MinVersion when the YAML files disagree, since that
+// is the version below which none of it exists. `mxcli syntax` reads its
+// "Requires Mendix" lines from here (ako/mxcli#1367).
+func (r *Registry) Lookup(area, name string) (FeatureEntry, bool) {
+	entries, ok := r.index[area+"."+name]
+	if !ok || len(entries) == 0 {
+		return FeatureEntry{}, false
+	}
+	best := entries[0]
+	for _, e := range entries[1:] {
+		if best.MinVersion.AtLeast(e.MinVersion) && best.MinVersion != e.MinVersion {
+			best = e
+		}
+	}
+	return best, true
+}
+
+// Keys returns every feature as "area/name", sorted.
+func (r *Registry) Keys() []string {
+	out := make([]string, 0, len(r.index))
+	for k := range r.index {
+		out = append(out, strings.Replace(k, ".", "/", 1))
+	}
+	sort.Strings(out)
+	return out
 }
 
 // FeaturesForVersion returns all features and their availability status for a

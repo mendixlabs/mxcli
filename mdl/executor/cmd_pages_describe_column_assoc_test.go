@@ -34,7 +34,7 @@ func TestColumnAttributeFromRef(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := columnAttributeFromRef(tc.ref); got != tc.want {
+			if got := columnAttributeFromRef(nil, tc.ref); got != tc.want {
 				t.Errorf("columnAttributeFromRef = %q, want %q", got, tc.want)
 			}
 		})

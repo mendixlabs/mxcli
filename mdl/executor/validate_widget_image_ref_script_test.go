@@ -40,10 +40,12 @@ func TestWidgetRefs_ImageInScriptCreatedCollectionIsResolved(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatalf("an image in a collection the script creates was refused: %v", errs)
 	}
-	// Mendix resolves names case-insensitively; the script's spelling must too.
+	// Mendix resolves an image reference case-sensitively (a case difference
+	// is CE1613, measured on 11.13.0), so a case difference against the
+	// script's own spelling is refused, naming that spelling.
 	errs = validateWidgetReferences(ctx, imageRefWidget("staticimage", "Image", "moda.ICONS.Pix"), sc)
-	if len(errs) != 0 {
-		t.Fatalf("a case difference against a script-created image was refused: %v", errs)
+	if len(errs) != 1 || !strings.Contains(errs[0], "ModA.Icons") || !strings.Contains(errs[0], "case-sensitive") {
+		t.Fatalf("a case difference against a script-created image: want one refusal naming ModA.Icons, got %v", errs)
 	}
 	// The project's own collections still resolve alongside the script's.
 	errs = validateWidgetReferences(ctx, imageRefWidget("image", "Image", "MyFirstModule.Images.gallery"), sc)

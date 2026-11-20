@@ -1,0 +1,39 @@
+-- ============================================================================
+-- Bug test: ako/mxcli#834 — a data source's first association does not touch
+-- the context entity
+-- ============================================================================
+--
+-- `$currentObject/Bug834b.Flag_Account/Bug834b.Flag` inside a data view over an
+-- Order: Flag_Account joins Flag and Account, not Order. The builder checked
+-- only that the association exists and that Flag is one of its ends, so exec
+-- wrote an EntityRefStep that cannot be followed from an Order.
+--
+-- This script parses (make check-mdl). Against a project it must be refused:
+--   mxcli check this.mdl -p app.mpr --references
+--     -> listview flags data source $currentObject/Bug834b.Flag_Account/…:
+--        Bug834b.Flag_Account joins Bug834b.Flag and Bug834b.Account, and does
+--        not start at Bug834b.Order … [MDL-ASSOCDS03]
+--   mxcli exec this.mdl -p app.mpr
+--     -> association "Bug834b.Flag_Account" in datasource … does not start at
+--        Bug834b.Order; nothing is written.
+-- Replace the path with $currentObject/Bug834b.Order_Account/Bug834b.Account/
+-- Bug834b.Flag_Account/Bug834b.Flag (the control) and both pass.
+-- ============================================================================
+
+mdl 1;
+
+create module Bug834b;
+
+create persistent entity Bug834b.Order (Code: String(20));
+create persistent entity Bug834b.Account (Name: String(50));
+create persistent entity Bug834b.Flag (Label: String(50));
+create association Bug834b.Order_Account from Bug834b.Order to Bug834b.Account;
+create association Bug834b.Flag_Account from Bug834b.Flag to Bug834b.Account;
+
+create page Bug834b.P1 (Title: 'P', Layout: Atlas_Core.Atlas_Default, Params: ($Order: Bug834b.Order)) {
+  dataview dv (DataSource: $Order) {
+    listview flags (DataSource: $currentObject/Bug834b.Flag_Account/Bug834b.Flag) {
+      dynamictext x (Content: '{1}', ContentParams: ({1} = Label))
+    }
+  }
+};

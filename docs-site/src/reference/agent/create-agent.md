@@ -6,6 +6,7 @@
 CREATE [ OR MODIFY ] AGENT module.Name (
     UsageType: { Task | Conversational },
     model: module.ModelName,
+    SelectedModel: 'model id',
     SystemPrompt: 'prompt' | $$ multi-line prompt $$,
     UserPrompt: 'prompt' | $$ multi-line prompt $$
     [, description: 'description' ]
@@ -37,6 +38,10 @@ Requires Mendix 11.9+.
 
 Creates an agent document in the Mendix Agent Editor. An agent defines how an AI assistant behaves: which model it uses, what instructions it follows, and which tools and knowledge bases it can access.
 
+### Lengths Agent Commons stores
+
+At startup Agent Editor copies each agent into Agent Commons entities with fixed lengths (measured in Agent Editor 2.7.0): the agent's name (the document name, without the module) into `AgentCommons.Agent.Title` (50 characters), `Description` into `AgentCommons.Agent.Description` (200), and a tool's name, `DisplayTitle` and `Description` into `AgentCommons.Tool.Name` (200), `DisplayTitle` (200) and `Description` (4096). A longer value fails the import, and the previous version of the agent stays in use; the build is green. `mxcli check` warns on it (MDL-AGENT04).
+
 ### Usage Types
 
 | Value | Description |
@@ -63,13 +68,13 @@ The optional body block (inside `{ }`) attaches tools and knowledge bases to the
 
 - **MCP SERVICE** — attaches a consumed MCP service by its qualified name
 - **KNOWLEDGE BASE** — attaches a knowledge base with retrieval settings
-- **TOOL** — attaches a tool
+- **TOOL** — attaches a microflow tool; `Document: Module.Microflow` is the microflow it runs
 
 Each attachment is a child of the agent, so its properties are in `( )`. The older brace form (`TOOL Name { … }`) still parses but warns (MDL-DEPR071); `mxcli fmt --upgrade` rewrites it.
 
 ### OR MODIFY
 
-If `OR MODIFY` is specified and the agent already exists, its properties and body blocks are updated in place. The document UUID is preserved.
+If `OR MODIFY` is specified and the agent already exists, its properties and body blocks are updated in place. The document UUID is preserved, and so is each tool's and knowledge base's identity: a tool keeps its stored entry when its type and name match (an MCP service when the service matches). Settings that MDL cannot spell keep their stored values, both on `OR MODIFY` and on `ALTER AGENT`: a tool's user approval and display title and description, the agent's streaming switches and selected model, and a knowledge base tool's minimum similarity.
 
 ## Parameters
 
@@ -81,6 +86,12 @@ If `OR MODIFY` is specified and the agent already exists, its properties and bod
 
 `model: module.ModelName`
 :   Qualified reference to the model document the agent uses.
+
+`SelectedModel`
+:   The id of the model the agent uses, one the Model document's resource offers (e.g. `'eu.anthropic.claude-sonnet-5'`). Required in practice from Agent Editor 2.2: its import refuses an agent without one ("Model with name  is referenced but could not be found for the Agent"), and that refusal stops the import of every agent document at startup. Studio Pro reports an agent with a `Model` and no selected model as AE018 ("Model version is required for an agent"), so for such an agent MDL-AGENT02 is an error and `exec` refuses it: `mxcli check` on a `create agent` without it, `check --references` and `exec` on a `create or modify` that leaves the agent without one. With no `Model` it is a warning. `mxcli lint` reports a stored agent without one (MPR014). Only the id is read at runtime; it is matched against `GenAICommons.DeployedModel.Model`. To list the ids, with the app running: `mxcli oql "select Model from MxGenAIConnector.MxCloudDeployedModel"` (reported to work in ako/mxcli#2031). `''` clears it.
+
+`SelectedModelName`
+:   Optional. The display name Studio Pro stores next to the id (e.g. `'Anthropic Claude Sonnet 5'`); nothing at runtime reads it. Defaults to the id, or keeps the stored name while the id is unchanged.
 
 `SystemPrompt`
 :   Instructions for the AI model's behavior and persona.
@@ -103,6 +114,27 @@ If `OR MODIFY` is specified and the agent already exists, its properties and bod
 `ToolChoice`
 :   Optional. `Auto` (let the model decide), `None` (no tools), or `Required` (always use a tool).
 
+`EnableBackendStreaming`, `EnableUIStreaming`
+:   Optional, `true` or `false`. Response streaming for the agent (Agent Editor 2.2.1+). Streaming is set on the agent, not on its model. The Studio Pro playground does not show it; it works at runtime with a chat agent in Conversational UI.
+
+### Tool and MCP service settings
+
+`UserAccessApproval`
+:   Optional. `HiddenForUser`: the call runs without being shown. `VisibleForUser`: the call is shown and runs. `UserConfirmationRequired`: the call is shown and waits for the user's approval. Agent Editor 2.2+.
+
+`DisplayTitle`, `DisplayDescription`
+:   Optional. The title and description shown to the user for the call. The model still sees the tool's name and `Description`.
+
+### Knowledge base settings
+
+`MinSimilarity`
+:   Optional. The least similarity, between 0 and 1, a chunk needs to be returned.
+
+`IsVisible`
+:   Optional, `true` or `false`. Whether the user sees the retrieval.
+
+On `OR MODIFY`, a setting the statement leaves out keeps its stored value.
+
 ## Examples
 
 ### Simple task agent
@@ -111,6 +143,7 @@ If `OR MODIFY` is specified and the agent already exists, its properties and bod
 CREATE AGENT MyModule."Summarizer" (
     UsageType: Task,
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     SystemPrompt: 'Summarize the given text in 3 sentences.',
     UserPrompt: 'Enter text to summarize.'
 );
@@ -123,11 +156,33 @@ CREATE AGENT MyModule."Summarizer" (
 CREATE AGENT MyModule."Translator" (
     UsageType: Task,
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     variables: ("Language": EntityAttribute),
     SystemPrompt: 'Translate the text into {{Language}}.',
     UserPrompt: 'Hello world'
 );
 
+```
+
+### Agent whose tool needs the user's approval
+
+```sql
+CREATE AGENT MyModule."Support" (
+    UsageType: Chat,
+    model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
+    EnableBackendStreaming: true,
+    SystemPrompt: 'Help the customer with their orders.'
+)
+{
+    TOOL CancelOrder (
+        Document: MyModule.Tool_CancelOrder,
+        Description: 'Cancel an order by its number',
+        UserAccessApproval: UserConfirmationRequired,
+        DisplayTitle: 'Cancel order'
+    )
+    KNOWLEDGE BASE Faq (Source: MyModule.FaqKB, MaxResults: 5, MinSimilarity: 0.3)
+};
 ```
 
 ### Agent with multi-line dollar-quoted prompt
@@ -136,6 +191,7 @@ CREATE AGENT MyModule."Translator" (
 CREATE AGENT MyModule."CodeReviewer" (
     UsageType: Task,
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     SystemPrompt: $$You are a code review assistant.
 
 Review the provided code for:
@@ -158,6 +214,7 @@ CREATE AGENT MyModule."ResearchAssistant" (
     UsageType: Conversational,
     description: 'Research assistant with web search and documentation',
     model: MyModule.GPT4Model,
+    SelectedModel: 'eu.anthropic.claude-sonnet-5',
     MaxTokens: 16384,
     ToolChoice: Auto,
     SystemPrompt: 'You are a research assistant. Use available tools.',

@@ -59,6 +59,16 @@ For one-off queries without the REPL:
 mxcli sql --driver postgres --dsn 'postgres://user:pass@localhost:5432/mydb' "SELECT * FROM users"
 ```
 
+The subcommand is **read-only by default**. A statement that is not a read
+(`INSERT`, `UPDATE`, `DELETE`, `MERGE`, DDL, procedure calls) is refused, and a
+read runs in a read-only transaction that is rolled back, so a write inside a
+read — a data-modifying `WITH` — fails instead of changing data. Pass `--write`
+to change the database; the output then reports the rows affected:
+
+```bash
+mxcli sql --alias mydb --write "DELETE FROM orders WHERE id = 42"
+```
+
 ## Related Pages
 
 - [SQL CONNECT](sql-connect.md) -- Connection syntax and driver details

@@ -61,6 +61,7 @@ var objectTypeToDescribeKind = map[string]ast.DescribeObjectType{
 	"AI_MODEL":                      ast.DescribeModel,
 	"KNOWLEDGE_BASE":                ast.DescribeKnowledgeBase,
 	"CONSUMED_MCP_SERVICE":          ast.DescribeConsumedMCPService,
+	"PUBLISHED_MCP_SERVICE":         ast.DescribePublishedMCPService,
 }
 
 // DescribeKindFor maps a catalog `objects` view ObjectType to the DESCRIBE kind

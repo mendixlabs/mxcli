@@ -55,7 +55,7 @@ func TestSettleSourceWaitsForAMultiFileWrite(t *testing.T) {
 		done.Store(true)
 	}()
 
-	settled := settleSource(mpr, sourceMTime(mpr), poll, nil)
+	settled := settleSource(func() time.Time { return sourceMTime(mpr) }, sourceMTime(mpr), poll, nil)
 	// Read the writer's state at the moment settleSource returned — after
 	// wg.Wait() every unit is on disk regardless, so that assertion would hold
 	// against a settleSource that returned immediately.
@@ -101,7 +101,7 @@ func TestSettleSourceReturnsPromptlyForOneChange(t *testing.T) {
 	}
 
 	polls := 0
-	settled := settleSourceWith(mpr, sourceMTime(mpr), nil, countingTick(&polls))
+	settled := settleSourceWith(func() time.Time { return sourceMTime(mpr) }, sourceMTime(mpr), nil, countingTick(&polls))
 
 	if settled.IsZero() {
 		t.Fatal("settleSource reported an interrupt that never happened")
@@ -142,7 +142,7 @@ func TestSettleSourceNeedsConsecutiveQuietPolls(t *testing.T) {
 		return ch
 	}
 
-	settled := settleSourceWith(mpr, start, nil, tick)
+	settled := settleSourceWith(func() time.Time { return sourceMTime(mpr) }, start, nil, tick)
 
 	if !touched {
 		t.Fatal("the write never happened — the test proved nothing")
@@ -169,7 +169,7 @@ func TestSettleSourceHonoursInterrupt(t *testing.T) {
 	sigCh := make(chan os.Signal, 1)
 	sigCh <- os.Interrupt
 
-	if settled := settleSource(mpr, sourceMTime(mpr), 20*time.Millisecond, sigCh); !settled.IsZero() {
+	if settled := settleSource(func() time.Time { return sourceMTime(mpr) }, sourceMTime(mpr), 20*time.Millisecond, sigCh); !settled.IsZero() {
 		t.Errorf("settleSource ignored the interrupt, returned %v", settled)
 	}
 }

@@ -120,8 +120,6 @@ func TestSecondErrorHandlerRowClearsTheFirst(t *testing.T) {
 // all of them.
 var handlerRuns = []struct {
 	name, body string
-	// rejoins: the handlers fall through to the main line instead of ending.
-	rejoins bool
 }{
 	{name: "two handlers with a plain activity between", body: `
   retrieve $A from M.Item on error without rollback begin
@@ -165,7 +163,35 @@ var handlerRuns = []struct {
     return;
   end error;
   log info node 'M' 'done';`},
-	{name: "handlers that rejoin the main line", rejoins: true, body: `
+	// ako/mxcli#1773, shape 2: a join draws nothing, so a row that ends in one
+	// is as wide as its activities. It was measured as an activity plus an end
+	// event, and reserved the lane for about twice its drawn width. `check`
+	// refuses a join inside a loop (MDL-FLOW04), but the builder measures and
+	// places a run the same way wherever it is, and the box it fits around a loop
+	// body is the exact oracle for the run's width.
+	{name: "handlers that end in joins", body: `
+  retrieve $A from M.Item on error without rollback begin
+    log error node 'M' 'a1';
+    join recovered;
+  end error;
+  retrieve $B from M.Item on error without rollback begin
+    log error node 'M' 'b1';
+    log error node 'M' 'b2';
+    join recovered;
+  end error;
+  log info node 'M' 'between';
+  merge recovered;
+  log info node 'M' 'done';`},
+	// ako/mxcli#1773, shape 3: a row of three that falls through.
+	{name: "a long handler that rejoins", body: `
+  retrieve $A from M.Item on error without rollback begin
+    log error node 'M' 'a1';
+    log error node 'M' 'a2';
+    log error node 'M' 'a3';
+  end error;
+  log info node 'M' 'next';
+  log info node 'M' 'done';`},
+	{name: "handlers that rejoin the main line", body: `
   retrieve $A from M.Item on error without rollback begin
     log error node 'M' 'a1';
     log error node 'M' 'a2';
@@ -180,12 +206,12 @@ var handlerRuns = []struct {
 // lanePartners put a handler row next to the lane's other occupants: a guard's
 // branch, a decision's ELSE row, a handler row inside a decision's branch.
 //
-// They are checked where the builder places the statement after the decision
-// itself — the main line and a loop body. Inside a branch the enclosing merge is
-// placed from the measured width of that decision, and the measurer counts a
-// split's x as its left edge, so every decision is measured 45px short whether
-// or not a handler is involved: `if … else … end if; log …` in a THEN branch puts
-// the closing merge 5px into that log. That is its own defect, not this one.
+// They run in every context the handler runs do. Inside a branch the enclosing
+// merge is placed from the measured width of the decision, which used to count
+// the split's x as its left edge and so came out 45px short: `if … else … end
+// if; log …` in a THEN branch put the closing merge 5px into that log
+// (ako/mxcli#1773). Until that was fixed these ran on the main line and in loop
+// bodies only.
 var lanePartners = []struct{ name, body string }{
 	{"a guard after a handler", `
   retrieve $A from M.Item on error without rollback begin
@@ -260,6 +286,9 @@ var (
 	}}
 )
 
+// allShapeContexts is every place the builder puts a statement run.
+var allShapeContexts = []shapeContext{onMainLine, inLoopBody, inThenBranch, inElseBranch, inThenWithoutElse}
+
 func handlerShapeFlow(body string) string {
 	return "create microflow M.F ($Flag: Boolean, $Other: Boolean, $Items: list of M.Item) begin\n" + body + "\nend;"
 }
@@ -281,17 +310,18 @@ func assertNoSharedPlace(t *testing.T, src string, checkMergeDirection bool) {
 
 func TestErrorHandlerRowsNeverOverlap(t *testing.T) {
 	for _, run := range handlerRuns {
-		for _, ctx := range []shapeContext{onMainLine, inLoopBody, inThenBranch, inElseBranch, inThenWithoutElse} {
+		for _, ctx := range allShapeContexts {
 			t.Run(run.name+" / "+ctx.name, func(t *testing.T) {
-				// A handler that falls through rejoins at a merge placed between its
-				// activity and the next one, left of a row of two or more: a
-				// backward edge, but not a shared place, and older than this test.
-				assertNoSharedPlace(t, handlerShapeFlow(ctx.wrap(run.body)), !run.rejoins)
+				// A handler that falls through used to rejoin at a merge placed
+				// between its activity and the next one, left of a row of two or
+				// more, so the edge into it ran backwards; this skipped the
+				// direction check for it until ako/mxcli#1773.
+				assertNoSharedPlace(t, handlerShapeFlow(ctx.wrap(run.body)), true)
 			})
 		}
 	}
 	for _, shape := range lanePartners {
-		for _, ctx := range []shapeContext{onMainLine, inLoopBody} {
+		for _, ctx := range allShapeContexts {
 			t.Run(shape.name+" / "+ctx.name, func(t *testing.T) {
 				assertNoSharedPlace(t, handlerShapeFlow(ctx.wrap(shape.body)), true)
 			})
@@ -307,31 +337,41 @@ func TestErrorHandlerRowsNeverOverlap(t *testing.T) {
 // builder.
 func TestLoopAroundHandlerRowsIsMeasuredAsBuilt(t *testing.T) {
 	for _, run := range handlerRuns {
-		t.Run(run.name, func(t *testing.T) {
-			prog, errs := visitor.Build(handlerShapeFlow("loop $It in $Items begin\n" + run.body + "\nend loop;"))
-			if len(errs) > 0 {
-				t.Fatalf("parse errors: %v", errs)
-			}
-			mf := prog.Statements[0].(*ast.CreateMicroflowStmt)
-			var loopStmt *ast.LoopStmt
-			for _, s := range mf.Body {
-				if l, ok := s.(*ast.LoopStmt); ok {
-					loopStmt = l
-				}
-			}
-			measured := (&layoutMeasurer{}).measureStatement(loopStmt)
+		t.Run(run.name, func(t *testing.T) { assertLoopMeasuredAsBuilt(t, run.body) })
+	}
+	// The lane partners hold decisions, which the measurer used to measure 45px
+	// short (ako/mxcli#1773).
+	for _, shape := range lanePartners {
+		t.Run(shape.name, func(t *testing.T) { assertLoopMeasuredAsBuilt(t, shape.body) })
+	}
+}
 
-			fb := &flowBuilder{posX: 200, posY: 200, spacing: HorizontalSpacing}
-			oc := fb.buildFlowGraph(mf.Body, mf.ReturnType)
-			var built model.Size
-			for _, o := range oc.Objects {
-				if l, ok := o.(*microflows.LoopedActivity); ok {
-					built = l.Size
-				}
-			}
-			if built.Width != measured.Width {
-				t.Errorf("loop built %dpx wide, measured %dpx", built.Width, measured.Width)
-			}
-		})
+// assertLoopMeasuredAsBuilt wraps body in a loop and compares the loop's measured
+// width with the width the builder gives the box it draws around what it built.
+func assertLoopMeasuredAsBuilt(t *testing.T, body string) {
+	t.Helper()
+	prog, errs := visitor.Build(handlerShapeFlow("loop $It in $Items begin\n" + body + "\nend loop;"))
+	if len(errs) > 0 {
+		t.Fatalf("parse errors: %v", errs)
+	}
+	mf := prog.Statements[0].(*ast.CreateMicroflowStmt)
+	var loopStmt *ast.LoopStmt
+	for _, s := range mf.Body {
+		if l, ok := s.(*ast.LoopStmt); ok {
+			loopStmt = l
+		}
+	}
+	measured := (&layoutMeasurer{}).measureStatement(loopStmt)
+
+	fb := &flowBuilder{posX: 200, posY: 200, spacing: HorizontalSpacing}
+	oc := fb.buildFlowGraph(mf.Body, mf.ReturnType)
+	var built model.Size
+	for _, o := range oc.Objects {
+		if l, ok := o.(*microflows.LoopedActivity); ok {
+			built = l.Size
+		}
+	}
+	if built.Width != measured.Width {
+		t.Errorf("loop built %dpx wide, measured %dpx", built.Width, measured.Width)
 	}
 }

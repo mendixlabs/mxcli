@@ -334,6 +334,12 @@ func (m *mcpPageMutator) DropWidget(refs []backend.WidgetRef) error {
 	return nil
 }
 
+// MoveWidget is not supported over MCP: Studio Pro's editor API offers no move
+// of an existing widget.
+func (m *mcpPageMutator) MoveWidget(widgetRef, destRef string, position backend.InsertPosition) error {
+	return fmt.Errorf("move/wrap of an existing widget is not yet supported by the MCP backend")
+}
+
 func (m *mcpPageMutator) ReplaceWidget(widgetRef string, columnRef string, widgets []pages.Widget) error {
 	if columnRef != "" {
 		return fmt.Errorf("replacing a column (%s.%s) is not yet supported by the MCP backend", widgetRef, columnRef)
@@ -507,6 +513,10 @@ func (m *mcpPageMutator) InsertListViewTemplates(listViewRef string, _ []*pages.
 
 func (m *mcpPageMutator) InsertTabPages(targetRef string, _ backend.InsertPosition, _ []*pages.TabPage) error {
 	return fmt.Errorf("adding tab pages at %s is not yet supported by the MCP backend", targetRef)
+}
+
+func (m *mcpPageMutator) InsertLayoutGridRows(gridRef string, _ []*pages.LayoutGridRow) error {
+	return fmt.Errorf("adding layout grid rows to %s is not yet supported by the MCP backend", gridRef)
 }
 
 func (m *mcpPageMutator) InsertNavigationListItems(targetRef string, _ backend.InsertPosition, _ []*pages.NavigationListItem) error {

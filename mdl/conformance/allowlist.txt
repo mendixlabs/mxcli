@@ -58,7 +58,7 @@
 17	syntax	.claude/skills/mendix/write-microflows/SKILL.md
 1	syntax	.claude/skills/mendix/write-microflows/reference/integration.md
 10	syntax	.claude/skills/mendix/write-microflows/reference/pitfalls.md
-7	syntax	.claude/skills/mendix/write-nanoflows/SKILL.md
+2	syntax	.claude/skills/mendix/write-nanoflows/SKILL.md
 25	syntax	.claude/skills/mendix/write-oql-queries/SKILL.md
 3	syntax	.claude/skills/mendix/xpath-constraints/SKILL.md
 3	syntax	.claude/skills/packs/mendix-bulk-oql-dml/references/gotchas.md

@@ -132,8 +132,8 @@ func TestServeRecovery_IncompletePrebuiltBundleRestartsServe(t *testing.T) {
 	// The fresh process says restartRequired for an unchanged model; the
 	// incremental build's answer is the one that knows what changed. Taking the
 	// cold one would restart the runtime — and drop every session — per change.
-	if res.RestartRequired {
-		t.Fatal("RestartRequired must be the incremental build's (false), not the cold build's")
+	if res.RestartRequired || res.ColdRestart {
+		t.Fatalf("RestartRequired must be the incremental build's (false), not the cold build's: %+v", res)
 	}
 	if got := out.String(); !strings.Contains(got, "dist/pages") || !strings.Contains(got, "mxbuild --serve") {
 		t.Fatalf("the recovery must be reported in one line naming what was lost, got:\n%s", got)
@@ -174,6 +174,27 @@ func TestServeRecovery_RollupShapeIsNotServesBusiness(t *testing.T) {
 	}
 }
 
+// headless (mxcli test --watch): nothing serves the client, so an incomplete
+// prebuilt bundle after a successful build is not a defect to recover from —
+// recovering it would restart mxbuild --serve (and rebuild, and reboot the
+// runtime) on every single test-file edit for a symptom the test runner never
+// observes.
+func TestServeRecovery_HeadlessSkipsPrebuiltRestart(t *testing.T) {
+	deploy := prebuiltDeployment(t)
+	f := &scriptedServe{build: func(_, _ int) (*BuildResult, error) {
+		writeIncompleteBundle(t, deploy) // the same symptom IncompletePrebuiltBundle recovers from
+		return buildOK(false), nil
+	}}
+	r := &serveRecovery{serve: f, deployDir: deploy, out: io.Discard, headless: true}
+	res, err := r.Build(BuildRequest{})
+	if err != nil || !res.OK() {
+		t.Fatalf("Build = %+v, %v", res, err)
+	}
+	if f.restarts != 0 {
+		t.Fatalf("restarts = %d, want 0: headless must not pay for a restart only a browser-facing bundle needs", f.restarts)
+	}
+}
+
 // The same serve process FAILS a change that regenerates a page: it wants
 // web/pages/<Page>.js, which its own first build did not leave behind. Measured
 // on 11.12.5 as well as 11.14. A fresh process builds it.
@@ -194,6 +215,12 @@ func TestServeRecovery_MissingClientSourceFailureRestartsServe(t *testing.T) {
 	}
 	if !res.RestartRequired {
 		t.Fatal("with no successful incremental build to say otherwise, the cold build's restartRequired stands")
+	}
+	// ...but it is a first build's answer, true whatever changed, and a caller
+	// that cannot restart the runtime (test --attach) must be able to say so
+	// rather than claim an entity changed.
+	if !res.ColdRestart {
+		t.Fatal("the cold build's restartRequired must be marked ColdRestart")
 	}
 	if f.restarts != 1 {
 		t.Fatalf("restarts = %d, want 1", f.restarts)
@@ -224,6 +251,9 @@ func TestServeRecovery_FailedRestartIsRetriedOnNextBuild(t *testing.T) {
 	}
 	if f.restarts != before+1 {
 		t.Fatalf("the next build must start a serve process first, restarts %d -> %d", before, f.restarts)
+	}
+	if !res.ColdRestart {
+		t.Fatal("the first build of the process just started is a cold answer and must be marked ColdRestart")
 	}
 }
 

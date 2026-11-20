@@ -1,0 +1,15 @@
+-- ako/mxcli#1208: on a Mendix 9 project, a pluggable widget whose stored source
+-- is Studio Pro 9's "Database" source (CustomWidgetDatabaseSource) was written
+-- back as an XPath source when the widget was edited — describe prints both as
+-- `database from E where …`. A rewrite now keeps the stored type when the WHERE
+-- fits its constraint rows. Run on a 9.24 project holding such a grid; editing
+-- only the sort keeps the DatabaseSource and its rows.
+mdl 1;
+create module BugTest1208;
+create persistent entity BugTest1208.Cust (Name: String(100));
+create page BugTest1208.P_Cust ( Title: 'Customers', Layout: Atlas_Core.Atlas_Default )
+{
+  datagrid dg (DataSource: database from BugTest1208.Cust where [Name = 'x'] sort by Name desc) {
+    column (Attribute: Name, Caption: 'Name')
+  }
+};

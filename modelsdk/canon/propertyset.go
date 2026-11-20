@@ -82,7 +82,7 @@ func CompletePropertySets(contents []byte, pv *version.Version) []byte {
 		return contents
 	}
 	var doc bson.D
-	if err := bson.Unmarshal(contents, &doc); err != nil {
+	if err := parseForStorageForm(contents, &doc); err != nil {
 		return contents
 	}
 	if !completeValue(&doc, defs, *pv, elementIDs(doc)) {

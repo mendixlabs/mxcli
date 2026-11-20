@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	modelsdkbackend "github.com/mendixlabs/mxcli/mdl/backend/modelsdk"
@@ -62,7 +63,7 @@ func TestExecPreflightRefusesHiddenTimelineEnumerations(t *testing.T) {
 		t.Skipf("expr-checker fixture not found: %v", err)
 	}
 	dir := t.TempDir()
-	if err := os.CopyFS(dir, os.DirFS(src)); err != nil {
+	if err := testutil.CopyFixture(dir, src); err != nil {
 		t.Fatal(err)
 	}
 	mpr := filepath.Join(dir, "minimal.mpr")

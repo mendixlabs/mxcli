@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="4.0" xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx">
+  <edmx:DataServices>
+    <Schema Namespace="Probe" xmlns="http://docs.oasis-open.org/odata/ns/edm">
+      <EntityType Name="Unit">
+        <Key><PropertyRef Name="Id"/></Key>
+        <Property Name="Id" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="Code" Type="Edm.String"/>
+      </EntityType>
+      <EntityType Name="QuantityParameterType">
+        <Key><PropertyRef Name="Id"/></Key>
+        <Property Name="Id" Type="Edm.Guid" Nullable="false"/>
+        <Property Name="Amount" Type="Edm.Decimal"/>
+        <NavigationProperty Name="Unit" Type="Probe.Unit" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="CreateBufferCommand">
+        <Key><PropertyRef Name="Id"/></Key>
+        <Property Name="Id" Type="Edm.Guid" Nullable="false"/>
+        <NavigationProperty Name="Quantity" Type="Probe.QuantityParameterType" Nullable="true"/>
+      </EntityType>
+      <Action Name="CreateBuffer" IsBound="false">
+        <Parameter Name="command" Type="Probe.CreateBufferCommand" Nullable="false"/>
+      </Action>
+      <EntityContainer Name="Container">
+        <ActionImport Name="CreateBuffer" Action="Probe.CreateBuffer"/>
+        <EntitySet Name="Units" EntityType="Probe.Unit"/>
+        <EntitySet Name="Quantities" EntityType="Probe.QuantityParameterType"><NavigationPropertyBinding Path="Unit" Target="Units"/></EntitySet>
+        <EntitySet Name="Commands" EntityType="Probe.CreateBufferCommand"><NavigationPropertyBinding Path="Quantity" Target="Quantities"/></EntitySet>
+      </EntityContainer>
+    </Schema>
+  </edmx:DataServices>
+</edmx:Edmx>

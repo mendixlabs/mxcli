@@ -58,6 +58,11 @@ func validateWidgetExpressionValuesIn(w *ast.WidgetV3, def *WidgetDefinition, it
 				continue
 			}
 			text = src
+			// `$Name/Assoc/Attr` parses as a data source; on an attribute
+			// property it is a rooted attribute path (ako/mxcli#2107).
+			if root, path, rooted := rootedAttributeValue(v); rooted {
+				text, isExpr = "$"+root+"/"+path, true
+			}
 		default:
 			continue
 		}
@@ -77,11 +82,15 @@ func validateWidgetExpressionValuesIn(w *ast.WidgetV3, def *WidgetDefinition, it
 		switch {
 		case op == "expression":
 			continue
-		case isExpr && isParameterAttributeText(text) && (op == "attribute" || !known):
+		case isExpr && isNamedObjectAttributeText(text) && (op == "attribute" || !known):
 			// `$Param.Attr` reads an attribute of a page or snippet parameter
 			// (mendixlabs/mxcli#1591); exec resolves the parameter. It is no
 			// Mendix expression (that is `$Param/Attr`), so a key whose kind is
 			// out of sight — no project, no schema — is not refused as one.
+			continue
+		case isExpr && op == "attribute" && isAssociationAttributePath(text):
+			// `Assoc/Attr` over associations from the context object
+			// (ako/mxcli#2295); exec resolves or refuses the path.
 			continue
 		case op == "image" && isImageObjectVariable(text):
 			// `Image: $currentObject` binds the object in context (#1476).

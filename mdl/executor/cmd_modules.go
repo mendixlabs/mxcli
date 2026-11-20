@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
@@ -35,12 +36,20 @@ func execCreateModule(ctx *ExecContext, s *ast.CreateModuleStmt) error {
 		if m.Name == s.Name {
 			// A plain create of an existing module stays the no-op it always
 			// was; `or modify` applies the documentation the statement states.
-			if s.CreateOrModify && s.DocumentationSet {
-				return setModuleDocumentation(ctx, m, s.Documentation)
+			if s.CreateOrModify {
+				if err := setModuleSettings(ctx, m, s.Settings); err != nil {
+					return err
+				}
+				if s.DocumentationSet {
+					return setModuleDocumentation(ctx, m, s.Documentation)
+				}
+				if !s.Settings.IsEmpty() {
+					return nil
+				}
 			}
-			if s.DocumentationSet {
-				fmt.Fprintf(ctx.Output, "Module '%s' already exists; documentation unchanged "+
-					"(create or modify module sets it)\n", s.Name)
+			if s.DocumentationSet || !s.Settings.IsEmpty() {
+				fmt.Fprintf(ctx.Output, "Module '%s' already exists; documentation and settings unchanged "+
+					"(create or modify module sets them)\n", s.Name)
 				return nil
 			}
 			fmt.Fprintf(ctx.Output, "Module '%s' already exists\n", s.Name)
@@ -61,6 +70,13 @@ func execCreateModule(ctx *ExecContext, s *ast.CreateModuleStmt) error {
 	invalidateModuleCache(ctx)
 
 	fmt.Fprintf(ctx.Output, "Created module: %s\n", s.Name)
+	if !s.Settings.IsEmpty() {
+		// The new module's settings unit holds the defaults; the stated ones
+		// are written onto it, so its PackageId and the rest are kept.
+		if err := setModuleSettings(ctx, module, s.Settings); err != nil {
+			return err
+		}
+	}
 	if s.DocumentationSet && s.Documentation != "" {
 		return setModuleDocumentation(ctx, module, s.Documentation)
 	}
@@ -78,6 +94,12 @@ func setModuleDocumentation(ctx *ExecContext, module *model.Module, doc string) 
 	}
 	if dm == nil {
 		return mdlerrors.NewNotFound("domain model of module", module.Name)
+	}
+	// Storage writes nothing when the text is what is stored (ADR-0008); say
+	// so, rather than report a write a re-run did not make.
+	if dm.Documentation == doc {
+		fmt.Fprintf(ctx.Output, "Documentation of module %s unchanged\n", module.Name)
+		return nil
 	}
 	if err := ctx.Backend.SetDomainModelDocumentation(dm.ID, doc); err != nil {
 		return mdlerrors.NewBackend(fmt.Sprintf("set documentation of %s", module.Name), err)
@@ -533,6 +555,8 @@ func listModules(ctx *ExecContext) error {
 	type row struct {
 		name        string
 		source      string
+		version     string
+		moduleType  string
 		entities    int
 		enums       int
 		pages       int
@@ -550,6 +574,14 @@ func listModules(ctx *ExecContext) error {
 	}
 	var rows []row
 	protections := moduleProtections(ctx)
+	// Version and Type are the General tab of the Module settings dialog
+	// (ako/mxcli#1921).
+	settingsByModule := map[model.ID]*types.ModuleSettings{}
+	if all, err := ctx.Backend.ListModuleSettings(); err == nil {
+		for _, ms := range all {
+			settingsByModule[ms.ContainerID] = ms
+		}
+	}
 
 	for _, m := range modules {
 		// Determine source (AppStore with version or local)
@@ -561,6 +593,13 @@ func listModules(ctx *ExecContext) error {
 				source = "Marketplace"
 			}
 		}
+		if m.PackageFile != "" {
+			// ako/mxcli#1780: held as modules/<Name>.mxmodule, not as units.
+			if source != "" {
+				source += ", "
+			}
+			source += "Packaged"
+		}
 		if kind := protections[string(m.ID)]; kind != "" {
 			// mendixlabs/mxcli#1498: its Hidden elements cannot be referenced
 			// from other modules, which nothing else printed showed.
@@ -570,9 +609,23 @@ func listModules(ctx *ExecContext) error {
 			source += "Protected " + kind
 		}
 
+		version, moduleType := "", ""
+		if ms := settingsByModule[m.ID]; ms != nil {
+			version = ms.Version
+			switch moduleTypeOf(ms) {
+			case moduleTypeApp:
+				moduleType = "App"
+			case moduleTypeAddOn:
+				moduleType = "Add-on"
+			default:
+				moduleType = ms.ProtectedModuleType
+			}
+		}
 		r := row{
 			name:        m.Name,
 			source:      source,
+			version:     version,
+			moduleType:  moduleType,
 			entities:    entityCounts[m.ID],
 			enums:       enumCounts[m.ID],
 			pages:       pageCounts[m.ID],
@@ -593,11 +646,11 @@ func listModules(ctx *ExecContext) error {
 
 	// Build TableResult
 	result := &TableResult{
-		Columns: []string{"Module", "Source", "Entities", "Enums", "Pages", "Snippets", "Microflows", "Nanoflows", "Workflows", "Constants", "JavaActions", "PubREST", "PubOData", "ConOData", "BizEvents", "ExtDB"},
+		Columns: []string{"Module", "Source", "Version", "Type", "Entities", "Enums", "Pages", "Snippets", "Microflows", "Nanoflows", "Workflows", "Constants", "JavaActions", "PubREST", "PubOData", "ConOData", "BizEvents", "ExtDB"},
 		Summary: fmt.Sprintf("(%d modules)", len(modules)),
 	}
 	for _, r := range rows {
-		result.Rows = append(result.Rows, []any{r.name, r.source, r.entities, r.enums, r.pages, r.snippets, r.microflows, r.nanoflows, r.workflows, r.constants, r.javaActions, r.pubRest, r.pubOData, r.conOData, r.bizEvents, r.extDb})
+		result.Rows = append(result.Rows, []any{r.name, r.source, r.version, r.moduleType, r.entities, r.enums, r.pages, r.snippets, r.microflows, r.nanoflows, r.workflows, r.constants, r.javaActions, r.pubRest, r.pubOData, r.conOData, r.bizEvents, r.extDb})
 	}
 	return writeResult(ctx, result)
 }
@@ -629,13 +682,34 @@ func describeModule(ctx *ExecContext, moduleName string, withAll bool) error {
 	// The module's documentation is its domain model's; print it as the doc
 	// comment that sets it, so the output re-run stores it (mendixlabs/mxcli#1314).
 	if dm, err := ctx.Backend.GetDomainModel(targetModule.ID); err == nil && dm != nil && dm.Documentation != "" {
-		fmt.Fprintf(ctx.Output, "/**\n * %s\n */\n", strings.ReplaceAll(dm.Documentation, "\n", "\n * "))
+		fmt.Fprintf(ctx.Output, "/**\n * %s\n */\n", strings.ReplaceAll(doccomment.Escape(dm.Documentation), "\n", "\n * "))
 	}
-	fmt.Fprintf(ctx.Output, "create or modify module %s;\n", targetModule.Name)
+	// Listed rather than got by module: the same read moduleProtection makes.
+	var settings *types.ModuleSettings
+	if all, err := ctx.Backend.ListModuleSettings(); err == nil {
+		for _, ms := range all {
+			if ms.ContainerID == targetModule.ID {
+				settings = ms
+			}
+		}
+	}
+	fmt.Fprintf(ctx.Output, "create or modify module %s%s;\n", targetModule.Name, moduleSettingsMDL(ctx, settings, targetModule.IsThemeModule))
+	if targetModule.PackageFile != "" {
+		fmt.Fprintf(ctx.Output, "-- packaged module: %s — read-only, the project file holds none of its documents\n", targetModule.PackageFile)
+	}
+	// Location has no key yet (PROPOSAL_module_settings.md, "Later: Location").
+	if targetModule.FromAppStore {
+		fmt.Fprintln(ctx.Output, "-- location: Marketplace modules (set in Studio Pro)")
+	}
 	// A Protected (add-on / solution) module hides every element not marked
-	// Usable from the rest of the app (CE1406). MDL has no syntax for the
-	// module's export level, so it prints as a comment (mendixlabs/mxcli#1498).
-	if kind := moduleProtection(ctx, string(targetModule.ID)); kind != "" {
+	// Usable from the rest of the app (CE1406), which nothing else printed
+	// says (mendixlabs/mxcli#1498). An add-on is `ModuleType: addon` above; a
+	// solution module has no MDL spelling, so it is a comment only.
+	switch kind := moduleProtection(ctx, string(targetModule.ID)); kind {
+	case "":
+	case "AddOn":
+		fmt.Fprintln(ctx.Output, "-- add-on module: elements not marked Usable cannot be referenced from other modules")
+	default:
 		fmt.Fprintf(ctx.Output, "-- export level: Protected (%s module) — set in Studio Pro; elements not marked Usable cannot be referenced from other modules\n", kind)
 	}
 
@@ -953,17 +1027,33 @@ func execAlterModuleJarDep(ctx *ExecContext, s *ast.AlterModuleJarDepStmt) error
 		return fmt.Errorf("failed to read module settings: %w", err)
 	}
 
+	skipped := 0
 	for _, action := range s.Actions {
-		if err := applyJarDepAction(ms, action, s.ModuleName); err != nil {
+		skip, err := applyJarDepAction(ms, action, s.ModuleName)
+		if err != nil {
 			return err
 		}
+		if skip != "" {
+			skipped++
+			fmt.Fprintln(ctx.Output, skip)
+		}
+	}
+
+	// Every action was an IF NOT EXISTS skip: the settings are exactly what is
+	// stored, so there is nothing to offer storage (ako/mxcli#2239).
+	if skipped == len(s.Actions) {
+		reportUnchanged(ctx, fmt.Sprintf("jar dependencies for module '%s'", s.ModuleName))
+		warnUnvendoredJarDependencies(ctx, ms)
+		return nil
 	}
 
 	if err := ctx.Backend.UpdateModuleSettings(ms); err != nil {
 		return mdlerrors.NewBackend("update module settings", err)
 	}
 
-	fmt.Fprintf(ctx.Output, "Updated jar dependencies for module '%s'\n", s.ModuleName)
+	// ReportMutation says Unchanged when storage elided the write (ADR-0008),
+	// e.g. a SET … VERSION restating the stored version.
+	ctx.ReportMutation("Updated", "jar dependencies for module '%s'", s.ModuleName)
 	warnUnvendoredJarDependencies(ctx, ms)
 	return nil
 }
@@ -1014,12 +1104,26 @@ func pluralItIsTheyAre(n int) string {
 	return "they are"
 }
 
-func applyJarDepAction(ms *types.ModuleSettings, action ast.JarDepAction, moduleName string) error {
+// applyJarDepAction applies one action to ms. A non-empty skip is the notice
+// for an ADD … IF NOT EXISTS whose coordinate is already declared: ms is left
+// as it was, and the caller decides whether to print it (exec) or not (check's
+// replay, which calls this same function so the two cannot disagree).
+func applyJarDepAction(ms *types.ModuleSettings, action ast.JarDepAction, moduleName string) (skip string, err error) {
+	err = applyJarDepActionTo(ms, action, moduleName, &skip)
+	return skip, err
+}
+
+func applyJarDepActionTo(ms *types.ModuleSettings, action ast.JarDepAction, moduleName string, skip *string) error {
 	switch a := action.(type) {
 	case *ast.AddJarDepAction:
 		coord := a.Group + ":" + a.Artifact
-		if jarDepByCoord(ms.JarDependencies, coord) != nil {
-			return fmt.Errorf("jar dependency '%s' already exists in module '%s'; use SET to update version", coord, moduleName)
+		if existing := jarDepByCoord(ms.JarDependencies, coord); existing != nil {
+			if a.IfNotExists {
+				*skip = jarDepSkipNotice(existing, a, moduleName)
+				return nil
+			}
+			return fmt.Errorf("jar dependency '%s' already exists in module '%s'; use SET to update version, "+
+				"or 'add jar dependency if not exists' to make the script re-runnable", coord, moduleName)
 		}
 		ms.JarDependencies = append(ms.JarDependencies, &types.JarDependency{
 			GroupID:    a.Group,
@@ -1086,6 +1190,30 @@ func applyJarDepAction(ms *types.ModuleSettings, action ast.JarDepAction, module
 		dep.Exclusions = append(dep.Exclusions[:excIdx], dep.Exclusions[excIdx+1:]...)
 	}
 	return nil
+}
+
+// jarDepSkipNotice is the line an ADD … IF NOT EXISTS prints for a coordinate
+// the module already declares. Like every IF NOT EXISTS form it leaves the
+// stored element untouched; when the statement asks for a different version or
+// included flag it says so and names the SET that would change it, because a
+// silent skip would let a version bump in the script never reach the model.
+func jarDepSkipNotice(existing *types.JarDependency, a *ast.AddJarDepAction, moduleName string) string {
+	coord := a.Group + ":" + a.Artifact
+	notice := fmt.Sprintf("Jar dependency '%s' already exists in module '%s' — skipped", coord, moduleName)
+	var diffs, fixes []string
+	if existing.Version != a.Version {
+		diffs = append(diffs, fmt.Sprintf("stored version '%s', this statement says '%s'", existing.Version, a.Version))
+		fixes = append(fixes, fmt.Sprintf("set jar dependency '%s' version '%s'", coord, a.Version))
+	}
+	if existing.IsIncluded != a.Included {
+		diffs = append(diffs, fmt.Sprintf("stored included = %t, this statement says %t", existing.IsIncluded, a.Included))
+		fixes = append(fixes, fmt.Sprintf("set jar dependency '%s' included %t", coord, a.Included))
+	}
+	if len(diffs) == 0 {
+		return notice
+	}
+	return fmt.Sprintf("%s (%s; if not exists leaves it untouched — to change it: alter module %s %s)",
+		notice, strings.Join(diffs, "; "), moduleName, strings.Join(fixes, " "))
 }
 
 func jarDepByCoord(deps []*types.JarDependency, coordinate string) *types.JarDependency {

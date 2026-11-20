@@ -77,7 +77,7 @@ func NormalizeListMarkers(contents []byte) []byte {
 		return contents
 	}
 	var doc bson.D
-	if err := bson.Unmarshal(contents, &doc); err != nil {
+	if err := parseForStorageForm(contents, &doc); err != nil {
 		return contents
 	}
 	if !normalizeListMarkersIn(doc) {

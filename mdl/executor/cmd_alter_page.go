@@ -105,6 +105,14 @@ func execAlterPage(ctx *ExecContext, s *ast.AlterPageStmt) error {
 			if err := applyDropWidgetMutator(mutator, o); err != nil {
 				return mdlerrors.NewBackend("drop", err)
 			}
+		case *ast.MoveWidgetOp:
+			if err := mutator.MoveWidget(o.Target.Name(), o.Destination.Name(), backend.InsertPosition(o.Position)); err != nil {
+				return mdlerrors.NewBackend("move", err)
+			}
+		case *ast.WrapWidgetOp:
+			if err := applyWrapWidgetMutator(ctx, mutator, o, modName, containerID); err != nil {
+				return mdlerrors.NewBackend("wrap", err)
+			}
 		case *ast.DropListViewTemplateOp:
 			if err := mutator.DropListViewTemplate(o.ListView, o.Specialization); err != nil {
 				return mdlerrors.NewBackend("drop TEMPLATE", err)
@@ -154,7 +162,10 @@ func execAlterPage(ctx *ExecContext, s *ast.AlterPageStmt) error {
 		return mdlerrors.NewBackend("save modified "+strings.ToLower(containerType), err)
 	}
 
-	fmt.Fprintf(ctx.Output, "Altered %s %s\n", strings.ToLower(containerType), s.PageName.String())
+	// The report follows what landed, not what was attempted: storage elides a
+	// save whose content equals what is stored (ADR-0008), so re-running an
+	// applied alter must say "Unchanged", not "Altered" (ako/mxcli#2156).
+	ctx.ReportMutation("Altered", "%s %s", strings.ToLower(containerType), s.PageName.String())
 	return nil
 }
 
@@ -297,6 +308,10 @@ func alterPageOperationTargets(op ast.AlterPageOperation) []ast.WidgetRef {
 		return []ast.WidgetRef{o.Target}
 	case *ast.DropWidgetOp:
 		return o.Targets
+	case *ast.MoveWidgetOp:
+		return []ast.WidgetRef{o.Target, o.Destination}
+	case *ast.WrapWidgetOp:
+		return []ast.WidgetRef{o.Target}
 	case *ast.DropListViewTemplateOp:
 		return []ast.WidgetRef{{Widget: o.ListView}}
 	}
@@ -355,6 +370,42 @@ func resolveAlterPageUnit(ctx *ExecContext, s *ast.AlterPageStmt, h *ContainerHi
 // ============================================================================
 
 func applySetPropertyMutator(ctx *ExecContext, mutator backend.PageMutator, op *ast.SetPropertyOp, moduleName string, moduleID model.ID) error {
+	// A column's attribute is written last. The column is addressed by its
+	// attribute, so once it changes, `column(Old)` no longer finds it, and the
+	// follow-up below — which re-finds the column — failed with "column(Old)
+	// not found". The attribute drives none of the visibility the follow-up
+	// resets, so the rest is applied and reset under the address as written
+	// (ako/mxcli#1644).
+	//
+	// A column addressed by its caption, `column('Old caption')`, is the same
+	// case with the caption: renaming it applied the new caption, then the
+	// follow-up looked for 'Old caption' and the whole script rolled back
+	// (mendixlabs/mxcli#1823, ako/mxcli#2146). The property written last is
+	// whichever one the address reads.
+	if op.Target.IsColumn() {
+		addressProp := "Attribute"
+		if op.Target.ColumnCaption != "" {
+			addressProp = "Caption"
+		}
+		for name, value := range op.Properties {
+			if !strings.EqualFold(name, addressProp) {
+				continue
+			}
+			rest := &ast.SetPropertyOp{Target: op.Target, Properties: map[string]any{}}
+			for k, v := range op.Properties {
+				if k != name {
+					rest.Properties[k] = v
+				}
+			}
+			if len(rest.Properties) > 0 {
+				if err := applySetPropertyMutator(ctx, mutator, rest, moduleName, moduleID); err != nil {
+					return err
+				}
+			}
+			return applySetProperties(ctx, mutator,
+				&ast.SetPropertyOp{Target: op.Target, Properties: map[string]any{name: value}}, moduleName, moduleID)
+		}
+	}
 	if err := applySetProperties(ctx, mutator, op, moduleName, moduleID); err != nil {
 		return err
 	}
@@ -463,7 +514,24 @@ func applySetProperties(ctx *ExecContext, mutator backend.PageMutator, op *ast.S
 				"`set %s = <action>` needs a pluggable widget target: `set '%s' = … on <widgetName>`",
 				propName, propName)
 		}
+		if params, ok := value.([]ast.ParamAssignmentV3); ok && isTemplateParamsKey(propName) {
+			if err := setTemplateParameters(ctx, mutator, op.Target, propName, params, moduleName, moduleID); err != nil {
+				return err
+			}
+			continue
+		}
 		if op.Target.IsColumn() {
+			if strings.EqualFold(propName, "Attribute") {
+				b, err := resolveColumnAttribute(ctx, mutator, op.Target, value, moduleName, moduleID)
+				if err != nil {
+					return err
+				}
+				value = b
+			} else if expr, ok := value.(*ast.WidgetExpressionV3); ok {
+				// `$Param.Attr` / `Assoc/Attr` bind an attribute; any other
+				// column property was stringified into "&{…}" (ako/mxcli#2283).
+				return mdlerrors.NewValidationf("column property %s takes a plain value, not an expression: %s", propName, expr.Text)
+			}
 			if err := mutator.SetColumnProperty(op.Target.Widget, columnRefOf(op.Target), propName, value); err != nil {
 				return mdlerrors.NewBackend("set "+propName+" on "+op.Target.Name(), err)
 			}
@@ -523,6 +591,16 @@ func applySetProperties(ctx *ExecContext, mutator backend.PageMutator, op *ast.S
 			resolved, err := resolvePluggableSetValue(ctx, mutator, op.Target.Widget, propName, value, moduleName, moduleID)
 			if err != nil {
 				return err
+			}
+			// A built-in input's `Attribute:` — the value passed through the
+			// pluggable resolver unchanged — is bound by create page's rule
+			// (ako/mxcli#2278).
+			if s, isString := resolved.(string); isString && strings.EqualFold(propName, "Attribute") && op.Target.Widget != "" {
+				b, err := resolveInputSetAttribute(ctx, mutator, op.Target.Widget, s, moduleName, moduleID)
+				if err != nil {
+					return err
+				}
+				resolved = b
 			}
 			if err := mutator.SetWidgetProperty(op.Target.Widget, propName, resolved); err != nil {
 				return mdlerrors.NewBackend("set "+propName+" on "+op.Target.Name(), err)
@@ -641,6 +719,41 @@ func convertASTAction(ctx *ExecContext, mutator backend.PageMutator, value any, 
 // INSERT widget via mutator
 // ============================================================================
 
+// applyWrapWidgetMutator puts a new container where a widget is and moves the
+// widget into it (ako/mxcli#2122). The container is inserted before the widget
+// exactly as INSERT BEFORE would build it — so it takes the widget's own data
+// context — and the widget's stored subtree is then moved into it, never
+// rebuilt: this is how a legacy classic Data grid, which MDL cannot re-author,
+// gets wrapped in a data view after an upgrade.
+func applyWrapWidgetMutator(ctx *ExecContext, mutator backend.PageMutator, op *ast.WrapWidgetOp, moduleName string, moduleID model.ID) error {
+	if len(op.Container) != 1 || op.Container[0] == nil {
+		return mdlerrors.NewValidation("wrap takes exactly one container: `wrap <widget> in { container ctn1 { } }`")
+	}
+	c := op.Container[0]
+	if c.Name == "" {
+		return mdlerrors.NewValidation("the container `wrap` puts the widget into needs a name, so the widget can be moved into it")
+	}
+	if !wrapContainerTypes[strings.ToLower(c.Type)] {
+		return mdlerrors.NewValidationf("cannot wrap in a %s: wrap takes a container, dataview or groupbox — "+
+			"a container that holds one list of widgets", c.Type)
+	}
+	if op.Target.IsColumn() {
+		return mdlerrors.NewValidation("a column cannot be wrapped: only a widget can be moved into a container")
+	}
+	insert := &ast.InsertWidgetOp{Position: "BEFORE", Target: op.Target, Widgets: op.Container}
+	if err := applyInsertWidgetMutator(ctx, mutator, insert, moduleName, moduleID); err != nil {
+		return err
+	}
+	return mutator.MoveWidget(op.Target.Name(), c.Name, backend.InsertPosition("INTO"))
+}
+
+// wrapContainerTypes are the widgets `wrap` can put a widget into: the ones
+// whose children are a single list of widgets (containerAcceptsWidgets in the
+// page mutator).
+var wrapContainerTypes = map[string]bool{
+	"container": true, "dataview": true, "groupbox": true,
+}
+
 func applyInsertWidgetMutator(ctx *ExecContext, mutator backend.PageMutator, op *ast.InsertWidgetOp, moduleName string, moduleID model.ID) error {
 	if strings.EqualFold(op.Position, "INTO") {
 		if err := refuseHiddenItemSlot(ctx, mutator, op.Target); err != nil {
@@ -724,6 +837,32 @@ func applyInsertWidgetMutator(ctx *ExecContext, mutator backend.PageMutator, op 
 			"mixing `tabpage` blocks with ordinary widgets in one INSERT is not supported: " +
 				"tab pages go in a tab container's list of pages, widgets inside a tab page. " +
 				"Use one INSERT for the tab pages and another for the widgets")
+	}
+
+	// Special path: adding rows to a layout grid (mendixlabs/mxcli#1791). A row
+	// lives in the grid's Rows list and is not a widget: the builder asked for
+	// a name it never stores, and InsertWidget refused the grid as "not a
+	// simple container". A row has no stored name, so INTO the grid is the only
+	// position the mutator can address.
+	if allLayoutGridRows(op.Widgets) {
+		if !into {
+			return mdlerrors.NewValidation(fmt.Sprintf(
+				"a layout grid row has no name to insert %s, so rows are added with "+
+					"`insert into <layoutgrid> { row { … } }`, which appends them; to place widgets "+
+					"in an existing row, insert into or next to a widget in its column",
+				strings.ToLower(op.Position)))
+		}
+		rows, err := buildLayoutGridRowsFromAST(ctx, op.Widgets, moduleName, moduleID, entityCtx, mutator)
+		if err != nil {
+			return mdlerrors.NewBackend("build layout grid rows", err)
+		}
+		return mutator.InsertLayoutGridRows(op.Target.Widget, rows)
+	}
+	if hasLayoutGridRow(op.Widgets) {
+		return mdlerrors.NewValidation(
+			"mixing `row` blocks with ordinary widgets in one INSERT is not supported: " +
+				"rows go in a layout grid's list of rows, widgets inside a row's column. " +
+				"Use one INSERT for the rows and another for the widgets")
 	}
 
 	// Special path: adding items to a navigation list (#1388). An item lives in
@@ -975,7 +1114,7 @@ func refuseStaleContentReplace(ctx *ExecContext, mutator backend.PageMutator, op
 // replacement differs from the baseline" as "the statement states it", so one
 // the statement leaves out must be left out of the baseline too, or the
 // replacement's default would overwrite the stored value.
-var replaceBaselineSystemProps = []string{"Editable", "EditableIf", "Visible", "VisibleIf", "VisibleWhen", "VisibleRoles"}
+var replaceBaselineSystemProps = []string{"Editable", "EditableIf", "EditableWhen", "Visible", "VisibleIf", "VisibleWhen", "VisibleRoles"}
 
 // replaceBaseline is the stored widget's description with the visibility and
 // editability properties the statement does not state removed.
@@ -1325,6 +1464,49 @@ func hasNavigationListItem(widgets []*ast.WidgetV3) bool {
 	return false
 }
 
+// buildLayoutGridRowsFromAST builds the rows an INSERT adds to a layout grid,
+// with the same builder CREATE PAGE uses for a layout grid's children.
+func buildLayoutGridRowsFromAST(ctx *ExecContext, nodes []*ast.WidgetV3, moduleName string, moduleID model.ID, entityContext string, mutator backend.PageMutator) ([]*pages.LayoutGridRow, error) {
+	pb := newAlterPageBuilder(ctx, moduleName, moduleID, entityContext, mutator)
+	pb.isDocumentWidget = alterDocumentWidgets(mutator, nodes)
+	out := make([]*pages.LayoutGridRow, 0, len(nodes))
+	for _, node := range nodes {
+		if err := refuseNativeWidgetProps(pb.ctx, "layoutgrid row", node); err != nil {
+			return nil, err
+		}
+		row, err := pb.buildLayoutGridRowV3(node)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+// allLayoutGridRows reports whether every inserted node is a layout grid row.
+func allLayoutGridRows(widgets []*ast.WidgetV3) bool {
+	if len(widgets) == 0 {
+		return false
+	}
+	for _, w := range widgets {
+		if !strings.EqualFold(w.Type, "row") {
+			return false
+		}
+	}
+	return true
+}
+
+// hasLayoutGridRow reports whether ANY inserted node is a layout grid row, so
+// a mixed insert is refused rather than half-applied.
+func hasLayoutGridRow(widgets []*ast.WidgetV3) bool {
+	for _, w := range widgets {
+		if strings.EqualFold(w.Type, "row") {
+			return true
+		}
+	}
+	return false
+}
+
 // allTabPages reports whether every inserted node is a tab page.
 func allTabPages(widgets []*ast.WidgetV3) bool {
 	if len(widgets) == 0 {
@@ -1383,4 +1565,33 @@ func newAlterPageBuilder(ctx *ExecContext, moduleName string, moduleID model.ID,
 		isDocumentWidget: alterDocumentWidgets(mutator, nil),
 		isSnippet:        mutator.ContainerType() == backend.ContainerSnippet,
 	}
+}
+
+// templateParameterSetter is the page mutator capability behind
+// `set (CaptionParams: …)` / `set (ContentParams: …)`.
+type templateParameterSetter interface {
+	SetWidgetTemplateParameters(widgetRef, prop string, params []*pages.ClientTemplateParameter) error
+}
+
+func isTemplateParamsKey(prop string) bool {
+	return strings.EqualFold(prop, "CaptionParams") || strings.EqualFold(prop, "ContentParams")
+}
+
+// setTemplateParameters writes a text template's parameters on a stored
+// built-in widget (ako/mxcli#1966), resolved by the builder CREATE PAGE uses
+// against the entity of the data container the widget sits in — so a bare
+// attribute name means here what it means in `create page`.
+func setTemplateParameters(ctx *ExecContext, mutator backend.PageMutator, target ast.WidgetRef, prop string,
+	params []ast.ParamAssignmentV3, moduleName string, moduleID model.ID) error {
+	setter, ok := mutator.(templateParameterSetter)
+	if !ok || target.Widget == "" || target.IsColumn() || target.Item != nil {
+		return mdlerrors.NewUnsupported(fmt.Sprintf(
+			"alter page set %s is supported on a button or a dynamic text — use `replace <widget> with …` here", prop))
+	}
+	pb := newAlterPageBuilder(ctx, moduleName, moduleID, mutator.EnclosingEntity(target.Widget), mutator)
+	resolved := pb.buildClientTemplateParams(params)
+	if err := setter.SetWidgetTemplateParameters(target.Widget, prop, resolved); err != nil {
+		return mdlerrors.NewBackend("set "+prop+" on "+target.Name(), err)
+	}
+	return nil
 }

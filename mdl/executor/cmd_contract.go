@@ -618,6 +618,9 @@ func createExternalEntities(ctx *ExecContext, s *ast.CreateExternalEntitiesStmt)
 					RemoteName: keyName,
 					RemoteType: keyProp.Type,
 					Type:       edmToDomainModelAttrType(keyProp, true),
+					// The key part has its own Filterable, which mxbuild compares with
+					// the service's — the same restrictions the attribute follows.
+					NotFilterable: !entitySet.AttrFilterable(keyName),
 				})
 			}
 
@@ -1284,7 +1287,7 @@ func createNavigationAssociations(
 				// not collide with any entity name (CE0065). When the OData
 				// nav property name collides with an existing entity, append
 				// a numeric suffix.
-				assocName := uniqueAssocName(np.Name, dm, existingAssocs)
+				assocName := uniqueAssocName(np.Name, parentEnt.Name, dm, existingAssocs)
 
 				assocType := domainmodel.AssociationTypeReference
 				if isMany {
@@ -1452,9 +1455,12 @@ func indexExistingAssociations(dm *domainmodel.DomainModel) (byName, byNav map[a
 }
 
 // uniqueAssocName returns a Mendix-safe association name for an OData nav
-// property. If the requested name collides with an existing entity name OR an
-// already-created association name, append a numeric suffix.
-func uniqueAssocName(base string, dm *domainmodel.DomainModel, existingAssocs map[assocKey]bool) string {
+// property: the nav property's own name, unless it collides with an entity or
+// an association already in the module (CE0065) — then `<Parent>_<NavProperty>`,
+// the Mendix convention, and a numeric suffix only if that is taken as well.
+// The suffix used to come first, so Product's nav `Category` became
+// `Category_2` beside the entity Category (ako/mxcli#2354).
+func uniqueAssocName(base, parent string, dm *domainmodel.DomainModel, existingAssocs map[assocKey]bool) string {
 	collides := func(name string) bool {
 		for _, ent := range dm.Entities {
 			if ent.Name == name {
@@ -1470,6 +1476,13 @@ func uniqueAssocName(base string, dm *domainmodel.DomainModel, existingAssocs ma
 	}
 	if !collides(base) {
 		return base
+	}
+	if parent != "" {
+		qualified := parent + "_" + base
+		if !collides(qualified) {
+			return qualified
+		}
+		base = qualified
 	}
 	for i := 2; i < 100; i++ {
 		candidate := fmt.Sprintf("%s_%d", base, i)
@@ -1835,7 +1848,15 @@ func parseAsyncAPIContract(ctx *ExecContext, name ast.QualifiedName) (*types.Asy
 		svcQN := modName + "." + svc.Name
 
 		if svc.Document == "" {
-			return nil, svcQN, mdlerrors.NewValidationf("no cached AsyncAPI contract for %s. This service has no Document field (it may be a publisher, not a consumer)", svcQN)
+			// A publisher caches no contract — Studio Pro renders one on export
+			// and stores nothing. Its channels and messages are in the stored
+			// Definition, though, and the channel id there is the topic other
+			// apps bind to, so project the definition rather than refusing the
+			// read (ako/mxcli#2381, #2384 §5.4).
+			if doc := contractFromDefinition(svc); doc != nil {
+				return doc, svcQN, nil
+			}
+			return nil, svcQN, mdlerrors.NewValidationf("no AsyncAPI contract for %s: it has neither a cached contract (a consumed service) nor a definition (a published one)", svcQN)
 		}
 
 		doc, err := types.ParseAsyncAPI(svc.Document)
@@ -1847,6 +1868,52 @@ func parseAsyncAPIContract(ctx *ExecContext, name ast.QualifiedName) (*types.Asy
 	}
 
 	return nil, "", mdlerrors.NewNotFound("business event service", name.Module+"."+name.Name)
+}
+
+// contractFromDefinition projects a published business event service's stored
+// definition into the shape the contract readers expect. It is a view of what is
+// stored, not a rendering of the AsyncAPI document Studio Pro exports: only the
+// values the model actually holds are filled in, and OperationID is left empty
+// because a publisher stores none (Studio Pro mints `receive<Message>Events` at
+// export time, which is the renderer's business — #2384 part E).
+//
+// OperationType follows AsyncAPI 2's direction, which is the *other* app's point
+// of view: a message this service publishes is one others `subscribe` to, which
+// is what Studio Pro writes and what CanSubscribe records.
+func contractFromDefinition(svc *model.BusinessEventService) *types.AsyncAPIDocument {
+	if svc == nil || svc.Definition == nil {
+		return nil
+	}
+	doc := &types.AsyncAPIDocument{
+		Title:      svc.Definition.ServiceName,
+		DocVersion: "1.0.0",
+	}
+	for _, ch := range svc.Definition.Channels {
+		for _, msg := range ch.Messages {
+			op := "publish"
+			if msg.CanSubscribe {
+				op = "subscribe"
+			}
+			doc.Channels = append(doc.Channels, &types.AsyncAPIChannel{
+				Name:          ch.ChannelName,
+				OperationType: op,
+				MessageRef:    msg.MessageName,
+			})
+			m := &types.AsyncAPIMessage{
+				Name:        msg.MessageName,
+				Description: msg.Description,
+				ContentType: "application/json",
+			}
+			for _, a := range msg.Attributes {
+				m.Properties = append(m.Properties, &types.AsyncAPIProperty{
+					Name: a.AttributeName,
+					Type: a.AttributeType,
+				})
+			}
+			doc.Messages = append(doc.Messages, m)
+		}
+	}
+	return doc
 }
 
 // asyncTypeString formats an AsyncAPI property type for display.

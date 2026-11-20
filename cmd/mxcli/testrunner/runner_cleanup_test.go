@@ -188,6 +188,7 @@ func TestCleanupCommands(t *testing.T) {
 			want: []string{
 				"ALTER SETTINGS RUNTIME (AfterStartupMicroflow: 'Mod.Flow')",
 				"DROP MICROFLOW MxTest.TestRunner",
+				"DROP MICROFLOW " + errorMessageFlow,
 			},
 		},
 		{

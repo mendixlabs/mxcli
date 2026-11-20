@@ -226,15 +226,18 @@ var communityBuiltins = []string{
 // any builtin whose answer differs and is not listed here.
 var fullBuiltins = []string{
 	"refs_to", "refs_from",
-	"widgets", "xpath_expressions", "activities_for",
+	"widgets", "xpath_expressions", "activities_for", "flows_for",
 	"permissions", "permissions_for",
 	"strings",
 }
 
 // fullFields are struct fields a fast build leaves at their zero value
 // (page.widget_count and snippet.widget_count count widgets only a full build
-// extracts). They are detected as an attribute access, `.name`.
-var fullFields = []string{"widget_count"}
+// extracts; a page's and a layout's own class_name, style and dynamic_classes
+// are read from the raw unit a full build loads). They are detected as an
+// attribute access, `.name`; a match on another struct's field of the same
+// name only builds a deeper catalog than needed.
+var fullFields = []string{"widget_count", "class_name", "style", "dynamic_classes"}
 
 // detectRequiredCatalogMode infers the catalog depth a Starlark rule needs by
 // scanning its source for calls to the graph / full-only builtins and reads of
@@ -424,7 +427,12 @@ func (r *StarlarkRule) buildPredeclared() starlark.StringDict {
 		"strings":                   starlark.NewBuiltin("strings", r.builtinStrings),
 		"layouts":                   starlark.NewBuiltin("layouts", r.builtinLayouts),
 		"published_rest_operations": starlark.NewBuiltin("published_rest_operations", r.builtinPublishedRestOperations),
+		"workflows":                 starlark.NewBuiltin("workflows", r.builtinWorkflows),
+		"workflow_activities":       starlark.NewBuiltin("workflow_activities", r.builtinWorkflowActivities),
 		"modules":                   starlark.NewBuiltin("modules", r.builtinModules),
+		"folders":                   starlark.NewBuiltin("folders", r.builtinFolders),
+		"annotations":               starlark.NewBuiltin("annotations", r.builtinAnnotations),
+		"jar_files":                 starlark.NewBuiltin("jar_files", r.builtinJarFiles),
 
 		// Graph-analysis facts (populated by `refresh catalog communities`).
 		"community_of":         starlark.NewBuiltin("community_of", r.builtinCommunityOf),
@@ -442,6 +450,7 @@ func (r *StarlarkRule) buildPredeclared() starlark.StringDict {
 		"rest_clients":         starlark.NewBuiltin("rest_clients", r.builtinRestClients),
 		"rest_operations":      starlark.NewBuiltin("rest_operations", r.builtinRestOperations),
 		"activities_for":       starlark.NewBuiltin("activities_for", r.builtinActivitiesFor),
+		"flows_for":            starlark.NewBuiltin("flows_for", r.builtinFlowsFor),
 
 		// Project-level queries
 		"user_roles":       starlark.NewBuiltin("user_roles", r.builtinUserRoles),
@@ -1029,6 +1038,25 @@ func (r *StarlarkRule) builtinActivitiesFor(_ *starlark.Thread, _ *starlark.Buil
 	return starlark.NewList(activities), nil
 }
 
+// builtinFlowsFor returns the sequence and annotation flows of a microflow,
+// nanoflow or rule (ako/mxcli#1299), loop bodies included.
+func (r *StarlarkRule) builtinFlowsFor(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if r.ctx == nil {
+		return starlark.NewList(nil), nil
+	}
+	var microflowQualifiedName starlark.String
+	if err := starlark.UnpackArgs("flows_for", args, kwargs,
+		"microflow_qualified_name", &microflowQualifiedName,
+	); err != nil {
+		return nil, err
+	}
+	var flows []starlark.Value
+	for f := range r.ctx.FlowsFor(string(microflowQualifiedName)) {
+		flows = append(flows, flowToStarlark(f))
+	}
+	return starlark.NewList(flows), nil
+}
+
 // builtinUserRoles returns all user roles from project security.
 func (r *StarlarkRule) builtinUserRoles(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if r.ctx == nil {
@@ -1245,6 +1273,10 @@ func pageToStarlark(p Page) starlark.Value {
 		"url":            starlark.String(p.URL),
 		"description":    starlark.String(p.Description),
 		"widget_count":   starlark.MakeInt(p.WidgetCount),
+		// Named class_name because class is a Starlark keyword, as on a widget.
+		"class_name":      starlark.String(p.Class),
+		"style":           starlark.String(p.Style),
+		"dynamic_classes": starlark.String(p.DynamicClasses),
 	})
 }
 
@@ -1269,6 +1301,7 @@ func enumerationValuesToStarlark(values []EnumerationValue) *starlark.List {
 	out := make([]starlark.Value, 0, len(values))
 	for _, v := range values {
 		out = append(out, starlarkstruct.FromStringDict(starlark.String("enumeration_value"), starlark.StringDict{
+			"id":             starlark.String(v.ID),
 			"name":           starlark.String(v.Name),
 			"qualified_name": starlark.String(v.QualifiedName),
 			"caption":        starlark.String(v.Caption),
@@ -1311,6 +1344,7 @@ func widgetToStarlark(w Widget) starlark.Value {
 		"microflow_ref": starlark.String(w.MicroflowRef),
 		"nanoflow_ref":  starlark.String(w.NanoflowRef),
 		"page_ref":      starlark.String(w.PageRef),
+		"snippet_ref":   starlark.String(w.SnippetRef),
 		// Tree position, appearance and primary action (mendixlabs/mxcli#1268).
 		// `class` is a Starlark keyword, hence class_name.
 		"parent_widget_id": starlark.String(w.ParentWidgetID),
@@ -1320,6 +1354,8 @@ func widgetToStarlark(w Widget) starlark.Value {
 		"dynamic_classes":  starlark.String(w.DynamicClasses),
 		"action_type":      starlark.String(w.ActionType),
 		"has_confirmation": starlark.Bool(w.HasConfirmation),
+		"caption":          starlark.String(w.Caption),
+		"tooltip":          starlark.String(w.Tooltip),
 	})
 }
 
@@ -1471,6 +1507,27 @@ func activityToStarlark(a Activity) starlark.Value {
 		"with_events":              starlark.Bool(a.WithEvents),
 		"retrieve_source":          starlark.String(a.RetrieveSource),
 		"queue_ref":                starlark.String(a.QueueRef),
+		"x":                        starlark.MakeInt(a.X),
+		"y":                        starlark.MakeInt(a.Y),
+		"width":                    starlark.MakeInt(a.Width),
+		"height":                   starlark.MakeInt(a.Height),
+	})
+}
+
+// flowToStarlark converts a Flow to a Starlark struct.
+func flowToStarlark(f Flow) starlark.Value {
+	return starlarkstruct.FromStringDict(starlark.String("flow"), starlark.StringDict{
+		"id":                           starlark.String(f.ID),
+		"flow_type":                    starlark.String(f.FlowType),
+		"microflow_id":                 starlark.String(f.MicroflowID),
+		"microflow_qualified_name":     starlark.String(f.MicroflowQualifiedName),
+		"module_name":                  starlark.String(f.ModuleName),
+		"origin_id":                    starlark.String(f.OriginID),
+		"destination_id":               starlark.String(f.DestinationID),
+		"is_error_handler":             starlark.Bool(f.IsErrorHandler),
+		"case_value":                   starlark.String(f.CaseValue),
+		"origin_connection_index":      starlark.MakeInt(f.OriginConnectionIndex),
+		"destination_connection_index": starlark.MakeInt(f.DestinationConnectionIndex),
 	})
 }
 
@@ -1584,7 +1641,18 @@ func (r *StarlarkRule) builtinParseXPath(_ *starlark.Thread, _ *starlark.Builtin
 	parser := exprcheck.NewParser()
 	ctx := exprcheck.NewSyntaxContext("", "")
 	ctx.XPath = true
-	ast, _ := parser.Parse(inner, ctx)
+	ast, hs := parser.Parse(inner, ctx)
+	// A parse that stopped before the end (E014, trailing tokens) is a
+	// partial tree that looks whole; a rule over it judged a fragment of the
+	// constraint (ako/mxcli#2398). Hand the rule a recovered root instead.
+	for _, h := range hs {
+		if h.Code == "E014" {
+			return robustExprToStarlark(&exprcheck.RecoveredExpr{
+				SourceFragment: inner,
+				Reason:         "unexpected '" + h.YouWrote + "' after the expression: the constraint did not parse to its end",
+			}), nil
+		}
+	}
 	return robustExprToStarlark(ast), nil
 }
 

@@ -55,75 +55,9 @@ func (pb *pageBuilder) applyVisibleWhen(widget pages.Widget, w *ast.WidgetV3) er
 // for applyVisibleWhen and for a tab page, which is no widget but carries the
 // same setting (mendixlabs/mxcli#1465).
 func (pb *pageBuilder) visibleWhenSettings(w *ast.WidgetV3, vw *ast.VisibleWhenV3) (*pages.ConditionalVisibilitySettings, error) {
-	where := fmt.Sprintf("%s %s: Visible: %s in (…)", w.Type, w.Name, vw.Attribute)
-	if strings.Contains(vw.Attribute, "/") {
-		return nil, mdlerrors.NewValidationf("%s: association paths are not supported — name an attribute of the data container's own entity", where)
-	}
-
-	// The entity is the data container's, or — qualified, Module.Entity.Attr —
-	// named outright. DESCRIBE writes the qualified form under a container whose
-	// flow cannot be resolved, where there is no entity in scope at all.
-	//
-	// `$Param.Attr` reads a page or snippet parameter: Studio Pro stores the
-	// parameter in the setting's SourceVariable, as on TestApp's
-	// WorkflowCommons.Snip_UserTask_NameColumnWithIcon, where the image sits in
-	// the snippet with no data container around it.
-	entity, attrName := pb.entityContext, vw.Attribute
-	var source *pages.WidgetVariable
-	if name, rest, ok := namedObjectBinding(vw.Attribute); ok {
-		wv, paramEntity, isParam := pb.parameterVariable(name)
-		if !isParam || strings.Contains(rest, ".") {
-			return nil, mdlerrors.NewValidationf("%s: `$%s` is not a parameter of this %s — `Visible: $Param.Attr in (…)` "+
-				"reads an attribute of a page or snippet parameter; inside a data container name the attribute bare",
-				where, name, pb.documentKind())
-		}
-		entity, attrName, source = paramEntity, rest, &wv
-	} else if parts := strings.Split(vw.Attribute, "."); len(parts) == 3 {
-		entity, attrName = parts[0]+"."+parts[1], parts[2]
-	} else if len(parts) != 1 {
-		return nil, mdlerrors.NewValidationf("%s: name the attribute bare, as $Param.Attribute, or as Module.Entity.Attribute", where)
-	}
-	if entity == "" {
-		return nil, mdlerrors.NewValidationf("%s: the attribute is read from the enclosing data container's object — place the widget inside a data container, or read it from a parameter ($Param.%s)", where, attrName)
-	}
-
-	declaring, ok := pb.declaringEntityFor(entity, attrName)
-	if !ok {
-		return nil, mdlerrors.NewValidationf("%s: %s has no attribute %s", where, entity, attrName)
-	}
-	attrQN := declaring + "." + attrName
-
-	var all []string
-	switch t := pb.findAttributeType(attrQN).(type) {
-	case *domainmodel.BooleanAttributeType:
-		all = []string{"true", "false"}
-	case *domainmodel.EnumerationAttributeType:
-		values, err := pb.enumerationValueNames(t.EnumerationRef)
-		if err != nil {
-			return nil, mdlerrors.NewValidationf("%s: %v", where, err)
-		}
-		all = append(values, emptyConditionValue)
-	default:
-		return nil, mdlerrors.NewValidationf("%s: %s is not a Boolean or enumeration attribute — use an expression instead: `Visible: $currentObject/…`", where, attrQN)
-	}
-
-	visible := map[string]bool{}
-	for _, v := range vw.Values {
-		stored := v
-		if strings.EqualFold(v, "empty") {
-			stored = emptyConditionValue
-		}
-		idx := indexFold(all, stored)
-		if idx < 0 {
-			return nil, mdlerrors.NewValidationf("%s: %q is not a value of %s (values: %s)", where, v, attrQN,
-				strings.Join(mdlValueNames(all), ", "))
-		}
-		visible[all[idx]] = true
-	}
-
-	conds := make([]pages.ValueCondition, 0, len(all))
-	for _, v := range all {
-		conds = append(conds, pages.ValueCondition{Value: v, Visible: visible[v]})
+	attrQN, conds, source, err := pb.attributeConditions(w, vw, "Visible")
+	if err != nil {
+		return nil, err
 	}
 	return &pages.ConditionalVisibilitySettings{
 		BaseElement: model.BaseElement{
@@ -136,12 +70,147 @@ func (pb *pageBuilder) visibleWhenSettings(w *ast.WidgetV3, vw *ast.VisibleWhenV
 	}, nil
 }
 
+// editableWhenSettings resolves `Editable: Attr in (…)` — Studio Pro's
+// "Editable: based on attribute value" — to the editability settings element.
+// Studio Pro stores it as it stores the visibility form: the attribute, one
+// condition per value it can hold, and the parameter it is read from
+// (ako/mxcli#2111).
+func (pb *pageBuilder) editableWhenSettings(w *ast.WidgetV3, ew *ast.VisibleWhenV3) (*pages.ConditionalEditabilitySettings, error) {
+	attrQN, conds, source, err := pb.attributeConditions(w, ew, "Editable")
+	if err != nil {
+		return nil, err
+	}
+	return &pages.ConditionalEditabilitySettings{
+		BaseElement: model.BaseElement{
+			ID:       model.ID(types.GenerateID()),
+			TypeName: "Forms$ConditionalEditabilitySettings",
+		},
+		Attribute:      attrQN,
+		Conditions:     conds,
+		SourceVariable: source,
+	}, nil
+}
+
+// applyEditableWhen writes `Editable: Attr in (…)` onto a widget. It replaces
+// any other editability the statement set: the attribute form is a condition,
+// and a widget has one.
+func (pb *pageBuilder) applyEditableWhen(widget pages.Widget, w *ast.WidgetV3) error {
+	ew, ok := w.Properties["EditableWhen"].(*ast.VisibleWhenV3)
+	if !ok || ew == nil {
+		return nil
+	}
+	type baseWidgetGetter interface {
+		GetBaseWidget() *pages.BaseWidget
+	}
+	bwg, ok := widget.(baseWidgetGetter)
+	if !ok {
+		return mdlerrors.NewValidationf("%s %s: `Editable: %s in (…)` is not supported on this widget", w.Type, w.Name, ew.Attribute)
+	}
+	ces, err := pb.editableWhenSettings(w, ew)
+	if err != nil {
+		return err
+	}
+	bw := bwg.GetBaseWidget()
+	bw.ConditionalEditability = ces
+	bw.Editable = ""
+	if cw, ok := widget.(*pages.CustomWidget); ok {
+		cw.Editable = pages.WidgetEditability(&cw.BaseWidget)
+	}
+	return nil
+}
+
+// attributeConditions resolves `<kind>: Attr in (v1, …)` to the attribute's
+// qualified name, one condition per value it can hold (true for the values
+// named), and the parameter it is read from, if any. Visibility and
+// editability store the attribute form identically.
+func (pb *pageBuilder) attributeConditions(w *ast.WidgetV3, vw *ast.VisibleWhenV3, kind string) (string, []pages.ValueCondition, *pages.WidgetVariable, error) {
+	where := fmt.Sprintf("%s %s: %s: %s in (…)", w.Type, w.Name, kind, vw.Attribute)
+	if strings.Contains(vw.Attribute, "/") {
+		return "", nil, nil, mdlerrors.NewValidationf("%s: association paths are not supported — name an attribute of the data container's own entity", where)
+	}
+
+	// The entity is the data container's, or — qualified, Module.Entity.Attr —
+	// named outright. DESCRIBE writes the qualified form under a container whose
+	// flow cannot be resolved, where there is no entity in scope at all.
+	//
+	// `$Param.Attr` reads a page or snippet parameter: Studio Pro stores the
+	// parameter in the setting's SourceVariable, as on TestApp's
+	// WorkflowCommons.Snip_UserTask_NameColumnWithIcon, where the image sits in
+	// the snippet with no data container around it.
+	entity, attrName := pb.entityContext, vw.Attribute
+	var source *pages.WidgetVariable
+	//
+	// `$dataView1.Attr` reads an enclosing data view's object: the data-view pair
+	// {Widget, PageParameter}, as on FactoryManagement's
+	// ConversationalUI.Trace_Details (ako/mxcli#2107).
+	if name, rest, ok := namedObjectBinding(vw.Attribute); ok {
+		wv, paramEntity, isParam := pb.namedObjectVariable(name)
+		if !isParam || strings.Contains(rest, ".") {
+			return "", nil, nil, mdlerrors.NewValidationf("%s: `$%s` is not a parameter of this %s or an enclosing data view — "+
+				"`%s: $Param.Attr in (…)` reads an attribute of a page or snippet parameter, `$dataView1.Attr` one of "+
+				"a data view the widget is inside; for the nearest data container's object name the attribute bare",
+				where, name, pb.documentKind(), kind)
+		}
+		entity, attrName, source = paramEntity, rest, &wv
+	} else if parts := strings.Split(vw.Attribute, "."); len(parts) == 3 {
+		entity, attrName = parts[0]+"."+parts[1], parts[2]
+	} else if len(parts) != 1 {
+		return "", nil, nil, mdlerrors.NewValidationf("%s: name the attribute bare, as $Param.Attribute, or as Module.Entity.Attribute", where)
+	}
+	if entity == "" {
+		return "", nil, nil, mdlerrors.NewValidationf("%s: the attribute is read from the enclosing data container's object — place the widget inside a data container, or read it from a parameter ($Param.%s)", where, attrName)
+	}
+
+	declaring, ok := pb.declaringEntityFor(entity, attrName)
+	if !ok {
+		return "", nil, nil, mdlerrors.NewValidationf("%s: %s has no attribute %s", where, entity, attrName)
+	}
+	attrQN := declaring + "." + attrName
+
+	var all []string
+	switch t := pb.findAttributeType(attrQN).(type) {
+	case *domainmodel.BooleanAttributeType:
+		all = []string{"true", "false"}
+	case *domainmodel.EnumerationAttributeType:
+		values, err := pb.enumerationValueNames(t.EnumerationRef)
+		if err != nil {
+			return "", nil, nil, mdlerrors.NewValidationf("%s: %v", where, err)
+		}
+		all = append(values, emptyConditionValue)
+	default:
+		return "", nil, nil, mdlerrors.NewValidationf("%s: %s is not a Boolean or enumeration attribute — use an expression instead: `%s: $currentObject/…`", where, attrQN, kind)
+	}
+
+	visible := map[string]bool{}
+	for _, v := range vw.Values {
+		stored := v
+		if strings.EqualFold(v, "empty") {
+			stored = emptyConditionValue
+		}
+		idx := indexFold(all, stored)
+		if idx < 0 {
+			return "", nil, nil, mdlerrors.NewValidationf("%s: %q is not a value of %s (values: %s)", where, v, attrQN,
+				strings.Join(mdlValueNames(all), ", "))
+		}
+		visible[all[idx]] = true
+	}
+
+	conds := make([]pages.ValueCondition, 0, len(all))
+	for _, v := range all {
+		conds = append(conds, pages.ValueCondition{Value: v, Visible: visible[v]})
+	}
+	return attrQN, conds, source, nil
+}
+
 // applyVisibleRoles writes `Visible: roles (Mod.A, …)` — Studio Pro's "Visible
 // for module roles" — onto the widget's settings element, creating one when no
 // expression or attribute condition did. Studio Pro keeps the roles beside the
 // condition on the same element (TestApp WorkflowCommons), so they never
 // replace it. Runs after applyConditionalSettings and applyVisibleWhen.
 func applyVisibleRoles(widget pages.Widget, w *ast.WidgetV3) error {
+	if err := refuseRolesInExpressions(w); err != nil {
+		return err
+	}
 	if len(widgetVisibleRoles(w)) == 0 {
 		return nil
 	}
@@ -247,4 +316,32 @@ func (pb *pageBuilder) getEnumerations() ([]*model.Enumeration, error) {
 		pb.execCache.enumerations = enums
 	}
 	return enums, nil
+}
+
+// refuseRolesInExpressions is MDL-WIDGET54 at exec: a `roles (…)` call left in
+// a widget expression would be stored as invalid expression text with the
+// role restriction lost (ako/mxcli#2319).
+func refuseRolesInExpressions(w *ast.WidgetV3) error {
+	// The keys of expressionWidgetProps, each read by literal: the builder's
+	// property reads are checked that way (widget_native_props_source_test.go).
+	for _, p := range []struct{ key, expr string }{
+		{"DynamicClasses", w.GetStringProp("DynamicClasses")},
+		{"VisibleIf", w.GetStringProp("VisibleIf")},
+		{"EditableIf", w.GetStringProp("EditableIf")},
+	} {
+		if exprCallsRoles(p.expr) {
+			return mdlerrors.NewValidation(rolesInExpressionMessage(w.Type, w.Name, p.key))
+		}
+	}
+	return nil
+}
+
+// refuseRolesInVisibility is refuseRolesInExpressions for an element that has
+// a visibility and nothing else (a tab page, a layout-grid row): only its
+// `Visible:` is read.
+func refuseRolesInVisibility(w *ast.WidgetV3) error {
+	if exprCallsRoles(w.GetStringProp("VisibleIf")) {
+		return mdlerrors.NewValidation(rolesInExpressionMessage(w.Type, w.Name, "VisibleIf"))
+	}
+	return nil
 }

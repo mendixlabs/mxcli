@@ -52,12 +52,29 @@ type Reader struct {
 	v2TypesDirty  bool
 	v2Hashes      map[string]struct{}
 
-	// contentCache stores raw BSON bytes per unit ID (MPR v2 only).
-	// Populated on first read while caching is on (EnableContentCache, or a
-	// CacheUnitReads scope); cleared by InvalidateCache, which every write
-	// calls. nil means caching is off. contentMu guards it and cacheScopes.
+	// memo is storage for what another package derives from this reader's
+	// units and wants dropped with the connection (see Memo).
+	memo sync.Map
+
+	// contentCache stores raw BSON bytes per unit ID (MPR v2 only), each
+	// under the ContentsHash its Unit row had when it was read. Populated on
+	// first read while caching is on (EnableContentCache, or a CacheUnitReads
+	// scope); nil means caching is off. An entry is served only while the
+	// unit's row still has that hash (rowHashes), so a write retires the one
+	// unit it rewrote and no other (ako/mxcli#2160). contentMu guards the
+	// cache, rowHashes and cacheScopes.
 	contentMu    sync.Mutex
-	contentCache map[string][]byte
+	contentCache map[string]cachedContent
+	// rowHashes is every unit's ContentsHash as the Unit table had it at the
+	// last buildUnitCache. nil between a write and the next one: nothing is
+	// known to be current then, so nothing is served from contentCache or
+	// added to it.
+	rowHashes map[string]string
+	// nameIndex is where GetRawUnitByName last found each qualified name, by
+	// type: a hint it verifies before use, cleared by InvalidateCache
+	// (ako/mxcli#2043). nameIndexMu guards it.
+	nameIndexMu sync.Mutex
+	nameIndex   map[string]map[string]rawUnit
 	// cacheScopes counts the open CacheUnitReads scopes; the cache is dropped
 	// when the last one closes. -1 means EnableContentCache turned it on for
 	// the reader's lifetime, which no scope ends.
@@ -66,6 +83,12 @@ type Reader struct {
 	// fileReads counts unit files read from mprcontents/ — what the content
 	// cache saves. Read by tests (mendixlabs/mxcli#1272).
 	fileReads atomic.Int64
+	// unitIndexBuilds counts the scans of the Unit table that rebuild the
+	// unit cache (buildUnitCache). For tests.
+	unitIndexBuilds atomic.Int64
+	// contentCopies counts the copies of cached unit bytes handed to callers
+	// (readMprContentsUnder). For tests.
+	contentCopies atomic.Int64
 
 	// store is MPR v2's persisted copy of the units (reader_unit_store.go),
 	// made on first use; nil for v1 and for a reader with no project path.
@@ -79,18 +102,48 @@ type Reader struct {
 
 	// v1Types is MPR v1's unit-type index (reader_units_v1.go): UnitID blob →
 	// $Type, with the blob length it was read at. It lets a typed listing
-	// skip the contents of every other unit. Revalidated on every listing, so
-	// it needs no invalidation from the writer.
+	// skip the contents of every other unit. Revalidated against each fresh
+	// scan of the Unit table.
 	v1TypesMu sync.Mutex
 	v1Types   map[string]v1TypeEntry
+	// v1Metas is the last scan of the Unit table's metadata, kept while
+	// v1MetasValid and v1MetasStamp say the table cannot have changed
+	// (unitMetasV1). v1Headers is each unit's Name / Excluded by length and
+	// ContentsHash (listUnitHeadersV1). v1NoHashColumn marks a project whose
+	// Unit table has no ContentsHash. All guarded by v1TypesMu.
+	v1Metas        []v1UnitMeta
+	v1MetasValid   bool
+	v1MetasStamp   v1Stamp
+	v1Headers      map[string]v1HeaderEntry
+	v1NoHashColumn bool
 
 	// blobReads counts full unit-content blobs read from the v1 Unit table by
 	// listings — the cost a typed listing must keep proportional to its
 	// result, not to the project. Read by tests.
 	blobReads atomic.Int64
+
+	// metaScans counts scans of the v1 Unit table's metadata — what the
+	// listing cache saves (ako/mxcli#2094). Read by tests.
+	metaScans atomic.Int64
+
+	// packaged is what the project's module packages (modules/*.mxmodule)
+	// hold, read on first use (packaged_modules.go).
+	packagedOnce sync.Once
+	packaged     *packagedSet
+
+	// diskSeen is the state of the project on disk this reader last looked
+	// at (reader_disk_change.go, ako/mxcli#2121). diskMu guards it.
+	diskMu   sync.Mutex
+	diskSeen diskStamp
 }
 
 // cachedUnit stores metadata about a unit for fast filtering.
+// cachedContent is a unit's bytes and the row hash they were read under.
+type cachedContent struct {
+	hash string
+	data []byte
+}
+
 type cachedUnit struct {
 	ID              string
 	ContainerID     string
@@ -203,6 +256,7 @@ func OpenWithOptions(path string, opts OpenOptions) (*Reader, error) {
 		return nil, err
 	}
 
+	r.markDiskBaseline()
 	return r, nil
 }
 
@@ -329,6 +383,7 @@ func OpenWithDB(db *sql.DB, path, contentsDir string) (*Reader, error) {
 	if err := r.verify(); err != nil {
 		return nil, err
 	}
+	r.markDiskBaseline()
 	return r, nil
 }
 
@@ -488,6 +543,9 @@ func (r *Reader) rawUnitBytes(q rowQuerier, unitID string) ([]byte, error) {
 			return data, nil
 		}
 	}
+	if u, ok := r.packagedUnit(unitID); ok {
+		return u.Contents, nil
+	}
 	if r.version == MPRVersionV2 {
 		// For v2, we need the swapped UUID to build the file path.
 		// The unitID is in standard UUID format; readMprContents expects
@@ -543,3 +601,10 @@ func blobToUUIDSwapped(blob []byte) string {
 		blob[8], blob[9],
 		blob[10], blob[11], blob[12], blob[13], blob[14], blob[15])
 }
+
+// Memo is a store that lives exactly as long as this reader: for a cache of
+// something derived from the project's units, kept by a package the reader
+// cannot import (mprread's decoded-unit cache). Nothing in the reader reads or
+// invalidates it, so whatever is kept there must be keyed so that it cannot go
+// stale — by the unit's content, not by its identity alone.
+func (r *Reader) Memo() *sync.Map { return &r.memo }

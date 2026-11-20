@@ -109,6 +109,24 @@ func actionFromGen(el element.Element) microflows.MicroflowAction {
 		out.ID = model.ID(a.ID())
 		return out
 
+	case *genMf.SendExternalObject:
+		out := &microflows.SendExternalObjectAction{
+			Variable:          a.VariableNameToBeSent(),
+			RefreshInClient:   a.RefreshInClient(),
+			ErrorHandlingType: microflows.ErrorHandlingType(a.ErrorHandlingType()),
+		}
+		out.ID = model.ID(a.ID())
+		return out
+
+	case *genMf.DeleteExternalObject:
+		out := &microflows.DeleteExternalObjectAction{
+			Variable:          a.DeleteVariableName(),
+			RefreshInClient:   a.RefreshInClient(),
+			ErrorHandlingType: microflows.ErrorHandlingType(a.ErrorHandlingType()),
+		}
+		out.ID = model.ID(a.ID())
+		return out
+
 	case *genMf.RollbackAction:
 		out := &microflows.RollbackObjectAction{
 			RollbackVariable:  a.RollbackVariableName(),
@@ -616,13 +634,24 @@ func actionFromGen(el element.Element) microflows.MicroflowAction {
 			ResultVariableName:   rawStr(raw, "VariableName"),
 		}
 		out.UseReturnVariable = out.ResultVariableName != ""
-		for _, md := range rawDocElements(raw, "ParameterMappings") {
+		genMappings := a.ParameterMappingsItems()
+		for i, md := range rawDocElements(raw, "ParameterMappings") {
 			pm := &microflows.ExternalActionParameterMapping{
 				ParameterName: rawStr(md, "ParameterName"),
 				Argument:      rawStr(md, "Argument"),
 			}
 			if b, ok := md.Lookup("CanBeEmpty").BooleanOK(); ok {
 				pm.CanBeEmpty = b
+			}
+			// The parameter's entity, so a rewrite can tell whether the stored
+			// IncludedAssociations still belong to the argument it binds.
+			if pt, ok := md.Lookup("ParameterType").DocumentOK(); ok {
+				pm.ParameterEntity = rawStr(pt, "Entity")
+			}
+			if i < len(genMappings) {
+				if gm, ok := genMappings[i].(*genMf.ExternalActionParameterMapping); ok {
+					pm.IncludedAssociations = includedAssociationsFromGen(gm.IncludedAssociationsItems())
+				}
 			}
 			out.ParameterMappings = append(out.ParameterMappings, pm)
 		}
@@ -1552,6 +1581,27 @@ func readWebServiceRequestBody(raw bson.Raw, out *microflows.WebServiceCallActio
 	}
 }
 
+// includedAssociationsFromGen reads a "call external action" parameter's
+// Associations to include, nested ones under the association they hang from,
+// keeping each element's $ID so a rewrite carries them unchanged (#1914).
+func includedAssociationsFromGen(items []element.Element) []*microflows.IncludedAssociation {
+	var out []*microflows.IncludedAssociation
+	for _, it := range items {
+		ia, ok := it.(*genMf.IncludedAssociation)
+		if !ok {
+			continue
+		}
+		a := &microflows.IncludedAssociation{
+			Association:          ia.AssociationQualifiedName(),
+			IsParent:             ia.IsParent(),
+			IncludedAssociations: includedAssociationsFromGen(ia.IncludedAssociationsItems()),
+		}
+		a.ID = model.ID(ia.ID())
+		out = append(out, a)
+	}
+	return out
+}
+
 func rawDocElements(raw bson.Raw, key string) []bson.Raw {
 	arr, ok := raw.Lookup(key).ArrayOK()
 	if !ok {
@@ -1582,8 +1632,34 @@ func queueSettingsFromRaw(raw bson.Raw) *microflows.QueueSettings {
 	qs := &microflows.QueueSettings{Queue: rawStr(doc, "Queue")}
 	if v, err := doc.LookupErr("Retry"); err == nil && v.Type != bson.TypeNull {
 		qs.Retry = v
+		if rd, ok := v.DocumentOK(); ok {
+			qs.RetryPolicy = queueRetryFromRaw(rd)
+		}
 	}
 	return qs
+}
+
+// queueRetryFromRaw decodes a stored Queues$QueueRetry, or nil for a type this
+// build does not know — the raw value is still carried, so the rewrite guard
+// refuses rather than drops it.
+func queueRetryFromRaw(doc bson.Raw) *microflows.QueueRetry {
+	num := func(key string) int { n, _ := rawInteger(doc, key); return n }
+	r := &microflows.QueueRetry{
+		Retries:      num("Retries"),
+		IntervalType: rawStr(doc, "IntervalType"),
+	}
+	switch rawStr(doc, "$Type") {
+	case "Queues$QueueFixedRetry":
+		r.Kind = microflows.QueueRetryFixed
+		r.Interval = num("Interval")
+	case "Queues$QueueExponentialRetry":
+		r.Kind = microflows.QueueRetryExponential
+		r.InitialInterval = num("InitialInterval")
+		r.MaximumInterval = num("MaximumInterval")
+	default:
+		return nil
+	}
+	return r
 }
 
 // closePageCount reads how many pages a close-page action closes. Mendix stores

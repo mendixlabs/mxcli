@@ -63,6 +63,9 @@ type Layout struct {
 	Name          string     `json:"name"`
 	Documentation string     `json:"documentation,omitempty"`
 	LayoutType    LayoutType `json:"layoutType"`
+	// Excluded mirrors Studio Pro's "Exclude from project" (read only; the
+	// layout writer still writes false).
+	Excluded bool `json:"excluded,omitempty"`
 	// Native selects Forms$NativeLayoutContent over Forms$WebLayoutContent.
 	Native bool `json:"native,omitempty"`
 	// Class and Style are the layout's own Forms$Appearance.

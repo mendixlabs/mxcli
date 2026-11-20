@@ -178,7 +178,20 @@ func (b *Backend) WriteJavaScriptSourceFile(moduleName, actionName string, jsCod
 	// calls (mendixlabs/mxcli#1429; the Java twin is ako/mxcli#705).
 	existing, _ := os.ReadFile(path)
 	imports, extraCode := javaactions.JavaScriptRetainedSections(string(existing))
-	source := javaactions.GenerateJavaScriptSource(actionName, jsCode, params, returnType, imports, extraCode)
+	// The file as mxbuild writes it, the action's documentation and its
+	// enumerations' values included, so a build leaves it alone and a re-run
+	// writes nothing (ako/mxcli#2357). The action's unit is written before its
+	// file, so its documentation is read back from it.
+	doc := ""
+	if b.reader != nil {
+		if a, err := b.ReadJavaScriptActionByName(moduleName + "." + actionName); err == nil && a != nil {
+			doc = a.Documentation
+		}
+	}
+	source := javaactions.JSSource{
+		Action: actionName, Documentation: doc, UserCode: jsCode, Params: params, ReturnType: returnType,
+		Imports: imports, ExtraCode: extraCode, EnumValues: b.enumerationValueNames,
+	}.Generate()
 	changed, err := javaactions.WriteSourceIfChanged(path, source)
 	b.noteFileWrite(changed)
 	if err != nil {
@@ -232,4 +245,41 @@ func (b *Backend) RenameJavaScriptSourceFile(moduleName, oldName, newName string
 		return fmt.Errorf("RenameJavaScriptSourceFile: %w", err)
 	}
 	return nil
+}
+
+// enumerationValueNames is the value names of the enumeration qualifiedName,
+// in order, or nil when it cannot be read.
+func (b *Backend) enumerationValueNames(qualifiedName string) []string {
+	if b.reader == nil {
+		return nil
+	}
+	info, err := b.reader.GetRawUnitByName("enumeration", qualifiedName)
+	if err != nil || info == nil {
+		return nil
+	}
+	var doc bson.D
+	if bson.Unmarshal(info.Contents, &doc) != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range doc {
+		if e.Key != "Values" {
+			continue
+		}
+		list, _ := e.Value.(bson.A)
+		for _, v := range list {
+			vd, ok := v.(bson.D)
+			if !ok {
+				continue
+			}
+			for _, f := range vd {
+				if f.Key == "Name" {
+					if n, ok := f.Value.(string); ok {
+						names = append(names, n)
+					}
+				}
+			}
+		}
+	}
+	return names
 }

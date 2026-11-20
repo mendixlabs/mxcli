@@ -84,6 +84,29 @@ type RollbackObjectAction struct {
 
 func (RollbackObjectAction) isMicroflowAction() {}
 
+// SendExternalObjectAction is Studio Pro's "Send external object"
+// (Microflows$SendExternalObject): it saves a changed external (OData) object
+// through its consumed service, which a plain commit on one cannot do.
+type SendExternalObjectAction struct {
+	model.BaseElement
+	Variable          string            `json:"variable"`
+	RefreshInClient   bool              `json:"refreshInClient"`
+	ErrorHandlingType ErrorHandlingType `json:"errorHandlingType,omitempty"`
+}
+
+func (SendExternalObjectAction) isMicroflowAction() {}
+
+// DeleteExternalObjectAction is Studio Pro's "Delete external object"
+// (Microflows$DeleteExternalObject).
+type DeleteExternalObjectAction struct {
+	model.BaseElement
+	Variable          string            `json:"variable"`
+	RefreshInClient   bool              `json:"refreshInClient"`
+	ErrorHandlingType ErrorHandlingType `json:"errorHandlingType,omitempty"`
+}
+
+func (DeleteExternalObjectAction) isMicroflowAction() {}
+
 // MemberChange represents a change to a member (attribute or association).
 type MemberChange struct {
 	model.BaseElement
@@ -744,13 +767,35 @@ type MicroflowCall struct {
 // QueueSettings does (CE1613 when the named queue is missing). `generated/metamodel`
 // — the arbiter — has no top-level `Queue` on either call type, only this.
 //
-// Retry is a Queues$QueueRetry (fixed or exponential) that MDL cannot author.
-// It is carried as raw storage so a rewrite preserves whatever Studio Pro wrote
-// rather than silently dropping it (guard-don't-drop, ADR-0005).
+// Retry is the stored Queues$QueueRetry as raw storage, so the rewrite guard can
+// tell one is there even when it cannot be decoded (guard-don't-drop, ADR-0005).
+// RetryPolicy is the same value decoded — set by the reader for the two retry
+// types Mendix has, and by the builder for `in queue … retry …`
+// (mendixlabs/mxcli#1729). The writer writes RetryPolicy; nil writes no retry.
 type QueueSettings struct {
 	model.BaseElement
-	Queue string `json:"queue,omitempty"` // Qualified name of the Queues$Queue
-	Retry any    `json:"retry,omitempty"` // Opaque Queues$QueueRetry, preserved verbatim
+	Queue       string      `json:"queue,omitempty"` // Qualified name of the Queues$Queue
+	Retry       any         `json:"retry,omitempty"` // Stored Queues$QueueRetry, raw
+	RetryPolicy *QueueRetry `json:"retryPolicy,omitempty"`
+}
+
+// Retry policy kinds: the two concrete Queues$QueueRetry types (Mendix 9.10+).
+const (
+	QueueRetryFixed       = "Fixed"       // Queues$QueueFixedRetry
+	QueueRetryExponential = "Exponential" // Queues$QueueExponentialRetry
+)
+
+// QueueRetry is a queued call's retry policy. Fixed uses Interval; Exponential
+// uses InitialInterval and MaximumInterval. IntervalType is the unit of all of
+// them: Seconds, Minutes or Hours (Queues$IntervalType).
+type QueueRetry struct {
+	model.BaseElement
+	Kind            string `json:"kind"`
+	Retries         int    `json:"retries"`
+	Interval        int    `json:"interval,omitempty"`
+	InitialInterval int    `json:"initialInterval,omitempty"`
+	MaximumInterval int    `json:"maximumInterval,omitempty"`
+	IntervalType    string `json:"intervalType,omitempty"`
 }
 
 // MicroflowCallParameterMapping maps a parameter to an argument.
@@ -918,6 +963,23 @@ type ExternalActionParameterMapping struct {
 	// type-checked against a parameter that has no type (mendixlabs/mxcli#1020).
 	ParameterDataType string `json:"parameterDataType,omitempty"`
 	ParameterEntity   string `json:"parameterEntity,omitempty"`
+	// IncludedAssociations is Studio Pro's "Associations to include" for an
+	// object parameter: the associations whose objects are sent with it in the
+	// OData request. It is a tree, not a flag — an association ticked under
+	// another is stored nested in it. Without it the request carries only the
+	// object's own attributes (#1914).
+	IncludedAssociations []*IncludedAssociation `json:"includedAssociations,omitempty"`
+}
+
+// IncludedAssociation is one ticked association under an external action
+// parameter (Microflows$IncludedAssociation).
+type IncludedAssociation struct {
+	model.BaseElement
+	Association string `json:"association,omitempty"` // BY_NAME reference
+	// IsParent is true when the object on this side of the tree is the
+	// association's owner (its ParentPointer, the FROM entity).
+	IsParent             bool                   `json:"isParent,omitempty"`
+	IncludedAssociations []*IncludedAssociation `json:"includedAssociations,omitempty"`
 }
 
 // WebServiceCallAction calls a web service.

@@ -68,6 +68,47 @@ var memberRefSkipKeys = map[string]bool{
 	"Documentation":   true,
 	"XPathConstraint": true,
 	"XpathConstraint": true,
+	// Module role names: `TcConnector.User` the role is not TcConnector.User
+	// the entity (ako/mxcli#1829).
+	"AllowedModuleRoles": true,
+}
+
+// memberRefProse are the string properties, by owning $Type, that hold text a
+// person wrote: an annotation and a text's translation. A name in them is a
+// mention, not a use; reading `Sums Shop.Order/Total` as a path gave the
+// annotation a member edge to the attribute (ako/mxcli#1829).
+var memberRefProse = map[[2]string]bool{
+	{"Microflows$Annotation", "Caption"}: true,
+	{"Workflows$Annotation", "Caption"}:  true,
+	{"Texts$Translation", "Text"}:        true,
+}
+
+// entityTypeRef is the edge kind for an entity named whole at (owning $Type,
+// key), where the owner's own enclosing $Type is parent ("" for any). These are
+// the places a document names an entity as a type or a destination that no
+// typed pass reads: an action's result variable, a list it creates, an entity-
+// type argument, a snippet parameter, an association step's destination. A
+// flow's own parameters and return type, and a page's parameters, are left to
+// the typed passes, which emit `parameter` and `return` for them
+// (ako/mxcli#1829).
+var entityTypeRefs = []struct {
+	owner, key, parent, kind string
+}{
+	{"DataTypes$ObjectType", "Entity", "Microflows$ResultHandling", RefKindType},
+	{"DataTypes$ListType", "Entity", "Microflows$ResultHandling", RefKindType},
+	{"Microflows$CreateListAction", "Entity", "", RefKindType},
+	{"Microflows$EntityTypeCodeActionParameterValue", "Entity", "", RefKindType},
+	{"DataTypes$ObjectType", "Entity", "Forms$SnippetParameter", RefKindParameter},
+	{"DomainModels$EntityRefStep", "DestinationEntity", "", RefKindMember},
+}
+
+func entityTypeRefKind(owner, parent, key string) string {
+	for _, r := range entityTypeRefs {
+		if r.owner == owner && r.key == key && (r.parent == "" || r.parent == parent) {
+			return r.kind
+		}
+	}
+	return ""
 }
 
 // memberRefIndex is the set of names the model declares, which is what makes a
@@ -149,6 +190,19 @@ func (idx *memberRefIndex) resolveAttribute(entity, name string) (string, bool) 
 	return "", false
 }
 
+// missingEnumValue returns the enumeration of `Mod.Enum.Value` when the
+// enumeration exists but has no such value, else "".
+func (idx *memberRefIndex) missingEnumValue(name string) string {
+	i := strings.LastIndexByte(name, '.')
+	if i <= 0 || strings.Count(name, ".") != 2 || idx.enumValues[name] {
+		return ""
+	}
+	if enum := name[:i]; idx.enumerations[enum] {
+		return enum
+	}
+	return ""
+}
+
 // refEdge is one outbound edge found in a document.
 type refEdge struct {
 	TargetType, TargetName, RefKind string
@@ -197,8 +251,15 @@ func memberRefsInUnit(contents []byte, sourceType string, idx *memberRefIndex) [
 	isMapping := sourceType == RefObjectImportMapping || sourceType == RefObjectExportMapping ||
 		sourceType == RefObjectMessageDefinitionCollection || sourceType == RefObjectMessageDefinition
 	var set edgeSet
-	walkBSONStrings(doc, "", func(key, v string) {
-		if memberRefSkipKeys[key] || v == "" {
+	walkBSONStringsTyped(doc, "", "", "", func(owner, parent, key, v string) {
+		if memberRefSkipKeys[key] || memberRefProse[[2]string{owner, key}] || v == "" {
+			return
+		}
+		if kind := entityTypeRefKind(owner, parent, key); kind != "" {
+			idx.read(v)
+			if idx.entities[v] {
+				set.add(RefObjectEntity, v, kind)
+			}
 			return
 		}
 		// A whole-string match is a structured reference: MemberChange.Attribute,
@@ -227,7 +288,7 @@ func memberRefsInUnit(contents []byte, sourceType string, idx *memberRefIndex) [
 		if strings.ContainsAny(v, "./") {
 			scanPaths(v, "", idx, func(targetType, name string) {
 				kind := RefKindMember
-				if targetType == RefObjectEnumerationValue {
+				if targetType == RefObjectEnumerationValue || targetType == RefObjectEnumeration {
 					kind = RefKindValue
 				}
 				set.add(targetType, name, kind)
@@ -242,32 +303,40 @@ func hasKey(m map[string]string, k string) bool {
 	return ok
 }
 
-// walkBSONStrings calls fn for every string property value in a decoded
-// document, with the property's key. Arrays of strings are visited with the
-// array's key.
-func walkBSONStrings(v any, key string, fn func(key, value string)) {
+// walkBSONStringsTyped calls fn for every string property value in a decoded
+// document, with the property's key, the $Type of the object holding it
+// (owner) and the $Type of the object enclosing that one (parent). Arrays of
+// strings are visited with the array's key. A $Type value itself is not
+// visited.
+func walkBSONStringsTyped(v any, key, owner, parent string, fn func(owner, parent, key, value string)) {
 	switch t := v.(type) {
 	case string:
-		fn(key, t)
+		fn(owner, parent, key, t)
 	case bson.D:
+		typ := owner
 		for _, e := range t {
-			walkBSONStrings(e.Value, e.Key, fn)
+			if e.Key == "$Type" {
+				if s, ok := e.Value.(string); ok {
+					typ = s
+				}
+			}
 		}
-	case bson.M:
-		for k, x := range t {
-			walkBSONStrings(x, k, fn)
+		up := parent
+		if typ != owner {
+			up = owner
 		}
-	case map[string]any:
-		for k, x := range t {
-			walkBSONStrings(x, k, fn)
+		for _, e := range t {
+			if e.Key != "$Type" {
+				walkBSONStringsTyped(e.Value, e.Key, typ, up, fn)
+			}
 		}
 	case bson.A:
 		for _, x := range t {
-			walkBSONStrings(x, key, fn)
+			walkBSONStringsTyped(x, key, owner, parent, fn)
 		}
 	case []any:
 		for _, x := range t {
-			walkBSONStrings(x, key, fn)
+			walkBSONStringsTyped(x, key, owner, parent, fn)
 		}
 	}
 }
@@ -385,9 +454,12 @@ func scanPaths(text, context string, idx *memberRefIndex, emit func(targetType, 
 func resolvePath(chunk, context string, idx *memberRefIndex, emit func(targetType, name string)) (pendingEnum, endEntity string) {
 	cur := context
 	segs := strings.Split(chunk, "/")
+	afterAssociation := false
 	for n, seg := range segs {
 		pendingEnum, endEntity = "", ""
 		idx.read(seg)
+		wasAssociation := afterAssociation
+		afterAssociation = false
 		switch {
 		case seg == "":
 			cur = ""
@@ -398,11 +470,25 @@ func resolvePath(chunk, context string, idx *memberRefIndex, emit func(targetTyp
 		case idx.associations[seg]:
 			emit(RefObjectAssociation, seg)
 			cur = ""
+			afterAssociation = true
 		case idx.entities[seg]:
+			// The entity an association step arrives at is one the document
+			// navigates to (`$O/Mod.O_C/Mod.C`), and often its only mention of
+			// it (ako/mxcli#1829). An entity standing alone is not emitted: the
+			// typed passes cover casts and type checks.
+			if wasAssociation {
+				emit(RefObjectEntity, seg)
+			}
 			cur = seg
 			endEntity = seg
 		case idx.enumValues[seg]:
 			emit(RefObjectEnumerationValue, seg)
+			cur = ""
+		case idx.missingEnumValue(seg) != "":
+			// `Mod.Enum.Gone`: a value the enumeration does not have. The
+			// document still uses the enumeration, and is rebuilt when the
+			// value is added (ako/mxcli#1829).
+			emit(RefObjectEnumeration, idx.missingEnumValue(seg))
 			cur = ""
 		case !strings.Contains(seg, ".") && cur != "" && !xpathKeywords[seg]:
 			if attr, ok := idx.resolveAttribute(cur, seg); ok {

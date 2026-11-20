@@ -91,6 +91,7 @@ type Builder struct {
 	reader          CatalogReader
 	snapshot        *Snapshot
 	progress        ProgressFunc
+	routine         ProgressFunc // routine counts; nil sends them to progress (SetRoutineProgress)
 	hierarchy       *hierarchy
 	tx              *builderTx // Transaction for batched inserts; records row owners
 	fullMode        bool       // If true, do full parsing (activities/widgets)
@@ -138,6 +139,10 @@ type Builder struct {
 	// and emitted by buildReferences (a later pass). Carried on the Builder
 	// rather than re-queried because CatalogTx has no Query.
 	scheduledEventRefs []scheduledEventRef
+	// agentDocRefs are the decoded agent-editor documents, whose edges
+	// buildReferences writes once every table their names resolve against is
+	// filled (ako/mxcli#2074).
+	agentDocRefs []agentDocRefs
 
 	// Entity → regular-expression edges from attribute validation rules,
 	// collected while cataloguing regexes and emitted by buildReferences.
@@ -219,6 +224,9 @@ type hierarchy struct {
 	moduleNames     map[model.ID]string
 	containerParent map[model.ID]model.ID
 	folderNames     map[model.ID]string
+	// unitTypes is each unit's $Type, so the folders pass can count the
+	// documents a folder holds directly (ako/mxcli#1436).
+	unitTypes map[model.ID]string
 }
 
 func (b *Builder) buildHierarchy() error {
@@ -227,6 +235,7 @@ func (b *Builder) buildHierarchy() error {
 		moduleNames:     make(map[model.ID]string),
 		containerParent: make(map[model.ID]model.ID),
 		folderNames:     make(map[model.ID]string),
+		unitTypes:       make(map[model.ID]string),
 	}
 
 	// Load modules
@@ -243,6 +252,7 @@ func (b *Builder) buildHierarchy() error {
 	units, _ := b.reader.ListUnits()
 	for _, u := range units {
 		h.containerParent[u.ID] = u.ContainerID
+		h.unitTypes[u.ID] = u.Type
 	}
 
 	// Load folders
@@ -437,7 +447,9 @@ type buildPhase struct {
 func (b *Builder) phases() []buildPhase {
 	return []buildPhase{
 		{"modules", b.buildModules},
+		{"folders", b.buildFolders},
 		{"entities", b.buildEntities},
+		{"domain model annotations", b.buildDomainModelAnnotations},
 		{"entity event handlers", b.buildEntityEventHandlers},
 		{"associations", b.buildAssociations},
 		{"enumerations", b.buildEnumerations},
@@ -740,6 +752,7 @@ func (b *Builder) resetCollected() {
 	b.databaseConnectionCache = nil
 	b.moduleSettingsCache = nil
 	b.scheduledEventRefs = nil
+	b.agentDocRefs = nil
 	b.regexRuleRefs = nil
 	b.publishedRestRefs = nil
 	b.eventHandlerRefs = nil
@@ -752,8 +765,28 @@ func (b *Builder) resetCollected() {
 // read as the table's size and is left out; say reports regardless.
 func (b *Builder) report(table string, count int) {
 	if b.scope == nil {
-		b.say(table, count)
+		b.count(table, count)
 	}
+}
+
+// SetRoutineProgress sends the routine lines — a table's row count, the
+// source pass's periodic "source n/m documents" — to fn instead of to the
+// Build callback. Those are about fifty lines a build that say nothing but
+// "still going", so a caller writing to a log or an agent's context can
+// throttle them, while the lines that carry information (the incremental
+// summary, documents that could not be described) still reach Build's
+// callback (ako/mxcli#1860).
+func (b *Builder) SetRoutineProgress(fn ProgressFunc) {
+	b.routine = fn
+}
+
+// count reports a routine line in every build.
+func (b *Builder) count(line string, n int) {
+	if b.routine != nil {
+		b.routine(line, n)
+		return
+	}
+	b.say(line, n)
 }
 
 // say reports a progress line in every build.
@@ -799,9 +832,19 @@ func (b *Builder) buildSnapshotRecord() error {
 }
 
 func (b *Builder) updateSnapshotCount() {
-	// Count total objects
+	// Counted through the TRANSACTION, not the pool (ako/mxcli#2417).
+	//
+	// Two reasons. It runs while the build's transaction is open, so a pool
+	// query needs a second connection: against an in-memory catalog, where
+	// every connection is its own database, that read saw an empty one and the
+	// count came back 0; with the pool pinned to one connection it deadlocked
+	// outright, waiting for the connection the transaction holds.
+	//
+	// And the transaction is the right scope anyway: the rows being counted are
+	// the ones this build just wrote and has not committed, which a pool query
+	// cannot see by definition.
 	var count int
-	row := b.catalog.db.QueryRow(`
+	rows, err := b.txQuery(`
 		SELECT COUNT(*) FROM (
 			SELECT Id FROM modules
 			UNION ALL SELECT Id FROM entities
@@ -813,7 +856,15 @@ func (b *Builder) updateSnapshotCount() {
 			UNION ALL SELECT Id FROM workflows
 		)
 	`)
-	row.Scan(&count)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	if rows.Next() {
+		if err := rows.Scan(&count); err != nil {
+			return
+		}
+	}
 	b.snapshot.ObjectCount = count
 }
 

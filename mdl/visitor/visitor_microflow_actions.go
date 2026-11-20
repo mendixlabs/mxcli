@@ -417,8 +417,9 @@ func buildCallMicroflowStatement(ctx parser.ICallMicroflowStatementContext) *ast
 		stmt.Arguments = buildCallArgumentList(argList)
 	}
 
-	// IN QUEUE Module.Name — runs the call on a task queue.
+	// IN QUEUE Module.Name [RETRY …] — runs the call on a task queue.
 	stmt.Queue = buildQueueClause(callCtx.QueueClause())
+	stmt.QueueRetry = buildQueueRetry(callCtx.QueueClause())
 
 	// Check for ON ERROR clause
 	if errClause := callCtx.OnErrorClause(); errClause != nil {
@@ -486,8 +487,9 @@ func buildCallJavaActionStatement(ctx parser.ICallJavaActionStatementContext) *a
 		stmt.Arguments = buildCallArgumentList(argList)
 	}
 
-	// IN QUEUE Module.Name — runs the call on a task queue.
+	// IN QUEUE Module.Name [RETRY …] — runs the call on a task queue.
 	stmt.Queue = buildQueueClause(callCtx.QueueClause())
+	stmt.QueueRetry = buildQueueRetry(callCtx.QueueClause())
 
 	// Check for ON ERROR clause
 	if errClause := callCtx.OnErrorClause(); errClause != nil {
@@ -730,7 +732,7 @@ func buildCallArgumentList(ctx parser.ICallArgumentListContext) []ast.CallArgume
 		}
 		if arg.NOTHING() != nil {
 			// `Param = nothing`: a blank argument, stored as "" (ExitCallArgument
-			// refuses it outside call microflow / call nanoflow).
+			// refuses it outside call microflow / call nanoflow / call external action).
 			ca.Value = &ast.BlankExpr{}
 		} else if expr := arg.Expression(); expr != nil {
 			value := buildSourceExpression(expr)
@@ -739,15 +741,40 @@ func buildCallArgumentList(ctx parser.ICallArgumentListContext) []ast.CallArgume
 				// whitespace before `)` to keep.
 				ca.Value = value
 				ca.TemplateParams = buildTemplateParams(tp)
+			} else if arg.IncludeAssociationsClause() != nil {
+				ca.Value = value // ends at `include`, as above
 			} else {
 				ca.Value = appendExpressionListTrailingWhitespace(listCtx, nextParserRuleContext(allArgs, i), expr, value)
 			}
+		}
+
+		if ic := arg.IncludeAssociationsClause(); ic != nil {
+			ca.IncludeAssociations = buildIncludeAssociationsClause(ic)
 		}
 
 		args = append(args, ca)
 	}
 
 	return args
+}
+
+// buildIncludeAssociationsClause converts `include associations ( … )`.
+func buildIncludeAssociationsClause(ctx parser.IIncludeAssociationsClauseContext) *ast.IncludeAssociationsClause {
+	c := ctx.(*parser.IncludeAssociationsClauseContext)
+	clause := &ast.IncludeAssociationsClause{Associations: []*ast.IncludedAssociationDef{}}
+	for _, n := range c.AllIncludedAssociation() {
+		clause.Associations = append(clause.Associations, buildIncludedAssociation(n))
+	}
+	return clause
+}
+
+func buildIncludedAssociation(ctx parser.IIncludedAssociationContext) *ast.IncludedAssociationDef {
+	n := ctx.(*parser.IncludedAssociationContext)
+	def := &ast.IncludedAssociationDef{Name: buildQualifiedName(n.QualifiedName())}
+	for _, c := range n.AllIncludedAssociation() {
+		def.Children = append(def.Children, buildIncludedAssociation(c))
+	}
+	return def
 }
 
 // buildMemberAssignmentList converts memberAssignmentList context to ChangeItem slice.
@@ -869,6 +896,7 @@ func buildListOperationStatement(ctx parser.IListOperationStatementContext) *ast
 	// which, exactly as the flow builder has always decided (ast.IsMemberEquality).
 	defer func() {
 		if stmt.Operation == ast.ListOpFind || stmt.Operation == ast.ListOpFilter {
+			stmt.Condition = ast.MemberEqualityCondition(stmt.Condition) // ako/mxcli#1943
 			stmt.ByExpression = !ast.IsMemberEquality(stmt.Condition)
 		}
 	}()

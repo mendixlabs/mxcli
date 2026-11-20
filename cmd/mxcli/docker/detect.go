@@ -387,7 +387,11 @@ func resolveJDKWith(e jdkEnv, major int) (string, error) {
 	// obvious whether their JDK simply sits somewhere unlisted.
 	msg := fmt.Sprintf("JDK %d not found", major)
 	if jh := e.getenv("JAVA_HOME"); jh != "" {
-		msg += fmt.Sprintf("\n  JAVA_HOME is set to %s but is not a JDK %d (java -version reports %s)", jh, major, e.versionOf(jh))
+		if javaTool(jh, "java") != "" && !hasJavaCompiler(jh) {
+			msg += fmt.Sprintf("\n  JAVA_HOME is set to %s, a Java runtime (JRE) without bin/javac: MxBuild needs a JDK to compile Java actions", jh)
+		} else {
+			msg += fmt.Sprintf("\n  JAVA_HOME is set to %s but is not a JDK %d (java -version reports %s)", jh, major, e.versionOf(jh))
+		}
 	}
 	if darwin {
 		msg += fmt.Sprintf("\n  /usr/libexec/java_home -v %d found none", major)
@@ -478,17 +482,45 @@ func jdkSearchPathsFor(goos string, major int) []string {
 // release. The version string is matched rather than parsed because `java
 // -version` has never had a stable machine-readable form.
 func isJDK(javaHome string, major int) bool {
-	javaBin := JavaExePath(javaHome)
-	if _, err := os.Stat(javaBin); err != nil {
+	return jdkAt(javaHome, major, func(javaBin string) (string, error) {
+		out, err := exec.Command(javaBin, "-version").CombinedOutput()
+		return string(out), err
+	})
+}
+
+// jdkAt is isJDK with `java -version` injected. A JDK is a java of the
+// requested major AND a Java compiler: a JRE reports the same version, and
+// MxBuild handed one fails compiling Java actions with "Java compiler is not
+// available. Please check that <dir> contains a valid JDK installation". On
+// Windows with a JRE 21 and a JDK 21 side by side and JAVA_HOME unset, the JRE
+// came first on PATH and was chosen (mendixlabs/mxcli#1839, ako/mxcli#2186).
+func jdkAt(javaHome string, major int, javaVersion func(javaBin string) (string, error)) bool {
+	javaBin := javaTool(javaHome, "java")
+	if javaBin == "" || !hasJavaCompiler(javaHome) {
 		return false
 	}
-
-	out, err := exec.Command(javaBin, "-version").CombinedOutput()
+	out, err := javaVersion(javaBin)
 	if err != nil {
 		return false
 	}
+	return javaMajorRegex(major).MatchString(out)
+}
 
-	return javaMajorRegex(major).Match(out)
+// hasJavaCompiler reports whether a Java installation has bin/javac — what
+// tells a JDK from a JRE.
+func hasJavaCompiler(javaHome string) bool { return javaTool(javaHome, "javac") != "" }
+
+// javaTool returns the path of bin/<tool> or bin/<tool>.exe in a Java
+// installation, whichever exists, or "". Both spellings are looked for so the
+// Windows layout is testable from a Linux runner.
+func javaTool(javaHome, tool string) string {
+	for _, name := range []string{tool, tool + ".exe"} {
+		p := filepath.Join(javaHome, "bin", name)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+			return p
+		}
+	}
+	return ""
 }
 
 // javaMajorRegex matches the major release in `java -version` output, which

@@ -94,7 +94,7 @@ func TestAlterWorkflow_DropBoundaryEventAmongSeveral(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dropped := false
 			mut := &mock.MockWorkflowMutator{
-				DropBoundaryEventFunc: func(string, int) error { dropped = true; return nil },
+				DropBoundaryEventFunc: func(string, int, int) error { dropped = true; return nil },
 			}
 			ctx, out := boundaryDropCtx(t, tc.events, mut)
 			ctx.LanguageVersion = tc.v
@@ -116,5 +116,80 @@ func TestAlterWorkflow_DropBoundaryEventAmongSeveral(t *testing.T) {
 				t.Errorf("warned = %v, want %v; output:\n%s", warned, tc.warned, out.String())
 			}
 		})
+	}
+}
+
+// ako/mxcli#808: `boundary event N` names one event among several, in describe
+// order, under either language version; out of range is refused before the
+// mutator is reached.
+func TestAlterWorkflow_DropBoundaryEventByIndex(t *testing.T) {
+	for _, tc := range []struct {
+		src     string
+		v       langver.Version
+		index   int // index handed to the mutator; 0 = not reached
+		refused string
+	}{
+		{`alter workflow Sales.WF { drop task1 boundary event 2 };`, langver.V1, 2, ""},
+		{`alter workflow Sales.WF { drop task1 boundary event 1 };`, langver.V0, 1, ""},
+		{`alter workflow Sales.WF { drop task1 boundary event 3 };`, langver.V1, 0, "has 2 boundary event"},
+		{`alter workflow Sales.WF { drop task1 boundary event 3 };`, langver.V0, 0, "has 2 boundary event"},
+	} {
+		t.Run(tc.src, func(t *testing.T) {
+			got := 0
+			mut := &mock.MockWorkflowMutator{
+				DropBoundaryEventFunc: func(_ string, _ int, index int) error { got = index; return nil },
+			}
+			ctx, out := boundaryDropCtx(t, 2, mut)
+			ctx.LanguageVersion = tc.v
+			prog, perrs := visitor.Build(tc.src)
+			if len(perrs) > 0 {
+				t.Fatal(perrs)
+			}
+			err := execAlterWorkflow(ctx, prog.Statements[0].(*ast.AlterWorkflowStmt))
+			if tc.refused != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.refused) {
+					t.Fatalf("want refusal %q, got %v", tc.refused, err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.index {
+				t.Errorf("mutator got index %d, want %d", got, tc.index)
+			}
+			if strings.Contains(out.String(), "MDL-V1-BOUNDARYDROP") {
+				t.Errorf("an addressed drop is not a guess; got warning:\n%s", out.String())
+			}
+		})
+	}
+}
+
+func TestVisitor_BoundaryEventIndexZeroRefused(t *testing.T) {
+	if _, errs := visitor.Build(`alter workflow Sales.WF { drop task1 boundary event 0 };`); len(errs) == 0 {
+		t.Fatal("boundary event 0 accepted; indexes are 1-based")
+	}
+}
+
+// ako/mxcli#808: a Name match wins over caption matches without @N, as in the
+// mutator (preferNameMatches). A jump captioned with its target's name used to
+// make the reference ambiguous here, so the check-time guards went silent.
+func TestResolveStoredActivity_PrefersName(t *testing.T) {
+	task := &workflows.UserTask{BaseWorkflowActivity: workflows.BaseWorkflowActivity{
+		BaseElement: model.BaseElement{ID: "a1"}, Name: "task1", Caption: "Review"}}
+	jump := &workflows.JumpToActivity{BaseWorkflowActivity: workflows.BaseWorkflowActivity{
+		BaseElement: model.BaseElement{ID: "a2"}, Name: "jump1", Caption: "task1"}}
+	flow := &workflows.Flow{Activities: []workflows.WorkflowActivity{task, jump}}
+	if got := resolveStoredActivity(flow, "task1", 0); got != task {
+		t.Fatalf("task1 resolved to %v, want the task named task1", got)
+	}
+	// @N still counts every match in describe order.
+	if got := resolveStoredActivity(flow, "task1", 2); got != jump {
+		t.Fatalf("task1@2 resolved to %v, want the jump", got)
+	}
+	// Two caption matches and no name match stay ambiguous.
+	other := &workflows.JumpToActivity{BaseWorkflowActivity: workflows.BaseWorkflowActivity{
+		BaseElement: model.BaseElement{ID: "a3"}, Name: "jump2", Caption: "Review"}}
+	flow.Activities = append(flow.Activities, other)
+	if got := resolveStoredActivity(flow, "Review", 0); got != nil {
+		t.Fatalf("ambiguous caption resolved to %v", got)
 	}
 }

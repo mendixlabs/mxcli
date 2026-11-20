@@ -88,7 +88,7 @@ var nativeWidgetKinds = map[string]nativeWidgetKind{
 	// Data and list widgets. `Footer` is the legacy property form of a data
 	// view's footer block, still read by buildDataViewV3.
 	"dataview": {stored: "Forms$DataView", tail: true, visible: true,
-		reads: []string{"DataSource", "FormOrientation", "LabelWidth", "ReadOnlyStyle", "ShowFooter", "Footer"}},
+		reads: []string{"DataSource", "FormOrientation", "LabelWidth", "ReadOnlyStyle", "ShowFooter", "Footer", "NoEntityMessage"}},
 	"listview": {stored: "Forms$ListView", tail: true, visible: true,
 		reads: []string{"DataSource", "Action", "Editable", "PageSize"}},
 
@@ -102,8 +102,8 @@ var nativeWidgetKinds = map[string]nativeWidgetKind{
 	"datepicker": {stored: "Forms$DatePicker", tail: true, visible: true,
 		reads: withReads(inputReads, "ReadOnlyStyle")},
 	"dropdown":     {stored: "Forms$DropDown", tail: true, visible: true, reads: withReads(inputReads)},
-	"checkbox":     {stored: "Forms$CheckBox", tail: true, visible: true, reads: withReads(inputReads, "ReadOnlyStyle")},
-	"radiobuttons": {stored: "Forms$RadioButtonGroup", tail: true, visible: true, reads: withReads(inputReads, "ReadOnlyStyle")},
+	"checkbox":     {stored: "Forms$CheckBox", tail: true, visible: true, reads: withReads(inputReads, "ReadOnlyStyle", "LabelPosition")},
+	"radiobuttons": {stored: "Forms$RadioButtonGroup", tail: true, visible: true, reads: withReads(inputReads, "ReadOnlyStyle", "RenderHorizontal")},
 	"filemanager": {stored: "Forms$FileManager", tail: true, visible: true,
 		reads: []string{"Label", "ShowLabel", "Type", "MaxFileSize", "AllowedExtensions", "ShowFileInBrowser"}},
 
@@ -368,7 +368,7 @@ func nativeWidgetAcceptedNames(kind, keyword string) []string {
 func nativeWidgetKeyOwnedElsewhere(kind, keyword, key string) bool {
 	l := strings.ToLower(key)
 	switch l {
-	case "editable", "editableif":
+	case "editable", "editableif", "editablewhen":
 		return true
 	case "action", "onclick":
 		if clickDroppedNoSlot[keyword] || clickCapableInMendix[keyword] {

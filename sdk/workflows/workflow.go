@@ -717,6 +717,11 @@ var boundaryEventStorageTypes = map[string]string{
 	"NonInterruptingNotification": "Workflows$NonInterruptingNotificationBoundaryEvent",
 }
 
+// MaxBoundaryEventsPerActivity is the most boundary events one activity may
+// carry. mx check 11.12.4 reports CE6696 "An activity is not allowed to have
+// more than 5 boundary events." on a sixth (ako/mxcli#2242).
+const MaxBoundaryEventsPerActivity = 5
+
 // BoundaryEventStorageType returns the $Type for an EventType. An empty
 // EventType is an interrupting timer, which is what the writers always assumed;
 // ok is false for anything else unknown.

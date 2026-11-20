@@ -207,6 +207,13 @@ func actualExpr(n expectNode) string {
 		return left.render()
 	case lk == exprcheck.KindUnknown && isStringifiableScalar(rk):
 		return "toString(" + left.render() + ")"
+	case lk == exprcheck.KindUnknown && rk == exprcheck.KindEnumeration:
+		// An enumeration value on one side pins the other to the same
+		// enumeration; toString() yields its key, which is how the expected
+		// value is written.
+		return "toString(" + left.render() + ")"
+	case lk == exprcheck.KindEnumeration && rk == exprcheck.KindUnknown:
+		return "toString(" + right.render() + ")"
 	}
 	return ""
 }
@@ -248,8 +255,23 @@ func (e *expectLiteral) kind() exprcheck.TypeKind { return e.Kind }
 // (`Module.Enum.Value`) or a `[%Token%]`.
 type expectVar struct{ Text string }
 
-func (e *expectVar) render() string           { return e.Text }
-func (e *expectVar) kind() exprcheck.TypeKind { return exprcheck.KindUnknown }
+func (e *expectVar) render() string { return e.Text }
+func (e *expectVar) kind() exprcheck.TypeKind {
+	if isEnumLiteralName(e.Text) {
+		return exprcheck.KindEnumeration
+	}
+	return exprcheck.KindUnknown
+}
+
+// isEnumLiteralName reports whether a variable's text is an enumeration value,
+// `Module.Enum.Value`. A variable, an attribute path and a token start with
+// `$`, `@` or `[%`; an entity or attribute name has one dot, not two.
+func isEnumLiteralName(s string) bool {
+	if s == "" || strings.ContainsAny(s[:1], "$@[") {
+		return false
+	}
+	return strings.Count(s, ".") == 2 && !strings.ContainsAny(s, "/$ ")
+}
 
 type expectCall struct {
 	Name string

@@ -25,7 +25,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 
 	// Calculate branch width (max of both branches)
 	branchWidth := max(thenBounds.Width, elseBounds.Width)
-	elseColumn := fb.layoutStyle().IfElse == IfElseColumn && (s.HasElse || len(s.ElseBody) > 0)
+	elseColumn := fb.layoutStyle().IfElse == IfElseColumn && ifHasElse(s)
 	if elseColumn {
 		branchWidth = elseColumnBranchWidth(thenBounds, fb.measurer.measureColumn(s.ElseBody))
 	}
@@ -35,7 +35,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 
 	// Check if branches end with RETURN (creating their own EndEvents)
 	thenReturns := lastStmtIsReturn(s.ThenBody)
-	hasElseBody := s.HasElse || len(s.ElseBody) > 0
+	hasElseBody := ifHasElse(s)
 	elseReturns := hasElseBody && lastStmtIsReturn(s.ElseBody)
 	bothReturn := hasElseBody && thenReturns && elseReturns
 
@@ -48,10 +48,8 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 	// how DESCRIBE carries a stored one through a rebuild.
 	atTail := fb.atBodyTail
 	fb.atBodyTail = false
-	tailWithoutMerge := atTail && hasElseBody && len(s.ThenBody) > 0 && len(s.ElseBody) > 0 &&
-		!thenReturns && !elseReturns &&
-		!bodyHasContinuingCustomErrorHandler(s.ThenBody) && !bodyHasContinuingCustomErrorHandler(s.ElseBody) &&
-		(s.Annotations == nil || s.Annotations.Merge == nil)
+	// The measurer decides the same with ifHasMerge, so the predicate is shared.
+	tailWithoutMerge := atTail && ifJoinsNothingAtTail(s)
 
 	// Save/restore endsWithReturn around branch processing to avoid
 	// a branch's RETURN affecting the parent flow state prematurely
@@ -917,6 +915,8 @@ func statementErrorHandling(stmt ast.MicroflowStatement) *ast.ErrorHandlingClaus
 	case *ast.MfCommitStmt:
 		return s.ErrorHandling
 	case *ast.DeleteObjectStmt:
+		return s.ErrorHandling
+	case *ast.ExternalObjectStmt:
 		return s.ErrorHandling
 	case *ast.CallMicroflowStmt:
 		return s.ErrorHandling

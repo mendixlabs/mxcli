@@ -9,7 +9,9 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/pages"
@@ -27,8 +29,11 @@ func describePage(ctx *ExecContext, name ast.QualifiedName) error {
 		return mdlerrors.NewBackend("build hierarchy", err)
 	}
 
-	// Find the page: only the pages of this name are decoded (#1850).
-	allPages, err := pagesWhere(ctx.Backend, func(n string) bool { return n == name.Name })
+	// Find the page: only the pages of this name in this module are decoded
+	// (#1850; and not its namesakes in other modules, #2160).
+	allPages, err := pagesWhereHeader(ctx.Backend, func(hd types.DocumentHeader) bool {
+		return hd.Name == name.Name && (name.Module == "" || h.GetModuleName(h.FindModuleID(hd.ContainerID)) == name.Module)
+	})
 	if err != nil {
 		return mdlerrors.NewBackend("list pages", err)
 	}
@@ -53,7 +58,7 @@ func describePage(ctx *ExecContext, name ast.QualifiedName) error {
 
 	// Output documentation if present
 	if foundPage.Documentation != "" {
-		lines := strings.Split(foundPage.Documentation, "\n")
+		lines := strings.Split(doccomment.Escape(foundPage.Documentation), "\n")
 		fmt.Fprint(ctx.Output, "/**\n")
 		for _, line := range lines {
 			fmt.Fprintf(ctx.Output, " * %s\n", line)
@@ -169,7 +174,9 @@ func describePage(ctx *ExecContext, name ast.QualifiedName) error {
 	// Main placeholder renders as bare widgets (backward-compatible); a page that
 	// binds widgets to more than one placeholder emits explicit `placeholder
 	// <Name> { … }` blocks so it round-trips (issue #532).
-	groups := getPageWidgetGroupsFromRaw(ctx, foundPage.ID)
+	// From the document read above for the layout: reading it again decoded
+	// the whole page a second time for every describe.
+	groups := pageWidgetGroupsFromRawData(ctx, rawData)
 	var nonEmpty []pageWidgetGroup
 	for _, g := range groups {
 		if len(g.Widgets) > 0 {
@@ -261,7 +268,7 @@ func describeSnippet(ctx *ExecContext, name ast.QualifiedName) error {
 
 	// Output documentation if present
 	if foundSnippet.Documentation != "" {
-		lines := strings.Split(foundSnippet.Documentation, "\n")
+		lines := strings.Split(doccomment.Escape(foundSnippet.Documentation), "\n")
 		fmt.Fprint(ctx.Output, "/**\n")
 		for _, line := range lines {
 			fmt.Fprintf(ctx.Output, " * %s\n", line)
@@ -348,7 +355,7 @@ func describeLayout(ctx *ExecContext, name ast.QualifiedName) error {
 
 	// Output documentation if present
 	if foundLayout.Documentation != "" {
-		lines := strings.Split(foundLayout.Documentation, "\n")
+		lines := strings.Split(doccomment.Escape(foundLayout.Documentation), "\n")
 		fmt.Fprint(ctx.Output, "/**\n")
 		for _, line := range lines {
 			fmt.Fprintf(ctx.Output, " * %s\n", line)
@@ -914,8 +921,11 @@ type rawWidget struct {
 	Editable      string // "Always", "Never", "Conditional"
 	ReadOnlyStyle string // "Inherit", "Control", "Text"
 	ShowLabel     bool   // Whether label is shown (from LabelTemplate visibility)
-	LabelPosition string // "Left", "Top", etc.
-	Placeholder   string // Placeholder hint text (from PlaceholderTemplate)
+	LabelPosition string // a check box's: "Default", "BeforeControl", "AfterControl"
+	// RenderVertical is a radio button group stored RenderHorizontal false
+	// (ako/mxcli#2106).
+	RenderVertical bool
+	Placeholder    string // Placeholder hint text (from PlaceholderTemplate)
 	// IsPassword is Forms$TextBox.IsPasswordBox. Security-relevant: a text box
 	// that round-trips without it renders the value in plaintext (ako/mxcli#550).
 	IsPassword bool
@@ -1022,6 +1032,10 @@ type rawWidget struct {
 	// expression/attribute condition (mendixlabs/mxcli#1460).
 	VisibleRoles []string
 	EditableIf   string // Expression from ConditionalEditabilitySettings
+	// "Editable: based on attribute value", as VisibleAttr/VisibleValues are
+	// for visibility: the values that make the widget EDITABLE (ako/mxcli#2111).
+	EditableAttr   string
+	EditableValues []string
 	// Design properties from Appearance
 	DesignProperties []rawDesignProp
 	// Explicit widget properties (for generic PLUGGABLEWIDGET output)
@@ -1063,6 +1077,9 @@ type rawWidget struct {
 	// DataView-only: ShowFooter read from BSON. Round-tripping it matters only when
 	// the footer block would not imply the same value (#813).
 	ShowFooter bool
+	// NoEntityMessage is a data view's "no entity" message, default language
+	// (ako/mxcli#2133).
+	NoEntityMessage string
 	// Pluggable Image widget properties
 	ImageUrl        string // Image URL (from textTemplate)
 	AlternativeText string // Alt text (from textTemplate)

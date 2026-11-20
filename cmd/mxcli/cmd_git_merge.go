@@ -67,6 +67,11 @@ the engine chokes on the conflicted state. Its result is copied back:
                      those units (a stale or hand-widened plan is refused).
                      Each planned unit is taken whole from its side, its
                      conflict marker cleared, and the .mpr index repaired.
+                     Whole means the other side's changes to that unit go
+                     too, not only the conflicting one: the review lists,
+                     per unit, what each choice drops that did not conflict
+                     (an entity only one side added), and --plan repeats it
+                     for the side it takes before committing.
                      Modified-on-both units only — added/deleted/moved
                      conflicts go to Studio Pro.
       --ours / --theirs   take one side of every conflicted unit
@@ -85,11 +90,19 @@ the engine chokes on the conflicted state. Its result is copied back:
   - a conflict in non-model files (text sources) is left in place for manual
     resolution, like plain git: resolve them, 'git add' them, and re-run
     this command — it finishes the merge (model conflicts included) and
-    commits.
+    commits. If that re-run then needs a model decision, the abort keeps
+    what you resolved: the plan template records it and --plan restores
+    it, and --plan stops before the model while a text conflict is open.
 
 --ours/--theirs take one side of every conflicted unit — never a side of the
 .mpr without the hash check, because the .mpr lists every document: a whole
 side would drop the other side's added units and resurrect its deleted ones.
+
+Exit codes: 0 merged (or already up to date), 1 failed, 3 stopped for a
+decision a person must take — a model conflict the engine leaves open (a
+plan template is written) or text conflicts left for manual resolution. The
+merge is aborted or left in place as described above; nothing was committed.
+Once the merge commits, the plan template beside the .mpr is removed.
 
 The merge is refused while Studio Pro has the project open (.mpr.lock).
 MPR v2 projects only. The mx binary is resolved for the project's Mendix
@@ -233,11 +246,7 @@ func mergeRun(mprPath, ref, message, strategy, plan string, push bool, runners m
 		}
 	}
 	if len(other) > 0 {
-		fmt.Fprintln(out, "Non-model conflicts, resolve by hand, then 'git add' them and re-run this command to resolve the model and commit:")
-		for _, p := range other {
-			fmt.Fprintf(out, "  %s\n", p)
-		}
-		return errors.New("merge has non-model conflicts left for manual resolution")
+		return reportTextConflicts(out, other)
 	}
 
 	baseSha := strings.TrimSpace(gitOutOr(root, "merge-base", "HEAD", "MERGE_HEAD"))
@@ -313,11 +322,16 @@ func mergeRun(mprPath, ref, message, strategy, plan string, push bool, runners m
 			theirsJSON := filepath.Join(tmp, "theirs-diff.json")
 			d1 := runners.diff(filepath.Join(baseDir, filepath.FromSlash(repo.MPRPath)), oursMpr, oursJSON)
 			d2 := runners.diff(filepath.Join(baseDir, filepath.FromSlash(repo.MPRPath)), filepath.Join(theirsDir, filepath.FromSlash(repo.MPRPath)), theirsJSON)
-			if d1 == nil && d2 == nil {
-				fmt.Fprintln(out, propertyReport(oursJSON, theirsJSON, manual))
-			}
+			// A failed side is reported, not dropped: skipping the report made
+			// "the diff crashed" read as "no details" (ako/mxcli#1981).
+			fmt.Fprintln(out, propertyReport(diffSide{oursJSON, d1}, diffSide{theirsJSON, d2}, manual))
+			fmt.Fprint(out, wholeUnitDropReport(diffSide{oursJSON, d1}, diffSide{theirsJSON, d2}, manual, nil))
 		}
-		if err := writePlanTemplate(mprPath, baseSha, oursSha, theirsSha, manual); err != nil {
+		// The abort below resets the index; what the human resolved and staged
+		// for the non-model files is recorded first, and --plan restores it
+		// (mendixlabs/mxcli#1751).
+		resolved := stagedTextResolutions(root, repo, mprPath)
+		if err := writePlanTemplate(mprPath, baseSha, oursSha, theirsSha, manual, resolved); err != nil {
 			fmt.Fprintf(out, "  (could not write the plan template: %v)\n", err)
 		} else {
 			fmt.Fprintf(out, "Plan template: %s — set \"take\" per unit, re-run with --plan.\n", filepath.Base(mprPath)+".merge-plan.json")
@@ -327,7 +341,7 @@ func mergeRun(mprPath, ref, message, strategy, plan string, push bool, runners m
 			return fmt.Errorf("the model merge has conflicts and aborting it failed (%v); resolve in Studio Pro", abortErr)
 		}
 		fmt.Fprintln(out, "Merge aborted; the working tree is back to the pre-merge state.")
-		return errors.New("the model merge needs a decision: re-run with --plan to resolve per unit, or resolve in Studio Pro (Version Control › Merge Changes Here)")
+		return decisionNeeded(errors.New("the model merge needs a decision: re-run with --plan to resolve per unit, or resolve in Studio Pro (Version Control › Merge Changes Here)"))
 	}
 
 	// Exit 0: the engine resolved the model into MINE, the clean worktree at
@@ -563,10 +577,25 @@ func commitTheMerge(root string, repo *gitNoteRepo, stagedPaths []string, messag
 // finishMerge attaches the mx_metadata note to the finished merge and prints
 // (or, with push, runs) the branch-and-notes push.
 func finishMerge(out io.Writer, repo *gitNoteRepo, head, branch string, push bool) error {
+	removeStalePlanTemplate(out, repo)
 	if err := annotateCommits(out, repo, []string{head}, branch, true, false); err != nil {
 		return fmt.Errorf("committed %s, but attaching the note failed (%v) — run 'mxcli git note -p … --write' to attach it", shortCommit(head), err)
 	}
 	return pushBranchAndNotes(out, repo.Root, branch, push)
+}
+
+// removeStalePlanTemplate deletes the plan template a stopped run wrote beside
+// the .mpr (<mpr>.merge-plan.json) once the merge has committed: it described
+// a decision that is now taken, and left behind it turned up in the next
+// `git add -A` (ako/mxcli#2240). Only that file — the one mxcli writes — is
+// removed; a plan passed to --plan from another path is the caller's.
+func removeStalePlanTemplate(out io.Writer, repo *gitNoteRepo) {
+	template := filepath.Join(repo.Root, filepath.FromSlash(repo.MPRPath)) + ".merge-plan.json"
+	if err := os.Remove(template); err == nil {
+		fmt.Fprintf(out, "Removed the plan template %s; the merge is committed.\n", filepath.Base(template))
+	} else if !os.IsNotExist(err) {
+		fmt.Fprintf(out, "  (could not remove the stale plan template %s: %v)\n", filepath.Base(template), err)
+	}
 }
 
 func pushBranchAndNotes(out io.Writer, root, branch string, push bool) error {
@@ -720,15 +749,30 @@ type mxDiffFile struct {
 	UnitDifferences []mxDiffUnit `json:"unitDifferences"`
 }
 
+// diffSide is one side's mx diff: the file it was asked to write, and the
+// error the run returned, if it failed.
+type diffSide struct {
+	path string
+	err  error
+}
+
 // propertyReport renders the two mx diff files as one property-level report
-// over the conflicted units: what each side changed.
-func propertyReport(oursJSON, theirsJSON string, unitIDs []string) string {
+// over the conflicted units: what each side changed. A side whose diff failed
+// says why, on one line, and the other side is reported as usual.
+func propertyReport(ours, theirs diffSide, unitIDs []string) string {
 	want := map[string]bool{}
 	for _, id := range unitIDs {
 		want[id] = true
 	}
 	lines := map[string][]string{}
-	for _, f := range []struct{ side, path string }{{"Yours", oursJSON}, {"Theirs", theirsJSON}} {
+	for _, f := range []struct {
+		side string
+		diffSide
+	}{{"Yours", ours}, {"Theirs", theirs}} {
+		if f.err != nil {
+			lines[f.side] = append(lines[f.side], fmt.Sprintf("  (diff unavailable: %s)", strings.Join(strings.Fields(f.err.Error()), " ")))
+			continue
+		}
 		raw, err := os.ReadFile(f.path)
 		if err != nil {
 			lines[f.side] = append(lines[f.side], fmt.Sprintf("  (diff unavailable: %v)", err))
@@ -789,6 +833,9 @@ type mergePlanTemplate struct {
 	Ours   string     `json:"ours"`
 	Theirs string     `json:"theirs"`
 	Units  []planUnit `json:"units"`
+	// Resolved are the non-model files the human had resolved and staged when
+	// the merge was aborted for this plan; --plan restores them.
+	Resolved []textResolution `json:"resolved,omitempty"`
 }
 
 type planUnit struct {
@@ -796,8 +843,8 @@ type planUnit struct {
 	Take string `json:"take"`
 }
 
-func writePlanTemplate(mprPath, baseSha, oursSha, theirsSha string, unitIDs []string) error {
-	tmpl := mergePlanTemplate{Base: baseSha, Ours: oursSha, Theirs: theirsSha}
+func writePlanTemplate(mprPath, baseSha, oursSha, theirsSha string, unitIDs []string, resolved []textResolution) error {
+	tmpl := mergePlanTemplate{Base: baseSha, Ours: oursSha, Theirs: theirsSha, Resolved: resolved}
 	for _, id := range unitIDs {
 		tmpl.Units = append(tmpl.Units, planUnit{ID: id, Take: "ours"})
 	}
@@ -827,12 +874,7 @@ func applyPlan(root string, repo *gitNoteRepo, mprAbs, mprPath, ref, planPath, m
 	if err != nil {
 		return fmt.Errorf("read plan: %w", err)
 	}
-	var plan struct {
-		Base   string     `json:"base"`
-		Ours   string     `json:"ours"`
-		Theirs string     `json:"theirs"`
-		Units  []planUnit `json:"units"`
-	}
+	var plan mergePlanTemplate
 	if err := json.Unmarshal(raw, &plan); err != nil {
 		return fmt.Errorf("plan %s is not valid JSON: %w", planPath, err)
 	}
@@ -848,6 +890,20 @@ func applyPlan(root string, repo *gitNoteRepo, mprAbs, mprPath, ref, planPath, m
 			return fmt.Errorf("git merge %s: %v", ref, mergeErr)
 		}
 	}
+	// The text resolutions the abort recorded go back first; a non-model
+	// conflict still open then stops the plan before it touches the model,
+	// the merge left in progress (mendixlabs/mxcli#1751).
+	restored, err := restoreTextResolutions(root, plan.Resolved)
+	if err != nil {
+		return err
+	}
+	if len(restored) > 0 {
+		fmt.Fprintf(out, "Restored your resolution of %s.\n", strings.Join(restored, ", "))
+	}
+	if other := openTextConflicts(root, repo); len(other) > 0 {
+		return reportTextConflicts(out, other)
+	}
+
 	baseSha := strings.TrimSpace(gitOutOr(root, "merge-base", "HEAD", "MERGE_HEAD"))
 	oursSha := strings.TrimSpace(gitOutOr(root, "rev-parse", "HEAD"))
 	theirsSha := strings.TrimSpace(gitOutOr(root, "rev-parse", "MERGE_HEAD"))
@@ -914,6 +970,17 @@ func applyPlan(root string, repo *gitNoteRepo, mprAbs, mprPath, ref, planPath, m
 		if !isOpen[u.ID] {
 			return abortMerge(root, fmt.Errorf("plan: unit %s is merged without a decision by the engine — remove it from the plan: taking a side there drops the other side's change to it", shortCommit(u.ID)))
 		}
+	}
+
+	// Say what the whole-unit choices drop before they are applied: changes
+	// of the other side to the same unit that did not conflict (ako/mxcli#2325).
+	if runners.diff != nil {
+		base := filepath.Join(revs.baseDir, filepath.FromSlash(repo.MPRPath))
+		oursJSON := filepath.Join(revs.tmp, "ours-diff.json")
+		theirsJSON := filepath.Join(revs.tmp, "theirs-diff.json")
+		d1 := runners.diff(base, filepath.Join(revs.oursDir, filepath.FromSlash(repo.MPRPath)), oursJSON)
+		d2 := runners.diff(base, filepath.Join(revs.theirsDir, filepath.FromSlash(repo.MPRPath)), theirsJSON)
+		fmt.Fprint(out, wholeUnitDropReport(diffSide{oursJSON, d1}, diffSide{theirsJSON, d2}, open, take))
 	}
 
 	// The engine's result first, then each planned unit whole from its
@@ -1005,4 +1072,103 @@ func realMxDiff(base, mine, outJSON string) error {
 		return fmt.Errorf("mx diff: %v: %s", err, strings.TrimSpace(string(b)))
 	}
 	return nil
+}
+
+// --- what a whole-unit choice drops (ako/mxcli#2325) -------------------------
+
+// unitChanges reads one side's mx diff into its top-level changes per unit:
+// the elements the side added, changed or removed ("Entity 'Shop.OursOnly'",
+// "Attribute 'Shop.Customer.Name'"). ok is false for a side whose diff failed
+// or cannot be read.
+func unitChanges(side diffSide) (changes map[string][]string, types map[string]string, ok bool) {
+	if side.err != nil {
+		return nil, nil, false
+	}
+	raw, err := os.ReadFile(side.path)
+	if err != nil {
+		return nil, nil, false
+	}
+	var d mxDiffFile
+	if err := json.Unmarshal(bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf")), &d); err != nil {
+		return nil, nil, false
+	}
+	changes, types = map[string][]string{}, map[string]string{}
+	for _, u := range d.UnitDifferences {
+		types[u.ID] = u.Type
+		for _, c := range u.ChangeDetails {
+			desc := c.ChangeDescription
+			if desc == "" {
+				desc = c.Property
+			}
+			if desc != "" {
+				changes[u.ID] = append(changes[u.ID], desc)
+			}
+		}
+	}
+	return changes, types, true
+}
+
+// onlyIn returns the entries of a that b does not have, in a's order.
+func onlyIn(a, b []string) []string {
+	in := map[string]bool{}
+	for _, x := range b {
+		in[x] = true
+	}
+	var out []string
+	for _, x := range a {
+		if !in[x] {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// wholeUnitDropReport says, per conflicted unit, what each "take" drops that
+// does not conflict: a plan takes a unit whole, from one side's commit, so
+// every change of the other side to that unit goes — not only the conflicting
+// element. The property report lists both sides' changes; nothing said that
+// "theirs" also discards an entity only ours added (ako/mxcli#2325). take, when
+// non-nil, limits the report to the side each unit's plan chose. Empty when
+// neither side's diff can be read or nothing would be dropped.
+func wholeUnitDropReport(ours, theirs diffSide, unitIDs []string, take map[string]string) string {
+	oc, ot, ok1 := unitChanges(ours)
+	tc, tt, ok2 := unitChanges(theirs)
+	if !ok1 || !ok2 {
+		return ""
+	}
+	var b strings.Builder
+	for _, id := range unitIDs {
+		typ := ot[id]
+		if typ == "" {
+			typ = tt[id]
+		}
+		label := shortCommit(id)
+		if typ != "" {
+			label += " (" + typ + ")"
+		}
+		dropsOurs := onlyIn(oc[id], tc[id])
+		dropsTheirs := onlyIn(tc[id], oc[id])
+		if (take == nil || take[id] == "theirs") && len(dropsOurs) > 0 {
+			fmt.Fprintf(&b, "  %s — \"take\": \"theirs\" also drops these changes of yours, which do not conflict:\n", label)
+			for _, c := range dropsOurs {
+				fmt.Fprintf(&b, "      %s\n", c)
+			}
+		}
+		if (take == nil || take[id] == "ours") && len(dropsTheirs) > 0 {
+			fmt.Fprintf(&b, "  %s — \"take\": \"ours\" also drops these changes of theirs, which do not conflict:\n", label)
+			for _, c := range dropsTheirs {
+				fmt.Fprintf(&b, "      %s\n", c)
+			}
+		}
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	head := "A plan takes each unit whole, from one side:\n"
+	if take != nil {
+		head = "Warning: the plan takes each unit whole, so it drops changes that did not conflict:\n"
+	}
+	return head + b.String() +
+		"  To keep both sides' changes, resolve the unit in Studio Pro (Version Control › Merge Changes Here), " +
+		"or re-apply the dropped changes after the merge.\n"
 }

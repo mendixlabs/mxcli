@@ -48,6 +48,15 @@ for a whole feature's life, unguarded, because only the rule looked configurable
 The reliable audit is mechanical — diff a Studio Pro-saved document key by key
 against what the writer emits, and every constant is a candidate.
 
+**Where the identities already survive, carry there.** A flow rebuild — `drop` +
+`create` in one script, or a `create or modify` that cannot splice — reaches
+`canon.Reconcile` with the stored unit, which has already paired the elements by
+`$ID`. A property with no MDL spelling is then a table entry (element `$Type`,
+key, the writer's default), carried only while the written value *is* that
+default. Doing it in the executor instead means re-pairing activities by hand
+and wiring each rebuild path separately — the dropped path carried nothing but the
+unit id and grants.
+
 **Read the stored side raw, not through the reader.** A guard that asks the
 semantic model "what did the stored document hold?" inherits the reader's blind
 spots, and the reader is usually why the construct was at risk in the first place.
@@ -367,6 +376,17 @@ for "what Studio Pro writes" is `mx convert -p`, which re-serializes exactly the
 non-canonical units. Its additions are the gaps, valued with Mendix's own
 defaults. Its removals are keys the version does not declare, and those turned
 out to hide real behaviour bugs.
+
+**A carry has as many sites as the statement has write paths.** A `create or
+modify` of a *stored* flow is applied as an in-place splice first, and rebuilt
+from scratch only when the splice cannot make the change. A carry wired into the
+rebuild alone is therefore skipped in the common case. The splice's replace
+rebuilds the activity through the alter-flow fragment builder, which never reaches
+it. Associations to include shipped that way: the carry was tested, and the tests
+passed, because the mock's stored flow had no start or end event and always fell
+back to the rebuild. Before trusting a carry, list the write paths (rebuild,
+splice replace, explicit `alter … replace`), and test the splice against a real
+project, where the stored flow is a whole graph.
 
 ## See also
 

@@ -286,6 +286,8 @@ func loopRefVars(stmt ast.MicroflowStatement) []string {
 		add(s.Variable)
 	case *ast.RollbackStmt:
 		add(s.Variable)
+	case *ast.ExternalObjectStmt:
+		add(s.Variable)
 	case *ast.RetrieveStmt:
 		add(s.StartVariable)
 		addExpr(s.Where)

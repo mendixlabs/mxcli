@@ -22,9 +22,9 @@ func (b *Builder) buildPages() error {
 
 	pageStmt, err := b.tx.Prepare(`
 		INSERT INTO pages_data (Id, Name, QualifiedName, ModuleName, Folder, Title, URL, LayoutRef,
-			Description, ParameterCount, WidgetCount, Excluded,
+			Description, ParameterCount, WidgetCount, Excluded, Class, Style, DynamicClasses,
 			ProjectId, SnapshotId)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -36,10 +36,10 @@ func (b *Builder) buildPages() error {
 	if b.fullMode {
 		widgetStmt, err = b.tx.Prepare(`
 			INSERT INTO widgets_data (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
-				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, Description,
-				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation,
+				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, SnippetRef, Description,
+				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation, Caption, Tooltip,
 				ProjectId, SnapshotId)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`)
 		if err != nil {
 			return err
@@ -74,6 +74,7 @@ func (b *Builder) buildPages() error {
 		layoutRef := ""
 		widgetCnt := 0
 		var rawWidgets []rawWidgetInfo
+		var class, style, dynamicClasses string
 
 		if b.fullMode {
 			rawData, _ := b.reader.GetRawUnit(pg.ID)
@@ -81,6 +82,7 @@ func (b *Builder) buildPages() error {
 				layoutRef = extractLayoutRef(rawData)
 				rawWidgets = extractPageWidgets(rawData, string(pg.ID))
 				widgetCnt = len(rawWidgets)
+				class, style, dynamicClasses = widgetAppearance(rawData)
 			}
 		}
 
@@ -97,6 +99,7 @@ func (b *Builder) buildPages() error {
 			len(pg.Parameters),
 			widgetCnt,
 			pg.Excluded,
+			class, style, dynamicClasses,
 			projectID, snapshotID,
 		)
 		if err != nil {
@@ -121,9 +124,11 @@ func (b *Builder) buildPages() error {
 					w.MicroflowRef,
 					w.NanoflowRef,
 					w.PageRef,
+					w.SnippetRef,
 					"",
 					w.ParentID, w.Depth, w.Class, w.Style, w.DynamicClasses,
 					w.ActionType, w.HasConfirmation,
+					pickTranslation(w.CaptionTexts, b.defaultLanguage()), pickTranslation(w.TooltipTexts, b.defaultLanguage()),
 					projectID, snapshotID,
 				); err != nil {
 					return fmt.Errorf("insert widget %s for page %s: %w", w.Name, qualifiedName, err)
@@ -151,9 +156,9 @@ func (b *Builder) buildSnippets() error {
 
 	snippetStmt, err := b.tx.Prepare(`
 		INSERT INTO snippets_data (Id, Name, QualifiedName, ModuleName, Folder, Description,
-			ParameterCount, WidgetCount,
+			ParameterCount, WidgetCount, Excluded,
 			ProjectId, SnapshotId)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -167,10 +172,10 @@ func (b *Builder) buildSnippets() error {
 	if b.fullMode {
 		widgetStmt, err = b.tx.Prepare(`
 			INSERT INTO widgets_data (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
-				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, Description,
-				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation,
+				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, SnippetRef, Description,
+				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation, Caption, Tooltip,
 				ProjectId, SnapshotId)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`)
 		if err != nil {
 			return err
@@ -206,8 +211,9 @@ func (b *Builder) buildSnippets() error {
 			moduleName,
 			folder,
 			sn.Documentation,
-			0, // ParameterCount
+			len(sn.Parameters),
 			len(rawWidgets),
+			sn.Excluded,
 			projectID, snapshotID,
 		); err != nil {
 			return err
@@ -220,9 +226,10 @@ func (b *Builder) buildSnippets() error {
 					w.ID, w.Name, w.WidgetType,
 					string(sn.ID), qualifiedName, "SNIPPET",
 					moduleName, folder,
-					w.EntityRef, w.AttributeRef, w.MicroflowRef, w.NanoflowRef, w.PageRef, "",
+					w.EntityRef, w.AttributeRef, w.MicroflowRef, w.NanoflowRef, w.PageRef, w.SnippetRef, "",
 					w.ParentID, w.Depth, w.Class, w.Style, w.DynamicClasses,
 					w.ActionType, w.HasConfirmation,
+					pickTranslation(w.CaptionTexts, b.defaultLanguage()), pickTranslation(w.TooltipTexts, b.defaultLanguage()),
 					projectID, snapshotID,
 				); err != nil {
 					return fmt.Errorf("insert widget %s for snippet %s: %w", w.Name, qualifiedName, err)
@@ -316,6 +323,7 @@ type rawWidgetInfo struct {
 	MicroflowRef string // action/datasource microflow (Forms$MicroflowSettings.Microflow, …)
 	NanoflowRef  string // action/datasource nanoflow
 	PageRef      string // action page (Forms$PageSettings.Form) — see scanWidgetOwnRefs
+	SnippetRef   string // called snippet (Forms$SnippetCall.Form)
 
 	// AllRefs is every document the widget names in its own BSON. The four
 	// single columns above hold one of each kind (the smallest, see
@@ -351,6 +359,57 @@ type rawWidgetInfo struct {
 	// has no confirmation setting in the model at all.
 	ActionType      string
 	HasConfirmation bool
+
+	// CaptionTexts and TooltipTexts are the widget's own Caption and Tooltip,
+	// language code → text (ako/mxcli#1303). The row stores the project's
+	// default language, picked at insert time as pages.Title is.
+	CaptionTexts map[string]string
+	TooltipTexts map[string]string
+}
+
+// widgetTexts reads a widget's own caption and tooltip. Measured on
+// CitrusGrove (Mendix 10.24), a button stores its caption as CaptionTemplate,
+// a Forms$ClientTemplate holding the Texts$Text under Template; a label stores
+// Caption as a Texts$Text directly. A tooltip is a Texts$Text. A text with no
+// translations, as an unset tooltip is stored, reads as nil. An input's
+// LabelTemplate and a dynamic text's Content are not its caption; they reach a
+// rule through strings().widget_id.
+func widgetTexts(w map[string]any) (caption, tooltip map[string]string) {
+	text := func(v any) map[string]string {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return nil
+		}
+		if extractString(m["$Type"]) == "Forms$ClientTemplate" {
+			if m, ok = m["Template"].(map[string]any); !ok {
+				return nil
+			}
+		}
+		if extractString(m["$Type"]) != "Texts$Text" {
+			return nil
+		}
+		var out map[string]string
+		for _, it := range getBsonArrayElements(m["Items"]) {
+			tr, ok := it.(map[string]any)
+			if !ok {
+				continue
+			}
+			lang, txt := extractString(tr["LanguageCode"]), extractString(tr["Text"])
+			if lang == "" || txt == "" {
+				continue
+			}
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[lang] = txt
+		}
+		return out
+	}
+	caption = text(w["CaptionTemplate"])
+	if caption == nil {
+		caption = text(w["Caption"])
+	}
+	return caption, text(w["Tooltip"])
 }
 
 // widgetPrimaryAction returns the $Type of a widget's primary action and whether
@@ -405,7 +464,7 @@ var widgetChildKeys = map[string]bool{
 // widgetOwnRefs is every entity, microflow, nanoflow and page a widget names in
 // its own (non-child-widget) BSON, each list sorted and without duplicates.
 type widgetOwnRefs struct {
-	Entities, Microflows, Nanoflows, Pages []string
+	Entities, Microflows, Nanoflows, Pages, Snippets []string
 }
 
 // scanWidgetOwnRefs returns ONE entity/microflow/nanoflow/page per kind from a
@@ -418,7 +477,7 @@ type widgetOwnRefs struct {
 // columns alone — QUAL004 then called a live datasource microflow unused
 // (mendixlabs/mxcli#1513). The refs table takes every name, from
 // scanWidgetAllRefs.
-func scanWidgetOwnRefs(w map[string]any) (entity, microflow, nanoflow, page string) {
+func scanWidgetOwnRefs(w map[string]any) (entity, microflow, nanoflow, page, snippet string) {
 	all := scanWidgetAllRefs(w)
 	first := func(xs []string) string {
 		if len(xs) == 0 {
@@ -426,14 +485,14 @@ func scanWidgetOwnRefs(w map[string]any) (entity, microflow, nanoflow, page stri
 		}
 		return xs[0]
 	}
-	return first(all.Entities), first(all.Microflows), first(all.Nanoflows), first(all.Pages)
+	return first(all.Entities), first(all.Microflows), first(all.Nanoflows), first(all.Pages), first(all.Snippets)
 }
 
 // scanWidgetAllRefs collects every entity/microflow/nanoflow/page a widget
 // references in its own (non-child-widget) BSON — datasource entity, datasource
 // microflow, on-click microflow, etc.
 func scanWidgetAllRefs(w map[string]any) widgetOwnRefs {
-	var ents, mfs, nfs, forms []string
+	var ents, mfs, nfs, forms, snippets []string
 	var walk func(v any)
 	walk = func(v any) {
 		switch x := v.(type) {
@@ -452,8 +511,16 @@ func scanWidgetAllRefs(w map[string]any) widgetOwnRefs {
 			// collecting it is why an action button that opens a page created no
 			// reference, so the page reported "(no callers found)" however many
 			// buttons pointed at it (issue #773).
+			//
+			// A snippet call stores its snippet under "Form" too. Read as a page,
+			// every snippet call became a show_page edge to a PAGE and nothing in
+			// refs ever targeted a SNIPPET (ako/mxcli#2017).
 			if s, ok := x["Form"].(string); ok && s != "" {
-				forms = append(forms, s)
+				if x["$Type"] == "Forms$SnippetCall" {
+					snippets = append(snippets, s)
+				} else {
+					forms = append(forms, s)
+				}
 			}
 			for k, val := range x {
 				if widgetChildKeys[k] {
@@ -473,6 +540,7 @@ func scanWidgetAllRefs(w map[string]any) widgetOwnRefs {
 		Microflows: sortedUnique(mfs),
 		Nanoflows:  sortedUnique(nfs),
 		Pages:      sortedUnique(forms),
+		Snippets:   sortedUnique(snippets),
 	}
 }
 
@@ -612,10 +680,11 @@ func walkWidget(w map[string]any, parentID string, depth int) []rawWidgetInfo {
 
 	// Extract datasource entity + action microflow/nanoflow references from this
 	// widget's own content (not its child widgets).
-	widget.EntityRef, widget.MicroflowRef, widget.NanoflowRef, widget.PageRef = scanWidgetOwnRefs(w)
+	widget.EntityRef, widget.MicroflowRef, widget.NanoflowRef, widget.PageRef, widget.SnippetRef = scanWidgetOwnRefs(w)
 	widget.AllRefs = scanWidgetAllRefs(w)
 	widget.Class, widget.Style, widget.DynamicClasses = widgetAppearance(w)
 	widget.ActionType, widget.HasConfirmation = widgetPrimaryAction(w)
+	widget.CaptionTexts, widget.TooltipTexts = widgetTexts(w)
 	widget.ParentID, widget.Depth = parentID, depth
 
 	// Index user-authored containers, but skip the synthetic
@@ -672,6 +741,20 @@ func walkWidget(w map[string]any, parentID string, depth int) []rawWidgetInfo {
 		}
 	}
 
+	// A legacy grid's control-bar buttons are named widgets `alter page`
+	// addresses; their list is STORED as `NewButtons` (the storage name of
+	// Forms$GridControlBar.Items), so `show widgets` listed none of them
+	// (ako/mxcli#2382).
+	if cb, ok := w["ControlBar"].(map[string]any); ok {
+		for _, key := range []string{"NewButtons", "Items"} {
+			for _, b := range getBsonArrayElements(cb[key]) {
+				if bMap, ok := b.(map[string]any); ok {
+					result = append(result, walkWidget(bMap, childParent, childDepth)...)
+				}
+			}
+		}
+	}
+
 	// Handle DataView/ListView footer widgets
 	footerWidgets := getBsonArrayElements(w["FooterWidgets"])
 	for _, fw := range footerWidgets {
@@ -711,7 +794,51 @@ func walkWidget(w map[string]any, parentID string, depth int) []rawWidgetInfo {
 		}
 	}
 
+	// Handle the containers that keep their widgets under other keys: table
+	// cells, a header's and a split pane's sides, a scroll container's regions.
+	// Each was skipped, so everything inside was absent from the index while the
+	// XPath walk, which descends into every key, named it (ako/mxcli#1895).
+	var parts []map[string]any
+	for _, cell := range getBsonArrayElements(w["Cells"]) {
+		if cellMap, ok := cell.(map[string]any); ok {
+			parts = append(parts, cellMap)
+		}
+	}
+	if widget.WidgetType == "Forms$ScrollContainer" {
+		for _, key := range []string{"CenterRegion", "Top", "Left", "Right", "Bottom"} {
+			if region, ok := w[key].(map[string]any); ok {
+				parts = append(parts, region)
+			}
+		}
+	}
+	for _, part := range parts {
+		for _, pw := range partWidgets(part, "Widgets", "Widget") {
+			result = append(result, walkWidget(pw, childParent, childDepth)...)
+		}
+	}
+	for _, side := range [][2]string{{"LeftWidgets", "LeftWidget"}, {"RightWidgets", "RightWidget"},
+		{"FirstWidgets", "FirstWidget"}, {"SecondWidgets", "SecondWidget"}} {
+		for _, sw := range partWidgets(w, side[0], side[1]) {
+			result = append(result, walkWidget(sw, childParent, childDepth)...)
+		}
+	}
+
 	return result
+}
+
+// partWidgets returns the widgets m holds under a list key or, in older models,
+// a single-widget key.
+func partWidgets(m map[string]any, listKey, singleKey string) []map[string]any {
+	var out []map[string]any
+	for _, v := range getBsonArrayElements(m[listKey]) {
+		if vm, ok := v.(map[string]any); ok {
+			out = append(out, vm)
+		}
+	}
+	if single, ok := m[singleKey].(map[string]any); ok {
+		out = append(out, single)
+	}
+	return out
 }
 
 // widgetsInPropertyBag walks a pluggable widget's stored property bag and
@@ -932,17 +1059,37 @@ func (b *Builder) buildLayouts() error {
 
 	layoutStmt, err := b.tx.Prepare(`
 		INSERT INTO layouts_data (Id, Name, QualifiedName, ModuleName, Folder, LayoutType, Platform,
-			Description, ProjectId, SnapshotId)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			Description, Excluded, Class, Style, DynamicClasses, ProjectId, SnapshotId)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
 	}
 	defer layoutStmt.Close()
 
+	// A layout's widgets feed widgets_data like a page's, with
+	// ContainerType=LAYOUT (full mode only). Without them a "no inline styles"
+	// rule passed the styling that reaches every page on the layout, and a
+	// microflow only a layout's button calls had no caller (ako/mxcli#1302).
+	var widgetStmt *Stmt
+	if b.fullMode {
+		widgetStmt, err = b.tx.Prepare(`
+			INSERT INTO widgets_data (Id, Name, WidgetType, ContainerId, ContainerQualifiedName, ContainerType,
+				ModuleName, Folder, EntityRef, AttributeRef, MicroflowRef, NanoflowRef, PageRef, SnippetRef, Description,
+				ParentWidgetId, Depth, Class, Style, DynamicClasses, ActionType, HasConfirmation, Caption, Tooltip,
+				ProjectId, SnapshotId)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`)
+		if err != nil {
+			return err
+		}
+		defer widgetStmt.Close()
+	}
+
 	projectID, snapshotID := b.snapshotMeta()
 
 	count := 0
+	widgetCount := 0
 	for _, l := range layoutList {
 		if !b.own(string(l.ID)) {
 			continue
@@ -953,6 +1100,15 @@ func (b *Builder) buildLayouts() error {
 		qualifiedName := moduleName + "." + l.Name
 		folder := b.hierarchy.buildFolderPath(l.ContainerID)
 
+		var rawWidgets []rawWidgetInfo
+		var class, style, dynamicClasses string
+		if b.fullMode {
+			if rawData, _ := b.reader.GetRawUnit(l.ID); rawData != nil {
+				rawWidgets = extractLayoutWidgets(rawData)
+				class, style, dynamicClasses = widgetAppearance(rawData)
+			}
+		}
+
 		_, err := layoutStmt.Exec(
 			string(l.ID),
 			l.Name,
@@ -962,17 +1118,70 @@ func (b *Builder) buildLayouts() error {
 			string(l.LayoutType),
 			layoutPlatform(l),
 			l.Documentation,
+			l.Excluded,
+			class, style, dynamicClasses,
 			projectID, snapshotID,
 		)
 		if err != nil {
 			return err
 		}
 		count++
+
+		for _, w := range rawWidgets {
+			if _, err := widgetStmt.Exec(
+				w.ID, w.Name, w.WidgetType,
+				string(l.ID), qualifiedName, "LAYOUT",
+				moduleName, folder,
+				w.EntityRef, w.AttributeRef, w.MicroflowRef, w.NanoflowRef, w.PageRef, w.SnippetRef, "",
+				w.ParentID, w.Depth, w.Class, w.Style, w.DynamicClasses,
+				w.ActionType, w.HasConfirmation,
+				pickTranslation(w.CaptionTexts, b.defaultLanguage()), pickTranslation(w.TooltipTexts, b.defaultLanguage()),
+				projectID, snapshotID,
+			); err != nil {
+				return fmt.Errorf("insert widget %s for layout %s: %w", w.Name, qualifiedName, err)
+			}
+			widgetCount++
+			b.collectWidgetExtraRefs("LAYOUT", qualifiedName, moduleName, w)
+		}
 	}
 	b.disown()
 
 	b.report("Layouts", count)
+	if b.fullMode {
+		b.report("Layout widgets", widgetCount)
+	}
 	return nil
+}
+
+// extractLayoutWidgets extracts every widget of a raw layout. A Forms$Layout
+// keeps its tree under Content (Forms$WebLayoutContent or
+// Forms$NativeLayoutContent): its own Widgets, or — for a layout built on
+// another one — the arguments of Content.LayoutCall, shaped like a page's
+// FormCall. A native layout adds the header placeholder and the sidebar.
+func extractLayoutWidgets(rawData map[string]any) []rawWidgetInfo {
+	content, ok := rawData["Content"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	var roots []map[string]any
+	roots = append(roots, partWidgets(content, "Widgets", "Widget")...)
+	if call, ok := content["LayoutCall"].(map[string]any); ok {
+		for _, arg := range getBsonArrayElements(call["Arguments"]) {
+			if argMap, ok := arg.(map[string]any); ok {
+				roots = append(roots, partWidgets(argMap, "Widgets", "Widget")...)
+			}
+		}
+	}
+	if ph, ok := content["RightHeaderPlaceholder"].(map[string]any); ok {
+		roots = append(roots, ph)
+	}
+	roots = append(roots, partWidgets(content, "SidebarWidgets", "")...)
+
+	var widgets []rawWidgetInfo
+	for _, w := range roots {
+		widgets = append(widgets, extractWidgetsRecursive(w)...)
+	}
+	return widgets
 }
 
 // widgetExtraRef is a page/snippet → document edge a widget makes that its
@@ -1001,4 +1210,5 @@ func (b *Builder) collectWidgetExtraRefs(containerType, containerQN, moduleName 
 	add(w.AllRefs.Microflows, w.MicroflowRef, RefObjectMicroflow, RefKindAction)
 	add(w.AllRefs.Nanoflows, w.NanoflowRef, RefObjectNanoflow, RefKindAction)
 	add(w.AllRefs.Pages, w.PageRef, RefObjectPage, RefKindShowPage)
+	add(w.AllRefs.Snippets, w.SnippetRef, RefObjectSnippet, RefKindSnippetCall)
 }

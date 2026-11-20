@@ -247,7 +247,7 @@ end workflow;
   runtime then **refuses to start the application** ("Class
   'Workflows$TimerBoundaryEvent' could not be found"). mxcli refuses the bare form
   on Mendix 11 (MDL-WF07).
-- **The delay is a DateTime expression** (`addDays([%CurrentDateTime%], 3)`, not `'P3D'`). A **reminder** repeats a non-interrupting timer: `… timer addDays([%CurrentDateTime%], 1) repeat every 1 day at most 5 times { … }` — minute(s) to month(s), the count includes the first firing and is at least 2 (MDL-WF22); a timer event sub-process start takes it on 11.15+.
+- **The delay is a DateTime expression** (`addDays([%CurrentDateTime%], 3)`, not `'P3D'`). A **reminder** repeats a non-interrupting timer: `… timer addDays([%CurrentDateTime%], 1) repeat every 1 day at most 5 times { … }` — minute(s) to month(s), the count includes the first firing and is at least 2 (MDL-WF22); a timer event sub-process start takes it on 11.15+. **At most 5 boundary events per activity** (CE6696, MDL-WF23): repeat one timer rather than stacking them.
 - **Every boundary path must end**, and mxcli ends one that runs to its last
   activity as Studio Pro does (ako/mxcli#1712): an **interrupting** path with an
   End — the timeout ends the workflow; `describe` shows `end workflow;` — and a
@@ -365,9 +365,9 @@ the same function — and the refusal names the fragment that fits the target.
 branch cannot write a wrong type; it leaves an ordinary build error (`CE6686`)
 rather than an unloadable project. `path n` addresses a **parallel split** only
 — on a user task it used to delete the n-th outcome (ako/mxcli#791) and is now
-refused; drop a user task's outcome by its value. `drop X boundary event` names
-no event, so on an activity with several it is refused under `mdl 1` (under
-`mdl 0` it drops the first and warns `MDL-V1-BOUNDARYDROP`).
+refused; drop a user task's outcome by its value (refused if two share it).
+`drop X boundary event 2` drops the second as `describe` lists them; with no number
+and several events it is refused under `mdl 1` (`mdl 0` drops the first, warns `MDL-V1-BOUNDARYDROP`).
 
 The old per-action statements (`alter workflow M.W set display 'X';`, `set
 activity X page …`, `insert outcome 'N' on X { }`, `drop path 'Path 2' on X`)

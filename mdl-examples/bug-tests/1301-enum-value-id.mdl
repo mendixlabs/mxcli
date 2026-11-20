@@ -1,0 +1,24 @@
+mdl 1;
+-- ako/mxcli#1301: a Starlark rule could not tie an enumeration caption in
+-- another language to its value: enumerations().values had no id, and the
+-- strings() caption rows name the value only by element_id.
+--
+-- Run on a fresh app, then lint with a rule that does
+--   for e in enumerations():
+--       for v in e.values: ... v.id ...
+-- and matches it to strings(language = "nl_NL") rows whose
+-- context == "Enumerations$EnumerationValue.Caption" and element_id == v.id.
+-- Expected: Bug1301.ApiTimeout.Quick -> 'dertig', .Slow -> 'vierhonderd'.
+-- Before the fix the rule stopped: "enumeration_value" struct has no .id.
+
+create module Bug1301;
+
+create enumeration Bug1301.ApiTimeout (
+  Quick '30',
+  Slow '400'
+);
+
+create or modify translations in Bug1301 for nl_NL (
+  '30' as 'dertig',
+  '400' as 'vierhonderd'
+);

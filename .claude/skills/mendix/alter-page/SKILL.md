@@ -243,22 +243,11 @@ so a silent write would build cleanly and then fail to open.
 > `Editable` on a non-input widget is rejected. This mirrors CREATE PAGE's
 > `visible:` — see the create-page skill for enum-value rules.
 
-**Pluggable widget properties** use quoted names to set values in the widget's `Object.Properties[]`. Boolean values are stored as `"yes"`/`"no"` in BSON. An **attribute** property binds as in CREATE: `Attr` (the bound entity's), `Module.Entity.Attr`, or `$Param.Attr` — `set (eventDataAttribute: $Ctx.EventData) on chart1`; an attribute the bound entity lacks is refused (CE1613, CE7247).
+**Pluggable widget properties** use quoted names to set values in the widget's `Object.Properties[]`. Boolean values are stored as `"yes"`/`"no"` in BSON. An **attribute** property binds as in CREATE: `Attr` (the bound entity's), `Module.Entity.Attr`, `$Param.Attr` — `set (eventDataAttribute: $Ctx.EventData) on chart1` — or `Assoc/Attr` over associations, stored with its steps as CREATE stores it (`set (booleanAttribute: Order_Customer/Active) on sw`); an attribute the bound entity lacks is refused (CE1613, CE7247), and so is a reference-set hop or a reference followed from its non-owner end on a property linked to no data source.
 
 **Column property names are case-insensitive** in MDL — `set (caption: …)` and `set (Caption: …)` both work. The internal BSON keys are dictated by the widget schema and stay case-sensitive on the storage side.
 
-> **Warning: Style on DYNAMICTEXT** — Setting `style` directly on a DYNAMICTEXT widget crashes MxBuild with a NullReferenceException. Wrap the DYNAMICTEXT in a CONTAINER and apply styling to the container instead:
-> ```sql
-> -- Wrong: crashes MxBuild
-> SET (Style: 'color: red;') ON txtHeading
->
-> -- Correct: style the container
-> REPLACE txtHeading WITH {
->   CONTAINER ctnHeading (Style: 'color: red;') {
->     DYNAMICTEXT txtHeading (Content: 'Heading', RenderMode: H2)
->   }
-> }
-> ```
+> **Style on DYNAMICTEXT** works like on any widget: `SET (Style: 'color: red;') ON txtHeading`. (An old warning that it crashes MxBuild does not reproduce.) Prefer `Class:` with a theme class for anything reusable.
 
 #### Changing a widget's DataSource
 
@@ -382,6 +371,17 @@ alter page MyModule.Customer_Edit {
 ```
 
 Replaces the target widget with one or more new widgets. The new widgets use the same syntax as `create page`, and may reuse the names of the widgets the replace removes. `insert into dvMain.footer { … }` appends to a footer and `drop dvMain.footer` empties it.
+
+### MOVE and WRAP - Rearrange Existing Widgets
+
+```sql
+mdl 1;
+alter page MyModule.Order_Lines {
+  wrap dgLines in { dataview dvOrder (DataSource: $Order) { } } move txtTitle into dvOrder;
+};
+```
+
+`wrap` takes a named container, dataview or groupbox; `move` goes `after`, `before` or `into`. Neither rebuilds the widget, so a legacy classic Data grid can be wrapped in a data view after an upgrade. A move into itself, or into a non-container, is refused.
 
 ### DataGrid Column Operations
 

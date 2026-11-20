@@ -14,11 +14,11 @@ description: "XPath constraint syntax for MDL — retrieve WHERE clauses, page d
 | 35-87 | XPath vs Mendix Expressions |
 | 88-131 | Syntax Reference |
 | 132-309 | How a Constraint Is Laid Out on Disk |
-| 310-360 | Usage Contexts |
-| 361-400 | Enumeration Attributes |
-| 401-442 | Common Patterns |
-| 443-454 | Validation |
-| 455-464 | Troubleshooting |
+| 310-375 | Usage Contexts |
+| 376-415 | Enumeration Attributes |
+| 416-457 | Common Patterns |
+| 458-469 | Validation |
+| 470-479 | Troubleshooting |
 
 <!-- /skill-index -->
 # XPath Constraints in MDL
@@ -354,6 +354,21 @@ grant read *, write * on entity Module.Entity to Module.Role
   where [System.owner = '[%CurrentUser%]'];
 ```
 
+An access rule is stricter than a retrieve. Each of these fails the build with
+CE0161 at security level Production (measured on 11.14.0), and `check` reports
+it at the grant (ako/mxcli#2099):
+
+- **No variables at all** — not `$x`, not `$currentUser` (**MDL-XPATH04**). The
+  current user is the token `'[%CurrentUser%]'`, compared with an association
+  to `System.User` (or a specialization) or with `System.owner` — never with an
+  attribute.
+- **A literal of the attribute's type**: `[Count = 5]`, not `'5'`; a String
+  takes a quoted string; a Boolean `true()`, `false()` or `'true'`/`'false'`;
+  an enumeration the **key**, case-sensitively (`'Red'`, not `'red'`, and not
+  the caption).
+- `empty` on an association (MDL047), an association without its module
+  (MDL-XPATH01), and `System.owner` on an entity that does not store it.
+
 Sibling groups (`where [a][b]`) are kept as one constraint. The old quoted form
 `grant Module.Role on Module.Entity (...) where '[...]'` still parses, warns
 MDL-DEPR030, and `mxcli fmt --upgrade` rewrites it.
@@ -445,8 +460,8 @@ grant read * on entity Module.Item to Module.User where [System.owner = '[%Curre
 Always validate XPath syntax before execution:
 
 ```bash
-# Syntax check (no project needed)
-./bin/mxcli check script.mdl
+# Syntax check only (--no-project: do not auto-detect an .mpr in this directory)
+./bin/mxcli check script.mdl --no-project
 
 # with reference validation (needs project)
 ./bin/mxcli check script.mdl -p app.mpr --references

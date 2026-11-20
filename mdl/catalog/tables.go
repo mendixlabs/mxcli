@@ -7,6 +7,94 @@ package catalog
 //
 // History:
 //
+//	48 (workflow activities): new workflow_activities table, one row per
+//	    activity of a workflow — boundary-event paths and event sub-processes
+//	    included — with its kind and the microflow, page or workflow each of
+//	    its slots names (ako/mxcli#1295). Without the bump a cached catalog
+//	    lacks the table and workflow_activities() fails with "no such table".
+//	47 (absent references are NULL): the agent-editor tables (agents,
+//	    agent_tools, agent_knowledge_bases, ai_models, knowledge_bases,
+//	    consumed_mcp_services, published_mcp_services) store an absent
+//	    reference as NULL instead of '', as their optional values already were
+//	    (ako/mxcli#2093). Without the bump a cached catalog keeps the '' and an
+//	    `IS NULL` query finds nothing.
+//	46 (excluded UI documents): snippets and layouts gain Excluded, as pages
+//	    already had, and snippets.ParameterCount is the snippet's parameter
+//	    count instead of a literal 0 (mendixlabs/mxcli#1819). Without the bump
+//	    a cached catalog lacks the column and every query naming it fails.
+//	45 (agent tools and MCP endpoints): agent_tools no longer holds an
+//	    agent's MCP services, which agent_mcp_services already lists, so it
+//	    matches ToolCount; consumed_mcp_services gains Endpoint and
+//	    AuthenticationMicroflow, and refs an `endpoint` edge to the constant
+//	    and a `call` to the microflow (ako/mxcli#2090). Views are CREATE VIEW
+//	    IF NOT EXISTS, so without the bump a cached catalog keeps both. Its own
+//	    number: #1299's flows took 44 in parallel.
+//	44 (sequence flows): new flows table, one row per sequence and
+//	    annotation flow of a microflow, nanoflow or rule; activities gains
+//	    X, Y, Width and Height, the object's canvas box (ako/mxcli#1299).
+//	    Without the bump a cached catalog lacks the table and the columns,
+//	    and flows_for() and activities_for() fail with "no such column".
+//	43 (agent prompts): strings gains an agent's description, system and
+//	    user prompts, and its tool and knowledge base descriptions
+//	    (ako/mxcli#2075). Without the bump a cached catalog keeps answering
+//	    no hits for a prompt's text.
+//	42 (agent details): agents, ai_models, knowledge_bases and
+//	    consumed_mcp_services gain the settings their JSON Contents holds;
+//	    new published_mcp_services, agent_tools (with the agent_mcp_services
+//	    view) and agent_knowledge_bases (ako/mxcli#2075). Without the bump a
+//	    cached catalog lacks the columns and every query naming them fails.
+//	41 (agent and code action edges): refs gains edges from agent-editor
+//	    documents (an agent's tool `call`s, `tool`, `model`, `type`; a model's
+//	    or knowledge base's `key`) and a `call` from a flow to a microflow or
+//	    agent document it passes as a Java action parameter (ako/mxcli#2074).
+//	    Without the bump a cached catalog keeps answering "(no callers
+//	    found)" for every agent tool. (40 is the widget-texts schema of
+//	    ako/mxcli#1303, merged separately.)
+//	40 (widget texts): widgets gains Caption and Tooltip (default language),
+//	    strings gains WidgetId, the widget a caption, tooltip or confirmation
+//	    text belongs to (ako/mxcli#1303). Without the bump a cached catalog
+//	    lacks the columns and every query naming them fails.
+//
+//	39 (domain model annotations): annotations_data + view, one row per
+//	    domain model annotation with its full caption and canvas position
+//	    (ako/mxcli#1300). Without the bump a cached catalog has the table but
+//	    no rows, and annotations() answers [] -- a "no TODO notes" rule passes.
+//
+//	38 (folders): folders_data + view, one row per folder with its path,
+//	    parent and direct document and subfolder counts, including empty
+//	    folders, which no document's Folder column can show
+//	    (ako/mxcli#1436). Without the bump a cached catalog has the table
+//	    but no rows, and folders() answers [] with no warning.
+//
+//	37 (entity type edges): refs gains entity targets for a result variable's
+//	    type, a created list, an entity-type argument, a snippet parameter and
+//	    the entity an association step reaches, and a value edge to an
+//	    enumeration whose named value does not exist; annotation and text
+//	    prose and module-role names no longer produce member edges
+//	    (ako/mxcli#1829). Without the bump a cached catalog keeps answering
+//	    "not referenced" for those entities.
+//
+//	36 (mapping edges): refs gains mapping_call edges from a flow to each
+//	    import / export mapping it applies (import and export actions, REST
+//	    and web service calls) and structure edges from a mapping to its JSON
+//	    structure; activities.ActionRef names an import / export action's
+//	    mapping (ako/mxcli#1861). Without the bump a cached catalog keeps
+//	    answering "not referenced" for every mapping in use.
+//
+//	35 (snippet call edges): widgets gains SnippetRef, and a snippet call
+//	    becomes a snippet_call edge to a SNIPPET instead of a show_page edge to
+//	    a PAGE (ako/mxcli#2017). The linter selects SnippetRef, so against a
+//	    cached catalog without it every Widgets() query fails.
+//
+//	34 (page and layout appearance, layout widgets): pages and layouts gain
+//	    Class, Style and DynamicClasses, and widgets gains the rows of every
+//	    layout (ContainerType LAYOUT), with the refs they make (ako/mxcli#1302).
+//	    The linter selects the new columns, so against a cached catalog
+//	    without them every Pages() and Layouts() query fails.
+//	33 (container widgets): widgets gains the rows inside table cells, scroll
+//	    container regions, header sides and split panes (ako/mxcli#1895). No
+//	    column changed, but a cached catalog keeps the table with nothing in
+//	    it, so XPath rows naming those widgets join to nothing.
 //	32 (xpath widget): xpath_expressions gains WidgetId and WidgetName, and
 //	    ComponentId is written as a GUID instead of a Go byte dump
 //	    (ako/mxcli#1879) — a cached catalog keeps the dump and lacks the
@@ -174,7 +262,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "32"
+const CatalogSchemaVersion = "48"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -252,6 +340,40 @@ func (c *Catalog) createTables() error {
 			SnapshotId TEXT
 		)`,
 		viewWithFullSnapshot("modules"),
+
+		// folders: one row per Projects$Folder, empty ones included. A
+		// document's Folder column names only the folders that hold a
+		// document, so an empty folder appeared nowhere else
+		// (ako/mxcli#1436). Path is spelled as that column spells it.
+		`CREATE TABLE IF NOT EXISTS folders_data (
+			Id TEXT PRIMARY KEY,
+			Name TEXT,
+			ModuleName TEXT,
+			Path TEXT,
+			ParentPath TEXT DEFAULT '',
+			Depth INTEGER DEFAULT 1,
+			DocumentCount INTEGER DEFAULT 0,
+			FolderCount INTEGER DEFAULT 0,
+			ProjectId TEXT,
+			SnapshotId TEXT
+		)`,
+		viewWithFullSnapshot("folders"),
+
+		// annotations: one row per domain model annotation. A microflow's
+		// annotations are activities (activities_data); a domain model's were
+		// in no table (ako/mxcli#1300). Caption is the full text, newlines kept.
+		`CREATE TABLE IF NOT EXISTS annotations_data (
+			Id TEXT PRIMARY KEY,
+			DomainModelId TEXT,
+			ModuleName TEXT,
+			Caption TEXT,
+			X INTEGER DEFAULT 0,
+			Y INTEGER DEFAULT 0,
+			Width INTEGER DEFAULT 0,
+			ProjectId TEXT,
+			SnapshotId TEXT
+		)`,
+		viewWithFullSnapshot("annotations"),
 
 		// entities
 		`CREATE TABLE IF NOT EXISTS entities_data (
@@ -415,6 +537,10 @@ func (c *Catalog) createTables() error {
 			ParameterCount INTEGER DEFAULT 0,
 			WidgetCount INTEGER DEFAULT 0,
 			Excluded BOOLEAN DEFAULT 0,
+			-- The page's own Forms$Appearance (full build only, like WidgetCount).
+			Class TEXT,
+			Style TEXT,
+			DynamicClasses TEXT,
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,
@@ -430,6 +556,7 @@ func (c *Catalog) createTables() error {
 			Description TEXT,
 			ParameterCount INTEGER DEFAULT 0,
 			WidgetCount INTEGER DEFAULT 0,
+			Excluded BOOLEAN DEFAULT 0,
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,
@@ -462,6 +589,11 @@ func (c *Catalog) createTables() error {
 			LayoutType TEXT,
 			Platform TEXT,
 			Description TEXT,
+			Excluded BOOLEAN DEFAULT 0,
+			-- The layout's own Forms$Appearance (full build only).
+			Class TEXT,
+			Style TEXT,
+			DynamicClasses TEXT,
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,
@@ -703,26 +835,80 @@ func (c *Catalog) createTables() error {
 
 		// agent-editor documents (CustomBlobDocuments, discriminated by
 		// CustomDocumentType into agent / model / knowledge base / MCP service).
+		// The columns after Description come from the document's JSON
+		// Contents (ako/mxcli#2075); a boolean is NULL when the document does
+		// not store it, as an older Agent Editor does not.
 		`CREATE TABLE IF NOT EXISTS agents_data (
 			Id TEXT PRIMARY KEY, Name TEXT, QualifiedName TEXT, ModuleName TEXT,
-			Folder TEXT, Description TEXT, ProjectId TEXT, SnapshotId TEXT
+			Folder TEXT, Description TEXT,
+			UsageType TEXT, Model TEXT, SelectedModel TEXT, SelectedModelName TEXT,
+			ToolChoice TEXT, MaxTokens INTEGER, Temperature REAL, TopP REAL,
+			EnableBackendStreaming INTEGER, EnableUIStreaming INTEGER, Entity TEXT,
+			Variables TEXT, ToolCount INTEGER DEFAULT 0,
+			KnowledgeBaseCount INTEGER DEFAULT 0, MCPServiceCount INTEGER DEFAULT 0,
+			ProjectId TEXT, SnapshotId TEXT
 		)`,
 		viewWithFullSnapshot("agents"),
 		`CREATE TABLE IF NOT EXISTS ai_models_data (
 			Id TEXT PRIMARY KEY, Name TEXT, QualifiedName TEXT, ModuleName TEXT,
-			Folder TEXT, Description TEXT, ProjectId TEXT, SnapshotId TEXT
+			Folder TEXT, Description TEXT,
+			Provider TEXT, ModelType TEXT, DisplayName TEXT, KeyConstant TEXT,
+			ProjectId TEXT, SnapshotId TEXT
 		)`,
 		viewWithFullSnapshot("ai_models"),
 		`CREATE TABLE IF NOT EXISTS knowledge_bases_data (
 			Id TEXT PRIMARY KEY, Name TEXT, QualifiedName TEXT, ModuleName TEXT,
-			Folder TEXT, Description TEXT, ProjectId TEXT, SnapshotId TEXT
+			Folder TEXT, Description TEXT,
+			Provider TEXT, KeyConstant TEXT,
+			ProjectId TEXT, SnapshotId TEXT
 		)`,
 		viewWithFullSnapshot("knowledge_bases"),
 		`CREATE TABLE IF NOT EXISTS consumed_mcp_services_data (
 			Id TEXT PRIMARY KEY, Name TEXT, QualifiedName TEXT, ModuleName TEXT,
-			Folder TEXT, Description TEXT, ProjectId TEXT, SnapshotId TEXT
+			Folder TEXT, Description TEXT,
+			ProtocolVersion TEXT, Version TEXT, ConnectionTimeoutSeconds INTEGER,
+			Endpoint TEXT, AuthenticationMicroflow TEXT,
+			ProjectId TEXT, SnapshotId TEXT
 		)`,
 		viewWithFullSnapshot("consumed_mcp_services"),
+		`CREATE TABLE IF NOT EXISTS published_mcp_services_data (
+			Id TEXT PRIMARY KEY, Name TEXT, QualifiedName TEXT, ModuleName TEXT,
+			Folder TEXT, Description TEXT,
+			ServerName TEXT, EndpointPath TEXT, Version TEXT, ProtocolVersion TEXT,
+			AuthenticationEnabled INTEGER, AuthenticationMicroflow TEXT,
+			ToolCount INTEGER DEFAULT 0,
+			ProjectId TEXT, SnapshotId TEXT
+		)`,
+		viewWithFullSnapshot("published_mcp_services"),
+		// One row per entry of an agent's tools list: a microflow, nanoflow
+		// or agent it calls, or a consumed MCP service (ToolType 'MCP'). The
+		// agent_tools view holds the tools ToolCount counts, agent_mcp_services
+		// the MCP services MCPServiceCount counts, as the Agent Editor lists
+		// them apart (ako/mxcli#2090).
+		`CREATE TABLE IF NOT EXISTS agent_tools_data (
+			Id TEXT, AgentId TEXT, Agent TEXT, ModuleName TEXT,
+			Name TEXT, ToolType TEXT, Document TEXT, Enabled INTEGER,
+			UserAccessApproval TEXT, Description TEXT,
+			DisplayTitle TEXT, DisplayDescription TEXT,
+			ProjectId TEXT, SnapshotId TEXT
+		)`,
+		viewWithFullSnapshotOver("agent_tools", "agent_tools_data") + ` WHERE IFNULL(t.ToolType, '') <> 'MCP'`,
+		// The MCP service tools, under the names the Agent Editor shows them.
+		`CREATE VIEW IF NOT EXISTS agent_mcp_services AS
+			SELECT t.Id, t.AgentId, t.Agent, t.ModuleName, t.Name, t.Document AS Service,
+				t.Enabled, t.UserAccessApproval, t.Description,
+				t.ProjectId, s.ProjectName, t.SnapshotId, s.SnapshotDate, s.SnapshotSource
+			FROM agent_tools_data t
+			LEFT JOIN snapshots s ON s.SnapshotId = t.SnapshotId
+			WHERE t.ToolType = 'MCP'`,
+		// One row per entry of an agent's knowledge base tools list.
+		`CREATE TABLE IF NOT EXISTS agent_knowledge_bases_data (
+			Id TEXT, AgentId TEXT, Agent TEXT, ModuleName TEXT,
+			Name TEXT, KnowledgeBase TEXT, Collection TEXT, MaxResults INTEGER,
+			MinSimilarity REAL, IsVisible INTEGER, Enabled INTEGER, Description TEXT,
+			ProjectId TEXT, SnapshotId TEXT
+		)`,
+		viewWithFullSnapshot("agent_knowledge_bases"),
 
 		// activities
 		`CREATE TABLE IF NOT EXISTS activities_data (
@@ -755,10 +941,40 @@ func (c *Catalog) createTables() error {
 			WithEvents INTEGER DEFAULT 0,
 			RetrieveSource TEXT DEFAULT '',
 			QueueRef TEXT DEFAULT '',
+			-- The canvas box: X / Y the stored middle point (describe's
+			-- @position), Width / Height its size.
+			X INTEGER DEFAULT 0,
+			Y INTEGER DEFAULT 0,
+			Width INTEGER DEFAULT 0,
+			Height INTEGER DEFAULT 0,
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,
 		viewWithFullSnapshot("activities"),
+
+		// flows — one row per sequence flow and annotation flow of a flow
+		// body (ako/mxcli#1299). OriginId / DestinationId are activities.Id.
+		// An annotation flow runs from the note to the object it annotates.
+		// CaseValue is the branch a split's outgoing flow takes: "true" /
+		// "false", an enumeration value or "(empty)", an inheritance split's
+		// entity; "" for an unconditional flow.
+		`CREATE TABLE IF NOT EXISTS flows_data (
+			Id TEXT PRIMARY KEY,
+			FlowType TEXT,
+			Sequence INTEGER DEFAULT 0,
+			MicroflowId TEXT,
+			MicroflowQualifiedName TEXT,
+			ModuleName TEXT,
+			OriginId TEXT,
+			DestinationId TEXT,
+			IsErrorHandler INTEGER DEFAULT 0,
+			CaseValue TEXT DEFAULT '',
+			OriginConnectionIndex INTEGER DEFAULT 0,
+			DestinationConnectionIndex INTEGER DEFAULT 0,
+			ProjectId TEXT,
+			SnapshotId TEXT
+		)`,
+		viewWithFullSnapshot("flows"),
 
 		// widget_definitions — widgets AVAILABLE in the project (.mpk / .def.json)
 		`CREATE TABLE IF NOT EXISTS widget_definitions_data (
@@ -812,6 +1028,11 @@ func (c *Catalog) createTables() error {
 			-- from a button had no inbound reference at all and read as dead code
 			-- (issue #773).
 			PageRef TEXT,
+			-- The snippet a snippet call places (Forms$SnippetCall.Form). The
+			-- call stores it under "Form" like a page action's page, and it was
+			-- recorded as PageRef, so every snippet call read as a show_page
+			-- edge to a PAGE and no reference targeted a SNIPPET (ako/mxcli#2017).
+			SnippetRef TEXT,
 			Description TEXT,
 			-- Tree position (mendixlabs/mxcli#1268): the nearest INDEXED
 			-- ancestor (skipped wrappers and grid rows/columns are
@@ -829,6 +1050,11 @@ func (c *Catalog) createTables() error {
 			-- only microflow, nanoflow and workflow calls can.
 			ActionType TEXT,
 			HasConfirmation INTEGER DEFAULT 0,
+			-- The widget's own Caption and Tooltip in the project's default
+			-- language (ako/mxcli#1303); a button's caption was otherwise only
+			-- in strings, under its Forms$ClientTemplate's id.
+			Caption TEXT DEFAULT '',
+			Tooltip TEXT DEFAULT '',
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,
@@ -913,6 +1139,41 @@ func (c *Catalog) createTables() error {
 			SnapshotId TEXT
 		)`,
 		viewWithFullSnapshot("workflows"),
+
+		// workflow_activities — one row per activity of a workflow, in the
+		// order wfnames.WalkActivities visits them: the main flow, the paths
+		// of its boundary events, then its event sub-processes
+		// (ako/mxcli#1295). ActivityType is the activity's kind as
+		// workflows_data counts it, with the two kinds that share a Go type
+		// told apart: MultiUserTask from UserTask, AIAgentTask from
+		// CallMicroflow. Each slot that names another document is a column of
+		// its own, so a rule can ask which microflow runs where:
+		//   Microflow            a system task's, call-microflow or AI agent task's
+		//   UserSourceMicroflow  a user task's targeting microflow (users or groups)
+		//   OnCreatedMicroflow   a user task's on-created microflow
+		//   CompletionMicroflow  a multi-user task's completion microflow
+		//   Page                 a user task's page
+		//   CalledWorkflow       a call-workflow activity's workflow
+		`CREATE TABLE IF NOT EXISTS workflow_activities_data (
+			Id TEXT PRIMARY KEY,
+			Sequence INTEGER DEFAULT 0,
+			WorkflowId TEXT,
+			WorkflowQualifiedName TEXT,
+			ModuleName TEXT,
+			Name TEXT,
+			Caption TEXT,
+			ActivityType TEXT,
+			Microflow TEXT,
+			UserSourceMicroflow TEXT,
+			OnCreatedMicroflow TEXT,
+			CompletionMicroflow TEXT,
+			Page TEXT,
+			UserTaskEntity TEXT,
+			CalledWorkflow TEXT,
+			ProjectId TEXT,
+			SnapshotId TEXT
+		)`,
+		viewWithFullSnapshot("workflow_activities"),
 
 		// business_event_services
 		`CREATE TABLE IF NOT EXISTS business_event_services_data (
@@ -1472,6 +1733,10 @@ func (c *Catalog) createTables() error {
 				ProjectId, ProjectName, SnapshotId, SnapshotDate, SnapshotSource
 			FROM consumed_mcp_services
 			UNION ALL
+			SELECT Id, 'PUBLISHED_MCP_SERVICE' as ObjectType, Name, QualifiedName, ModuleName, Folder, Description,
+				ProjectId, ProjectName, SnapshotId, SnapshotDate, SnapshotSource
+			FROM published_mcp_services
+			UNION ALL
 			SELECT Id, 'CONSUMED_ODATA_SERVICE' as ObjectType, Name, QualifiedName, ModuleName, '' as Folder, '' as Description,
 				ProjectId, ProjectName, SnapshotId, SnapshotDate, SnapshotSource
 			FROM consumed_odata_services
@@ -1540,7 +1805,10 @@ func (c *Catalog) createTables() error {
 				ProjectId, ProjectName, SnapshotId, SnapshotDate, SnapshotSource
 			FROM jar_dependencies`,
 
-		// FTS5 virtual tables for full-text search
+		// FTS5 virtual tables for full-text search. WidgetId is the widget a
+		// text belongs to (ako/mxcli#1303): ElementId is the text's direct
+		// owner, which for a button caption is its Forms$ClientTemplate.
+		// UNINDEXED, since an id is no search term.
 		`CREATE VIRTUAL TABLE IF NOT EXISTS strings USING fts5(
 			QualifiedName,
 			ObjectType,
@@ -1548,7 +1816,8 @@ func (c *Catalog) createTables() error {
 			StringContext,
 			Language,
 			ElementId,
-			ModuleName
+			ModuleName,
+			WidgetId UNINDEXED
 		)`,
 
 		// What the source rows were described from: every unit's content
@@ -1600,6 +1869,11 @@ func (c *Catalog) createTables() error {
 
 		// Indexes for common queries — target the underlying *_data tables.
 		`CREATE INDEX IF NOT EXISTS idx_modules_name ON modules_data(Name)`,
+		`CREATE INDEX IF NOT EXISTS idx_folders_module ON folders_data(ModuleName)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_tools_agent ON agent_tools_data(AgentId)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_tools_document ON agent_tools_data(Document)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_kbs_agent ON agent_knowledge_bases_data(AgentId)`,
+		`CREATE INDEX IF NOT EXISTS idx_annotations_module ON annotations_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_entities_name ON entities_data(Name)`,
 		`CREATE INDEX IF NOT EXISTS idx_entities_module ON entities_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_microflows_name ON microflows_data(Name)`,
@@ -1610,6 +1884,7 @@ func (c *Catalog) createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_layouts_module ON layouts_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_activities_microflow ON activities_data(MicroflowId)`,
 		`CREATE INDEX IF NOT EXISTS idx_activities_type ON activities_data(ActivityType)`,
+		`CREATE INDEX IF NOT EXISTS idx_flows_microflow ON flows_data(MicroflowQualifiedName)`,
 		`CREATE INDEX IF NOT EXISTS idx_widgets_container ON widgets_data(ContainerId)`,
 		`CREATE INDEX IF NOT EXISTS idx_widgets_type ON widgets_data(WidgetType)`,
 		`CREATE INDEX IF NOT EXISTS idx_widgets_parent ON widgets_data(ParentWidgetId)`,
@@ -1633,6 +1908,7 @@ func (c *Catalog) createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_odata_services_module ON odata_services_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows_data(QualifiedName)`,
 		`CREATE INDEX IF NOT EXISTS idx_workflows_module ON workflows_data(ModuleName)`,
+		`CREATE INDEX IF NOT EXISTS idx_workflow_activities_workflow ON workflow_activities_data(WorkflowQualifiedName)`,
 		`CREATE INDEX IF NOT EXISTS idx_be_services_name ON business_event_services_data(QualifiedName)`,
 		`CREATE INDEX IF NOT EXISTS idx_be_services_module ON business_event_services_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_role_mappings_user_role ON role_mappings(UserRoleName)`,

@@ -165,6 +165,17 @@ func (w *mcpWidgetBuilder) SetAttribute(propertyKey, attributePath string) {
 	}
 }
 
+// SetAttributeWithSteps: the MCP payload's attribute has no association
+// steps, so a path over associations is reported unsupported rather than sent
+// as a direct attribute.
+func (w *mcpWidgetBuilder) SetAttributeWithSteps(propertyKey, attributePath string, steps []pages.AttributeRefStep) {
+	if len(steps) > 0 {
+		w.note("SetAttributeWithSteps(" + propertyKey + ")")
+		return
+	}
+	w.SetAttribute(propertyKey, attributePath)
+}
+
 // SetSourceVariable: the MCP widget payload has no slot for a property's
 // parameter source, so a `$Param.Attr` binding is reported unsupported rather
 // than sent as one read from the enclosing object.
@@ -198,6 +209,15 @@ func (w *mcpWidgetBuilder) SetImage(propertyKey, imageQN string) {
 		return
 	}
 	w.object[propertyKey] = imageQN
+}
+
+// SetIcon has no PED spelling this backend knows of; it is recorded rather than
+// sent in a shape the Studio Pro side may not read.
+func (w *mcpWidgetBuilder) SetIcon(propertyKey string, icon *pages.Icon) {
+	if icon == nil {
+		return
+	}
+	w.note("SetIcon(" + propertyKey + ")")
 }
 
 // SetImageEntity has no PED spelling this backend knows of; it is recorded
@@ -572,6 +592,8 @@ func (w *mcpWidgetBuilder) PrimitiveValues() map[string]string { return nil }
 
 func (w *mcpWidgetBuilder) EnsureRequiredObjectLists()                             {}
 func (w *mcpWidgetBuilder) ApplyPropertyVisibility(_ []types.WidgetVisibilityRule) {}
+
+func (w *mcpWidgetBuilder) NullTemplatesOfUnsetDataSources() {}
 
 // Finalize builds the CustomWidget shell and registers its recorded pg object on
 // the backend, keyed by the widget's ID so mapPageWidget can find it.

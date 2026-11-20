@@ -35,6 +35,8 @@ var nestedBuilderInherits = map[string]bool{
 	"annotationsByLabel":   true,
 	"storedNotes":          true,
 	"qualifiedMembersOnly": true,
+	"statedIncludes":       true, // the carry reads one registry (#1914)
+	"resolveKnownOnly":     true,
 
 	// Where the body is drawn: nestedBuilder's arguments, and the body's own
 	// lanes and rows (a loop box is sized to fit, so it never wraps).
@@ -43,7 +45,7 @@ var nestedBuilderInherits = map[string]bool{
 
 	// What the body builds, merged into the parent by the site.
 	"objects": false, "flows": false, "annotationFlows": false, "errors": false,
-	"statedNotes": false, "curveByOrigin": false, "rejoinMergeAt": false,
+	"statedNotes": false, "curveByOrigin": false, "rejoinMergeAt": false, "rejoinPastRowX": false,
 	"returnEndIDs": false, "fallThroughEndID": false, "endsWithReturn": false,
 	"lastReturnEndID": false, "returnValue": false,
 

@@ -705,6 +705,8 @@ func (fb *flowBuilder) addStatement(stmt ast.MicroflowStatement) model.ID {
 		return fb.addDeleteAction(s)
 	case *ast.RollbackStmt:
 		return fb.addRollbackAction(s)
+	case *ast.ExternalObjectStmt:
+		return fb.addExternalObjectAction(s)
 	case *ast.IfStmt:
 		return fb.addIfStatement(s)
 	case *ast.LoopStmt:

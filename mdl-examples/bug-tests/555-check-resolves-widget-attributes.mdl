@@ -1,0 +1,19 @@
+-- ako/mxcli#555: an attribute named inside a widget was not resolved by
+-- `check --references`, so a misspelt name passed check, exec wrote it and
+-- mxbuild refused it. Measured on a fresh 11.12.6 app: each of the three
+-- bindings below is CE1613 "The selected attribute 'BugTest555.WorkOrder.PlannedOn'
+-- no longer exists" (3 errors), and the same page binding PlannedDate / Title
+-- builds clean. check -p --references now reports all three before the write.
+mdl 1;
+create module BugTest555;
+create persistent entity BugTest555.WorkOrder ( PlannedDate: DateTime, Title: String(100) );
+create page BugTest555.P_WorkOrder ( Title: 'x', Layout: Atlas_Core.Atlas_Default, Params: ( $W: BugTest555.WorkOrder ) )
+{
+  layoutgrid lg { row { column (desktopwidth: autofill) {
+    dataview dv (DataSource: $W) {
+      textbox tb (Label: 'Planned', Attribute: PlannedOn)
+      dynamictext dt (Content: 'Planned {1}', ContentParams: ({1} = PlannedOn))
+      actionbutton btn (Caption: 'Go {1}', CaptionParams: ({1} = PlannedOn), Action: close page)
+    }
+  } } }
+};

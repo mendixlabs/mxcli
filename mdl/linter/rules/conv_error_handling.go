@@ -4,6 +4,7 @@ package rules
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/linter"
 	"github.com/mendixlabs/mxcli/model"
@@ -60,12 +61,15 @@ func findUnhandledCalls(objects []microflows.MicroflowObject, mf linter.Microflo
 				continue
 			}
 			actionName := ""
-			switch act.Action.(type) {
+			switch a := act.Action.(type) {
 			case *microflows.RestCallAction:
 				actionName = "REST call"
 			case *microflows.WebServiceCallAction:
 				actionName = "Web service call"
 			case *microflows.JavaActionCallAction:
+				if isThrowingJavaAction(a.JavaAction) {
+					continue
+				}
 				actionName = "Java action call"
 			default:
 				continue
@@ -96,11 +100,26 @@ func findUnhandledCalls(objects []microflows.MicroflowObject, mf linter.Microflo
 				})
 			}
 		case *microflows.LoopedActivity:
-			if act.ObjectCollection != nil {
-				findUnhandledCalls(act.ObjectCollection.Objects, mf, r, violations)
-			}
+			// Not descended into: inside a loop Mendix allows only Rollback
+			// (CE0644, which check reports as MDL006), so a finding there could
+			// not be acted on in place (ako/mxcli#1838). Custom handling for a
+			// call in a loop means moving it into a sub-microflow — a design
+			// choice, not a defect of the call.
 		}
 	}
+}
+
+// isThrowingJavaAction reports whether a Java action exists to throw, such as
+// CommunityCommons.ThrowException and ThrowWebserviceException. A flow calls
+// one to roll itself back — MDL refuses `raise error` in the main flow
+// (MDL084/CE0710) — so Rollback is the point of the call, not an omission
+// (ako/mxcli#1838).
+func isThrowingJavaAction(qualifiedName string) bool {
+	name := qualifiedName
+	if i := strings.LastIndex(name, "."); i >= 0 {
+		name = name[i+1:]
+	}
+	return strings.HasPrefix(strings.ToLower(name), "throw")
 }
 
 // --- CONV014: NoContinueErrorHandling ---

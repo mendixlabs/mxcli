@@ -35,6 +35,19 @@ type MicroflowFragment struct {
 	// where they are when the fragment is translated into place, and take no
 	// part in the room it needs (mendixlabs/mxcli#1598, case 1).
 	Pinned map[model.ID]bool
+	// InCurve and OutCurve are the control vectors the script states for the
+	// connector into the fragment and the one out of it, when it states them
+	// (`create or modify`, whose declared flow is drawn whole): the splice
+	// draws those two connectors with them, so the flow it leaves is the flow
+	// the script describes and the next run of it finds nothing to change
+	// (ako/mxcli#2311). nil keeps the splice's own vectors (an `alter`).
+	InCurve, OutCurve *FlowVectors
+}
+
+// FlowVectors are a sequence flow's two bezier control vectors as stored,
+// "x;y"; "0;0" is a straight end.
+type FlowVectors struct {
+	Origin, Destination string
 }
 
 // MicroflowMutator splices into one stored microflow or nanoflow (ADR-0012

@@ -21,6 +21,10 @@ type ReloadOptions struct {
 	// SkipCheck skips mx check before build.
 	SkipCheck bool
 
+	// UpdateWidgetsFirst builds a widget-normalised copy (--update-widgets);
+	// see BuildOptions.UpdateWidgetsFirst.
+	UpdateWidgetsFirst bool
+
 	// SkipBuild skips mxbuild, just calls reload_model.
 	SkipBuild bool
 
@@ -83,10 +87,11 @@ func Reload(opts ReloadOptions) error {
 	// Build step (unless --model-only)
 	if !opts.SkipBuild {
 		buildOpts := BuildOptions{
-			ProjectPath: opts.ProjectPath,
-			MxBuildPath: opts.MxBuildPath,
-			SkipCheck:   opts.SkipCheck,
-			Stdout:      w,
+			ProjectPath:        opts.ProjectPath,
+			MxBuildPath:        opts.MxBuildPath,
+			SkipCheck:          opts.SkipCheck,
+			UpdateWidgetsFirst: opts.UpdateWidgetsFirst,
+			Stdout:             w,
 		}
 		if err := Build(buildOpts); err != nil {
 			return fmt.Errorf("build failed: %w", err)

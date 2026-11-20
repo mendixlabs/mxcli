@@ -3,12 +3,12 @@
 package modelsdkbackend
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
 	bsonv2 "go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/mendixlabs/mxcli/internal/testutil"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/modelsdk/codec"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
@@ -27,7 +27,7 @@ import (
 // Documentation — the key whose absence made `mx diff` throw.
 func TestIssue1373_RewrittenLoopKeepsItsPropertySet(t *testing.T) {
 	dst := t.TempDir()
-	if err := os.CopyFS(dst, os.DirFS("../../../testdata/testapp-views")); err != nil {
+	if err := testutil.CopyFixture(dst, "../../../testdata/testapp-views"); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 	proj := filepath.Join(dst, "TestApp.mpr")

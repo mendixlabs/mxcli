@@ -16,6 +16,10 @@ func init() {
 	codec.RegisterTypeDefaults("Microflows$CallExternalAction", codec.TypeDefaults{
 		MandatoryListMarkers: map[string]int32{"ParameterMappings": 3},
 	})
+	// Associations to include are marker-2 lists at both levels, measured on
+	// ako/TestApp's Odata.IncludeAssociationsMF (Studio Pro 11.16.0).
+	codec.RegisterPropertyListMarker("Microflows$ExternalActionParameterMapping", "IncludedAssociations", 2)
+	codec.RegisterPropertyListMarker("Microflows$IncludedAssociation", "IncludedAssociations", 2)
 }
 
 // callExternalActionToGen builds a Microflows$CallExternalAction
@@ -44,12 +48,37 @@ func callExternalActionToGen(a *microflows.CallExternalAction) element.Element {
 		if pm.ParameterDataType != "" {
 			addPart(m, "ParameterType", externalActionReturnTypeToGen(pm.ParameterDataType, pm.ParameterEntity))
 		}
+		// Written only when there is something to include: the empty list is
+		// version-dependent (Mendix 10.11+), and leaving it out builds clean.
+		if len(pm.IncludedAssociations) > 0 {
+			addPartList(m, "IncludedAssociations", includedAssociationsToGen(pm.IncludedAssociations))
+		}
 		mappings = append(mappings, m)
 	}
 	if len(mappings) > 0 {
 		addPartList(g, "ParameterMappings", mappings)
 	}
 	return g
+}
+
+// includedAssociationsToGen writes a parameter's Associations to include in
+// Studio Pro's shape: each association with IsParent, the ones ticked under it
+// nested in its own IncludedAssociations (#1914).
+func includedAssociationsToGen(in []*microflows.IncludedAssociation) []element.Element {
+	out := make([]element.Element, 0, len(in))
+	for _, ia := range in {
+		e := newElem("Microflows$IncludedAssociation", string(ia.ID))
+		addStr(e, "Association", ia.Association)
+		// Studio Pro writes the nested list, empty or not, before IsParent.
+		if len(ia.IncludedAssociations) > 0 {
+			addPartList(e, "IncludedAssociations", includedAssociationsToGen(ia.IncludedAssociations))
+		} else {
+			addEmptyTypedList(e, "IncludedAssociations", 2)
+		}
+		addBool(e, "IsParent", ia.IsParent)
+		out = append(out, e)
+	}
+	return out
 }
 
 // externalActionReturnTypeToGen maps a Mendix kind name to the DataTypes$ element

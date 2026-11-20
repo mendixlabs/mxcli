@@ -89,6 +89,12 @@ Two more consequences:
 ### Navigation properties become associations
 
 Each navigation property whose target is also imported becomes an association.
+It is named after the navigation property. When that name is already an entity
+or an association in the module — a `Category` navigation beside the entity
+`Category` — it is named `<Parent>_<NavigationProperty>` (`Product_Category`),
+and only if that is taken too does a number follow (`Product_Category_2`). A
+re-import recognises the associations it made by their navigation property, not
+their name, so an existing name is never changed.
 A navigation property with a `Partner` is one end of a bidirectional
 relationship, and Mendix does not accept its ends as separate associations
 (`CE6618` "Navigation '…' is not available in the OData service"):
@@ -102,6 +108,34 @@ relationship, and Mendix does not accept its ends as separate associations
 A re-import of a module that an earlier mxcli version imported the old way lists
 the associations that fail with `CE6618` as `drop association …;` lines. Run them,
 then run the import again.
+
+## Calling an External Action
+
+```sql
+$Response = call external action Odata.OrderService.CreateBuffer(
+  command = $Cmd include associations (Odata.Quantity (Odata.Unit)),
+  additional = nothing
+);
+```
+
+`include associations ( … )` after an argument is Studio Pro's **Associations to
+include**: the associations whose objects are serialised into the OData request
+with that argument. It is a tree. A name followed by `( … )` lists the
+associations included under it, reached from the entity at its far end. Without
+the clause, a sub-object linked to the argument is not sent, and nothing fails
+until the service receives the request.
+
+- Which end of each association the object is on is worked out from the domain
+  model, so the clause names only the associations.
+- A self-association is refused, because its direction cannot be derived. Tick it
+  in Studio Pro instead. `describe` prints a tree that holds one as a comment.
+- `include associations ()` removes them all. To remove some, restate the tree
+  without them. The clause is always the whole tree.
+- Left out on `create or modify`, the stored tree is **kept**, and `check -p` and
+  `exec` warn with **MDL-ODATA10**. Deleting the clause does not remove the
+  associations.
+- `describe microflow` prints the clause, so describe → exec restates the tree.
+- A non-empty clause needs Mendix 10.11 or later.
 
 ## Contract Browsing Statements
 

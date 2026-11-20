@@ -49,6 +49,14 @@ func hiddenPropertySeverity(value, def, operation string) (linter.Severity, stri
 		// page with the slot unset builds clean. (#956)
 		return linter.SeverityError, "an action there fails the build with CE0463"
 	}
+	if value == slotFilledValue {
+		// A widgets slot holding widgets, like an action, has no default to
+		// compare against. Measured on a Data grid 2 at 11.14: widgets in
+		// `emptyPlaceholder` while showEmptyPlaceholder is "none" fail mx check
+		// with CE0463; with "custom", or with the slot empty, the page is clean
+		// (ako/mxcli#1862).
+		return linter.SeverityError, "widgets there fail the build with CE0463; set the condition's property so the slot shows"
+	}
 	if def == "" || strings.EqualFold(value, def) {
 		return linter.SeverityWarning, "the value will be ignored"
 	}

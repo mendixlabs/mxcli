@@ -195,6 +195,9 @@ func execCreateAgentEditorModel(ctx *ExecContext, s *ast.CreateModelStmt) error 
 	}
 
 	if existing != nil {
+		// The model Agent Editor selected from the Portal resource: MDL has no
+		// spelling for it, and a restatement wrote both empty.
+		m.Type, m.InnerName = existing.Type, existing.InnerName
 		m.ID = existing.ID
 		// Excluded is model state, not script state (#914).
 		m.Excluded = existing.Excluded

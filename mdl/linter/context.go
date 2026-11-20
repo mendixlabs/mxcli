@@ -13,6 +13,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/catalog"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
 	"github.com/mendixlabs/mxcli/sdk/pages"
 	"github.com/mendixlabs/mxcli/sdk/security"
@@ -92,6 +93,71 @@ func (ctx *LintContext) FullMicroflow(id model.ID) (*microflows.Microflow, error
 		return nil, ctx.fullMFErr
 	}
 	return ctx.fullMFCache[id], nil
+}
+
+// DomainModels returns the domain model of every module, or nil when the
+// reader cannot supply them.
+//
+// Entity geometry (an entity's Location, and the members its drawn box is sized
+// from) is not in the catalog, so a rule that checks the diagram has to read
+// the model. This is an optional reader capability rather than a method on
+// LintReader: eight readers in the linter test packages implement that
+// interface and would each need a stub, while in production the reader is
+// always an mdl/backend Backend, whose interface declares ListDomainModels. So
+// the assertion holds wherever lint actually runs, and the same arrangement is
+// how JarFiles reaches Path().
+func (ctx *LintContext) DomainModels() []*domainmodel.DomainModel {
+	if ctx == nil || ctx.reader == nil {
+		return nil
+	}
+	r, ok := ctx.reader.(interface {
+		ListDomainModels() ([]*domainmodel.DomainModel, error)
+	})
+	if !ok {
+		return nil
+	}
+	dms, err := r.ListDomainModels()
+	if err != nil {
+		return nil
+	}
+	return dms
+}
+
+// OwnedModuleNamesByID maps the ID of every module the user actually owns to
+// its name — not System, and not downloaded from the Marketplace or installed
+// as a package. A domain model records only its containing module's ID, so a
+// rule that reads the model needs this both to name the module and to stay off
+// modules the user cannot edit.
+//
+// This is the Go counterpart of the notPlatformModule SQL fragment, and it has
+// to make the same two tests for the same reason. A rule that reads the MODEL
+// rather than the catalog does not get that WHERE clause for free, so it starts
+// out seeing every platform module — which is how MPR016, in its first run,
+// reported 41 System entities as overlapping, naming FileDocument and
+// HttpRequest just as QUAL002 once did. Filtering on Source alone does not
+// help: it is empty for System exactly as it is for the user's own modules,
+// which is why the ID test is here too.
+func (ctx *LintContext) OwnedModuleNamesByID() map[model.ID]string {
+	out := map[model.ID]string{}
+	if ctx == nil || ctx.reader == nil {
+		return out
+	}
+	mods, err := ctx.reader.ListModules()
+	if err != nil {
+		return out
+	}
+	for _, m := range mods {
+		if m == nil || string(m.ID) == systemModuleID {
+			continue
+		}
+		// The catalog's modules.Source is non-empty for exactly these two, and
+		// notPlatformModule requires it empty.
+		if m.FromAppStore || strings.TrimSpace(m.AppStoreGuid) != "" || m.PackageFile != "" {
+			continue
+		}
+		out[m.ID] = m.Name
+	}
+	return out
 }
 
 // Reader returns the LintReader, or nil if not set.
@@ -725,6 +791,10 @@ type Page struct {
 	URL           string
 	Description   string
 	WidgetCount   int
+	// The page's own Appearance (full catalog only, like WidgetCount).
+	Class          string
+	Style          string
+	DynamicClasses string
 }
 
 // Pages returns an iterator over all pages (excluding system modules).
@@ -732,7 +802,8 @@ func (ctx *LintContext) Pages() iter.Seq[Page] {
 	return func(yield func(Page) bool) {
 		rows, err := ctx.db.Query(fmt.Sprintf(`
 			SELECT p.Id, p.Name, p.QualifiedName, p.ModuleName, p.Folder,
-			       p.Title, p.URL, p.Description, p.WidgetCount
+			       p.Title, p.URL, p.Description, p.WidgetCount,
+			       COALESCE(p.Class, ''), COALESCE(p.Style, ''), COALESCE(p.DynamicClasses, '')
 			FROM pages p
 			LEFT JOIN modules m ON p.ModuleName = m.Name
 			WHERE %s AND %s
@@ -749,7 +820,7 @@ func (ctx *LintContext) Pages() iter.Seq[Page] {
 			var title, url, desc, folder sql.NullString
 			var widgetCount sql.NullInt64
 			err := rows.Scan(&pg.ID, &pg.Name, &pg.QualifiedName, &pg.ModuleName, &folder,
-				&title, &url, &desc, &widgetCount)
+				&title, &url, &desc, &widgetCount, &pg.Class, &pg.Style, &pg.DynamicClasses)
 			if err != nil {
 				ctx.recordQueryError("Pages (row scan)", err)
 				continue
@@ -788,6 +859,9 @@ type Enumeration struct {
 // EnumerationValue is one value of an enumeration, with its caption in the
 // project's default language.
 type EnumerationValue struct {
+	// ID is the value's $ID: the element_id of its captions in strings(), one
+	// row per language (ako/mxcli#1301).
+	ID            string
 	Name          string
 	QualifiedName string // Module.Enumeration.Value, as refs_from() names it
 	Caption       string
@@ -800,7 +874,7 @@ type EnumerationValue struct {
 func (ctx *LintContext) enumerationValues() map[string][]EnumerationValue {
 	out := map[string][]EnumerationValue{}
 	rows, err := ctx.db.Query(`
-		SELECT EnumerationQualifiedName, Name, COALESCE(Caption, ''), COALESCE(Ordinal, 0)
+		SELECT EnumerationQualifiedName, COALESCE(Id, ''), Name, COALESCE(Caption, ''), COALESCE(Ordinal, 0)
 		FROM enumeration_values
 		ORDER BY EnumerationQualifiedName, Ordinal, Name`)
 	if err != nil {
@@ -811,7 +885,7 @@ func (ctx *LintContext) enumerationValues() map[string][]EnumerationValue {
 	for rows.Next() {
 		var enum string
 		var v EnumerationValue
-		if err := rows.Scan(&enum, &v.Name, &v.Caption, &v.Ordinal); err != nil {
+		if err := rows.Scan(&enum, &v.ID, &v.Name, &v.Caption, &v.Ordinal); err != nil {
 			ctx.recordQueryError("EnumerationValues (row scan)", err)
 			continue
 		}
@@ -932,6 +1006,7 @@ type Widget struct {
 	MicroflowRef           string // Qualified name of an action/datasource microflow, if any
 	NanoflowRef            string // Qualified name of an action/datasource nanoflow, if any
 	PageRef                string // Qualified name of the page the widget's action opens, if any
+	SnippetRef             string // Qualified name of the snippet a snippet call places, if any
 
 	// Tree position and appearance (mendixlabs/mxcli#1268); see
 	// catalog.rawWidgetInfo for the exact semantics.
@@ -942,6 +1017,10 @@ type Widget struct {
 	DynamicClasses  string
 	ActionType      string // stored $Type of the primary action, e.g. "Forms$DeleteClientAction"
 	HasConfirmation bool   // only microflow / nanoflow / workflow calls can have one
+	// Caption and Tooltip in the project's default language (ako/mxcli#1303).
+	// Other languages: strings() rows whose widget_id is this widget's ID.
+	Caption string
+	Tooltip string
 }
 
 // Widgets returns an iterator over all widgets (excluding system modules).
@@ -950,9 +1029,9 @@ func (ctx *LintContext) Widgets() iter.Seq[Widget] {
 		rows, err := ctx.db.Query(fmt.Sprintf(`
 			SELECT w.Id, w.Name, w.WidgetType, w.ContainerId, w.ContainerQualifiedName,
 			       w.ContainerType, w.ModuleName, w.EntityRef, w.AttributeRef,
-			       w.MicroflowRef, w.NanoflowRef, w.PageRef,
+			       w.MicroflowRef, w.NanoflowRef, w.PageRef, w.SnippetRef,
 			       w.ParentWidgetId, w.Depth, w.Class, w.Style, w.DynamicClasses,
-			       w.ActionType, w.HasConfirmation
+			       w.ActionType, w.HasConfirmation, w.Caption, w.Tooltip
 			FROM widgets w
 			LEFT JOIN modules m ON w.ModuleName = m.Name
 			WHERE %s AND %s
@@ -966,12 +1045,12 @@ func (ctx *LintContext) Widgets() iter.Seq[Widget] {
 
 		for rows.Next() {
 			var w Widget
-			var containerID, containerQName, containerType, entityRef, attrRef, mfRef, nfRef, pageRef sql.NullString
-			var parentID, class, style, dynClasses, actionType sql.NullString
+			var containerID, containerQName, containerType, entityRef, attrRef, mfRef, nfRef, pageRef, snippetRef sql.NullString
+			var parentID, class, style, dynClasses, actionType, caption, tooltip sql.NullString
 			var depth, hasConfirmation sql.NullInt64
 			err := rows.Scan(&w.ID, &w.Name, &w.WidgetType, &containerID, &containerQName,
-				&containerType, &w.ModuleName, &entityRef, &attrRef, &mfRef, &nfRef, &pageRef,
-				&parentID, &depth, &class, &style, &dynClasses, &actionType, &hasConfirmation)
+				&containerType, &w.ModuleName, &entityRef, &attrRef, &mfRef, &nfRef, &pageRef, &snippetRef,
+				&parentID, &depth, &class, &style, &dynClasses, &actionType, &hasConfirmation, &caption, &tooltip)
 			if err != nil {
 				ctx.recordQueryError("Widgets (row scan)", err)
 				continue
@@ -984,6 +1063,7 @@ func (ctx *LintContext) Widgets() iter.Seq[Widget] {
 			w.MicroflowRef = mfRef.String
 			w.NanoflowRef = nfRef.String
 			w.PageRef = pageRef.String
+			w.SnippetRef = snippetRef.String
 			w.ParentWidgetID = parentID.String
 			w.Depth = int(depth.Int64)
 			w.Class = class.String
@@ -991,6 +1071,8 @@ func (ctx *LintContext) Widgets() iter.Seq[Widget] {
 			w.DynamicClasses = dynClasses.String
 			w.ActionType = actionType.String
 			w.HasConfirmation = hasConfirmation.Int64 != 0
+			w.Caption = caption.String
+			w.Tooltip = tooltip.String
 
 			if ctx.IsExcluded(w.ModuleName) {
 				continue
@@ -1556,6 +1638,10 @@ type Activity struct {
 	// asynchronously, so a loop-scoped rule should not follow it
 	// (mendixlabs/mxcli#1305).
 	QueueRef string
+	// X / Y is the object's stored middle point on the canvas (describe's
+	// @position) and Width / Height its size (ako/mxcli#1299). Y grows
+	// downwards.
+	X, Y, Width, Height int
 }
 
 // ActivitiesFor returns an iterator over the top-level activities of a flow —
@@ -1585,7 +1671,8 @@ func (ctx *LintContext) ActivitiesIn(microflowQualifiedName string, nested bool)
 			       COALESCE(ErrorHandlingType, ''),
 			       COALESCE(LogLevel, ''), COALESCE(LogNodeExpression, ''), COALESCE(LogMessage, ''),
 			       COALESCE(CommitType, ''), COALESCE(WithEvents, 0), COALESCE(RetrieveSource, ''),
-			       COALESCE(QueueRef, '')
+			       COALESCE(QueueRef, ''),
+			       COALESCE(X, 0), COALESCE(Y, 0), COALESCE(Width, 0), COALESCE(Height, 0)
 			FROM activities
 			WHERE MicroflowQualifiedName = ?
 			  AND (? OR COALESCE(ParentLoopId, '') = '')
@@ -1612,7 +1699,8 @@ func (ctx *LintContext) ActivitiesIn(microflowQualifiedName string, nested bool)
 				&a.ErrorHandlingType,
 				&a.LogLevel, &a.LogNodeExpression, &a.LogMessage,
 				&a.CommitType, &withEvents, &a.RetrieveSource,
-				&a.QueueRef)
+				&a.QueueRef,
+				&a.X, &a.Y, &a.Width, &a.Height)
 			if err != nil {
 				ctx.recordQueryError("ActivitiesFor (row scan)", err)
 				continue
@@ -1628,6 +1716,60 @@ func (ctx *LintContext) ActivitiesIn(microflowQualifiedName string, nested bool)
 			a.WithEvents = withEvents != 0
 
 			if !yield(a) {
+				return
+			}
+		}
+	}
+}
+
+// Flow is one sequence flow or annotation flow of a microflow, nanoflow or
+// rule (ako/mxcli#1299). OriginID and DestinationID are Activity.ID values,
+// loop bodies included; an annotation flow runs from the note to the object
+// it annotates. CaseValue is the branch a split's flow takes ("true" /
+// "false", an enumeration value or "(empty)", an inheritance split's entity),
+// "" for an unconditional flow.
+type Flow struct {
+	ID                         string
+	FlowType                   string
+	MicroflowID                string
+	MicroflowQualifiedName     string
+	ModuleName                 string
+	OriginID                   string
+	DestinationID              string
+	IsErrorHandler             bool
+	CaseValue                  string
+	OriginConnectionIndex      int
+	DestinationConnectionIndex int
+}
+
+// FlowsFor returns the flows of a microflow, nanoflow or rule in stored
+// order, the sequence flows of each collection before its annotation flows.
+func (ctx *LintContext) FlowsFor(microflowQualifiedName string) iter.Seq[Flow] {
+	return func(yield func(Flow) bool) {
+		rows, err := ctx.db.Query(`
+			SELECT Id, FlowType, MicroflowId, MicroflowQualifiedName, ModuleName,
+			       OriginId, DestinationId, COALESCE(IsErrorHandler, 0), COALESCE(CaseValue, ''),
+			       COALESCE(OriginConnectionIndex, 0), COALESCE(DestinationConnectionIndex, 0)
+			FROM flows
+			WHERE MicroflowQualifiedName = ?
+			ORDER BY Sequence
+		`, microflowQualifiedName)
+		if err != nil {
+			ctx.recordQueryError("FlowsFor", err)
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var f Flow
+			var errHandler int
+			if err := rows.Scan(&f.ID, &f.FlowType, &f.MicroflowID, &f.MicroflowQualifiedName, &f.ModuleName,
+				&f.OriginID, &f.DestinationID, &errHandler, &f.CaseValue,
+				&f.OriginConnectionIndex, &f.DestinationConnectionIndex); err != nil {
+				ctx.recordQueryError("FlowsFor (row scan)", err)
+				continue
+			}
+			f.IsErrorHandler = errHandler != 0
+			if !yield(f) {
 				return
 			}
 		}

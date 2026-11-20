@@ -1,0 +1,2 @@
+mdl 1;
+create microflow Sp.F02 () returns String as $R begin $S = call microflow Sp.Helper(Wrong = 'a'); return $S; end;

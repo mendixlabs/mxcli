@@ -57,6 +57,7 @@ showStatement
     | showOrList AGENTS (IN (qualifiedName | IDENTIFIER))?
     | showOrList KNOWLEDGE BASES (IN (qualifiedName | IDENTIFIER))?
     | showOrList CONSUMED MCP SERVICES (IN (qualifiedName | IDENTIFIER))?
+    | showOrList PUBLISHED MCP SERVICES (IN (qualifiedName | IDENTIFIER))?
     | showOrList JSON STRUCTURES (IN (qualifiedName | IDENTIFIER))?
     | showOrList MESSAGE DEFINITION COLLECTION (IN (qualifiedName | IDENTIFIER))?
     | showOrList MESSAGE DEFINITIONS (IN (qualifiedName | IDENTIFIER))?
@@ -119,9 +120,9 @@ showStatement
     | showOrList PUBLISHED REST SERVICES (IN (qualifiedName | IDENTIFIER))?
     | showOrList DATA TRANSFORMERS (IN (qualifiedName | IDENTIFIER))?
     | showOrList LANGUAGES
-    | showOrList FEATURES (IN IDENTIFIER)?
-    | showOrList FEATURES FOR VERSION NUMBER_LITERAL
-    | showOrList FEATURES ADDED SINCE NUMBER_LITERAL
+    | showOrList FEATURES (IN identifierOrKeyword)?   // area names are keywords: workflows, pages, … (#1367)
+    | showOrList FEATURES FOR VERSION featureVersion
+    | showOrList FEATURES ADDED SINCE featureVersion
     | showOrList JAR DEPENDENCIES (IN (qualifiedName | IDENTIFIER))?
     ;
 
@@ -211,6 +212,7 @@ describeStatement
     | DESCRIBE AGENT qualifiedName                      // DESCRIBE AGENT Module.Name (agent-editor)
     | DESCRIBE KNOWLEDGE BASE qualifiedName             // DESCRIBE KNOWLEDGE BASE Module.Name
     | DESCRIBE CONSUMED MCP SERVICE qualifiedName       // DESCRIBE CONSUMED MCP SERVICE Module.Name
+    | DESCRIBE PUBLISHED MCP SERVICE qualifiedName      // DESCRIBE PUBLISHED MCP SERVICE Module.Name
     | DESCRIBE JSON STRUCTURE qualifiedName              // DESCRIBE JSON STRUCTURE Module.Name
     | DESCRIBE MESSAGE DEFINITION COLLECTION qualifiedName
     | DESCRIBE MESSAGE DEFINITION qualifiedName
@@ -266,6 +268,9 @@ catalogTableName
     | OBJECTS       // keyword token — must be listed explicitly
     | COMMUNITIES   // keyword token (SHOW COMMUNITIES) — must be listed explicitly for CATALOG.COMMUNITIES
     | QUEUES        // keyword token (SHOW QUEUES) — must be listed explicitly for CATALOG.QUEUES
+    | FOLDERS       // keyword token (LIST FOLDERS) — must be listed explicitly for CATALOG.FOLDERS (ako/mxcli#1436)
+    | AGENTS        // keyword token (SHOW AGENTS) — CATALOG.AGENTS parsed to nothing until TestEveryCatalogTableParses caught it
+    | ANNOTATIONS   // keyword token (LIST ANNOTATIONS) — for CATALOG.ANNOTATIONS (ako/mxcli#1300)
     | SOURCE_KW     // For CATALOG.SOURCE FTS table
     | ODATA         // For CATALOG.ODATA_CLIENTS and CATALOG.ODATA_SERVICES (via IDENTIFIER)
     | IDENTIFIER    // For tables like activities, xpath_expressions, projects, snapshots, refs, strings, odata_clients, odata_services, java_actions
@@ -398,4 +403,10 @@ groupByList
 limitOffsetClause
     : LIMIT NUMBER_LITERAL (OFFSET NUMBER_LITERAL)?
     | OFFSET NUMBER_LITERAL (LIMIT NUMBER_LITERAL)?
+    ;
+
+// A Mendix version as written everywhere else: 10.24 or 10.24.3. NUMBER_LITERAL
+// takes one dot, so a patch arrives as DOT NUMBER_LITERAL (ako/mxcli#1367).
+featureVersion
+    : NUMBER_LITERAL (DOT NUMBER_LITERAL)?
     ;

@@ -92,6 +92,10 @@ func (unimplemented) CreateAgentEditorModel(_ *agenteditor.Model) error {
 	return errUnimplemented("CreateAgentEditorModel")
 }
 
+func (unimplemented) CreateAgentEditorPublishedMCPService(_ *agenteditor.PublishedMCPService) error {
+	return errUnimplemented("CreateAgentEditorPublishedMCPService")
+}
+
 func (unimplemented) CreateAssociation(_ model.ID, _ *domainmodel.Association) error {
 	return errUnimplemented("CreateAssociation")
 }
@@ -243,6 +247,10 @@ func (unimplemented) DeleteAgentEditorKnowledgeBase(_ string) error {
 
 func (unimplemented) DeleteAgentEditorModel(_ string) error {
 	return errUnimplemented("DeleteAgentEditorModel")
+}
+
+func (unimplemented) DeleteAgentEditorPublishedMCPService(_ string) error {
+	return errUnimplemented("DeleteAgentEditorPublishedMCPService")
 }
 
 func (unimplemented) DeleteAssociation(_ model.ID, _ model.ID) error {
@@ -434,6 +442,11 @@ func (unimplemented) FindDocumentUnit(_ string, _ string) (*types.DocumentUnit, 
 	return r0, errUnimplemented("FindDocumentUnit")
 }
 
+func (unimplemented) FindDocumentUnits(_ string, _ string) ([]*types.DocumentUnit, error) {
+	var r0 []*types.DocumentUnit
+	return r0, errUnimplemented("FindDocumentUnits")
+}
+
 func (unimplemented) FindViewEntitySourceDocumentID(_ string, _ string) (model.ID, error) {
 	var r0 model.ID
 	return r0, errUnimplemented("FindViewEntitySourceDocumentID")
@@ -616,6 +629,11 @@ func (unimplemented) ListAgentEditorKnowledgeBases() ([]*agenteditor.KnowledgeBa
 func (unimplemented) ListAgentEditorModels() ([]*agenteditor.Model, error) {
 	var r0 []*agenteditor.Model
 	return r0, errUnimplemented("ListAgentEditorModels")
+}
+
+func (unimplemented) ListAgentEditorPublishedMCPServices() ([]*agenteditor.PublishedMCPService, error) {
+	var r0 []*agenteditor.PublishedMCPService
+	return r0, errUnimplemented("ListAgentEditorPublishedMCPServices")
 }
 
 func (unimplemented) ListAllUnitIDs() ([]string, error) {
@@ -1089,12 +1107,20 @@ func (unimplemented) SetDomainModelDocumentation(_ model.ID, _ string) error {
 	return errUnimplemented("SetDomainModelDocumentation")
 }
 
+func (unimplemented) SetModuleUIResources(_ model.ID, _ bool) error {
+	return errUnimplemented("SetModuleUIResources")
+}
+
 func (unimplemented) SetProjectAdminPassword(_ model.ID, _ string) error {
 	return errUnimplemented("SetProjectAdminPassword")
 }
 
 func (unimplemented) SetProjectAdminUserName(_ model.ID, _ string) error {
 	return errUnimplemented("SetProjectAdminUserName")
+}
+
+func (unimplemented) SetProjectAdminUserRole(_ model.ID, _ string) error {
+	return errUnimplemented("SetProjectAdminUserRole")
 }
 
 func (unimplemented) SetProjectDemoUsersEnabled(_ model.ID, _ bool) error {
@@ -1131,6 +1157,10 @@ func (unimplemented) UpdateAgentEditorKnowledgeBase(_ *agenteditor.KnowledgeBase
 
 func (unimplemented) UpdateAgentEditorModel(_ *agenteditor.Model) error {
 	return errUnimplemented("UpdateAgentEditorModel")
+}
+
+func (unimplemented) UpdateAgentEditorPublishedMCPService(_ *agenteditor.PublishedMCPService) error {
+	return errUnimplemented("UpdateAgentEditorPublishedMCPService")
 }
 
 func (unimplemented) UpdateAllowedRoles(_ model.ID, _ []string) error {

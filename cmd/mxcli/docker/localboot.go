@@ -119,6 +119,9 @@ type LocalRuntimeOptions struct {
 	// ReadyTimeout bounds how long StartLocalRuntime waits for the admin API
 	// (default 90s).
 	ReadyTimeout time.Duration
+	// StartTimeout bounds the runtime's start action, which runs the
+	// after-startup microflow (default $MXCLI_START_TIMEOUT, else 15m).
+	StartTimeout time.Duration
 	// Env are extra "KEY=value" entries layered onto the runtime JVM's
 	// environment, last-wins over the inherited process environment. Used to hand
 	// the runtime a secret that must not be written to disk — the test runner
@@ -549,6 +552,7 @@ func StartLocalRuntime(opts LocalRuntimeOptions) (*LocalRuntime, error) {
 		},
 	}
 	rt.ctrl = NewRuntimeController(rt.m2ee)
+	rt.ctrl.StartTimeout = opts.StartTimeout
 	// Attach a file log subscriber (post-start, inside Start) so the runtime's
 	// application log lands in the same file the JVM stdout/stderr is tee'd to.
 	// An absolute path keeps the runtime (cwd = <install>/runtime) and the JVM

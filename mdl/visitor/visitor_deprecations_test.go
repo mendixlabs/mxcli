@@ -108,6 +108,7 @@ var createOrReplaceCases = map[string]string{
 	"datatransformer":             "data transformer M.Flatten source json '{\"id\": 1}' { jslt '{\"id\": .id}'; };",
 	"model":                       "ai model M.GPT4 (Provider: MxCloudGenAI, Key: @M.ModelApiKey);",
 	"consumedmcpservice":          "consumed mcp service M.WebSearch (ProtocolVersion: v2025_03_26, Version: '1.0');",
+	"publishedmcpservice":         "published mcp service M.Svc (EndpointPath: 'svc', Version: '1.0', ProtocolVersion: v2025_03_26);",
 	"knowledgebase":               "knowledge base M.Docs (Provider: MxCloudGenAI, Key: @M.KBApiKey);",
 	"agent":                       "agent M.Summarizer (UsageType: Task, Model: M.GPT4, SystemPrompt: 'Summarize.', UserPrompt: 'Text.');",
 	"nanoflow":                    "nanoflow M.NF_Validate () begin return; end;",

@@ -227,6 +227,7 @@ func buildFailureHint(other []docker.BuildProblem) string {
 var runnerDocuments = map[string]string{
 	endpointStartupFlow:    "to register the test endpoint at startup and then run your after-startup microflow",
 	endpointRegisterAction: "to register the test endpoint",
+	errorMessageFlow:       "to read a raised error's message for the test microflows",
 }
 
 // runnerDocumentPattern matches the `document` MxBuild reports — the document's

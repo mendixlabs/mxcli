@@ -1,0 +1,25 @@
+mdl 1;
+-- Bug ako/mxcli#560: `use building block … as <prefix>` renamed the block's
+-- widgets but not the references between them. Atlas_Web_Content.Master_Detail
+-- holds `gallery gallery2` and `dataview dataView7 (DataSource: selection
+-- gallery2)`; copied `as md_`, the widgets became md_gallery2 / md_dataView7
+-- and exec failed with
+--   Error: failed to build page: failed to build datasource: widget not found: gallery2
+--
+-- Fix: prefixWidgetNames rewrites, in the same pass, every reference to a name
+-- the block declares — a `selection` datasource, `delete $w`, a flow argument
+-- `$w`, a template parameter `$w.Attr`, an expression `$w/Attr` — and leaves
+-- references to widgets outside the block alone. `use fragment … as` shares it.
+--
+-- Verify (needs a project with Atlas_Web_Content, e.g. `mxcli new`): exec
+-- writes `dataview md_dataView7 (DataSource: selection md_gallery2)`. mxcli
+-- docker check then reports only the block template's unbound text boxes
+-- (CE7005); with the selection left on `gallery2` exec refused the page.
+
+create module BugTest560;
+
+create persistent entity BugTest560.Person (Name: string(100));
+
+create page BugTest560.MasterDetail (Title: 'Master detail', Layout: Atlas_Core.Atlas_Default) {
+  use building block Atlas_Web_Content.Master_Detail (datasource: database from BugTest560.Person) as md_
+};

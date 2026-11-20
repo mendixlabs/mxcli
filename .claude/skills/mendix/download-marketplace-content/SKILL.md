@@ -14,16 +14,16 @@ description: "The full lifecycle of Mendix Marketplace modules and widgets from 
 | 45-61 | Prerequisites: Authenticate |
 | 62-95 | Step 1 — Discover |
 | 96-105 | Step 2 — Download a `.mpk` to disk (optional) |
-| 106-225 | Step 3 — Install into a project |
-| 226-290 | Step 4 — Repair the model after the install (required, headless) |
-| 291-347 | Step 5 — Before updating: has the module been edited? |
-| 348-406 | Step 6 — Update an installed module |
-| 407-452 | Worked example: the agent-editor stack on a vanilla app |
-| 453-474 | Package a module of the project (`marketplace package`) |
-| 475-482 | Notes |
-| 483-486 | Platform authentication (`mxcli auth login/logout/status/list`) with PAT scheme for marketplace-api |
-| 487-490 | Marketplace download/install (`mxcli marketplace download/install`) — the content API now exposes a per-version downloadUrl (303→public CDN); install is type-aware (widget→widgets/, new module→`mx module-import`); existing-module updates are reported, not applied (entity-ID/local-edit safety — see PROPOSAL_marketplace_modules |
-| 491-495 | Marketplace drift detection (`mxcli marketplace diff <content-id> -p app.mpr [--to VERSION] [--json]`) |
+| 106-227 | Step 3 — Install into a project |
+| 228-292 | Step 4 — Repair the model after the install (required, headless) |
+| 293-349 | Step 5 — Before updating: has the module been edited? |
+| 350-408 | Step 6 — Update an installed module |
+| 409-462 | Worked example: the agent-editor stack on a vanilla app |
+| 463-484 | Package a module of the project (`marketplace package`) |
+| 485-492 | Notes |
+| 493-496 | Platform authentication (`mxcli auth login/logout/status/list`) with PAT scheme for marketplace-api |
+| 497-500 | Marketplace download/install (`mxcli marketplace download/install`) — the content API now exposes a per-version downloadUrl (303→public CDN); install is type-aware (widget→widgets/, new module→`mx module-import`); existing-module updates are reported, not applied (entity-ID/local-edit safety — see PROPOSAL_marketplace_modules |
+| 501-505 | Marketplace drift detection (`mxcli marketplace diff <content-id> -p app.mpr [--to VERSION] [--json]`) |
 
 <!-- /skill-index -->
 # Download, Install and Update Marketplace Content
@@ -221,7 +221,9 @@ version "6.0.0" not found; run 'mxcli marketplace versions <id>' to list availab
 
 `--force` does not help — it overrides a *finding*, and here there is no finding.
 `--no-baseline` accepts that the question cannot be answered and updates anyway.
-Commit first: local edits to that module go without being named.
+Commit first: local edits to that module go without being named. Associations
+other modules own into it are still found: the update refuses without `--force`
+and `--save-edits <dir>` saves them for replay.
 
 ## Step 4 — Repair the model after the install (required, headless)
 
@@ -435,7 +437,7 @@ Then authoring works — `create constant` + `create ai model` + `create agent` 
 added 3 units, with `list features in agent_documents` reporting all four document types
 available on 11.12.1.
 
-Four things this run established, none of them obvious from the command list:
+Five things these runs established, none of them obvious from the command list:
 
 1. **Install `AgentEditorCommons` last** — it depends transitively on the rest.
 2. **`--version` is mandatory in practice.** Every agent-stack module's latest release
@@ -446,6 +448,14 @@ Four things this run established, none of them obvious from the command list:
    `mx check` on the finished project reported 203 errors (202 × CE0463, 1 × CE6087);
    `mxcli fix widgets` (62 units) and `mxcli fix design-properties` (42 units) took it to
    **0**. The project stays MPR v2 throughout: 1,868 `.mxunit` files, a 249,856-byte index.
+5. **`mx check` passing does not mean the app builds.** MCP Client (and Agent Commons
+   through it) declares managed Java dependencies — `io.modelcontextprotocol.sdk:mcp`,
+   `mcp-json-jackson2`, `jackson-databind`. Until they are in `vendorlib/`, `run --local` and
+   `test --local` fail compiling Java actions with ~180 `package … does not exist` errors,
+   while `mx check` reports 0. `marketplace install` / `update` now download them (the step
+   Studio Pro runs on import) and print `Retry with: mxcli sync-java-deps -p …` when Maven
+   cannot be reached; `mxcli sync-java-deps -p App.mpr --check` reports what is still missing
+   (ako/mxcli#2028).
 
 The ids are a convenience, not an authority: confirm with `search`/`info` rather than
 trusting them from memory, and note that the listing name never matches the module name.

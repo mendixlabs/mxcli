@@ -45,8 +45,10 @@ import (
 // original, which is the one thing that is cheap to guarantee.
 
 // pageProbe is the optional capability the shared BSON page mutator offers: a
-// discardable copy to dry-run an operation against, and the property names the
-// stored widget declares.
+// discardable copy to dry-run an operation against, the property names the
+// stored widget declares, and what the stored widget IS — its $Type and, for a
+// pluggable widget, its widget id. The last is what lets ALTER STYLING's check
+// judge a design property against the widget's own type (ako/mxcli#613).
 //
 // It is an assertion rather than an addition to backend.PageMutator on purpose.
 // The MCP mutator has neither — and no pluggable path at all — so asserting is
@@ -56,6 +58,7 @@ type pageProbe interface {
 	Probe() (backend.PageMutator, error)
 	ResolvesTarget(widgetRef, columnRef string) bool
 	WidgetPropertyKeys(widgetRef, columnRef string) []string
+	widgetStorageTyper
 }
 
 // validateAlterSetProperties dry-runs every ALTER … SET against the stored
@@ -69,6 +72,7 @@ func validateAlterSetProperties(ctx *ExecContext, prog *ast.Program, sc *scriptC
 		return nil
 	}
 	grows := documentsTheScriptAddsWidgetsTo(prog)
+	added := widgetsTheScriptAddsTo(ctx, prog)
 	opened := map[model.ID]pageProbe{}
 
 	var errs []error
@@ -94,6 +98,7 @@ func validateAlterSetProperties(ctx *ExecContext, prog *ast.Program, sc *scriptC
 		}
 		label := fmt.Sprintf("alter %s %s", containerType, s.PageName.String())
 		modName := h.GetModuleName(containerID)
+		var earlier []*ast.SetPropertyOp
 		for _, op := range s.Operations {
 			set, ok := op.(*ast.SetPropertyOp)
 			if !ok {
@@ -107,13 +112,57 @@ func validateAlterSetProperties(ctx *ExecContext, prog *ast.Program, sc *scriptC
 			// so `column colTitle` is inserted under one name and set under
 			// another. Its properties are checked where it is written, by
 			// ValidateWidgetProperties.
-			if grows[s.PageName.String()] && !probe.ResolvesTarget(set.Target.Widget, columnRefOf(set.Target)) {
+			//
+			// Waived only for a name the script's additions could hold, though —
+			// their names after building block expansion, or anything at all when
+			// they carry derived addresses. Waiving every unresolved name passed
+			// `set … on s_text99` after `insert … { use building block B as s_ }`,
+			// which exec refused (ako/mxcli#2182).
+			doc := s.PageName.String()
+			if grows[doc] && !probe.ResolvesTarget(set.Target.Widget, columnRefOf(set.Target)) &&
+				added[doc].allows(set.Target.Widget) {
 				continue
 			}
 			errs = append(errs, checkSetOp(ctx, probe, label, set, modName, containerID, sc)...)
+			errs = append(errs, checkDateFormatSet(ctx, probe, label, earlier, set, modName, containerID)...)
+			earlier = append(earlier, set)
 		}
 	}
 	return errs
+}
+
+// checkDateFormatSet is exec's checkDateFormatAfterSet for check: a date
+// picker left `DateFormat: Custom` with no pattern is CE0493, judged on the
+// widget as the statement leaves it — its earlier SETs on that widget applied
+// first, then this one whole — because the format and its pattern may be set
+// in either order, in one SET or in two (ako/mxcli#1965).
+func checkDateFormatSet(ctx *ExecContext, p pageProbe, label string, earlier []*ast.SetPropertyOp, op *ast.SetPropertyOp,
+	modName string, modID model.ID) []error {
+	touches := false
+	for name := range op.Properties {
+		if strings.EqualFold(name, "DateFormat") || strings.EqualFold(name, "CustomDateFormat") {
+			touches = true
+		}
+	}
+	if !touches || op.Target.IsColumn() || op.Target.Item != nil || op.Target.Widget == "" {
+		return nil
+	}
+	probe, err := p.Probe()
+	if err != nil {
+		return nil
+	}
+	for _, e := range earlier {
+		if e.Target.Widget == op.Target.Widget && !e.Target.IsColumn() && e.Target.Item == nil {
+			_ = applySetProperties(ctx, probe, e, modName, modID) // its own errors are reported for it
+		}
+	}
+	if applySetProperties(ctx, probe, op, modName, modID) != nil {
+		return nil // reported by checkSetOp
+	}
+	if err := checkDateFormatAfterSet(probe, op); err != nil {
+		return []error{mdlerrors.NewValidation(fmt.Sprintf("%s: %v", label, err))}
+	}
+	return nil
 }
 
 // openPageProbe opens the stored document and returns it as a prober, or nil
@@ -165,6 +214,7 @@ func checkSetOp(ctx *ExecContext, p pageProbe, label string, op *ast.SetProperty
 		for _, msg := range setImageRefErrors(ctx, p, op.Target, name, op.Properties[name], sc) {
 			errs = append(errs, mdlerrors.NewValidation(fmt.Sprintf("%s: %s", label, msg)))
 		}
+		judgeSetInputAttributePath(ctx, p, op.Target, name, op.Properties[name], sc)
 	}
 	// A column's properties are then judged TOGETHER, with the follow-up that
 	// resets what the widget now hides: `ColumnWidth: autoFill, Size: 220` is
@@ -215,11 +265,10 @@ func checkGalleryClickSet(ctx *ExecContext, p pageProbe, label string, op *ast.S
 // a build later. Only for the stored widget types whose key that is
 // (pages.ImageReferenceProperty), so a pluggable widget's `image` is untouched.
 func setImageRefErrors(ctx *ExecContext, p pageProbe, target ast.WidgetRef, name string, value any, sc *scriptContext) []string {
-	typer, ok := p.(widgetStorageTyper)
-	if !ok || target.Widget == "" || columnRefOf(target) != "" {
+	if p == nil || target.Widget == "" || columnRefOf(target) != "" {
 		return nil
 	}
-	bsonType, _ := typer.WidgetStorageType(target.Widget)
+	bsonType, _ := p.WidgetStorageType(target.Widget)
 	key := pages.ImageReferenceProperty(bsonType)
 	img, isString := value.(string)
 	if key == "" || !strings.EqualFold(key, name) || !isString || strings.TrimSpace(img) == "" {
@@ -346,10 +395,47 @@ func documentsTheScriptAddsWidgetsTo(prog *ast.Program) map[string]bool {
 		}
 		for _, op := range s.Operations {
 			switch op.(type) {
-			case *ast.InsertWidgetOp, *ast.ReplaceWidgetOp:
+			case *ast.InsertWidgetOp, *ast.ReplaceWidgetOp, *ast.WrapWidgetOp:
 				grows[s.PageName.String()] = true
 			}
 		}
 	}
 	return grows
+}
+
+// judgeSetInputAttributePath judges a built-in input's `set (attribute: …)`
+// path as create page's check judges the same path on the same widget
+// (checkQualifiedAttributePaths): a qualified form exec normalises warns
+// MDL-ATTRPATH01 with what exec stores (ako/mxcli#2278). Only the warning is
+// taken: a path exec refuses — MDL-ATTRPATH02 included — is already reported
+// by the dry run above, with exec's own message.
+func judgeSetInputAttributePath(ctx *ExecContext, p pageProbe, target ast.WidgetRef, prop string, value any, sc *scriptContext) {
+	attr, ok := value.(string)
+	if sc == nil || !ok || !strings.EqualFold(prop, "Attribute") || target.Widget == "" || target.IsColumn() ||
+		target.Item != nil || !strings.Contains(attr, "/") {
+		return
+	}
+	probe, err := p.Probe()
+	if err != nil {
+		return
+	}
+	entity := probe.EnclosingEntity(target.Widget)
+	if entity == "" {
+		return
+	}
+	kind, _ := p.WidgetStorageType(target.Widget)
+	if i := strings.LastIndex(kind, "$"); i >= 0 {
+		kind = kind[i+1:]
+	}
+	v := &attributeScopeValidator{
+		types:           checkMemberTypeIndex(ctx, sc),
+		pb:              &pageBuilder{ctx: ctx, backend: ctx.Backend, execCache: ctx.Cache},
+		generalizations: sc.entityGeneralizations,
+	}
+	path := strings.TrimPrefix(strings.TrimSpace(attr), "$currentObject/")
+	if strings.HasPrefix(path, "$") {
+		return
+	}
+	v.judgeQualifiedPath(&ast.WidgetV3{Name: target.Widget, Type: kind}, "", attr, path, entity)
+	sc.warnings = append(sc.warnings, v.warns...)
 }

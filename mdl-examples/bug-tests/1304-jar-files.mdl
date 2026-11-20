@@ -1,0 +1,23 @@
+mdl 1;
+-- ako/mxcli#1304: a Starlark rule could not see the .jar files in userlib/
+-- and vendorlib/; jar_dependencies() lists only what module settings declare.
+--
+-- Run on a fresh app, then put two versions of one library on disk:
+--   mkdir -p App/vendorlib
+--   touch App/userlib/commons-lang3-3.12.0.jar App/userlib/commons-lang3-3.12.0.jar.Bug1304.RequiredLib
+--   touch App/vendorlib/commons-lang3-3.14.0.jar
+-- and lint with a rule that iterates jar_files().
+-- Expected rows:
+--   userlib   commons-lang3-3.12.0.jar  commons-lang3  3.12.0  required_by ["Bug1304"]
+--   vendorlib commons-lang3-3.14.0.jar  commons-lang3  3.14.0  required_by []
+-- Before the fix the rule was skipped: undefined: jar_files.
+
+create module Bug1304;
+
+alter module Bug1304
+  add jar dependency (
+    group    = 'org.apache.commons',
+    artifact = 'commons-lang3',
+    version  = '3.14.0',
+    included = true,
+  );

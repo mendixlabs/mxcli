@@ -217,9 +217,14 @@ func nonDefaultPropsByKey(ctx *ExecContext, objProps []any, schemas map[string]w
 				continue
 			}
 			if entityRef, ok := attrRef["EntityRef"].(map[string]any); ok && len(entityRef) > 0 {
-				// A path over associations has no spelling the explicit-key pass
-				// reads back.
-				omitted = append(omitted, sc.Key)
+				// A path over associations, `Assoc/Attr`, which the explicit-key
+				// pass resolves back into the same steps (ako/mxcli#2279,
+				// ako/mxcli#2295).
+				if path := columnAttributeFromRef(ctx, attrRef); strings.Contains(path, "/") {
+					props = append(props, rawExplicitProp{Key: sc.Key, Value: path, IsRef: true})
+				} else {
+					omitted = append(omitted, sc.Key)
+				}
 				continue
 			}
 			scope := ""

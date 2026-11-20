@@ -50,6 +50,10 @@ func GenerateTestFlows(suite *TestSuite) string {
 	v := suiteVersion(suite)
 	writeScriptHeader(&b, v)
 	b.WriteString("\n")
+	if suiteHasFlows(suite) {
+		writeErrorMessageFlow(&b)
+		b.WriteString("\n")
+	}
 	for _, tc := range suite.Tests {
 		// A test with an uncompilable @expect gets no microflow. The runner
 		// reports it as an ERROR from the parse message, which is more useful
@@ -66,6 +70,9 @@ func GenerateTestFlows(suite *TestSuite) string {
 // writeTestFlow writes one test's microflow.
 func writeTestFlow(b *strings.Builder, tc TestCase, v langver.Version) {
 	fmt.Fprintf(b, "/** %s */\n", escapeMDLComment(tc.Name))
+	if callerAppliesEntityAccess(tc) {
+		b.WriteString(applyEntityAccessAnnotation + "\n")
+	}
 	fmt.Fprintf(b, "%s %s ()\n", createFlow, testFlowName(tc))
 	b.WriteString("RETURNS String AS $Verdict\n")
 	b.WriteString("BEGIN\n")
@@ -222,15 +229,18 @@ func failVerdictExpr(exp Expect) string {
 //
 // The verdict carries the raised message: a bare "exception during execution"
 // left the user guessing, e.g. at an unresolvable [%CurrentUser%] token (tests
-// run in a system context with no user). $latestError/Message is the same
-// expression throwsHandler uses, measured there.
+// run in a system context with no user). The message is read through
+// errorMessageFlow, as in throwsHandler: the test flow applies entity access.
 func rewriteBodyForVerdict(lines []string, tc TestCase) []string {
-	handler := []string{
-		fmt.Sprintf("  SET $Verdict = '%s' + %s;",
-			escapeMDLString(verdictFailPrefix+"exception during execution: "), latestErrorMessage),
-		"  RETURN $Verdict;",
-	}
-	return attachOnError(lines, tc.Version, handler)
+	return attachOnError(lines, tc.Version, func(n int) []string {
+		msg := errorMessageVar("", n)
+		return []string{
+			readErrorMessage(msg),
+			fmt.Sprintf("  SET $Verdict = '%s' + %s;",
+				escapeMDLString(verdictFailPrefix+"exception during execution: "), msg),
+			"  RETURN $Verdict;",
+		}
+	})
 }
 
 // rewriteBodyForThrows attaches an ON ERROR handler that clears the pre-set
@@ -240,7 +250,7 @@ func rewriteBodyForVerdict(lines []string, tc TestCase) []string {
 // replaces it with one naming both sides, so a failing @throws says what was
 // raised instead of only what was expected.
 func rewriteBodyForThrows(lines []string, want string, v langver.Version) []string {
-	return attachOnError(lines, v, throwsHandler(want))
+	return attachOnError(lines, v, func(n int) []string { return throwsHandler(want, errorMessageVar("", n)) })
 }
 
 // throwsHandler builds the ON ERROR body of an @throws test.
@@ -248,30 +258,27 @@ func rewriteBodyForThrows(lines []string, want string, v langver.Version) []stri
 // $latestError is the error variable Mendix makes available inside a handler;
 // its Message member is what the annotation is compared against. Measured
 // against mxbuild 11.6.0 and 11.13.0 at 0 errors, with `$noSuchThing/Message` as
-// the control (CE0109, "Undefined variable").
+// the control (CE0109, "Undefined variable"). The handler reads it into msg
+// through errorMessageFlow, because the test microflow applies entity access.
 //
 // The comparison is `contains`, so an expectation is a substring of the raised
 // message: a Mendix error message routinely carries an activity name or an
 // object id the test cannot predict, and demanding equality would make almost
 // every real expectation unwritable.
-func throwsHandler(want string) []string {
+func throwsHandler(want, msgVar string) []string {
 	if want == "" {
 		return []string{fmt.Sprintf("  SET $Verdict = '%s';", verdictPass)}
 	}
 	msg := verdictFailPrefix + "expected an error containing " + quoteForMessage(want) + ", actual: "
 	return []string{
-		fmt.Sprintf("  IF contains(%s, '%s') THEN", latestErrorMessage, escapeMDLString(want)),
+		readErrorMessage(msgVar),
+		fmt.Sprintf("  IF contains(%s, '%s') THEN", msgVar, escapeMDLString(want)),
 		fmt.Sprintf("    SET $Verdict = '%s';", verdictPass),
 		"  ELSE",
-		fmt.Sprintf("    SET $Verdict = '%s' + %s;", escapeMDLString(msg), latestErrorMessage),
+		fmt.Sprintf("    SET $Verdict = '%s' + %s;", escapeMDLString(msg), msgVar),
 		"  END IF;",
 	}
 }
-
-// latestErrorMessage is the MDL expression for the message of the error being
-// handled. Named once because it appears in both branches of every @throws
-// handler and in the legacy runner.
-const latestErrorMessage = "$latestError/Message"
 
 // quoteForMessage renders the expected message for a human-readable verdict,
 // before that verdict is itself escaped for MDL.
@@ -309,7 +316,10 @@ func quoteForMessage(s string) string {
 // semicolons) of its own, and `on error` may be inside a string or a comment.
 // A body that does not parse is returned unchanged — no handler can make it
 // parse, and the error the author then sees is about their own text.
-func attachOnError(lines []string, v langver.Version, handler []string) []string {
+//
+// handler is called once per wrapped call with its number, from 1 in source
+// order, so a handler that declares a variable can give each its own name.
+func attachOnError(lines []string, v langver.Version, handler func(n int) []string) []string {
 	body := strings.Join(lines, "\n")
 	prefix := bodyParsePrefix(v)
 	stmts, ok := visitor.FlowStatements(prefix + body + bodyParseSuffix)
@@ -320,7 +330,9 @@ func attachOnError(lines []string, v langver.Version, handler []string) []string
 	runes := []rune(body)
 	// The handler is laid out at the indentation of the line its call starts
 	// on, so a call nested in an IF or a loop reads as nested in --verbose.
+	n := 0
 	block := func(callStart int) string {
+		n++
 		lineStart := callStart
 		for lineStart > 0 && runes[lineStart-1] != '\n' {
 			lineStart--
@@ -332,7 +344,7 @@ func attachOnError(lines []string, v langver.Version, handler []string) []string
 		pad := string(runes[lineStart:indent])
 		var b strings.Builder
 		b.WriteString("ON ERROR BEGIN\n")
-		for _, l := range handler {
+		for _, l := range handler(n) {
 			b.WriteString(pad + l + "\n")
 		}
 		b.WriteString(pad + "END ERROR")

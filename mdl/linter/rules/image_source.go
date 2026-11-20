@@ -51,7 +51,7 @@ func (r *ImageSourceRule) Check(ctx *linter.LintContext) []linter.Violation {
 	type containerInfo struct {
 		ID            string
 		QualifiedName string
-		Type          string // "PAGE" or "SNIPPET"
+		Type          string // "PAGE", "SNIPPET" or "LAYOUT"
 		ModuleName    string
 	}
 	containers := make(map[string]containerInfo)
@@ -87,10 +87,7 @@ func (r *ImageSourceRule) Check(ctx *linter.LintContext) []linter.Violation {
 				continue
 			}
 
-			docType := "page"
-			if c.Type == "SNIPPET" {
-				docType = "snippet"
-			}
+			docType := widgetDocType(c.Type)
 
 			violations = append(violations, linter.Violation{
 				RuleID:   r.ID(),
@@ -109,6 +106,20 @@ func (r *ImageSourceRule) Check(ctx *linter.LintContext) []linter.Violation {
 	}
 
 	return violations
+}
+
+// widgetDocType is the location document type of a widgets() row's container:
+// "page", "snippet" or "layout". A layout's widgets are catalogued since
+// ako/mxcli#1302; read as "page", a finding in one pointed at a page that does
+// not exist.
+func widgetDocType(containerType string) string {
+	switch containerType {
+	case "SNIPPET":
+		return "snippet"
+	case "LAYOUT":
+		return "layout"
+	}
+	return "page"
 }
 
 // docNameFromQualified extracts the document name from a qualified name like "Module.Name".

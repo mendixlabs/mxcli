@@ -1,0 +1,24 @@
+{
+  "serverName": "Published_MCP_service",
+  "endpointPath": "published_mcp_service_2",
+  "version": "1.0.0",
+  "protocolVersion": "v2025_03_26",
+  "authenticationEnabled": true,
+  "tools": [
+    {
+      "uuid": "06e34e7d-8103-43f3-aa12-4243d3858956",
+      "name": "tool1",
+      "description": "tool1 is cool",
+      "sourceMicroflow": {
+        "qualifiedName": "AgentTest.mcptool1",
+        "documentId": "2173b68a-686a-408b-8e73-cccc5d213256"
+      },
+      "title": "ewdwe"
+    }
+  ],
+  "documentation": "this is an mcp server",
+  "authenticationMicroflow": {
+    "documentId": "1987e8e9-32bc-403b-b87c-7f95661a3d57",
+    "qualifiedName": "AgentTest.auth_mf"
+  }
+}

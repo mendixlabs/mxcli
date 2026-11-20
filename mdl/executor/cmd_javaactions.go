@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/codesection"
+	"github.com/mendixlabs/mxcli/mdl/doccomment"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
@@ -81,7 +83,7 @@ func describeJavaAction(ctx *ExecContext, name ast.QualifiedName) error {
 	doc = strings.ReplaceAll(doc, "\r", "\n")
 	if doc != "" {
 		sb.WriteString("/**\n")
-		for line := range strings.SplitSeq(doc, "\n") {
+		for line := range strings.SplitSeq(doccomment.Escape(doc), "\n") {
 			sb.WriteString(" * ")
 			sb.WriteString(line)
 			sb.WriteString("\n")
@@ -129,21 +131,21 @@ func describeJavaAction(ctx *ExecContext, name ast.QualifiedName) error {
 	// longer existed.
 	source := readJavaActionSource(ctx.MprPath, name.Module, name.Name)
 	javaCode := javaActionUserCode(source)
-	sb.WriteString("\nas $$\n")
+	var body strings.Builder
 	if javaCode != "" {
 		if imports := javaactions.StatedImports(source, ja.Parameters, ja.ReturnType); len(imports) > 0 {
-			sb.WriteString(strings.Join(imports, "\n"))
-			sb.WriteString("\n\n")
+			body.WriteString(strings.Join(imports, "\n"))
+			body.WriteString("\n\n")
 		}
-		sb.WriteString(javaCode)
+		body.WriteString(javaCode)
 	} else {
-		sb.WriteString(javaSourceOmittedBody)
+		body.WriteString(javaSourceOmittedBody)
 	}
-	sb.WriteString("\n$$")
+	sb.WriteString("\nas ")
+	sb.WriteString(mdlSourceBlock(ctx, body.String()))
 	if _, extra := javaactions.RetainedSections(source); javaCode != "" && extra != "" {
-		sb.WriteString("\nextra code $$\n")
-		sb.WriteString(extra)
-		sb.WriteString("\n$$")
+		sb.WriteString("\nextra code ")
+		sb.WriteString(mdlSourceBlock(ctx, extra))
 	}
 	sb.WriteString(";")
 
@@ -159,8 +161,8 @@ func describeJavaAction(ctx *ExecContext, name ast.QualifiedName) error {
 	fmt.Fprintln(ctx.Output, stmt)
 
 	// Additional info as comments
-	if ja.ExportLevel != "" && ja.ExportLevel != "Hidden" {
-		fmt.Fprintf(ctx.Output, "-- export level: %s\n", ja.ExportLevel)
+	if line := javaActionExportLevelComment(ja.ExportLevel); line != "" {
+		fmt.Fprintln(ctx.Output, line)
 	}
 	if ja.Excluded {
 		fmt.Fprintln(ctx.Output, "-- EXCLUDED: true")
@@ -280,33 +282,7 @@ func javaActionUserCode(source string) string {
 // GenerateSource re-indents each line uniformly, so without this every rewrite
 // shifted the code further right and a second DESCRIBE never matched the first.
 func normalizeJavaSection(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	lines := strings.Split(s, "\n")
-	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
-		lines = lines[1:]
-	}
-	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
-		lines = lines[:len(lines)-1]
-	}
-	indent := ""
-	first := true
-	for _, l := range lines {
-		if strings.TrimSpace(l) == "" {
-			continue
-		}
-		lead := l[:len(l)-len(strings.TrimLeft(l, " \t"))]
-		if first {
-			indent, first = lead, false
-			continue
-		}
-		for !strings.HasPrefix(lead, indent) {
-			indent = indent[:len(indent)-1]
-		}
-	}
-	for i, l := range lines {
-		lines[i] = strings.TrimRight(strings.TrimPrefix(l, indent), " \t")
-	}
-	return strings.Join(lines, "\n")
+	return codesection.Normalize(s)
 }
 
 // formatJavaActionType formats a Java action parameter type for MDL output.
@@ -1094,4 +1070,24 @@ func listOfTypeParameter(dt ast.DataType, typeParamNameToID map[string]model.ID)
 		TypeParameter:   dt.EntityRef.Name,
 		TypeParameterID: id,
 	}
+}
+
+// javaActionExportLevelComment is describe's line for a Java action's export
+// level: nothing for the default, Hidden.
+//
+// The stored value Mendix knows is Hidden or API. "Public" is what mxcli wrote
+// on every Java action rewrite before #705, and Mendix reads it as Hidden:
+// `mx update-widgets` re-saves such a unit as Hidden, while a stored API comes
+// back as API (measured on mx 11.12.6, ako/mxcli#2287). Printing it as
+// `-- export level: Public` made it look like a level the project has, and its
+// disappearance like a loss.
+func javaActionExportLevelComment(level string) string {
+	switch level {
+	case "", "Hidden":
+		return ""
+	case "API":
+		return "-- export level: API"
+	}
+	return fmt.Sprintf("-- export level: %q is not a Mendix export level (Hidden or API); Mendix reads it as Hidden. "+
+		"Earlier mxcli versions wrote %q — set API in Studio Pro if the action is part of the module's API", level, level)
 }

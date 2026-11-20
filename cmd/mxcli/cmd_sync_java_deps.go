@@ -83,7 +83,7 @@ Examples:
 		if still := docker.UnvendoredJarDependencies(filepath.Dir(projectPath), deps); len(still) > 0 {
 			// mx reports success even when a coordinate resolves to nothing, so
 			// check the postcondition rather than trusting the exit code.
-			return fmt.Errorf("sync finished but %d dependency/dependencies are still missing from vendorlib/: %v", len(still), still)
+			return fmt.Errorf("sync finished but %d dependency/dependencies are still missing from vendorlib/: %v", len(still), docker.DescribeUnvendored(filepath.Dir(projectPath), still))
 		}
 		fmt.Println("All declared dependencies are in vendorlib/.")
 		return nil
