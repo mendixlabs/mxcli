@@ -23,21 +23,7 @@ import (
 // Icon-typed `icon`, as on the Star rating) is in KnownProperties, and the core
 // reading stays, as before.
 func defOwnsCoreName(def *WidgetDefinition, name string) bool {
-	if def == nil || !pages.PluggableKeyShadowsCoreName(name) {
-		return false
-	}
-	sets := [][]PropertyMapping{def.PropertyMappings}
-	for _, m := range def.Modes {
-		sets = append(sets, m.PropertyMappings)
-	}
-	for _, set := range sets {
-		for _, m := range set {
-			if strings.EqualFold(m.PropertyKey, name) {
-				return true
-			}
-		}
-	}
-	return false
+	return pages.PluggableKeyShadowsCoreName(name) && defDeclaresOwnKey(def, name)
 }
 
 // templateOwnsCoreName is defOwnsCoreName asked of the template being built:
@@ -51,6 +37,30 @@ func templateOwnsCoreName(propertyTypeIDs map[string]pages.PropertyTypeIDEntry, 
 	for key, entry := range propertyTypeIDs {
 		if strings.EqualFold(key, name) && entry.ValueType != "System" {
 			return true
+		}
+	}
+	return false
+}
+
+// defDeclaresOwnKey reports whether def maps a property key of its own spelled
+// key, in any case — in its top-level mappings or any mode's. Unlike
+// defOwnsCoreName it does not ask whether the name shadows a core property in
+// general: `editable` does not (a CustomWidget stores its own Editable), but on
+// a widget declaring an `editable` enumeration and no Editability system
+// property, `editable:` is that enumeration.
+func defDeclaresOwnKey(def *WidgetDefinition, key string) bool {
+	if def == nil {
+		return false
+	}
+	sets := [][]PropertyMapping{def.PropertyMappings}
+	for _, m := range def.Modes {
+		sets = append(sets, m.PropertyMappings)
+	}
+	for _, set := range sets {
+		for _, m := range set {
+			if strings.EqualFold(m.PropertyKey, key) {
+				return true
+			}
 		}
 	}
 	return false
