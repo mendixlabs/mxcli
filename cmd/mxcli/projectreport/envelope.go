@@ -110,6 +110,12 @@ type Note struct {
 	Name   string `json:"name,omitempty" yaml:"name,omitempty"`
 	Status string `json:"status,omitempty" yaml:"status,omitempty"`
 	Note   string `json:"note,omitempty" yaml:"note,omitempty"`
+	// Finding ties an item to a finding (`finding:<ID>`) that explains it:
+	// a performance step the finding's fix targets (ako/mxcli#2443).
+	Finding string `json:"finding,omitempty" yaml:"finding,omitempty"`
+	// Scope says what a finding is about when it is not a step: "background"
+	// for work no journey step runs (a scheduled job, a traffic generator).
+	Scope string `json:"scope,omitempty" yaml:"scope,omitempty"`
 }
 
 // LoadAnnotations reads a JSON or YAML annotations file. An empty path is no
