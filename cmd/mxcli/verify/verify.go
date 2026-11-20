@@ -94,6 +94,10 @@ type StageResult struct {
 	Resolved    int `json:"resolved"`
 	Hidden      int `json:"hidden,omitempty"`
 	PreExisting int `json:"preExisting"`
+	// PreExistingBySeverity says what the pre-existing findings are: a count alone
+	// ("63 pre-existing") reads the same whether they are infos or errors the
+	// baseline accepted. Empty when the stage cannot say.
+	PreExistingBySeverity map[string]int `json:"preExistingBySeverity,omitempty"`
 	// Recorded is true when --update-baseline recorded this stage's baseline.
 	Recorded bool `json:"recorded,omitempty"`
 }
@@ -119,8 +123,10 @@ type Outcome struct {
 	Resolved    int
 	Hidden      int
 	PreExisting int
-	Recorded    bool
-	Note        string
+	// PreExistingBy is PreExisting by severity ("error", "warning", "info").
+	PreExistingBy map[string]int
+	Recorded      bool
+	Note          string
 	// Incomplete says the stage ran but cannot vouch for its result: rules the
 	// baseline expects did not run, or the configuration differs from the one it
 	// was recorded under. A stage with new failing findings still fails; one
@@ -203,6 +209,7 @@ func Run(opts Options, stages map[string]Stage) Result {
 			sr.New = append(sr.New, out.New...)
 			sr.Unmasked, sr.Resolved, sr.Hidden = out.Unmasked, out.Resolved, out.Hidden
 			sr.PreExisting, sr.Recorded, sr.Note = out.PreExisting, out.Recorded, out.Note
+			sr.PreExistingBySeverity = out.PreExistingBy
 			switch {
 			case fails(sr, opts):
 				sr.Status = StatusFailed

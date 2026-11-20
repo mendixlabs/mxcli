@@ -323,3 +323,21 @@ func TestVerifyCleanCheckText(t *testing.T) {
 		}
 	}
 }
+
+// lint reports what its already-known findings are by severity (the findings of the
+// run minus the new ones), and verify carries it into its summary.
+func TestKnownBySeverity(t *testing.T) {
+	all := map[string]int{"error": 2, "warning": 5, "info": 60}
+	fresh := map[string]int{"warning": 1}
+	got := knownBySeverity(all, fresh)
+	if got["error"] != 2 || got["warning"] != 4 || got["info"] != 60 {
+		t.Errorf("known = %v", got)
+	}
+	if k := knownBySeverity(map[string]int{"info": 3}, map[string]int{"info": 3}); len(k) != 0 {
+		t.Errorf("nothing known must be empty, got %v", k)
+	}
+	_, bl, err := parseReport("lint", []byte(`{"violations": [], "baseline": {"new": 0, "unchanged": 63, "unchangedBySeverity": {"warning": 1, "info": 62}}}`))
+	if err != nil || bl.UnchangedBySeverity["warning"] != 1 || bl.UnchangedBySeverity["info"] != 62 {
+		t.Errorf("parsed = %+v, %v", bl, err)
+	}
+}

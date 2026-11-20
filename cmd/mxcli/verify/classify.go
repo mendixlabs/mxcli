@@ -31,6 +31,10 @@ func Classify(baseline, current []Finding, staging bool) Outcome {
 		if left[c.Key] > 0 {
 			left[c.Key]--
 			out.PreExisting++
+			if out.PreExistingBy == nil {
+				out.PreExistingBy = map[string]int{}
+			}
+			out.PreExistingBy[c.Severity]++
 			continue
 		}
 		candidates = append(candidates, c)

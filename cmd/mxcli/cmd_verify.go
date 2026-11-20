@@ -332,10 +332,12 @@ func (v *verifyRunner) lint() (verify.Outcome, error) {
 		return verify.Outcome{Recorded: true, PreExisting: len(findings), Note: "baseline recorded at " + lintBaseline}, nil
 	}
 	pre, _ := parseLintBaselineSummary(string(stderr))
+	var preBy map[string]int
 	if bl != nil {
 		pre = bl.Unchanged
+		preBy = bl.UnchangedBySeverity
 	}
-	return verify.Outcome{New: findings, PreExisting: pre, Note: note, Incomplete: bl.incomplete()}, nil
+	return verify.Outcome{New: findings, PreExisting: pre, PreExistingBy: preBy, Note: note, Incomplete: bl.incomplete()}, nil
 }
 
 func (v *verifyRunner) mxcheck() (verify.Outcome, error) {
@@ -418,14 +420,16 @@ type violationsJSON struct {
 
 // lintBaselineJSON is the "baseline" object of `lint --format json --baseline`.
 type lintBaselineJSON struct {
-	New           int      `json:"new"`
-	Unchanged     int      `json:"unchanged"`
-	Fixed         int      `json:"fixed"`
-	NotChecked    int      `json:"notChecked"`
-	RulesNotRun   []string `json:"rulesNotRun"`
-	RuleFailures  []string `json:"ruleFailures"`
-	NewRules      []string `json:"newRules"`
-	ConfigChanged bool     `json:"configChanged"`
+	New        int `json:"new"`
+	Unchanged  int `json:"unchanged"`
+	Fixed      int `json:"fixed"`
+	NotChecked int `json:"notChecked"`
+	// UnchangedBySeverity is Unchanged by severity name, when lint reports it.
+	UnchangedBySeverity map[string]int `json:"unchangedBySeverity"`
+	RulesNotRun         []string       `json:"rulesNotRun"`
+	RuleFailures        []string       `json:"ruleFailures"`
+	NewRules            []string       `json:"newRules"`
+	ConfigChanged       bool           `json:"configChanged"`
 	// failureMessages is each failed rule's own message, read from the violations
 	// (not part of lint's output object).
 	failureMessages map[string]string

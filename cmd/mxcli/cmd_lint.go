@@ -371,6 +371,7 @@ modules, and findings that are not about those documents are not reported.
 			}
 			fmt.Fprintf(os.Stderr, "Recorded %d finding(s) from %d rule(s) in the lint baseline %s\n", recorded, len(ranRules), baselinePath)
 		} else if baseline != nil {
+			allBySeverity := severityCounts(violations)
 			cmp := baseline.CompareRun(violations, linter.RunInfo{Known: true, Ran: ranRules, Failed: failedRules, Config: configFingerprint, Scoped: scoped})
 			violations = cmp.New
 			newFindings := 0
@@ -404,7 +405,8 @@ modules, and findings that are not about those documents are not reported.
 			}
 			baselineReport = &linter.BaselineReport{
 				Path: baselinePath, New: newFindings, Unchanged: cmp.Unchanged, Fixed: cmp.Fixed, NotChecked: cmp.NotChecked,
-				RulesNotRun: cmp.RulesNotRun, RuleFailures: cmp.RuleFailures, NewRules: cmp.NewRules, ConfigChanged: cmp.ConfigChanged,
+				UnchangedBySeverity: knownBySeverity(allBySeverity, severityCounts(cmp.New)),
+				RulesNotRun:         cmp.RulesNotRun, RuleFailures: cmp.RuleFailures, NewRules: cmp.NewRules, ConfigChanged: cmp.ConfigChanged,
 				Scoped: scoped,
 			}
 		}
@@ -467,6 +469,30 @@ modules, and findings that are not about those documents are not reported.
 			os.Exit(1)
 		}
 	},
+}
+
+// severityCounts counts findings about the project by severity name; a rule
+// failure is about the rule and is not counted.
+func severityCounts(vs []linter.Violation) map[string]int {
+	out := map[string]int{}
+	for _, v := range vs {
+		if !v.RuleFailure {
+			out[v.Severity.String()]++
+		}
+	}
+	return out
+}
+
+// knownBySeverity is what the run found minus what is new: the findings the
+// baseline already had, by severity.
+func knownBySeverity(all, fresh map[string]int) map[string]int {
+	out := map[string]int{}
+	for sev, n := range all {
+		if k := n - fresh[sev]; k > 0 {
+			out[sev] = k
+		}
+	}
+	return out
 }
 
 // shortList joins ids, keeping the first n: a baseline can miss dozens of rules
