@@ -4,6 +4,7 @@ package projectreport
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"encoding/binary"
 	"encoding/hex"
@@ -233,6 +234,19 @@ func readSpanFile(path string) ([]Span, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
+	}
+	// Span exports are large and usually kept gzipped: read them as they are
+	// (ako/mxcli#2452). The gzip magic decides, not the name; the format is
+	// then the name's without .gz.
+	if len(b) > 2 && b[0] == 0x1f && b[1] == 0x8b {
+		zr, err := gzip.NewReader(bytes.NewReader(b))
+		if err != nil {
+			return nil, err
+		}
+		if b, err = io.ReadAll(zr); err != nil {
+			return nil, fmt.Errorf("gunzip: %w", err)
+		}
+		path = strings.TrimSuffix(path, ".gz")
 	}
 	if strings.HasSuffix(path, ".pb") || strings.HasSuffix(path, ".protobuf") {
 		return DecodeOTLPProto(b)

@@ -109,7 +109,10 @@ func TestReadinessBlockingItems(t *testing.T) {
 	}
 	var html bytes.Buffer
 	_ = RenderHTML(&html, doc)
-	mustContain(t, html.String(), `<a href="release.html">Release</a>`, "readiness:vuln:GHSA-1", "A penetration test", "not ready")
+	mustContain(t, html.String(), `<a href="release.html">Release</a>`, "readiness:vuln:GHSA-1", "A penetration test", "not ready",
+		// a reader with many prose decisions should not think they were not read (ako/mxcli#2451)
+		"A decision written only as prose in the brain is not read as accepting anything",
+		"any one makes it not ready")
 }
 
 // A link in a cell is rendered only to a report page in the same folder:
@@ -121,5 +124,37 @@ func TestInlineLinksOnlyToReportPages(t *testing.T) {
 	}
 	if strings.Contains(got, `href="javascript`) || strings.Contains(got, `href="https`) {
 		t.Errorf("only relative .html pages are linked: %s", got)
+	}
+}
+
+// A report that was given its inputs but failed says "failed: <why>", not
+// "not given": the evidence exists and broke, which calls for a different
+// action than evidence never collected (ako/mxcli#2452).
+func TestReadinessSaysFailedNotNotGiven(t *testing.T) {
+	in := everythingGiven()
+	in.Tests = nil
+	in.Performance = nil
+	in.Failed = map[string]string{"tests": "the test run failed: docker up: exit status 1"}
+	d := ComputeReadiness(in)
+	note := map[string]string{}
+	for _, s := range d.Sources {
+		note[s.Kind] = s.Note
+	}
+	if note["tests"] != "failed: the test run failed: docker up: exit status 1" {
+		t.Errorf("tests note = %q", note["tests"])
+	}
+	if !strings.HasPrefix(note["performance"], "not given") {
+		t.Errorf("performance was not given: %q", note["performance"])
+	}
+
+	// Given, rendered, but without test results: the report's own warning says why.
+	in = everythingGiven()
+	in.Tests.HasResults = false
+	in.Warnings = map[string][]string{"tests": {"Test results file `out/junit.xml` does not exist: no test results were read."}}
+	d = ComputeReadiness(in)
+	for _, s := range d.Sources {
+		if s.Kind == "tests" && (s.Assessed || !strings.Contains(s.Note, "out/junit.xml` does not exist")) {
+			t.Errorf("tests source = %+v", s)
+		}
 	}
 }

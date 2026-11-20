@@ -15,15 +15,27 @@ import (
 	"time"
 )
 
-// Stage names, in cost order.
+// Stage names, in pipeline order.
 const (
 	StageCheck   = "check"
+	StageExec    = "exec" // applies the scripts; runs only with Options.Apply
 	StageLint    = "lint"
 	StageMxCheck = "mxcheck"
 )
 
-// AllStages is the cost order the stages run in.
-var AllStages = []string{StageCheck, StageLint, StageMxCheck}
+// AllStages is the pipeline order the stages run in.
+var AllStages = []string{StageCheck, StageExec, StageLint, StageMxCheck}
+
+// Through returns the stages up to and including last, in pipeline order: the
+// caller's answer to "how far should this run?".
+func Through(last string) ([]string, error) {
+	for i, s := range AllStages {
+		if s == last {
+			return append([]string{}, AllStages[:i+1]...), nil
+		}
+	}
+	return nil, fmt.Errorf("unknown stage %q (stages: %s)", last, strings.Join(AllStages, ", "))
+}
 
 // Statuses of a stage.
 const (
@@ -43,7 +55,7 @@ const (
 	ExitFailedBase  = 16
 )
 
-var stageBit = map[string]int{StageCheck: 1, StageLint: 2, StageMxCheck: 4}
+var stageBit = map[string]int{StageCheck: 1, StageLint: 2, StageMxCheck: 4, StageExec: 8}
 
 // Finding is one problem a stage reports. Key is the identity a baseline matches
 // on; it must not contain the message or any name that renaming changes.
@@ -88,9 +100,15 @@ type StageResult struct {
 
 // Result is the whole run.
 type Result struct {
-	Project string        `json:"project"`
+	Project string `json:"project"`
+	// Applied is true when the exec stage ran and applied the scripts. Without
+	// it, lint and mxcheck describe the project as it was before any script.
+	Applied bool          `json:"applied"`
 	Stages  []StageResult `json:"stages"`
-	Exit    int           `json:"exit"`
+	// Notes are things a reader of the whole result must not miss (scripts that
+	// were checked but not applied).
+	Notes []string `json:"notes,omitempty"`
+	Exit  int      `json:"exit"`
 }
 
 // Outcome is what a Stage returns, before the orchestrator decides pass or fail.
@@ -109,7 +127,12 @@ type Outcome struct {
 	// without them is an error, never a pass, because "nothing new" would mean
 	// "nothing was checked".
 	Incomplete string
+	// Applied is set by the exec stage when it applied the scripts.
+	Applied bool
 }
+
+// notSelectedNote is the note of a stage the caller did not select.
+const notSelectedNote = "not selected"
 
 // Stage is one runnable stage.
 type Stage func() (Outcome, error)
@@ -127,7 +150,19 @@ type Options struct {
 	// Skip lists stages that have nothing to do, with the reason (e.g. check
 	// without scripts); they report skipped, never passed.
 	Skip map[string]string
+	// Apply says the scripts are applied (the exec stage runs). It also makes
+	// the stages depend on each other: a change that failed check is not
+	// written, and lint and mxcheck of a change that was not applied would
+	// describe the project without it, so they are skipped.
+	Apply bool
+	// ScriptsGiven says scripts were passed. Without Apply they are checked and
+	// not applied, which the result says in Notes.
+	ScriptsGiven bool
 }
+
+// ScriptsNotAppliedNote is what a run that checked scripts without applying
+// them says: lint and mxcheck judge the project as it is.
+const ScriptsNotAppliedNote = "scripts were checked but not applied: lint and mxcheck describe the project without them (pass --apply to apply them first)"
 
 // Run executes the selected stages in cost order and returns the result.
 // stages maps a stage name to its runner.
@@ -137,15 +172,21 @@ func Run(opts Options, stages map[string]Stage) Result {
 		selected[s] = true
 	}
 	res := Result{Project: opts.Project}
+	if opts.ScriptsGiven && !opts.Apply {
+		res.Notes = append(res.Notes, ScriptsNotAppliedNote)
+	}
 	failed, errored, stop := false, false, false
+	blocked := "" // why the stages after a failed check or exec do not run (--apply only)
 	mask := 0
 	for _, name := range AllStages {
 		sr := StageResult{Name: name, New: []Finding{}}
 		switch {
 		case !selected[name]:
-			sr.Status, sr.Note = StatusSkipped, "not selected"
+			sr.Status, sr.Note = StatusSkipped, notSelectedNote
 		case opts.Skip[name] != "":
 			sr.Status, sr.Note = StatusSkipped, opts.Skip[name]
+		case blocked != "":
+			sr.Status, sr.Note = StatusSkipped, blocked
 		case stop:
 			sr.Status, sr.Note = StatusSkipped, "an earlier stage failed (--fail-fast)"
 		default:
@@ -156,6 +197,7 @@ func Run(opts Options, stages map[string]Stage) Result {
 				sr.Status, sr.Note = StatusError, err.Error()
 				errored = true
 				stop = opts.FailFast
+				blocked = blockAfter(name, opts)
 				break
 			}
 			sr.New = append(sr.New, out.New...)
@@ -170,12 +212,16 @@ func Run(opts Options, stages map[string]Stage) Result {
 				failed = true
 				mask |= stageBit[name]
 				stop = opts.FailFast
+				blocked = blockAfter(name, opts)
 			case out.Incomplete != "":
 				sr.Status, sr.Note = StatusError, joinNote(sr.Note, out.Incomplete)
 				errored = true
 				stop = opts.FailFast
 			default:
 				sr.Status = StatusPassed
+				if name == StageExec && out.Applied {
+					res.Applied = true
+				}
 			}
 		}
 		res.Stages = append(res.Stages, sr)
@@ -201,6 +247,23 @@ func joinNote(a, b string) string {
 		return b
 	}
 	return a + "; " + b
+}
+
+// blockAfter says why nothing after a failed stage runs, or "" when the stages
+// stay independent. Only a run that applies scripts has dependencies: a failed
+// check writes nothing, and a change that was not applied is not what lint and
+// mxcheck would judge.
+func blockAfter(failed string, opts Options) string {
+	if !opts.Apply {
+		return ""
+	}
+	switch failed {
+	case StageCheck:
+		return "check failed; nothing was written"
+	case StageExec:
+		return "exec did not apply the scripts; lint and mxcheck would describe the project without them"
+	}
+	return ""
 }
 
 func fails(sr StageResult, opts Options) bool {

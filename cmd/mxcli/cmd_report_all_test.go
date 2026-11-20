@@ -50,7 +50,7 @@ func TestReportAllWritesEveryPageAndAnOverview(t *testing.T) {
 		t.Error("--skip map leaves the map out")
 	}
 	index, _ := os.ReadFile(filepath.Join(out, "index.html"))
-	for _, want := range []string{`<a href="security.html">Security</a>`, "needs a journey log", "needs the deployed revision",
+	for _, want := range []string{`<a href="security.html">Security</a>`, "needs a performance run", "needs the deployed revision", "Annotations read from", "<code>security-annotations.yaml</code>",
 		`aria-current="page">Overview</a>`, "Not generated"} {
 		if !strings.Contains(string(index), want) {
 			t.Errorf("index lacks %q", want)
@@ -83,5 +83,47 @@ func TestReportAllWritesEveryPageAndAnOverview(t *testing.T) {
 	sec, _ := os.ReadFile(filepath.Join(out, "security.html"))
 	if !strings.Contains(string(sec), `aria-current="page">Security</a>`) || !strings.Contains(string(sec), "Reviewed by hand on Tuesday.") {
 		t.Error("each page links the others, and takes <kind>-annotations.yaml from the folder")
+	}
+}
+
+// Annotations can live outside the output folder (--annotations-dir), and the
+// overview says which were read — or that none were (ako/mxcli#2452).
+func TestReportAllAnnotationsDir(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a catalog")
+	}
+	work := t.TempDir()
+	if err := copyTree(filepath.Join("..", "..", "testdata", "pedapp"), filepath.Join(work, "app")); err != nil {
+		t.Fatal(err)
+	}
+	notes, out := filepath.Join(work, "notes"), filepath.Join(work, "reports")
+	for _, d := range []string{notes, out} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(notes, "security-annotations.yaml"), []byte("summary: Kept beside the docs.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resetFlags(t, reportAllCmd, "annotations-dir")
+	_ = reportAllCmd.Flags().Set("annotations-dir", notes)
+	skip := map[string]bool{}
+	for _, k := range reportAllKinds {
+		skip[k] = k != "security"
+	}
+	skip["readiness"] = true
+	if err := runReportAll(reportAllCmd, filepath.Join(work, "app", "PedApp.mpr"), out, skip, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	sec, _ := os.ReadFile(filepath.Join(out, "security.html"))
+	if !strings.Contains(string(sec), "Kept beside the docs.") {
+		t.Error("the security page takes its annotations from --annotations-dir")
+	}
+	index, _ := os.ReadFile(filepath.Join(out, "index.html"))
+	if !strings.Contains(string(index), "Annotations read from") {
+		t.Error("the overview names the annotation files read")
+	}
+	if got := annotationsLine("docs", nil); !strings.Contains(got, "No annotation files") {
+		t.Errorf("none found is said: %q", got)
 	}
 }

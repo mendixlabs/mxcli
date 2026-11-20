@@ -17,6 +17,9 @@ func mx(key string, mxStage int, unit string) Finding {
 	return Finding{Stage: StageMxCheck, Code: "CE", Severity: "error", Key: key, MxStage: mxStage, Unit: unit}
 }
 
+// readOnly is the stage set of a run that does not apply scripts.
+var readOnly = []string{StageCheck, StageLint, StageMxCheck}
+
 func ok(o Outcome) Stage { return func() (Outcome, error) { return o, nil } }
 
 func statuses(r Result) map[string]string {
@@ -28,20 +31,22 @@ func statuses(r Result) map[string]string {
 }
 
 func TestRunPassesWhenNothingIsNew(t *testing.T) {
-	r := Run(Options{Stages: AllStages}, map[string]Stage{
+	r := Run(Options{Stages: readOnly}, map[string]Stage{
 		StageCheck: ok(Outcome{}), StageLint: ok(Outcome{PreExisting: 400}), StageMxCheck: ok(Outcome{PreExisting: 3}),
 	})
 	if r.Exit != ExitOK {
 		t.Errorf("exit = %d, want 0", r.Exit)
 	}
-	if r.Stages[1].PreExisting != 400 {
-		t.Errorf("lint pre-existing = %d", r.Stages[1].PreExisting)
+	for _, st := range r.Stages {
+		if st.Name == StageLint && st.PreExisting != 400 {
+			t.Errorf("lint pre-existing = %d", st.PreExisting)
+		}
 	}
 }
 
 // The control for the pass above: the same run with one new error must fail.
 func TestRunFailsOnANewError(t *testing.T) {
-	r := Run(Options{Stages: AllStages}, map[string]Stage{
+	r := Run(Options{Stages: readOnly}, map[string]Stage{
 		StageCheck: ok(Outcome{}), StageLint: ok(Outcome{New: []Finding{f(StageLint, "k", "error")}}), StageMxCheck: ok(Outcome{}),
 	})
 	if r.Exit != ExitFailedBase|stageBit[StageLint] {
@@ -56,7 +61,7 @@ func TestRunFailsOnANewError(t *testing.T) {
 // findings and the exit code is the bitmask of all that failed.
 func TestRunAllStagesByDefault(t *testing.T) {
 	bad := ok(Outcome{New: []Finding{f("", "k", "error")}})
-	r := Run(Options{Stages: AllStages}, map[string]Stage{StageCheck: bad, StageLint: bad, StageMxCheck: bad})
+	r := Run(Options{Stages: readOnly}, map[string]Stage{StageCheck: bad, StageLint: bad, StageMxCheck: bad})
 	want := ExitFailedBase | 1 | 2 | 4
 	if r.Exit != want {
 		t.Errorf("exit = %d, want %d", r.Exit, want)
@@ -68,7 +73,7 @@ func TestRunFailFastSkipsLaterStages(t *testing.T) {
 	mk := func(name string, o Outcome) Stage {
 		return func() (Outcome, error) { ran[name] = true; return o, nil }
 	}
-	r := Run(Options{Stages: AllStages, FailFast: true}, map[string]Stage{
+	r := Run(Options{Stages: readOnly, FailFast: true}, map[string]Stage{
 		StageCheck: mk(StageCheck, Outcome{New: []Finding{f("", "k", "error")}}),
 		StageLint:  mk(StageLint, Outcome{}), StageMxCheck: mk(StageMxCheck, Outcome{}),
 	})
@@ -85,7 +90,7 @@ func TestRunFailFastSkipsLaterStages(t *testing.T) {
 
 // A stage that cannot run is never "passed", and its exit code is not a failure's.
 func TestRunStageThatCannotRunIsAnError(t *testing.T) {
-	r := Run(Options{Stages: AllStages}, map[string]Stage{
+	r := Run(Options{Stages: readOnly}, map[string]Stage{
 		StageCheck: ok(Outcome{}), StageLint: ok(Outcome{}),
 		StageMxCheck: func() (Outcome, error) { return Outcome{}, errors.New("mx not found") },
 	})
@@ -109,10 +114,10 @@ func TestRunSkipsUnselectedAndEmptyStages(t *testing.T) {
 func TestFailOnWarning(t *testing.T) {
 	w := ok(Outcome{New: []Finding{f(StageLint, "k", "warning")}})
 	stages := map[string]Stage{StageCheck: ok(Outcome{}), StageLint: w, StageMxCheck: ok(Outcome{})}
-	if r := Run(Options{Stages: AllStages}, stages); r.Exit != ExitOK {
+	if r := Run(Options{Stages: readOnly}, stages); r.Exit != ExitOK {
 		t.Errorf("a new warning failed the gate by default (exit %d)", r.Exit)
 	}
-	if r := Run(Options{Stages: AllStages, FailOn: "warning"}, stages); r.Exit == ExitOK {
+	if r := Run(Options{Stages: readOnly, FailOn: "warning"}, stages); r.Exit == ExitOK {
 		t.Error("--fail-on warning did not fail on a new warning")
 	}
 }
@@ -120,10 +125,10 @@ func TestFailOnWarning(t *testing.T) {
 func TestStrictFailsOnUnmasked(t *testing.T) {
 	u := ok(Outcome{Unmasked: []Finding{mx("k", 3, "u1")}})
 	stages := map[string]Stage{StageCheck: ok(Outcome{}), StageLint: ok(Outcome{}), StageMxCheck: u}
-	if r := Run(Options{Stages: AllStages}, stages); r.Exit != ExitOK {
+	if r := Run(Options{Stages: readOnly}, stages); r.Exit != ExitOK {
 		t.Errorf("unmasked failed the gate without --strict (exit %d)", r.Exit)
 	}
-	if r := Run(Options{Stages: AllStages, Strict: true}, stages); r.Exit != ExitFailedBase|4 {
+	if r := Run(Options{Stages: readOnly, Strict: true}, stages); r.Exit != ExitFailedBase|4 {
 		t.Errorf("--strict exit = %d", r.Exit)
 	}
 }
@@ -233,10 +238,10 @@ func TestIncompleteStageIsAnErrorNotAPass(t *testing.T) {
 			StageLint: ok(Outcome{PreExisting: 3, Incomplete: incomplete}),
 		}
 	}
-	if r := Run(Options{Stages: AllStages}, stages("")); r.Exit != ExitOK {
+	if r := Run(Options{Stages: readOnly}, stages("")); r.Exit != ExitOK {
 		t.Fatalf("control: exit = %d, want 0", r.Exit)
 	}
-	r := Run(Options{Stages: AllStages}, stages("60 finding(s) of SEC007 were not checked"))
+	r := Run(Options{Stages: readOnly}, stages("60 finding(s) of SEC007 were not checked"))
 	if r.Exit != ExitCouldNotRun || statuses(r)[StageLint] != StatusError {
 		t.Errorf("exit = %d, lint status = %s; want %d and error", r.Exit, statuses(r)[StageLint], ExitCouldNotRun)
 	}
@@ -250,9 +255,9 @@ func TestIncompleteStageIsAnErrorNotAPass(t *testing.T) {
 // A stage that is incomplete AND has a new error still fails: the failure is the
 // actionable result, and the note keeps the incompleteness.
 func TestIncompleteStageWithNewErrorsStillFails(t *testing.T) {
-	r := Run(Options{Stages: AllStages}, map[string]Stage{
+	r := Run(Options{Stages: readOnly}, map[string]Stage{
 		StageCheck: ok(Outcome{}), StageMxCheck: ok(Outcome{}),
-		StageLint: ok(Outcome{New: []Finding{f(StageLint, "e", "error")}, Incomplete: "SEC007 did not run"}),
+		StageLint: ok(Outcome{New: errFinding, Incomplete: "SEC007 did not run"}),
 	})
 	if r.Exit != ExitFailedBase|stageBit[StageLint] {
 		t.Errorf("exit = %d, want lint's failure bit %d", r.Exit, ExitFailedBase|stageBit[StageLint])
@@ -261,5 +266,123 @@ func TestIncompleteStageWithNewErrorsStillFails(t *testing.T) {
 		if s.Name == StageLint && !strings.Contains(s.Note, "SEC007 did not run") {
 			t.Errorf("note = %q", s.Note)
 		}
+	}
+}
+
+// --- --apply: the dependency rule, and --through -----------------------------
+
+func applyOpts(through ...string) Options {
+	return Options{Project: "App.mpr", Stages: through, Apply: true, ScriptsGiven: true}
+}
+
+func recording(ran map[string]bool, name string, o Outcome) Stage {
+	return func() (Outcome, error) { ran[name] = true; return o, nil }
+}
+
+var errFinding = []Finding{{Stage: "x", Code: "E", Severity: "error", Key: "e", MxStage: -1}}
+
+// The happy path: every stage runs in pipeline order and the result says the
+// scripts were applied.
+func TestApplyRunsCheckExecLintMxcheck(t *testing.T) {
+	ran := map[string]bool{}
+	r := Run(applyOpts(AllStages...), map[string]Stage{
+		StageCheck: recording(ran, StageCheck, Outcome{}), StageExec: recording(ran, StageExec, Outcome{Applied: true}),
+		StageLint: recording(ran, StageLint, Outcome{}), StageMxCheck: recording(ran, StageMxCheck, Outcome{}),
+	})
+	for _, n := range AllStages {
+		if !ran[n] {
+			t.Errorf("%s did not run", n)
+		}
+	}
+	if !r.Applied || r.Exit != ExitOK || len(r.Notes) != 0 {
+		t.Errorf("applied=%v exit=%d notes=%v", r.Applied, r.Exit, r.Notes)
+	}
+}
+
+// A failed check writes nothing: exec and everything after it are skipped, and the
+// reason says so. The control is the previous test: the same stages run when check passes.
+func TestApplyFailedCheckSkipsExecAndEverythingAfter(t *testing.T) {
+	ran := map[string]bool{}
+	r := Run(applyOpts(AllStages...), map[string]Stage{
+		StageCheck: recording(ran, StageCheck, Outcome{New: errFinding}), StageExec: recording(ran, StageExec, Outcome{Applied: true}),
+		StageLint: recording(ran, StageLint, Outcome{}), StageMxCheck: recording(ran, StageMxCheck, Outcome{}),
+	})
+	if ran[StageExec] || ran[StageLint] || ran[StageMxCheck] {
+		t.Errorf("stages ran after a failed check: %v", ran)
+	}
+	st := statuses(r)
+	if st[StageExec] != StatusSkipped || r.Applied || r.Exit != ExitFailedBase|stageBit[StageCheck] {
+		t.Errorf("statuses=%v applied=%v exit=%d", st, r.Applied, r.Exit)
+	}
+	for _, s := range r.Stages {
+		if s.Name == StageExec && !strings.Contains(s.Note, "nothing was written") {
+			t.Errorf("exec note = %q", s.Note)
+		}
+	}
+}
+
+// A script exec refused is not applied, so lint and mxcheck would judge the
+// project without it: they are skipped and the failure is exec's bit.
+func TestApplyFailedExecSkipsLintAndMxcheck(t *testing.T) {
+	ran := map[string]bool{}
+	r := Run(applyOpts(AllStages...), map[string]Stage{
+		StageCheck: recording(ran, StageCheck, Outcome{}), StageExec: recording(ran, StageExec, Outcome{New: errFinding}),
+		StageLint: recording(ran, StageLint, Outcome{}), StageMxCheck: recording(ran, StageMxCheck, Outcome{}),
+	})
+	if ran[StageLint] || ran[StageMxCheck] {
+		t.Errorf("lint or mxcheck ran after a failed exec: %v", ran)
+	}
+	if r.Applied || r.Exit != ExitFailedBase|stageBit[StageExec] {
+		t.Errorf("applied=%v exit=%d, want exec's bit %d", r.Applied, r.Exit, ExitFailedBase|stageBit[StageExec])
+	}
+}
+
+// Without --apply the stages stay independent: a failed check does not stop lint
+// and mxcheck, which describe the project as it is, and the result says the
+// script was not applied. The control for the two tests above.
+func TestWithoutApplyStagesStayIndependentAndSaySo(t *testing.T) {
+	ran := map[string]bool{}
+	r := Run(Options{Project: "App.mpr", Stages: []string{StageCheck, StageLint, StageMxCheck}, ScriptsGiven: true,
+		Skip: map[string]string{StageExec: "scripts are only applied with --apply"}}, map[string]Stage{
+		StageCheck: recording(ran, StageCheck, Outcome{New: errFinding}),
+		StageLint:  recording(ran, StageLint, Outcome{}), StageMxCheck: recording(ran, StageMxCheck, Outcome{}),
+	})
+	if !ran[StageLint] || !ran[StageMxCheck] {
+		t.Errorf("lint and mxcheck must still run without --apply: %v", ran)
+	}
+	if r.Applied || len(r.Notes) != 1 || r.Notes[0] != ScriptsNotAppliedNote {
+		t.Errorf("applied=%v notes=%v", r.Applied, r.Notes)
+	}
+	// No scripts, no note.
+	if r := Run(Options{Stages: []string{StageLint}}, map[string]Stage{StageLint: ok(Outcome{})}); len(r.Notes) != 0 {
+		t.Errorf("notes without scripts: %v", r.Notes)
+	}
+}
+
+func TestThroughStopsWhereAsked(t *testing.T) {
+	for last, want := range map[string]string{
+		"check": "check", "exec": "check,exec", "lint": "check,exec,lint", "mxcheck": "check,exec,lint,mxcheck",
+	} {
+		got, err := Through(last)
+		if err != nil || strings.Join(got, ",") != want {
+			t.Errorf("Through(%q) = %v, %v; want %s", last, got, err, want)
+		}
+	}
+	if _, err := Through("test"); err == nil {
+		t.Error("a stage that does not exist yet must be refused")
+	}
+}
+
+// An exec that could not run at all (a failed start) also blocks the stages after
+// it, and is a "could not run", not a failure.
+func TestApplyExecThatCannotRunBlocksTheRest(t *testing.T) {
+	ran := map[string]bool{}
+	r := Run(applyOpts(AllStages...), map[string]Stage{
+		StageCheck: recording(ran, StageCheck, Outcome{}),
+		StageExec:  func() (Outcome, error) { return Outcome{}, errors.New("cannot start") },
+		StageLint:  recording(ran, StageLint, Outcome{}), StageMxCheck: recording(ran, StageMxCheck, Outcome{}),
+	})
+	if ran[StageLint] || ran[StageMxCheck] || r.Exit != ExitCouldNotRun {
+		t.Errorf("ran=%v exit=%d", ran, r.Exit)
 	}
 }
