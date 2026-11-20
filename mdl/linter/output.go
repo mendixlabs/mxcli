@@ -161,7 +161,28 @@ func (f *TextFormatter) severitySymbol(s Severity) string {
 }
 
 // JSONFormatter outputs violations as JSON.
-type JSONFormatter struct{}
+type JSONFormatter struct {
+	// Baseline, when set, is added to the output as "baseline": how the run
+	// compares with the baseline it was given.
+	Baseline *BaselineReport
+}
+
+// BaselineReport is how a run compares with a baseline, for the JSON output. A
+// reader that gates on lint (verify) needs more than the new findings: that rules
+// did not run, or that the configuration changed, means a short list of new
+// findings is not a clean one.
+type BaselineReport struct {
+	Path          string   `json:"path"`
+	New           int      `json:"new"`
+	Unchanged     int      `json:"unchanged"`
+	Fixed         int      `json:"fixed"`
+	NotChecked    int      `json:"notChecked"`
+	RulesNotRun   []string `json:"rulesNotRun,omitempty"`
+	RuleFailures  []string `json:"ruleFailures,omitempty"`
+	NewRules      []string `json:"newRules,omitempty"`
+	ConfigChanged bool     `json:"configChanged,omitempty"`
+	Scoped        bool     `json:"scoped,omitempty"`
+}
 
 // JSONViolation is the JSON representation of a violation.
 type JSONViolation struct {
@@ -173,11 +194,14 @@ type JSONViolation struct {
 	DocumentType string `json:"documentType"`
 	DocumentID   string `json:"documentId,omitempty"`
 	Suggestion   string `json:"suggestion,omitempty"`
+	// RuleFailure marks a finding about the rule (it could not run), not the project.
+	RuleFailure bool `json:"ruleFailure,omitempty"`
 }
 
 // JSONOutput is the JSON output structure.
 type JSONOutput struct {
 	Violations []JSONViolation `json:"violations"`
+	Baseline   *BaselineReport `json:"baseline,omitempty"`
 	Summary    struct {
 		Total    int `json:"total"`
 		Errors   int `json:"errors"`
@@ -189,7 +213,7 @@ type JSONOutput struct {
 
 // Format outputs violations as JSON.
 func (f *JSONFormatter) Format(violations []Violation, w io.Writer) error {
-	output := JSONOutput{}
+	output := JSONOutput{Baseline: f.Baseline}
 
 	for _, v := range violations {
 		output.Violations = append(output.Violations, JSONViolation{
@@ -201,6 +225,7 @@ func (f *JSONFormatter) Format(violations []Violation, w io.Writer) error {
 			DocumentType: v.Location.DocumentType,
 			DocumentID:   v.Location.DocumentID,
 			Suggestion:   v.Suggestion,
+			RuleFailure:  v.RuleFailure,
 		})
 	}
 

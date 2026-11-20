@@ -121,6 +121,12 @@ type Outcome struct {
 	PreExisting int
 	Recorded    bool
 	Note        string
+	// Incomplete says the stage ran but cannot vouch for its result: rules the
+	// baseline expects did not run, or the configuration differs from the one it
+	// was recorded under. A stage with new failing findings still fails; one
+	// without them is an error, never a pass, because "nothing new" would mean
+	// "nothing was checked".
+	Incomplete string
 	// Applied is set by the exec stage when it applied the scripts.
 	Applied bool
 }
@@ -197,13 +203,21 @@ func Run(opts Options, stages map[string]Stage) Result {
 			sr.New = append(sr.New, out.New...)
 			sr.Unmasked, sr.Resolved, sr.Hidden = out.Unmasked, out.Resolved, out.Hidden
 			sr.PreExisting, sr.Recorded, sr.Note = out.PreExisting, out.Recorded, out.Note
-			if fails(sr, opts) {
+			switch {
+			case fails(sr, opts):
 				sr.Status = StatusFailed
+				if out.Incomplete != "" {
+					sr.Note = joinNote(sr.Note, out.Incomplete)
+				}
 				failed = true
 				mask |= stageBit[name]
 				stop = opts.FailFast
 				blocked = blockAfter(name, opts)
-			} else {
+			case out.Incomplete != "":
+				sr.Status, sr.Note = StatusError, joinNote(sr.Note, out.Incomplete)
+				errored = true
+				stop = opts.FailFast
+			default:
 				sr.Status = StatusPassed
 				if name == StageExec && out.Applied {
 					res.Applied = true
@@ -226,6 +240,13 @@ func Run(opts Options, stages map[string]Stage) Result {
 		res.Exit = ExitFailedBase | mask
 	}
 	return res
+}
+
+func joinNote(a, b string) string {
+	if a == "" {
+		return b
+	}
+	return a + "; " + b
 }
 
 // blockAfter says why nothing after a failed stage runs, or "" when the stages

@@ -40,17 +40,72 @@ const baselineVersion = 1
 type Baseline struct {
 	byKey map[string][]string // key -> messages, one per recorded finding
 	total int
+	// byRule counts the recorded findings of each rule.
+	byRule map[string]int
+	// rules are the rules that ran when it was recorded (rulesRecorded is false
+	// for a baseline written before that was recorded), and config is the
+	// fingerprint of the configuration they ran under ("" when not recorded).
+	rules         map[string]bool
+	rulesRecorded bool
+	config        string
 }
 
 // BaselineComparison is what a run found against a baseline.
 type BaselineComparison struct {
 	New       []Violation // not in the baseline, in the order the run reported them
 	Unchanged int         // current findings the baseline already had
-	Fixed     int         // baseline findings the run no longer reports
+	Fixed     int         // baseline findings of a rule that ran and no longer reports them
+
+	// NotChecked counts baseline findings whose rule did not run this time (not
+	// installed, disabled, or it failed). They are not fixed: nothing looked.
+	NotChecked int
+	// RulesNotRun are the rules the baseline holds findings for, or recorded as
+	// having run, that did not run now; RuleFailures are those that ran into an
+	// error. NewRules ran now and are not in the baseline's recorded set, so all
+	// their findings are new.
+	RulesNotRun  []string
+	RuleFailures []string
+	NewRules     []string
+	// ConfigChanged says the lint configuration differs from the one the
+	// baseline was recorded under, which changes what the rules report.
+	ConfigChanged bool
+}
+
+// Incomplete reports whether the run cannot be trusted to compare with the
+// baseline: a rule it holds findings for did not run, a rule failed, or the
+// configuration differs. A green result then means "nothing was checked", not
+// "nothing is new".
+func (c BaselineComparison) Incomplete() bool {
+	return len(c.RulesNotRun) > 0 || len(c.RuleFailures) > 0 || c.ConfigChanged
+}
+
+// BaselineMeta is what a baseline records besides its findings: the rules that
+// ran and the fingerprint of the configuration they ran under.
+type BaselineMeta struct {
+	Rules  []string
+	Config string
+}
+
+// RunInfo says how the run being compared went. The zero value is a run that
+// cannot say (the comparison then trusts every rule ran, as it always did).
+type RunInfo struct {
+	Known  bool
+	Ran    []string // rules that executed to completion
+	Failed []string // rules that executed and reported they could not run
+	Config string
+	// Scoped is a run narrowed to some rules, modules or documents: rules that
+	// did not run are expected, so none of it is held against the run.
+	Scoped bool
 }
 
 type baselineFile struct {
-	Version  int               `json:"version"`
+	Version int `json:"version"`
+	// Rules and Config say what the findings were produced by: which rules ran
+	// and under which configuration (ako/mxcli#2455). Optional, so a baseline
+	// written before they were recorded still loads, and an older mxcli still
+	// reads a newer file.
+	Rules    []string          `json:"rules,omitempty"`
+	Config   string            `json:"config,omitempty"`
 	Findings []baselineFinding `json:"findings"`
 }
 
@@ -77,7 +132,16 @@ func keyOf(v Violation) string {
 // out. The file is sorted, so re-recording an unchanged project rewrites the
 // same bytes and a committed baseline diffs only where findings changed.
 func WriteBaseline(path string, findings []Violation) error {
-	f := baselineFile{Version: baselineVersion, Findings: []baselineFinding{}}
+	return WriteBaselineWith(path, findings, BaselineMeta{})
+}
+
+// WriteBaselineWith is WriteBaseline that also records which rules ran and the
+// configuration they ran under, so a later run can tell a finding that was fixed
+// from one whose rule was not there to report it.
+func WriteBaselineWith(path string, findings []Violation, meta BaselineMeta) error {
+	rules := append([]string(nil), meta.Rules...)
+	sort.Strings(rules)
+	f := baselineFile{Version: baselineVersion, Rules: rules, Config: meta.Config, Findings: []baselineFinding{}}
 	for _, v := range findings {
 		if v.RuleFailure {
 			continue
@@ -126,10 +190,15 @@ func LoadBaseline(path string) (*Baseline, error) {
 		return nil, fmt.Errorf("lint baseline %s has format version %d; this mxcli reads version %d — re-record it with --update-baseline",
 			path, f.Version, baselineVersion)
 	}
-	b := &Baseline{byKey: map[string][]string{}, total: len(f.Findings)}
+	b := &Baseline{byKey: map[string][]string{}, total: len(f.Findings), byRule: map[string]int{},
+		rules: map[string]bool{}, rulesRecorded: len(f.Rules) > 0, config: f.Config}
+	for _, r := range f.Rules {
+		b.rules[r] = true
+	}
 	for _, x := range f.Findings {
 		k := baselineKey(x.Rule, x.Type, x.ID, x.Document)
 		b.byKey[k] = append(b.byKey[k], x.Message)
+		b.byRule[x.Rule]++
 	}
 	return b, nil
 }
@@ -140,6 +209,15 @@ func (b *Baseline) Len() int { return b.total }
 // Compare splits a run's findings into new and already-known ones, and counts
 // the baseline findings the run no longer reports.
 func (b *Baseline) Compare(findings []Violation) BaselineComparison {
+	return b.CompareRun(findings, RunInfo{})
+}
+
+// CompareRun is Compare that knows how the run went. A baseline finding whose rule
+// did not run is NotChecked, not Fixed: a checkout without the project's custom
+// rules reported all their findings as fixed and passed the gate. Rule failures
+// are never new findings (they are about the rule, not the project); they are
+// listed in RuleFailures.
+func (b *Baseline) CompareRun(findings []Violation, run RunInfo) BaselineComparison {
 	var out BaselineComparison
 
 	groups := map[string][]int{} // key -> indexes into findings
@@ -158,6 +236,12 @@ func (b *Baseline) Compare(findings []Violation) BaselineComparison {
 	isNew := make([]bool, len(findings))
 	for i, v := range findings {
 		isNew[i] = v.RuleFailure
+	}
+	failed := map[string]bool{}
+	for _, v := range findings {
+		if v.RuleFailure {
+			failed[v.RuleID] = true
+		}
 	}
 	matched := 0
 	for _, k := range order {
@@ -196,5 +280,43 @@ func (b *Baseline) Compare(findings []Violation) BaselineComparison {
 	}
 	out.Unchanged = matched
 	out.Fixed = b.total - matched
+	for id := range failed {
+		out.RuleFailures = append(out.RuleFailures, id)
+	}
+	sort.Strings(out.RuleFailures)
+	if !run.Known || run.Scoped {
+		return out
+	}
+
+	ran := map[string]bool{}
+	for _, id := range run.Ran {
+		ran[id] = true
+	}
+	// Rules the baseline expects: those it has findings for, and those it
+	// recorded as having run.
+	expected := map[string]bool{}
+	for id := range b.byRule {
+		expected[id] = true
+	}
+	for id := range b.rules {
+		expected[id] = true
+	}
+	for id := range expected {
+		if !ran[id] {
+			out.RulesNotRun = append(out.RulesNotRun, id)
+			out.NotChecked += b.byRule[id]
+		}
+	}
+	sort.Strings(out.RulesNotRun)
+	out.Fixed = b.total - matched - out.NotChecked
+	if b.rulesRecorded {
+		for id := range ran {
+			if !b.rules[id] {
+				out.NewRules = append(out.NewRules, id)
+			}
+		}
+		sort.Strings(out.NewRules)
+	}
+	out.ConfigChanged = b.config != "" && run.Config != "" && b.config != run.Config
 	return out
 }

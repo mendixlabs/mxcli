@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -312,7 +313,16 @@ func (v *verifyRunner) lint() (verify.Outcome, error) {
 		note = "no lint baseline (" + lintBaseline + "): every finding is reported as new; record one with --update-baseline"
 	}
 	stdout, stderr, err := v.sub(args...)
-	findings, perr := parseViolations(verify.StageLint, stdout)
+	if v.update {
+		// lint refuses (exit 2) to record a baseline while a rule cannot run: it
+		// would hold none of that rule's findings. Say so, instead of reporting a
+		// baseline that was not written as recorded.
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && ee.ExitCode() == 2 {
+			return verify.Outcome{}, fmt.Errorf("the lint baseline was not recorded: %s", verifyRefusal(stderr))
+		}
+	}
+	findings, bl, perr := parseReport(verify.StageLint, stdout)
 	if perr != nil {
 		return verify.Outcome{}, fmt.Errorf("mxcli lint produced no readable report: %v%s", perr, verifyTail(stderr, err))
 	}
@@ -320,7 +330,10 @@ func (v *verifyRunner) lint() (verify.Outcome, error) {
 		return verify.Outcome{Recorded: true, PreExisting: len(findings), Note: "baseline recorded at " + lintBaseline}, nil
 	}
 	pre, _ := parseLintBaselineSummary(string(stderr))
-	return verify.Outcome{New: findings, PreExisting: pre, Note: note}, nil
+	if bl != nil {
+		pre = bl.Unchanged
+	}
+	return verify.Outcome{New: findings, PreExisting: pre, Note: note, Incomplete: bl.incomplete()}, nil
 }
 
 func (v *verifyRunner) mxcheck() (verify.Outcome, error) {
@@ -395,22 +408,153 @@ type violationsJSON struct {
 		Document     string `json:"document"`
 		DocumentType string `json:"documentType"`
 		Suggestion   string `json:"suggestion"`
+		RuleFailure  bool   `json:"ruleFailure"`
 	} `json:"violations"`
+	// Baseline is how `lint --baseline` says the run compares with its baseline.
+	Baseline *lintBaselineJSON `json:"baseline"`
+}
+
+// lintBaselineJSON is the "baseline" object of `lint --format json --baseline`.
+type lintBaselineJSON struct {
+	New           int      `json:"new"`
+	Unchanged     int      `json:"unchanged"`
+	Fixed         int      `json:"fixed"`
+	NotChecked    int      `json:"notChecked"`
+	RulesNotRun   []string `json:"rulesNotRun"`
+	RuleFailures  []string `json:"ruleFailures"`
+	NewRules      []string `json:"newRules"`
+	ConfigChanged bool     `json:"configChanged"`
+	// failureMessages is each failed rule's own message, read from the violations
+	// (not part of lint's output object).
+	failureMessages map[string]string
+}
+
+// incomplete says why the comparison cannot be trusted, or "" when it can. A
+// rule the baseline expects that did not run, a rule that failed, or a changed
+// configuration each mean the findings are not the whole answer: lint reports
+// nothing for a rule that was not there, which would otherwise read as fixed.
+func (b *lintBaselineJSON) incomplete() string {
+	if b == nil {
+		return ""
+	}
+	failed := map[string]bool{}
+	for _, id := range b.RuleFailures {
+		failed[id] = true
+	}
+	var notRun []string
+	for _, id := range b.RulesNotRun {
+		if !failed[id] {
+			notRun = append(notRun, id)
+		}
+	}
+	var parts []string
+	var advice []string
+	if len(notRun) > 0 {
+		parts = append(parts, fmt.Sprintf("%s did not run (not installed, disabled or filtered out)", verifyShortList(notRun, 6)))
+		advice = append(advice, "run lint where the project's rules and config are installed")
+	}
+	if len(b.RuleFailures) > 0 {
+		var fs []string
+		for _, id := range b.RuleFailures {
+			if m := b.failureMessages[id]; m != "" {
+				fs = append(fs, m)
+			} else {
+				fs = append(fs, id+" could not run")
+			}
+		}
+		parts = append(parts, strings.Join(fs, "; "))
+		advice = append(advice, "a rule that ran into an error usually runs on a second attempt, so run verify again, and report the rule if it keeps failing")
+	}
+	if b.NotChecked > 0 {
+		parts = append(parts, fmt.Sprintf("%d baseline finding(s) of those rules are not checked, not fixed", b.NotChecked))
+	}
+	if b.ConfigChanged {
+		parts = append(parts, "the lint configuration differs from the one the baseline was recorded under")
+		advice = append(advice, "re-record with --update-baseline if the change is intended")
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	if len(advice) == 0 {
+		return strings.Join(parts, "; ")
+	}
+	return strings.Join(parts, "; ") + ". " + strings.ToUpper(advice[0][:1]) + advice[0][1:] + verifyMoreAdvice(advice[1:])
+}
+
+// verifyMoreAdvice appends further advice sentences, if any.
+func verifyMoreAdvice(more []string) string {
+	var out string
+	for _, a := range more {
+		out += "; or " + a
+	}
+	return out
+}
+
+// verifyLast keeps the last n bytes of s, where a command says what went wrong.
+func verifyLast(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return "..." + s[len(s)-n:]
+}
+
+// verifyRefusal is the reason lint gave for refusing, from its stderr: the line
+// that says the baseline was not recorded and the rule messages under it.
+func verifyRefusal(stderr []byte) string {
+	var keep []string
+	for _, l := range strings.Split(string(stderr), "\n") {
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "Error: the baseline was not recorded") {
+			t = strings.TrimPrefix(t, "Error: the baseline was not recorded: ")
+			keep = append(keep, t)
+		} else if len(keep) > 0 && t != "" {
+			keep = append(keep, t)
+		}
+	}
+	if len(keep) == 0 {
+		return verifyLast(strings.TrimSpace(string(stderr)), 400)
+	}
+	return strings.Join(keep, " ")
+}
+
+func verifyShortList(ids []string, n int) string {
+	if len(ids) <= n {
+		return strings.Join(ids, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(ids[:n], ", "), len(ids)-n)
 }
 
 func parseViolations(stage string, data []byte) ([]verify.Finding, error) {
+	fs, _, err := parseReport(stage, data)
+	return fs, err
+}
+
+// parseReport reads a `check`/`lint` JSON report: the findings about the
+// project, and the baseline comparison when there was one. A finding about a
+// rule that could not run is not a finding about the project and is left out
+// (the baseline object names the rule instead).
+func parseReport(stage string, data []byte) ([]verify.Finding, *lintBaselineJSON, error) {
 	var j violationsJSON
 	if err := json.Unmarshal(bytes.TrimSpace(data), &j); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	out := []verify.Finding{}
 	for _, v := range j.Violations {
+		if v.RuleFailure {
+			if j.Baseline != nil {
+				if j.Baseline.failureMessages == nil {
+					j.Baseline.failureMessages = map[string]string{}
+				}
+				j.Baseline.failureMessages[v.RuleID] = v.Message
+			}
+			continue
+		}
 		out = append(out, verify.Finding{
 			Stage: stage, Code: v.RuleID, Severity: v.Severity, Document: v.Document,
 			Message: v.Message, Suggestion: v.Suggestion, Key: v.RuleID + "\x00" + v.Document, MxStage: -1,
 		})
 	}
-	return out, nil
+	return out, j.Baseline, nil
 }
 
 var lintBaselineRe = regexp.MustCompile(`Lint baseline .*: (\d+) new, (\d+) already known`)

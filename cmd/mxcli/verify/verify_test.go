@@ -226,6 +226,49 @@ func TestMxBaselineRoundTripAndCompat(t *testing.T) {
 	}
 }
 
+// --- a stage that ran but cannot vouch for its result ----------------------------
+
+// A lint run in which the baseline's rules did not run finds nothing new, and
+// "nothing new" would mean "nothing was checked": it is an error (exit 2), not a
+// pass. The control is the same run without the incompleteness, which passes.
+func TestIncompleteStageIsAnErrorNotAPass(t *testing.T) {
+	stages := func(incomplete string) map[string]Stage {
+		return map[string]Stage{
+			StageCheck: ok(Outcome{}), StageMxCheck: ok(Outcome{}),
+			StageLint: ok(Outcome{PreExisting: 3, Incomplete: incomplete}),
+		}
+	}
+	if r := Run(Options{Stages: readOnly}, stages("")); r.Exit != ExitOK {
+		t.Fatalf("control: exit = %d, want 0", r.Exit)
+	}
+	r := Run(Options{Stages: readOnly}, stages("60 finding(s) of SEC007 were not checked"))
+	if r.Exit != ExitCouldNotRun || statuses(r)[StageLint] != StatusError {
+		t.Errorf("exit = %d, lint status = %s; want %d and error", r.Exit, statuses(r)[StageLint], ExitCouldNotRun)
+	}
+	for _, s := range r.Stages {
+		if s.Name == StageLint && !strings.Contains(s.Note, "not checked") {
+			t.Errorf("the note must say what was not checked: %q", s.Note)
+		}
+	}
+}
+
+// A stage that is incomplete AND has a new error still fails: the failure is the
+// actionable result, and the note keeps the incompleteness.
+func TestIncompleteStageWithNewErrorsStillFails(t *testing.T) {
+	r := Run(Options{Stages: readOnly}, map[string]Stage{
+		StageCheck: ok(Outcome{}), StageMxCheck: ok(Outcome{}),
+		StageLint: ok(Outcome{New: errFinding, Incomplete: "SEC007 did not run"}),
+	})
+	if r.Exit != ExitFailedBase|stageBit[StageLint] {
+		t.Errorf("exit = %d, want lint's failure bit %d", r.Exit, ExitFailedBase|stageBit[StageLint])
+	}
+	for _, s := range r.Stages {
+		if s.Name == StageLint && !strings.Contains(s.Note, "SEC007 did not run") {
+			t.Errorf("note = %q", s.Note)
+		}
+	}
+}
+
 // --- --apply: the dependency rule, and --through -----------------------------
 
 func applyOpts(through ...string) Options {
