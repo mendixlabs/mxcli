@@ -877,7 +877,15 @@ func (w *Writer) carryIdentityFromRemovedUnit(
 	delete(w.removedUnits, unitID)
 
 	w.writesOffered++
-	out, _ = canon.Reconcile(contents, prev.contents)
+	out, unchanged := canon.Reconcile(contents, prev.contents)
+	// What means the same lands as the bytes that were there. The write path
+	// puts what it writes in Studio Pro's key order (canon.SortKeys,
+	// ako/mxcli#2467), so a recreate of a unit stored in another order would
+	// otherwise move every key while changing nothing; only a real change
+	// reorders it, as on the update path, where an unchanged write is elided.
+	if unchanged {
+		out = prev.contents
+	}
 
 	// A delete+insert that put back exactly what it removed changed nothing, so
 	// the project's transaction id — which is how Studio Pro decides there is
