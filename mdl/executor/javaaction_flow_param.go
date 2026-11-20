@@ -46,6 +46,18 @@ func microflowParamArgRefusal(action, param string, v ast.Expression) string {
 		expressionToString(v))
 }
 
+// nanoflowParamArgRefusal is microflowParamArgRefusal for a JavaScript
+// action's Nanoflow-typed parameter: it takes a nanoflow name, not an
+// expression (ako/mxcli#2450).
+func nanoflowParamArgRefusal(action, param string, v ast.Expression) string {
+	if microflowParamArgRefusal(action, param, v) == "" {
+		return ""
+	}
+	return fmt.Sprintf("call javascript action %s: parameter %s is of type Nanoflow, which takes a nanoflow "+
+		"name ('Module.Nanoflow') or empty, not %s — the text would be stored as the reference",
+		action, param, expressionToString(javaActionArgumentValue(v)))
+}
+
 // javaActionArgumentValue is the argument as written, without the whitespace
 // the visitor keeps after it. An argument followed by whitespace before `)` —
 // `Flow = Module.Sub⏎)` — arrives as a SourceExpr whose Source carries that
