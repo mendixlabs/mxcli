@@ -174,3 +174,24 @@ func TestUnusedAnnotationWithoutModule(t *testing.T) {
 		t.Error("the unique short key applied, so it is not listed as matching nothing")
 	}
 }
+
+// At phone width a stacked bar's label wraps instead of being cut with an
+// ellipsis: the bar has its own line by then, so the label has room. The
+// narrow rule must come after the base .srow rules, or those win the cascade
+// at equal specificity (the retest of ako/mxcli#2475 saw "M3 — Simulated
+// kitchen and co…" at 390 px).
+func TestStackedLabelsWrapAtPhoneWidth(t *testing.T) {
+	css := pageCSS
+	narrow := strings.Index(css, "@media (max-width:600px){.srow")
+	base := strings.Index(css, ".srow .sl{overflow:hidden")
+	if narrow < 0 || base < 0 {
+		t.Fatalf("rules not found: narrow %d, base %d", narrow, base)
+	}
+	if narrow < base {
+		t.Error("the phone-width .srow rule comes before the base rules, so they override it")
+	}
+	rule := css[narrow : narrow+strings.Index(css[narrow:], "}}")]
+	if !strings.Contains(rule, ".srow .sl{") || !strings.Contains(rule, "white-space:normal") {
+		t.Errorf("the phone-width rule lets the label wrap: %s", rule)
+	}
+}
