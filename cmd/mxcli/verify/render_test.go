@@ -112,3 +112,39 @@ func TestWriteTextOmitsUnselectedStagesOnly(t *testing.T) {
 		t.Error("the JSON must keep every stage")
 	}
 }
+
+// ako/mxcli#2468: with --apply the exec stage writes the project before mx check
+// runs, so a later stage that fails leaves the failing change in the project. The
+// text said "Result: FAILED" like any failed gate; it now says the scripts were
+// applied.
+func TestWriteTextSaysTheScriptsWereAppliedWhenALaterStageFails(t *testing.T) {
+	fail := Finding{Stage: StageMxCheck, Code: "CE0117", Severity: "error", Document: "Shop.SNIP", Message: "Error(s) in expression.", Key: "k", MxStage: 0}
+	r := Run(Options{Project: "App.mpr", Apply: true, ScriptsGiven: true, Stages: []string{StageExec, StageMxCheck}}, map[string]Stage{
+		StageExec:    ok(Outcome{Applied: true}),
+		StageMxCheck: ok(Outcome{New: []Finding{fail}}),
+	})
+	out := textOf(r, "error")
+	for _, want := range []string{"FAILED", "The scripts were applied", "Undo it"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+
+	// Controls: a pass, a failure before anything was written, and a run that
+	// never applied say nothing about applied scripts.
+	pass := Run(Options{Project: "App.mpr", Apply: true, ScriptsGiven: true, Stages: []string{StageExec, StageMxCheck}}, map[string]Stage{
+		StageExec: ok(Outcome{Applied: true}), StageMxCheck: ok(Outcome{}),
+	})
+	notApplied := Run(Options{Project: "App.mpr", Stages: []string{StageMxCheck}}, map[string]Stage{
+		StageMxCheck: ok(Outcome{New: []Finding{fail}}),
+	})
+	checkFailed := Run(Options{Project: "App.mpr", Apply: true, ScriptsGiven: true, Stages: []string{StageCheck, StageExec, StageMxCheck}}, map[string]Stage{
+		StageCheck: ok(Outcome{New: []Finding{{Stage: StageCheck, Code: "MDL108", Severity: "error", Document: "Shop.E", Message: "m", Key: "c", MxStage: -1}}}),
+		StageExec:  ok(Outcome{Applied: true}), StageMxCheck: ok(Outcome{}),
+	})
+	for name, r := range map[string]Result{"passed": pass, "not applied": notApplied, "check failed, nothing written": checkFailed} {
+		if strings.Contains(textOf(r, "error"), "The scripts were applied") {
+			t.Errorf("%s: must not claim the scripts were applied:\n%s", name, textOf(r, "error"))
+		}
+	}
+}

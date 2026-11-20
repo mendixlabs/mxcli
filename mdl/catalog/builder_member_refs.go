@@ -33,7 +33,10 @@ import (
 //
 // What this cannot see: an attribute named only by its bare name through a
 // variable in an expression (`$Order/Total`), because resolving `$Order` needs
-// the variable's type. XPath is different — its context entity is known — and
+// the variable's type. The document's own object-typed PARAMETERS are the
+// exception — they declare their entity, so `$Param/Total` resolves
+// (ako/mxcli#2468); a retrieve result, a loop item or a data view's object
+// still does not. XPath is different — its context entity is known — and
 // is handled by xpathRefs below.
 
 // memberRefSourceTypes maps the unit types whose documents are walked to the
@@ -120,6 +123,10 @@ type memberRefIndex struct {
 	enumValues     map[string]bool // "Mod.Enum.Value"
 	entities       map[string]bool
 	generalization map[string]string // entity -> the entity it specializes
+
+	// vars is the entity of each object-typed parameter of the document being
+	// walked, by parameter name: what resolves `$Param/Attr`. Set per document.
+	vars map[string]string
 
 	// probe, when set, is told every name looked up, found or not: the
 	// document being walked depends on it (builder_coverage.go).
@@ -251,6 +258,8 @@ func memberRefsInUnit(contents []byte, sourceType string, idx *memberRefIndex) [
 	isMapping := sourceType == RefObjectImportMapping || sourceType == RefObjectExportMapping ||
 		sourceType == RefObjectMessageDefinitionCollection || sourceType == RefObjectMessageDefinition
 	var set edgeSet
+	idx.vars = documentParameterEntities(doc)
+	defer func() { idx.vars = nil }()
 	walkBSONStringsTyped(doc, "", "", "", func(owner, parent, key, v string) {
 		if memberRefSkipKeys[key] || memberRefProse[[2]string{owner, key}] || v == "" {
 			return
@@ -464,9 +473,16 @@ func resolvePath(chunk, context string, idx *memberRefIndex, emit func(targetTyp
 		case seg == "":
 			cur = ""
 		case strings.HasPrefix(seg, "$"):
-			// A variable: its type is not known here, so what hangs off it
-			// directly cannot be resolved. Qualified segments after it still can.
+			// A variable. When it is one of the document's own object-typed
+			// parameters its entity is known, so the bare attribute after it
+			// resolves (ako/mxcli#2468). Any other variable — a retrieve result,
+			// a loop item, a data view's object — has no type here, so what hangs
+			// off it directly stays unresolved; qualified segments after it still
+			// resolve.
 			cur = ""
+			if n == 0 {
+				cur = idx.vars[strings.TrimPrefix(seg, "$")]
+			}
 		case idx.associations[seg]:
 			emit(RefObjectAssociation, seg)
 			cur = ""
@@ -630,4 +646,74 @@ func (b *Builder) extractXPathRefs(stmt *Stmt, idx *memberRefIndex, projectID, s
 		}
 	}
 	return count
+}
+
+// parameterTypeKeys are the $Types that declare a document parameter, with the
+// property that holds its type: a page's and a snippet's `ParameterType`, a
+// microflow's and nanoflow's `VariableType`.
+var parameterTypeKeys = map[string]string{
+	"Forms$PageParameter":           "ParameterType",
+	"Forms$SnippetParameter":        "ParameterType",
+	"Microflows$MicroflowParameter": "VariableType",
+}
+
+// documentParameterEntities returns the entity of each object-typed parameter the
+// document declares, by parameter name. A list, an enumeration and a primitive
+// have no attributes to resolve, so they are left out.
+func documentParameterEntities(doc bson.D) map[string]string {
+	out := map[string]string{}
+	var walk func(v any)
+	walk = func(v any) {
+		switch t := v.(type) {
+		case bson.D:
+			typ := ""
+			for _, e := range t {
+				if e.Key == "$Type" {
+					typ, _ = e.Value.(string)
+				}
+			}
+			if typeKey, ok := parameterTypeKeys[typ]; ok {
+				name := ""
+				entity := ""
+				for _, e := range t {
+					switch {
+					case e.Key == "Name":
+						name, _ = e.Value.(string)
+					case e.Key == typeKey:
+						if ot, ok := e.Value.(bson.D); ok {
+							isObject := false
+							for _, f := range ot {
+								if f.Key == "$Type" {
+									isObject = f.Value == "DataTypes$ObjectType"
+								}
+							}
+							if isObject {
+								for _, f := range ot {
+									if f.Key == "Entity" {
+										entity, _ = f.Value.(string)
+									}
+								}
+							}
+						}
+					}
+				}
+				if name != "" && entity != "" {
+					out[name] = entity
+				}
+			}
+			for _, e := range t {
+				walk(e.Value)
+			}
+		case bson.A:
+			for _, x := range t {
+				walk(x)
+			}
+		case []any:
+			for _, x := range t {
+				walk(x)
+			}
+		}
+	}
+	walk(doc)
+	return out
 }

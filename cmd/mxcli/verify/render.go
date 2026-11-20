@@ -55,6 +55,12 @@ func WriteText(w io.Writer, r Result, failOn string) {
 	default:
 		fmt.Fprintf(w, "Result: FAILED (exit %d)\n", r.Exit)
 	}
+	// --apply writes the project before the later stages run, so a failure after
+	// it leaves the failing change in the project; the gate wording alone reads as
+	// if nothing happened (ako/mxcli#2468).
+	if r.Applied && r.Exit != ExitOK {
+		fmt.Fprintln(w, "The scripts were applied: the project now contains the change a later stage failed on. Undo it (git checkout the project, or restore your backup) before continuing.")
+	}
 	if below > 0 {
 		fmt.Fprintf(w, "%d new finding(s) are below --fail-on=%s and do not fail the gate. Review them (--format json lists\n", below, opts.failOn())
 		// Scoped to the stages that have them: --update-baseline records every
