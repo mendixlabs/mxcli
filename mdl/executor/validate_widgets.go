@@ -285,6 +285,9 @@ func validateWidgetTreeIn(widgets []*ast.WidgetV3, registry *WidgetRegistry, loc
 			out = append(out, validatePluggableTemplateParams(w, locationPrefix)...)
 		}
 		out = append(out, validateWidgetVisibility(w, registry, locationPrefix)...)
+		// A required property the package declares, left unset: CE0642 /
+		// CE4899 at build time (MDL-WIDGET56).
+		out = append(out, validateWidgetRequired(w, registry, locationPrefix)...)
 		// #1519: several attributes for a widget with one attribute slot — the
 		// drop-down filter. exec refuses it; so does check.
 		if m, attrs, over := singleAttributeOverflow(lookupWidgetDef(w, registry), w); over {
