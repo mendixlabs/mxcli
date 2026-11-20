@@ -4,6 +4,8 @@ package docker
 
 import (
 	"fmt"
+	"github.com/mendixlabs/mxcli/modelsdk/mpr"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"io"
 	"os"
 	"os/exec"
@@ -231,7 +233,11 @@ func applyHarvest(projectPath string, fixed map[string]harvestedUnit, order []st
 			res.Added = append(res.Added, fmt.Sprintf("%s %s", h.unitType, id))
 			continue
 		}
-		out, unchanged := canon.Reconcile(h.contents, prev.contents)
+		contents := h.contents
+		if prev.unitType == "Projects$ProjectConversion" {
+			contents = keepStoredConversions(contents, prev.contents)
+		}
+		out, unchanged := canon.Reconcile(contents, prev.contents)
 		if unchanged {
 			continue
 		}
@@ -286,4 +292,86 @@ func unitCount(contentsDir string) int {
 		return nil
 	})
 	return n
+}
+
+// keepStoredConversions puts back the one-time conversion records the stored
+// ProjectConversion has and the tool's copy lacks.
+//
+// A record says a conversion has run. mx drops one it has no provider for when
+// it re-saves the unit: Studio Pro 11.16.1's UseMeToSetupNodeConversion lives
+// in the UI layer mx does not run, so `fix design-properties` and the repair
+// after `marketplace install` carried a list without it back, and Studio Pro
+// asked to convert the project again on the next open (ako/mxcli#2487,
+// mendixlabs/mxcli#1917). No tool means to un-run a conversion, so a missing
+// record is restored; one the tool added is kept. contents is returned as it
+// is when nothing is missing or either side cannot be read.
+func keepStoredConversions(contents, stored []byte) []byte {
+	var doc, prev bson.D
+	if bson.Unmarshal(contents, &doc) != nil || bson.Unmarshal(stored, &prev) != nil {
+		return contents
+	}
+	listAt := func(d bson.D) (int, bson.A) {
+		for i, e := range d {
+			if e.Key == "OneTimeConversions" {
+				a, _ := e.Value.(bson.A)
+				return i, a
+			}
+		}
+		return -1, nil
+	}
+	name := func(v any) string {
+		d, ok := v.(bson.D)
+		if !ok {
+			return ""
+		}
+		for _, f := range d {
+			if f.Key == "Name" {
+				s, _ := f.Value.(string)
+				return s
+			}
+		}
+		return ""
+	}
+	i, list := listAt(doc)
+	_, storedList := listAt(prev)
+	if i < 0 || len(storedList) == 0 {
+		return contents
+	}
+	have := map[string]bool{}
+	for _, it := range list {
+		have[name(it)] = true
+	}
+	added := false
+	for _, it := range storedList {
+		if n := name(it); n != "" && !have[n] {
+			// A fresh $ID: the reconcile that follows carries stored IDs onto
+			// the tool's elements, and may already have given this record's ID
+			// to one the tool added. Nothing points at a conversion record; its
+			// name is all it says.
+			list = append(list, withFreshID(it.(bson.D)))
+			have[n] = true
+			added = true
+		}
+	}
+	if !added {
+		return contents
+	}
+	doc[i].Value = list
+	out, err := bson.Marshal(doc)
+	if err != nil {
+		return contents
+	}
+	return out
+}
+
+// withFreshID is d with a newly minted $ID.
+func withFreshID(d bson.D) bson.D {
+	out := make(bson.D, len(d))
+	copy(out, d)
+	for i, f := range out {
+		if f.Key == "$ID" {
+			out[i].Value = mpr.IDToBsonBinary(mpr.GenerateID())
+		}
+	}
+	return out
 }
