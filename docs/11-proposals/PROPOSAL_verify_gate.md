@@ -397,20 +397,28 @@ type Stage interface {
    refactored. Checked on real MxBuild 11.16.1: a new defect fails (exit 20), an
    accepted one does not, a stage 0 fix is unmasked, a same-flow uncovered error
    is new.
-3. **Make `verify` the thing everything points at** (implemented). `projectGates`,
-   the definition of done in every generated `CLAUDE.md`, now lists `verify` **in
-   place of** the separate `lint` and `docker check` gates, which it runs. Adding it
-   as a seventh gate would have run both twice and put the file over its
-   test-enforced byte budget. `report` stays: `verify` reports what is new, not how
-   good the project is. The bootstrap skill (step 9) records the baselines with
-   `verify --update-baseline` on the blank app, next to the existing quality
-   baseline, and says to commit `verify-baseline/`; the docs page and a new
-   `mxcli verify` page say the same, and `init_claudemd_gates_test.go` keeps the
-   three descriptions in step. The generated `CLAUDE.md` does not explain how to
-   record a baseline: a stage without one says so in its own output. The default
-   baseline directory moved from `.mxcli/verify` to `verify-baseline/` because
-   `mxcli init` git-ignores `.mxcli/`; an ignored baseline is lost on the next fresh
-   clone or reaped session.
+3. **Make `verify` the thing everything points at** (implemented, then
+   corrected). The generated `CLAUDE.md` gate list has two forms (`classicGates`,
+   `verifyGates`): `verify` replaces the separate `lint` and `docker check` gates
+   **only for a project that has recorded its baselines** (`verify-baseline/lint.json`
+   exists). The first version made it the list for every project, on the belief
+   that existing projects keep their old list; that was wrong. The session-start
+   bootstrap runs `mxcli init --sync-skills .` every session, which regenerates the
+   mxcli section of `CLAUDE.md`, so an upgraded mxcli moved every bootstrapped
+   project onto `verify` with no baselines, where it reports everything the project
+   already had as new (a project with errors fails on its whole backlog). The list
+   now follows the project: the choice is made at generation time, so recording the
+   baselines moves a project onto `verify` at the next sync, removing them moves it
+   back, and upgrading mxcli alone changes nothing. `report` stays in both lists:
+   `verify` reports what is new, not how good the project is. The bootstrap skill
+   (step 9) records the baselines on the blank app, says to commit
+   `verify-baseline/`, and regenerates `CLAUDE.md` at once with
+   `mxcli init --sync-skills .`. Both lists stay within the test-enforced byte
+   budget, and `init_claudemd_gates_test.go` holds the generated file to the list
+   its project gets and the skill and docs page to every gate of either. The default
+   baseline directory is `verify-baseline/`, not `.mxcli/`, which `mxcli init`
+   git-ignores: an ignored baseline is lost on the next fresh clone or reaped
+   session.
 4. **`--apply` and `--through`, with the `exec` stage** (implemented). `check` →
    `exec` → `lint` → `mxcheck` in one call, the dependency rule above, the
    `applied` field and the "script not applied" note. The note and the `applied`
@@ -481,11 +489,11 @@ type Stage interface {
 10. **Default stage set** — `mxcheck` costs ~8 s once per run and is on by default.
 11. ~~Step 3: add `verify` as a seventh gate, or replace `lint` and `docker check`?~~
     **Settled:** it replaces them (see Phasing).
-12. **Existing projects.** A project initialised before this change has the old gate
-    list in its `CLAUDE.md` and no `verify-baseline/`. Does `mxcli init` re-run (or
-    a new command) offer to update the list, and should the first `verify` on a
-    project with no baseline refuse with a pointer instead of reporting everything
-    as new?
+12. ~~Existing projects.~~ **Settled:** the gate list follows whether the project has
+    baselines (step 3), so a sync moves no project onto `verify` before it has
+    recorded them. Still open: should the first `verify` on a project with no
+    baseline refuse with a pointer instead of reporting everything as new, and
+    should `mxcli init --sync-skills` say that a project has no baseline yet?
 13. **`exec` that fails partway.** `exec` refuses atomically when its pre-flight
     fails, but is not transactional once statements run (`check`'s own help says
     so). Should `verify --apply` snapshot the project and restore it when `exec`

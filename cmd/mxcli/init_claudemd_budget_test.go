@@ -20,12 +20,17 @@ import (
 const claudeMDBudgetBytes = 6000
 
 func TestGeneratedClaudeMDStaysWithinItsContextBudget(t *testing.T) {
-	md := generateClaudeMD("Demo", "Demo.mpr")
-	if len(md) > claudeMDBudgetBytes {
-		t.Errorf("generated CLAUDE.md is %d bytes (~%d tokens), over the %d-byte budget.\n"+
-			"It is re-read into every context this project starts, so anything mxcli can\n"+
-			"answer on demand belongs behind a command, not in here.",
-			len(md), len(md)/4, claudeMDBudgetBytes)
+	// Both gate lists: a project with verify baselines gets the other one.
+	for name, md := range map[string]string{
+		"without verify baselines": generateClaudeMD("Demo", "Demo.mpr"),
+		"with verify baselines":    generateClaudeMDIn(projectWithBaseline(t), "Demo", "Demo.mpr"),
+	} {
+		if len(md) > claudeMDBudgetBytes {
+			t.Errorf("generated CLAUDE.md %s is %d bytes (~%d tokens), over the %d-byte budget.\n"+
+				"It is re-read into every context this project starts, so anything mxcli can\n"+
+				"answer on demand belongs behind a command, not in here.",
+				name, len(md), len(md)/4, claudeMDBudgetBytes)
+		}
 	}
 }
 

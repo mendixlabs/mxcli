@@ -77,7 +77,8 @@ a longer prompt.
    an optional `run --hub` preview URL.
 6. **Takes the quality baseline** — `mxcli verify --update-baseline` (the lint and
    `mx check` baselines, committed as `verify-baseline/`) and the scored
-   `mxcli report` on the blank app, recorded in `FINDINGS.md`. This is the only moment those numbers mean
+   `mxcli report` on the blank app, recorded in `FINDINGS.md`. Recording the baselines is also
+   what puts `verify` on the project's gate list (`mxcli init --sync-skills .` regenerates it). This is the only moment those numbers mean
    "what the template ships with"; afterwards every figure is yours plus the
    template's, with nothing to subtract. See [mxcli report](mxcli-report.md) for how to
    read the six category scores.
@@ -198,6 +199,13 @@ single statement and not a file write. Iterate with `exec`, then run the gates o
 over the result. That distinction is held by a test too — without it, "definition of
 done" reads as the whole list after every edit, which is ~55s and five tool calls each
 time, and was the dominant cost in a measured agent session.
+
+The list below is the one a project gets once it has recorded its baselines. Before that
+(and in a project that never does), `CLAUDE.md` lists `mxcli lint` and `mxcli docker check` in place
+of the one `verify` line: `verify` is those two run against the baselines, and without
+baselines it reports everything the project already had as new. The list follows the
+project, not the mxcli version: it changes when `verify-baseline/` appears or is removed,
+at the next session start.
 
 ```bash
 ./mxcli check change.mdl -p <AppName>.mpr --references   # syntax + references (~2s)

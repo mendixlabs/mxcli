@@ -12,10 +12,10 @@ description: "Provision a Mendix project in a repo that has none — interview, 
 |---|---|
 | 23-43 | When to Use This Skill |
 | 44-134 | Step 0 — interview, and WAIT for the answers |
-| 135-270 | Provision |
-| 271-340 | If this is a solution (several apps in one repo) |
-| 341-400 | Then propose the model — do not build it yet |
-| 401-463 | After bootstrap — the inner loop |
+| 135-273 | Provision |
+| 274-343 | If this is a solution (several apps in one repo) |
+| 344-403 | Then propose the model — do not build it yet |
+| 404-472 | After bootstrap — the inner loop |
 
 <!-- /skill-index -->
 # Bootstrap a Mendix App in an Empty Repo
@@ -228,7 +228,10 @@ drop the `./` if it came pre-installed on `PATH`.
 
    `verify --update-baseline` writes `verify-baseline/` next to the `.mpr`. **Commit
    it** — it is what every later `verify` compares against, and a fresh clone or a
-   reaped session without it reports every finding as new. Report the warning count
+   reaped session without it reports every finding as new. The project's `CLAUDE.md`
+   lists `verify` as a gate only once `verify-baseline/` exists (until then it lists
+   `lint` and `docker check`, which `verify` replaces), so regenerate it now with
+   `./mxcli init --sync-skills .`; the session hook would only do it at the next start. Report the warning count
    and the six category scores, and put them in `FINDINGS.md` with the date. This is the only moment the numbers mean "what the
    template ships with" — afterwards every figure is yours plus the template's, and
    there is nothing to subtract. A blank app is **not** expected to score zero
@@ -415,6 +418,12 @@ Run them **once per change, not per edit** — a change being a coherent unit of
 not a single statement and not a file write. Iterate with `exec` until the script is
 right, then run the gates once over the result. The whole list after every edit costs
 ~55s and five calls each time and proves nothing the one run at the end does not.
+
+The list below is the one a project with recorded baselines gets. Until step 9 has
+recorded them (and in any project that never does), `CLAUDE.md` lists `mxcli lint` (rules,
+~3s) and `mxcli docker check` (mxbuild, ~25s) in place of the one `verify` line: `verify`
+is those two run against the baselines, and without baselines it reports everything
+the project already had as new.
 
 ```bash
 ./mxcli check change.mdl -p <AppName>.mpr --references   # syntax + references (~2s)

@@ -323,7 +323,7 @@ Container Runtime:
 				}
 
 				// Generate content
-				content := file.Content(projectName, mprFile)
+				content := file.render(absDir, projectName, mprFile)
 
 				// Write file. CLAUDE.md goes through the mxcli markers so a
 				// later sync can refresh it without touching project notes.
@@ -418,7 +418,7 @@ Container Runtime:
 		fmt.Println("\nCreating universal documentation:")
 		for _, file := range UniversalFiles {
 			filePath := filepath.Join(absDir, file.Path)
-			content := file.Content(projectName, mprFile)
+			content := file.render(absDir, projectName, mprFile)
 
 			if _, err := writeOwnedDoc(filePath, content, true); err != nil {
 				fmt.Fprintf(os.Stderr, "  Error writing %s: %v\n", file.Path, err)

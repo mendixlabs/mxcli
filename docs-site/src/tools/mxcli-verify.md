@@ -29,6 +29,17 @@ mxcli verify -p app.mpr --apply change.mdl
 mxcli verify -p app.mpr --apply change.mdl --through exec   # check and exec only
 ```
 
+## Which gate list a project gets
+
+The generated `CLAUDE.md` lists `verify` as a gate (in place of `mxcli lint` and `mxcli docker check`,
+which it runs) only once the project has recorded its baselines, that is once `verify-baseline/lint.json`
+exists. Without baselines `verify` reports every finding the project already had as new, and on a project
+with errors it fails on the whole backlog, so a project keeps the separate gates until it has them.
+The list follows the project and not the mxcli version: the session-start sync regenerates it every
+session, so recording the baselines moves a project onto `verify` at the next session start
+(`mxcli init --sync-skills .` does it at once), and removing them moves it back. Upgrading mxcli alone
+changes nothing.
+
 ## How far it runs
 
 You say how far. `--through <stage>` runs every stage up to and including that one, in pipeline
