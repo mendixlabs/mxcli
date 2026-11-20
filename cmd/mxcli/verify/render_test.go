@@ -148,3 +148,42 @@ func TestWriteTextSaysTheScriptsWereAppliedWhenALaterStageFails(t *testing.T) {
 		}
 	}
 }
+
+// "63 pre-existing" reads the same whether they are notes or errors the baseline
+// accepted. The summary says what they are, worst first.
+func TestSummaryNamesWhatThePreExistingFindingsAre(t *testing.T) {
+	r := Run(Options{Project: "App.mpr", Stages: []string{StageLint}}, map[string]Stage{
+		StageLint: ok(Outcome{PreExisting: 64, PreExistingBy: map[string]int{"error": 2, "warning": 1, "info": 60, "hint": 1}}),
+	})
+	out := textOf(r, "error")
+	if !strings.Contains(out, "0 new, 64 pre-existing (2 errors, 1 warning, 60 info, 1 hint)") {
+		t.Errorf("the breakdown is missing:\n%s", out)
+	}
+	var b bytes.Buffer
+	if err := WriteJSON(&b, r); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), `"preExistingBySeverity"`) || !strings.Contains(b.String(), `"error": 2`) {
+		t.Errorf("the JSON must carry the breakdown:\n%s", b.String())
+	}
+	// A stage that cannot say keeps the plain count, and zero findings say nothing.
+	r = Run(Options{Project: "App.mpr", Stages: []string{StageLint}}, map[string]Stage{StageLint: ok(Outcome{PreExisting: 5})})
+	if out := textOf(r, "error"); !strings.Contains(out, "0 new, 5 pre-existing\n") {
+		t.Errorf("a stage without a breakdown changed:\n%s", out)
+	}
+	r = Run(Options{Project: "App.mpr", Stages: []string{StageLint}}, map[string]Stage{StageLint: ok(Outcome{})})
+	if out := textOf(r, "error"); !strings.Contains(out, "0 new, 0 pre-existing\n") {
+		t.Errorf("an empty stage changed:\n%s", out)
+	}
+}
+
+// Classify counts the pre-existing findings by severity, so mxcheck says how many
+// errors the baseline accepts on every run.
+func TestClassifyCountsPreExistingBySeverity(t *testing.T) {
+	e := mx("k1", 3, "u")
+	w := Finding{Stage: StageMxCheck, Code: "CW", Severity: "warning", Key: "k2", MxStage: -1}
+	o := Classify([]Finding{e, w}, []Finding{e, w, mx("new", 3, "u")}, true)
+	if o.PreExisting != 2 || o.PreExistingBy["error"] != 1 || o.PreExistingBy["warning"] != 1 || len(o.New) != 1 {
+		t.Errorf("pre=%d by=%v new=%d", o.PreExisting, o.PreExistingBy, len(o.New))
+	}
+}

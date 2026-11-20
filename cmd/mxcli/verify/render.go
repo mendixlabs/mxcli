@@ -110,7 +110,11 @@ func summary(s StageResult, quiet int, quietDetail string) string {
 	if len(s.Unmasked) > 0 {
 		parts = append(parts, fmt.Sprintf("%d unmasked (an earlier error in the baseline hid them)", len(s.Unmasked)))
 	}
-	parts = append(parts, fmt.Sprintf("%d pre-existing", s.PreExisting))
+	if d := severityBreakdown(s.PreExistingBySeverity); d != "" && s.PreExisting > 0 {
+		parts = append(parts, fmt.Sprintf("%d pre-existing (%s)", s.PreExisting, d))
+	} else {
+		parts = append(parts, fmt.Sprintf("%d pre-existing", s.PreExisting))
+	}
 	if s.Resolved > 0 {
 		parts = append(parts, fmt.Sprintf("%d resolved", s.Resolved))
 	}
@@ -125,6 +129,25 @@ func summary(s StageResult, quiet int, quietDetail string) string {
 		out += " — " + s.Note
 	}
 	return out
+}
+
+// severityBreakdown is "2 errors, 1 warning, 60 info" for a severity-to-count map,
+// worst first, "" when it is empty. It is what lets a reader of "63 pre-existing"
+// see whether they are notes or errors a baseline accepted.
+func severityBreakdown(by map[string]int) string {
+	var parts []string
+	for _, sev := range []string{"error", "warning", "info", "hint"} {
+		n := by[sev]
+		if n == 0 {
+			continue
+		}
+		name := sev
+		if sev != "info" && n != 1 {
+			name += "s"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", n, name))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func line(f Finding) string {
