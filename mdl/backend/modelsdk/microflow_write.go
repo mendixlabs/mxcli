@@ -74,6 +74,11 @@ func init() {
 		NullFields: []string{"Retry"},
 	})
 	codec.RegisterListMarker("Microflows$JavaActionParameterMapping", 2)
+	// A JavaScript action call's ParameterMappings is marker 2 like the Java
+	// one's (25/25 in a Studio Pro-made project); unregistered, it fell back to
+	// 3 and Studio Pro rewrote every nanoflow calling one (ako/mxcli#2467).
+	codec.RegisterListMarker("Microflows$JavaScriptActionParameterMapping", 2)
+	codec.RegisterPropertyListMarker("Microflows$JavaScriptActionCallAction", "ParameterMappings", 2)
 	codec.RegisterTypeDefaults("Microflows$TypedTemplate", codec.TypeDefaults{
 		MandatoryListMarkers: map[string]int32{"Arguments": 2},
 	})
