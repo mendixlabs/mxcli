@@ -172,16 +172,20 @@ type JSONFormatter struct {
 // did not run, or that the configuration changed, means a short list of new
 // findings is not a clean one.
 type BaselineReport struct {
-	Path          string   `json:"path"`
-	New           int      `json:"new"`
-	Unchanged     int      `json:"unchanged"`
-	Fixed         int      `json:"fixed"`
-	NotChecked    int      `json:"notChecked"`
-	RulesNotRun   []string `json:"rulesNotRun,omitempty"`
-	RuleFailures  []string `json:"ruleFailures,omitempty"`
-	NewRules      []string `json:"newRules,omitempty"`
-	ConfigChanged bool     `json:"configChanged,omitempty"`
-	Scoped        bool     `json:"scoped,omitempty"`
+	Path      string `json:"path"`
+	New       int    `json:"new"`
+	Unchanged int    `json:"unchanged"`
+	// UnchangedBySeverity says what the already-known findings are, by severity
+	// ("error", "warning", "info", "hint"): a count alone does not tell notes from
+	// errors a baseline accepted.
+	UnchangedBySeverity map[string]int `json:"unchangedBySeverity,omitempty"`
+	Fixed               int            `json:"fixed"`
+	NotChecked          int            `json:"notChecked"`
+	RulesNotRun         []string       `json:"rulesNotRun,omitempty"`
+	RuleFailures        []string       `json:"ruleFailures,omitempty"`
+	NewRules            []string       `json:"newRules,omitempty"`
+	ConfigChanged       bool           `json:"configChanged,omitempty"`
+	Scoped              bool           `json:"scoped,omitempty"`
 }
 
 // JSONViolation is the JSON representation of a violation.

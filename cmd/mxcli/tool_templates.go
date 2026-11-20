@@ -18,9 +18,21 @@ type ToolConfig struct {
 
 // ToolFile defines a configuration file to create
 type ToolFile struct {
-	Path     string
-	Content  func(projectName, mprPath string) string
-	Optional bool
+	Path    string
+	Content func(projectName, mprPath string) string
+	// ContentIn, when set, is used instead of Content by callers that know the
+	// project directory (render). The files that publish the gate list need it:
+	// the list follows whether the project has recorded its verify baselines.
+	ContentIn func(projectDir, projectName, mprPath string) string
+	Optional  bool
+}
+
+// render is the file's content for the project in projectDir.
+func (f ToolFile) render(projectDir, projectName, mprPath string) string {
+	if f.ContentIn != nil {
+		return f.ContentIn(projectDir, projectName, mprPath)
+	}
+	return f.Content(projectName, mprPath)
 }
 
 // SupportedTools defines all AI tools that can be initialized
@@ -34,8 +46,9 @@ var SupportedTools = map[string]ToolConfig{
 				Content: generateClaudeSettings,
 			},
 			{
-				Path:    "CLAUDE.md",
-				Content: generateClaudeMD,
+				Path:      "CLAUDE.md",
+				Content:   generateClaudeMD,
+				ContentIn: generateClaudeMDIn,
 			},
 		},
 	},
@@ -119,8 +132,9 @@ var SupportedTools = map[string]ToolConfig{
 // Universal files created for all tools
 var UniversalFiles = []ToolFile{
 	{
-		Path:    "AGENTS.md",
-		Content: generateProjectAIMD,
+		Path:      "AGENTS.md",
+		Content:   generateProjectAIMD,
+		ContentIn: generateProjectAIMDIn,
 	},
 }
 
@@ -438,6 +452,10 @@ func generatePlaywrightConfig() string {
 
 func generateProjectAIMD(projectName, mprPath string) string {
 	return generateClaudeMD(projectName, mprPath)
+}
+
+func generateProjectAIMDIn(projectDir, projectName, mprPath string) string {
+	return generateClaudeMDIn(projectDir, projectName, mprPath)
 }
 
 func generateVibeConfig(projectName, mprPath string) string {

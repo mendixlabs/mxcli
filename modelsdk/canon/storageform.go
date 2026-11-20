@@ -26,8 +26,8 @@ func parseForStorageForm(contents []byte, doc *bson.D) error {
 
 // CompleteForStorage gives a unit the form it is stored in, for a project of
 // version pv: StripUndeclaredProperties, CompletePropertySets,
-// FillMissingUserRoleGUIDs and — when listMarkers is set — NormalizeListMarkers,
-// then UndeclaredTypeError on the result. It returns exactly what those return
+// FillMissingUserRoleGUIDs and — when listMarkers is set — NormalizeListMarkers
+// and SortKeys, then UndeclaredTypeError on the result. It returns exactly what those return
 // when called one after the other, and contents itself when nothing changes.
 //
 // Called one after the other, each parses the whole document and each that
@@ -64,6 +64,12 @@ func CompleteForStorage(contents []byte, pv *version.Version, listMarkers bool) 
 	if listMarkers && len(propertyListMarkers) > 0 && normalizeListMarkersIn(doc) {
 		changed = true
 	}
+	// The bytes that land are in Studio Pro's key order (ako/mxcli#2467). Like
+	// the markers, only on the write path: the comparison path keeps what is
+	// stored.
+	if listMarkers && sortKeysIn(doc) {
+		changed = true
+	}
 	out := contents
 	if changed {
 		encoded, err := bson.Marshal(doc)
@@ -92,7 +98,7 @@ func completeForStorageInPasses(contents []byte, pv *version.Version, listMarker
 		return nil, err
 	}
 	if listMarkers {
-		out = NormalizeListMarkers(out)
+		out = SortKeys(NormalizeListMarkers(out))
 	}
 	return out, nil
 }

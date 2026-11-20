@@ -232,7 +232,7 @@ func syncProjectTooling(projectDir string) (toolingSyncResult, error) {
 	if mprFile := findMprFile(projectDir); mprFile != "" {
 		projectName := projectDisplayName(projectDir, mprFile)
 		for _, doc := range ownedDocs() {
-			r, err := writeOwnedDoc(filepath.Join(projectDir, doc.Path), doc.Content(projectName, mprFile), false)
+			r, err := writeOwnedDoc(filepath.Join(projectDir, doc.Path), doc.render(projectDir, projectName, mprFile), false)
 			if err != nil {
 				return res, err
 			}

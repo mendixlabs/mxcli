@@ -13,10 +13,10 @@ description: "Measure an app's main journeys at production volume and produce th
 | 32-54 | 1. Seed (backup first) |
 | 55-69 | 2. Instrument (and write down what you change) |
 | 70-87 | 3. Measure |
-| 88-98 | 4. Before and after — fairly |
-| 99-104 | 5. Restore |
-| 105-127 | Reading it |
-| 128-131 | Related |
+| 88-116 | 4. Before and after — fairly |
+| 117-122 | 5. Restore |
+| 123-145 | Reading it |
+| 146-149 | Related |
 
 <!-- /skill-index -->
 # Performance Report
@@ -95,6 +95,24 @@ mxcli report performance --journeys before.jsonl --spans before-spans.jsonl -f j
 mxcli report performance -p app.mpr --journeys after.jsonl --spans after-spans.jsonl \
   --baseline perf/before.json -o perf/report.html
 ```
+
+Each median shows the min–max of its warm runs: a change inside that spread is
+run-to-run noise, not an effect of the fix — say so rather than claim it.
+
+Write what was found and done as findings, so the page groups the steps by them:
+
+```yaml
+items:
+  "finding:F1": {name: "Housekeeping held a 10-minute transaction", status: fixed,
+                 note: "deleted in batches of 500; checkout no longer blocks"}
+  "step:Guest orders a pizza / 6 place order and pay": {finding: F1}
+```
+
+Each finding becomes a card with its steps' before → after — server and DB time, with
+a change inside the run-to-run spread marked as such — and a finding no step names
+says so. Status is `fixed`, `open`, or a decision not to change it (`accepted`,
+`intended`, `by design`); `scope: background` marks work no journey step runs (a
+scheduled job, a traffic generator).
 
 ## 5. Restore
 

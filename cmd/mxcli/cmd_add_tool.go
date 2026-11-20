@@ -118,7 +118,7 @@ Supported Tools:
 			}
 
 			// Generate content
-			content := file.Content(projectName, mprFile)
+			content := file.render(absDir, projectName, mprFile)
 
 			// Write file
 			if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
