@@ -599,6 +599,10 @@ func (fb *flowBuilder) addCallJavaScriptActionAction(s *ast.CallJavaScriptAction
 	// be resolved, so the prior Basic shape stands rather than guessing the
 	// parameter's kind from how the argument is spelled.
 	entityTypeParams := make(map[string]bool)
+	// A Nanoflow-typed parameter takes a nanoflow NAME, stored as
+	// Nanoflows$NanoflowParameterValue; written as a Basic value it was CE0115
+	// (ako/mxcli#2450).
+	nanoflowParams := make(map[string]bool)
 	if fb.backend != nil {
 		jsaDef, err := fb.backend.ReadJavaScriptActionByName(actionQN)
 		if err != nil {
@@ -609,6 +613,9 @@ func (fb *flowBuilder) addCallJavaScriptActionAction(s *ast.CallJavaScriptAction
 			for _, p := range jsaDef.Parameters {
 				if _, ok := p.ParameterType.(*types.EntityTypeParameterType); ok {
 					entityTypeParams[p.Name] = true
+				}
+				if _, ok := p.ParameterType.(*types.NanoflowType); ok {
+					nanoflowParams[p.Name] = true
 				}
 			}
 		}
@@ -626,6 +633,18 @@ func (fb *flowBuilder) addCallJavaScriptActionAction(s *ast.CallJavaScriptAction
 			value = &microflows.EntityTypeCodeActionParameterValue{
 				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 				Entity:      fb.entityTypeArgument(arg.Value),
+			}
+		} else if nanoflowParams[arg.Name] {
+			name := ""
+			if !isEmptyJavaActionArgument(arg.Value) {
+				if msg := nanoflowParamArgRefusal(actionQN, arg.Name, arg.Value); msg != "" {
+					fb.addError("%s", msg)
+				}
+				name = strings.Trim(fb.exprToString(javaActionArgumentValue(arg.Value)), "'")
+			}
+			value = &microflows.NanoflowParameterValue{
+				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
+				Nanoflow:    name,
 			}
 		} else {
 			value = &microflows.BasicCodeActionParameterValue{
