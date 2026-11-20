@@ -137,3 +137,5 @@ mxcli setup mxbuild -p your-app.mpr
 **"CGO not available"** -- mxcli uses pure Go SQLite. No C compiler needed. If you see CGO errors, ensure you're using the official pre-built binary or a `make build` from source.
 
 **"refusing to write …: Studio Pro has this project open"** -- Close the project in Studio Pro before running mxcli write commands, then reopen it. Studio Pro does not reload the model from disk, so its next save would silently discard mxcli's changes. If Studio Pro is not running, the `.mpr.lock` was left behind by a crash: delete it, or pass `--force` to `exec`.
+
+**Studio Pro converts a project made with `mxcli new` the first time it opens it** -- Expected, once. The template `mx create-project` ships can be one Studio Pro conversion behind the Studio Pro of the same version (11.16.1 adds a setup conversion and a `SetupSettings` unit that `mx` does not write), so the first open prompts and converts. Let it, and commit the result on its own before other changes, so it does not land in the diff of your first real one.
