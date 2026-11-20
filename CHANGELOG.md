@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A data view in a grid's own control bar can listen to that grid** (ako/mxcli#2476, mendixlabs/mxcli#1911) — `DataSource: selection dgItems` on a data view inside `dgItems`' `controlbar {}` passed check and was refused by exec with "widget not found: dgItems". A pluggable widget's name is now known before its slots are built.
 - **A view entity column added in the script can be used in the same script** (ako/mxcli#2463, mendixlabs/mxcli#1908) — `create or modify view entity` adding a column followed by a microflow aggregating over it was refused ("has no member"), because the column was looked up in the stored entity. A view entity the script declares is now read from the script.
 - **`check` reports a REST call's binary body that is not Binary** (ako/mxcli#2409, mendixlabs/mxcli#1897) — `Body: BINARY $File` with a FileDocument object, a String literal or a String member passed check and failed the build with CE0117. It is now reported, and for an object the fix names `$File/Contents`.
 - **`check` reports a variable defined twice inside an `alter microflow` fragment** (ako/mxcli#2478, mendixlabs/mxcli#1914) — a replaced loop body that declared `$N` and then made it a `count()` output passed check and exec, and the build failed with CE0111. MDL063 now runs over each fragment, as it does over a `create` body.
