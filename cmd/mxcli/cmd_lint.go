@@ -117,7 +117,9 @@ rules; a changed configuration is reported too. Run lint where the rules and the
 config are installed, or re-record with --update-baseline if the change is
 intended. mxcli verify turns either into an error (exit 2) instead of a pass.
 --update-baseline refuses (exit 2) while a rule cannot run: the baseline would hold
-none of its findings.
+none of its findings. It also refuses when the run has errors the baseline does not
+already hold, since recording them turns a failing gate into a passing one without
+fixing anything; --accept-errors records them on purpose.
 
 --documents scopes a run to named documents, so a structural question about one
 microflow costs a fraction of a project-wide lint and needs no baseline diff to
@@ -135,6 +137,7 @@ modules, and findings that are not about those documents are not reported.
 		documentFilter, _ := cmd.Flags().GetStringSlice("documents")
 		baselinePath, _ := cmd.Flags().GetString("baseline")
 		updateBaseline, _ := cmd.Flags().GetBool("update-baseline")
+		acceptErrors, _ := cmd.Flags().GetBool("accept-errors")
 		scoped := len(onlyRules) > 0 || len(moduleFilter) > 0 || len(documentFilter) > 0
 		if updateBaseline && baselinePath == "" {
 			fmt.Fprintln(os.Stderr, "Error: --update-baseline needs --baseline <file> to write to")
@@ -358,6 +361,26 @@ modules, and findings that are not about those documents are not reported.
 				}
 				fmt.Fprintln(os.Stderr, "  A rule that ran into an error usually runs on a second attempt; run the command again, and report the rule if it keeps failing.")
 				os.Exit(2)
+			}
+			// Re-recording is how a failing gate becomes a passing one without fixing
+			// anything, and an agent that wants green will do it. Errors the baseline
+			// does not already hold are accepted only on request.
+			existing, _ := linter.LoadBaseline(baselinePath) // none, or one that cannot be read: a first record
+			toAccept := existing.ErrorsToAccept(violations, linter.RunInfo{Known: true, Ran: ranRules, Failed: failedRules, Config: configFingerprint})
+			if len(toAccept) > 0 && !acceptErrors {
+				fmt.Fprintf(os.Stderr, "Error: the baseline was not recorded: it would accept %d error(s) it does not hold.\n", len(toAccept))
+				for i, v := range toAccept {
+					if i == 5 {
+						fmt.Fprintf(os.Stderr, "  ... and %d more\n", len(toAccept)-5)
+						break
+					}
+					fmt.Fprintf(os.Stderr, "  %s %s: %s\n", v.RuleID, v.Location.QualifiedName(), v.Message)
+				}
+				fmt.Fprintln(os.Stderr, "  Fix them, or record them on purpose with --accept-errors.")
+				os.Exit(2)
+			}
+			if len(toAccept) > 0 {
+				fmt.Fprintf(os.Stderr, "Accepted %d error(s) into the baseline (--accept-errors); they will not fail the gate again.\n", len(toAccept))
 			}
 			if err := linter.WriteBaselineWith(baselinePath, violations, linter.BaselineMeta{Rules: ranRules, Config: configFingerprint}); err != nil {
 				fmt.Fprintf(os.Stderr, "Error writing lint baseline: %v\n", err)
