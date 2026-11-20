@@ -33,10 +33,11 @@ import (
 //
 // What this cannot see: an attribute named only by its bare name through a
 // variable in an expression (`$Order/Total`), because resolving `$Order` needs
-// the variable's type. The document's own object-typed PARAMETERS are the
-// exception — they declare their entity, so `$Param/Total` resolves
-// (ako/mxcli#2468); a retrieve result, a loop item or a data view's object
-// still does not. XPath is different — its context entity is known — and
+// the variable's type. The variables whose entity the document itself states are
+// the exception — an object-typed parameter, a database retrieve's result, a
+// created object and a loop item, so `$Param/Total` resolves (ako/mxcli#2468);
+// a data view's object, a retrieve over an association and a variable the flow
+// receives some other way do not. XPath is different — its context entity is known — and
 // is handled by xpathRefs below.
 
 // memberRefSourceTypes maps the unit types whose documents are walked to the
@@ -473,12 +474,12 @@ func resolvePath(chunk, context string, idx *memberRefIndex, emit func(targetTyp
 		case seg == "":
 			cur = ""
 		case strings.HasPrefix(seg, "$"):
-			// A variable. When it is one of the document's own object-typed
-			// parameters its entity is known, so the bare attribute after it
-			// resolves (ako/mxcli#2468). Any other variable — a retrieve result,
-			// a loop item, a data view's object — has no type here, so what hangs
-			// off it directly stays unresolved; qualified segments after it still
-			// resolve.
+			// A variable. When the document states its entity (a parameter, a
+			// database retrieve's result, a created object, a loop item) the bare
+			// attribute after it resolves (ako/mxcli#2468). Any other variable — a
+			// data view's object, a retrieve over an association — has no type
+			// here, so what hangs off it directly stays unresolved; qualified
+			// segments after it still resolve.
 			cur = ""
 			if n == 0 {
 				cur = idx.vars[strings.TrimPrefix(seg, "$")]
@@ -657,49 +658,72 @@ var parameterTypeKeys = map[string]string{
 	"Microflows$MicroflowParameter": "VariableType",
 }
 
-// documentParameterEntities returns the entity of each object-typed parameter the
-// document declares, by parameter name. A list, an enumeration and a primitive
-// have no attributes to resolve, so they are left out.
+// variableScope collects the entity of each object variable a document declares.
+// A name given two different entities is dropped for good: a guess there would be
+// a reference to the wrong attribute, which is worse than none.
+type variableScope struct {
+	entity    map[string]string
+	ambiguous map[string]bool
+}
+
+func (v *variableScope) declare(name, entity string) {
+	if name == "" || entity == "" || v.ambiguous[name] {
+		return
+	}
+	if prev, ok := v.entity[name]; ok && prev != entity {
+		delete(v.entity, name)
+		v.ambiguous[name] = true
+		return
+	}
+	v.entity[name] = entity
+}
+
+// documentParameterEntities returns the entity of each object variable the
+// document declares, by name: its object-typed parameters, a database retrieve's
+// result, a created object, and a loop's item (the entity of the list it walks).
+// A list, an enumeration, a primitive and a retrieve over an association have no
+// entity known here and are left out.
 func documentParameterEntities(doc bson.D) map[string]string {
-	out := map[string]string{}
+	scope := &variableScope{entity: map[string]string{}, ambiguous: map[string]bool{}}
+	type loop struct{ list, item string }
+	var loops []loop
+	str := func(d bson.D, key string) string {
+		for _, e := range d {
+			if e.Key == key {
+				s, _ := e.Value.(string)
+				return s
+			}
+		}
+		return ""
+	}
+	sub := func(d bson.D, key string) bson.D {
+		for _, e := range d {
+			if e.Key == key {
+				s, _ := e.Value.(bson.D)
+				return s
+			}
+		}
+		return nil
+	}
 	var walk func(v any)
 	walk = func(v any) {
 		switch t := v.(type) {
 		case bson.D:
-			typ := ""
-			for _, e := range t {
-				if e.Key == "$Type" {
-					typ, _ = e.Value.(string)
+			typ := str(t, "$Type")
+			if typeKey, ok := parameterTypeKeys[typ]; ok {
+				if ot := sub(t, typeKey); str(ot, "$Type") == "DataTypes$ObjectType" {
+					scope.declare(str(t, "Name"), str(ot, "Entity"))
 				}
 			}
-			if typeKey, ok := parameterTypeKeys[typ]; ok {
-				name := ""
-				entity := ""
-				for _, e := range t {
-					switch {
-					case e.Key == "Name":
-						name, _ = e.Value.(string)
-					case e.Key == typeKey:
-						if ot, ok := e.Value.(bson.D); ok {
-							isObject := false
-							for _, f := range ot {
-								if f.Key == "$Type" {
-									isObject = f.Value == "DataTypes$ObjectType"
-								}
-							}
-							if isObject {
-								for _, f := range ot {
-									if f.Key == "Entity" {
-										entity, _ = f.Value.(string)
-									}
-								}
-							}
-						}
-					}
+			switch typ {
+			case "Microflows$RetrieveAction":
+				if src := sub(t, "RetrieveSource"); str(src, "$Type") == "Microflows$DatabaseRetrieveSource" {
+					scope.declare(str(t, "ResultVariableName"), str(src, "Entity"))
 				}
-				if name != "" && entity != "" {
-					out[name] = entity
-				}
+			case "Microflows$CreateChangeAction":
+				scope.declare(str(t, "VariableName"), str(t, "Entity"))
+			case "Microflows$IterableList":
+				loops = append(loops, loop{list: str(t, "ListVariableName"), item: str(t, "VariableName")})
 			}
 			for _, e := range t {
 				walk(e.Value)
@@ -715,5 +739,15 @@ func documentParameterEntities(doc bson.D) map[string]string {
 		}
 	}
 	walk(doc)
-	return out
+	// A loop item takes the entity of its list; resolved after every declaration
+	// is known so the order the flow was walked in does not matter, and repeated
+	// until a loop over a loop's own item settles.
+	for range loops {
+		for _, l := range loops {
+			if e, ok := scope.entity[l.list]; ok {
+				scope.declare(l.item, e)
+			}
+		}
+	}
+	return scope.entity
 }
