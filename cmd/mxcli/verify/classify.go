@@ -61,6 +61,19 @@ func Classify(baseline, current []Finding, staging bool) Outcome {
 	return out
 }
 
+// ErrorsToAccept are the findings recording current as the baseline would accept:
+// those the existing baseline does not hold (all of them when there is none, a first
+// record), including errors that only appeared because a baseline error hid them.
+// Every mxcheck finding is an error, and a re-record is the one command that turns a
+// failing gate into a passing one without fixing anything.
+func ErrorsToAccept(baseline, current []Finding, staging bool) []Finding {
+	if baseline == nil {
+		return current
+	}
+	c := Classify(baseline, current, staging)
+	return append(append([]Finding{}, c.New...), c.Unmasked...)
+}
+
 // hiddenByStage0 reports whether the report holds a stage 0 finding (an
 // unresolved reference), which hides every later-stage finding in the project.
 func hiddenByStage0(f Finding, report []Finding) bool {

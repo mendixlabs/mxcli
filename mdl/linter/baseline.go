@@ -79,6 +79,30 @@ func (c BaselineComparison) Incomplete() bool {
 	return len(c.RulesNotRun) > 0 || len(c.RuleFailures) > 0 || c.ConfigChanged
 }
 
+// ErrorsToAccept are the error findings of a run that recording it as the baseline
+// would accept: the errors the existing baseline does not already hold (all of them
+// when b is nil, a first record). Warnings and rule failures are not errors of the
+// project. A re-record is the one command that turns "the gate fails" into "the
+// gate passes" without fixing anything, so it must not do that silently.
+func (b *Baseline) ErrorsToAccept(findings []Violation, run RunInfo) []Violation {
+	var errs []Violation
+	for _, v := range findings {
+		if v.Severity == SeverityError && !v.RuleFailure {
+			errs = append(errs, v)
+		}
+	}
+	if b == nil || len(errs) == 0 {
+		return errs
+	}
+	var out []Violation
+	for _, v := range b.CompareRun(findings, run).New {
+		if v.Severity == SeverityError && !v.RuleFailure {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // BaselineMeta is what a baseline records besides its findings: the rules that
 // ran and the fingerprint of the configuration they ran under.
 type BaselineMeta struct {

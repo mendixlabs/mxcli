@@ -464,6 +464,7 @@ func init() {
 	lintCmd.Flags().Bool("show-accepted", false, "List the findings that decisions in the project brain accept (they are not counted)")
 	lintCmd.Flags().String("baseline", "", "Report only findings not recorded in this baseline file (exit code follows the new ones)")
 	lintCmd.Flags().Bool("update-baseline", false, "Record the current findings in the --baseline file instead of comparing")
+	lintCmd.Flags().Bool("accept-errors", false, "With --update-baseline, record errors the baseline does not already hold (without it, recording them is refused)")
 
 	// Report command flags
 	reportCmd.Flags().StringP("format", "f", "markdown", "Output format: markdown, json, html")

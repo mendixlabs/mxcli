@@ -386,3 +386,27 @@ func TestApplyExecThatCannotRunBlocksTheRest(t *testing.T) {
 		t.Errorf("ran=%v exit=%d", ran, r.Exit)
 	}
 }
+
+// Re-recording the mx check baseline accepts the errors it does not already hold.
+func TestErrorsToAcceptAreTheNewMxCheckErrors(t *testing.T) {
+	held := mx("held", 3, "u1")
+	fresh := mx("fresh", 3, "u2")
+	if got := ErrorsToAccept([]Finding{held}, []Finding{held, fresh}, true); len(got) != 1 || got[0].Key != "fresh" {
+		t.Errorf("errors to accept = %+v, want only the new one", got)
+	}
+	// The control: nothing new, nothing to accept.
+	if got := ErrorsToAccept([]Finding{held}, []Finding{held}, true); len(got) != 0 {
+		t.Errorf("a re-record that adds no error would accept %+v", got)
+	}
+	// No baseline (a first record): every error is accepted, including a clean project's none.
+	if got := ErrorsToAccept(nil, []Finding{held, fresh}, true); len(got) != 2 {
+		t.Errorf("a first record accepts %d, want 2", len(got))
+	}
+	if got := ErrorsToAccept(nil, nil, true); len(got) != 0 {
+		t.Errorf("a clean first record accepts %+v", got)
+	}
+	// An error that appears only because a baseline error stopped hiding it is accepted too.
+	if got := ErrorsToAccept([]Finding{mx("ref", 0, "f")}, []Finding{mx("type", 3, "g")}, true); len(got) != 1 {
+		t.Errorf("an unmasked error is also accepted by a re-record: %+v", got)
+	}
+}

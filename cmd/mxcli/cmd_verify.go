@@ -52,6 +52,9 @@ findings; use --fail-fast to stop at the first stage that fails. mx check is the
 mxcli check cannot yet predict everything it rejects, so a project that passes
 check and lint can still fail mxcheck.
 
+--update-baseline refuses (exit 2) when the run has errors the baseline does not
+already hold; --accept-errors records them on purpose.
+
 Baselines live in --baseline-dir (default verify-baseline/ next to the project):
 lint.json is a ` + "`mxcli lint --baseline`" + ` file, mxcheck.json records mx check's
 findings by their element IDs. Without one, every finding is reported as new and
@@ -98,6 +101,7 @@ func init() {
 	verifyCmd.Flags().Bool("strict", false, "Also fail on unmasked mx check findings (errors an earlier baseline error was hiding)")
 	verifyCmd.Flags().String("baseline-dir", "", "Where the baselines live (default verify-baseline/ next to the project)")
 	verifyCmd.Flags().Bool("update-baseline", false, "Record the current lint and mx check findings as the baseline instead of comparing")
+	verifyCmd.Flags().Bool("accept-errors", false, "With --update-baseline, record errors the baseline does not already hold (without it, recording them is refused)")
 	verifyCmd.Flags().String("mxbuild-path", "", "Path to MxBuild/Mendix installation (used to find mx)")
 	verifyCmd.Flags().StringP("format", "f", "text", "Output format: text, json")
 	rootCmd.AddCommand(verifyCmd)
@@ -114,6 +118,7 @@ func runVerify(cmd *cobra.Command, scripts []string) int {
 	strict, _ := cmd.Flags().GetBool("strict")
 	baselineDir, _ := cmd.Flags().GetString("baseline-dir")
 	update, _ := cmd.Flags().GetBool("update-baseline")
+	acceptErrors, _ := cmd.Flags().GetBool("accept-errors")
 	mxbuildPath, _ := cmd.Flags().GetString("mxbuild-path")
 
 	usage := func(format string, a ...any) int {
@@ -151,7 +156,10 @@ func runVerify(cmd *cobra.Command, scripts []string) int {
 	if err != nil {
 		return usage("cannot locate this executable: %v", err)
 	}
-	vr := &verifyRunner{self: self, project: projectPath, baselineDir: baselineDir, update: update, mxbuildPath: mxbuildPath, scripts: scripts}
+	if acceptErrors && !update {
+		return usage("--accept-errors only applies with --update-baseline")
+	}
+	vr := &verifyRunner{self: self, project: projectPath, baselineDir: baselineDir, update: update, acceptErrors: acceptErrors, mxbuildPath: mxbuildPath, scripts: scripts}
 	res := verify.Run(verify.Options{
 		Project: projectPath, Stages: stages, FailFast: failFast, FailOn: failOn, Strict: strict, Skip: skip,
 		Apply: apply, ScriptsGiven: len(scripts) > 0,
@@ -217,7 +225,7 @@ func verifyStageSelection(stages []string, stagesSet bool, through string, apply
 
 type verifyRunner struct {
 	self, project, baselineDir, mxbuildPath string
-	update                                  bool
+	update, acceptErrors                    bool
 	scripts                                 []string
 }
 
@@ -309,6 +317,9 @@ func (v *verifyRunner) lint() (verify.Outcome, error) {
 			return verify.Outcome{}, err
 		}
 		args = append(args, "--baseline", lintBaseline, "--update-baseline")
+		if v.acceptErrors {
+			args = append(args, "--accept-errors")
+		}
 	case verifyFileExists(lintBaseline):
 		args = append(args, "--baseline", lintBaseline)
 	default:
@@ -352,10 +363,28 @@ func (v *verifyRunner) mxcheck() (verify.Outcome, error) {
 	version := verifyMxVersionOf(report.MxPath)
 	path := filepath.Join(v.baselineDir, "mxcheck.json")
 	if v.update {
+		// Recording must not turn a failing gate into a passing one without a say:
+		// errors the existing baseline does not hold are accepted only on request.
+		var held []verify.Finding
+		if old, err := verify.LoadMxBaseline(path); err == nil && old != nil && old.CheckCompatible("mx check", version) == nil {
+			held = old.Findings
+			if held == nil {
+				held = []verify.Finding{}
+			}
+		}
+		toAccept := verify.ErrorsToAccept(held, current, true)
+		if len(toAccept) > 0 && !v.acceptErrors {
+			return verify.Outcome{}, fmt.Errorf("the mx check baseline was not recorded: it would accept %d error(s) it does not hold: %s. Fix them, or record them on purpose with --accept-errors",
+				len(toAccept), verifyListFindings(toAccept, 5))
+		}
 		if err := verify.WriteMxBaseline(path, "mx check", version, current); err != nil {
 			return verify.Outcome{}, err
 		}
-		return verify.Outcome{Recorded: true, PreExisting: len(current), Note: "baseline recorded at " + path}, nil
+		note := "baseline recorded at " + path
+		if len(toAccept) > 0 {
+			note += fmt.Sprintf("; accepted %d error(s) (--accept-errors): they will not fail the gate again", len(toAccept))
+		}
+		return verify.Outcome{Recorded: true, PreExisting: len(current), Note: note}, nil
 	}
 	base, err := verify.LoadMxBaseline(path)
 	if err != nil {
@@ -521,6 +550,23 @@ func verifyRefusal(stderr []byte) string {
 		return verifyLast(strings.TrimSpace(string(stderr)), 400)
 	}
 	return strings.Join(keep, " ")
+}
+
+// verifyListFindings names the first n findings, one clause each.
+func verifyListFindings(fs []verify.Finding, n int) string {
+	var parts []string
+	for i, f := range fs {
+		if i == n {
+			parts = append(parts, fmt.Sprintf("and %d more", len(fs)-n))
+			break
+		}
+		loc := f.Document
+		if f.Element != "" {
+			loc += " / " + f.Element
+		}
+		parts = append(parts, fmt.Sprintf("%s %s", f.Code, strings.TrimSpace(loc)))
+	}
+	return strings.Join(parts, "; ")
 }
 
 func verifyShortList(ids []string, n int) string {
