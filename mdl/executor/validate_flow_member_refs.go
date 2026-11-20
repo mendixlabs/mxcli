@@ -219,6 +219,19 @@ func (m scriptMemberModel) memberLink(entityQN, name string) (memberLinkFacts, b
 	var decl *ast.CreateEntityStmt
 	if r.sc != nil {
 		decl = r.sc.entityDecls[entityQN]
+		// A view entity the script declares has the columns it lists, the
+		// stored one's not: a column added and aggregated over in one script
+		// was refused (mendixlabs/mxcli#1908).
+		if v := r.sc.viewEntityDecls[entityQN]; decl == nil && v != nil {
+			var facts memberLinkFacts
+			for _, a := range v.Attributes {
+				if a.Name == name {
+					facts.attribute = true
+				}
+			}
+			facts.association = r.declaredAssociationInModule(entityQN, name) || r.projectAssociationInModule(entityQN, name)
+			return facts, true
+		}
 	}
 	if decl == nil {
 		facts, ok := backendMemberModel{r.backend()}.memberLink(entityQN, name)
@@ -272,6 +285,13 @@ func (r *flowMemberRefs) projectAssociationInModule(entityQN, name string) bool 
 // nearMembers is nearMembersFor through the script's declarations.
 func (r *flowMemberRefs) nearMembers(entityQN string) string {
 	if r.sc != nil {
+		if v := r.sc.viewEntityDecls[entityQN]; v != nil && r.sc.entityDecls[entityQN] == nil {
+			var names []string
+			for _, a := range v.Attributes {
+				names = append(names, a.Name)
+			}
+			return nearMemberList(names)
+		}
 		if decl := r.sc.entityDecls[entityQN]; decl != nil {
 			var names []string
 			for _, a := range decl.Attributes {
