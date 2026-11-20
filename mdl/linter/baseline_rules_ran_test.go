@@ -197,3 +197,37 @@ func TestLinterReportsWhichRulesRan(t *testing.T) {
 		t.Errorf("ran=%v failed=%v, want A,B and F (a disabled rule is in neither)", ran, failed)
 	}
 }
+
+// Re-recording is how a failing gate becomes a passing one without fixing anything.
+// It accepts only the errors the baseline does not already hold, and only on request.
+func TestErrorsToAcceptAreTheNewErrors(t *testing.T) {
+	errV := func(rule, doc, id string) Violation {
+		x := v(rule, "Sales", doc, id, "broken")
+		x.Severity = SeverityError
+		return x
+	}
+	held := errV("SEC007", "ACT_Old", "1")
+	b := recordWith(t, []Violation{held, v("QUAL002", "Sales", "ACT_W", "2", "no docs")}, BaselineMeta{Rules: []string{"SEC007", "QUAL002"}})
+	run := RunInfo{Known: true, Ran: []string{"SEC007", "QUAL002"}}
+	fresh := errV("SEC007", "ACT_New", "3")
+	warn := v("QUAL002", "Sales", "ACT_W2", "4", "no docs")
+	failure := Violation{RuleID: "MPR017", Severity: SeverityError, RuleFailure: true, Message: "could not run"}
+
+	got := b.ErrorsToAccept([]Violation{held, fresh, warn, failure}, run)
+	if len(got) != 1 || got[0].Location.DocumentID != "3" {
+		t.Errorf("errors to accept = %v, want only the new error", messages(got))
+	}
+	// The control: a re-record with nothing new (the accepted error is still there)
+	// accepts nothing, so it needs no flag.
+	if got := b.ErrorsToAccept([]Violation{held, warn}, run); len(got) != 0 {
+		t.Errorf("a re-record that adds no error would accept %v", messages(got))
+	}
+	// A first record (no baseline) accepts every error of the run, and none of the rest.
+	var none *Baseline
+	if got := none.ErrorsToAccept([]Violation{held, fresh, warn, failure}, run); len(got) != 2 {
+		t.Errorf("a first record accepts %v, want the two errors", messages(got))
+	}
+	if got := none.ErrorsToAccept([]Violation{warn}, run); len(got) != 0 {
+		t.Errorf("warnings are not errors to accept: %v", messages(got))
+	}
+}
