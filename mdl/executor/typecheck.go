@@ -10,6 +10,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/exprcheck"
 	"github.com/mendixlabs/mxcli/mdl/exprcheck/adapters"
 	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 // TypeCheckProgram type-checks the expressions in a script's microflows and
@@ -60,7 +61,8 @@ func (e *Executor) TypeCheckProgram(prog *ast.Program) []linter.Violation {
 	// not attach source text, which it does for some slots and not others. The
 	// adapter's own default reads SourceExpr only, and would silently skip
 	// whichever half of a flow happened not to carry one.
-	adapter := adapters.NewCheckAdapter(reader, adapters.WithSourceFunc(microflowExprSource))
+	adapter := adapters.NewCheckAdapter(reader, adapters.WithSourceFunc(microflowExprSource),
+		adapters.WithCallResultKinds(callResultKind(ctx, reader)))
 	var out []linter.Violation
 	for _, stmt := range prog.Statements {
 		switch s := stmt.(type) {
@@ -191,4 +193,47 @@ func scriptAttributeKind(k ast.DataTypeKind) exprcheck.TypeKind {
 		return exprcheck.KindEnumeration
 	}
 	return exprcheck.KindUnknown
+}
+
+// callResultKind types a call statement's output variable: a microflow or
+// nanoflow by its return type in the catalog, a Java action by its definition
+// (ako/mxcli#2464: `$Guid = call java action CommunityCommons.getGUID(…)` is an
+// Integer, and assigning it to a String attribute is CE0117). Unknown where
+// the callee cannot be read.
+func callResultKind(ctx *ExecContext, reader exprcheck.CatalogReader) func(ast.MicroflowStatement) exprcheck.TypeKind {
+	return func(stmt ast.MicroflowStatement) exprcheck.TypeKind {
+		switch s := stmt.(type) {
+		case *ast.CallMicroflowStmt:
+			if k, ok := reader.MicroflowReturn(s.MicroflowName.String()); ok {
+				return k
+			}
+		case *ast.CallNanoflowStmt:
+			if k, ok := reader.MicroflowReturn(s.NanoflowName.String()); ok {
+				return k
+			}
+		case *ast.CallJavaActionStmt:
+			if ctx.Backend == nil {
+				return exprcheck.KindUnknown
+			}
+			ja, err := ctx.Backend.ReadJavaActionByName(s.ActionName.String())
+			if err != nil || ja == nil {
+				return exprcheck.KindUnknown
+			}
+			switch ja.ReturnType.(type) {
+			case *types.BooleanType:
+				return exprcheck.KindBoolean
+			case *types.StringType:
+				return exprcheck.KindString
+			case *types.IntegerType:
+				return exprcheck.KindInteger
+			case *types.LongType:
+				return exprcheck.KindLong
+			case *types.DecimalType:
+				return exprcheck.KindDecimal
+			case *types.DateTimeType:
+				return exprcheck.KindDateTime
+			}
+		}
+		return exprcheck.KindUnknown
+	}
 }

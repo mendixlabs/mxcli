@@ -382,3 +382,44 @@ func addParamTypes(s *flowScope, params []ast.MicroflowParam) {
 		}
 	}
 }
+
+// recordCallResults types the output variable of each call statement by what
+// the call returns. Only a primitive kind is recorded: an object or list
+// result, or one that cannot be resolved, stays Unknown, which every rule
+// tolerates (ako/mxcli#2464).
+func (s *flowScope) recordCallResults(body []ast.MicroflowStatement, kindOf func(ast.MicroflowStatement) exprcheck.TypeKind) {
+	var walk func([]ast.MicroflowStatement)
+	walk = func(stmts []ast.MicroflowStatement) {
+		for _, st := range stmts {
+			out := ""
+			switch n := st.(type) {
+			case *ast.CallMicroflowStmt:
+				out = n.OutputVariable
+			case *ast.CallNanoflowStmt:
+				out = n.OutputVariable
+			case *ast.CallJavaActionStmt:
+				out = n.OutputVariable
+			case *ast.LoopStmt:
+				walk(n.Body)
+			case *ast.IfStmt:
+				walk(n.ThenBody)
+				walk(n.ElseBody)
+			case *ast.WhileStmt:
+				walk(n.Body)
+			}
+			if out = strings.TrimPrefix(out, "$"); out != "" {
+				if _, typed := s.kinds[out]; !typed {
+					switch k := kindOf(st); k {
+					case exprcheck.KindBoolean, exprcheck.KindString, exprcheck.KindInteger,
+						exprcheck.KindLong, exprcheck.KindDecimal, exprcheck.KindDateTime:
+						s.kinds[out] = k
+					}
+				}
+			}
+			if eb := errorHandlerBody(st); eb != nil {
+				walk(eb)
+			}
+		}
+	}
+	walk(body)
+}

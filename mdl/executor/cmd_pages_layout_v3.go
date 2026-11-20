@@ -26,10 +26,10 @@ func (pb *pageBuilder) buildLayoutV3(s *ast.CreateLayoutStmt) (*pages.Layout, er
 	for k := range s.Properties {
 		if !strings.EqualFold(k, "LayoutType") && !strings.EqualFold(k, "Class") &&
 			!strings.EqualFold(k, "Style") && !strings.EqualFold(k, "Layout") &&
-			!strings.EqualFold(k, "ShowBottomBar") {
+			!strings.EqualFold(k, "ShowBottomBar") && !strings.EqualFold(k, "Folder") {
 			return nil, mdlerrors.NewValidation(fmt.Sprintf(
-				"layout %s: unknown property %q (a layout header takes layouttype, class, style, layout "+
-					"and, on a native layout, showbottombar; "+
+				"layout %s: unknown property %q (a layout header takes layouttype, class, style, layout, "+
+					"folder and, on a native layout, showbottombar; "+
 					"which placeholder is \"main\" is set by naming one Main, not by a property)",
 				s.Name.String(), k))
 		}
@@ -53,12 +53,23 @@ func (pb *pageBuilder) buildLayoutV3(s *ast.CreateLayoutStmt) (*pages.Layout, er
 	// (ako/mxcli#1679).
 	pb.themeRegistry = pb.themeRegistry.ForPlatform(native)
 
+	// `folder:` files the layout as a page's is filed; it was refused as an
+	// unknown property after check had passed it (ako/mxcli#2460).
+	containerID := pb.moduleID
+	if folder := props.GetStringProp("Folder"); folder != "" {
+		id, err := pb.resolveFolder(folder)
+		if err != nil {
+			return nil, err
+		}
+		containerID = id
+	}
+
 	layout := &pages.Layout{
 		BaseElement: model.BaseElement{
 			ID:       model.ID(types.GenerateID()),
 			TypeName: "Forms$Layout",
 		},
-		ContainerID:   pb.moduleID,
+		ContainerID:   containerID,
 		Name:          s.Name.Name,
 		Documentation: s.Documentation,
 		LayoutType:    layoutType,
@@ -312,10 +323,18 @@ func execCreateLayout(ctx *ExecContext, s *ast.CreateLayoutStmt) error {
 		// module root, and an insert would file a foldered layout back into it
 		// (the defect #932 fixed for REST clients). UpdateLayout does not touch
 		// the unit's row at all.
+		wanted := layout.ContainerID
 		layout.ID = stored.ID
 		layout.ContainerID = stored.ContainerID
 		if err := ctx.Backend.UpdateLayout(layout); err != nil {
 			return mdlerrors.NewBackend("update layout", err)
+		}
+		// A `folder:` on the rewrite moves the layout there; without one the
+		// stored folder stands (ako/mxcli#2460).
+		if layoutHasFolder(s) {
+			if _, err := applyDocumentFolder(ctx, layout.ID, stored.ContainerID, wanted); err != nil {
+				return err
+			}
 		}
 	} else if err := ctx.Backend.CreateLayout(layout); err != nil {
 		return mdlerrors.NewBackend("create layout", err)
@@ -382,4 +401,16 @@ func checkLayoutCallArguments(ctx *ExecContext, layout *pages.Layout) error {
 	return mdlerrors.NewValidation(fmt.Sprintf(
 		"layout %s is built on %s, which does not declare the placeholder %s; it has %s",
 		layout.Name, lc.LayoutName, strings.Join(missing, ", "), strings.Join(declared, ", ")))
+}
+
+// layoutHasFolder reports whether a create layout header names a folder.
+func layoutHasFolder(s *ast.CreateLayoutStmt) bool {
+	for k, v := range s.Properties {
+		if strings.EqualFold(k, "Folder") {
+			if str, ok := v.(string); ok && str != "" {
+				return true
+			}
+		}
+	}
+	return false
 }

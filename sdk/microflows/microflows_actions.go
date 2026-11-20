@@ -914,6 +914,16 @@ type MicroflowParameterValue struct {
 
 func (MicroflowParameterValue) isCodeActionParameterValue() {}
 
+// NanoflowParameterValue is a nanoflow reference passed to a JavaScript
+// action's Nanoflow-typed parameter (Nanoflows$NanoflowParameterValue). An
+// empty Nanoflow is Studio Pro's "(none)" (ako/mxcli#2450).
+type NanoflowParameterValue struct {
+	model.BaseElement
+	Nanoflow string `json:"nanoflow,omitempty"` // BY_NAME_REFERENCE: qualified nanoflow name
+}
+
+func (NanoflowParameterValue) isCodeActionParameterValue() {}
+
 // EntityTypeCodeActionParameterValue is an entity type passed at a call site for a type parameter.
 type EntityTypeCodeActionParameterValue struct {
 	model.BaseElement

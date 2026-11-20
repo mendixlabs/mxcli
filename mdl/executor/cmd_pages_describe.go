@@ -380,6 +380,13 @@ func describeLayout(ctx *ExecContext, name ast.QualifiedName) error {
 	// output cannot be fed back in.
 	rawData, _ := ctx.Backend.GetRawUnit(foundLayout.ID)
 	header := layoutHeaderMDL(ctx, layoutTypeStr, foundLayout.Class, layoutOuterName(rawData))
+	// The folder, so describe → exec files the layout where it is
+	// (ako/mxcli#2460).
+	if h, err := getHierarchy(ctx); err == nil && h != nil {
+		if folderPath := h.BuildFolderPath(foundLayout.ContainerID); folderPath != "" {
+			header += ",\n  folder: " + mdlQuote(ctx, folderPath)
+		}
+	}
 	if native := nativeLayoutContent(rawData); native != nil {
 		if on, _ := native["ShowBottomBar"].(bool); on {
 			header += ",\n  showbottombar: true"

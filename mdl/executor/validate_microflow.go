@@ -623,6 +623,28 @@ func (v *microflowValidator) checkStmtExprFunctions(s ast.MicroflowStatement) {
 		for i, arg := range stmt.TemplateArgs {
 			v.checkExprFunctions(fmt.Sprintf("validation feedback template {%d}", i+1), arg)
 		}
+	case *ast.RestCallStmt:
+		// ako/mxcli#2408: an unknown function in a REST call's URL, header,
+		// body or timeout passed check and exec and failed the build with
+		// CE0117 at the activity — none of them was walked.
+		v.checkExprFunctions("call rest service URL", stmt.URL)
+		for _, p := range stmt.URLParams {
+			v.checkExprFunctions(fmt.Sprintf("call rest service URL template {%d}", p.Index), p.Value)
+		}
+		for _, h := range stmt.Headers {
+			v.checkExprFunctions(fmt.Sprintf("call rest service header '%s'", h.Name), h.Value)
+		}
+		if stmt.Auth != nil {
+			v.checkExprFunctions("call rest service username", stmt.Auth.Username)
+			v.checkExprFunctions("call rest service password", stmt.Auth.Password)
+		}
+		if stmt.Body != nil {
+			v.checkExprFunctions("call rest service body", stmt.Body.Template)
+			for _, p := range stmt.Body.TemplateParams {
+				v.checkExprFunctions(fmt.Sprintf("call rest service body template {%d}", p.Index), p.Value)
+			}
+		}
+		v.checkExprFunctions("call rest service timeout", stmt.Timeout)
 	}
 }
 

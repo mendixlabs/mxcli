@@ -1713,9 +1713,12 @@ func validateFlowBodyReferences(ctx *ExecContext, body []ast.MicroflowStatement,
 				flowParams := map[string]bool{}
 				templates := map[string]bool{}
 				documents := map[string]string{}
+				var entityTypeParams []string
 				for _, p := range ja.Parameters {
 					declared = append(declared, p.Name)
 					switch pt := p.ParameterType.(type) {
+					case *javaactions.EntityTypeParameterType:
+						entityTypeParams = append(entityTypeParams, p.Name)
 					case *javaactions.MicroflowType:
 						flowParams[p.Name] = true
 					case *javaactions.StringTemplateParameterType:
@@ -1725,6 +1728,7 @@ func validateFlowBodyReferences(ctx *ExecContext, body []ast.MicroflowStatement,
 					}
 				}
 				errors = append(errors, validateCodeActionParams("java action", ref, declared)...)
+				errors = append(errors, missingCodeActionArgs("java action", ref, declared, entityTypeParams)...)
 				errors = append(errors, microflowParamArgErrors(ref, flowParams)...)
 				errors = append(errors, javaActionCallValueErrors(ctx, sc, ref, templates, documents)...)
 			}
@@ -1747,10 +1751,15 @@ func validateFlowBodyReferences(ctx *ExecContext, body []ast.MicroflowStatement,
 			}
 			if jsa, err := ctx.Backend.ReadJavaScriptActionByName(ref.name); err == nil && jsa != nil {
 				declared := []string{} // read: an action with no parameters is known to have none
+				var entityTypeParams []string
 				for _, p := range jsa.Parameters {
 					declared = append(declared, p.Name)
+					if _, ok := p.ParameterType.(*javaactions.EntityTypeParameterType); ok {
+						entityTypeParams = append(entityTypeParams, p.Name)
+					}
 				}
 				errors = append(errors, validateCodeActionParams("javascript action", ref, declared)...)
+				errors = append(errors, missingCodeActionArgs("javascript action", ref, declared, entityTypeParams)...)
 			}
 		}
 	}
@@ -2074,6 +2083,44 @@ func validateCodeActionParams(kind string, ref codeActionCallRef, declared []str
 		errs = append(errs, msg)
 	}
 	return errs
+}
+
+// missingCodeActionArgs reports the entity-type parameters (`ENTITY <pE>`) a
+// Java / JavaScript action call does not pass. Measured on mxbuild 11.12.6
+// with each parameter kind left out of a call: only an entity-type parameter
+// is CE0115 "The arguments that are passed to … do not match the expected
+// parameters and need to be refreshed" (ako/mxcli#2464); a missing Integer,
+// object, type-parameter object or Microflow argument builds clean, so it is
+// not reported. declared nil means the parameters are unknown.
+func missingCodeActionArgs(kind string, ref codeActionCallRef, declared, entityTypeParams []string) []string {
+	if declared == nil || len(entityTypeParams) == 0 {
+		return nil
+	}
+	declaredSet := make(map[string]bool, len(declared))
+	for _, d := range declared {
+		declaredSet[d] = true
+	}
+	written := make(map[string]bool, len(ref.argNames))
+	for _, n := range ref.argNames {
+		if !declaredSet[n] {
+			// A misspelled argument is reported by validateCodeActionParams,
+			// and is most likely the one that looks missing here.
+			return nil
+		}
+		written[n] = true
+	}
+	var missing []string
+	for _, d := range entityTypeParams {
+		if !written[d] {
+			missing = append(missing, d)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s %s: no argument for entity-type parameter(s) %s — the call must name "+
+		"the entity (`%s = Module.Entity`). Mendix build fails CE0115 \"The arguments that are passed to … "+
+		"do not match the expected parameters\".", kind, ref.name, strings.Join(missing, ", "), missing[0])}
 }
 
 // entityRef tracks an entity reference along with the statement that referenced it.

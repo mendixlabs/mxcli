@@ -25,6 +25,9 @@ type CheckAdapter struct {
 	// returnKind is the primitive type the flow under walk returns, or
 	// KindUnknown; a RETURN is checked against it.
 	returnKind exprcheck.TypeKind
+	// callResult types the output variable of a call statement (a microflow,
+	// nanoflow or Java action call), or KindUnknown (ako/mxcli#2464).
+	callResult func(ast.MicroflowStatement) exprcheck.TypeKind
 }
 
 // Option configures a CheckAdapter.
@@ -45,6 +48,14 @@ func WithSourceFunc(f func(ast.Expression) string) Option {
 			c.source = f
 		}
 	}
+}
+
+// WithCallResultKinds types the output variable of a call statement, so a
+// called flow's or Java action's result is checked where it is used: `$Guid =
+// call java action …getGUID(…)` (Integer) assigned to a String attribute was
+// unchecked because $Guid was Unknown (ako/mxcli#2464).
+func WithCallResultKinds(f func(ast.MicroflowStatement) exprcheck.TypeKind) Option {
+	return func(c *CheckAdapter) { c.callResult = f }
 }
 
 func NewCheckAdapter(cat exprcheck.CatalogReader, opts ...Option) *CheckAdapter {
@@ -107,6 +118,9 @@ func (c *CheckAdapter) CheckNanoflow(stmt *ast.CreateNanoflowStmt) *Result {
 // most ordinary shape in the language (mendixlabs/mxcli#1100).
 func (c *CheckAdapter) walkFlow(body []ast.MicroflowStatement, params []ast.MicroflowParam, mf string, r *Result) {
 	scope := buildFlowScope(body, params, c.assoc)
+	if c.callResult != nil {
+		scope.recordCallResults(body, c.callResult)
+	}
 	c.entities = entityScope{vars: scope.entities, assoc: c.assoc}
 	c.kinds = kindScope(scope.kinds)
 	defer func() { c.entities, c.kinds, c.returnKind = nil, nil, exprcheck.KindUnknown }()

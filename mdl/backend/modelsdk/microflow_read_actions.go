@@ -820,6 +820,10 @@ func codeActionParameterValueFromRaw(doc bson.Raw) microflows.CodeActionParamete
 		v := &microflows.MicroflowParameterValue{Microflow: rawStr(doc, "Microflow")}
 		v.ID = id
 		return v
+	case "Nanoflows$NanoflowParameterValue":
+		v := &microflows.NanoflowParameterValue{Nanoflow: rawStr(doc, "Nanoflow")}
+		v.ID = id
+		return v
 	case "Microflows$EntityTypeCodeActionParameterValue":
 		v := &microflows.EntityTypeCodeActionParameterValue{Entity: rawStr(doc, "Entity")}
 		v.ID = id
