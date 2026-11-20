@@ -34,14 +34,14 @@ import (
 func recreatedDoc(t *testing.T, name, innerID string) []byte {
 	t.Helper()
 	b, err := bson.Marshal(bson.D{
-		{Key: "$Type", Value: "Rest$ConsumedRestService"},
 		{Key: "$ID", Value: bson.Binary{Subtype: 0x00, Data: uuidToBlob("11111111-1111-1111-1111-111111111111")}},
-		{Key: "Name", Value: name},
+		{Key: "$Type", Value: "Rest$ConsumedRestService"},
 		{Key: "BaseUrl", Value: bson.D{
-			{Key: "$Type", Value: "Rest$ValueTemplate"},
 			{Key: "$ID", Value: bson.Binary{Subtype: 0x00, Data: uuidToBlob(innerID)}},
+			{Key: "$Type", Value: "Rest$ValueTemplate"},
 			{Key: "Template", Value: "https://example.test/api"},
 		}},
+		{Key: "Name", Value: name},
 	})
 	if err != nil {
 		t.Fatalf("marshal unit: %v", err)

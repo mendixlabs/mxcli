@@ -22,17 +22,19 @@ const deferredUnitID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 func ruleDoc(t *testing.T, withRule bool, ruleID, template string) []byte {
 	t.Helper()
 	doc := bson.D{
-		{Key: "$Type", Value: "Rest$ConsumedRestService"},
 		{Key: "$ID", Value: bson.Binary{Subtype: 0x00, Data: uuidToBlob("11111111-1111-1111-1111-111111111111")}},
-		{Key: "Name", Value: "Svc"},
+		{Key: "$Type", Value: "Rest$ConsumedRestService"},
 	}
+	// In Studio Pro's key order (BaseUrl before Name), which is what the write
+	// path stores (ako/mxcli#2467), so the bytes read back compare equal.
 	if withRule {
 		doc = append(doc, bson.E{Key: "BaseUrl", Value: bson.D{
-			{Key: "$Type", Value: "Rest$ValueTemplate"},
 			{Key: "$ID", Value: bson.Binary{Subtype: 0x00, Data: uuidToBlob(ruleID)}},
+			{Key: "$Type", Value: "Rest$ValueTemplate"},
 			{Key: "Template", Value: template},
 		}})
 	}
+	doc = append(doc, bson.E{Key: "Name", Value: "Svc"})
 	b, err := bson.Marshal(doc)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)

@@ -157,7 +157,7 @@ func normalizePropertySetsFor(pv *version.ProjectVersion, unitID string, content
 func storageFormFor(pv *version.ProjectVersion, unitID string, contents []byte, listMarkers bool) ([]byte, error) {
 	if pv == nil || pv.MajorVersion == 0 {
 		if listMarkers {
-			return canon.NormalizeListMarkers(contents), nil
+			return canon.SortKeys(canon.NormalizeListMarkers(contents)), nil
 		}
 		return contents, nil
 	}
