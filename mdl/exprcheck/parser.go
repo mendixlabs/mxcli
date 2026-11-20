@@ -64,6 +64,7 @@ func (p *parserImpl) Parse(src string, ctx Context) (RobustExpr, []Hint) {
 	hs = append(hs, checkValueLiterals(expr, ctx)...)
 	hs = append(hs, checkSlotKind(expr, ctx)...)
 	hs = append(hs, checkCallArgumentKind(expr, ctx)...)
+	hs = append(hs, checkMemberKind(expr, ctx)...)
 	hs = append(hs, checkTargetKind(expr, ctx)...)
 	hs = append(hs, checkBareIdentifierValue(expr, ctx)...)
 	hs = append(hs, checkStringFuncsComparedWithEmpty(expr, nil, ctx)...)
