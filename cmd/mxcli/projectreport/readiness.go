@@ -32,6 +32,11 @@ type ReadinessInput struct {
 	// SignOff is the readiness page's own annotations: readiness:<key> with
 	// status "signed off" moves a blocking item to Accepted.
 	SignOff *Annotations
+	// Failed names the reports that were given their inputs but could not
+	// run, with why; Warnings are each report's own warnings. Both turn a
+	// "not given" into what actually happened (ako/mxcli#2452).
+	Failed   map[string]string
+	Warnings map[string][]string
 	// Milestone, when set, makes its unbuilt requirements blocking.
 	Milestone string
 	// BudgetMs is the server time a journey step may take; 0 means none.
@@ -111,6 +116,13 @@ func ComputeReadiness(in ReadinessInput) *ReadinessData {
 		d.Accepted = append(d.Accepted, ReadinessItem{Key: key, Source: src, Text: text, Note: note})
 	}
 	source := func(kind string, given, decides bool, note string) {
+		switch {
+		case !given && in.Failed[kind] != "":
+			// Given, and broke: a different action than evidence never collected.
+			note = "failed: " + firstLine(in.Failed[kind])
+		case note != "" && len(in.Warnings[kind]) > 0:
+			note += " — " + firstLine(in.Warnings[kind][0])
+		}
 		d.Sources = append(d.Sources, ReadinessSource{Kind: kind, Assessed: given && note == "", Decides: decides, Note: note})
 	}
 	resolved := func(kind, key string) (Note, bool) {
@@ -412,11 +424,11 @@ func RenderReadiness(env *Envelope, ann *Annotations) (Doc, error) {
 	doc.Lede = fmt.Sprintf("Verdict: %s. %d blocking, %d risk(s), %d accepted; %d of %d reports not assessed in full.",
 		d.Verdict, len(d.Blocking), len(d.Risks), len(d.Accepted), notAssessed, len(d.Sources))
 	doc.Stats = []Stat{
-		{Label: "verdict", Value: d.Verdict, Status: status},
-		{Label: "blocking", Value: fmt.Sprint(len(d.Blocking)), Status: statusIf(len(d.Blocking) > 0, false)},
-		{Label: "risks", Value: fmt.Sprint(len(d.Risks)), Status: statusIf(false, len(d.Risks) > 0)},
-		{Label: "accepted", Value: fmt.Sprint(len(d.Accepted))},
-		{Label: "not assessed", Value: fmt.Sprint(notAssessed), Status: statusIf(false, notAssessed > 0)},
+		{Label: "verdict", Value: d.Verdict, Status: status, Note: "by the rule under Blocking"},
+		{Label: "blocking", Value: fmt.Sprint(len(d.Blocking)), Status: statusIf(len(d.Blocking) > 0, false), Note: "any one makes it not ready"},
+		{Label: "risks", Value: fmt.Sprint(len(d.Risks)), Status: statusIf(false, len(d.Risks) > 0), Note: "decide, or accept on their report"},
+		{Label: "accepted", Value: fmt.Sprint(len(d.Accepted)), Note: "recorded decisions and verdicts"},
+		{Label: "not assessed", Value: fmt.Sprint(notAssessed), Status: statusIf(false, notAssessed > 0), Note: fmt.Sprintf("of %d reports: never counted as passing", len(d.Sources))},
 	}
 
 	items := func(xs []ReadinessItem, empty string, withKey bool) Block {
@@ -449,7 +461,9 @@ func RenderReadiness(env *Envelope, ann *Annotations) (Doc, error) {
 		Section{ID: "blocking", Title: "Blocking", Intro: intro, Blocks: []Block{items(d.Blocking, "Nothing blocking was found in the reports that were read.", true)}},
 		Section{ID: "risks", Title: "Risks", Intro: "Not blocking on their own; each is a decision to take, or to record as accepted on its report.",
 			Blocks: []Block{items(d.Risks, "No risks were found in the reports that were read.", false)}},
-		Section{ID: "accepted", Title: "Accepted", Intro: "Visible, not hidden: each accepted item with the decision or verdict that accepts it.",
+		Section{ID: "accepted", Title: "Accepted", Intro: "Visible, not hidden: each accepted item with the decision or verdict that accepts it. " +
+			"Only recorded acceptances count: a verdict on the item's own report (`--annotations`), a lint finding accepted by a brain decision captured with `mxcli brain capture --accepts <RULE>:<why>`, or a sign-off here. " +
+			"A decision written only as prose in the brain is not read as accepting anything.",
 			Blocks: []Block{items(d.Accepted, "Nothing is accepted.", false)}},
 	)
 	admin := []Block{items(d.Admin, "The model asks nothing of an environment.", false)}
@@ -482,7 +496,12 @@ var ReadinessKinds = []string{"quality", "release", "dependencies", "configurati
 // ReadinessInputFrom decodes the other reports' envelopes. A kind missing
 // from envs stays nil: not given.
 func ReadinessInputFrom(envs map[string]*Envelope, quality *linter.JSONReport, ann map[string]*Annotations) (ReadinessInput, error) {
-	in := ReadinessInput{Quality: quality, Annotations: ann}
+	in := ReadinessInput{Quality: quality, Annotations: ann, Warnings: map[string][]string{}}
+	for kind, env := range envs {
+		if env != nil && len(env.Warnings) > 0 {
+			in.Warnings[kind] = env.Warnings
+		}
+	}
 	var errs []string
 	note := func(err error) {
 		if err != nil {

@@ -21,13 +21,28 @@ the kinds below answer specific questions instead of scoring.
 
 ```bash
 mxcli report all -p app.mpr -o docs/reports
-mxcli report all -p app.mpr -o docs/reports --against v1.4.0 --journeys journeys.jsonl --spans spans.jsonl
+mxcli report all -p app.mpr -o docs/reports --against v1.4.0 \
+  --journeys journeys.jsonl --spans spans.jsonl --junit results.xml \
+  --perf-journeys perf-journeys.jsonl --perf-spans perf-spans.jsonl
 ```
+
+Each input goes to the reports it is for:
+
+| Flags | Feed | What |
+|---|---|---|
+| `--journeys`, `--spans` | tests, traceability | the functional journeys and the spans they exported |
+| `--junit`, `--tests`, `--run` | tests, traceability | microflow test results; `--run` runs the tests once and writes `junit.xml` into the folder (`--local`: on mxcli's own runtime, no Docker) |
+| `--perf-journeys`, `--perf-spans` | performance | a measured performance run, one record per step |
+| `--against` | release | the deployed revision or `.mpr` |
+
+The functional log and a performance run are different files: a functional log has
+one record per journey, which performance would read as one step per journey.
 
 Writes every kind into one folder — `<kind>.html` and `<kind>.json`, the scored report
 as `quality.html` — and `index.html`, an overview with a card per report: its verdict
 and headline numbers, linked. Every page links the others. A `<kind>-annotations.yaml`
-in the folder is applied to that kind. Performance runs with `--journeys`/`--spans`
+in the folder — or in `--annotations-dir`, for a project that keeps them elsewhere —
+is applied to that kind, and the overview names the annotation files it read. Performance runs with `--perf-journeys`/`--perf-spans`
 and release with `--against`; a kind that cannot run is listed on the overview with
 the reason, and a `<kind>.json` left in the folder by an earlier run is linked instead.
 `--offline` asks no online source, `--skip` leaves kinds out. The folder also gets
