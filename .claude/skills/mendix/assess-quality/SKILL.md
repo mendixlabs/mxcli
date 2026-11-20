@@ -69,7 +69,7 @@ data is in the folder as `<kind>.json` (`{kind, …, data: {…}}`), so an exter
 session can join them — and the catalog — with no export. mxcli does not embed DuckDB;
 this is a reviewer's tool, run from the reports folder, everything read-only:
 
-```sql
+```duckdb
 -- duckdb, in docs/reports (after `mxcli report all`)
 ATTACH '../../.mxcli/catalog.db' AS cat (TYPE sqlite, READ_ONLY);   -- optional: the model
 CREATE VIEW security     AS SELECT data FROM read_json_auto('security.json');
@@ -83,7 +83,7 @@ CREATE VIEW reach AS
 
 Three questions no single page answers:
 
-```sql
+```duckdb
 -- callable flows at medium or high risk that no test or journey reaches
 SELECT f.name, f.risk
 FROM (SELECT unnest(data.flows) AS f FROM security) JOIN reach r ON r.microflow = f.name
