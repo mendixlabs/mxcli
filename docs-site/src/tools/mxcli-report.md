@@ -35,6 +35,24 @@ mxcli report -p app.mpr --mxbuild-path /opt/mxbuild     # a specific mxbuild
 mxcli report -p app.mpr --no-mx-check                   # lint only
 ```
 
+## Reading the HTML Page
+
+`--format html` explains the number rather than only showing it:
+
+- **Categories:** each one's weight, the points it costs the overall score, and its
+  penalty: how many points are left before the floor, or how far past it the findings
+  go. Past the floor, fixing findings in that category does not move the score.
+- **Rules:** every rule that found something, with how many of its findings brain
+  decisions accept, the points fixing the rest would gain (scored again without them),
+  and a verdict. Give a verdict with `--annotations`:
+
+  ```yaml
+  items:
+    "rule:MPR006": {status: by design, note: "CSS-drawn dots, not empty containers"}
+  ```
+- **Recommendations:** the five rules whose fixes gain the most, rules with a verdict
+  left out.
+
 ## Scoring Selected Modules
 
 ```bash

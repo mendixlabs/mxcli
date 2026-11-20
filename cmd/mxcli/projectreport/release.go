@@ -430,8 +430,8 @@ func RenderRelease(env *Envelope, ann *Annotations) (Doc, error) {
 		verdict = fmt.Sprintf("This release destroys stored data in %d place(s), all accepted.", destroys)
 	}
 	doc.Stats = []Stat{
-		{Label: "destroys", Value: fmt.Sprint(destroys)},
-		{Label: "verify", Value: fmt.Sprint(d.Count(EffectVerify))},
+		{Label: "destroys", Value: fmt.Sprint(destroys), Status: statusIf(destroys > accepted, destroys > 0)},
+		{Label: "verify", Value: fmt.Sprint(d.Count(EffectVerify)), Status: statusIf(false, d.Count(EffectVerify) > 0)},
 		{Label: "migrates", Value: fmt.Sprint(d.Count(EffectMigrates))},
 		{Label: "adds", Value: fmt.Sprint(d.Count(EffectAdds))},
 		{Label: "tables deployed", Value: fmt.Sprint(d.Tables)},

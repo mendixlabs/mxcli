@@ -14,6 +14,40 @@ the kinds below answer specific questions instead of scoring.
 | `map` | What does the app contain, and how does it fit together? (an interactive guide) |
 | `release` | What does deploying this model do to the data already in production? |
 | `dependencies` | What does the app stand on, and is it current and safe? |
+| `configuration` | What must each environment supply, and what does the model fix so no environment can change it? |
+| `readiness` | Taken together, is it ready for production — what blocks, what is a risk, what was not assessed? |
+
+## All reports at once
+
+```bash
+mxcli report all -p app.mpr -o docs/reports
+mxcli report all -p app.mpr -o docs/reports --against v1.4.0 \
+  --journeys journeys.jsonl --spans spans.jsonl --junit results.xml \
+  --perf-journeys perf-journeys.jsonl --perf-spans perf-spans.jsonl
+```
+
+Each input goes to the reports it is for:
+
+| Flags | Feed | What |
+|---|---|---|
+| `--journeys`, `--spans` | tests, traceability | the functional journeys and the spans they exported |
+| `--junit`, `--tests`, `--run` | tests, traceability | microflow test results; `--run` runs the tests once and writes `junit.xml` into the folder (`--local`: on mxcli's own runtime, no Docker) |
+| `--perf-journeys`, `--perf-spans` | performance | a measured performance run, one record per step |
+| `--against` | release | the deployed revision or `.mpr` |
+
+The functional log and a performance run are different files: a functional log has
+one record per journey, which performance would read as one step per journey.
+
+Writes every kind into one folder — `<kind>.html` and `<kind>.json`, the scored report
+as `quality.html` — and `index.html`, an overview with a card per report: its verdict
+and headline numbers, linked. Every page links the others. A `<kind>-annotations.yaml`
+in the folder — or in `--annotations-dir`, for a project that keeps them elsewhere —
+is applied to that kind, and the overview names the annotation files it read. Performance runs with `--perf-journeys`/`--perf-spans`
+and release with `--against`; a kind that cannot run is listed on the overview with
+the reason, and a `<kind>.json` left in the folder by an earlier run is linked instead.
+`--offline` asks no online source, `--skip` leaves kinds out. The folder also gets
+`readiness.html`, first on the overview: the go/no-go roll-up of all the others
+(`--milestone` names the milestone being released).
 
 ## Shared shape
 
@@ -52,6 +86,12 @@ recommendations:
 Marketplace modules, `System` and the test runner's `MxTest` are outside the app
 unless `--include-marketplace`; `--modules` and `--exclude` choose by hand.
 
+Every HTML page — the scored `mxcli report` too — shares one look: a line naming the
+project, report and date above the title, the verdict as a lede, headline tiles whose
+edge shows their status, bars in tables, findings as cards, and numbers in a
+fixed-width face. It follows the system's light or dark setting; add
+`data-theme="light"` or `"dark"` to the page's `<html>` element to force one.
+
 ## architecture
 
 Layered module map (domain dependencies only — menus, layouts and page links are
@@ -64,6 +104,8 @@ in a constant, placed in a layout, named in text).
 
 ```bash
 mxcli report architecture -p app.mpr -o architecture.html
+# leave generated code, probes and fixtures out of every figure (name globs)
+mxcli report architecture -p app.mpr --exclude-docs 'Shop.FaultProbe*,RestClient.*' -o architecture.html
 ```
 
 ## tests
@@ -221,11 +263,48 @@ not be checked — no token, `--offline`, a jar without coordinates — is said 
 never shown as up to date or clean. Annotate `vuln:<id>` with status `accepted`, and
 why, for an advisory that does not apply.
 
+## configuration
+
+What each environment must supply, read from the model, as a checklist an
+administrator signs off: constants with no default or a placeholder, constants whose
+default points at localhost, a private address or a test host, scheduled events to
+switch on or off, and published services whose callers need accounts. Below it, what
+the model fixes so that no environment can change it — a REST client or REST call
+location written as a literal localhost, private or test-host URL, a credential
+written as a literal — and what runs by itself: scheduled events and the lifecycle
+microflows with what they write and call.
+
+```bash
+mxcli report configuration -p app.mpr -o configuration.html
+```
+
+The actual production values live in the deployment portal or the pipeline; the
+report does not read them. Sign items off with `constant:<Name>`,
+`scheduled:<Name>` or `published:<Name>`, status `done`, and a note naming the
+environment.
+
+## readiness
+
+One go/no-go page rolled up from the other reports, with its verdict rule stated:
+**blocking** (consistency errors, a release that destroys data, a high or critical
+vulnerability, a location fixed to localhost or a test host, a literal credential, an
+open high security finding, a failing test or journey, an unbuilt requirement of the
+milestone being released), **risks**, **accepted** (with what accepts each), the
+administrator's checklist, which reports were assessed, and what no model report
+covers. A report that was not given, or could not check, is "not assessed", and keeps
+the verdict at "not assessed in full" — never "ready".
+
+```bash
+mxcli report readiness --dir docs/reports --milestone M2 -o docs/reports/readiness.html
+```
+
+Sign a blocking item off with `readiness:<key>`, status `signed off`, and a note.
+
 ## Skills
 
 Each kind has a skill with the judgement the command cannot make and the traps found
 building the reports by hand: `report-architecture`, `report-tests`,
 `report-security`, `report-performance`, `report-traceability`, `report-map`,
-`report-release`, `report-dependencies`.
+`report-release`, `report-dependencies`, `report-configuration`, `report-readiness`.
 The scored report has `report-quality`, and `assess-quality` combines all of them
 with the manual review no rule can do.

@@ -7,6 +7,7 @@ a mature project the result is about the change just made, not the backlog.
 | Stage | What it runs | Against |
 |---|---|---|
 | `check` | `mxcli check` on the script files you pass | nothing: every finding is the script's |
+| `exec` | `mxcli exec` on those scripts; only with `--apply`, and only if `check` passed | nothing: it applies the change |
 | `lint` | `mxcli lint` on the project | `verify-baseline/lint.json` |
 | `mxcheck` | `mx check` on a copy of the project | `verify-baseline/mxcheck.json` |
 
@@ -19,11 +20,30 @@ that passes `check` and `lint` can still fail `mxcheck`; that is why the stage i
 # Record the current state as the baseline (do this once, on a project you accept as it is)
 mxcli verify -p app.mpr --update-baseline
 
-# After a change
+# After a change you already applied
 mxcli verify -p app.mpr
-mxcli verify -p app.mpr change.mdl        # also checks the script
 mxcli verify -p app.mpr --stages lint --format json
+
+# Check, apply and verify a change in one call
+mxcli verify -p app.mpr --apply change.mdl
+mxcli verify -p app.mpr --apply change.mdl --through exec   # check and exec only
 ```
+
+## How far it runs
+
+You say how far. `--through <stage>` runs every stage up to and including that one, in pipeline
+order `check`, `exec`, `lint`, `mxcheck`; `--stages` names an explicit set. Without either, `verify`
+runs `lint` and `mxcheck` (and `check` when scripts are given), and with `--apply` it runs through
+`mxcheck`. Iterate with `--through exec`, finish a change with the default.
+
+Scripts are applied only with `--apply`. Without it they are checked and not applied, so `lint` and
+`mxcheck` describe the project **without** them, and the result says so. With `--apply`:
+
+- a failed `check` writes nothing and skips everything after it;
+- a script `exec` refuses skips `lint` and `mxcheck`, which would otherwise judge a project without the change;
+- several scripts are checked as one ordered set (each sees what the earlier ones create) and applied in
+  order. `exec` is not transactional across files, so a failure part-way leaves the earlier ones applied
+  and the finding says how far it got.
 
 Commit `verify-baseline/`. It lives next to the `.mpr`, not under `.mxcli/` (which `mxcli init`
 git-ignores): a baseline that is not committed is gone with the next fresh clone, and every run
@@ -32,7 +52,14 @@ says so.
 
 Every selected stage runs, so one result carries every stage's findings. `--fail-fast` stops at
 the first stage that fails. `--fail-on warning` makes a new warning fail a stage (the default is
-errors). `--format json` prints one document with each stage's status, duration and new findings.
+errors). `--format json` prints one document with each stage's status, duration and every new finding.
+
+The text output lists only the new findings that would fail the gate at `--fail-on`, and counts the
+rest by severity. A baseline taken on a blank app leaves most of a built app's lint findings "new"
+(documentation, access-rule notes); listing them would bury the one that matters. When there are
+any, the output ends with the command that accepts them, scoped to the stages that have them
+(`--stages lint --update-baseline`), because `--update-baseline` records every selected stage.
+Review them first: re-recording is how a finding becomes accepted.
 
 ## Exit codes
 
@@ -41,7 +68,7 @@ errors). `--format json` prints one document with each stage's status, duration 
 | 0 | nothing new |
 | 1 | usage error |
 | 2 | a stage could not run (no `mx`, ...) and nothing failed |
-| 16 + bits | a stage failed: 1 `check`, 2 `lint`, 4 `mxcheck` (18 = lint, 22 = lint and mxcheck) |
+| 16 + bits | a stage failed: 1 `check`, 2 `lint`, 4 `mxcheck`, 8 `exec` (18 = lint, 22 = lint and mxcheck, 24 = exec refused) |
 
 A stage that could not run is never reported as passed.
 

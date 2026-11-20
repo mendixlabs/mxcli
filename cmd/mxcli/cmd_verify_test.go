@@ -122,7 +122,7 @@ func TestVerifyOutputContract(t *testing.T) {
 	if dec.More() {
 		t.Errorf("more than one document on stdout:\n%s", r.stdout)
 	}
-	if len(doc.Stages) != 3 || doc.Stages[0].Status != "skipped" || doc.Stages[0].Note != "no scripts given" {
+	if len(doc.Stages) != 4 || doc.Stages[0].Name != "check" || doc.Stages[0].Status != "skipped" || doc.Stages[0].Note != "no scripts given" {
 		t.Errorf("stages = %+v", doc.Stages)
 	}
 
@@ -154,6 +154,83 @@ func TestDefaultVerifyBaselineDirIsNotGitIgnored(t *testing.T) {
 		pattern := strings.Trim(line, "/")
 		if pattern == "verify-baseline" || pattern == "*" || strings.HasPrefix(pattern, "verify") {
 			t.Errorf(".gitignore pattern %q hides the default baseline directory", line)
+		}
+	}
+}
+
+func TestVerifyStageSelection(t *testing.T) {
+	join := func(s []string, err error) string {
+		if err != nil {
+			return "ERR: " + err.Error()
+		}
+		return strings.Join(s, ",")
+	}
+	cases := []struct {
+		name         string
+		stages       []string
+		stagesSet    bool
+		through      string
+		apply, files bool
+		want         string
+	}{
+		{"default without scripts", nil, false, "", false, false, "check,lint,mxcheck"},
+		{"default with --apply goes through mxcheck", nil, false, "", true, true, "check,exec,lint,mxcheck"},
+		{"--through exec", nil, false, "exec", true, true, "check,exec"},
+		{"--through lint", nil, false, "lint", true, true, "check,exec,lint"},
+		{"--stages is an explicit set", []string{"lint"}, true, "", false, false, "lint"},
+		{"--stages and --through are two answers", []string{"lint"}, true, "lint", false, false, "ERR"},
+		{"--apply needs scripts", nil, false, "", true, false, "ERR"},
+		{"exec never runs without --apply (through)", nil, false, "exec", false, true, "ERR"},
+		{"exec never runs without --apply (stages)", []string{"exec"}, true, "", false, true, "ERR"},
+		{"unknown stage", nil, false, "smoke", true, true, "ERR"},
+	}
+	for _, c := range cases {
+		got := join(verifyStageSelection(c.stages, c.stagesSet, c.through, c.apply, c.files))
+		if strings.HasPrefix(c.want, "ERR") != strings.HasPrefix(got, "ERR") || (!strings.HasPrefix(c.want, "ERR") && got != c.want) {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// Bad flag combinations are usage errors: exit 1 and nothing on stdout.
+func TestVerifyApplyFlagErrors(t *testing.T) {
+	if testing.Short() {
+		t.Skip("spawns mxcli")
+	}
+	mpr := jsonPurityFixture(t)
+	dir := filepath.Dir(mpr)
+	for _, args := range [][]string{
+		{"verify", "-p", mpr, "--apply"},
+		{"verify", "-p", mpr, "--stages", "lint", "--through", "lint"},
+		{"verify", "-p", mpr, "--through", "exec"},
+		{"verify", "-p", mpr, "--apply", "x.mdl", "--update-baseline"},
+	} {
+		r := runMainStreams(t, dir, args...)
+		if r.exitCode != 1 || strings.TrimSpace(r.stdout) != "" {
+			t.Errorf("mxcli %v: exit %d, stdout %q; want exit 1 and nothing on stdout\nstderr:\n%s", args, r.exitCode, r.stdout, r.stderr)
+		}
+	}
+}
+
+// What `mxcli check a.mdl d.mdl` prints when the second file fails (recorded from a
+// real run): the finding keeps the violation and the verdict, not the progress or
+// the colour codes.
+func TestVerifyCleanCheckText(t *testing.T) {
+	raw := "Checking syntax: c.mdl\n\x1b[32m✓\x1b[0m Syntax OK (1 statements)\nConnected to: /tmp/x/Spike.mpr (Mendix 11.16.1)\n\n" +
+		"Validating references against: Spike.mpr\n(Note: References to objects created within the script are skipped)\n✓ All references valid\n" +
+		"Building catalog (fast mode)...\n✓ Catalog ready (0.1s)\n\nCheck passed!\n\n" +
+		"Checking d.mdl against a scratch copy of the project holding what the 1 file(s) before it write (the project itself is not changed)\n" +
+		"1 of 2 files failed: d.mdl\n\nWARNING: This is a vibe-coded PoC, alpha quality, use with caution.\n\n\x1b[36m(no module)\x1b[0m\n-----------\n" +
+		"  \x1b[31m✗\x1b[0m return reads $Nope, which nothing in this microflow defines \x1b[2m[MDL098]\x1b[0m\n      at \x1b[2mSp.ACT_D\x1b[0m\n\n1 issues: 1 errors, 0 warnings, 0 info\n"
+	got := verifyCleanCheckText(raw)
+	for _, want := range []string{"1 of 2 files failed: d.mdl", "return reads $Nope", "[MDL098]", "at Sp.ACT_D", "1 issues: 1 errors"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("cleaned text lacks %q:\n%s", want, got)
+		}
+	}
+	for _, drop := range []string{"\x1b[", "Connected to", "Catalog ready", "Check passed", "vibe-coded"} {
+		if strings.Contains(got, drop) {
+			t.Errorf("cleaned text still has %q:\n%s", drop, got)
 		}
 	}
 }

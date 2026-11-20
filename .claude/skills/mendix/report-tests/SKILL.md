@@ -12,9 +12,9 @@ description: "Produce and read the tests report (mxcli report tests): microflow 
 |---|---|
 | 31-43 | Preconditions (check every one) |
 | 44-66 | Run it |
-| 67-80 | Reading it |
-| 81-94 | Which gaps deserve a test |
-| 95-98 | Related |
+| 67-83 | Reading it |
+| 84-100 | Which gaps deserve a test |
+| 101-104 | Related |
 
 <!-- /skill-index -->
 # Tests Report
@@ -76,11 +76,17 @@ checks verbatim for that reason.
 - **Tests that call no microflow** (create, retrieve, assert) are listed: they add
   nothing to reach and may test the platform rather than the app.
 - **"Startup or scheduled" is not a gap.** It is the after-startup, before-shutdown
-  and health-check flows and scheduled events, with what they call.
+  and health-check flows and scheduled events, with what they call; the Gaps section
+  lists the two apart under "Runs without a test".
+- **"What only one journey runs"** lists, per journey, the microflows no other journey
+  and no test reaches — what is lost if that journey is dropped or starts failing.
 
 ## Which gaps deserve a test
 
-Give each module's gap list a verdict (`gap:<Module>`): `needs a test` for business
+The page groups the gaps **by kind** first: *callable by a role* (a page or the
+client can start it — usually needs a test), *called by other logic*, *seed or demo
+data* (by name; usually not), and *no reference in the model* — dead code, or called
+from Java, which the model does not show. Then give each module's gap list a verdict (`gap:<Module>`): `needs a test` for business
 rules and anything that writes data; `admin only` for back-office screens covered by
 a journey's smoke check; `dead — remove` when the architecture report's unused list
 agrees. Do not chase 100%: a gap list that is explained is the goal.

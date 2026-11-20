@@ -154,9 +154,7 @@ func (b *Backend) ListConsumedRestServices() ([]*model.ConsumedRestService, erro
 		}
 		svc.ID = model.ID(g.ID())
 		svc.TypeName = "Rest$ConsumedRestService"
-		if vt, ok := g.BaseUrl().(*genRest.ValueTemplate); ok && vt != nil {
-			svc.BaseUrl = vt.Value()
-		}
+		svc.BaseUrl, svc.BaseUrlConstant = restBaseURL(g.BaseUrl())
 		if auth, ok := g.AuthenticationScheme().(*genRest.BasicAuthenticationScheme); ok && auth != nil {
 			a := &model.RestAuthentication{Scheme: "Basic"}
 			a.Username = restValueOf(auth.Username())
@@ -355,6 +353,24 @@ func restDataTypeName(dt element.Element) string {
 
 // restValueOf extracts a string from a polymorphic Rest$Value (StringValue or
 // ConstantValue), mirroring the legacy extractRestValue.
+// restBaseURL reads a consumed REST service's base URL: a literal
+// (Rest$ValueTemplate) or the constant it is read from (Rest$ConstantValue).
+// Only the literal was read, so a service configured per environment had no
+// base URL at all (ako/mxcli#2426).
+func restBaseURL(el element.Element) (literal, constant string) {
+	switch v := el.(type) {
+	case *genRest.ValueTemplate:
+		if v != nil {
+			return v.Value(), ""
+		}
+	case *genRest.ConstantValue:
+		if v != nil {
+			return "", v.ValueQualifiedName()
+		}
+	}
+	return "", ""
+}
+
 func restValueOf(el element.Element) string {
 	switch v := el.(type) {
 	case *genRest.StringValue:

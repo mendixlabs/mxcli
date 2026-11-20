@@ -57,7 +57,10 @@ func TestListFiltersTheCommittedStore(t *testing.T) {
 		{"everything", ListFilter{}, []string{question.ID, dec.ID, reqA.ID, reqB.ID}},
 		{"one slice", ListFilter{Slice: "02-dispatch"}, []string{reqB.ID}},
 		{"requirements", ListFilter{Kind: KindRequirement}, []string{reqA.ID, reqB.ID}},
-		{"decisions", ListFilter{Kind: KindDecision}, []string{question.ID, dec.ID}},
+		// An open question is not a decision yet: listed apart, so a consumer
+		// counting decisions does not count it twice (ako/mxcli#2443).
+		{"decisions", ListFilter{Kind: KindDecision}, []string{dec.ID}},
+		{"questions", ListFilter{Kind: KindQuestion}, []string{question.ID}},
 		{"open only", ListFilter{Open: &yes}, []string{question.ID}},
 		{"settled only", ListFilter{Open: &no}, []string{dec.ID, reqA.ID, reqB.ID}},
 		{"no such slice", ListFilter{Slice: "99-none"}, nil},
@@ -83,6 +86,9 @@ func TestListFiltersTheCommittedStore(t *testing.T) {
 		if e.Kind == "" || e.Shard == "" {
 			t.Errorf("%s: kind %q shard %q", e.ID, e.Kind, e.Shard)
 		}
+	}
+	if got.Entries[0].Kind != KindQuestion || got.Entries[1].Kind != KindDecision {
+		t.Errorf("an open question is listed with kind question: %+v", got.Entries[:2])
 	}
 	if got.Entries[1].Shard != "Sales" || got.Entries[2].Shard != PlanShard("01-scheduling") {
 		t.Errorf("shards: %+v", got.Entries)

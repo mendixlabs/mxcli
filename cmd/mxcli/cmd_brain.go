@@ -567,7 +567,9 @@ render the store without parsing its markdown. 'brief --json' is for a prompt;
 this is for a program.
 
   --slice <s>       one slice: its requirements and the questions filed on it
-  --kind <k>        decision or requirement
+  --kind <k>        decision, requirement or question (an open question is
+                    listed with kind "question", so decisions are only the
+                    settled ones)
   --open            only open questions; --open=false only settled entries
 
 Blocks whose metadata line cannot be read are listed under "malformed" rather
@@ -1372,7 +1374,7 @@ func init() {
 		"Replace the anchors with these (repeatable); without -a the anchors are kept")
 	brainMoveCmd.Flags().StringP("slice", "s", "", "The slice to move the requirement to")
 	brainListCmd.Flags().String("slice", "", "Only this slice's entries")
-	brainListCmd.Flags().String("kind", "", "Only decisions or only requirements (decision|requirement)")
+	brainListCmd.Flags().String("kind", "", "Only decisions, requirements or open questions (decision|requirement|question)")
 	brainListCmd.Flags().Bool("open", false, "Only open questions; --open=false for only settled entries")
 	brainCaptureCmd.Flags().String("from-json", "",
 		"Queue a JSON array of entries from a file, or - for stdin, as one act")

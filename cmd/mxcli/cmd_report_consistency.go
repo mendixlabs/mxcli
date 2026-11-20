@@ -83,5 +83,6 @@ func consistencyFrom(rep docker.CheckReport, source string) *linter.ConsistencyC
 func init() {
 	reportCmd.Flags().Bool("no-mx-check", false, "Do not run Mendix's consistency check (mx check); the report then says whether the project builds is unknown")
 	reportCmd.Flags().String("mx-check-results", "", "Read the JSON report of an earlier 'mx check <app.mpr> -j <file>' instead of running the check")
+	reportCmd.Flags().String("annotations", "", "YAML or JSON with a verdict per rule for the HTML page: items: {\"rule:MPR006\": {status: by design, note: \"…\"}}")
 	reportCmd.Flags().String("mxbuild-path", "", "Path to the mxbuild whose mx runs the check, overriding resolution by the project's Mendix version")
 }
