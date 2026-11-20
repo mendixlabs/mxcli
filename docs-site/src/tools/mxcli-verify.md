@@ -61,6 +61,10 @@ git-ignores): a baseline that is not committed is gone with the next fresh clone
 then reports every finding as new. Without a baseline a stage reports every finding as new and
 says so.
 
+The pre-existing count says what the already-known findings are, worst first (`8 pre-existing
+(2 errors, 1 warning, 5 info)`), so a baseline that accepted errors shows them on every run; `--format json`
+has the same in `preExistingBySeverity`.
+
 Every selected stage runs, so one result carries every stage's findings. `--fail-fast` stops at
 the first stage that fails. `--fail-on warning` makes a new warning fail a stage (the default is
 errors). `--format json` prints one document with each stage's status, duration and every new finding.

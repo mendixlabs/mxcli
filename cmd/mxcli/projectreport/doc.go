@@ -100,6 +100,19 @@ type Table struct {
 	// Bars, when set, draws a bar in a cell in HTML (a score, a cohesion, a
 	// share); the cell's text is its label, and all markdown shows.
 	Bars [][]*Bar
+	// Groups, when set, is a group label per row: a header row spanning the
+	// table is written where it changes, instead of repeating it in a column
+	// on every row — which also leaves the columns that matter on screen at
+	// phone width (ako/mxcli#2475).
+	Groups []string
+}
+
+// groupAt is the group header to write before row ri, "" when none.
+func (t Table) groupAt(ri int) string {
+	if ri >= len(t.Groups) || t.Groups[ri] == "" || (ri > 0 && ri-1 < len(t.Groups) && t.Groups[ri-1] == t.Groups[ri]) {
+		return ""
+	}
+	return t.Groups[ri]
 }
 
 // Bar is an inline bar: Pct in [0,100], Status "good", "warn", "bad" or ""
@@ -230,7 +243,10 @@ func writeMarkdownBlock(b *strings.Builder, bl Block) {
 		}
 		b.WriteString("| " + strings.Join(cols, " | ") + " |\n")
 		b.WriteString("|" + strings.Repeat("---|", len(v.Columns)) + "\n")
-		for _, r := range v.Rows {
+		for ri, r := range v.Rows {
+			if g := v.groupAt(ri); g != "" {
+				b.WriteString("| **" + mdCell(g) + "** |" + strings.Repeat(" |", len(v.Columns)-1) + "\n")
+			}
 			cells := make([]string, len(v.Columns))
 			for i := range cells {
 				if i < len(r) {
@@ -449,6 +465,9 @@ func writeHTMLBlock(b *strings.Builder, bl Block) {
 			fmt.Fprintf(b, "<tr><td colspan=\"%d\" class=\"none\">none</td></tr>", max(1, len(v.Columns)))
 		}
 		for ri, r := range v.Rows {
+			if g := v.groupAt(ri); g != "" {
+				fmt.Fprintf(b, "<tr class=\"group\"><th colspan=\"%d\">%s</th></tr>", len(v.Columns), inline(g))
+			}
 			b.WriteString("<tr>")
 			for ci := range v.Columns {
 				cell := ""
@@ -718,6 +737,8 @@ td.info{background:var(--infobg);color:var(--info)}td.muted{color:var(--muted)}t
 .meter.good i{background:var(--good)}.meter.warn i{background:var(--warn)}.meter.bad i{background:var(--bad)}
 .meter span{position:absolute;top:0;font:600 11.5px/16px var(--mono);color:var(--fg)}
 .meter.good i+span,.meter.warn i+span,.meter.bad i+span{mix-blend-mode:normal}
+tr.group th{background:var(--bg);color:var(--fg);font-weight:600;text-align:left;padding-top:14px}
+@media (max-width:600px){.srow{grid-template-columns:1fr auto}.srow .stack{grid-column:1/-1;grid-row:2}}
 .stacked{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin:8px 0 14px;display:grid;gap:7px}
 .stacked .cap{font-weight:600}.srow{display:grid;grid-template-columns:minmax(120px,220px) 1fr auto;gap:12px;align-items:center;font-size:13.5px}
 .srow .sl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.srow .sv{font:12.5px var(--mono);color:var(--muted);white-space:nowrap}
