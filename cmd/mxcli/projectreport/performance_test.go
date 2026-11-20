@@ -68,7 +68,25 @@ func TestPerformanceMedianOfWarmRuns(t *testing.T) {
 	doc, _ := RenderPerformance(env2, nil)
 	var md bytes.Buffer
 	_ = RenderMarkdown(&md, doc)
-	mustContain(t, md.String(), "200 → 200", "1 → 1", "does not say what data the run used")
+	// Each median carries the min–max of its warm runs (ako/mxcli#2443).
+	mustContain(t, md.String(), "200 (100–300) → 200 (100–300)", "250 (150–350)", "1 → 1", "does not say what data the run used")
+	if s.ServerMin != 100 || s.ServerMax != 300 || s.BrowserMin != 150 || s.BrowserMax != 350 {
+		t.Errorf("ranges: server %v–%v, browser %v–%v", s.ServerMin, s.ServerMax, s.BrowserMin, s.BrowserMax)
+	}
+
+	// Steps grouped by the finding that explains them: one card per finding,
+	// with its steps' before → after (ako/mxcli#2443).
+	doc, _ = RenderPerformance(env2, &Annotations{Items: map[string]Note{
+		"finding:F1":         {Name: "Housekeeping held a long transaction", Status: "fixed", Note: "split into batches of 500"},
+		"finding:F2":         {Name: "Menu query scans every order", Status: "open"},
+		"step:Market / open": {Finding: "F1", Note: "the step the fix targets"},
+	}})
+	md.Reset()
+	_ = RenderMarkdown(&md, doc)
+	mustContain(t, md.String(), "## Findings", "Housekeeping held a long transaction", "split into batches of 500",
+		"Steps: Market / open: server 200 → 200 ms, 1 → 1 queries.", "Menu query scans every order",
+		"No step names this finding", "finding F1: the step the fix targets")
+
 }
 
 func TestReadAutoExplainKeepsJIT(t *testing.T) {

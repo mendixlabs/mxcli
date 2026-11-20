@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"regexp"
 	"sort"
@@ -41,12 +42,18 @@ type PerformanceData struct {
 
 // StepStats is one journey step, measured as the median of its warm runs.
 type StepStats struct {
-	Journey       string       `json:"journey"`
-	Step          string       `json:"step"`
-	Runs          int          `json:"runs"`
-	WarmRuns      int          `json:"warmRuns"`
-	BrowserMs     float64      `json:"browserMs"`
-	ServerMs      float64      `json:"serverMs"`
+	Journey   string  `json:"journey"`
+	Step      string  `json:"step"`
+	Runs      int     `json:"runs"`
+	WarmRuns  int     `json:"warmRuns"`
+	BrowserMs float64 `json:"browserMs"`
+	ServerMs  float64 `json:"serverMs"`
+	// The spread of the warm runs behind each median: a difference inside it
+	// is run-to-run noise, not a change (ako/mxcli#2443).
+	BrowserMin    float64      `json:"browserMin,omitempty"`
+	BrowserMax    float64      `json:"browserMax,omitempty"`
+	ServerMin     float64      `json:"serverMin,omitempty"`
+	ServerMax     float64      `json:"serverMax,omitempty"`
 	DBMs          float64      `json:"dbMs"`
 	Queries       int          `json:"queries"`
 	TopMicroflows []NameMs     `json:"topMicroflows,omitempty"`
@@ -176,6 +183,8 @@ func CollectPerformance(in PerformanceInput) (*PerformanceData, error) {
 		}
 		st.BrowserMs, st.ServerMs, st.DBMs, st.Queries = round1(median(bs)), round1(median(ss)), round1(median(ds)), int(median(qs)+0.5)
 		st.BackgroundMs = round1(median(gs))
+		st.BrowserMin, st.BrowserMax = minMax(bs)
+		st.ServerMin, st.ServerMax = minMax(ss)
 		// The representative run is the one closest to the median server time.
 		rep := 0
 		for i, r := range runs {
@@ -534,6 +543,26 @@ func flame(spans []Span, windowStart int64, limit int) []FlameEntry {
 	return out
 }
 
+// minMax is the smallest and largest value, rounded as the medians are.
+func minMax(xs []float64) (float64, float64) {
+	if len(xs) == 0 {
+		return 0, 0
+	}
+	lo, hi := xs[0], xs[0]
+	for _, x := range xs[1:] {
+		lo, hi = math.Min(lo, x), math.Max(hi, x)
+	}
+	return round1(lo), round1(hi)
+}
+
+// withRange is a median with the spread of its runs, when there is one.
+func withRange(med, lo, hi float64) string {
+	if hi <= lo {
+		return ms(med)
+	}
+	return ms(med) + " (" + ms(lo) + "–" + ms(hi) + ")"
+}
+
 func median(xs []float64) float64 {
 	if len(xs) == 0 {
 		return 0
@@ -768,9 +797,13 @@ func RenderPerformance(env *Envelope, ann *Annotations) (Doc, error) {
 		note := ""
 		if n, ok := ann.Get("step:" + s.key()); ok {
 			note = joinNote(n.Status, n.Note, "")
+			if n.Finding != "" {
+				note = joinNote("finding "+n.Finding, note, "")
+			}
 		}
 		if len(d.Baseline) == 0 {
-			st.Rows = append(st.Rows, []string{s.key(), fmt.Sprintf("%d (%d warm)", s.Runs, s.WarmRuns), ms(s.BrowserMs), ms(s.ServerMs), ms(s.DBMs), fmt.Sprint(s.Queries), note})
+			st.Rows = append(st.Rows, []string{s.key(), fmt.Sprintf("%d (%d warm)", s.Runs, s.WarmRuns), withRange(s.BrowserMs, s.BrowserMin, s.BrowserMax),
+				withRange(s.ServerMs, s.ServerMin, s.ServerMax), ms(s.DBMs), fmt.Sprint(s.Queries), note})
 			st.Classes = append(st.Classes, []string{"", "num", "num", "num", "num", "num", ""})
 			continue
 		}
@@ -780,16 +813,20 @@ func RenderPerformance(env *Envelope, ann *Annotations) (Doc, error) {
 			st.Classes = append(st.Classes, []string{"", "num", "num", "num", "num", ""})
 			continue
 		}
-		st.Rows = append(st.Rows, []string{s.key(), arrow(b.BrowserMs, s.BrowserMs), arrow(b.ServerMs, s.ServerMs), arrow(b.DBMs, s.DBMs),
+		st.Rows = append(st.Rows, []string{s.key(), withRange(b.BrowserMs, b.BrowserMin, b.BrowserMax) + " → " + withRange(s.BrowserMs, s.BrowserMin, s.BrowserMax),
+			withRange(b.ServerMs, b.ServerMin, b.ServerMax) + " → " + withRange(s.ServerMs, s.ServerMin, s.ServerMax), arrow(b.DBMs, s.DBMs),
 			fmt.Sprintf("%d → %d", b.Queries, s.Queries), note})
 		st.Classes = append(st.Classes, []string{"", deltaClass(b.BrowserMs, s.BrowserMs), deltaClass(b.ServerMs, s.ServerMs), deltaClass(b.DBMs, s.DBMs),
 			deltaClass(float64(b.Queries), float64(s.Queries)), ""})
 	}
-	intro := "Median of the warm runs per step."
+	intro := "Median of the warm runs per step, with their min–max: a difference inside that spread is run-to-run noise."
 	if len(d.Baseline) > 0 {
-		intro = "Before → after, median of the warm runs. Baseline generated " + d.BaselineGenerated + "."
+		intro = "Before → after, median of the warm runs with their min–max. Baseline generated " + d.BaselineGenerated + "."
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "steps", Title: "Journey steps", Intro: intro, Blocks: append(env0, st)})
+	if fs := findingsSection(d, base, ann); fs != nil {
+		doc.Sections = append(doc.Sections, *fs)
+	}
 
 	// Per-step detail: flame chart, microflows, statements.
 	for _, s := range d.Steps {
@@ -883,4 +920,55 @@ func deltaClass(before, after float64) string {
 		return "bad"
 	}
 	return "num"
+}
+
+// findingsSection groups the steps by the finding that explains them
+// (ako/mxcli#2443): a finding is annotated `finding:<ID>` (name: its title,
+// status, note: what was found and done), and each step it targets names it
+// with `step:<journey / step>` and `finding: <ID>`. One card per finding, with
+// its steps' before → after, so a fix is read with the numbers that prove it.
+func findingsSection(d PerformanceData, base map[string]StepStats, ann *Annotations) *Section {
+	if ann == nil || len(ann.Items) == 0 {
+		return nil
+	}
+	var ids []string
+	for k := range ann.Items {
+		if id, ok := strings.CutPrefix(k, "finding:"); ok {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	sort.Strings(ids)
+	targets := map[string][]string{}
+	for _, s := range d.Steps {
+		n, ok := ann.Peek("step:" + s.key())
+		if !ok || n.Finding == "" {
+			continue
+		}
+		line := s.key() + ": server " + ms(s.ServerMs) + " ms"
+		if b, ok := base[s.key()]; ok {
+			line = s.key() + ": server " + arrow(b.ServerMs, s.ServerMs) + " ms, " + fmt.Sprintf("%d → %d queries", b.Queries, s.Queries)
+		}
+		targets[n.Finding] = append(targets[n.Finding], line)
+	}
+	var blocks []Block
+	for _, id := range ids {
+		n, _ := ann.Get("finding:" + id)
+		status := map[string]string{"fixed": "good", "open": "warn", "accepted": "none"}[strings.ToLower(n.Status)]
+		c := Card{Tag: id, Status: status, StatusText: nonEmpty(n.Status, "open"), Title: nonEmpty(n.Name, id)}
+		if n.Note != "" {
+			c.Paras = append(c.Paras, n.Note)
+		}
+		if ts := targets[id]; len(ts) > 0 {
+			c.Paras = append(c.Paras, "Steps: "+strings.Join(ts, "; ")+".")
+		} else {
+			c.Paras = append(c.Paras, "No step names this finding (`step:<journey / step>` with `finding: "+id+"`).")
+		}
+		blocks = append(blocks, c)
+	}
+	return &Section{ID: "findings", Title: "Findings",
+		Intro:  "What was found and done, each with the steps it targets. Write them in the annotations: `finding:<ID>` (name, status, note) and `finding: <ID>` on each `step:<journey / step>`.",
+		Blocks: blocks}
 }
