@@ -88,6 +88,10 @@ type scriptContext struct {
 	// not the declaration's, so it is not judged from it.
 	entityDecls     map[string]*ast.CreateEntityStmt
 	alteredEntities map[string]bool
+	// viewEntityDecls is the same for a view entity the script declares: its
+	// columns are its members once the statement runs, the stored entity's
+	// not (mendixlabs/mxcli#1908).
+	viewEntityDecls map[string]*ast.CreateViewEntityStmt
 
 	// Java/JavaScript actions created in the script, mapped to their declared
 	// parameter names. A bool would be enough to stop the false "not found",
@@ -180,6 +184,7 @@ func newScriptContext() *scriptContext {
 		javaActionTemplateParams: make(map[string]map[string]bool),
 		customDocuments:          make(map[string]bool),
 		entityDecls:              make(map[string]*ast.CreateEntityStmt),
+		viewEntityDecls:          make(map[string]*ast.CreateViewEntityStmt),
 		alteredEntities:          make(map[string]bool),
 
 		javaActions:       make(map[string][]string),
@@ -311,6 +316,7 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 		if s.Name.Module != "" {
 			sc.entities[s.Name.String()] = true
 			sc.viewEntities[s.Name.String()] = true
+			sc.viewEntityDecls[s.Name.String()] = s
 			sc.recordViewAssociations(s)
 		}
 	case *ast.CreateExternalEntityStmt:

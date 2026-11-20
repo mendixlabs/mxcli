@@ -995,6 +995,15 @@ func reportCleanup(w io.Writer, err error, left []string) {
 // the test runner's output from the container log.
 func runDockerAndCapture(opts RunOptions, timeout time.Duration, w io.Writer) (string, error) {
 	dockerDir := filepath.Join(filepath.Dir(opts.ProjectPath), ".docker")
+	// Ask the daemon first. Everything below writes into the project — the
+	// .docker/ stack, then the build output under it — and `up` was the first
+	// step to reach the daemon, so a run without one failed only after leaving
+	// a Docker setup the user never had in their git status (ako/mxcli#2474).
+	if err := dockerDaemonReachable(); err != nil {
+		return "", fmt.Errorf("docker: %w\n"+
+			"  hint: this environment has no Docker daemon. Pass --local to run the tests "+
+			"against mxcli's own runtime instead — no container needed.", err)
+	}
 	if err := ensureDockerStack(opts.ProjectPath, dockerDir, w); err != nil {
 		return "", fmt.Errorf("docker init: %w", err)
 	}
@@ -1168,6 +1177,27 @@ func ensureDockerStack(projectPath, dockerDir string, w io.Writer) error {
 		OutputDir:   dockerDir,
 		Stdout:      w,
 	})
+}
+
+// dockerDaemonReachable reports whether the container engine answers, without
+// writing anything: `docker info` talks to the daemon, where `docker version`
+// succeeds with the client alone. A variable so a test can stand in for a
+// machine with or without one.
+var dockerDaemonReachable = func() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, docker.ContainerCLI(), "info", "--format", "{{.ServerVersion}}").CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if i := strings.IndexByte(msg, '\n'); i >= 0 {
+			msg = msg[:i]
+		}
+		if msg == "" {
+			return fmt.Errorf("the %s daemon is not reachable: %w", docker.ContainerCLI(), err)
+		}
+		return fmt.Errorf("the %s daemon is not reachable: %s", docker.ContainerCLI(), msg)
+	}
+	return nil
 }
 
 // runCompose executes a docker compose command in the given directory.

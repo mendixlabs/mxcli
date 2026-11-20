@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
+	"github.com/mendixlabs/mxcli/cmd/mxcli/verify"
 )
 
 // The JSON is what `mxcli lint --format json` and `mxcli check --format json`
@@ -293,6 +294,7 @@ func TestVerifyApplyFlagErrors(t *testing.T) {
 		{"verify", "-p", mpr, "--stages", "lint", "--through", "lint"},
 		{"verify", "-p", mpr, "--through", "exec"},
 		{"verify", "-p", mpr, "--apply", "x.mdl", "--update-baseline"},
+		{"verify", "-p", mpr, "--accept-errors"},
 	} {
 		r := runMainStreams(t, dir, args...)
 		if r.exitCode != 1 || strings.TrimSpace(r.stdout) != "" {
@@ -339,5 +341,17 @@ func TestKnownBySeverity(t *testing.T) {
 	_, bl, err := parseReport("lint", []byte(`{"violations": [], "baseline": {"new": 0, "unchanged": 63, "unchangedBySeverity": {"warning": 1, "info": 62}}}`))
 	if err != nil || bl.UnchangedBySeverity["warning"] != 1 || bl.UnchangedBySeverity["info"] != 62 {
 		t.Errorf("parsed = %+v, %v", bl, err)
+	}
+}
+
+func TestVerifyListFindings(t *testing.T) {
+	fs := []verify.Finding{
+		{Code: "CE0109", Document: "Sp.Microflow 'A'", Element: "End event"},
+		{Code: "CE0117", Document: "Sp.Microflow 'B'"},
+		{Code: "CE0001", Document: "x"}, {Code: "CE0002", Document: "y"},
+	}
+	got := verifyListFindings(fs, 2)
+	if !strings.Contains(got, "CE0109 Sp.Microflow 'A' / End event") || !strings.Contains(got, "CE0117 Sp.Microflow 'B'") || !strings.Contains(got, "and 2 more") || strings.Contains(got, "CE0001") {
+		t.Errorf("listing = %q", got)
 	}
 }
