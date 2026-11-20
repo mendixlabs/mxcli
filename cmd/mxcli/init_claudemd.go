@@ -105,9 +105,10 @@ type projectGate struct {
 var projectGates = []projectGate{
 	{"check script.mdl -p %s", "syntax + references, no apply (~2s)", "mxcli check", "check"},
 	{"exec script.mdl -p %s", "apply", "mxcli exec", "exec"},
-	{"lint -p %s", "rules (~3s)", "mxcli lint", "lint"},
+	// verify is lint and mx check in one run, against the baselines recorded at
+	// bootstrap, so it reports what the change made worse and not the backlog.
+	{"verify -p %s", "lint + mx check, new findings only (~10s)", "mxcli verify", "verify"},
 	{"report -p %s", "scored quality report", "mxcli report", "report"},
-	{"docker check -p %s", "mxbuild, the slow one (~25s)", "mxcli docker check", "docker check"},
 	{"test tests/ -p %s --local", "microflow tests (~30s cold, ~2s warm)", "mxcli test", "test"},
 	// --detach because an agent's tool call must return: without it the run was
 	// started with nohup and then managed by sleep/grep/pkill loops, a quarter
@@ -244,8 +245,8 @@ func generateClaudeMD(projectName, mprFile string) string {
 	w(bt3 + "bash\n")
 	w(renderProjectGates(mprPath))
 	w(bt3 + "\n\n")
-	w("**" + bt + "lint" + bt + " printing no errors is not a pass** — read the warning count, and read\n")
-	w(bt + "report" + bt + "'s score. A green " + bt + "check" + bt + " proves nothing about behaviour or about how\n")
+	w("**" + bt + "verify" + bt + " reports what is new, not what is good** — read the pre-existing count it\n")
+	w("prints and " + bt + "report" + bt + "'s score. A green " + bt + "check" + bt + " proves nothing about behaviour or about how\n")
 	w("a page renders: logic needs " + bt + "test" + bt + ", and anything visual needs the app actually running.\n\n")
 	w("Set " + bt + "mx" + bt + " up once with " + bt + "./mxcli setup mxbuild -p " + mprPath + bt + ". To call it directly,\n")
 	w("name the version — " + bt + "~/.mxcli/mxbuild/<version>/modeler/mx" + bt + " — because a " + bt + "*" + bt + " glob\n")

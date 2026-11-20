@@ -135,6 +135,22 @@ func refuseAmbiguousTable(ctx context.Context, conn *Connection, table string) e
 	if schema != "" {
 		return nil
 	}
+	holders := schemasHolding(ctx, conn, name)
+	if len(holders) < 2 {
+		return nil
+	}
+	var names []string
+	for _, h := range holders {
+		names = append(names, h+"."+name)
+	}
+	return fmt.Errorf("%s is in more than one schema: name one of %s", name, strings.Join(names, ", "))
+}
+
+// schemasHolding is every schema that has a table or view of this (bare) name,
+// in order. Empty when the lookup is not possible or finds nothing, so a caller
+// must treat "no answer" and "not there" alike: DescribeTable is the one that
+// reports a missing object.
+func schemasHolding(ctx context.Context, conn *Connection, name string) []string {
 	var q string
 	switch conn.Driver {
 	case DriverOracle:
@@ -145,14 +161,16 @@ func refuseAmbiguousTable(ctx context.Context, conn *Connection, table string) e
 		q = "SELECT DISTINCT table_schema FROM information_schema.columns WHERE table_name = " + sqlString(name) + " ORDER BY 1"
 	}
 	res, err := Execute(ctx, conn, q)
-	if err != nil || len(res.Rows) < 2 {
+	if err != nil {
 		return nil
 	}
-	var names []string
+	var out []string
 	for _, r := range res.Rows {
-		names = append(names, fmt.Sprintf("%v.%s", r[0], name))
+		if len(r) > 0 {
+			out = append(out, fmt.Sprintf("%v", r[0]))
+		}
 	}
-	return fmt.Errorf("%s is in more than one schema: name one of %s", name, strings.Join(names, ", "))
+	return out
 }
 
 // columnsFilter is the information_schema filter for table, qualified by its
@@ -169,14 +187,83 @@ func columnsFilter(table, schemaCol, nameCol string) string {
 // splitTableName splits `schema.table` (a leading database part is dropped)
 // and removes identifier quotes.
 func splitTableName(table string) (schema, name string) {
-	parts := strings.Split(table, ".")
-	for i, p := range parts {
-		parts[i] = strings.Trim(strings.TrimSpace(p), `"[]`+"`")
-	}
+	parts := splitQualifiedIdent(table)
 	if len(parts) == 1 {
 		return "", parts[0]
 	}
 	return parts[len(parts)-2], parts[len(parts)-1]
+}
+
+// splitQualifiedIdent splits a dotted identifier on the dots that are not
+// inside quotes, and unquotes each part. A quoted part may contain dots of its
+// own -- a table named after a Kafka topic does, `main."local__cdc.App.E.1.ns"`
+// -- and splitting those made the object unaddressable, so it was dropped from
+// a generated connector without a word (ako/mxcli#2422).
+func splitQualifiedIdent(s string) []string {
+	var (
+		parts  []string
+		cur    strings.Builder
+		closer rune // 0 when not inside quotes
+	)
+	runes := []rune(s)
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		if closer != 0 {
+			if r != closer {
+				cur.WriteRune(r)
+				continue
+			}
+			// "" inside a quoted name is one literal quote, not the end of it.
+			if r == '"' && i+1 < len(runes) && runes[i+1] == '"' {
+				cur.WriteRune('"')
+				i++
+				continue
+			}
+			closer = 0
+			continue
+		}
+		switch r {
+		case '"':
+			closer = '"'
+		case '`':
+			closer = '`'
+		case '[':
+			closer = ']'
+		case '.':
+			parts = append(parts, strings.TrimSpace(cur.String()))
+			cur.Reset()
+		default:
+			cur.WriteRune(r)
+		}
+	}
+	return append(parts, strings.TrimSpace(cur.String()))
+}
+
+// quoteIdent quotes an identifier that is not a bare word, doubling any quote
+// inside it. A bare word is left alone, reserved or not: `cdcpublish.order`
+// parses, which is what ako/mxcli#2414 measured, and quoting everything would
+// change every query this tool has ever generated.
+//
+// The quote is the double quote, which PostgreSQL and Oracle take and SQL
+// Server takes with QUOTED_IDENTIFIER on -- the default over JDBC, which is how
+// a Database Connector reaches it.
+func quoteIdent(ident string) string {
+	if !needsQuoting(ident) {
+		return ident
+	}
+	return `"` + strings.ReplaceAll(ident, `"`, `""`) + `"`
+}
+
+func needsQuoting(ident string) bool {
+	for i, r := range ident {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r == '_':
+		case r >= '0' && r <= '9' && i > 0:
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 func sqlString(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }

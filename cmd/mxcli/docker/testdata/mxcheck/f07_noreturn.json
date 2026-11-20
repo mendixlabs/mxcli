@@ -1,0 +1,22 @@
+{
+  "serialization_version": 1,
+  "errors": [
+    {
+      "code": "CE0109",
+      "message": "Undefined variable 'R'.",
+      "locations": [
+        {
+          "module-id": "97100ad9-1b61-4b02-bb15-8529f694f829",
+          "module-name": "Sp",
+          "document-name": "Microflow 'F07'",
+          "element-name": "End event",
+          "element-id": "54894d79-d85d-4c2b-9e3c-07e4bdc8de89",
+          "unit-id": "d6cab120-5978-4190-8756-8e54d5ea41e5"
+        }
+      ]
+    }
+  ],
+  "warnings": [],
+  "deprecations": [],
+  "total-problems": 1
+}

@@ -708,9 +708,10 @@ func odataKeyFromGen(key element.Element) []*domainmodel.RemoteKeyPart {
 			continue
 		}
 		kp := &domainmodel.RemoteKeyPart{
-			Name:       p.EntityKeyPartName(),
-			RemoteName: p.Name(),
-			RemoteType: p.RemoteType(),
+			Name:          p.EntityKeyPartName(),
+			RemoteName:    p.Name(),
+			RemoteType:    p.RemoteType(),
+			NotFilterable: !storedKeyPartFilterable(p),
 		}
 		if t := p.Type(); t != nil {
 			kp.Type = attributeTypeFromGen(t)
@@ -718,6 +719,18 @@ func odataKeyFromGen(key element.Element) []*domainmodel.RemoteKeyPart {
 		parts = append(parts, kp)
 	}
 	return parts
+}
+
+// storedKeyPartFilterable reads a key part's Filterable. A document that does
+// not store it is read as filterable, the value every earlier mxcli wrote: reading
+// the absent property as false would mark the key not filterable on the next write.
+func storedKeyPartFilterable(p *genRest.ODataKeyPart) bool {
+	if raw := p.Raw(); raw != nil {
+		if _, err := raw.LookupErr("Filterable"); err != nil {
+			return true
+		}
+	}
+	return p.Filterable()
 }
 
 // storedLocalizeDate reads DateTimeAttributeType.LocalizeDate. An absent property

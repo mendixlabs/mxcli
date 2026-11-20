@@ -5,6 +5,7 @@ package linter
 
 import (
 	"context"
+	"sort"
 	"strings"
 )
 
@@ -127,6 +128,11 @@ type Linter struct {
 	rules      []Rule
 	configs    map[string]RuleConfig
 	maxWorkers int
+
+	// ran and failed are the rules the last Run executed, and those of them that
+	// reported they could not run. A rule that is not enabled is in neither.
+	ran    []string
+	failed map[string]bool
 }
 
 // New creates a new Linter with the given context.
@@ -164,6 +170,7 @@ func (l *Linter) Rules() []Rule {
 // Run executes all enabled rules and returns the violations found.
 func (l *Linter) Run(ctx context.Context) ([]Violation, error) {
 	var allViolations []Violation
+	l.ran, l.failed = nil, map[string]bool{}
 
 	// Run rules sequentially to avoid SQLite concurrency issues with in-memory db
 	for _, rule := range l.rules {
@@ -202,11 +209,38 @@ func (l *Linter) Run(ctx context.Context) ([]Violation, error) {
 			}
 		}
 
+		// Which rules ran, and which could not: a baseline has to know, because
+		// a rule that did not run reports nothing, which reads as every one of
+		// its findings being fixed (ako/mxcli#2454, #2455).
+		l.ran = append(l.ran, rule.ID())
+		for _, v := range violations {
+			if v.RuleFailure {
+				l.failed[rule.ID()] = true
+			}
+		}
+
 		// Collect results
 		allViolations = append(allViolations, violations...)
 	}
 
 	return allViolations, nil
+}
+
+// RulesRun returns the IDs of the rules the last Run executed to completion, and
+// separately those that were enabled and executed but reported that they could
+// not run. Both are sorted. A rule that was disabled, or filtered out, is in
+// neither.
+func (l *Linter) RulesRun() (ran, failed []string) {
+	for _, id := range l.ran {
+		if l.failed[id] {
+			failed = append(failed, id)
+		} else {
+			ran = append(ran, id)
+		}
+	}
+	sort.Strings(ran)
+	sort.Strings(failed)
+	return ran, failed
 }
 
 // QueryErrors returns the catalog queries that failed during the run.

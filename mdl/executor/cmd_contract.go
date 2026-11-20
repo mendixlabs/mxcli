@@ -618,6 +618,9 @@ func createExternalEntities(ctx *ExecContext, s *ast.CreateExternalEntitiesStmt)
 					RemoteName: keyName,
 					RemoteType: keyProp.Type,
 					Type:       edmToDomainModelAttrType(keyProp, true),
+					// The key part has its own Filterable, which mxbuild compares with
+					// the service's — the same restrictions the attribute follows.
+					NotFilterable: !entitySet.AttrFilterable(keyName),
 				})
 			}
 

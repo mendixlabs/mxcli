@@ -68,6 +68,20 @@ type SecurityData struct {
 	// flow can be seen to check its caller.
 	SourceIndexed bool       `json:"sourceIndexed"`
 	LintRules     []LintRule `json:"lintRules"`
+	// Constants are the app modules' constants with their committed default:
+	// what an environment runs with when nobody overrides it.
+	Constants []ConstantDefault `json:"constants,omitempty"`
+}
+
+// ConstantDefault is one constant and the default the model commits.
+type ConstantDefault struct {
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Default string `json:"default"` // masked when it looks like a secret
+	Masked  bool   `json:"masked,omitempty"`
+	Exposed bool   `json:"exposedToClient,omitempty"`
+	// Configs are the run configurations that set a value of their own.
+	Configs []string `json:"configs,omitempty"`
 }
 
 // Finding is one security finding.
@@ -82,7 +96,7 @@ type Finding struct {
 // GridRow is one entity's access per user role.
 type GridRow struct {
 	Entity string            `json:"entity"`
-	Access map[string]string `json:"access"` // user role → "R all", "RW own", …
+	Access map[string]string `json:"access"` // user role → "R all", "RWCD own", …
 }
 
 // XPathRule is a distinct access-rule constraint with its classification.
@@ -103,8 +117,13 @@ type CallableFlow struct {
 	ChecksCaller      bool     `json:"checksCaller"`
 	TakesUser         bool     `json:"takesUser"`
 	Writes            bool     `json:"writes"`
-	Risk              string   `json:"risk"` // high | medium | low | ok
-	Triage            string   `json:"triage"`
+	// CheckedBy is a sub-microflow that checks the caller on an entity the
+	// flow takes, when the flow does not check in its own body; WritesVia the
+	// sub that writes such an entity.
+	CheckedBy string `json:"checkedBy,omitempty"`
+	WritesVia string `json:"writesVia,omitempty"`
+	Risk      string `json:"risk"` // high | medium | low | ok
+	Triage    string `json:"triage"`
 }
 
 // LintRule is one security lint rule's findings, grouped.
@@ -252,8 +271,8 @@ func CollectSecurity(q Querier, in SecurityInput) (*SecurityData, error) {
 		return nil, err
 	}
 	type acc struct {
-		read  string
-		write bool
+		read                  string
+		write, create, delete bool
 	}
 	grid := map[string]map[string]*acc{} // entity → user role → access
 	readClass := map[string]map[string]string{}
@@ -280,8 +299,12 @@ func CollectSecurity(q Querier, in SecurityInput) (*SecurityData, error) {
 					a.read = cls
 					readClass[ent][role] = cls
 				}
-			default:
+			case "WRITE":
 				a.write = true
+			case "CREATE":
+				a.create = true
+			case "DELETE":
+				a.delete = true
 			}
 		}
 		if p["XPath"] != "" {
@@ -302,11 +325,17 @@ func CollectSecurity(q Querier, in SecurityInput) (*SecurityData, error) {
 	for _, e := range gridEnts {
 		row := GridRow{Entity: e, Access: map[string]string{}}
 		for role, a := range grid[e] {
-			cell := "R"
-			if a.read == "" {
-				cell = "W"
-			} else if a.write {
-				cell = "RW"
+			// R, W, C, D in that order: create and delete are what a
+			// substituted or forged object costs most, so they are not folded
+			// into "write" (ako/mxcli#2443).
+			cell := ""
+			for _, l := range []struct {
+				on     bool
+				letter string
+			}{{a.read != "", "R"}, {a.write, "W"}, {a.create, "C"}, {a.delete, "D"}} {
+				if l.on {
+					cell += l.letter
+				}
 			}
 			if a.read != "" {
 				cell += " " + a.read
@@ -377,13 +406,31 @@ func collectCallableFlows(q Querier, d *SecurityData, app map[string]bool, userR
 	for _, s := range src {
 		body[s["QualifiedName"]] = s["SourceText"]
 	}
-	wr, err := rows(q, `SELECT DISTINCT SourceName FROM refs WHERE SourceType = 'MICROFLOW' AND RefKind IN ('change', 'delete', 'commit', 'create')`)
+	// What each microflow writes and what it touches, by entity. "Changes
+	// an object the client chose" is about the parameter's entity: a flow
+	// that takes a Product and creates the caller's own cart line does not
+	// change what the client chose (Shop.DS_Info_Line on ako/PizzaV1).
+	wr, err := rows(q, `SELECT DISTINCT SourceName, TargetName FROM refs WHERE SourceType = 'MICROFLOW' AND RefKind IN ('change', 'delete', 'commit', 'create')`)
 	if err != nil {
 		return err
 	}
-	writes := map[string]bool{}
+	writes := map[string][]string{}
 	for _, w := range wr {
-		writes[w["SourceName"]] = true
+		writes[w["SourceName"]] = append(writes[w["SourceName"]], w["TargetName"])
+	}
+	tr, err := rows(q, `SELECT DISTINCT SourceName, TargetName FROM refs WHERE SourceType = 'MICROFLOW'`)
+	if err != nil {
+		return err
+	}
+	touches := map[string][]string{}
+	for _, t := range tr {
+		touches[t["SourceName"]] = append(touches[t["SourceName"]], t["TargetName"])
+	}
+	// What a flow does through its sub-microflows counts too: a flow that
+	// commits through a sub was labelled as reading only (ako/mxcli#2443).
+	calls, err := LoadCallGraph(q)
+	if err != nil {
+		return err
 	}
 	var names []string
 	for n := range roles {
@@ -394,7 +441,7 @@ func collectCallableFlows(q Querier, d *SecurityData, app map[string]bool, userR
 		if !app[moduleOf(name)] {
 			continue
 		}
-		f := CallableFlow{Name: name, Roles: roles[name], ApplyEntityAccess: applyEA[name], Writes: writes[name]}
+		f := CallableFlow{Name: name, Roles: roles[name], ApplyEntityAccess: applyEA[name]}
 		sort.Strings(f.Roles)
 		var paramEnts []string
 		for _, p := range pOf[name] {
@@ -416,6 +463,21 @@ func collectCallableFlows(q Querier, d *SecurityData, app map[string]bool, userR
 			continue
 		}
 		f.ChecksCaller = callerCheck.MatchString(body[name])
+		f.Writes = anyOnEntity(writes[name], paramEnts)
+		for _, callee := range calls.Closure([]string{name}) {
+			if callee == name {
+				continue
+			}
+			// A sub's check on the caller counts only when the sub works with
+			// an entity the flow takes: a toast helper that stamps the caller
+			// on a Toast says nothing about the Cart passed in.
+			if !f.ChecksCaller && f.CheckedBy == "" && callerCheck.MatchString(body[callee]) && anyOnEntity(touches[callee], paramEnts) {
+				f.CheckedBy = callee
+			}
+			if !f.Writes && anyOnEntity(writes[callee], paramEnts) {
+				f.Writes, f.WritesVia = true, callee
+			}
+		}
 		widest := ""
 		for _, ent := range paramEnts {
 			for _, r := range f.Roles {
@@ -429,8 +491,27 @@ func collectCallableFlows(q Querier, d *SecurityData, app map[string]bool, userR
 			f.Risk, f.Triage = "high", "acts for a user the page supplies: an object parameter is a plain id, so any user the caller may read can be substituted. Use $currentUser in the body instead"
 		case f.ChecksCaller:
 			f.Risk, f.Triage = "ok", "checks the caller in its own body ($currentUser / [%CurrentUser%])"
+		case !f.ApplyEntityAccess && f.Writes && widest == AccessAll:
+			f.Risk, f.Triage = "high", "changes an object the client chose, with entity access off, and the granted roles may read every object of its entity: any id can be passed and nothing stops the change"
+			if f.WritesVia != "" {
+				f.Triage += " (it writes through `" + f.WritesVia + "`)"
+			}
+			if f.CheckedBy != "" {
+				f.Triage += "; `" + f.CheckedBy + "` checks the caller on the same entity — if that check covers the object passed in, this is a false alarm"
+			}
 		case !f.ApplyEntityAccess && f.Writes:
-			f.Risk, f.Triage = "high", "changes an object the client chose, with entity access off: no access rule stops a substituted id"
+			// The client can only pass an object its role may read, so the
+			// read rule bounds what can be substituted even with entity access
+			// off in the flow (ako/PizzaV1's review: "only the guest's own rows").
+			f.Risk, f.Triage = "medium", "changes an object the client chose, with entity access off: a substituted id is limited to what the granted roles read ("+nonEmpty(widest, "no read rule")+"), so it relies on that read rule"
+			if f.WritesVia != "" {
+				f.Triage += " (it writes through `" + f.WritesVia + "`)"
+			}
+			if f.CheckedBy != "" {
+				f.Triage += "; `" + f.CheckedBy + "` checks the caller on the same entity — if that check covers the object passed in, this is a false alarm"
+			}
+		case f.CheckedBy != "":
+			f.Risk, f.Triage = "low", "a sub-microflow, `"+f.CheckedBy+"`, checks the caller on the same entity — confirm it constrains the object passed in, not only the caller's own"
 		case !f.ApplyEntityAccess:
 			f.Risk, f.Triage = "medium", "reads an object the client chose, with entity access off"
 		case widest == AccessAll:
@@ -498,6 +579,14 @@ func collectUnsafeDefaults(q Querier, d *SecurityData, scope Scope) error {
 				}
 			}
 		}
+		cd := ConstantDefault{Name: name, Type: c["DataType"], Default: val, Exposed: exposed}
+		if (dt == "string" || dt == "") && val != "" && (LooksLikeKeyMaterial(val) || (looksSecretNamed(short) && !placeholder(val))) {
+			cd.Default, cd.Masked = fmt.Sprintf("•••• (%d characters)", len(val)), true
+		}
+		for _, cv := range cfg[name] {
+			cd.Configs = appendUnique(cd.Configs, cv[0])
+		}
+		d.Constants = append(d.Constants, cd)
 		if (dt == "boolean") && strings.EqualFold(strings.TrimSpace(val), "true") && testishName.MatchString(short) {
 			d.Findings = append(d.Findings, Finding{ID: "constant-testmode:" + name, Severity: "medium",
 				Title:  "Constant `" + name + "` switches on test behaviour by default",
@@ -678,7 +767,7 @@ func appendUnique(xs []string, s string) []string {
 var SecurityMethod = []string{
 	"A review of the model, read from the mxcli catalog (`refresh catalog full` and `source`) and the project security settings. Nothing ran against the app.",
 	"Who can read what: each user role's module roles (`CATALOG.ROLE_MAPPINGS`) joined to entity access rules (`CATALOG.PERMISSIONS`). A rule's XPath is classified as own rows (`[System.owner = '[%CurrentUser%]']`), via user (any other path to the current user), filtered (a constraint not about the user) or all (no constraint); a cell shows the widest.",
-	"Client-callable flows: microflows granted to a user role that take a persistent object or list. A flow checks its caller when its body (`CATALOG.SOURCE`) uses `$currentUser` or `[%CurrentUser%]`.",
+	"Client-callable flows: microflows granted to a user role that take a persistent object or list. A flow checks its caller when its body (`CATALOG.SOURCE`) uses `$currentUser` or `[%CurrentUser%]`; a sub-microflow it calls that does so on an entity the flow takes is named as a check to confirm. A flow writes when it or a sub-microflow changes, creates, deletes or commits an entity it takes. With entity access off, a write is high only when the granted roles read every object of that entity: the client can pass only what it may read.",
 	"Unsafe defaults: string constants whose default (or a committed configuration value) looks like key material — base64 of 16/24/32/64 bytes, a 128/192/256-bit hex string, a PEM block — or that are named like a secret; boolean constants named like test switches that default to `true`; the security level, demo users, guest access, strict mode and password policy.",
 	"Lint security rules are grouped per rule with a verdict slot, so the score is explained rather than alarming.",
 }
@@ -686,7 +775,7 @@ var SecurityMethod = []string{
 var SecurityLimits = []string{
 	"This is a model review, not a penetration test. Hosting (HTTPS, headers, TLS), Marketplace module vulnerabilities, rate limiting and the deployment's own constant values are not covered.",
 	"Object parameters versus association values: an object parameter is a plain id, so a caller can substitute any object it may read; a forged association value is rejected by the runtime (\"Hash is invalid\"), and with strict mode `mx.data.get` is refused. Only the first is flagged here — confirm a flagged flow before fixing it.",
-	"A caller check is detected by name (`$currentUser`); a check through a sub-microflow or a Java action is not seen, and such a flow is shown as trusting its caller.",
+	"A caller check is detected by name (`$currentUser`), in the flow or a sub-microflow it calls; whether that check constrains the object the page passed in is not proven, so a flow checked through a sub names it. A check in a Java action is not seen, and such a flow is shown as trusting its caller.",
 	"Access through Java actions, OQL datasets, published services' own authentication and nanoflows is not analysed.",
 	"Demo accounts: dropping a demo user from the model does not delete its account from an existing database, and the runtime does not reactivate a deactivated demo account. Check each environment's database.",
 }
@@ -715,10 +804,10 @@ func RenderSecurity(env *Envelope, ann *Annotations) (Doc, error) {
 	}
 	doc := Doc{Title: "Security review", Subtitle: "What protects the data, what does not, and what to fix"}
 	doc.Stats = []Stat{
-		{Label: "open high findings", Value: fmt.Sprint(open["high"])},
-		{Label: "open medium findings", Value: fmt.Sprint(open["medium"])},
-		{Label: "client-callable flows", Value: fmt.Sprint(len(d.Flows)), Note: fmt.Sprintf("%d to triage", risky)},
-		{Label: "security level", Value: levelName(d.Settings)},
+		{Label: "open high findings", Value: fmt.Sprint(open["high"]), Status: statusIf(open["high"] > 0, false)},
+		{Label: "open medium findings", Value: fmt.Sprint(open["medium"]), Status: statusIf(false, open["medium"] > 0)},
+		{Label: "client-callable flows", Value: fmt.Sprint(len(d.Flows)), Note: fmt.Sprintf("%d to triage", risky), Status: statusIf(false, risky > 0)},
+		{Label: "security level", Value: levelName(d.Settings), Status: statusIf(d.Settings.Known && d.Settings.Level != "CheckEverything", false)},
 	}
 
 	// Findings.
@@ -770,33 +859,47 @@ func RenderSecurity(env *Envelope, ann *Annotations) (Doc, error) {
 		xt.Rows = append(xt.Rows, []string{"`" + x.Entity + "`", "`" + x.XPath + "`", x.Class, strings.Join(x.Roles, ", ")})
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "grid", Title: "Who can read what",
-		Intro:  "User role × persistent app entity. R read, W write; then the widest read: own rows, via user, filtered, or all (no constraint). `all` is right for reference data and admin roles and wrong almost anywhere else.",
+		Intro:  "User role × persistent app entity. R read, W write, C create, D delete; then the widest read: own rows, via user, filtered, or all (no constraint). `all` is right for reference data and admin roles and wrong almost anywhere else.",
 		Blocks: []Block{gt, xt}})
 
-	// Flows.
-	flt := Table{Columns: []string{"Microflow", "Roles", "Object parameters", "Entity access", "Risk", "Triage", "Verdict"}}
-	for _, f := range d.Flows {
-		key := "flow:" + f.Name
-		verdict := ""
-		if n, ok := ann.Get(key); ok {
-			verdict = joinNote(n.Status, n.Note, "")
-		} else if f.Risk != "ok" && f.Risk != "low" {
-			verdict = "`" + key + "`"
+	// Flows, one table per set of entities they take: the question "what
+	// stops a caller substituting another Order" is asked once per entity, so
+	// the flows that share the answer sit together (ako/mxcli#2443).
+	var fbl []Block
+	for _, g := range groupFlows(d.Flows) {
+		flt := Table{Caption: g.caption(), Columns: []string{"Microflow", "Roles", "Object parameters", "Entity access", "Risk", "Triage", "Verdict"}}
+		for _, f := range g.flows {
+			key := "flow:" + f.Name
+			verdict := ""
+			if n, ok := ann.Get(key); ok {
+				verdict = joinNote(n.Status, n.Note, "")
+			} else if f.Risk != "ok" && f.Risk != "low" {
+				verdict = "`" + key + "`"
+			}
+			ea := "off"
+			if f.ApplyEntityAccess {
+				ea = "on"
+			}
+			flt.Rows = append(flt.Rows, []string{"`" + f.Name + "`", strings.Join(f.Roles, ", "), strings.Join(codeList(f.Params), ", "), ea, f.Risk, f.Triage, verdict})
+			flt.Classes = append(flt.Classes, []string{"", "", "", "", sevClass(f.Risk), "", ""})
 		}
-		ea := "off"
-		if f.ApplyEntityAccess {
-			ea = "on"
-		}
-		flt.Rows = append(flt.Rows, []string{"`" + f.Name + "`", strings.Join(f.Roles, ", "), strings.Join(codeList(f.Params), ", "), ea, f.Risk, f.Triage, verdict})
-		flt.Classes = append(flt.Classes, []string{"", "", "", "", sevClass(f.Risk), "", ""})
+		fbl = append(fbl, flt)
 	}
-	fbl := []Block{flt}
 	if !d.SourceIndexed {
 		fbl = append([]Block{Callout{Kind: "warn", Text: "Microflow bodies were not indexed, so no flow can be seen to check its caller. Run without `--no-source`."}}, fbl...)
 	}
 	doc.Sections = append(doc.Sections, Section{ID: "flows", Title: "Client-callable flows",
 		Intro:  "Microflows a user role may call that take a persistent object. The page passes the object as a plain id, so the question is what stops a caller substituting another one: a check in the flow's own body, or access rules on the parameter's entity.",
 		Blocks: fbl})
+
+	// Settings and defaults: every switch the findings judge, also the ones
+	// that are fine, so a reader sees the whole configuration rather than
+	// only what went wrong (ako/mxcli#2443).
+	if sb := settingsBlocks(d); len(sb) > 0 {
+		doc.Sections = append(doc.Sections, Section{ID: "settings", Title: "Settings and defaults",
+			Intro:  "The project's security settings and every app constant's committed default: what an environment runs with when nobody overrides it. A deployment can override constants (and the cloud portal some settings), which this model review cannot see.",
+			Blocks: sb})
+	}
 
 	// Lint.
 	lt := Table{Columns: []string{"Rule", "Severity", "Findings", "Examples", "Verdict"}}
@@ -855,4 +958,178 @@ func sevClass(s string) string {
 		return "ok"
 	}
 	return ""
+}
+
+// flowGroup is the callable flows that take the same persistent entities.
+type flowGroup struct {
+	takes string
+	flows []CallableFlow
+	worst int
+}
+
+func (g flowGroup) caption() string {
+	n := map[string]int{}
+	for _, f := range g.flows {
+		n[f.Risk]++
+	}
+	noun := "flows"
+	if len(g.flows) == 1 {
+		noun = "flow"
+	}
+	c := fmt.Sprintf("Takes %s · %d %s", g.takes, len(g.flows), noun)
+	for _, r := range []string{"high", "medium"} {
+		if n[r] > 0 {
+			c += fmt.Sprintf(" · %d %s", n[r], r)
+		}
+	}
+	return c
+}
+
+// groupFlows groups flows by the entities of their object parameters, the
+// group with the worst risk first, then by entity.
+func groupFlows(flows []CallableFlow) []flowGroup {
+	byKey := map[string]*flowGroup{}
+	var keys []string
+	for _, f := range flows {
+		var ents []string
+		for _, p := range f.Params {
+			if _, t, ok := strings.Cut(p, ": "); ok {
+				_, ent, _ := strings.Cut(t, ":") // Object:Shop.Order, List:Shop.Order
+				ents = appendUnique(ents, "`"+ent+"`")
+			}
+		}
+		sort.Strings(ents)
+		k := strings.Join(ents, " + ")
+		g := byKey[k]
+		if g == nil {
+			g = &flowGroup{takes: k}
+			byKey[k] = g
+			keys = append(keys, k)
+		}
+		g.flows = append(g.flows, f)
+		if r := riskRank(f.Risk); r > g.worst {
+			g.worst = r
+		}
+	}
+	out := make([]flowGroup, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, *byKey[k])
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].worst != out[j].worst {
+			return out[i].worst > out[j].worst
+		}
+		return out[i].takes < out[j].takes
+	})
+	return out
+}
+
+func riskRank(r string) int {
+	return map[string]int{"high": 3, "medium": 2, "low": 1}[r]
+}
+
+// settingsBlocks renders the security settings and the constants' defaults.
+func settingsBlocks(d SecurityData) []Block {
+	var out []Block
+	if s := d.Settings; s.Known {
+		t := Table{Caption: "Project security", Columns: []string{"Setting", "Value", "Verdict"}}
+		add := func(name, value, verdict, cls string) {
+			t.Rows = append(t.Rows, []string{name, value, verdict})
+			t.Classes = append(t.Classes, []string{"", "", cls})
+		}
+		switch s.Level {
+		case "CheckEverything":
+			add("Security level", levelName(s), "entity access rules are enforced", "ok")
+		default:
+			add("Security level", levelName(s), "access rules are not enforced", "bad")
+		}
+		switch {
+		case s.Level != "CheckEverything":
+			add("Strict mode", onOff(s.StrictMode), "applies at Production level only", "")
+		case s.StrictMode:
+			add("Strict mode", "on", "the client API retrieves only what pages show", "ok")
+		default:
+			add("Strict mode", "off", "the client API may retrieve anything the role reads", "warn")
+		}
+		demo := onOff(s.DemoUsersEnabled)
+		if s.DemoUsersEnabled {
+			demo += fmt.Sprintf(" (%d)", len(s.DemoUsers))
+		}
+		switch {
+		case s.DemoUsersEnabled && len(s.DemoUsers) > 0:
+			add("Demo users", demo, "see the finding: accounts stay in the database", "bad")
+		default:
+			add("Demo users", demo, "", "ok")
+		}
+		if s.GuestAccess {
+			add("Anonymous access", "on, role `"+s.GuestRole+"`", "everything that role reads and calls is public", "warn")
+		} else {
+			add("Anonymous access", "off", "", "ok")
+		}
+		if s.AdminUser != "" {
+			add("Administrator", "`"+s.AdminUser+"`, role `"+s.AdminRole+"`", "set its password per environment", "")
+		}
+		switch {
+		case s.PasswordMinLength == 0:
+			add("Minimum password length", "not set", "", "")
+		case s.PasswordMinLength < 8:
+			add("Minimum password length", fmt.Sprint(s.PasswordMinLength), "short: require at least 12, or use single sign-on", "warn")
+		default:
+			add("Minimum password length", fmt.Sprint(s.PasswordMinLength), "", "ok")
+		}
+		out = append(out, t)
+	}
+	if len(d.Constants) > 0 {
+		flagged := map[string]string{}
+		for _, f := range d.Findings {
+			for _, p := range []string{"constant-secret:", "constant-testmode:"} {
+				if strings.HasPrefix(f.ID, p) {
+					flagged[strings.TrimPrefix(f.ID, p)] = f.Severity
+				}
+			}
+		}
+		t := Table{Caption: "Constants", Columns: []string{"Constant", "Type", "Default", "Exposed to client", "Set by configuration", "Verdict"}}
+		for _, c := range d.Constants {
+			def := "`" + c.Default + "`"
+			switch {
+			case c.Masked:
+				def = c.Default
+			case c.Default == "":
+				def = "(empty)"
+			}
+			exp := ""
+			if c.Exposed {
+				exp = "yes"
+			}
+			verdict, cls := "", ""
+			if sev, ok := flagged[c.Name]; ok {
+				verdict, cls = "see findings", sevClass(sev)
+			}
+			t.Rows = append(t.Rows, []string{"`" + c.Name + "`", c.Type, def, exp, strings.Join(c.Configs, ", "), verdict})
+			t.Classes = append(t.Classes, []string{"", "", "", "", "", cls})
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+func onOff(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
+}
+
+// anyOnEntity reports whether a target names one of the entities, one of
+// their members ("Shop.Cart.Total") or an association named after them
+// ("Shop.Cart_Owner", Mendix's default naming).
+func anyOnEntity(targets, ents []string) bool {
+	for _, t := range targets {
+		for _, e := range ents {
+			if t == e || strings.HasPrefix(t, e+".") || strings.HasPrefix(t, e+"_") {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -18,8 +18,9 @@ type ListFilter struct {
 	// Slice keeps one slice's entries: its requirements and the questions
 	// filed against it.
 	Slice string
-	// Kind keeps decisions or requirements. An open question is a decision
-	// unless it was filed against a slice.
+	// Kind keeps decisions, requirements or open questions. A listed open
+	// question has kind "question", wherever it is filed, so a consumer
+	// counting decisions does not count it twice (ako/mxcli#2443).
 	Kind Kind
 	// Open, when set, keeps only open questions (true) or only settled
 	// entries (false).
@@ -51,9 +52,9 @@ type ListResult struct {
 func (s *Store) List(f ListFilter) (ListResult, error) {
 	out := ListResult{Entries: []ListedEntry{}, Malformed: []string{}}
 	switch f.Kind {
-	case "", KindDecision, KindRequirement:
+	case "", KindDecision, KindRequirement, KindQuestion:
 	default:
-		return out, fmt.Errorf("kind %q: use %q or %q", f.Kind, KindDecision, KindRequirement)
+		return out, fmt.Errorf("kind %q: use %q, %q or %q", f.Kind, KindDecision, KindRequirement, KindQuestion)
 	}
 	if f.Slice != "" && f.Kind == KindDecision {
 		return out, fmt.Errorf("a decision has no slice, so --slice with --kind %s matches nothing; drop one of them", KindDecision)
@@ -79,6 +80,9 @@ func (s *Store) List(f ListFilter) (ListResult, error) {
 			// Explicit, so a consumer never has to know that an empty
 			// kind means a decision.
 			e.Kind = e.EntryKind()
+			if e.Open {
+				e.Kind = KindQuestion
+			}
 			if f.Kind != "" && e.Kind != f.Kind {
 				continue
 			}

@@ -171,3 +171,80 @@ func TestSnippetCallIsNotADomainDependency(t *testing.T) {
 		t.Errorf("navigation edges = %+v", d.NavigationEdges)
 	}
 }
+
+// Cohesion is drawn as a meter, and each cluster as a bar split by module
+// (ako/mxcli#2443).
+func TestArchitectureCohesionBarsAndClusterComposition(t *testing.T) {
+	d := ArchitectureData{
+		Modules:             []ModuleHealth{{Name: "Sales", Cohesion: 72}, {Name: "Billing", Cohesion: 20}, {Name: "Empty", Cohesion: -1}},
+		CommunitiesComputed: true,
+		Communities: []Community{
+			{Key: "cluster:Sales.Order", Label: "Order", Size: 10, Modules: []ModuleCount{{"Sales", 7}, {"Billing", 3}}},
+			{Key: "cluster:Billing.Invoice", Label: "Invoice", Size: 4, Modules: []ModuleCount{{"Billing", 4}}},
+		},
+	}
+	env, err := NewEnvelope("architecture", "App", "now", "test", d, ArchitectureMethod, ArchitectureLimits, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := RenderArchitecture(env, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var html bytes.Buffer
+	if err := RenderHTML(&html, doc); err != nil {
+		t.Fatal(err)
+	}
+	out := html.String()
+	mustContain(t, out, "What each cluster is made of", `class="meter good"`, `class="meter warn"`)
+	if strings.Count(out, `class="meter`) != 2 {
+		t.Errorf("want a meter for the two modules with a cohesion, not for n/a: %d", strings.Count(out, `class="meter`))
+	}
+}
+
+// --exclude-docs leaves matching documents out of the edges, the counts and
+// the unused list, and the page says so (ako/mxcli#2443).
+func TestArchitectureExcludeDocs(t *testing.T) {
+	f := archFixture(t)
+	base, err := CollectArchitecture(f.cat, ArchitectureOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(base.Cycles) != 1 {
+		t.Fatalf("control: the fixture has one cycle, got %d", len(base.Cycles))
+	}
+	d, err := CollectArchitecture(f.cat, ArchitectureOptions{ExcludeDocs: []string{"Billing.ACT_*", "Billing.Unused"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Cycles) != 0 {
+		t.Errorf("every edge of the cycle goes through Billing.ACT_Invoice, so excluding it removes the cycle: %+v", d.Cycles)
+	}
+	for _, u := range d.Unused {
+		if u.Name == "Billing.Unused" {
+			t.Error("an excluded document is not listed as unused")
+		}
+	}
+	if d.ExcludedDocs != 2 {
+		t.Errorf("excluded %d documents, want 2", d.ExcludedDocs)
+	}
+	docs := func(d *ArchitectureData) int {
+		for _, m := range d.Modules {
+			if m.Name == "Billing" {
+				return m.Documents
+			}
+		}
+		return -1
+	}
+	if docs(base)-docs(d) != 2 {
+		t.Errorf("Billing documents %d → %d, want two fewer", docs(base), docs(d))
+	}
+	env, _ := NewEnvelope("architecture", "App", "now", "test", d, ArchitectureMethod, ArchitectureLimits, nil)
+	doc, err := RenderArchitecture(env, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var md bytes.Buffer
+	_ = RenderMarkdown(&md, doc)
+	mustContain(t, md.String(), "2 app documents matching `Billing.ACT_*`, `Billing.Unused` are left out")
+}

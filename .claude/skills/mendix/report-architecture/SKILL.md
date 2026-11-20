@@ -10,11 +10,11 @@ description: "Produce and read the architecture report (mxcli report architectur
 
 | lines | section |
 |---|---|
-| 29-42 | Run it |
-| 43-59 | Checks before you trust the page |
-| 60-77 | Reading it |
-| 78-94 | Annotations file |
-| 95-99 | Related |
+| 29-47 | Run it |
+| 48-64 | Checks before you trust the page |
+| 65-82 | Reading it |
+| 83-99 | Annotations file |
+| 100-104 | Related |
 
 <!-- /skill-index -->
 # Architecture Report
@@ -39,6 +39,11 @@ mxcli report architecture --from docs/architecture/arch.json \
 Marketplace modules, `System` and `MxTest` are outside the app by default — they
 dominate god nodes and coupling otherwise. `--include-marketplace` brings them in;
 `--modules A,B` or `--exclude C` choose the app's modules by hand.
+
+Generated code, probes and fixtures inside an app module can dominate the clusters,
+god nodes and unused list. `--exclude-docs 'Shop.FaultProbe*,RestClient.*'` (name
+globs on the qualified name) leaves them out of every figure; the page states how
+many documents the patterns matched, so a too-wide glob shows.
 
 ## Checks before you trust the page
 

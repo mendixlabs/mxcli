@@ -34,6 +34,9 @@ type PerformanceData struct {
 	Plans             []Plan      `json:"plans,omitempty"`
 	Candidates        []Candidate `json:"candidates,omitempty"`
 	CandidatesChecked bool        `json:"candidatesChecked"`
+	// Attribution is how spans were given to steps: AttributionRequests, or
+	// AttributionWindow when the spans carry no HTTP request attributes.
+	Attribution string `json:"attribution,omitempty"`
 }
 
 // StepStats is one journey step, measured as the median of its warm runs.
@@ -50,6 +53,10 @@ type StepStats struct {
 	Statements    []Statement  `json:"statements,omitempty"`
 	WindowMs      float64      `json:"windowMs"`
 	Flame         []FlameEntry `json:"flame,omitempty"`
+	// BackgroundMs is work that ran inside the step's window but not for its
+	// requests — queued tasks, scheduled events, the task queue's polling. It
+	// is not in ServerMs, DBMs or Queries (ako/mxcli#2443).
+	BackgroundMs float64 `json:"backgroundMs,omitempty"`
 }
 
 func (s StepStats) key() string { return s.Journey + " / " + s.Step }
@@ -106,6 +113,11 @@ func CollectPerformance(in PerformanceInput) (*PerformanceData, error) {
 	}
 	d := &PerformanceData{Database: in.Journeys.Database, Notes: in.Journeys.Notes, Plans: in.Plans,
 		Candidates: in.Candidates, CandidatesChecked: in.Candidates != nil}
+	idx := indexSpans(in.Spans)
+	d.Attribution = AttributionRequests
+	if !idx.hasRequestsCached() {
+		d.Attribution = AttributionWindow
+	}
 	type group struct {
 		journey, step string
 		recs          []JourneyRecord
@@ -134,16 +146,16 @@ func CollectPerformance(in PerformanceInput) (*PerformanceData, error) {
 			warm = recs[1:]
 		}
 		type run struct {
-			browser, server, db float64
-			queries             int
-			spans               []Span
-			s, e                int64
+			browser, server, db, background float64
+			queries                         int
+			spans                           []Span
+			s, e                            int64
 		}
 		var runs []run
 		for _, r := range warm {
 			s, e := r.window()
-			sp := spansIn(in.Spans, s, e)
-			rr := run{s: s, e: e, spans: sp, browser: r.BrowserMs}
+			sp, bg := idx.stepSpans(s, e)
+			rr := run{s: s, e: e, spans: sp, browser: r.BrowserMs, background: rootUnionMs(bg)}
 			if rr.browser == 0 {
 				rr.browser = float64(e-s) / 1e6
 			}
@@ -157,11 +169,13 @@ func CollectPerformance(in PerformanceInput) (*PerformanceData, error) {
 			runs = append(runs, rr)
 		}
 		st := StepStats{Journey: g.journey, Step: g.step, Runs: len(recs), WarmRuns: len(warm)}
-		var bs, ss, ds, qs []float64
+		var bs, ss, ds, qs, gs []float64
 		for _, r := range runs {
 			bs, ss, ds, qs = append(bs, r.browser), append(ss, r.server), append(ds, r.db), append(qs, float64(r.queries))
+			gs = append(gs, r.background)
 		}
 		st.BrowserMs, st.ServerMs, st.DBMs, st.Queries = round1(median(bs)), round1(median(ss)), round1(median(ds)), int(median(qs)+0.5)
+		st.BackgroundMs = round1(median(gs))
 		// The representative run is the one closest to the median server time.
 		rep := 0
 		for i, r := range runs {
@@ -205,6 +219,121 @@ func CollectPerformance(in PerformanceInput) (*PerformanceData, error) {
 		}
 	}
 	return d, nil
+}
+
+// Attribution says how spans were given to steps.
+const (
+	// AttributionRequests: the traces rooted in an HTTP request to the app
+	// that starts inside the step's window.
+	AttributionRequests = "requests"
+	// AttributionWindow: every span that starts inside the window. Used only
+	// when no span is recognisable as an HTTP request (a collector that does
+	// not record the request attributes).
+	AttributionWindow = "window"
+)
+
+// spanIndex groups spans by trace and finds each trace's roots, so a step can
+// take the traces its own requests started and leave out the rest. Taking
+// every span in the window counted background work: on ako/PizzaV1 the
+// simulator's queued clock tick (a 1.5 s sleep) added up to 1.6 s of "server
+// time" to whichever step it happened to overlap (ako/mxcli#2443).
+type spanIndex struct {
+	all     []Span
+	traces  map[string][]Span
+	roots   []Span
+	appPort string
+	// reqKnown caches hasRequests: 0 unknown, 1 yes, 2 no.
+	reqKnown int
+}
+
+func indexSpans(spans []Span) *spanIndex {
+	x := &spanIndex{all: spans, traces: map[string][]Span{}}
+	ids := map[string]map[string]bool{}
+	for _, s := range spans {
+		x.traces[s.TraceID] = append(x.traces[s.TraceID], s)
+		if ids[s.TraceID] == nil {
+			ids[s.TraceID] = map[string]bool{}
+		}
+		ids[s.TraceID][s.SpanID] = true
+	}
+	ports := map[string]int{}
+	for _, s := range spans {
+		if s.ParentID == "" || !ids[s.TraceID][s.ParentID] {
+			x.roots = append(x.roots, s)
+			if httpMethod(s) != "" && s.Attrs["server.port"] != "" {
+				ports[s.Attrs["server.port"]]++
+			}
+		}
+	}
+	// The app port is the one most requests go to; the runtime's admin port
+	// (m2ee) gets a handful from tooling.
+	best := 0
+	for p, n := range ports {
+		if n > best || (n == best && p < x.appPort) {
+			x.appPort, best = p, n
+		}
+	}
+	return x
+}
+
+func httpMethod(s Span) string {
+	if m := s.Attrs["http.request.method"]; m != "" {
+		return m
+	}
+	return s.Attrs["http.method"]
+}
+
+// isRequest reports whether a root span is an HTTP request to the app.
+func (x *spanIndex) isRequest(root Span) bool {
+	if httpMethod(root) == "" {
+		return false
+	}
+	p := root.Attrs["server.port"]
+	return p == "" || x.appPort == "" || p == x.appPort
+}
+
+func (x *spanIndex) hasRequests() bool {
+	for _, r := range x.roots {
+		if x.isRequest(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// stepSpans returns the spans of the traces whose request root starts inside
+// [s, e] — whole traces, also where a child outlasts the window — and the
+// other roots that start inside it, which are background work. Without any
+// request root in the data it falls back to every span in the window.
+func (x *spanIndex) stepSpans(s, e int64) (own, background []Span) {
+	if !x.hasRequestsCached() {
+		return spansIn(x.all, s, e), nil
+	}
+	seen := map[string]bool{}
+	for _, r := range x.roots {
+		if r.Start < s || r.Start > e {
+			continue
+		}
+		if !x.isRequest(r) {
+			background = append(background, r)
+			continue
+		}
+		if !seen[r.TraceID] {
+			seen[r.TraceID] = true
+			own = append(own, x.traces[r.TraceID]...)
+		}
+	}
+	return own, background
+}
+
+func (x *spanIndex) hasRequestsCached() bool {
+	if x.reqKnown == 0 {
+		x.reqKnown = 2
+		if x.hasRequests() {
+			x.reqKnown = 1
+		}
+	}
+	return x.reqKnown == 1
 }
 
 func spansIn(spans []Span, s, e int64) []Span {
@@ -562,8 +691,8 @@ func CollectCandidates(q Querier, scope Scope) ([]Candidate, error) {
 // ---------------------------------------------------------------- render
 
 var PerformanceMethod = []string{
-	"Each journey step is the time window its journey log record gives: from the action until its last `/xas/` request answered and nothing new started for a short quiet period (the journey script decides). Every span that starts inside the window belongs to the step.",
-	"Browser time is the record's `browserMs` (or the window length). Server time is the union of the step's root spans — concurrent requests are not counted twice. Database time and query count are the database spans (`db.system` / `db.statement`) in the window.",
+	"Each journey step is the time window its journey log record gives: from the action until its last `/xas/` request answered and nothing new started for a short quiet period (the journey script decides). A step's work is the traces rooted in an HTTP request to the app (the port most requests go to) that starts inside the window — the whole trace, also where it outlasts the window. Other work that starts inside it — queued tasks, scheduled events, the task queue's polling — is background and is shown apart, not counted.",
+	"Browser time is the record's `browserMs` (or the window length). Server time is the union of the step's request roots — concurrent requests are not counted twice. Database time and query count are the database spans (`db.system` / `db.statement`) in those traces.",
 	"Each step ran several times; the first run warms caches and the JIT and is not counted. Figures are the median of the warm runs; the flame chart and statements are from the run closest to the median.",
 	"Plans come from Postgres `auto_explain` in JSON format (`--plans <postgres log>`), with the JIT block reported next to the plan.",
 	"Before/after compares against `--baseline`, an earlier performance report of the same journeys on the same seed.",
@@ -615,6 +744,18 @@ func RenderPerformance(env *Envelope, ann *Annotations) (Doc, error) {
 	}
 	if len(d.Notes) > 0 {
 		env0 = append(env0, Para{Text: "Changes made for the measurement (and restored afterwards):"}, Bullets{Items: d.Notes})
+	}
+	if d.Attribution == AttributionWindow {
+		env0 = append(env0, Callout{Kind: "warn", Text: "No span carries HTTP request attributes (`http.request.method`), so each step counts every span that starts in its window, background work included. A collector that records the runtime's request spans lets the report count only the step's own requests."})
+	}
+	var bgSteps []string
+	for _, s := range d.Steps {
+		if s.BackgroundMs >= 1 {
+			bgSteps = append(bgSteps, fmt.Sprintf("%s: %s ms", s.key(), ms(s.BackgroundMs)))
+		}
+	}
+	if len(bgSteps) > 0 {
+		env0 = append(env0, Para{Text: "Background work ran during some steps — queued tasks, scheduled events, polling. It is not in their server or database time:"}, Bullets{Items: bgSteps})
 	}
 
 	// Steps table, with before/after when there is a baseline.
@@ -675,7 +816,7 @@ func RenderPerformance(env *Envelope, ann *Annotations) (Doc, error) {
 			bl = append(bl, sq)
 		}
 		if len(bl) == 0 {
-			bl = append(bl, Para{Text: "No spans fell inside this step's window."})
+			bl = append(bl, Para{Text: "No request of this step was traced inside its window."})
 		}
 		doc.Sections = append(doc.Sections, Section{ID: "", Title: "Step: " + s.key(), Blocks: bl})
 	}

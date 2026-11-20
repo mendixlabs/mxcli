@@ -141,6 +141,7 @@
   - [Starlark Rules](tools/starlark-rules.md)
   - [Writing Custom Rules](tools/custom-rules.md)
   - [mxcli lint](tools/mxcli-lint.md)
+  - [mxcli verify](tools/mxcli-verify.md)
   - [mxcli report](tools/mxcli-report.md)
   - [Project Reports](tools/project-reports.md)
 - [Claude Code Companion](tools/companion.md)

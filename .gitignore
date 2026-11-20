@@ -74,3 +74,17 @@ go-test-output.txt
 # MPR v2 unit-type index, written next to any project mxcli opens — including
 # the testdata/ fixtures tests open in place.
 **/.mxcli/unit-types.idx
+
+# Per-widget skill docs, derived from a project's widgets/*.mpk and rewritten by
+# `refresh catalog full` (executor.RegenerateWidgetDocs), not authored here.
+# Written next to any fixture a lint or catalog run opens, the same way the
+# unit-type index above is; testdata/expr-checker also ignores its own copy.
+**/testdata/**/.claude/skills/widgets/
+
+# mxcli's own working directory inside a top-level testdata fixture: catalog,
+# unit index and unit-contents cache, all written by any command that opens the
+# fixture. testdata/pedapp ignores its own; the others have no .gitignore.
+# Anchored at /testdata/ ON PURPOSE: modelsdk/mpr/testdata/v1-project/.mxcli/
+# holds a catalog.db that IS tracked, as a fixture, and a /**/ pattern would
+# shadow it.
+/testdata/*/.mxcli/

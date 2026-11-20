@@ -4,7 +4,6 @@ package catalog
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strconv"
@@ -553,7 +552,7 @@ func (b *Builder) Build(progress ProgressFunc) error {
 		}
 		return b.markGraphAnalysis()
 	}
-	if err := b.buildOn(sdb.RawDB()); err != nil {
+	if err := b.buildOn(sdb); err != nil {
 		return err
 	}
 	// After the build's connection is back in the pool: an in-memory
@@ -561,15 +560,31 @@ func (b *Builder) Build(progress ProgressFunc) error {
 	return b.markGraphAnalysis()
 }
 
-// buildOn builds on one connection of db: an in-memory catalog lives on
-// one connection, and an incremental build loads the previous catalog into it.
-func (b *Builder) buildOn(db *sql.DB) error {
+// buildOn builds on one connection of sdb. An incremental build loads the
+// previous catalog into that connection, which makes its database a private
+// copy; the result is copied into the shared cache before the connection goes
+// back (ako/mxcli#2454), so every connection sees the built catalog.
+func (b *Builder) buildOn(sdb *SqliteCatalogDB) (err error) {
 	ctx := context.Background()
-	conn, err := db.Conn(ctx)
+	conn, err := sdb.RawDB().Conn(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to open catalog connection: %w", err)
 	}
 	defer conn.Close()
+	private := false
+	// Registered after conn.Close, so it runs first: a private copy is adopted
+	// when the build succeeded and retired when it did not, never left in the
+	// pool to answer from stale rows.
+	defer func() {
+		if !private {
+			return
+		}
+		if err == nil {
+			err = sdb.adoptPrivateCopy(conn)
+			return
+		}
+		_ = retireConn(conn)
+	}()
 
 	plan, reason := (*incrementalPlan)(nil), "no cache to carry from"
 	if b.prevCatalogPath != "" && b.fingerprint != "" && b.basis != nil {
@@ -581,6 +596,8 @@ func (b *Builder) buildOn(db *sql.DB) error {
 			// tables instead (clearCatalog).
 			if err := deserializeConn(conn, data); err != nil {
 				plan, reason = nil, "cannot load the cache: "+err.Error()
+			} else {
+				private = true
 			}
 		}
 	}
@@ -832,9 +849,19 @@ func (b *Builder) buildSnapshotRecord() error {
 }
 
 func (b *Builder) updateSnapshotCount() {
-	// Count total objects
+	// Counted through the TRANSACTION, not the pool (ako/mxcli#2417).
+	//
+	// Two reasons. It runs while the build's transaction is open, so a pool
+	// query needs a second connection: against an in-memory catalog, where
+	// every connection is its own database, that read saw an empty one and the
+	// count came back 0; with the pool pinned to one connection it deadlocked
+	// outright, waiting for the connection the transaction holds.
+	//
+	// And the transaction is the right scope anyway: the rows being counted are
+	// the ones this build just wrote and has not committed, which a pool query
+	// cannot see by definition.
 	var count int
-	row := b.catalog.db.QueryRow(`
+	rows, err := b.txQuery(`
 		SELECT COUNT(*) FROM (
 			SELECT Id FROM modules
 			UNION ALL SELECT Id FROM entities
@@ -846,7 +873,15 @@ func (b *Builder) updateSnapshotCount() {
 			UNION ALL SELECT Id FROM workflows
 		)
 	`)
-	row.Scan(&count)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	if rows.Next() {
+		if err := rows.Scan(&count); err != nil {
+			return
+		}
+	}
 	b.snapshot.ObjectCount = count
 }
 

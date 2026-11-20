@@ -26,6 +26,11 @@ type Report struct {
 	// They are not scored and not in Summary: an accepted finding is a
 	// decision, not an open problem (ako/mxcli#2304).
 	Accepted int `json:"accepted,omitempty"`
+	// AcceptedByRule is Accepted per rule id.
+	AcceptedByRule map[string]int `json:"acceptedByRule,omitempty"`
+	// Consistency is Mendix's own consistency check (mx check); nil when the
+	// caller did not ask for it (ako/mxcli#2423).
+	Consistency *ConsistencyCheck `json:"consistency,omitempty"`
 }
 
 // CategoryScore tracks the score for a lint category.
@@ -224,6 +229,28 @@ func resolveCategory(ruleID string) string {
 	return "Other"
 }
 
+// Penalty points per finding, by severity: a category starts at 100 and loses
+// these, floored at 0.
+const (
+	PenaltyError   = 10
+	PenaltyWarning = 3
+	PenaltyInfo    = 1
+)
+
+// Penalty is the points the category's findings cost before the floor: past
+// 100, its score stays 0 however much is fixed until it comes back under.
+func (c CategoryScore) Penalty() float64 {
+	return float64(c.Errors*PenaltyError + c.Warnings*PenaltyWarning + c.Infos*PenaltyInfo)
+}
+
+// CategoryWeight is a category's weight in the overall score.
+func CategoryWeight(name string) float64 {
+	if w := categoryWeight[name]; w != 0 {
+		return w
+	}
+	return 0.05
+}
+
 func buildCategoryScore(name string, violations []Violation) CategoryScore {
 	cs := CategoryScore{Name: name}
 
@@ -240,9 +267,7 @@ func buildCategoryScore(name string, violations []Violation) CategoryScore {
 
 	cs.Total = cs.Errors + cs.Warnings + cs.Infos
 
-	// Scoring: Error=-10, Warning=-3, Info=-1
-	penalty := float64(cs.Errors)*10 + float64(cs.Warnings)*3 + float64(cs.Infos)*1
-	cs.Score = math.Max(0, 100-penalty)
+	cs.Score = math.Max(0, 100-cs.Penalty())
 
 	// Build top actions from most frequent violation messages (deduplicated by rule)
 	ruleMessages := make(map[string]string)

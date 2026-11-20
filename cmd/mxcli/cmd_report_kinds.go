@@ -44,6 +44,15 @@ type reportKindSpec struct {
 	flags func(cmd *cobra.Command)
 }
 
+// reportKinds is every kind newReportKindCmd made, with its command, so
+// `report all` can run each with its own flag defaults.
+var reportKinds = map[string]reportKind{}
+
+type reportKind struct {
+	spec reportKindSpec
+	cmd  *cobra.Command
+}
+
 func newReportKindCmd(spec reportKindSpec) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     spec.name,
@@ -65,6 +74,7 @@ func newReportKindCmd(spec reportKindSpec) *cobra.Command {
 	if spec.flags != nil {
 		spec.flags(cmd)
 	}
+	reportKinds[spec.name] = reportKind{spec: spec, cmd: cmd}
 	return cmd
 }
 
@@ -239,11 +249,13 @@ from domain edges only. Marketplace modules are outside the app unless
 Annotation keys: module:<Name>, cluster:<key member>, cycle:<A+B>, unused:<Name>.`,
 	example: `  mxcli report architecture -p app.mpr -o architecture.html
   mxcli report architecture -p app.mpr --format json -o arch.json
+  mxcli report architecture -p app.mpr --exclude-docs 'Shop.FaultProbe*,RestClient.*' -o architecture.html
   mxcli report architecture --from arch.json --annotations arch-notes.yaml -o architecture.html`,
 	flags: func(cmd *cobra.Command) {
 		scopeFlags(cmd)
 		cmd.Flags().Int("top", 15, "Rows in the god node, bridge and hotspot tables")
 		cmd.Flags().Bool("no-communities", false, "Skip the clustering pass (no bounded-context section)")
+		cmd.Flags().StringSlice("exclude-docs", nil, "Name globs of documents to leave out, e.g. 'Shop.FaultProbe*,RestClient.*' (generated code, probes, fixtures)")
 	},
 	collect: func(cmd *cobra.Command, projectPath string) (*projectreport.Envelope, error) {
 		modes := []string{"full"}
@@ -256,8 +268,9 @@ Annotation keys: module:<Name>, cluster:<key member>, cycle:<A+B>, unused:<Name>
 		}
 		defer cleanup()
 		top, _ := cmd.Flags().GetInt("top")
+		excludeDocs, _ := cmd.Flags().GetStringSlice("exclude-docs")
 		data, err := projectreport.CollectArchitecture(exec.Catalog(), projectreport.ArchitectureOptions{
-			Scope: scopeOptions(cmd), Top: top, SettingsMicroflows: settingsMicroflows(exec),
+			Scope: scopeOptions(cmd), Top: top, SettingsMicroflows: settingsMicroflows(exec), ExcludeDocs: excludeDocs,
 		})
 		if err != nil {
 			return nil, err

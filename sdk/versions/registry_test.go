@@ -398,3 +398,17 @@ func TestMessageDefinitionCollectionEndsAt1114(t *testing.T) {
 		t.Errorf("Lookup = %+v, want the 11.14.99 ceiling", e)
 	}
 }
+
+func TestReleaseLine(t *testing.T) {
+	r, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for v, want := range map[string]string{"10.24.3": LineLTS, "10.18.0": LineMTS, "10.19.1": LineMonthly, "3.1.0": LineUnknown,
+		"11.13.0": LineUnknown /* the registry records no 11.x LTS or MTS line */} {
+		sv, _ := ParseSemVer(v)
+		if got, _ := r.ReleaseLine(sv); got != want {
+			t.Errorf("%s: %s, want %s", v, got, want)
+		}
+	}
+}

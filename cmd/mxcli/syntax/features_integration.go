@@ -491,10 +491,20 @@ func init() {
 		Summary: "Auto-generate Database Connector MDL from external database schema",
 		Keywords: []string{
 			"generate connector", "database connector",
-			"constants", "non-persistent entity", "jdbc",
+			"constants", "non-persistent entity", "jdbc", "schema",
 		},
-		Syntax:  "SQL <alias> GENERATE CONNECTOR INTO Module\n  [TABLES (t1, t2)]\n  [VIEWS (v1, v2)]\n  [EXEC];",
-		Example: "SQL source GENERATE CONNECTOR INTO HRModule;\nSQL source GENERATE CONNECTOR INTO HRModule TABLES (employees, departments) EXEC;",
+		Syntax: "SQL <alias> GENERATE CONNECTOR INTO Module\n" +
+			"  [TABLES (t1, schema.t2)]\n" +
+			"  [VIEWS (v1, schema.v2)]\n" +
+			"  [EXEC];\n" +
+			"  -- A name may be schema-qualified, and must be where two\n" +
+			"  -- schemas hold the same one. Each generated QUERY selects\n" +
+			"  -- FROM the schema the object was discovered in, so it runs\n" +
+			"  -- wherever the connection's search path points.\n" +
+			"  -- Either clause scopes the whole command: with neither, every\n" +
+			"  -- table and view is generated; with either, only what it names.\n" +
+			"  -- An object named twice is generated once.",
+		Example: "SQL source GENERATE CONNECTOR INTO HRModule;\nSQL source GENERATE CONNECTOR INTO HRModule TABLES (employees, hr.departments) EXEC;",
 		SeeAlso: []string{"sql", "sql.connect"},
 	})
 

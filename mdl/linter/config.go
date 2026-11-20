@@ -3,8 +3,12 @@
 package linter
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"gopkg.in/yaml.v3"
 )
@@ -120,4 +124,42 @@ func ParseSeverity(s string) Severity {
 	default:
 		return SeverityWarning
 	}
+}
+
+// Fingerprint identifies the configuration a lint run used: the effective
+// excluded modules (the config file's plus any given on the command line) and
+// each rule's enablement, severity and options. It is computed from the parsed
+// values, not the file's bytes, so a comment or reordering does not change it,
+// and a baseline records it to tell a run under another configuration from one
+// under the same (ako/mxcli#2455). cfg may be nil.
+func (cfg *Config) Fingerprint(cliExcluded []string) string {
+	type rule struct {
+		Enabled  *bool          `json:"enabled,omitempty"`
+		Severity string         `json:"severity,omitempty"`
+		Options  map[string]any `json:"options,omitempty"`
+	}
+	eff := struct {
+		Exclude []string        `json:"exclude"`
+		Rules   map[string]rule `json:"rules"`
+	}{Exclude: []string{}, Rules: map[string]rule{}}
+	seen := map[string]bool{}
+	add := func(ms []string) {
+		for _, m := range ms {
+			if !seen[m] {
+				seen[m] = true
+				eff.Exclude = append(eff.Exclude, m)
+			}
+		}
+	}
+	if cfg != nil {
+		add(cfg.ExcludeModules)
+		for id, r := range cfg.Rules {
+			eff.Rules[id] = rule{Enabled: r.Enabled, Severity: r.Severity, Options: r.Options}
+		}
+	}
+	add(cliExcluded)
+	sort.Strings(eff.Exclude)
+	data, _ := json.Marshal(eff) // map keys are sorted by encoding/json
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])[:16]
 }
