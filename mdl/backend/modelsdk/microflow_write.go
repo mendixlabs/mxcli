@@ -1157,6 +1157,10 @@ func codeActionParameterValueToGen(v microflows.CodeActionParameterValue) elemen
 		g := newElem("Microflows$MicroflowParameterValue", string(val.ID))
 		addStr(g, "Microflow", val.Microflow)
 		return g
+	case *microflows.NanoflowParameterValue:
+		g := newElem("Nanoflows$NanoflowParameterValue", string(val.ID))
+		addStr(g, "Nanoflow", val.Nanoflow)
+		return g
 	case *microflows.EntityTypeCodeActionParameterValue:
 		g := newElem("Microflows$EntityTypeCodeActionParameterValue", string(val.ID))
 		addStr(g, "Entity", val.Entity)
