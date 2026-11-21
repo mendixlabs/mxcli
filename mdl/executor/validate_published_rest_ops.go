@@ -110,16 +110,16 @@ func publishedRestAlterResourceProblems(stored *model.PublishedRestService, s *a
 		switch act := a.(type) {
 		case *ast.PublishedRestAddOperationsAction:
 			if !have[act.Resource] {
-				out = append(out, fmt.Sprintf("resource '%s' not found on %s: `add operation in resource` adds to a stored resource; "+
-					"a new one is `add resource '%s' { … }`", act.Resource, s.Name, act.Resource))
+				out = append(out, fmt.Sprintf("resource %s not found on %s: `add operation in resource` adds to a stored resource; "+
+					"a new one is `add resource %s { … }`", mdlQuoted(act.Resource), s.Name, mdlQuoted(act.Resource)))
 				continue
 			}
 			for _, op := range act.Operations {
 				k := publishedRestOperationKey(act.Resource, op.HTTPMethod, op.Path)
 				if ops[k] {
 					out = append(out, fmt.Sprintf("operation %s already exists on %s: `add operation` adds a new one; "+
-						"to change it, `drop operation %s in resource '%s'` first and add it back",
-						k, s.Name, publishedRestOperationSpelling(op.HTTPMethod, op.Path), act.Resource))
+						"to change it, `drop operation %s in resource %s` first and add it back",
+						k, s.Name, publishedRestOperationSpelling(op.HTTPMethod, op.Path), mdlQuoted(act.Resource)))
 				}
 				ops[k] = true
 			}
@@ -131,14 +131,14 @@ func publishedRestAlterResourceProblems(stored *model.PublishedRestService, s *a
 			delete(ops, k)
 		case *ast.PublishedRestAddResourceAction:
 			if have[act.Resource.Name] {
-				out = append(out, fmt.Sprintf("resource '%s' already exists on %s: `add resource` adds a new one; "+
-					"to change it, `drop resource '%s'` first and add it back with every operation it keeps",
-					act.Resource.Name, s.Name, act.Resource.Name))
+				out = append(out, fmt.Sprintf("resource %s already exists on %s: `add resource` adds a new one; "+
+					"to change it, `drop resource %s` first and add it back with every operation it keeps",
+					mdlQuoted(act.Resource.Name), s.Name, mdlQuoted(act.Resource.Name)))
 			}
 			have[act.Resource.Name] = true
 		case *ast.PublishedRestDropResourceAction:
 			if !have[act.Name] {
-				out = append(out, fmt.Sprintf("resource '%s' not found on %s", act.Name, s.Name))
+				out = append(out, fmt.Sprintf("resource %s not found on %s", mdlQuoted(act.Name), s.Name))
 			}
 			delete(have, act.Name)
 		}

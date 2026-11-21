@@ -937,8 +937,8 @@ func execAlterPublishedRestService(ctx *ExecContext, s *ast.AlterPublishedRestSe
 			res := publishedRestResourceNamed(svc, a.Resource)
 			if res == nil {
 				return mdlerrors.NewNotFoundMsg("resource", a.Resource, fmt.Sprintf(
-					"resource '%s' not found on %s.%s: `add operation in resource` adds to a stored resource; a new one is `add resource '%s' { … }`",
-					a.Resource, s.Name.Module, s.Name.Name, a.Resource))
+					"resource %s not found on %s.%s: `add operation in resource` adds to a stored resource; a new one is `add resource %s { … }`",
+					mdlQuoted(a.Resource), s.Name.Module, s.Name.Name, mdlQuoted(a.Resource)))
 			}
 			added, err := astResourceDefToModel(&ast.PublishedRestResourceDef{Name: a.Resource, Operations: a.Operations})
 			if err != nil {
@@ -950,8 +950,8 @@ func execAlterPublishedRestService(ctx *ExecContext, s *ast.AlterPublishedRestSe
 					if publishedRestOperationKey(a.Resource, stored.HTTPMethod, stored.Path) == key {
 						return mdlerrors.NewAlreadyExistsMsg("operation", key, fmt.Sprintf(
 							"operation %s already exists on %s.%s: `add operation` adds a new one; to change it, "+
-								"`drop operation %s in resource '%s'` first and add it back", key, s.Name.Module, s.Name.Name,
-							publishedRestOperationSpelling(op.HTTPMethod, op.Path), a.Resource))
+								"`drop operation %s in resource %s` first and add it back", key, s.Name.Module, s.Name.Name,
+							publishedRestOperationSpelling(op.HTTPMethod, op.Path), mdlQuoted(a.Resource)))
 					}
 				}
 				res.Operations = append(res.Operations, op)
@@ -1021,7 +1021,7 @@ func publishedRestResourceNamed(svc *model.PublishedRestService, name string) *m
 func publishedRestOperationSpelling(method, path string) string {
 	m := strings.ToLower(method)
 	if p := strings.Trim(path, "/"); p != "" {
-		return m + " '" + p + "'"
+		return m + " " + mdlQuoted(p)
 	}
 	return m
 }
