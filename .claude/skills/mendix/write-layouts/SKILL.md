@@ -15,10 +15,10 @@ description: "CREATE LAYOUT syntax — the frame a page is built on: scroll-cont
 | 195-234 | The four things only a layout has |
 | 235-246 | Layout type, and why there is no `native:` flag |
 | 247-268 | The layout class is load-bearing |
-| 269-328 | Gotchas |
-| 329-341 | Validate |
-| 342-354 | What `mxcli new` scaffolds |
-| 355-357 | Layouts (SHOW/DESCRIBE/CREATE [OR REPLACE] LAYOUT) |
+| 269-339 | Gotchas |
+| 340-352 | Validate |
+| 353-365 | What `mxcli new` scaffolds |
+| 366-368 | Layouts (SHOW/DESCRIBE/CREATE [OR REPLACE] LAYOUT) |
 
 <!-- /skill-index -->
 # CREATE LAYOUT — the frame a page is built on
