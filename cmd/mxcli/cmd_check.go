@@ -551,6 +551,9 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 		// write the clause (ako/mxcli#1914) — the omitted-clause warning exec
 		// prints, said before the write.
 		projectViolations = append(projectViolations, exec.CheckCarriedIncludedAssociations(prog)...)
+		// MDL-REST06: a create or modify of a stored published REST service
+		// that removes operations it does not list (ako/mxcli#2449).
+		projectViolations = append(projectViolations, exec.CheckPublishedRestOperationDrops(prog)...)
 		projectViolations = append(projectViolations, exec.TypeCheckProgram(prog)...)
 		flowReport := exec.CheckFlowVerdictsReport(prog)
 		projectViolations = append(projectViolations, flowReport.Violations...)

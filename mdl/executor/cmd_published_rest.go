@@ -557,6 +557,12 @@ func execCreatePublishedRestService(ctx *ExecContext, s *ast.CreatePublishedRest
 		return mdlerrors.NewAlreadyExistsMsg("published rest service", s.Name.Module+"."+s.Name.Name,
 			fmt.Sprintf("published rest service already exists: %s.%s (use create or modify to update)", s.Name.Module, s.Name.Name))
 	}
+	// The statement is the whole service: say which stored operations it
+	// removes, which exec did not (MDL-REST06, ako/mxcli#2449).
+	if dropped := droppedPublishedRestOperations(existing, s); len(dropped) > 0 {
+		fmt.Fprintf(ctx.progress(), "Warning [%s]: %s. %s\n", publishedRestOperationDropRule,
+			publishedRestDropMessage(s.Name.String(), dropped), publishedRestDropSuggestion)
+	}
 
 	module, err := findModule(ctx, s.Name.Module)
 	if err != nil {

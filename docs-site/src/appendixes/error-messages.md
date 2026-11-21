@@ -295,6 +295,17 @@ CE6086 ("Data views are not allowed on web layouts.") [MDL-LAYOUT01]
 
 **Solution:** Put the data view on the page, inside `placeholder Main { … }`. For a toggling sidebar, make the `scrollcontainer` the layout's one top-level widget and put the toggle in one of its regions, for example `region top { sidebartoggle tg (Caption: 'Menu') }`. A layout built on another one (`Layout:`) is checked only for data views.
 
+### MDL-REST06: `create or modify` removes stored operations
+
+```
+⚠ create or modify published rest service Shop.BookingApi removes 1 stored operation(s) it does not list:
+GET bookings/{id} [MDL-REST06]
+```
+
+**Cause:** `create or modify published rest service` describes the whole service. An operation of the stored service that the statement does not list is deleted. That is right when the script means to remove it. It is a loss when the statement was written to add one operation and lists only that. exec used to report only "Modified published rest service".
+
+**Solution:** List every operation the service keeps; `describe published rest service` prints them. To change one resource, use `alter published rest service … drop resource '<name>'` and `add resource '<name>' { … }`. `check` refuses `add resource` with the name of a stored resource, which exec refuses too.
+
 ## mxcli Parser Errors
 
 

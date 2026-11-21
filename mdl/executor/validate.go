@@ -1189,6 +1189,16 @@ func validateWithContext(ctx *ExecContext, stmt ast.Statement, sc *scriptContext
 	case *ast.CreateMessageDefinitionStmt:
 		return messageDefinitionMemberErrors(ctx, sc, s.Name.String(), s.Definition)
 	case *ast.AlterPublishedRestServiceStmt:
+		// What exec refuses about the stored service's resources, said here
+		// (ako/mxcli#2449). A service the script creates is not stored yet,
+		// so the lookup finds nothing and there is nothing to judge.
+		if ctx.Connected() {
+			if stored, err := findPublishedRestService(ctx, s.Name.Module, s.Name.Name); err == nil && stored != nil {
+				if probs := publishedRestAlterResourceProblems(stored, s); len(probs) > 0 {
+					return mdlerrors.NewValidationf("alter published rest service %s:\n  - %s", s.Name, strings.Join(probs, "\n  - "))
+				}
+			}
+		}
 		for _, a := range s.Actions {
 			if set, ok := a.(*ast.PublishedRestSetAction); ok {
 				if err := validatePublishedRestAuthMicroflow(ctx, set.Authentication, sc); err != nil {
