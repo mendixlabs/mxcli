@@ -1938,7 +1938,22 @@ func withAnnotations(st ast.MicroflowStatement, edit func(*ast.ActivityAnnotatio
 // before the stored statement after it. gapStart is the index of the first
 // stored statement after the run's predecessor; next is the index of the
 // matched statement after the run.
+//
+// An activity with a custom error handler is not anchored after: its handler
+// rejoins the flow at a merge on that activity's outgoing flow, which the
+// stored statements do not show (describe prints the merge only once a join
+// names it), so a statement spliced after it lands between the activity and
+// the merge, and the error path skips it. The next exec then cannot address
+// the join it made (MDL-V1-REBUILD, ako/mxcli#2489). Before the stored
+// statement after the gap is after the merge, where the source puts it.
 func insertAnchor(loc *storedLocator, stored []ast.MicroflowStatement, gapStart, next int) (ast.AlterFlowOpKind, mfmutator.Candidate, error) {
+	if gapStart > 0 && next < len(stored) && customErrorHandler(stored[gapStart-1]) {
+		c, err := loc.locate(stored[next])
+		if err != nil {
+			return "", mfmutator.Candidate{}, err
+		}
+		return ast.AlterFlowInsertBefore, c, nil
+	}
 	if gapStart > 0 {
 		if c, err := loc.locate(stored[gapStart-1]); err == nil {
 			if _, ok := c.Object.(*microflows.ActionActivity); ok {
