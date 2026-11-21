@@ -636,6 +636,12 @@ func (g *grantResolver) xpathProblem(qn ast.QualifiedName, xpath string) string 
 	stored := accessRuleXPathConstraint(g.ctx, xpath, name)
 	var bad []string
 	for _, b := range unresolvableXPathStepsWith(g.ctx, g.xpath.model, stored, name, g.xpath.resolve) {
+		// `Assoc.Attr`: one name to the walk, an association and an
+		// attribute with the entity step missing (ako/mxcli#2491).
+		if hint := missingEntityStepHint(g.xpath.model, g.xpath.resolve, name, b.name); hint != "" {
+			return fmt.Sprintf("the access rule's constraint names %q, which is %s; as written mxbuild reports "+
+				"CE1613 \"The selected … no longer exists\" at the access rule", b.name, hint)
+		}
 		bad = append(bad, fmt.Sprintf("%s %q", b.kind, b.name))
 	}
 	if len(bad) == 0 {
