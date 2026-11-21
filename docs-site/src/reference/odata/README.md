@@ -24,8 +24,35 @@ Mendix supports consuming and publishing OData services. Consumed services (ODat
 
 | Statement | Description |
 |-----------|-------------|
-| [CREATE EXTERNAL ENTITY](create-external-entity.md) | Import an entity from a consumed OData service |
+| [CREATE EXTERNAL ENTITY](#create-external-entity) | Import one entity from a consumed OData service |
 | [CREATE EXTERNAL ENTITIES](#create-external-entities) | Bulk-create external entities from cached $metadata |
+
+## CREATE EXTERNAL ENTITY
+
+```sql
+create external entity Sales.Order from consumed odata service Sales.SalesApi
+  (EntitySet: 'Orders')
+  (OrderId: Long, Title: String(100), Status: Enumeration(Sales.OrderStatus));
+```
+
+The attributes come from the service's cached `$metadata`. Each one listed is
+the property of that name, mapped exactly as [CREATE EXTERNAL
+ENTITIES](#create-external-entities) maps it. Its remote name and type, its
+capabilities, the entity's key, `Countable`, `$top` and `$skip` all follow the
+contract. So does the enumeration of an enum-typed property (see below). List
+a subset to import only those properties. Leave out the list to import them
+all.
+
+What would not build is refused, with nothing written:
+
+- a name that is not one of the contract's attributes (the message lists them);
+- a type the service does not publish, including an ordinary enumeration for an
+  enum-typed property;
+- a missing key attribute (`CE6010` "Key cannot be empty");
+- a `Countable`, `Creatable` or `Deletable` that differs from the entity set's
+  (`CE6630`). Leave them out to follow the service.
+
+`AllowCreateChangeLocally` is a local choice and is written as stated.
 
 ## CREATE EXTERNAL ENTITIES
 

@@ -2,15 +2,16 @@ mdl 1;
 -- Issue #534: ALTER ENTITY SET ALLOW_CREATE_CHANGE_LOCALLY = true/false
 -- and CREATE EXTERNAL ENTITY with AllowCreateChangeLocally property.
 
--- Create an external entity with the flag set at creation time.
+-- Create an external entity with the flag set at creation time. The flag is a
+-- local choice; Countable, Creatable and Deletable are TripPin's, which declares
+-- no capability annotations (read-only), and a stated value that contradicts
+-- them is refused as CE6630 (ako/mxcli#2497).
 create or modify external entity TripPin.People
 from consumed odata service TripPin.TripPinClient
 (
   EntitySet: 'People',
   Countable: Yes,
-  Creatable: Yes,
   Deletable: No,
-  Updatable: Yes,
   AllowCreateChangeLocally: Yes
 )
 (

@@ -28,6 +28,27 @@ import (
 // to, one value per member with the member's name as name and caption.
 type odataEnumerations struct {
 	byRemote map[string]string // remote type name -> enumeration qualified name
+	// deferred holds back creating an enumeration until createPending names
+	// it: the single `create external entity` resolves every property and
+	// keeps only the ones the statement lists (ako/mxcli#2497).
+	deferred bool
+	pending  map[string]*model.Enumeration // qualified name -> not yet created
+}
+
+// createPending creates the held-back enumeration of that qualified name, if
+// there is one.
+func (o *odataEnumerations) createPending(ctx *ExecContext, qn string) error {
+	enum := o.pending[qn]
+	if enum == nil {
+		return nil
+	}
+	delete(o.pending, qn)
+	if err := ctx.Backend.CreateEnumeration(enum); err != nil {
+		return fmt.Errorf("creating enumeration %s: %w", qn, err)
+	}
+	invalidateHierarchy(ctx)
+	fmt.Fprintf(ctx.Output, "  Created enumeration %s from %s\n", qn, enum.RemoteName)
+	return nil
 }
 
 var enumValueName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -72,6 +93,14 @@ func (o *odataEnumerations) ensure(ctx *ExecContext, moduleID model.ID, module, 
 			Caption:    &model.Text{Translations: map[string]string{authoringLanguage(ctx): m.Name}},
 			RemoteName: m.Name,
 		})
+	}
+	if o.deferred {
+		if o.pending == nil {
+			o.pending = map[string]*model.Enumeration{}
+		}
+		o.pending[qn] = enum
+		o.byRemote[remoteType] = qn
+		return qn, ""
 	}
 	if err := ctx.Backend.CreateEnumeration(enum); err != nil {
 		return "", "creating enumeration " + qn + ": " + err.Error()
