@@ -258,12 +258,13 @@ func resolveOneLink(
 			}
 		} else {
 			info.JunctionTable = sysInfo.TableName
-			// Junction column names from conventions
-			parentParts := strings.SplitN(entityNames[string(getParentID(foundAssoc, foundCross))], ".", 2)
+			// The row's junction column names, else the convention; a
+			// self-association's two are numbered (ako/mxcli#1686).
+			parentEntity := entityNames[string(getParentID(foundAssoc, foundCross))]
+			parentParts := strings.SplitN(parentEntity, ".", 2)
 			childParts := strings.SplitN(childEntity, ".", 2)
 			if len(parentParts) == 2 && len(childParts) == 2 {
-				info.ParentColName = sqllib.JunctionColumnFromConvention(entityNames[string(getParentID(foundAssoc, foundCross))])
-				info.ChildColName = sqllib.JunctionColumnFromConvention(childEntity)
+				info.ParentColName, info.ChildColName = sqllib.JunctionColumns(sysInfo, parentEntity, childEntity)
 			}
 		}
 	} else {
@@ -272,8 +273,7 @@ func resolveOneLink(
 			info.FKColumnName = sqllib.AssocColumnNameFromConvention(assocQualName)
 		} else {
 			info.JunctionTable = sqllib.JunctionTableFromConvention(assocQualName)
-			info.ParentColName = sqllib.JunctionColumnFromConvention(getParentEntityName(foundAssoc, foundCross, entityNames))
-			info.ChildColName = sqllib.JunctionColumnFromConvention(childEntity)
+			info.ParentColName, info.ChildColName = sqllib.JunctionColumns(nil, getParentEntityName(foundAssoc, foundCross, entityNames), childEntity)
 		}
 	}
 

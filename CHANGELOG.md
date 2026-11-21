@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- **`import … link` works through a self-association stored as a table** (ako/mxcli#1686) — both junction columns were named after the one entity, so the insert failed (`column "myfirstmodule$personid" … does not exist`). The column names now come from `mendixsystem$association`, and without a row a self-association's two are numbered as Mendix names them (`…personid1` parent, `…personid2` child, measured on 11.12.6).
 - **A statement appended after an activity with an error handler goes after the handler's rejoin** (ako/mxcli#2489) — `create or modify microflow` spliced it between the activity and the merge its handler rejoins, so the error path skipped the new statement, and the next exec of the unchanged script was refused (MDL-V1-REBUILD). It now goes after the merge, and the script re-runs unchanged.
 - **`check` names the missing entity step in `[Assoc.Attr …]`** (ako/mxcli#2491, mendixlabs/mxcli#1916) — an XPath constraint that joins an association and its far end's attribute with a dot (`[Car_Assignment.ReturnedOn = empty]`) was reported as an unknown association, and MDL047 suggested a `not(…)` that kept the dotted name. With `-p`, the access-rule and retrieve checks now say the entity step is missing and give the path (`[Repro.Car_Assignment/Repro.Assignment/ReturnedOn = empty]`); without a project, MDL047's suggestion offers that reading too.
 
