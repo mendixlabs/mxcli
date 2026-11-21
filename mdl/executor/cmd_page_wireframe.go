@@ -50,7 +50,17 @@ type wireframeNode struct {
 	Columns          []wireframeColumn     `json:"columns,omitempty"`
 	Rows             []wireframeRow        `json:"rows,omitempty"`
 	TabPages         []wireframeTabPage    `json:"tabPages,omitempty"`
-	Children         []wireframeNode       `json:"children,omitempty"`
+	// Slots are a pluggable widget's named widget slots other than its body:
+	// a data grid's control bar and empty-state placeholder, a gallery's
+	// filters (ako/mxcli#2465).
+	Slots    []wireframeSlot `json:"slots,omitempty"`
+	Children []wireframeNode `json:"children,omitempty"`
+}
+
+// wireframeSlot is one named widget slot, named as describe names it.
+type wireframeSlot struct {
+	Name     string          `json:"name"`
+	Children []wireframeNode `json:"children"`
 }
 
 type wireframeDesignProp struct {
@@ -71,6 +81,10 @@ type wireframeRowColumn struct {
 type wireframeColumn struct {
 	Caption string `json:"caption"`
 	Binding string `json:"binding,omitempty"`
+	// Children are the column's custom content and Filter its filter widgets
+	// (ako/mxcli#2465).
+	Children []wireframeNode `json:"children,omitempty"`
+	Filter   []wireframeNode `json:"filter,omitempty"`
 }
 
 type wireframeTabPage struct {
@@ -401,13 +415,26 @@ func rawWidgetToWireframe(w rawWidget, counter *wireframeCounter) wireframeNode 
 		// DataGrid2 columns
 		for _, col := range w.DataGridColumns {
 			node.Columns = append(node.Columns, wireframeColumn{
-				Caption: col.Caption,
-				Binding: col.Attribute,
+				Caption:  col.Caption,
+				Binding:  col.Attribute,
+				Children: wireframeNodes(col.ContentWidgets, counter),
+				Filter:   wireframeNodes(col.FilterWidgets, counter),
 			})
 		}
 		// Gallery/DataGrid children
 		for _, child := range w.Children {
 			node.Children = append(node.Children, rawWidgetToWireframe(child, counter))
+		}
+		// The other slots, in describe's order (ako/mxcli#2465).
+		addSlot := func(name string, ws []rawWidget) {
+			if len(ws) > 0 {
+				node.Slots = append(node.Slots, wireframeSlot{Name: name, Children: wireframeNodes(ws, counter)})
+			}
+		}
+		addSlot("controlbar", w.ControlBar)
+		addSlot("filter", w.FilterWidgets)
+		for _, slot := range w.ChildSlots {
+			addSlot(slot.Keyword, slot.Widgets)
 		}
 
 	default:
@@ -422,6 +449,14 @@ func rawWidgetToWireframe(w rawWidget, counter *wireframeCounter) wireframeNode 
 }
 
 // formatDataSourceRef formats a data source reference for display.
+func wireframeNodes(ws []rawWidget, counter *wireframeCounter) []wireframeNode {
+	var out []wireframeNode
+	for _, w := range ws {
+		out = append(out, rawWidgetToWireframe(w, counter))
+	}
+	return out
+}
+
 func formatDataSourceRef(ds *rawDataSource) string {
 	switch ds.Type {
 	case "parameter":
@@ -525,6 +560,13 @@ func mapWidgetToLines(nodes []wireframeNode, lines []string, sourceMap map[strin
 		}
 		for _, tab := range node.TabPages {
 			mapWidgetToLines(tab.Children, lines, sourceMap)
+		}
+		for _, col := range node.Columns {
+			mapWidgetToLines(col.Children, lines, sourceMap)
+			mapWidgetToLines(col.Filter, lines, sourceMap)
+		}
+		for _, slot := range node.Slots {
+			mapWidgetToLines(slot.Children, lines, sourceMap)
 		}
 	}
 }

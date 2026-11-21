@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`describe --format elk page` keeps a data grid's slot widgets** (ako/mxcli#2465, mendixlabs/mxcli#1910) — a DataGrid2's column content, column filters, control bar and empty-state placeholder were missing from the JSON tree. Columns now carry `children` and `filter`, and the grid carries `slots` (a gallery's filters too).
 - **`check` refuses a data view in a layout and a misplaced sidebar toggle** (ako/mxcli#2461) — a `dataview` in a layout (CE6086), a toggling region with no `sidebartoggle` (CE0611), a toggle outside the layout's one top-level scroll container (CE0628) and a toggle on a page or snippet (CE6086) passed check and exec and failed the build. They are now MDL-LAYOUT01..04.
 - **`alter layout` reaches the widgets of a layout built on another layout** (ako/mxcli#2462, mendixlabs/mxcli#1907) — a widget inside a nested layout's `placeholder Main { … }` was printed by describe but refused by `alter layout … on <widget>` as "widget not found". The placeholder fills are now searched, as a page's are.
 - **A business event message stores its String lengths, and describe pairs each message with its own operation** (ako/mxcli#2490) — `String(36)` and `String(unlimited)` in a message were dropped, so the build applied 200 and reported the length differing from the entity's. They are now stored (a bare `String` still stores none, as before) and described back. A message declared once per operation was described with the later operation twice.
