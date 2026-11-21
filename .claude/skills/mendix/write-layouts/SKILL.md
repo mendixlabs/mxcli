@@ -314,6 +314,17 @@ section.
   Before it was authorable, a copy dropped the header, so pages bound to those
   placeholders failed CE1613 and a Sidebar copy failed CE0611 ("A sidebar
   toggle button is required if a region can toggle").
+- **Where a data view and a sidebar toggle may go** (ako/mxcli#2461, measured
+  with mx check 11.12.6; `mxcli check` refuses each as MDL-LAYOUT01..04):
+  - No `dataview` in any layout, web or native: CE6086. It belongs on the page,
+    inside `placeholder Main { … }`.
+  - A region with a `ToggleMode` other than `'None'` needs a `sidebartoggle` in
+    the layout itself (one inside a called snippet does not count): CE0611.
+  - A `sidebartoggle` needs the layout's **only** top-level widget to be the
+    `scrollcontainer`, with the toggle in one of its regions and a region that
+    toggles. A container around the scroll container, the toggle beside it, or
+    no toggling region is CE0628.
+  - A `sidebartoggle` on a page or snippet is CE6086.
 - **A native layout's header placeholder, bottom bar and sidebar** are
   `region header { placeholder Header }`, `showbottombar: true` in the header,
   and `region sidebar { … }` (present = the layout has a sidebar). A copy used

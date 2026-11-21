@@ -1,0 +1,16 @@
+-- ako/mxcli#2461, positive twin of 2461-layout-widget-placement.fail.mdl: a
+-- toggling sidebar with its toggle in a region of the layout's one top-level
+-- scroll container builds with 0 errors (mx check 11.12.6).
+mdl 1;
+
+create module BugLayout2461;
+
+create layout BugLayout2461.ToggleLayout (layouttype: 'Responsive') {
+  scrollcontainer layoutContainer {
+    region top { sidebartoggle tgMenu (Caption: 'Menu') }
+    region left (Size: 260, SizeMode: 'Pixels', ToggleMode: 'ShrinkContentInitiallyClosed') {
+      dynamictext t2 (Content: 'menu')
+    }
+    region center { placeholder Main }
+  }
+};
