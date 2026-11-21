@@ -535,56 +535,61 @@ func buildPublishedRestResourceDef(rc *parser.PublishedRestResourceContext) *ast
 	}
 
 	for _, opCtx := range rc.AllPublishedRestOperation() {
-		oc := opCtx.(*parser.PublishedRestOperationContext)
-		opDef := &ast.PublishedRestOperationDef{}
-
-		// HTTP method
-		if mCtx := oc.RestHttpMethod(); mCtx != nil {
-			opDef.HTTPMethod = strings.ToUpper(mCtx.GetText())
-		}
-
-		// Operation path — strip leading/trailing slashes (CE6550/CE6551)
-		if pCtx := oc.PublishedRestOpPath(); pCtx != nil {
-			pc := pCtx.(*parser.PublishedRestOpPathContext)
-			if pc.STRING_LITERAL() != nil {
-				opDef.Path = strings.Trim(unquoteStringLit(pc.STRING_LITERAL()), "/")
-			}
-		}
-
-		// Microflow reference
-		allQN := oc.AllQualifiedName()
-		if len(allQN) >= 1 {
-			opDef.Microflow = buildQualifiedName(allQN[0])
-		}
-
-		if oc.DEPRECATED() != nil {
-			opDef.Deprecated = true
-		}
-
-		// Import/Export mapping (qualifiedName after IMPORT/EXPORT MAPPING)
-		if oc.IMPORT() != nil && len(allQN) >= 2 {
-			opDef.ImportMapping = buildQualifiedName(allQN[1]).String()
-		}
-		if oc.EXPORT() != nil {
-			idx := 1
-			if oc.IMPORT() != nil {
-				idx = 2
-			}
-			if len(allQN) > idx {
-				opDef.ExportMapping = buildQualifiedName(allQN[idx]).String()
-			}
-		}
-
-		if oc.COMMIT() != nil {
-			if idCtx := oc.IdentifierOrKeyword(); idCtx != nil {
-				opDef.Commit = identifierOrKeywordText(idCtx.(*parser.IdentifierOrKeywordContext))
-			}
-		}
-
-		resDef.Operations = append(resDef.Operations, opDef)
+		resDef.Operations = append(resDef.Operations, buildPublishedRestOperationDef(opCtx.(*parser.PublishedRestOperationContext)))
 	}
 
 	return resDef
+}
+
+// buildPublishedRestOperationDef converts one operation line, shared by a
+// resource block and ALTER … ADD OPERATION (ako/mxcli#2449).
+func buildPublishedRestOperationDef(oc *parser.PublishedRestOperationContext) *ast.PublishedRestOperationDef {
+	opDef := &ast.PublishedRestOperationDef{}
+
+	// HTTP method
+	if mCtx := oc.RestHttpMethod(); mCtx != nil {
+		opDef.HTTPMethod = strings.ToUpper(mCtx.GetText())
+	}
+
+	// Operation path — strip leading/trailing slashes (CE6550/CE6551)
+	if pCtx := oc.PublishedRestOpPath(); pCtx != nil {
+		pc := pCtx.(*parser.PublishedRestOpPathContext)
+		if pc.STRING_LITERAL() != nil {
+			opDef.Path = strings.Trim(unquoteStringLit(pc.STRING_LITERAL()), "/")
+		}
+	}
+
+	// Microflow reference
+	allQN := oc.AllQualifiedName()
+	if len(allQN) >= 1 {
+		opDef.Microflow = buildQualifiedName(allQN[0])
+	}
+
+	if oc.DEPRECATED() != nil {
+		opDef.Deprecated = true
+	}
+
+	// Import/Export mapping (qualifiedName after IMPORT/EXPORT MAPPING)
+	if oc.IMPORT() != nil && len(allQN) >= 2 {
+		opDef.ImportMapping = buildQualifiedName(allQN[1]).String()
+	}
+	if oc.EXPORT() != nil {
+		idx := 1
+		if oc.IMPORT() != nil {
+			idx = 2
+		}
+		if len(allQN) > idx {
+			opDef.ExportMapping = buildQualifiedName(allQN[idx]).String()
+		}
+	}
+
+	if oc.COMMIT() != nil {
+		if idCtx := oc.IdentifierOrKeyword(); idCtx != nil {
+			opDef.Commit = identifierOrKeywordText(idCtx.(*parser.IdentifierOrKeywordContext))
+		}
+	}
+
+	return opDef
 }
 
 // exitAlterRestClientStatement handles ALTER CONSUMED REST SERVICE
@@ -691,6 +696,31 @@ func (b *Builder) exitAlterPublishedRestServiceStatement(ctx *parser.AlterStatem
 				changes[key] = val
 			}
 			stmt.Actions = append(stmt.Actions, &ast.PublishedRestSetAction{Changes: changes})
+			continue
+		}
+
+		// ADD OPERATION IN RESOURCE 'name' { ... } (ako/mxcli#2449)
+		if ac.ADD() != nil && ac.OPERATION() != nil {
+			act := &ast.PublishedRestAddOperationsAction{Resource: unquoteStringLit(ac.STRING_LITERAL())}
+			for _, opCtx := range ac.AllPublishedRestOperation() {
+				act.Operations = append(act.Operations, buildPublishedRestOperationDef(opCtx.(*parser.PublishedRestOperationContext)))
+			}
+			stmt.Actions = append(stmt.Actions, act)
+			continue
+		}
+
+		// DROP OPERATION <method> ['path'] IN RESOURCE 'name'
+		if ac.DROP() != nil && ac.OPERATION() != nil {
+			act := &ast.PublishedRestDropOperationAction{Resource: unquoteStringLit(ac.STRING_LITERAL())}
+			if m := ac.RestHttpMethod(); m != nil {
+				act.HTTPMethod = strings.ToUpper(m.GetText())
+			}
+			if pCtx := ac.PublishedRestOpPath(); pCtx != nil {
+				if pc := pCtx.(*parser.PublishedRestOpPathContext); pc.STRING_LITERAL() != nil {
+					act.Path = strings.Trim(unquoteStringLit(pc.STRING_LITERAL()), "/")
+				}
+			}
+			stmt.Actions = append(stmt.Actions, act)
 			continue
 		}
 

@@ -48,7 +48,7 @@ func validateRetrieveMembers(ctx *ExecContext, retrieves []retrieveConstraintRef
 			}
 			errs = append(errs, fmt.Sprintf(
 				"retrieve from %s: the constraint names %q, which is neither an attribute nor an association of it — mxbuild rejects the constraint (CE0161 \"Error(s) in XPath constraint\")%s",
-				r.entity, bad.name, systemMemberSpellingHint(bad.name)))
+				r.entity, bad.name, systemMemberSpellingHint(bad.name)+missingStepSuffix(missingEntityStepHint(m, resolve, r.entity, bad.name))))
 		}
 	}
 	return errs
