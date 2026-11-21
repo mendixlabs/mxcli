@@ -343,12 +343,22 @@ func (v *verifyRunner) lint() (verify.Outcome, error) {
 		return verify.Outcome{Recorded: true, PreExisting: len(findings), Note: "baseline recorded at " + lintBaseline}, nil
 	}
 	pre, _ := parseLintBaselineSummary(string(stderr))
+	return lintOutcome(findings, bl, pre, note), nil
+}
+
+// lintOutcome is the lint stage's result from lint's report. pre is the
+// pre-existing count read from lint's summary line, used when the JSON carries
+// no baseline object. Fixed findings are the stage's resolved count, as the
+// mx check stage reports its own (ako/mxcli#2506).
+func lintOutcome(findings []verify.Finding, bl *lintBaselineJSON, pre int, note string) verify.Outcome {
 	var preBy map[string]int
+	var resolved int
 	if bl != nil {
 		pre = bl.Unchanged
 		preBy = bl.UnchangedBySeverity
+		resolved = bl.Fixed
 	}
-	return verify.Outcome{New: findings, PreExisting: pre, PreExistingBy: preBy, Note: note, Incomplete: bl.incomplete()}, nil
+	return verify.Outcome{New: findings, PreExisting: pre, PreExistingBy: preBy, Resolved: resolved, Note: note, Incomplete: bl.incomplete()}
 }
 
 func (v *verifyRunner) mxcheck() (verify.Outcome, error) {
