@@ -298,10 +298,24 @@ func describeBusinessEventService(ctx *ExecContext, name ast.QualifiedName) erro
 
 	fmt.Fprintf(ctx.Output, "{\n")
 
-	// Build operation map: messageName -> operation info
-	opMap := make(map[string]*model.ServiceOperation)
+	// Operations per message name, in stored order. A name declared once per
+	// operation (publish, then subscribe) is two messages and two operations
+	// of one name; keyed by name alone, both messages printed the later
+	// operation (ako/mxcli#2490). Each message takes the next of its name's.
+	opsByName := make(map[string][]*model.ServiceOperation)
 	for _, op := range found.OperationImplementations {
-		opMap[op.MessageName] = op
+		opsByName[op.MessageName] = append(opsByName[op.MessageName], op)
+	}
+	nextOp := func(name string) (*model.ServiceOperation, bool) {
+		ops := opsByName[name]
+		if len(ops) == 0 {
+			return nil, false
+		}
+		op := ops[0]
+		if len(ops) > 1 {
+			opsByName[name] = ops[1:]
+		}
+		return op, true
 	}
 
 	// Output messages
@@ -310,14 +324,14 @@ func describeBusinessEventService(ctx *ExecContext, name ast.QualifiedName) erro
 			// Format attributes
 			var attrs []string
 			for _, a := range msg.Attributes {
-				attrs = append(attrs, fmt.Sprintf("%s: %s", a.AttributeName, a.AttributeType))
+				attrs = append(attrs, fmt.Sprintf("%s: %s", a.AttributeName, businessEventAttrTypeText(a)))
 			}
 
 			// Determine operation from OperationImplementations
 			opStr := "publish"
 			entityStr := ""
 			microflowStr := ""
-			if op, ok := opMap[msg.MessageName]; ok {
+			if op, ok := nextOp(msg.MessageName); ok {
 				if op.Operation == "subscribe" {
 					opStr = "subscribe"
 				}
@@ -616,6 +630,8 @@ func createBusinessEventService(ctx *ExecContext, stmt *ast.CreateBusinessEventS
 			attr := &model.BusinessEventAttribute{
 				AttributeName: attrDef.Name,
 				AttributeType: attrDef.TypeName,
+				Length:        attrDef.Length,
+				LengthSet:     attrDef.LengthSet,
 			}
 			attr.ID = storedAttributeID(storedMsg, attrDef.Name)
 			attr.TypeName = "BusinessEvents$MessageAttribute"
@@ -849,3 +865,16 @@ func generateChannelName() string {
 }
 
 // Executor wrappers for unmigrated callers.
+
+// businessEventAttrTypeText is a message attribute's type as MDL states it: a
+// String with a stored length carries it, `String(unlimited)` for 0, so the
+// describe → exec round trip stores it again (ako/mxcli#2490).
+func businessEventAttrTypeText(a *model.BusinessEventAttribute) string {
+	if a.AttributeType != "String" || !a.LengthSet {
+		return a.AttributeType
+	}
+	if a.Length == 0 {
+		return "String(unlimited)"
+	}
+	return fmt.Sprintf("String(%d)", a.Length)
+}

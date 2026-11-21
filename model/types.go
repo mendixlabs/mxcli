@@ -775,6 +775,11 @@ type BusinessEventAttribute struct {
 	AttributeName string `json:"attributeName"`
 	AttributeType string `json:"attributeType"` // "Long", "String", "Integer", "Boolean", "DateTime", "Decimal"
 	Description   string `json:"description,omitempty"`
+	// Length is a String attribute's stored length, 0 for unlimited, when
+	// LengthSet; a string stored with no length is the build's 200
+	// (ako/mxcli#2490).
+	Length    int  `json:"length,omitempty"`
+	LengthSet bool `json:"lengthSet,omitempty"`
 }
 
 // ServiceOperation represents BusinessEvents$ServiceOperation.

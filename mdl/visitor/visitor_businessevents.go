@@ -89,6 +89,12 @@ func (b *Builder) ExitCreateBusinessEventServiceStatement(ctx *parser.CreateBusi
 			attr := &ast.BusinessEventAttributeDef{
 				TypeName: dataTypeSimpleName(attrDef.DataType()),
 			}
+			// A parenthesised String length is stated — a number, or
+			// `unlimited` (0) — and is stored; a bare String stores none
+			// (ako/mxcli#2490).
+			if dt, ok := attrDef.DataType().(*parser.DataTypeContext); ok && dt.STRING_TYPE() != nil && dt.LPAREN() != nil {
+				attr.Length, attr.LengthSet = buildDataType(dt).Length, true
+			}
 			if iok := attrDef.IdentifierOrKeyword(); iok != nil {
 				attr.Name = identifierOrKeywordText(iok)
 			}

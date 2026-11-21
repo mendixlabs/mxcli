@@ -62,6 +62,11 @@ type BusinessEventMessageDef struct {
 type BusinessEventAttributeDef struct {
 	Name     string
 	TypeName string // "Long", "String", "Integer", "Boolean", "DateTime", "Decimal"
+	// Length is a String's stated length, 0 for unlimited; LengthSet is
+	// whether one was stated. An unstated length stores none, which the build
+	// reads as 200 (ako/mxcli#2490).
+	Length    int
+	LengthSet bool
 }
 
 // DropBusinessEventServiceStmt represents DROP BUSINESS EVENT SERVICE.
