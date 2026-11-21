@@ -54,8 +54,7 @@ create business event service BeTest.SimpleEvents
   EventNamePrefix: ''
 )
 {
-  message CustomerChangedEvent (CustomerId: long) publish
-    entity BeTest.PBE_CustomerChangedEvent;
+  message CustomerChangedEvent (CustomerId: long) { publish (Entity: BeTest.PBE_CustomerChangedEvent); };
 };
 
 -- ============================================================================
@@ -71,10 +70,8 @@ create business event service BeTest.CustomerEventsApi
   EventNamePrefix: 'com.example'
 )
 {
-  message CustomerChangedEvent (CustomerId: long) publish
-    entity BeTest.PBE_CustomerChangedEvent;
-  message AddressChangedEvent (AddressId: long) publish
-    entity BeTest.PBE_AddressChangedEvent;
+  message CustomerChangedEvent (CustomerId: long) { publish (Entity: BeTest.PBE_CustomerChangedEvent); };
+  message AddressChangedEvent (AddressId: long) { publish (Entity: BeTest.PBE_AddressChangedEvent); };
 };
 
 -- Verify: entity attributes must match message attributes exactly.
@@ -97,8 +94,7 @@ create or modify business event service BeTest.SimpleEvents
   EventNamePrefix: 'v2'
 )
 {
-  message CustomerChangedEvent (CustomerId: long) publish
-    entity BeTest.PBE_CustomerChangedEvent;
+  message CustomerChangedEvent (CustomerId: long) { publish (Entity: BeTest.PBE_CustomerChangedEvent); };
 };
 
 -- ============================================================================

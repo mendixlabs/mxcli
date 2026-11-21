@@ -130,8 +130,7 @@ create business event service Svc.CustomerEvents
   EventNamePrefix: ''
 )
 {
-  message CustomerChanged (CustomerId: long) subscribe
-    entity Svc.BE_CustomerChanged microflow Svc.OnCustomerChanged;
+  message CustomerChanged (CustomerId: long) { subscribe (Entity: Svc.BE_CustomerChanged, Microflow: Svc.OnCustomerChanged); };
 };
 
 -- control: nothing runs this one

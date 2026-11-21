@@ -328,50 +328,38 @@ func describeBusinessEventService(ctx *ExecContext, name ast.QualifiedName) erro
 		}
 	}
 
-	// Output messages
+	// Output messages, each with its operations as children (R2):
+	//   message X (…) {
+	//     publish (Entity: M.P);
+	//     subscribe (Entity: M.C, Microflow: M.H);
+	//   };
 	for _, ch := range found.Definition.Channels {
 		for _, msg := range ch.Messages {
-			if pub, sub, ok := publishSubscribePair(opsByName[msg.MessageName]); ok && messagesNamed[msg.MessageName] == 1 {
-				var attrs []string
-				for _, a := range msg.Attributes {
-					attrs = append(attrs, fmt.Sprintf("%s: %s", a.AttributeName, businessEventAttrTypeText(a)))
-				}
-				fmt.Fprintf(ctx.Output, "  message %s (%s) publish subscribe", msg.MessageName, strings.Join(attrs, ", "))
-				fmt.Fprintf(ctx.Output, "\n    entity %s\n    entity %s", pub.Entity, sub.Entity)
-				if sub.Microflow != "" {
-					fmt.Fprintf(ctx.Output, "\n    microflow %s", sub.Microflow)
-				}
-				fmt.Fprintf(ctx.Output, ";\n")
-				delete(opsByName, msg.MessageName)
-				continue
-			}
-			// Format attributes
 			var attrs []string
 			for _, a := range msg.Attributes {
 				attrs = append(attrs, fmt.Sprintf("%s: %s", a.AttributeName, businessEventAttrTypeText(a)))
 			}
-
-			// Determine operation from OperationImplementations
-			opStr := "publish"
-			entityStr := ""
-			microflowStr := ""
-			if op, ok := nextOp(msg.MessageName); ok {
-				if op.Operation == "subscribe" {
-					opStr = "subscribe"
-				}
-				if op.Entity != "" {
-					entityStr = fmt.Sprintf("\n    entity %s", op.Entity)
-				}
-				// The grammar has `MICROFLOW qualifiedName` on the message
-				// rule; describe never printed it, so describe → exec
-				// unbound the handler (ako/mxcli#2381).
-				if op.Microflow != "" {
-					microflowStr = fmt.Sprintf("\n    microflow %s", op.Microflow)
-				}
+			var ops []*model.ServiceOperation
+			if pub, sub, ok := publishSubscribePair(opsByName[msg.MessageName]); ok && messagesNamed[msg.MessageName] == 1 {
+				ops = []*model.ServiceOperation{pub, sub}
+				delete(opsByName, msg.MessageName)
+			} else if op, ok := nextOp(msg.MessageName); ok {
+				ops = []*model.ServiceOperation{op}
+			} else {
+				// No stored operation: the message is the service's to publish.
+				ops = []*model.ServiceOperation{{Operation: "publish"}}
 			}
-
-			fmt.Fprintf(ctx.Output, "  message %s (%s) %s%s%s;\n",
-				msg.MessageName, strings.Join(attrs, ", "), opStr, entityStr, microflowStr)
+			fmt.Fprintf(ctx.Output, "  message %s (%s) {\n", msg.MessageName, strings.Join(attrs, ", "))
+			for _, op := range ops {
+				kind := "publish"
+				if strings.EqualFold(op.Operation, "subscribe") {
+					kind = "subscribe"
+				}
+				// The handler is printed whenever stored: describe → exec
+				// unbound it while it was left out (ako/mxcli#2381).
+				fmt.Fprintf(ctx.Output, "    %s %s;\n", kind, businessEventOpPropsText(op.Entity, op.Microflow))
+			}
+			fmt.Fprintf(ctx.Output, "  };\n")
 		}
 	}
 
@@ -420,14 +408,7 @@ func describeConsumedBusinessEventService(ctx *ExecContext, moduleName string, s
 	// normally ends in a newline, which puts the closing $$ on its own line.
 	fmt.Fprintf(ctx.Output, "(\n  Contract: $$%s$$\n)\n{\n", svc.Document)
 	for _, op := range svc.OperationImplementations {
-		fmt.Fprintf(ctx.Output, "  consume %s", op.MessageName)
-		if op.Entity != "" {
-			fmt.Fprintf(ctx.Output, "\n    entity %s", op.Entity)
-		}
-		if op.Microflow != "" {
-			fmt.Fprintf(ctx.Output, "\n    microflow %s", op.Microflow)
-		}
-		fmt.Fprintf(ctx.Output, ";\n")
+		fmt.Fprintf(ctx.Output, "  consume %s %s;\n", op.MessageName, businessEventOpPropsText(op.Entity, op.Microflow))
 	}
 	fmt.Fprintf(ctx.Output, "};\n")
 }
@@ -967,9 +948,8 @@ func businessEventServiceModel(stmt *ast.CreateBusinessEventServiceStmt, carry *
 //     deployment fails (measured with mxbuild 11.12.6 --target=deploy and
 //     BusinessEvents 3.12.0: "An item with the same key has already been
 //     added", ako/mxcli#2490). A message the service both publishes and
-//     consumes is `publish subscribe`;
-//   - `publish subscribe` without both entities;
-//   - a single operation with two entities.
+//     consumes has both operations as its children;
+//   - such a message without an entity for each operation.
 func businessEventMessageProblems(stmt *ast.CreateBusinessEventServiceStmt) []string {
 	var out []string
 	seen := map[string]bool{}
@@ -978,18 +958,14 @@ func businessEventMessageProblems(stmt *ast.CreateBusinessEventServiceStmt) []st
 		if seen[key] {
 			out = append(out, fmt.Sprintf("message %s is declared twice, which stores two messages of one name and "+
 				"fails the deployment (\"An item with the same key has already been added\"). For a message this "+
-				"service both publishes and consumes, declare it once: `message %s (…) publish subscribe entity "+
-				"<publish entity> entity <subscribe entity> microflow <handler>;`", m.MessageName, m.MessageName))
+				"service both publishes and consumes, declare it once with both operations: `message %s (…) "+
+				"{ publish (Entity: …); subscribe (Entity: …, Microflow: …); };`", m.MessageName, m.MessageName))
 			continue
 		}
 		seen[key] = true
-		switch {
-		case m.PublishAndSubscribe && (m.Entity == "" || m.SubscribeEntity == ""):
-			out = append(out, fmt.Sprintf("message %s is `publish subscribe` and needs two entities: "+
-				"`entity <publish entity> entity <subscribe entity>`", m.MessageName))
-		case !m.PublishAndSubscribe && m.SubscribeEntity != "":
-			out = append(out, fmt.Sprintf("message %s %s takes one entity; two are for `publish subscribe`",
-				m.MessageName, strings.ToLower(m.Operation)))
+		if m.PublishAndSubscribe && (m.Entity == "" || m.SubscribeEntity == "") {
+			out = append(out, fmt.Sprintf("message %s publishes and subscribes, and each operation needs its "+
+				"entity: `publish (Entity: …)` and `subscribe (Entity: …, Microflow: …)`", m.MessageName))
 		}
 	}
 	return out
@@ -1010,4 +986,18 @@ func publishSubscribePair(ops []*model.ServiceOperation) (pub, sub *model.Servic
 		}
 	}
 	return pub, sub, pub != nil && sub != nil && pub.Entity != "" && sub.Entity != ""
+}
+
+// businessEventOpPropsText is an operation's or subscription's property list,
+// `(Entity: M.E, Microflow: M.H)`, the empty ones left out (R2,
+// ako/mxcli#2490).
+func businessEventOpPropsText(entity, microflow string) string {
+	var props []string
+	if entity != "" {
+		props = append(props, "Entity: "+entity)
+	}
+	if microflow != "" {
+		props = append(props, "Microflow: "+microflow)
+	}
+	return "(" + strings.Join(props, ", ") + ")"
 }

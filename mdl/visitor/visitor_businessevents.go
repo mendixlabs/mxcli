@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/antlr4-go/antlr/v4"
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/deprecation"
 	"github.com/mendixlabs/mxcli/mdl/grammar/parser"
 )
 
@@ -49,6 +51,11 @@ func (b *Builder) ExitCreateBusinessEventServiceStatement(ctx *parser.CreateBusi
 		}
 	}
 
+	// The old keyword-clause spellings, recorded once per code for the
+	// statement with every rewrite (MDL-DEPR075, MDL-DEPR076).
+	depr := &bePending{}
+	defer depr.flush(b)
+
 	// Parse message definitions
 	for _, msgCtx := range ctx.AllBusinessEventMessageDef() {
 		msgDef := msgCtx.(*parser.BusinessEventMessageDefContext)
@@ -61,37 +68,7 @@ func (b *Builder) ExitCreateBusinessEventServiceStatement(ctx *parser.CreateBusi
 			msg.MessageName = identifierOrKeywordText(iok)
 		}
 
-		// Parse operation: PUBLISH, SUBSCRIBE, or PUBLISH SUBSCRIBE
-		// (ako/mxcli#2490).
-		switch {
-		case msgDef.PUBLISH() != nil && msgDef.SUBSCRIBE() != nil:
-			msg.Operation = "PUBLISH"
-			msg.PublishAndSubscribe = true
-		case msgDef.PUBLISH() != nil:
-			msg.Operation = "PUBLISH"
-		case msgDef.SUBSCRIBE() != nil:
-			msg.Operation = "SUBSCRIBE"
-		}
-
-		// Parse ENTITY clauses: the first is the message's entity (the
-		// publish entity of `publish subscribe`), a second the subscribe one.
-		qualNames := msgDef.AllQualifiedName()
-		idx := 0
-		for n := range msgDef.AllENTITY() {
-			if idx >= len(qualNames) {
-				break
-			}
-			if n == 0 {
-				msg.Entity = getQualifiedNameText(qualNames[idx])
-			} else {
-				msg.SubscribeEntity = getQualifiedNameText(qualNames[idx])
-			}
-			idx++
-		}
-		// Parse MICROFLOW clause
-		if msgDef.MICROFLOW() != nil && idx < len(qualNames) {
-			msg.Microflow = getQualifiedNameText(qualNames[idx])
-		}
+		b.businessEventMessageOperations(msgDef, msg, depr)
 
 		// Parse attribute definitions
 		for _, attrCtx := range msgDef.AllBusinessEventAttrDef() {
@@ -127,14 +104,23 @@ func (b *Builder) ExitCreateBusinessEventServiceStatement(ctx *parser.CreateBusi
 		if iok := consDef.IdentifierOrKeyword(); iok != nil {
 			cons.MessageName = identifierOrKeywordText(iok)
 		}
-		qualNames := consDef.AllQualifiedName()
-		idx := 0
-		if consDef.ENTITY() != nil && idx < len(qualNames) {
-			cons.Entity = getQualifiedNameText(qualNames[idx])
-			idx++
-		}
-		if consDef.MICROFLOW() != nil && idx < len(qualNames) {
-			cons.Microflow = getQualifiedNameText(qualNames[idx])
+		if consDef.LPAREN() != nil {
+			cons.Entity, cons.Microflow = b.businessEventOpProps("consume "+cons.MessageName, consDef.AllBusinessEventOpProp(), true)
+		} else {
+			qualNames := consDef.AllQualifiedName()
+			idx := 0
+			if consDef.ENTITY() != nil && idx < len(qualNames) {
+				cons.Entity = getQualifiedNameText(qualNames[idx])
+				idx++
+			}
+			if consDef.MICROFLOW() != nil && idx < len(qualNames) {
+				cons.Microflow = getQualifiedNameText(qualNames[idx])
+			}
+			// The keyword clauses are the old spelling (MDL-DEPR076).
+			if first := consumeClauseStart(consDef); first != nil {
+				depr.add(deprecation.BusinessEventConsumeClauses, first,
+					replaceSpan(first, consDef.SEMICOLON().GetSymbol(), opPropsText("", cons.Entity, cons.Microflow)+";"))
+			}
 		}
 		stmt.Consumes = append(stmt.Consumes, cons)
 	}
@@ -188,4 +174,156 @@ func dataTypeSimpleName(ctx parser.IDataTypeContext) string {
 		return c
 	}
 	return text
+}
+
+// bePending collects one statement's uses of the old keyword-clause spellings,
+// so each code is one warning carrying every rewrite.
+type bePending struct {
+	order []string
+	first map[string]antlr.Token
+	edits map[string][]ast.TextEdit
+}
+
+func (p *bePending) add(code string, at antlr.Token, edit ast.TextEdit) {
+	if p.first == nil {
+		p.first, p.edits = map[string]antlr.Token{}, map[string][]ast.TextEdit{}
+	}
+	if _, ok := p.first[code]; !ok {
+		p.first[code] = at
+		p.order = append(p.order, code)
+	}
+	p.edits[code] = append(p.edits[code], edit)
+}
+
+func (p *bePending) flush(b *Builder) {
+	for _, code := range p.order {
+		b.recordDeprecation(code, p.first[code], "")
+		b.fixLastDeprecation(code, &ast.Fix{Edits: p.edits[code]}, "")
+	}
+}
+
+// businessEventMessageOperations reads a message's operations into msg.
+//
+// The canonical form is R2's: the operations are the message's children,
+// `{ publish ( Entity: … ); subscribe ( Entity: …, Microflow: … ); }`, and one
+// message may have both (ako/mxcli#2490). One operation fills Operation /
+// Entity / Microflow; a publish and a subscribe fill PublishAndSubscribe, with
+// the publish entity in Entity and the subscription's in SubscribeEntity and
+// Microflow. The keyword clauses `publish entity … microflow …` are the old
+// spelling (MDL-DEPR075), for one operation.
+func (b *Builder) businessEventMessageOperations(def *parser.BusinessEventMessageDefContext, msg *ast.BusinessEventMessageDef, depr *bePending) {
+	if def.LBRACE() == nil {
+		opTok := def.PUBLISH()
+		if opTok == nil {
+			opTok = def.SUBSCRIBE()
+		}
+		if opTok == nil {
+			return
+		}
+		msg.Operation = strings.ToUpper(opTok.GetText())
+		qualNames := def.AllQualifiedName()
+		idx := 0
+		if def.ENTITY() != nil && idx < len(qualNames) {
+			msg.Entity = getQualifiedNameText(qualNames[idx])
+			idx++
+		}
+		if def.MICROFLOW() != nil && idx < len(qualNames) {
+			msg.Microflow = getQualifiedNameText(qualNames[idx])
+		}
+		last := opTok.GetSymbol()
+		if n := len(qualNames); n > 0 {
+			last = qualNames[n-1].GetStop()
+		}
+		word := keywordLike(opTok.GetText(), opTok.GetText())
+		depr.add(deprecation.BusinessEventMessageClauses, opTok.GetSymbol(),
+			replaceSpan(opTok.GetSymbol(), last, "{ "+opPropsText(word, msg.Entity, msg.Microflow)+"; }"))
+		return
+	}
+	type op struct{ entity, microflow string }
+	var pub, sub *op
+	for _, oc := range def.AllBusinessEventOperationDef() {
+		o, ok := oc.(*parser.BusinessEventOperationDefContext)
+		if !ok {
+			continue
+		}
+		isPub := o.PUBLISH() != nil
+		kind := "subscribe"
+		if isPub {
+			kind = "publish"
+		}
+		e, m := b.businessEventOpProps(kind+" of message "+msg.MessageName, o.AllBusinessEventOpProp(), true)
+		switch {
+		case isPub && pub != nil, !isPub && sub != nil:
+			b.addError(fmt.Errorf("message %s has two %s operations; a message has at most one publish and one subscribe", msg.MessageName, kind))
+		case isPub:
+			pub = &op{e, m}
+		default:
+			sub = &op{e, m}
+		}
+	}
+	switch {
+	case pub != nil && sub != nil:
+		if pub.microflow != "" {
+			b.addError(fmt.Errorf("message %s: a publish operation has no handler; `Microflow` belongs to the subscribe operation", msg.MessageName))
+		}
+		msg.Operation, msg.PublishAndSubscribe = "PUBLISH", true
+		msg.Entity, msg.SubscribeEntity, msg.Microflow = pub.entity, sub.entity, sub.microflow
+	case pub != nil:
+		msg.Operation, msg.Entity, msg.Microflow = "PUBLISH", pub.entity, pub.microflow
+	case sub != nil:
+		msg.Operation, msg.Entity, msg.Microflow = "SUBSCRIBE", sub.entity, sub.microflow
+	default:
+		b.addError(fmt.Errorf("message %s has no operation: write `{ publish ( Entity: … ); }`, `{ subscribe ( Entity: …, Microflow: … ); }` or both", msg.MessageName))
+	}
+}
+
+// businessEventOpProps reads `( Entity: M.E, Microflow: M.H )`. Keys are
+// matched without case; any other key is an error (R11).
+func (b *Builder) businessEventOpProps(where string, props []parser.IBusinessEventOpPropContext, microflowAllowed bool) (entity, microflow string) {
+	for _, pc := range props {
+		p, ok := pc.(*parser.BusinessEventOpPropContext)
+		if !ok || p.IdentifierOrKeyword() == nil || p.QualifiedName() == nil {
+			continue
+		}
+		key := identifierOrKeywordText(p.IdentifierOrKeyword())
+		val := getQualifiedNameText(p.QualifiedName())
+		switch {
+		case strings.EqualFold(key, "Entity"):
+			entity = val
+		case strings.EqualFold(key, "Microflow") && microflowAllowed:
+			microflow = val
+		default:
+			b.addError(fmt.Errorf("%s: unknown property %q; the properties are Entity and Microflow", where, key))
+		}
+	}
+	return entity, microflow
+}
+
+// opPropsText is `word ( Entity: e, Microflow: m )` with the empty ones left
+// out; word may be "" for a consume's own property list.
+func opPropsText(word, entity, microflow string) string {
+	var props []string
+	if entity != "" {
+		props = append(props, "Entity: "+entity)
+	}
+	if microflow != "" {
+		props = append(props, "Microflow: "+microflow)
+	}
+	list := "(" + strings.Join(props, ", ") + ")"
+	if word == "" {
+		return list
+	}
+	return word + " " + list
+}
+
+// consumeClauseStart is the first token of a consume's old keyword clauses,
+// nil when it has none.
+func consumeClauseStart(def *parser.BusinessEventConsumeDefContext) antlr.Token {
+	if t := def.ENTITY(); t != nil {
+		return t.GetSymbol()
+	}
+	if t := def.MICROFLOW(); t != nil {
+		return t.GetSymbol()
+	}
+	return nil
 }

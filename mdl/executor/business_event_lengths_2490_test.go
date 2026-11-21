@@ -36,7 +36,7 @@ func parseBusinessEventService2490(t *testing.T, src string) *ast.CreateBusiness
 
 func TestBusinessEventMessageStringLengthsParsed_2490(t *testing.T) {
 	stmt := parseBusinessEventService2490(t, `create business event service M.Bus (ServiceName: 'Bus', EventNamePrefix: '') {
-  message AgentMessage (TaskId: String(36), Text: String(unlimited), Note: String, N: Integer) publish entity M.PBE;
+  message AgentMessage (TaskId: String(36), Text: String(unlimited), Note: String, N: Integer) { publish (Entity: M.PBE); };
 };`)
 	got := map[string][2]int{}
 	for _, a := range stmt.Messages[0].Attributes {
@@ -98,8 +98,8 @@ func TestDescribeBusinessEventLengthsAndOperations_2490(t *testing.T) {
 	if strings.Contains(out, "Note: String(") {
 		t.Errorf("a string stored with no length was given one:\n%s", out)
 	}
-	pub := strings.Index(out, "publish\n    entity M.PBE_AgentMessage")
-	sub := strings.Index(out, "subscribe\n    entity M.CBE_AgentMessage\n    microflow M.SUB_OnMessage")
+	pub := strings.Index(out, "publish (Entity: M.PBE_AgentMessage);")
+	sub := strings.Index(out, "subscribe (Entity: M.CBE_AgentMessage, Microflow: M.SUB_OnMessage);")
 	if pub < 0 || sub < 0 {
 		t.Errorf("each message must be described with its own operation:\n%s", out)
 	}

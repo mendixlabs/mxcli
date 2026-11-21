@@ -292,6 +292,12 @@ const (
 	// AlterFlowFragmentBraces is an `alter microflow` / `alter nanoflow`
 	// fragment in braces: `insert after $X { … }`, `replace … with { … }`.
 	AlterFlowFragmentBraces = "MDL-DEPR074"
+	// BusinessEventMessageClauses is a business event message's operation as
+	// keyword clauses: `message X (…) publish entity M.P microflow M.H;`.
+	BusinessEventMessageClauses = "MDL-DEPR075"
+	// BusinessEventConsumeClauses is a consumed service's subscription as
+	// keyword clauses: `consume X entity M.C microflow M.H;`.
+	BusinessEventConsumeClauses = "MDL-DEPR076"
 
 	// Codes 120-129 are the rest of R2 (ako/mxcli#754): navigation and menus,
 	// property maps, and the database connection.
@@ -1075,6 +1081,33 @@ var r2Entries = []Entry{
 			"`begin … end` (R2). The operations around it are the alter's children and stay in its { }.",
 		Example:          "alter microflow M.F { insert after $X { log info 'x'; } };",
 		CanonicalExample: "alter microflow M.F { insert after $X begin log info 'x'; end };",
+	},
+	{
+		Code:      BusinessEventMessageClauses,
+		Old:       "message X (…) publish|subscribe entity M.E microflow M.H;",
+		Canonical: "message X (…) { publish|subscribe (Entity: M.E, Microflow: M.H); };",
+		Rewrite:   Rewrite{Structural: "message's operation clauses: `publish entity M.E` becomes `{ publish (Entity: M.E); }`"},
+		RemovedIn: 2,
+		Note: "A message's operations are its children, each with its properties in ( ) (R2), so one message " +
+			"can both publish and subscribe: `{ publish (Entity: …); subscribe (Entity: …, Microflow: …); }` " +
+			"(ako/mxcli#2490). Declaring a message twice, once per operation, fails the deployment.",
+		Example: "create business event service M.Bus (ServiceName: 'Bus', EventNamePrefix: '') " +
+			"{ message Changed (Id: Long) subscribe entity M.CBE_Changed microflow M.Handle; };",
+		CanonicalExample: "create business event service M.Bus (ServiceName: 'Bus', EventNamePrefix: '') " +
+			"{ message Changed (Id: Long) { subscribe (Entity: M.CBE_Changed, Microflow: M.Handle); }; };",
+	},
+	{
+		Code:      BusinessEventConsumeClauses,
+		Old:       "consume X entity M.E microflow M.H;",
+		Canonical: "consume X (Entity: M.E, Microflow: M.H);",
+		Rewrite:   Rewrite{Structural: "subscription's clauses: `consume X entity M.E microflow M.H` becomes `consume X (Entity: M.E, Microflow: M.H)`"},
+		RemovedIn: 2,
+		Note: "A subscription is a child of the consumed service: its properties are in ( ) (R2), as a " +
+			"published message's operations are (ako/mxcli#2490).",
+		Example: "create business event service M.Client (ContractFile: 'c.yaml') " +
+			"{ consume Changed entity M.CBE_Changed microflow M.Handle; };",
+		CanonicalExample: "create business event service M.Client (ContractFile: 'c.yaml') " +
+			"{ consume Changed (Entity: M.CBE_Changed, Microflow: M.Handle); };",
 	},
 }
 

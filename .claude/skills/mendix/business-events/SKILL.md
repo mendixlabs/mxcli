@@ -11,12 +11,12 @@ description: "Define event-driven APIs over Kafka with Mendix business event ser
 | lines | section |
 |---|---|
 | 24-31 | When to Use This Skill |
-| 32-167 | Commands |
-| 168-197 | Message Definition Syntax |
-| 198-205 | Service Properties |
-| 206-213 | Operations |
-| 214-260 | Publishing Events from Microflows |
-| 261-273 | Checklist |
+| 32-168 | Commands |
+| 169-200 | Message Definition Syntax |
+| 201-208 | Service Properties |
+| 209-216 | Operations |
+| 217-263 | Publishing Events from Microflows |
+| 264-276 | Checklist |
 
 <!-- /skill-index -->
 # Business Events
@@ -71,9 +71,7 @@ create or modify business event service Module.OrdersEventClient
   ContractFile: 'contracts/OrdersEventService.yaml'   -- or Contract: $$<yaml>$$
 )
 {
-  consume OrderPlaceEvent
-    entity Module.CBE_OrderPlaceEvent
-    microflow Module.HandleBE_OrderPlaceEvent;
+  consume OrderPlaceEvent (Entity: Module.CBE_OrderPlaceEvent, Microflow: Module.HandleBE_OrderPlaceEvent);
 };
 ```
 
@@ -123,10 +121,12 @@ create business event service Module.CustomerEventsApi
   EventNamePrefix: 'com.example'
 )
 {
-  message CustomerChangedEvent (CustomerId: long) publish
-    entity Module.PBE_CustomerChangedEvent;
-  message AddressChangedEvent (AddressId: long) publish
-    entity Module.PBE_AddressChangedEvent;
+  message CustomerChangedEvent (CustomerId: long) {
+    publish (Entity: Module.PBE_CustomerChangedEvent);
+  };
+  message AddressChangedEvent (AddressId: long) {
+    publish (Entity: Module.PBE_AddressChangedEvent);
+  };
 };
 ```
 
@@ -153,8 +153,9 @@ create or modify business event service Module.CustomerEventsApi
   EventNamePrefix: ''
 )
 {
-  message CustomerChangedEvent (CustomerId: long) publish
-    entity Module.PBE_CustomerChangedEvent;
+  message CustomerChangedEvent (CustomerId: long) {
+    publish (Entity: Module.PBE_CustomerChangedEvent);
+  };
 };
 ```
 
@@ -167,23 +168,25 @@ drop business event service Module.CustomerEventsApi;
 
 ## Message Definition Syntax
 
-```
-message <MessageName> (<AttrName>: <type>, ...) publish|subscribe
-  [entity <Module.EntityName>]
-  [microflow <Module.MicroflowName>];
+A message's operations are its children, each with its properties in `( )`:
 
--- A message this service both publishes and consumes (an in-app bus, a
--- request/reply loop): the publish entity, then the subscribe entity and handler.
-message <MessageName> (<AttrName>: <type>, ...) publish subscribe
-  entity <Module.PBE_Entity>
-  entity <Module.CBE_Entity>
-  [microflow <Module.Handler>];
+```
+message <MessageName> (<AttrName>: <type>, ...) {
+  publish (Entity: <Module.PBE_Entity>);
+  subscribe (Entity: <Module.CBE_Entity>, Microflow: <Module.Handler>);
+};
 ```
 
-Declare a message **once**. The same name declared twice (once `publish`, once
-`subscribe`) stores two messages of one name, which `mx check` accepts and the
-deployment rejects ("An item with the same key has already been added");
-`check` refuses it and names `publish subscribe`.
+Give a message the operations it has: `publish` only, `subscribe` only, or both, for
+a message the app publishes and consumes itself (an in-app bus, a request/reply loop).
+
+Declare a message **once**. The same name declared twice (once per operation) stores
+two messages of one name, which `mx check` accepts and the deployment rejects ("An item
+with the same key has already been added"); `check` refuses it.
+
+The keyword clauses `message X (…) publish entity M.E microflow M.H;` and
+`consume X entity M.E microflow M.H;` are the old spelling (MDL-DEPR075, MDL-DEPR076):
+they still run, warn, and `mxcli fmt --upgrade` rewrites them.
 
 ### Supported Attribute Types
 - `string`, `string(n)`, `string(unlimited)` - Text. The length must match the
@@ -209,7 +212,7 @@ deployment rejects ("An item with the same key has already been added");
 |-----------|-------------|
 | `publish` | This service publishes the event (other apps subscribe) |
 | `subscribe` | This service subscribes to the event (other apps publish) |
-| `publish subscribe` | Both, on one message: two entities and the subscribe handler |
+| both | One message the app publishes and consumes: a `publish` and a `subscribe` child |
 
 ## Publishing Events from Microflows
 

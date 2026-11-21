@@ -79,6 +79,8 @@ var topics = map[string][]string{
 	"MDL-DEPR070":               {"rest.consumed"},
 	"MDL-DEPR071":               {"agents.agent", "agents.mcp-service", "agents.knowledge-base"},
 	"MDL-DEPR072":               {"image-collection"},
+	"MDL-DEPR075":               {"business-events.create"},
+	"MDL-DEPR076":               {"business-events.create"},
 	"MDL-DEPR073":               {"message-definition"},
 	"MDL-DEPR074":               {"microflow.alter"},
 	"MDL-DEPR120":               {"rest.consumed"},
