@@ -4,6 +4,7 @@ package modelsdkbackend
 
 import (
 	genEnum "github.com/mendixlabs/mxcli/modelsdk/gen/enumerations"
+	genRest "github.com/mendixlabs/mxcli/modelsdk/gen/rest"
 	"github.com/mendixlabs/mxcli/modelsdk/meta"
 
 	"github.com/mendixlabs/mxcli/model"
@@ -57,6 +58,10 @@ func enumToModel(e *genEnum.Enumeration, containerID model.ID) *model.Enumeratio
 	}
 	out.ID = model.ID(e.ID())
 	out.TypeName = "Enumerations$Enumeration"
+	if src, ok := e.RemoteSource().(*genRest.ODataRemoteEnumerationSource); ok {
+		out.RemoteService = src.ConsumedODataServiceQualifiedName()
+		out.RemoteName = src.RemoteName()
+	}
 	for _, item := range e.ValuesItems() {
 		if ev, ok := item.(*genEnum.EnumerationValue); ok {
 			out.Values = append(out.Values, enumValueToModel(ev))
@@ -71,6 +76,9 @@ func enumValueToModel(v *genEnum.EnumerationValue) model.EnumerationValue {
 	out.TypeName = "Enumerations$EnumerationValue"
 	if cap := v.Caption(); cap != nil {
 		out.Caption = textElementToModel(cap)
+	}
+	if rv, ok := v.RemoteValue().(*genRest.ODataRemoteEnumerationValue); ok {
+		out.RemoteName = rv.RemoteName()
 	}
 	return out
 }

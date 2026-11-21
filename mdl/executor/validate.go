@@ -2483,6 +2483,10 @@ func validateViewEntityAttributeSet(ctx *ExecContext, s *ast.AlterEntityStmt, sc
 	if !isView && !sc.entities[qn] && s.Name.Module != "" && ctx.Connected() {
 		if ent, err := findEntity(ctx, s.Name.Module, s.Name.Name); err == nil {
 			isView = isViewEntity(ent)
+			// The same check for an external entity (CE6612, ako/mxcli#2477).
+			if ent.RemoteServiceName != "" && s.Operation == ast.AlterEntityAddAttribute && s.Attribute != nil {
+				return externalEntityAddAttributeRefusal(qn, ent.Name, ent.RemoteServiceName, s.Attribute.Name)
+			}
 		}
 	}
 	if !isView {
