@@ -56,7 +56,10 @@ type MapModule struct {
 	Purpose     string         `json:"purpose,omitempty"`
 	Counts      map[string]int `json:"counts"`
 	Integration bool           `json:"integration,omitempty"`
-	EntryPoints map[string]int `json:"entryPoints"`
+	// IntegrationWhy says what made it an integration port: its outbound
+	// clients, its name or its documentation (ako/mxcli#2505).
+	IntegrationWhy string         `json:"integrationWhy,omitempty"`
+	EntryPoints    map[string]int `json:"entryPoints"`
 }
 
 // MapEdge is module → module references, split by class.
@@ -269,14 +272,13 @@ func CollectMap(q Querier, opt ScopeOptions, purposes map[string]string) (*MapDa
 		if c == nil {
 			c = map[string]int{}
 		}
-		integ := c["import_mapping"] + c["export_mapping"] + c["consumed_rest_service"] + c["published_rest_service"] +
-			c["consumed_odata_service"] + c["published_odata_service"] + c["json_structure"] + c["business_event_service"]
 		p := purpose[m]
 		if v := purposes[m]; v != "" {
 			p = v
 		}
+		why := integrationWhy(m, c, p)
 		modIdx[m] = len(d.Modules)
-		d.Modules = append(d.Modules, MapModule{Name: m, Purpose: firstSentence(p), Counts: c, Integration: integ > 0, EntryPoints: map[string]int{}})
+		d.Modules = append(d.Modules, MapModule{Name: m, Purpose: firstSentence(p), Counts: c, Integration: why != "", IntegrationWhy: why, EntryPoints: map[string]int{}})
 	}
 
 	// ---- refs, read once
@@ -778,11 +780,7 @@ func collectMapLandscape(q Querier, d *MapData, appList string, flowIdx map[stri
 			d.Systems = append(d.Systems, MapSystem{Kind: "identity", Name: m, Detail: "signs users in"})
 		}
 	}
-	for _, m := range d.Modules {
-		if m.Integration {
-			d.Systems = append(d.Systems, MapSystem{Kind: "integration module", Name: m.Name})
-		}
-	}
+	addIntegrationSystems(d)
 	sort.SliceStable(d.Systems, func(i, j int) bool {
 		if d.Systems[i].Kind != d.Systems[j].Kind {
 			return d.Systems[i].Kind < d.Systems[j].Kind
@@ -895,4 +893,58 @@ func buildMapIndex(q Querier, d *MapData, refRows []map[string]string, inApp fun
 		sort.Strings(out[i].UsedBy)
 	}
 	return out
+}
+
+var (
+	// The naming conventions of integration ports: Int_HR, HRConnector,
+	// PlanningIntegration, PaymentAdapter.
+	portName = regexp.MustCompile(`(?i)^int_|(connector|integration|adapter)$`)
+	// Documentation that says the module is a port (#2305's module purpose).
+	portDoc = regexp.MustCompile(`(?i)^\s*(port (to|for)|integration (with|to|for)|adapter (to|for)|connector (to|for)|interface to|wraps )`)
+)
+
+// integrationWhy says why a module is an integration port, "" when it is not.
+// A port is a module that talks to an outside system: by its outbound clients,
+// or — built against a mock before the real connection exists — by its name or
+// its documentation. Publishing an API is not being an integration module: the
+// module's clients are outside, and the systems list shows the service
+// (ako/mxcli#2505).
+func integrationWhy(name string, c map[string]int, purpose string) string {
+	var out []string
+	for _, k := range []struct{ key, label string }{
+		{"consumed_rest_service", "consumed REST"}, {"consumed_odata_service", "consumed OData"},
+		{"database_connection", "database connection"}, {"business_event_service", "business events"},
+		{"consumed_mcp_service", "consumed MCP"},
+	} {
+		if n := c[k.key]; n > 0 {
+			out = append(out, fmt.Sprintf("%d %s", n, k.label))
+		}
+	}
+	if len(out) > 0 {
+		return "holds outbound clients: " + strings.Join(out, ", ")
+	}
+	switch {
+	case portName.MatchString(name):
+		return "named as an integration port"
+	case portDoc.MatchString(purpose):
+		return "documented as a port"
+	}
+	return ""
+}
+
+// addIntegrationSystems lists the integration modules among the systems,
+// replacing any listed before (an annotation can change the flags).
+func addIntegrationSystems(d *MapData) {
+	kept := d.Systems[:0]
+	for _, s := range d.Systems {
+		if s.Kind != "integration module" {
+			kept = append(kept, s)
+		}
+	}
+	d.Systems = kept
+	for _, m := range d.Modules {
+		if m.Integration {
+			d.Systems = append(d.Systems, MapSystem{Kind: "integration module", Name: m.Name, Detail: m.IntegrationWhy})
+		}
+	}
 }

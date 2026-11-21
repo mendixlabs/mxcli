@@ -31,10 +31,26 @@ var MapLimits = []string{
 // applyPurposes copies annotation notes keyed module:<Name> onto modules that
 // have no purpose of their own, or that the person wants to overrule.
 func applyPurposes(d *MapData, ann *Annotations) {
+	changed := false
 	for i := range d.Modules {
-		if n, ok := ann.Get("module:" + d.Modules[i].Name); ok && n.Note != "" {
+		n, ok := ann.Get("module:" + d.Modules[i].Name)
+		if !ok {
+			continue
+		}
+		if n.Note != "" {
 			d.Modules[i].Purpose = n.Note
 		}
+		// status integration / not integration decides when the conventions
+		// do not fit (ako/mxcli#2505).
+		switch strings.ToLower(n.Status) {
+		case "integration":
+			d.Modules[i].Integration, d.Modules[i].IntegrationWhy, changed = true, "annotated", true
+		case "not integration":
+			d.Modules[i].Integration, d.Modules[i].IntegrationWhy, changed = false, "", true
+		}
+	}
+	if changed {
+		addIntegrationSystems(d)
 	}
 }
 
