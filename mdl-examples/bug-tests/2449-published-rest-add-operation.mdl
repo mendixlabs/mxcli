@@ -1,0 +1,43 @@
+-- ako/mxcli#2449 (mendixlabs/mxcli#1903): one operation of a stored resource
+-- of a published REST service, added or removed without restating the service.
+-- The operation is written as create writes it; the resource's other
+-- operations are written back as stored. Measured on 11.12.6: mx check 0
+-- errors, and the describe output re-executes Unchanged.
+mdl 1;
+
+create module BugRest2449;
+
+create microflow BugRest2449.PRS_ListBookings () returns String as $Result
+begin
+  return 'list';
+end;
+
+create microflow BugRest2449.PRS_GetBooking ($id: String) returns String as $Result
+begin
+  return $id;
+end;
+
+create microflow BugRest2449.PRS_DeleteBooking ($id: String) returns String as $Result
+begin
+  return $id;
+end;
+
+create published rest service BugRest2449.BookingApi (
+  Path: 'rest/booking/v1',
+  Version: '1.0.0',
+  ServiceName: 'Booking API'
+)
+{
+  resource 'bookings' {
+    get '' microflow BugRest2449.PRS_ListBookings;
+    get '{id}' microflow BugRest2449.PRS_GetBooking;
+  }
+};
+
+alter published rest service BugRest2449.BookingApi
+  add operation in resource 'bookings' {
+    delete '{id}' microflow BugRest2449.PRS_DeleteBooking;
+  };
+
+alter published rest service BugRest2449.BookingApi
+  drop operation get '{id}' in resource 'bookings';

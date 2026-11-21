@@ -304,6 +304,10 @@ alterPublishedRestServiceAction
     | SET publishedRestAlterAssignment (COMMA publishedRestAlterAssignment)*
     | ADD publishedRestResource
     | DROP RESOURCE STRING_LITERAL
+    // One operation of a stored resource, written as create writes it; the
+    // others are written back as stored (ako/mxcli#2449).
+    | ADD OPERATION IN RESOURCE STRING_LITERAL LBRACE publishedRestOperation+ RBRACE
+    | DROP OPERATION restHttpMethod publishedRestOpPath? IN RESOURCE STRING_LITERAL
     ;
 
 publishedRestAlterAssignment

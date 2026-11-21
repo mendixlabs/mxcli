@@ -304,7 +304,7 @@ GET bookings/{id} [MDL-REST06]
 
 **Cause:** `create or modify published rest service` describes the whole service. An operation of the stored service that the statement does not list is deleted. That is right when the script means to remove it. It is a loss when the statement was written to add one operation and lists only that. exec used to report only "Modified published rest service".
 
-**Solution:** List every operation the service keeps; `describe published rest service` prints them. To change one resource, use `alter published rest service … drop resource '<name>'` and `add resource '<name>' { … }`. `check` refuses `add resource` with the name of a stored resource, which exec refuses too.
+**Solution:** List every operation the service keeps; `describe published rest service` prints them. To add or remove one operation, leave the rest of the service alone with `alter published rest service … add operation in resource '<name>' { <operation>; }` and `drop operation <method> ['<path>'] in resource '<name>'`. `check` refuses `add resource` with the name of a stored resource, and `add operation` with an operation the resource already has, as exec does.
 
 ## mxcli Parser Errors
 

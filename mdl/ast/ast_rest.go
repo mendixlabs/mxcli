@@ -272,3 +272,22 @@ type PublishedRestDropResourceAction struct {
 }
 
 func (a *PublishedRestDropResourceAction) isPublishedRestAlterAction() {}
+
+// PublishedRestAddOperationsAction represents:
+// ADD OPERATION IN RESOURCE 'name' { ops... } (ako/mxcli#2449).
+type PublishedRestAddOperationsAction struct {
+	Resource   string
+	Operations []*PublishedRestOperationDef
+}
+
+func (a *PublishedRestAddOperationsAction) isPublishedRestAlterAction() {}
+
+// PublishedRestDropOperationAction represents:
+// DROP OPERATION <method> ['path'] IN RESOURCE 'name' (ako/mxcli#2449).
+type PublishedRestDropOperationAction struct {
+	Resource   string
+	HTTPMethod string
+	Path       string
+}
+
+func (a *PublishedRestDropOperationAction) isPublishedRestAlterAction() {}

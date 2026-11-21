@@ -56,7 +56,8 @@ func publishedRestDropMessage(qn string, dropped []string) string {
 }
 
 const publishedRestDropSuggestion = "List every operation the service keeps — `describe published rest service` prints them — " +
-	"or, to change one resource, use `alter published rest service … drop resource '<name>'` and `add resource '<name>' { … }`."
+	"or change one operation and leave the rest alone: `alter published rest service … add operation in resource '<name>' { … }` " +
+	"or `drop operation <method> ['<path>'] in resource '<name>'`."
 
 // CheckPublishedRestOperationDrops reports, before exec, each create or modify
 // of a stored published REST service that would remove operations.
@@ -97,12 +98,37 @@ func (e *Executor) CheckPublishedRestOperationDrops(prog *ast.Program) []linter.
 // actions are applied in order, as exec applies them.
 func publishedRestAlterResourceProblems(stored *model.PublishedRestService, s *ast.AlterPublishedRestServiceStmt) []string {
 	have := map[string]bool{}
+	ops := map[string]bool{}
 	for _, r := range stored.Resources {
 		have[r.Name] = true
+		for _, op := range r.Operations {
+			ops[publishedRestOperationKey(r.Name, op.HTTPMethod, op.Path)] = true
+		}
 	}
 	var out []string
 	for _, a := range s.Actions {
 		switch act := a.(type) {
+		case *ast.PublishedRestAddOperationsAction:
+			if !have[act.Resource] {
+				out = append(out, fmt.Sprintf("resource '%s' not found on %s: `add operation in resource` adds to a stored resource; "+
+					"a new one is `add resource '%s' { … }`", act.Resource, s.Name, act.Resource))
+				continue
+			}
+			for _, op := range act.Operations {
+				k := publishedRestOperationKey(act.Resource, op.HTTPMethod, op.Path)
+				if ops[k] {
+					out = append(out, fmt.Sprintf("operation %s already exists on %s: `add operation` adds a new one; "+
+						"to change it, `drop operation %s in resource '%s'` first and add it back",
+						k, s.Name, publishedRestOperationSpelling(op.HTTPMethod, op.Path), act.Resource))
+				}
+				ops[k] = true
+			}
+		case *ast.PublishedRestDropOperationAction:
+			k := publishedRestOperationKey(act.Resource, act.HTTPMethod, act.Path)
+			if !ops[k] {
+				out = append(out, fmt.Sprintf("operation %s not found on %s", k, s.Name))
+			}
+			delete(ops, k)
 		case *ast.PublishedRestAddResourceAction:
 			if have[act.Resource.Name] {
 				out = append(out, fmt.Sprintf("resource '%s' already exists on %s: `add resource` adds a new one; "+
