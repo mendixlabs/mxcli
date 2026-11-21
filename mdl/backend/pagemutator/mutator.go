@@ -1559,12 +1559,37 @@ func findBsonWidget(rawData bson.D, widgetName string) *bsonWidgetResult {
 // A layout's tree hangs off Content — a Forms$WebLayoutContent (or
 // Forms$NativeLayoutContent) — never off the layout element and never off a
 // FormCall, so the page finder returns nil for every layout.
+//
+// A layout built on another layout keeps its widgets in the placeholder
+// fills of a layout call, Content.LayoutCall.Arguments[].Widgets — the shape
+// a page has under FormCall — and was out of reach until those were searched
+// too (mendixlabs/mxcli#1907).
 func findBsonWidgetInLayout(rawData bson.D, widgetName string) *bsonWidgetResult {
+	for _, parent := range layoutWidgetParents(rawData) {
+		if result := findInWidgetArray(parent, "Widgets", widgetName); result != nil {
+			return result
+		}
+	}
+	return nil
+}
+
+// layoutWidgetParents is every document of a layout whose Widgets holds its
+// top-level widgets: Content itself, and each placeholder fill of the layout
+// it is built on. nil for a document that is not a layout.
+func layoutWidgetParents(rawData bson.D) []bson.D {
 	content := bsonnav.DGetDoc(rawData, "Content")
 	if content == nil {
 		return nil
 	}
-	return findInWidgetArray(content, "Widgets", widgetName)
+	parents := []bson.D{content}
+	if call := bsonnav.DGetDoc(content, "LayoutCall"); call != nil {
+		for _, arg := range bsonnav.DGetArrayElements(bsonnav.DGet(call, "Arguments")) {
+			if argDoc, ok := arg.(bson.D); ok {
+				parents = append(parents, argDoc)
+			}
+		}
+	}
+	return parents
 }
 
 // findBsonWidgetInSnippet searches the raw BSON snippet tree for a widget by name.
@@ -2434,6 +2459,11 @@ func findNearestDataSourceDoc(rawData bson.D, widgetName string) (bson.D, bool) 
 	if ds, found := findNearestDSInWidgets(rawData, "Widgets", widgetName, nil); found {
 		return ds, true
 	}
+	for _, parent := range layoutWidgetParents(rawData) {
+		if ds, found := findNearestDSInWidgets(parent, "Widgets", widgetName, nil); found {
+			return ds, true
+		}
+	}
 	if widgetContainer := bsonnav.DGetDoc(rawData, "Widget"); widgetContainer != nil {
 		if ds, found := findNearestDSInWidgets(widgetContainer, "Widgets", widgetName, nil); found {
 			return ds, true
@@ -2629,6 +2659,11 @@ func extractWidgetScopeFromBSON(rawData bson.D) map[string]model.ID {
 	collectWidgetScope(rawData, "Widgets", scope)
 	if widgetContainer := bsonnav.DGetDoc(rawData, "Widget"); widgetContainer != nil {
 		collectWidgetScope(widgetContainer, "Widgets", scope)
+	}
+	// A layout's widgets, a nested layout's placeholder fills included
+	// (mendixlabs/mxcli#1907).
+	for _, parent := range layoutWidgetParents(rawData) {
+		collectWidgetScope(parent, "Widgets", scope)
 	}
 	return scope
 }

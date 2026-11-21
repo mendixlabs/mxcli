@@ -571,6 +571,7 @@ func businessEventDefinitionFromGen(def *genBe.BusinessEventDefinition) *model.B
 					Description:   attr.Description(),
 					AttributeType: businessEventAttrType(attr.AttributeType()),
 				}
+				ma.Length, ma.LengthSet = storedStringLength(attr.AttributeType())
 				ma.ID = model.ID(attr.ID())
 				ma.TypeName = "BusinessEvents$MessageAttribute"
 				message.Attributes = append(message.Attributes, ma)
@@ -580,6 +581,24 @@ func businessEventDefinitionFromGen(def *genBe.BusinessEventDefinition) *model.B
 		d.Channels = append(d.Channels, channel)
 	}
 	return d
+}
+
+// storedStringLength is a String attribute type's stored Length and whether it
+// stores one: the generated accessor reads 0 both for unlimited and for a type
+// stored with no length, which the build reads as 200 (ako/mxcli#2490).
+func storedStringLength(el element.Element) (int, bool) {
+	if el == nil || el.TypeName() != "DomainModels$StringAttributeType" {
+		return 0, false
+	}
+	v, err := el.Raw().LookupErr("Length")
+	if err != nil {
+		return 0, false
+	}
+	n, ok := v.AsInt64OK()
+	if !ok {
+		return 0, false
+	}
+	return int(n), true
 }
 
 // businessEventAttrType maps a gen attribute-type element's $Type to the short

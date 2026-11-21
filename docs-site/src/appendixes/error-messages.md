@@ -277,6 +277,24 @@ line 1: `create or replace …` (enumeration) is deprecated; write `create or mo
 
 The registry of deprecated spellings is `mdl/deprecation/deprecation.go`. It holds the code, old form, canonical form, rewrite and removal version of each entry. A spelling is only registered where it means exactly the same as its canonical form. `create or replace view entity`, for example, drops and recreates the view entity, so it is not reported. Likewise `show` is reported as `MDL-DEPR002` only where its canonical form is `list` (plurals, relationship queries and the summary tables), and as `MDL-DEPR090` where it is `describe` with the same output. `show entity X` and `show version` are neither: the first has no mdl 1 statement (`MDL-V1-SHOWSUMMARY`), the second is a session command (`MDL-V1-SESSION`).
 
+### MDL-LAYOUT01..04: A widget the layout cannot hold there
+
+```
+✗ layout 'M.Shell': data view 'dvUser' is not allowed in a layout, so mxbuild fails it with
+CE6086 ("Data views are not allowed on web layouts.") [MDL-LAYOUT01]
+```
+
+**Cause:** A placement mxbuild rejects in a layout. Each one used to pass `check` and `exec`, and the build failed. Measured with mx check 11.12.6:
+
+| Rule | Shape | mxbuild |
+|---|---|---|
+| MDL-LAYOUT01 | a `dataview` anywhere in a layout, web or native | CE6086 |
+| MDL-LAYOUT02 | a scroll container region with a `ToggleMode` other than `'None'`, and no `sidebartoggle` in the layout (one in a called snippet does not count) | CE0611 |
+| MDL-LAYOUT03 | a `sidebartoggle` in a layout whose only top-level widget is not a scroll container with a toggling region | CE0628 |
+| MDL-LAYOUT04 | a `sidebartoggle` on a page or snippet | CE6086 |
+
+**Solution:** Put the data view on the page, inside `placeholder Main { … }`. For a toggling sidebar, make the `scrollcontainer` the layout's one top-level widget and put the toggle in one of its regions, for example `region top { sidebartoggle tg (Caption: 'Menu') }`. A layout built on another one (`Layout:`) is checked only for data views.
+
 ## mxcli Parser Errors
 
 

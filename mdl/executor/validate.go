@@ -88,6 +88,10 @@ type scriptContext struct {
 	// not the declaration's, so it is not judged from it.
 	entityDecls     map[string]*ast.CreateEntityStmt
 	alteredEntities map[string]bool
+	// viewEntityDecls is the same for a view entity the script declares: its
+	// columns are its members once the statement runs, the stored entity's
+	// not (mendixlabs/mxcli#1908).
+	viewEntityDecls map[string]*ast.CreateViewEntityStmt
 
 	// Java/JavaScript actions created in the script, mapped to their declared
 	// parameter names. A bool would be enough to stop the false "not found",
@@ -180,6 +184,7 @@ func newScriptContext() *scriptContext {
 		javaActionTemplateParams: make(map[string]map[string]bool),
 		customDocuments:          make(map[string]bool),
 		entityDecls:              make(map[string]*ast.CreateEntityStmt),
+		viewEntityDecls:          make(map[string]*ast.CreateViewEntityStmt),
 		alteredEntities:          make(map[string]bool),
 
 		javaActions:       make(map[string][]string),
@@ -311,6 +316,7 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 		if s.Name.Module != "" {
 			sc.entities[s.Name.String()] = true
 			sc.viewEntities[s.Name.String()] = true
+			sc.viewEntityDecls[s.Name.String()] = s
 			sc.recordViewAssociations(s)
 		}
 	case *ast.CreateExternalEntityStmt:
@@ -632,6 +638,16 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// inherits (BusinessEvents.PublishedBusinessEvent's, read from the project):
 	// mxbuild reports the duplicate after exec wrote it (mendixlabs/mxcli#1525).
 	errors = append(errors, validateBusinessEventInheritedMembers(ctx, prog, sc)...)
+	// A message declared twice (two messages of one name: the deployment
+	// fails) and the shape of `publish subscribe` (ako/mxcli#2490): what
+	// exec refuses, reported first.
+	for i, stmt := range prog.Statements {
+		if s, ok := stmt.(*ast.CreateBusinessEventServiceStmt); ok && !s.IsConsumer() {
+			for _, p := range businessEventMessageProblems(s) {
+				errors = append(errors, mdlerrors.NewValidationf("statement %d: business event service %s: %s", i+1, s.Name.String(), p))
+			}
+		}
+	}
 	// A member named like one already on its entity's generalization chain —
 	// inherited, a specialization's, or the entity's own other kind: mxbuild's
 	// CE0069, after exec wrote it (ako/mxcli#1645). Replayed in statement
@@ -2467,6 +2483,10 @@ func validateViewEntityAttributeSet(ctx *ExecContext, s *ast.AlterEntityStmt, sc
 	if !isView && !sc.entities[qn] && s.Name.Module != "" && ctx.Connected() {
 		if ent, err := findEntity(ctx, s.Name.Module, s.Name.Name); err == nil {
 			isView = isViewEntity(ent)
+			// The same check for an external entity (CE6612, ako/mxcli#2477).
+			if ent.RemoteServiceName != "" && s.Operation == ast.AlterEntityAddAttribute && s.Attribute != nil {
+				return externalEntityAddAttributeRefusal(qn, ent.Name, ent.RemoteServiceName, s.Attribute.Name)
+			}
 		}
 	}
 	if !isView {

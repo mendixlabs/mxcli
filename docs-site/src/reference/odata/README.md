@@ -86,6 +86,31 @@ Two more consequences:
   neither. `CE6630` fires in both directions here, so this follows the contract
   rather than a fixed answer.
 
+### Enum types become enumerations
+
+A property typed as an OData `EnumType` (a vendor type such as
+`Vendor.Sales.OrderStatus`, not an `Edm.*` one) is imported as an enumeration
+attribute. Its enumeration is generated from the contract, as Studio Pro does:
+it is named after the enum type, placed in the module the entities go to, and
+has one value per member, with the member's name as both the value name and
+the caption. It records the service and the remote type, and each value
+records its member. Mendix requires this. An enumeration that is not generated
+from the contract is `CE4597` on the attribute ("should have an enumeration type
+that was generated from …").
+
+- A re-import reuses the generated enumeration, and so does a second property
+  of the same type. `create or modify enumeration` on it keeps the link to the
+  contract.
+- If the module already has an ordinary enumeration of that name, a member is
+  not a valid value name, or the project is older than Mendix 10.12, the
+  property is not imported. The import says
+  which property and why.
+
+An external entity's attributes come only from the contract. `alter entity …
+add attribute` on one is refused: the attribute would not be mapped to a
+contract property, which is `CE6612` ("Attribute 'X' of external entity 'E' is
+not supported"), whatever its type.
+
 ### Navigation properties become associations
 
 Each navigation property whose target is also imported becomes an association.

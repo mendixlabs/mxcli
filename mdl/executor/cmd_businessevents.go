@@ -298,42 +298,68 @@ func describeBusinessEventService(ctx *ExecContext, name ast.QualifiedName) erro
 
 	fmt.Fprintf(ctx.Output, "{\n")
 
-	// Build operation map: messageName -> operation info
-	opMap := make(map[string]*model.ServiceOperation)
+	// Operations per message name, in stored order. A name declared once per
+	// operation (publish, then subscribe) is two messages and two operations
+	// of one name; keyed by name alone, both messages printed the later
+	// operation (ako/mxcli#2490). Each message takes the next of its name's.
+	opsByName := make(map[string][]*model.ServiceOperation)
 	for _, op := range found.OperationImplementations {
-		opMap[op.MessageName] = op
+		opsByName[op.MessageName] = append(opsByName[op.MessageName], op)
+	}
+	nextOp := func(name string) (*model.ServiceOperation, bool) {
+		ops := opsByName[name]
+		if len(ops) == 0 {
+			return nil, false
+		}
+		op := ops[0]
+		if len(ops) > 1 {
+			opsByName[name] = ops[1:]
+		}
+		return op, true
 	}
 
-	// Output messages
+	// How many messages carry each name: one message with both a publish and
+	// a subscribe operation is `publish subscribe`; two messages of one name
+	// (an older double declaration) each take their own (ako/mxcli#2490).
+	messagesNamed := map[string]int{}
 	for _, ch := range found.Definition.Channels {
 		for _, msg := range ch.Messages {
-			// Format attributes
+			messagesNamed[msg.MessageName]++
+		}
+	}
+
+	// Output messages, each with its operations as children (R2):
+	//   message X (…) {
+	//     publish (Entity: M.P);
+	//     subscribe (Entity: M.C, Microflow: M.H);
+	//   };
+	for _, ch := range found.Definition.Channels {
+		for _, msg := range ch.Messages {
 			var attrs []string
 			for _, a := range msg.Attributes {
-				attrs = append(attrs, fmt.Sprintf("%s: %s", a.AttributeName, a.AttributeType))
+				attrs = append(attrs, fmt.Sprintf("%s: %s", a.AttributeName, businessEventAttrTypeText(a)))
 			}
-
-			// Determine operation from OperationImplementations
-			opStr := "publish"
-			entityStr := ""
-			microflowStr := ""
-			if op, ok := opMap[msg.MessageName]; ok {
-				if op.Operation == "subscribe" {
-					opStr = "subscribe"
-				}
-				if op.Entity != "" {
-					entityStr = fmt.Sprintf("\n    entity %s", op.Entity)
-				}
-				// The grammar has `MICROFLOW qualifiedName` on the message
-				// rule; describe never printed it, so describe → exec
-				// unbound the handler (ako/mxcli#2381).
-				if op.Microflow != "" {
-					microflowStr = fmt.Sprintf("\n    microflow %s", op.Microflow)
-				}
+			var ops []*model.ServiceOperation
+			if pub, sub, ok := publishSubscribePair(opsByName[msg.MessageName]); ok && messagesNamed[msg.MessageName] == 1 {
+				ops = []*model.ServiceOperation{pub, sub}
+				delete(opsByName, msg.MessageName)
+			} else if op, ok := nextOp(msg.MessageName); ok {
+				ops = []*model.ServiceOperation{op}
+			} else {
+				// No stored operation: the message is the service's to publish.
+				ops = []*model.ServiceOperation{{Operation: "publish"}}
 			}
-
-			fmt.Fprintf(ctx.Output, "  message %s (%s) %s%s%s;\n",
-				msg.MessageName, strings.Join(attrs, ", "), opStr, entityStr, microflowStr)
+			fmt.Fprintf(ctx.Output, "  message %s (%s) {\n", msg.MessageName, strings.Join(attrs, ", "))
+			for _, op := range ops {
+				kind := "publish"
+				if strings.EqualFold(op.Operation, "subscribe") {
+					kind = "subscribe"
+				}
+				// The handler is printed whenever stored: describe → exec
+				// unbound it while it was left out (ako/mxcli#2381).
+				fmt.Fprintf(ctx.Output, "    %s %s;\n", kind, businessEventOpPropsText(op.Entity, op.Microflow))
+			}
+			fmt.Fprintf(ctx.Output, "  };\n")
 		}
 	}
 
@@ -382,14 +408,7 @@ func describeConsumedBusinessEventService(ctx *ExecContext, moduleName string, s
 	// normally ends in a newline, which puts the closing $$ on its own line.
 	fmt.Fprintf(ctx.Output, "(\n  Contract: $$%s$$\n)\n{\n", svc.Document)
 	for _, op := range svc.OperationImplementations {
-		fmt.Fprintf(ctx.Output, "  consume %s", op.MessageName)
-		if op.Entity != "" {
-			fmt.Fprintf(ctx.Output, "\n    entity %s", op.Entity)
-		}
-		if op.Microflow != "" {
-			fmt.Fprintf(ctx.Output, "\n    microflow %s", op.Microflow)
-		}
-		fmt.Fprintf(ctx.Output, ";\n")
+		fmt.Fprintf(ctx.Output, "  consume %s %s;\n", op.MessageName, businessEventOpPropsText(op.Entity, op.Microflow))
 	}
 	fmt.Fprintf(ctx.Output, "};\n")
 }
@@ -585,66 +604,15 @@ func createBusinessEventService(ctx *ExecContext, stmt *ast.CreateBusinessEventS
 		}
 		return writeBusinessEventService(ctx, svc, stmt, moduleName, existingID, existingContainerID)
 	}
-	def := &model.BusinessEventDefinition{
-		ServiceName:     stmt.ServiceName,
-		EventNamePrefix: stmt.EventNamePrefix,
+	if probs := businessEventMessageProblems(stmt); len(probs) > 0 {
+		return mdlerrors.NewValidationf("business event service %s.%s: %s", moduleName, stmt.Name.Name, strings.Join(probs, "; "))
 	}
-	def.ID = carry.definitionID()
-	def.TypeName = "BusinessEvents$BusinessEventDefinition"
-
-	// Create channels (one per message in our simplified model)
-	for _, msgDef := range stmt.Messages {
-		ch := &model.BusinessEventChannel{}
-		ch.TypeName = "BusinessEvents$Channel"
-
-		msg := &model.BusinessEventMessage{
-			MessageName: msgDef.MessageName,
-		}
-		msg.TypeName = "BusinessEvents$Message"
-		storedMsg := carry.channelFor(msgDef.MessageName, ch, msg)
-
-		// Set publish/subscribe based on operation
-		switch strings.ToLower(msgDef.Operation) {
-		case "publish":
-			msg.CanSubscribe = true // Service publishes → others subscribe
-		case "subscribe":
-			msg.CanPublish = true // Service subscribes → others publish
-		}
-
-		// Build attributes
-		for _, attrDef := range msgDef.Attributes {
-			attr := &model.BusinessEventAttribute{
-				AttributeName: attrDef.Name,
-				AttributeType: attrDef.TypeName,
-			}
-			attr.ID = storedAttributeID(storedMsg, attrDef.Name)
-			attr.TypeName = "BusinessEvents$MessageAttribute"
-			msg.Attributes = append(msg.Attributes, attr)
-		}
-
-		ch.Messages = append(ch.Messages, msg)
-		def.Channels = append(def.Channels, ch)
-
-		// Create operation implementation
-		op := &model.ServiceOperation{
-			MessageName: msgDef.MessageName,
-			Operation:   strings.ToLower(msgDef.Operation),
-			Entity:      msgDef.Entity,
-			Microflow:   msgDef.Microflow,
-		}
-		if storedOp := carry.operationFor(msgDef.MessageName); storedOp != nil {
-			op.ID = storedOp.ID
-			// A statement silent about the handler keeps the stored one, the
-			// way a silent doc comment does (#1018).
-			if op.Microflow == "" {
-				op.Microflow = storedOp.Microflow
-			}
-		}
-		op.TypeName = "BusinessEvents$ServiceOperation"
-		svc.OperationImplementations = append(svc.OperationImplementations, op)
+	built, err := businessEventServiceModel(stmt, carry)
+	if err != nil {
+		return err
 	}
-
-	svc.Definition = def
+	svc.OperationImplementations = built.OperationImplementations
+	svc.Definition = built.Definition
 
 	return writeBusinessEventService(ctx, svc, stmt, moduleName, existingID, existingContainerID)
 }
@@ -746,6 +714,10 @@ type businessEventIdentityCarry struct {
 	messages map[string]storedBusinessEventMessage
 	claimed  map[*model.BusinessEventChannel]bool
 	ops      map[string]*model.ServiceOperation
+	// opsByName holds every stored operation per message name, so a message
+	// with a publish and a subscribe operation hands each its own
+	// (ako/mxcli#2490).
+	opsByName map[string][]*model.ServiceOperation
 }
 
 type storedBusinessEventMessage struct {
@@ -755,10 +727,11 @@ type storedBusinessEventMessage struct {
 
 func newBusinessEventIdentityCarry(stored *model.BusinessEventService) *businessEventIdentityCarry {
 	c := &businessEventIdentityCarry{
-		stored:   stored,
-		messages: map[string]storedBusinessEventMessage{},
-		claimed:  map[*model.BusinessEventChannel]bool{},
-		ops:      map[string]*model.ServiceOperation{},
+		stored:    stored,
+		messages:  map[string]storedBusinessEventMessage{},
+		claimed:   map[*model.BusinessEventChannel]bool{},
+		ops:       map[string]*model.ServiceOperation{},
+		opsByName: map[string][]*model.ServiceOperation{},
 	}
 	if stored == nil {
 		return c
@@ -778,8 +751,32 @@ func newBusinessEventIdentityCarry(stored *model.BusinessEventService) *business
 		if _, dup := c.ops[key]; !dup {
 			c.ops[key] = op
 		}
+		c.opsByName[key] = append(c.opsByName[key], op)
 	}
 	return c
+}
+
+// operationOf is the stored operation of messageName with the given
+// operation, else any stored one of that name, each handed out once.
+func (c *businessEventIdentityCarry) operationOf(messageName, operation string) *model.ServiceOperation {
+	key := strings.ToLower(messageName)
+	ops := c.opsByName[key]
+	pick := -1
+	for i, op := range ops {
+		if strings.EqualFold(op.Operation, operation) {
+			pick = i
+			break
+		}
+	}
+	if pick < 0 && len(ops) > 0 {
+		pick = 0
+	}
+	if pick < 0 {
+		return nil
+	}
+	op := ops[pick]
+	c.opsByName[key] = append(ops[:pick:pick], ops[pick+1:]...)
+	return op
 }
 
 func (c *businessEventIdentityCarry) definitionID() model.ID {
@@ -849,3 +846,158 @@ func generateChannelName() string {
 }
 
 // Executor wrappers for unmigrated callers.
+
+// businessEventAttrTypeText is a message attribute's type as MDL states it: a
+// String with a stored length carries it, `String(unlimited)` for 0, so the
+// describe → exec round trip stores it again (ako/mxcli#2490).
+func businessEventAttrTypeText(a *model.BusinessEventAttribute) string {
+	if a.AttributeType != "String" || !a.LengthSet {
+		return a.AttributeType
+	}
+	if a.Length == 0 {
+		return "String(unlimited)"
+	}
+	return fmt.Sprintf("String(%d)", a.Length)
+}
+
+// businessEventServiceModel is the definition and operations a published
+// service statement stores, carrying stored identities through carry.
+//
+// `message X (…) publish subscribe entity P entity C microflow H` is one
+// message the service both publishes and consumes: one Message with CanPublish
+// and CanSubscribe, and two operations, publish on P and subscribe on C with
+// the handler (ako/mxcli#2490). The flags are the other side's view: a message
+// the service publishes is one others subscribe to.
+func businessEventServiceModel(stmt *ast.CreateBusinessEventServiceStmt, carry *businessEventIdentityCarry) (*model.BusinessEventService, error) {
+	svc := &model.BusinessEventService{}
+	def := &model.BusinessEventDefinition{
+		ServiceName:     stmt.ServiceName,
+		EventNamePrefix: stmt.EventNamePrefix,
+	}
+	def.ID = carry.definitionID()
+	def.TypeName = "BusinessEvents$BusinessEventDefinition"
+
+	// One channel per message.
+	for _, msgDef := range stmt.Messages {
+		ch := &model.BusinessEventChannel{}
+		ch.TypeName = "BusinessEvents$Channel"
+
+		msg := &model.BusinessEventMessage{
+			MessageName: msgDef.MessageName,
+		}
+		msg.TypeName = "BusinessEvents$Message"
+		storedMsg := carry.channelFor(msgDef.MessageName, ch, msg)
+
+		switch {
+		case msgDef.PublishAndSubscribe:
+			msg.CanPublish, msg.CanSubscribe = true, true
+		case strings.EqualFold(msgDef.Operation, "publish"):
+			msg.CanSubscribe = true // Service publishes → others subscribe
+		case strings.EqualFold(msgDef.Operation, "subscribe"):
+			msg.CanPublish = true // Service subscribes → others publish
+		}
+
+		for _, attrDef := range msgDef.Attributes {
+			attr := &model.BusinessEventAttribute{
+				AttributeName: attrDef.Name,
+				AttributeType: attrDef.TypeName,
+				Length:        attrDef.Length,
+				LengthSet:     attrDef.LengthSet,
+			}
+			attr.ID = storedAttributeID(storedMsg, attrDef.Name)
+			attr.TypeName = "BusinessEvents$MessageAttribute"
+			msg.Attributes = append(msg.Attributes, attr)
+		}
+
+		ch.Messages = append(ch.Messages, msg)
+		def.Channels = append(def.Channels, ch)
+
+		type opSpec struct{ operation, entity, microflow string }
+		specs := []opSpec{{strings.ToLower(msgDef.Operation), msgDef.Entity, msgDef.Microflow}}
+		if msgDef.PublishAndSubscribe {
+			specs = []opSpec{{"publish", msgDef.Entity, ""}, {"subscribe", msgDef.SubscribeEntity, msgDef.Microflow}}
+		}
+		for _, sp := range specs {
+			op := &model.ServiceOperation{
+				MessageName: msgDef.MessageName,
+				Operation:   sp.operation,
+				Entity:      sp.entity,
+				Microflow:   sp.microflow,
+			}
+			if storedOp := carry.operationOf(msgDef.MessageName, sp.operation); storedOp != nil {
+				op.ID = storedOp.ID
+				// A statement silent about the handler keeps the stored one, the
+				// way a silent doc comment does (#1018).
+				if op.Microflow == "" && sp.operation != "publish" {
+					op.Microflow = storedOp.Microflow
+				}
+			}
+			op.TypeName = "BusinessEvents$ServiceOperation"
+			svc.OperationImplementations = append(svc.OperationImplementations, op)
+		}
+	}
+	svc.Definition = def
+	return svc, nil
+}
+
+// businessEventMessageProblems is what a published service statement states
+// that cannot be stored or deployed, in the words check and exec both refuse
+// it with:
+//
+//   - one message name declared twice: two messages of one name, and the
+//     deployment fails (measured with mxbuild 11.12.6 --target=deploy and
+//     BusinessEvents 3.12.0: "An item with the same key has already been
+//     added", ako/mxcli#2490). A message the service both publishes and
+//     consumes has both operations as its children;
+//   - such a message without an entity for each operation.
+func businessEventMessageProblems(stmt *ast.CreateBusinessEventServiceStmt) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, m := range stmt.Messages {
+		key := strings.ToLower(m.MessageName)
+		if seen[key] {
+			out = append(out, fmt.Sprintf("message %s is declared twice, which stores two messages of one name and "+
+				"fails the deployment (\"An item with the same key has already been added\"). For a message this "+
+				"service both publishes and consumes, declare it once with both operations: `message %s (…) "+
+				"{ publish (Entity: …); subscribe (Entity: …, Microflow: …); };`", m.MessageName, m.MessageName))
+			continue
+		}
+		seen[key] = true
+		if m.PublishAndSubscribe && (m.Entity == "" || m.SubscribeEntity == "") {
+			out = append(out, fmt.Sprintf("message %s publishes and subscribes, and each operation needs its "+
+				"entity: `publish (Entity: …)` and `subscribe (Entity: …, Microflow: …)`", m.MessageName))
+		}
+	}
+	return out
+}
+
+// publishSubscribePair is the publish and the subscribe operation of a
+// message's operations, when it has exactly those two (ako/mxcli#2490).
+func publishSubscribePair(ops []*model.ServiceOperation) (pub, sub *model.ServiceOperation, ok bool) {
+	if len(ops) != 2 {
+		return nil, nil, false
+	}
+	for _, op := range ops {
+		switch strings.ToLower(op.Operation) {
+		case "publish":
+			pub = op
+		case "subscribe":
+			sub = op
+		}
+	}
+	return pub, sub, pub != nil && sub != nil && pub.Entity != "" && sub.Entity != ""
+}
+
+// businessEventOpPropsText is an operation's or subscription's property list,
+// `(Entity: M.E, Microflow: M.H)`, the empty ones left out (R2,
+// ako/mxcli#2490).
+func businessEventOpPropsText(entity, microflow string) string {
+	var props []string
+	if entity != "" {
+		props = append(props, "Entity: "+entity)
+	}
+	if microflow != "" {
+		props = append(props, "Microflow: "+microflow)
+	}
+	return "(" + strings.Join(props, ", ") + ")"
+}

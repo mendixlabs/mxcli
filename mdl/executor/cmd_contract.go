@@ -542,6 +542,7 @@ func createExternalEntities(ctx *ExecContext, s *ast.CreateExternalEntitiesStmt)
 	}
 
 	serviceRef := s.ServiceRef.String()
+	odataEnums := &odataEnumerations{byRemote: map[string]string{}}
 	var created, updated, skipped, failed int
 	// Attribute names the import had to change because Mendix reserves them.
 	// Reported at the end so the local name never silently diverges from the
@@ -705,11 +706,25 @@ func createExternalEntities(ctx *ExecContext, s *ast.CreateExternalEntitiesStmt)
 				if strings.HasPrefix(p.Type, "Collection(") {
 					continue
 				}
+				// An enum-typed property becomes an enumeration attribute of an
+				// enumeration generated from the contract's EnumType, as Studio
+				// Pro imports it (ako/mxcli#2477). It was dropped, and the
+				// attribute written back by hand was CE6612 (a stored, not a
+				// mapped, value) or, with a plain enumeration, CE4597.
+				var enumType domainmodel.AttributeType
+				if et := doc.FindEnumType(p.Type); et != nil && !strings.HasPrefix(p.Type, "Edm.") {
+					qn, why := odataEnums.ensure(ctx, module.ID, targetModule, serviceRef, p.Type, et)
+					if why != "" {
+						dropped = append(dropped, fmt.Sprintf("%s.%s (%s) — %s", mendixName, p.Path(), p.Type, why))
+						continue
+					}
+					enumType = &domainmodel.EnumerationAttributeType{EnumerationRef: qn}
+				}
 				// Anything still not an Edm type after the flatten is an entity
-				// reference, an enum, or a complex type this document does not
-				// declare. None of them can become an attribute — but say so:
-				// silence here is what made mendixlabs/mxcli#1118 cost a build to discover.
-				if !strings.HasPrefix(p.Type, "Edm.") {
+				// reference or a complex type this document does not declare.
+				// Neither can become an attribute — but say so: silence here is
+				// what made mendixlabs/mxcli#1118 cost a build to discover.
+				if enumType == nil && !strings.HasPrefix(p.Type, "Edm.") {
 					dropped = append(dropped, fmt.Sprintf("%s.%s (%s) — not a supported attribute type", mendixName, p.Path(), p.Type))
 					continue
 				}
@@ -797,9 +812,13 @@ func createExternalEntities(ctx *ExecContext, s *ast.CreateExternalEntitiesStmt)
 					// attribute … no longer exists" (mxcli-formula1 #28).
 					renamed = append(renamed, fmt.Sprintf("%s.%s: %s -> %s", mendixName, p.Name, p.Name, attrName))
 				}
+				attrType := enumType
+				if attrType == nil {
+					attrType = edmToDomainModelAttrType(p, isKey)
+				}
 				attr := &domainmodel.Attribute{
 					Name:       attrName,
-					Type:       edmToDomainModelAttrType(p, isKey),
+					Type:       attrType,
 					RemoteName: remoteName,
 					RemoteType: p.Type,
 					Filterable: filterable,

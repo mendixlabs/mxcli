@@ -182,6 +182,14 @@ func (c *CheckAdapter) walkBodyWithScope(body []ast.MicroflowStatement, mf strin
 			}
 		case *ast.SendEmailStmt:
 			c.checkSendEmail(n, mf, r)
+		case *ast.RestCallStmt:
+			// A binary body sends the bytes of a Binary expression: Studio Pro
+			// stores a FileDocument's Contents there. The object itself
+			// passed check and exec and failed the build with CE0117
+			// (mendixlabs/mxcli#1897).
+			if n.Body != nil && n.Body.Type == ast.RestBodyBinary && n.Body.Template != nil {
+				c.checkExprAs(n.Body.Template, exprcheck.BinaryBodySlot, mf, exprcheck.KindBinary, r)
+			}
 		}
 		// A custom ON ERROR body is a block of ordinary statements and its
 		// expressions are as checkable as any other. It was not walked at all,

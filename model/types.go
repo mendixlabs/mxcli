@@ -217,6 +217,14 @@ type Enumeration struct {
 	// a Protected (add-on) module (CE5400). The writer writes a set level and,
 	// for "", keeps the stored one (mendixlabs/mxcli#1498).
 	ExportLevel string `json:"exportLevel,omitempty"`
+	// RemoteService and RemoteName are an enumeration generated from an OData
+	// contract's EnumType: the consumed OData service (qualified name) and the
+	// type's qualified remote name (Rest$ODataRemoteEnumerationSource). An
+	// external entity's enum attribute must use such an enumeration (CE4597);
+	// a rebuild that drops them breaks every attribute that does
+	// (ako/mxcli#2477). Both "" for an ordinary enumeration.
+	RemoteService string `json:"remoteService,omitempty"`
+	RemoteName    string `json:"remoteName,omitempty"`
 }
 
 // GetName returns the enumeration's name.
@@ -235,6 +243,9 @@ type EnumerationValue struct {
 	Name    string `json:"name"`
 	Caption *Text  `json:"caption,omitempty"`
 	Image   *Image `json:"image,omitempty"`
+	// RemoteName is the contract member a remote enumeration's value stands
+	// for (Rest$ODataRemoteEnumerationValue); "" otherwise (ako/mxcli#2477).
+	RemoteName string `json:"remoteName,omitempty"`
 }
 
 // GetName returns the enumeration value's name.
@@ -775,6 +786,11 @@ type BusinessEventAttribute struct {
 	AttributeName string `json:"attributeName"`
 	AttributeType string `json:"attributeType"` // "Long", "String", "Integer", "Boolean", "DateTime", "Decimal"
 	Description   string `json:"description,omitempty"`
+	// Length is a String attribute's stored length, 0 for unlimited, when
+	// LengthSet; a string stored with no length is the build's 200
+	// (ako/mxcli#2490).
+	Length    int  `json:"length,omitempty"`
+	LengthSet bool `json:"lengthSet,omitempty"`
 }
 
 // ServiceOperation represents BusinessEvents$ServiceOperation.

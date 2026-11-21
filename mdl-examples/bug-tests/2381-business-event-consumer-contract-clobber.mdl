@@ -53,6 +53,5 @@ create or modify business event service BusinessEventsClient.OrdersEventClient
   EventNamePrefix: ''
 )
 {
-  message OrderPlaceEvent (OrderId: Long, CustomerId: Long) subscribe
-    entity BusinessEventsClient.CBE_OrderPlaceEvent;
+  message OrderPlaceEvent (OrderId: Long, CustomerId: Long) { subscribe (Entity: BusinessEventsClient.CBE_OrderPlaceEvent); };
 };

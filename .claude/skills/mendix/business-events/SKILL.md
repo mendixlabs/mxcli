@@ -11,12 +11,12 @@ description: "Define event-driven APIs over Kafka with Mendix business event ser
 | lines | section |
 |---|---|
 | 24-31 | When to Use This Skill |
-| 32-167 | Commands |
-| 168-183 | Message Definition Syntax |
-| 184-191 | Service Properties |
-| 192-198 | Operations |
-| 199-245 | Publishing Events from Microflows |
-| 246-258 | Checklist |
+| 32-168 | Commands |
+| 169-200 | Message Definition Syntax |
+| 201-208 | Service Properties |
+| 209-216 | Operations |
+| 217-263 | Publishing Events from Microflows |
+| 264-276 | Checklist |
 
 <!-- /skill-index -->
 # Business Events
@@ -71,9 +71,7 @@ create or modify business event service Module.OrdersEventClient
   ContractFile: 'contracts/OrdersEventService.yaml'   -- or Contract: $$<yaml>$$
 )
 {
-  consume OrderPlaceEvent
-    entity Module.CBE_OrderPlaceEvent
-    microflow Module.HandleBE_OrderPlaceEvent;
+  consume OrderPlaceEvent (Entity: Module.CBE_OrderPlaceEvent, Microflow: Module.HandleBE_OrderPlaceEvent);
 };
 ```
 
@@ -123,10 +121,12 @@ create business event service Module.CustomerEventsApi
   EventNamePrefix: 'com.example'
 )
 {
-  message CustomerChangedEvent (CustomerId: long) publish
-    entity Module.PBE_CustomerChangedEvent;
-  message AddressChangedEvent (AddressId: long) publish
-    entity Module.PBE_AddressChangedEvent;
+  message CustomerChangedEvent (CustomerId: long) {
+    publish (Entity: Module.PBE_CustomerChangedEvent);
+  };
+  message AddressChangedEvent (AddressId: long) {
+    publish (Entity: Module.PBE_AddressChangedEvent);
+  };
 };
 ```
 
@@ -153,8 +153,9 @@ create or modify business event service Module.CustomerEventsApi
   EventNamePrefix: ''
 )
 {
-  message CustomerChangedEvent (CustomerId: long) publish
-    entity Module.PBE_CustomerChangedEvent;
+  message CustomerChangedEvent (CustomerId: long) {
+    publish (Entity: Module.PBE_CustomerChangedEvent);
+  };
 };
 ```
 
@@ -167,14 +168,30 @@ drop business event service Module.CustomerEventsApi;
 
 ## Message Definition Syntax
 
+A message's operations are its children, each with its properties in `( )`:
+
 ```
-message <MessageName> (<AttrName>: <type>, ...) publish|subscribe
-  [entity <Module.EntityName>]
-  [microflow <Module.MicroflowName>];
+message <MessageName> (<AttrName>: <type>, ...) {
+  publish (Entity: <Module.PBE_Entity>);
+  subscribe (Entity: <Module.CBE_Entity>, Microflow: <Module.Handler>);
+};
 ```
 
+Give a message the operations it has: `publish` only, `subscribe` only, or both, for
+a message the app publishes and consumes itself (an in-app bus, a request/reply loop).
+
+Declare a message **once**. The same name declared twice (once per operation) stores
+two messages of one name, which `mx check` accepts and the deployment rejects ("An item
+with the same key has already been added"); `check` refuses it.
+
+The keyword clauses `message X (…) publish entity M.E microflow M.H;` and
+`consume X entity M.E microflow M.H;` are the old spelling (MDL-DEPR075, MDL-DEPR076):
+they still run, warn, and `mxcli fmt --upgrade` rewrites them.
+
 ### Supported Attribute Types
-- `string` - Text
+- `string`, `string(n)`, `string(unlimited)` - Text. The length must match the
+  linked entity attribute's; a bare `string` stores no length, which the build
+  reads as 200
 - `integer` - 32-bit integer
 - `long` - 64-bit integer
 - `decimal` - Precise decimal number
@@ -195,6 +212,7 @@ message <MessageName> (<AttrName>: <type>, ...) publish|subscribe
 |-----------|-------------|
 | `publish` | This service publishes the event (other apps subscribe) |
 | `subscribe` | This service subscribes to the event (other apps publish) |
+| both | One message the app publishes and consumes: a `publish` and a `subscribe` child |
 
 ## Publishing Events from Microflows
 

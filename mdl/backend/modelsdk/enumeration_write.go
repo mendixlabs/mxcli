@@ -9,6 +9,7 @@ import (
 	"github.com/mendixlabs/mxcli/modelsdk/codec"
 	"github.com/mendixlabs/mxcli/modelsdk/element"
 	genEnum "github.com/mendixlabs/mxcli/modelsdk/gen/enumerations"
+	genRest "github.com/mendixlabs/mxcli/modelsdk/gen/rest"
 	genTexts "github.com/mendixlabs/mxcli/modelsdk/gen/texts"
 	mmpr "github.com/mendixlabs/mxcli/modelsdk/mpr"
 )
@@ -91,6 +92,14 @@ func enumToGen(enum *model.Enumeration) *genEnum.Enumeration {
 	out.SetDocumentation(enum.Documentation)
 	out.SetExcluded(enum.Excluded)
 	out.SetExportLevel(orDefault(enum.ExportLevel, "Hidden"))
+	// An enumeration generated from an OData contract keeps its source, and
+	// each value its member (ako/mxcli#2477).
+	if enum.RemoteName != "" {
+		src := genRest.NewODataRemoteEnumerationSource()
+		src.SetConsumedODataServiceQualifiedName(enum.RemoteService)
+		src.SetRemoteName(enum.RemoteName)
+		out.SetRemoteSource(src)
+	}
 	for _, v := range enum.Values {
 		out.AddValues(enumValueToGen(v))
 	}
@@ -104,6 +113,11 @@ func enumValueToGen(v model.EnumerationValue) *genEnum.EnumerationValue {
 	out.SetName(v.Name)
 	out.SetCaption(captionToGen(v.Caption))
 	out.SetImageQualifiedName("")
+	if v.RemoteName != "" {
+		rv := genRest.NewODataRemoteEnumerationValue()
+		rv.SetRemoteName(v.RemoteName)
+		out.SetRemoteValue(rv)
+	}
 	return out
 }
 
@@ -119,11 +133,17 @@ func captionToGen(t *model.Text) *genTexts.Text {
 // fresh IDs where empty (assignID leaves non-empty IDs untouched).
 func assignEnumIDs(e *genEnum.Enumeration) {
 	assignID(e)
+	if src := e.RemoteSource(); src != nil {
+		assignID(src)
+	}
 	for _, el := range e.ValuesItems() {
 		assignID(el)
 		v, ok := el.(*genEnum.EnumerationValue)
 		if !ok {
 			continue
+		}
+		if rv := v.RemoteValue(); rv != nil {
+			assignID(rv)
 		}
 		if cap := v.Caption(); cap != nil {
 			assignID(cap)

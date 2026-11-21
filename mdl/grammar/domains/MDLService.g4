@@ -441,18 +441,41 @@ createBusinessEventServiceStatement
 // ServiceOperation would be unreadable even though R11 keeps them unambiguous.
 businessEventConsumeDef
     : CONSUME identifierOrKeyword
-      (ENTITY qualifiedName)?
-      (MICROFLOW qualifiedName)?
+      ( LPAREN (businessEventOpProp (COMMA businessEventOpProp)* COMMA?)? RPAREN
+      | (ENTITY qualifiedName)? /* @alias MDL-DEPR076 */
+        (MICROFLOW qualifiedName)?
+      )
       SEMICOLON
     ;
 
+// R2 (ADR-0010): a message's operations are its children, each with its
+// properties in ( ). One message may have both a publish and a subscribe
+// operation: a message the service publishes and consumes itself (an in-app
+// bus, a request/reply loop). Declaring the message twice, once per
+// operation, wrote two messages of one name, which fails the deployment
+// ("An item with the same key has already been added", ako/mxcli#2490).
+// The keyword clauses `publish|subscribe entity … microflow …` are the old
+// spelling.
 businessEventMessageDef
     : MESSAGE identifierOrKeyword
       LPAREN businessEventAttrDef (COMMA businessEventAttrDef)* RPAREN
-      (PUBLISH | SUBSCRIBE)
-      (ENTITY qualifiedName)?
-      (MICROFLOW qualifiedName)?
+      ( LBRACE businessEventOperationDef* RBRACE
+      | (PUBLISH | SUBSCRIBE) /* @alias MDL-DEPR075 */
+        (ENTITY qualifiedName)?
+        (MICROFLOW qualifiedName)?
+      )
       SEMICOLON
+    ;
+
+// `publish ( Entity: M.PBE_X )`, `subscribe ( Entity: M.CBE_X, Microflow: M.H )`.
+businessEventOperationDef
+    : (PUBLISH | SUBSCRIBE)
+      LPAREN (businessEventOpProp (COMMA businessEventOpProp)* COMMA?)? RPAREN
+      SEMICOLON?
+    ;
+
+businessEventOpProp
+    : identifierOrKeyword COLON qualifiedName
     ;
 
 businessEventAttrDef

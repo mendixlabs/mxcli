@@ -397,6 +397,17 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 
 	propertyTypeIDs := builder.PropertyTypeIDs()
 
+	// The widget's ID is minted, and its name registered, before its slots
+	// are built: a data view in a grid's own control bar listening to that
+	// grid's selection (`DataSource: selection dgItems`, the selection-driven
+	// command bar) is built inside it, and refused "widget not found" while
+	// the grid was registered only once it was finished. Studio Pro and
+	// mxbuild accept it (mendixlabs/mxcli#1911).
+	widgetID := model.ID(types.GenerateID())
+	if err := e.pageBuilder.registerWidgetName(w.Name, widgetID); err != nil {
+		return nil, err
+	}
+
 	// The template's per-property datasource links, and the per-datasource
 	// entities the mappings below will fill in. Saved/restored like currentDef,
 	// so a nested widget cannot see its parent's.
@@ -873,8 +884,7 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	// not set is null, as Studio Pro stores it (ako/mxcli#1967, CE0463).
 	builder.NullTemplatesOfUnsetDataSources()
 
-	// 5. Build CustomWidget
-	widgetID := model.ID(types.GenerateID())
+	// 5. Build CustomWidget (widgetID was reserved above, with the name)
 	// `label:` on a widget that declares a `label` of its own (a PDS Form
 	// label, the Badge button) is that key, written above by its mapping — not
 	// also a widget-level LabelTemplate beside it (ako/mxcli#2180).
@@ -883,11 +893,6 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 		label = ""
 	}
 	cw := builder.Finalize(widgetID, w.Name, label, def.DefaultEditable)
-
-	if err := e.pageBuilder.registerWidgetName(w.Name, cw.ID); err != nil {
-		return nil, err
-	}
-
 	return cw, nil
 }
 

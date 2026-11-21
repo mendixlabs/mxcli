@@ -51,8 +51,7 @@ $$
   -- consumes X of its own definition". The stored Operation is "subscribe"
   -- either way; only the MDL keyword differs.
   consume OrderPlaceEvent
-    entity MyFirstModule.CBE_OrderPlaceEvent
-    microflow MyFirstModule.HandleBE_OrderPlaceEvent;
+    (Entity: MyFirstModule.CBE_OrderPlaceEvent, Microflow: MyFirstModule.HandleBE_OrderPlaceEvent);
 };
 
 drop business event service MyFirstModule.OrdersEventClient;

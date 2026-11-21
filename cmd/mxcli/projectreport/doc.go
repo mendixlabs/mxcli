@@ -738,10 +738,10 @@ td.info{background:var(--infobg);color:var(--info)}td.muted{color:var(--muted)}t
 .meter span{position:absolute;top:0;font:600 11.5px/16px var(--mono);color:var(--fg)}
 .meter.good i+span,.meter.warn i+span,.meter.bad i+span{mix-blend-mode:normal}
 tr.group th{background:var(--bg);color:var(--fg);font-weight:600;text-align:left;padding-top:14px}
-@media (max-width:600px){.srow{grid-template-columns:1fr auto}.srow .stack{grid-column:1/-1;grid-row:2}}
 .stacked{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin:8px 0 14px;display:grid;gap:7px}
 .stacked .cap{font-weight:600}.srow{display:grid;grid-template-columns:minmax(120px,220px) 1fr auto;gap:12px;align-items:center;font-size:13.5px}
 .srow .sl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.srow .sv{font:12.5px var(--mono);color:var(--muted);white-space:nowrap}
+@media (max-width:600px){.srow{grid-template-columns:1fr auto}.srow .stack{grid-column:1/-1;grid-row:2}.srow .sl{white-space:normal;overflow:visible}}
 .stack{display:flex;height:16px;border-radius:3px;overflow:hidden;gap:2px}.stack i{display:block;height:100%}
 .legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}

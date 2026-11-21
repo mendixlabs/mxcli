@@ -1,0 +1,27 @@
+-- ako/mxcli#2461, negative test (.fail.mdl): `make check-mdl` expects
+-- `mxcli check` to FAIL on this file.
+--
+-- A data view in a layout and a toggling region with no sidebar toggle passed
+-- check and exec, and mx check (11.12.6) reported CE6086 "Data views are not
+-- allowed on web layouts." and CE0611 "A sidebar toggle button is required if
+-- a region can toggle.". They are now MDL-LAYOUT01 and MDL-LAYOUT02. The
+-- positive twin is 2461-layout-widget-placement.mdl.
+mdl 1;
+
+create module BugLayout2461Fail;
+
+create layout BugLayout2461Fail.DataViewLayout (layouttype: 'Responsive') {
+  dataview dvProbe (DataSource: microflow BugLayout2461Fail.DS_Probe) {
+    dynamictext t1 (Content: 'x')
+  }
+  placeholder Main
+};
+
+create layout BugLayout2461Fail.ToggleLayout (layouttype: 'Responsive') {
+  scrollcontainer layoutContainer {
+    region left (Size: 260, SizeMode: 'Pixels', ToggleMode: 'ShrinkContentInitiallyClosed') {
+      dynamictext t2 (Content: 'menu')
+    }
+    region center { placeholder Main }
+  }
+};

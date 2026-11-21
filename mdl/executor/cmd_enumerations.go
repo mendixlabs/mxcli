@@ -128,6 +128,9 @@ func execCreateEnumeration(ctx *ExecContext, s *ast.CreateEnumerationStmt) error
 		// Excluded is model state, not script state: MDL cannot express it for
 		// an enumeration, so the stored value is the one that survives (#914).
 		enum.Excluded = existingEnum.Excluded
+		// So is an OData contract's source: a rebuild without it turns every
+		// external entity attribute of this type into CE4597 (ako/mxcli#2477).
+		carryRemoteEnumeration(enum, existingEnum)
 		// Absent doc comment preserves, explicitly empty clears (#1018).
 		if !s.DocumentationSet {
 			enum.Documentation = existingEnum.Documentation
@@ -767,4 +770,19 @@ func validateIdempotencyGuard(createOrModify, ifNotExists bool, kind, name strin
 			"or 'create %s if not exists %s' to leave an existing one alone.", kind, name, kind, name),
 		Location: linter.Location{DocumentType: kind, DocumentName: name},
 	}}
+}
+
+// carryRemoteEnumeration keeps a stored enumeration's OData source, and each
+// value's remote member by value name, on a rebuild from a statement that
+// cannot say them (ako/mxcli#2477). A value the statement adds has no member.
+func carryRemoteEnumeration(enum, stored *model.Enumeration) {
+	enum.RemoteService = stored.RemoteService
+	enum.RemoteName = stored.RemoteName
+	members := map[string]string{}
+	for _, v := range stored.Values {
+		members[v.Name] = v.RemoteName
+	}
+	for i := range enum.Values {
+		enum.Values[i].RemoteName = members[enum.Values[i].Name]
+	}
 }

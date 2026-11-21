@@ -54,14 +54,24 @@ type BusinessEventMessageDef struct {
 	MessageName string
 	Attributes  []*BusinessEventAttributeDef
 	Operation   string // "PUBLISH" or "SUBSCRIBE"
-	Entity      string // Qualified name of linked entity
+	Entity      string // Qualified name of linked entity (the publish entity for PublishAndSubscribe)
 	Microflow   string // Optional handler microflow
+	// PublishAndSubscribe is `publish subscribe`: one message the service both
+	// publishes (Entity) and consumes (SubscribeEntity, Microflow)
+	// (ako/mxcli#2490).
+	PublishAndSubscribe bool
+	SubscribeEntity     string
 }
 
 // BusinessEventAttributeDef defines an attribute within a message.
 type BusinessEventAttributeDef struct {
 	Name     string
 	TypeName string // "Long", "String", "Integer", "Boolean", "DateTime", "Decimal"
+	// Length is a String's stated length, 0 for unlimited; LengthSet is
+	// whether one was stated. An unstated length stores none, which the build
+	// reads as 200 (ako/mxcli#2490).
+	Length    int
+	LengthSet bool
 }
 
 // DropBusinessEventServiceStmt represents DROP BUSINESS EVENT SERVICE.

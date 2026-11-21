@@ -205,6 +205,25 @@ func (v *microflowValidator) buildsAsAProducer(s ast.MicroflowStatement) bool {
 	return !(stringOverloadedListOp(lo.Operation) && v.varKinds[lo.InputVariable] == exprcheck.KindString)
 }
 
+// fragmentCannotJudge reports, for an alter fragment, a statement whose
+// output MDL063's exemptions decide from types the fragment does not have: a
+// code-action or flow call (void or not is the called action's, unread here)
+// and a String contains/find (a Change Variable when its input is a String
+// declared outside the fragment). Left out rather than guessed, so a fragment
+// is never refused for a duplicate it does not have (mendixlabs/mxcli#1914).
+func (v *microflowValidator) fragmentCannotJudge(s ast.MicroflowStatement) bool {
+	if !v.fragment {
+		return false
+	}
+	switch st := s.(type) {
+	case *ast.CallJavaActionStmt, *ast.CallJavaScriptActionStmt, *ast.CallMicroflowStmt, *ast.CallNanoflowStmt:
+		return v.voids == nil
+	case *ast.ListOperationStmt:
+		return stringOverloadedListOp(st.Operation)
+	}
+	return false
+}
+
 // stringOverloadedListOp reports whether a list operation shares its name with a
 // String function, so the same MDL spells both. Read by the builder, which
 // rewrites these into a Change Variable, and by MDL063, which must stay silent
@@ -284,7 +303,7 @@ func (v *microflowValidator) checkDuplicateVariableNames(params []ast.MicroflowP
 			// A call to a void Java/JavaScript action keeps an output name in
 			// the model and declares nothing: two of them build clean, and so
 			// does a later declare of the same name (#953, mxbuild 11.13.0).
-			if v.buildsAsAProducer(s) && !v.voids.callIsVoid(s) {
+			if !v.fragmentCannotJudge(s) && v.buildsAsAProducer(s) && !v.voids.callIsVoid(s) {
 				for _, p := range statementProducedVars(s) {
 					report(p)
 				}

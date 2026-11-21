@@ -152,6 +152,13 @@ func businessEventAttributeToGen(attr *model.BusinessEventAttribute) element.Ele
 		addBool(at, "LocalizeDate", true)
 	case "Date":
 		addBool(at, "LocalizeDate", false)
+	case "String":
+		// The stated length, 0 for unlimited, as an entity attribute stores
+		// it. Unstated, none is stored and the build applies 200, which the
+		// entity's length must then match (ako/mxcli#2490).
+		if attr.LengthSet {
+			addInt32(at, "Length", int32(attr.Length))
+		}
 	}
 	addPart(a, "AttributeType", at)
 	return a

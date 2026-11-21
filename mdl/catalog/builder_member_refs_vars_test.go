@@ -156,3 +156,65 @@ func TestMemberRefs_ResolveVariablesFromDocumentParameters(t *testing.T) {
 		})
 	}
 }
+
+// A microflow's own local variables carry their entity too: a database retrieve's
+// result, a created object, and a loop's item (the entity of the list it walks).
+// Left unresolved they made MDL108 silent for an attribute used only through one
+// (ako/mxcli#2468, the part the first fix left open).
+func flowWith(objects ...any) bson.D {
+	return bson.D{{Key: "$Type", Value: "Microflows$Microflow"}, {Key: "Name", Value: "MF"},
+		{Key: "ObjectCollection", Value: bson.D{{Key: "$Type", Value: "Microflows$MicroflowObjectCollection"},
+			{Key: "Objects", Value: append(bson.A{int32(3)}, objects...)}}}}
+}
+
+func retrieveOf(entity, result string) bson.D {
+	return bson.D{{Key: "$Type", Value: "Microflows$RetrieveAction"},
+		{Key: "RetrieveSource", Value: bson.D{{Key: "$Type", Value: "Microflows$DatabaseRetrieveSource"}, {Key: "Entity", Value: entity}}},
+		{Key: "ResultVariableName", Value: result}}
+}
+
+func createOf(entity, result string) bson.D {
+	return bson.D{{Key: "$Type", Value: "Microflows$CreateChangeAction"},
+		{Key: "Entity", Value: entity}, {Key: "VariableName", Value: result}}
+}
+
+func loopOver(list, item string) bson.D {
+	return bson.D{{Key: "$Type", Value: "Microflows$LoopedActivity"},
+		{Key: "LoopSource", Value: bson.D{{Key: "$Type", Value: "Microflows$IterableList"},
+			{Key: "ListVariableName", Value: list}, {Key: "VariableName", Value: item}}}}
+}
+
+func splitOn(expr string) bson.D {
+	return bson.D{{Key: "$Type", Value: "Microflows$ExpressionSplitCondition"}, {Key: "Expression", Value: expr}}
+}
+
+func TestMemberRefs_ResolveVariablesFromLocalVariables(t *testing.T) {
+	member := []string{"ATTRIBUTE Shop.Card.Title member"}
+	cases := []struct {
+		name string
+		doc  bson.D
+		want []string
+	}{
+		{"a retrieve's result", flowWith(retrieveOf("Shop.Card", "One"), splitOn("$One/Title = 'x'")), member},
+		{"a created object", flowWith(createOf("Shop.Card", "New"), splitOn("$New/Title = 'x'")), member},
+		{"a loop item takes the entity of the list it walks",
+			flowWith(retrieveOf("Shop.Card", "All"), loopOver("All", "Item"), splitOn("$Item/Title = 'x'")), member},
+		{"a loop over a list that is not typed here (control)",
+			flowWith(loopOver("Unknown", "Item"), splitOn("$Item/Title = 'x'")), nil},
+		{"a variable used before nothing declares it (control)", flowWith(splitOn("$Gone/Title = 'x'")), nil},
+		{"the same name given two entities is not guessed (control)",
+			flowWith(retrieveOf("Shop.Card", "X"), retrieveOf("Shop.Other", "X"), splitOn("$X/Title = 'x'")), nil},
+		{"the same name given the same entity twice still resolves",
+			flowWith(retrieveOf("Shop.Card", "X"), retrieveOf("Shop.Card", "X"), splitOn("$X/Title = 'x'")), member},
+		{"an attribute the variable's entity does not have (control)",
+			flowWith(retrieveOf("Shop.Card", "One"), splitOn("$One/Missing = 'x'")), nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := edgeNames(memberRefsInUnit(marshalDoc(t, c.doc), RefObjectMicroflow, varsIndex()))
+			if len(got) != len(c.want) || (len(got) == 1 && got[0] != c.want[0]) {
+				t.Fatalf("edges = %v, want %v", got, c.want)
+			}
+		})
+	}
+}

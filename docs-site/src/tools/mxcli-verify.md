@@ -93,6 +93,19 @@ stage shows the rule's own message. `--update-baseline` refuses (exit 2) while a
 the baseline would hold none of that rule's findings and a re-record is what the failing run suggests:
 run it again first.
 
+## Recording a baseline does not accept errors silently
+
+A re-record is the one command that turns a failing gate into a passing one without fixing anything.
+`--update-baseline` therefore refuses (exit 2) when the run has errors the baseline does not already
+hold, and names them; the baseline file is left untouched. A first record on a project that already
+has errors is the same: it needs `--accept-errors`, which says so in the output and in the stage note.
+Warnings and notes are recorded as before, and so is a re-record that adds no error, because the
+errors it holds were already accepted. Fix the errors, or record them on purpose:
+
+```bash
+mxcli verify -p app.mpr --update-baseline --accept-errors
+```
+
 ## Exit codes
 
 | Code | Meaning |
