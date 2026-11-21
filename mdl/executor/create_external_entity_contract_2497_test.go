@@ -176,3 +176,33 @@ func TestSingleExternalEntityWithoutAttributesTakesTheContract_2497(t *testing.T
 		t.Fatalf("created = %+v", e)
 	}
 }
+
+// A stored entity whose attribute maps a property under another local name —
+// an older import named the key `_Id`, today's names it `OrderId` — is
+// rewritten by its describe output: the stated name is matched by the stored
+// mapping, and keeps its name (the TestApp round trip, Odata.Devices).
+func TestSingleExternalEntityRewriteMatchesStoredMapping_2497(t *testing.T) {
+	stored := &domainmodel.Entity{
+		BaseElement: model.BaseElement{ID: nextID("ent")}, Name: "Order", Source: "Rest$ODataRemoteEntitySource",
+		RemoteServiceName: "Shop.Sales", RemoteEntitySet: "Orders", RemoteEntityName: "Order",
+		Attributes: []*domainmodel.Attribute{
+			{Name: "_Id", RemoteName: "Id", RemoteType: "Edm.Int64", Type: &domainmodel.LongAttributeType{}},
+			{Name: "Title", RemoteName: "Title", RemoteType: "Edm.String", Type: &domainmodel.StringAttributeType{Length: 100}},
+		},
+		RemoteKeyParts: []*domainmodel.RemoteKeyPart{{Name: "_Id", RemoteName: "Id", RemoteType: "Edm.Int64"}},
+	}
+	r, err := runSingle2497(t, `create or modify external entity Shop.Order from consumed odata service Shop.Sales (EntitySet: 'Orders', RemoteName: 'Order') (
+  _Id: Long,
+  Title: String(100)
+);`, stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := r.updated["Order"]
+	if e == nil || len(e.Attributes) != 2 || e.Attributes[0].Name != "_Id" || e.Attributes[0].RemoteName != "Id" {
+		t.Fatalf("updated = %+v", e)
+	}
+	if len(e.RemoteKeyParts) != 1 || e.RemoteKeyParts[0].Name != "_Id" {
+		t.Errorf("key = %+v, want the key part named as the stored attribute", e.RemoteKeyParts)
+	}
+}

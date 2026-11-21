@@ -38,7 +38,12 @@ type singleEntityContract struct {
 // two statements cannot disagree. What cannot build is refused, with nothing
 // written: a name the contract does not have, a type it does not publish, a
 // key left out, and a capability the contract contradicts.
-func resolveSingleExternalEntity(ctx *ExecContext, s *ast.CreateExternalEntityStmt, moduleID model.ID, entitySetName string) (*singleEntityContract, error) {
+//
+// stored is the entity a rewrite replaces, nil on create. Its attributes are
+// matched by their mapping as well as by name: an older import named a
+// property differently (a key `_Id` where today's import says `DeviceId`), and
+// describe prints the stored name.
+func resolveSingleExternalEntity(ctx *ExecContext, s *ast.CreateExternalEntityStmt, moduleID model.ID, entitySetName string, stored *domainmodel.Entity) (*singleEntityContract, error) {
 	qn := s.Name.String()
 	doc, _, err := parseServiceContract(ctx, s.ServiceRef)
 	if err != nil {
@@ -81,9 +86,11 @@ func resolveSingleExternalEntity(ctx *ExecContext, s *ast.CreateExternalEntitySt
 	parts := contractEntityAttributes(ctx, doc, et, typeByQualified, entitySet, true,
 		s.Name.Name, moduleID, s.Name.Module, s.ServiceRef.String(), enums)
 	byName := map[string]*domainmodel.Attribute{}
+	byRemote := map[string]*domainmodel.Attribute{}
 	var available []string
 	for _, a := range parts.attrs {
 		byName[a.Name] = a
+		byRemote[a.RemoteName] = a
 		available = append(available, a.Name+": "+getAttributeTypeName(a.Type))
 	}
 	sort.Strings(available)
@@ -96,12 +103,23 @@ func resolveSingleExternalEntity(ctx *ExecContext, s *ast.CreateExternalEntitySt
 	if len(s.Attributes) == 0 {
 		kept = parts.attrs
 		for _, a := range parts.attrs {
-			stated[a.Name] = true
+			stated[a.RemoteName] = true
 		}
 	}
 	for _, a := range s.Attributes {
-		stated[a.Name] = true
 		c := byName[a.Name]
+		if c == nil && stored != nil {
+			for _, old := range stored.Attributes {
+				if old != nil && old.Name == a.Name && old.RemoteName != "" && byRemote[old.RemoteName] != nil {
+					renamed := *byRemote[old.RemoteName]
+					renamed.Name = a.Name
+					c = &renamed
+				}
+			}
+		}
+		if c != nil {
+			stated[c.RemoteName] = true
+		}
 		if c == nil {
 			why := "is not a property of " + et.Name
 			for _, d := range parts.dropped {
@@ -122,8 +140,10 @@ func resolveSingleExternalEntity(ctx *ExecContext, s *ast.CreateExternalEntitySt
 		}
 		kept = append(kept, c)
 	}
+	// stated is keyed on the remote property, so a key kept under another
+	// local name counts.
 	for _, k := range parts.keyParts {
-		if !stated[k.Name] {
+		if !stated[k.RemoteName] {
 			problems = append(problems, fmt.Sprintf("%s is the key (%s) and must be listed: an external entity without it is CE6010 \"Key cannot be empty\"",
 				k.Name, k.RemoteName))
 		}
@@ -157,7 +177,20 @@ func resolveSingleExternalEntity(ctx *ExecContext, s *ast.CreateExternalEntitySt
 			}
 		}
 	}
-	return &singleEntityContract{et: et, entitySet: entitySet, attrs: kept, keyParts: parts.keyParts}, nil
+	// A key part is named as the attribute it keys (EntityKeyPartName).
+	localName := map[string]string{}
+	for _, a := range kept {
+		localName[a.RemoteName] = a.Name
+	}
+	var keyParts []*domainmodel.RemoteKeyPart
+	for _, k := range parts.keyParts {
+		kp := *k
+		if n := localName[k.RemoteName]; n != "" {
+			kp.Name = n
+		}
+		keyParts = append(keyParts, &kp)
+	}
+	return &singleEntityContract{et: et, entitySet: entitySet, attrs: kept, keyParts: keyParts}, nil
 }
 
 func isEnumType(t domainmodel.AttributeType) bool {

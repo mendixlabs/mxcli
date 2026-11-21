@@ -924,7 +924,7 @@ func execCreateExternalEntity(ctx *ExecContext, s *ast.CreateExternalEntityStmt)
 				if s.EntitySet != nil && *s.EntitySet != "" {
 					set = *s.EntitySet
 				}
-				res, err := resolveSingleExternalEntity(ctx, s, module.ID, set)
+				res, err := resolveSingleExternalEntity(ctx, s, module.ID, set, existingEntity)
 				if err != nil {
 					return err
 				}
@@ -971,7 +971,7 @@ func execCreateExternalEntity(ctx *ExecContext, s *ast.CreateExternalEntityStmt)
 
 	// Everything Mendix checks against the contract comes from it: each
 	// attribute's mapping, the key, the capabilities (ako/mxcli#2497).
-	res, err := resolveSingleExternalEntity(ctx, s, module.ID, *s.EntitySet)
+	res, err := resolveSingleExternalEntity(ctx, s, module.ID, *s.EntitySet, nil)
 	if err != nil {
 		return err
 	}
