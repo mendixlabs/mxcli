@@ -89,7 +89,7 @@ var createOrReplaceCases = map[string]string{
 	"externalentity":              "external entity M.Remote from consumed odata service M.Api (EntitySet: 'Remotes', RemoteName: 'Remote');",
 	"externalentities":            "external entities from M.Api into Integration;",
 	"navigation":                  "navigation Responsive home page M.Home_Web;",
-	"businesseventservice":        "business event service M.CustomerEventsApi (ServiceName: 'CustomerEventsApi', EventNamePrefix: '') { message CustomerChangedEvent (CustomerId: Long) publish entity M.PBE_CustomerChangedEvent; };",
+	"businesseventservice":        "business event service M.CustomerEventsApi (ServiceName: 'CustomerEventsApi', EventNamePrefix: '') { message CustomerChangedEvent (CustomerId: Long) { publish (Entity: M.PBE_CustomerChangedEvent); }; };",
 	"workflow":                    "workflow M.LeaveApproval parameter $Context: M.LeaveRequest begin end workflow;",
 	"userrole":                    "user role Clerk ( ModuleRoles: (M.User) );",
 	"demouser":                    "demo user 'demo' ( Password: 'Password1!', UserRoles: (Clerk) );",

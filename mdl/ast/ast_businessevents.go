@@ -54,8 +54,13 @@ type BusinessEventMessageDef struct {
 	MessageName string
 	Attributes  []*BusinessEventAttributeDef
 	Operation   string // "PUBLISH" or "SUBSCRIBE"
-	Entity      string // Qualified name of linked entity
+	Entity      string // Qualified name of linked entity (the publish entity for PublishAndSubscribe)
 	Microflow   string // Optional handler microflow
+	// PublishAndSubscribe is `publish subscribe`: one message the service both
+	// publishes (Entity) and consumes (SubscribeEntity, Microflow)
+	// (ako/mxcli#2490).
+	PublishAndSubscribe bool
+	SubscribeEntity     string
 }
 
 // BusinessEventAttributeDef defines an attribute within a message.

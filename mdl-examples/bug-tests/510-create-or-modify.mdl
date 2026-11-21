@@ -57,8 +57,7 @@ create business event service BugTest510.OrderEvents
   EventNamePrefix: 'com.example'
 )
 {
-  message OrderCreated (OrderId: long) publish
-    entity BugTest510.BE_Payload;
+  message OrderCreated (OrderId: long) { publish (Entity: BugTest510.BE_Payload); };
 };
 
 -- Modify in-place: UUID must be preserved.
@@ -68,8 +67,7 @@ create or modify business event service BugTest510.OrderEvents
   EventNamePrefix: 'com.example.v2'
 )
 {
-  message OrderCreated (OrderId: long) publish
-    entity BugTest510.BE_Payload;
+  message OrderCreated (OrderId: long) { publish (Entity: BugTest510.BE_Payload); };
 };
 
 describe business event service BugTest510.OrderEvents;

@@ -35,9 +35,7 @@ app A, then name it in app B:
   create business event service Orders.OrdersEventClient
   ( ContractFile: 'contract.yaml' )
   {
-    consume OrderPlaceEvent
-      entity Orders.CBE_OrderPlaceEvent
-      microflow Orders.HandleBE_OrderPlaceEvent;
+    consume OrderPlaceEvent (Entity: Orders.CBE_OrderPlaceEvent, Microflow: Orders.HandleBE_OrderPlaceEvent);
   };
 
 Only business event services are supported so far. A published OData or REST

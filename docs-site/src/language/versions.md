@@ -263,7 +263,7 @@ refuse the spelling; until then it only warns.
 
 ### Deprecated spellings (`MDL-DEPR*`)
 
-88 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
+90 old spellings mean exactly what their new form means. They warn with their code under every version before the one in the last column, which refuses them.
 
 | Code | Old form | New form | Rewritten by `fmt --upgrade` | Refused from |
 |---|---|---|---|---|
@@ -294,6 +294,8 @@ refuse the spelling; until then it only warns.
 | `MDL-DEPR072` | `image collection M.C ( image X from file '…', … )` | `image collection M.C { image X ( File: '…' ) … }` | yes: image list: the images move into { } without commas, and `from file '…'` becomes `( File: '…' )` | mdl 2 |
 | `MDL-DEPR073` | `message definition collection M.C ( definition D for M.E ( A, M.E_B/M.B ( C ) ) )` | `message definition collection M.C { definition D for M.E { A, M.E_B/M.B { C } } }` | yes: message trees: each parenthesised definition list and member tree moves into { } | mdl 2 |
 | `MDL-DEPR074` | `alter microflow M.F { insert after $X { … } }` | `alter microflow M.F { insert after $X begin … end; }` | yes: fragment's braces: `{` becomes `begin` and `}` becomes `end` | mdl 2 |
+| `MDL-DEPR075` | `message X (…) publish\|subscribe entity M.E microflow M.H;` | `message X (…) { publish\|subscribe (Entity: M.E, Microflow: M.H); };` | yes: message's operation clauses: `publish entity M.E` becomes `{ publish (Entity: M.E); }` | mdl 2 |
+| `MDL-DEPR076` | `consume X entity M.E microflow M.H;` | `consume X (Entity: M.E, Microflow: M.H);` | yes: subscription's clauses: `consume X entity M.E microflow M.H` becomes `consume X (Entity: M.E, Microflow: M.H)` | mdl 2 |
 | `MDL-DEPR080` | `decision '<expression>' / timer '<expression>' / due date '<expression>'` | `decision <expression> / timer <expression> / due date <expression>` | yes: expression out of its string: `decision '$Ctx/Total > 1000'` becomes `decision $Ctx/Total > 1000` | mdl 2 |
 | `MDL-DEPR081` | `Visible: [<expression>] / Editable: [<expression>]` | `Visible: <expression> / Editable: <expression>, each attribute as $currentObject/Attr` | yes: brackets into the expression they store: `Visible: [Active]` becomes `Visible: $currentObject/Active` | mdl 2 |
 | `MDL-DEPR082` | `revoke M.Role on M.E [(rights)]` | `revoke rights\|all on entity M.E from M.Role` | yes: rights (or `all` when none are listed) before `on entity`, roles after `from`: `revoke R on M.E (write *)` becomes `revoke write * on entity M.E from R`, `revoke R on M.E` becomes `revoke all on entity M.E from R` | mdl 2 |

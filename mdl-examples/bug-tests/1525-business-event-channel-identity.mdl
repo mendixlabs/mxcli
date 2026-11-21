@@ -40,8 +40,6 @@ create or modify business event service MyFirstModule.Bug1525Events
   EventNamePrefix: ''
 )
 {
-  message OrderCreated (OrderId: long, Note: string) publish
-    entity MyFirstModule.PBE_Bug1525Order;
-  message OrderShipped (OrderId: long) publish
-    entity MyFirstModule.PBE_Bug1525Shipped;
+  message OrderCreated (OrderId: long, Note: string) { publish (Entity: MyFirstModule.PBE_Bug1525Order); };
+  message OrderShipped (OrderId: long) { publish (Entity: MyFirstModule.PBE_Bug1525Shipped); };
 };

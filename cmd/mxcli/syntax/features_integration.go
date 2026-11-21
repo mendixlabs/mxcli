@@ -662,16 +662,32 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 			"event name prefix",
 			"consume", "contract", "contractfile", "asyncapi", "consumed",
 		},
-		Syntax: "-- PUBLISHED: declares its own messages.\n" +
-			"CREATE [OR MODIFY] BUSINESS EVENT SERVICE Module.Name\n(\n  ServiceName: 'Name',\n  EventNamePrefix: ''\n)\n{\n  MESSAGE EventName (Attr: Type, ...) PUBLISH|SUBSCRIBE\n    ENTITY Module.PBE_Entity [MICROFLOW Module.Handler];\n};\n-- A String's length must match the entity attribute's: String(n) and\n-- String(unlimited) are stored; a bare String stores none, which the build\n-- reads as 200.\n\n" +
+		Syntax: "-- PUBLISHED: declares its own messages. A message's operations are its\n" +
+			"-- children (R2); a message the service both publishes and consumes has both.\n" +
+			"CREATE [OR MODIFY] BUSINESS EVENT SERVICE Module.Name\n(\n  ServiceName: 'Name',\n  EventNamePrefix: ''\n)\n{\n" +
+			"  MESSAGE EventName (Attr: Type, ...) {\n    PUBLISH (Entity: Module.PBE_Entity);\n" +
+			"    SUBSCRIBE (Entity: Module.CBE_Entity, Microflow: Module.Handler);\n  };\n};\n" +
+			"-- Declare each message once: the same name twice fails the deployment.\n" +
+			"-- A String's length must match the entity attribute's: String(n) and\n" +
+			"-- String(unlimited) are stored; a bare String stores none, which the build\n" +
+			"-- reads as 200.\n\n" +
 			"-- CONSUMED: names the producer's AsyncAPI contract and binds events from it.\n" +
 			"-- Exactly one of Contract / ContractFile; neither may be mixed with\n" +
 			"-- ServiceName, EventNamePrefix or MESSAGE.\n" +
-			"CREATE [OR MODIFY] BUSINESS EVENT SERVICE Module.Name\n(\n  Contract: $$<asyncapi yaml>$$ | ContractFile: 'path/to/contract.yaml'\n)\n{\n  CONSUME EventName\n    ENTITY Module.CBE_Entity\n    MICROFLOW Module.HandleBE_Event;\n};\n\n" +
+			"CREATE [OR MODIFY] BUSINESS EVENT SERVICE Module.Name\n(\n  Contract: $$<asyncapi yaml>$$ | ContractFile: 'path/to/contract.yaml'\n)\n{\n" +
+			"  CONSUME EventName (Entity: Module.CBE_Entity, Microflow: Module.HandleBE_Event);\n};\n\n" +
 			"DROP BUSINESS EVENT SERVICE Module.Name;",
-		Example: "mdl 1;\nCREATE BUSINESS EVENT SERVICE Module.CustomerEventsApi\n(\n  ServiceName: 'CustomerEventsApi',\n  EventNamePrefix: ''\n)\n{\n  MESSAGE CustomerChangedEvent (CustomerId: Long) PUBLISH\n    ENTITY Module.PBE_CustomerChangedEvent;\n};\n\n" +
+		Example: "mdl 1;\nCREATE BUSINESS EVENT SERVICE Module.CustomerEventsApi\n(\n  ServiceName: 'CustomerEventsApi',\n  EventNamePrefix: ''\n)\n{\n" +
+			"  MESSAGE CustomerChangedEvent (CustomerId: Long) {\n    PUBLISH (Entity: Module.PBE_CustomerChangedEvent);\n  };\n};\n\n" +
+			"-- A message the app publishes and consumes itself (an in-app bus):\n" +
+			"CREATE BUSINESS EVENT SERVICE Module.AgentBus\n(\n  ServiceName: 'AgentBus',\n  EventNamePrefix: ''\n)\n{\n" +
+			"  MESSAGE AgentMessage (TaskId: String(36), Text: String(unlimited)) {\n" +
+			"    PUBLISH (Entity: Module.PBE_AgentMessage);\n" +
+			"    SUBSCRIBE (Entity: Module.CBE_AgentMessage, Microflow: Module.SUB_OnMessage);\n  };\n};\n\n" +
 			"-- The consuming app, from the contract the producer exported:\n" +
-			"CREATE BUSINESS EVENT SERVICE Module.CustomerEventsClient\n(\n  ContractFile: 'contracts/CustomerEventsApi.yaml'\n)\n{\n  CONSUME CustomerChangedEvent\n    ENTITY Module.CBE_CustomerChangedEvent\n    MICROFLOW Module.HandleBE_CustomerChangedEvent;\n};\n\nDROP BUSINESS EVENT SERVICE Module.CustomerEventsApi;",
+			"CREATE BUSINESS EVENT SERVICE Module.CustomerEventsClient\n(\n  ContractFile: 'contracts/CustomerEventsApi.yaml'\n)\n{\n" +
+			"  CONSUME CustomerChangedEvent (Entity: Module.CBE_CustomerChangedEvent, Microflow: Module.HandleBE_CustomerChangedEvent);\n};\n\n" +
+			"DROP BUSINESS EVENT SERVICE Module.CustomerEventsApi;",
 		SeeAlso: []string{"business-events"},
 	})
 
