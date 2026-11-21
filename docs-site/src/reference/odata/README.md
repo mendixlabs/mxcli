@@ -101,8 +101,9 @@ that was generated from …").
 - A re-import reuses the generated enumeration, and so does a second property
   of the same type. `create or modify enumeration` on it keeps the link to the
   contract.
-- If the module already has an ordinary enumeration of that name, or a member
-  is not a valid value name, the property is not imported. The import says
+- If the module already has an ordinary enumeration of that name, a member is
+  not a valid value name, or the project is older than Mendix 10.12, the
+  property is not imported. The import says
   which property and why.
 
 An external entity's attributes come only from the contract. `alter entity …

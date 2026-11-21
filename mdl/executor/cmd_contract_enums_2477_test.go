@@ -100,3 +100,21 @@ func TestCreateOrModifyKeepsRemoteSource_2477(t *testing.T) {
 		t.Errorf("plain = %+v", plain)
 	}
 }
+
+// Below 10.12 the metamodel has no Rest$ODataRemoteEnumerationValue, so the
+// property is not imported there, and the import says why.
+func TestImportEnumGatedAt1012_2477(t *testing.T) {
+	for _, c := range []struct {
+		major, minor int
+		want         bool
+	}{{10, 11, false}, {10, 12, true}, {11, 12, true}} {
+		ctx, created := enumImportCtx2477(t)
+		mb := ctx.Backend.(*mock.MockBackend)
+		v := &types.ProjectVersion{MajorVersion: c.major, MinorVersion: c.minor}
+		mb.ProjectVersionFunc = func() *types.ProjectVersion { return v }
+		_, why := (&odataEnumerations{byRemote: map[string]string{}}).ensure(ctx, "mod1", "Shop", "Shop.Sales", "Vendor.Sales.OrderStatus", orderStatus2477)
+		if got := why == "" && len(*created) == 1; got != c.want {
+			t.Errorf("%d.%d: imported %v (why %q), want %v", c.major, c.minor, got, why, c.want)
+		}
+	}
+}

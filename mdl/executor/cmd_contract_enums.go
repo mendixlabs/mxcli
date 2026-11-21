@@ -48,6 +48,12 @@ func (o *odataEnumerations) ensure(ctx *ExecContext, moduleID model.ID, module, 
 		return "", fmt.Sprintf("enumeration %s already exists and was not generated from %s in %s; "+
 			"rename it, or import into another module, and run the import again", qn, remoteType, service)
 	}
+	// Rest$ODataRemoteEnumerationValue is in the metamodel from 10.12 only
+	// (the source from 10.2); how an older project stores a generated value
+	// was not measured, so it is not guessed.
+	if pv := ctx.Backend.ProjectVersion(); pv != nil && !pv.IsAtLeast(10, 12) {
+		return "", "importing an enum-typed property needs Mendix 10.12 or later (Rest$ODataRemoteEnumerationValue)"
+	}
 	if len(et.Members) == 0 {
 		return "", "the enum type has no members"
 	}
