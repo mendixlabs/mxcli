@@ -446,11 +446,16 @@ businessEventConsumeDef
       SEMICOLON
     ;
 
+// `publish subscribe` is one message the service both publishes and consumes
+// (an in-app bus, a request/reply loop): the publish entity, then the
+// subscribe entity and the handler. Declaring the message twice, once per
+// operation, wrote two messages of one name, which fails the deployment
+// ("An item with the same key has already been added", ako/mxcli#2490).
 businessEventMessageDef
     : MESSAGE identifierOrKeyword
       LPAREN businessEventAttrDef (COMMA businessEventAttrDef)* RPAREN
-      (PUBLISH | SUBSCRIBE)
-      (ENTITY qualifiedName)?
+      (PUBLISH SUBSCRIBE? | SUBSCRIBE)
+      (ENTITY qualifiedName (ENTITY qualifiedName)?)?
       (MICROFLOW qualifiedName)?
       SEMICOLON
     ;

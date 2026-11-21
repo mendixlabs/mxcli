@@ -12,11 +12,11 @@ description: "Define event-driven APIs over Kafka with Mendix business event ser
 |---|---|
 | 24-31 | When to Use This Skill |
 | 32-167 | Commands |
-| 168-183 | Message Definition Syntax |
-| 184-191 | Service Properties |
-| 192-198 | Operations |
-| 199-245 | Publishing Events from Microflows |
-| 246-258 | Checklist |
+| 168-197 | Message Definition Syntax |
+| 198-205 | Service Properties |
+| 206-213 | Operations |
+| 214-260 | Publishing Events from Microflows |
+| 261-273 | Checklist |
 
 <!-- /skill-index -->
 # Business Events
@@ -171,10 +171,24 @@ drop business event service Module.CustomerEventsApi;
 message <MessageName> (<AttrName>: <type>, ...) publish|subscribe
   [entity <Module.EntityName>]
   [microflow <Module.MicroflowName>];
+
+-- A message this service both publishes and consumes (an in-app bus, a
+-- request/reply loop): the publish entity, then the subscribe entity and handler.
+message <MessageName> (<AttrName>: <type>, ...) publish subscribe
+  entity <Module.PBE_Entity>
+  entity <Module.CBE_Entity>
+  [microflow <Module.Handler>];
 ```
 
+Declare a message **once**. The same name declared twice (once `publish`, once
+`subscribe`) stores two messages of one name, which `mx check` accepts and the
+deployment rejects ("An item with the same key has already been added");
+`check` refuses it and names `publish subscribe`.
+
 ### Supported Attribute Types
-- `string` - Text
+- `string`, `string(n)`, `string(unlimited)` - Text. The length must match the
+  linked entity attribute's; a bare `string` stores no length, which the build
+  reads as 200
 - `integer` - 32-bit integer
 - `long` - 64-bit integer
 - `decimal` - Precise decimal number
@@ -195,6 +209,7 @@ message <MessageName> (<AttrName>: <type>, ...) publish|subscribe
 |-----------|-------------|
 | `publish` | This service publishes the event (other apps subscribe) |
 | `subscribe` | This service subscribes to the event (other apps publish) |
+| `publish subscribe` | Both, on one message: two entities and the subscribe handler |
 
 ## Publishing Events from Microflows
 

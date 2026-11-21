@@ -61,18 +61,31 @@ func (b *Builder) ExitCreateBusinessEventServiceStatement(ctx *parser.CreateBusi
 			msg.MessageName = identifierOrKeywordText(iok)
 		}
 
-		// Parse operation (PUBLISH or SUBSCRIBE)
-		if msgDef.PUBLISH() != nil {
+		// Parse operation: PUBLISH, SUBSCRIBE, or PUBLISH SUBSCRIBE
+		// (ako/mxcli#2490).
+		switch {
+		case msgDef.PUBLISH() != nil && msgDef.SUBSCRIBE() != nil:
 			msg.Operation = "PUBLISH"
-		} else if msgDef.SUBSCRIBE() != nil {
+			msg.PublishAndSubscribe = true
+		case msgDef.PUBLISH() != nil:
+			msg.Operation = "PUBLISH"
+		case msgDef.SUBSCRIBE() != nil:
 			msg.Operation = "SUBSCRIBE"
 		}
 
-		// Parse ENTITY clause
+		// Parse ENTITY clauses: the first is the message's entity (the
+		// publish entity of `publish subscribe`), a second the subscribe one.
 		qualNames := msgDef.AllQualifiedName()
 		idx := 0
-		if msgDef.ENTITY() != nil && idx < len(qualNames) {
-			msg.Entity = getQualifiedNameText(qualNames[idx])
+		for n := range msgDef.AllENTITY() {
+			if idx >= len(qualNames) {
+				break
+			}
+			if n == 0 {
+				msg.Entity = getQualifiedNameText(qualNames[idx])
+			} else {
+				msg.SubscribeEntity = getQualifiedNameText(qualNames[idx])
+			}
 			idx++
 		}
 		// Parse MICROFLOW clause

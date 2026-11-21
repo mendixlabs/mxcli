@@ -41,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`message X (…) publish subscribe` for a business event message a service both publishes and consumes** (ako/mxcli#2490) — one message with both flags and two operations: `entity <publish entity> entity <subscribe entity> microflow <handler>`. Declaring the message twice, the only way before, stored two messages of one name, and the deployment failed ("An item with the same key has already been added"); `check` and `exec` now refuse that and name the new form.
 - **Lint `MPR019`: an attribute an XPath constraint filters on with no index leading with it** (ako/mxcli#2407) — every such query scans the table, and nothing else reports it: `mx check` is clean and demo data hides it. Severity `info`, because whether an index earns its place depends on table size and write rate, which the model does not know; it names a candidate rather than asserting a defect.
 
   Coverage is tested against an index's **leading** attribute, not membership: a composite index on `(Status, Date)` does nothing for a query on `Date` alone, and treating membership as coverage would make the rule wrong rather than merely quiet. Only attributes of the entity the XPath targets are considered — one reached across an association belongs to the other entity, and reporting it here would blame the wrong document.

@@ -638,6 +638,16 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// inherits (BusinessEvents.PublishedBusinessEvent's, read from the project):
 	// mxbuild reports the duplicate after exec wrote it (mendixlabs/mxcli#1525).
 	errors = append(errors, validateBusinessEventInheritedMembers(ctx, prog, sc)...)
+	// A message declared twice (two messages of one name: the deployment
+	// fails) and the shape of `publish subscribe` (ako/mxcli#2490): what
+	// exec refuses, reported first.
+	for i, stmt := range prog.Statements {
+		if s, ok := stmt.(*ast.CreateBusinessEventServiceStmt); ok && !s.IsConsumer() {
+			for _, p := range businessEventMessageProblems(s) {
+				errors = append(errors, mdlerrors.NewValidationf("statement %d: business event service %s: %s", i+1, s.Name.String(), p))
+			}
+		}
+	}
 	// A member named like one already on its entity's generalization chain —
 	// inherited, a specialization's, or the entity's own other kind: mxbuild's
 	// CE0069, after exec wrote it (ako/mxcli#1645). Replayed in statement

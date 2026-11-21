@@ -663,7 +663,7 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 			"consume", "contract", "contractfile", "asyncapi", "consumed",
 		},
 		Syntax: "-- PUBLISHED: declares its own messages.\n" +
-			"CREATE [OR MODIFY] BUSINESS EVENT SERVICE Module.Name\n(\n  ServiceName: 'Name',\n  EventNamePrefix: ''\n)\n{\n  MESSAGE EventName (Attr: Type, ...) PUBLISH|SUBSCRIBE\n    ENTITY Module.PBE_Entity [MICROFLOW Module.Handler];\n};\n-- A String's length must match the entity attribute's: String(n) and\n-- String(unlimited) are stored; a bare String stores none, which the build\n-- reads as 200.\n\n" +
+			"CREATE [OR MODIFY] BUSINESS EVENT SERVICE Module.Name\n(\n  ServiceName: 'Name',\n  EventNamePrefix: ''\n)\n{\n  MESSAGE EventName (Attr: Type, ...) PUBLISH|SUBSCRIBE\n    ENTITY Module.PBE_Entity [MICROFLOW Module.Handler];\n  -- One message this service both publishes and consumes:\n  MESSAGE EventName (Attr: Type, ...) PUBLISH SUBSCRIBE\n    ENTITY Module.PBE_Entity ENTITY Module.CBE_Entity [MICROFLOW Module.Handler];\n};\n-- Declare each message once: the same name twice fails the deployment.\n-- A String's length must match the entity attribute's: String(n) and\n-- String(unlimited) are stored; a bare String stores none, which the build\n-- reads as 200.\n\n" +
 			"-- CONSUMED: names the producer's AsyncAPI contract and binds events from it.\n" +
 			"-- Exactly one of Contract / ContractFile; neither may be mixed with\n" +
 			"-- ServiceName, EventNamePrefix or MESSAGE.\n" +
