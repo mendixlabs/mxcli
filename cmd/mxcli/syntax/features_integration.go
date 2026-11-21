@@ -63,7 +63,11 @@ func init() {
 			"CREATE EXTERNAL ENTITY Module.Name\n" +
 			"  FROM CONSUMED ODATA SERVICE Module.Client\n" +
 			"  (EntitySet: 'Name', RemoteName: 'Name')\n" +
-			"  (Attr: Type, ...);\n\n" +
+			"  (Attr: Type, ...);\n" +
+			"-- Each Attr is the contract property of that name, mapped as the bulk\n" +
+			"-- import maps it; the key must be listed, and no list takes them all.\n" +
+			"-- A name the contract lacks, a type it does not publish, or a Countable/\n" +
+			"-- Creatable/Deletable it contradicts (CE6630) is refused.\n\n" +
 			"CREATE EXTERNAL ENTITIES FROM Module.Client\n" +
 			"  [INTO Module] [ENTITIES (Name1, Name2)];\n\n" +
 			"ALTER ENTITY Module.Name SET (AllowCreateChangeLocally: true);\n\n" +

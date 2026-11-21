@@ -914,6 +914,24 @@ func execCreateExternalEntity(ctx *ExecContext, s *ast.CreateExternalEntityStmt)
 		if s.AllowCreateChangeLocally != nil {
 			existingEntity.CreateChangeLocally = *s.AllowCreateChangeLocally
 		}
+		// The attributes as the contract maps them, where its contract is cached:
+		// one the entity did not hold before was stored as a local value, CE6612
+		// (ako/mxcli#2497). A rewrite without a cached contract carries the
+		// stored mapping by name, as before.
+		if len(attrs) > 0 && existingEntity.RemoteEntitySet != "" {
+			if _, _, cerr := parseServiceContract(ctx, s.ServiceRef); cerr == nil {
+				set := existingEntity.RemoteEntitySet
+				if s.EntitySet != nil && *s.EntitySet != "" {
+					set = *s.EntitySet
+				}
+				res, err := resolveSingleExternalEntity(ctx, s, module.ID, set, existingEntity)
+				if err != nil {
+					return err
+				}
+				attrs = res.attrs
+				existingEntity.RemoteKeyParts = res.keyParts
+			}
+		}
 		if len(attrs) > 0 {
 			// The rebuilt attributes keep each stored attribute's identity and
 			// what the statement cannot spell (the OData mapping; LocalizeDate when
@@ -951,21 +969,19 @@ func execCreateExternalEntity(ctx *ExecContext, s *ast.CreateExternalEntityStmt)
 		return mdlerrors.NewValidation("EntitySet property is required when creating an external entity")
 	}
 
-	newEntity := &domainmodel.Entity{
-		Name:                s.Name.Name,
-		Documentation:       s.Documentation,
-		Persistable:         false, // External entities are not persistable
-		Attributes:          attrs,
-		Source:              "Rest$ODataRemoteEntitySource",
-		RemoteServiceName:   serviceRef,
-		RemoteEntitySet:     *s.EntitySet,
-		RemoteEntityName:    derefString(s.RemoteName),
-		Countable:           derefBool(s.Countable),
-		Creatable:           derefBool(s.Creatable),
-		Deletable:           derefBool(s.Deletable),
-		Updatable:           derefBool(s.Updatable),
-		CreateChangeLocally: derefBool(s.AllowCreateChangeLocally),
+	// Everything Mendix checks against the contract comes from it: each
+	// attribute's mapping, the key, the capabilities (ako/mxcli#2497).
+	res, err := resolveSingleExternalEntity(ctx, s, module.ID, *s.EntitySet, nil)
+	if err != nil {
+		return err
 	}
+	newEntity := &domainmodel.Entity{
+		Name:          s.Name.Name,
+		Documentation: s.Documentation,
+	}
+	applyExternalEntityFields(newEntity, res.et, true, serviceRef, res.entitySet, res.keyParts, res.attrs)
+	// A local modelling choice, which the contract does not say.
+	newEntity.CreateChangeLocally = derefBool(s.AllowCreateChangeLocally)
 	newEntity.ID = model.ID(types.GenerateID())
 	// The next grid slot whose box clears everything already in the module.
 	// This used to be the single-row `100 + len(dm.Entities)*150` that CREATE
