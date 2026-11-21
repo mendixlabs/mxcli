@@ -1318,6 +1318,14 @@ func execAlterEntity(ctx *ExecContext, s *ast.AlterEntityStmt) error {
 		if isViewEntity(entity) {
 			return viewEntityAttributeSetRefusal(s.Name.String(), "add", a.Name)
 		}
+		// An external entity's attributes are the contract's: one added here
+		// is stored as a local value, not mapped to a property, and mx check
+		// 11.12.6 refuses it with CE6612 "Attribute 'X' of external entity 'E'
+		// is not supported" — whatever its type, and with
+		// AllowCreateChangeLocally too (ako/mxcli#2477).
+		if entity.RemoteServiceName != "" {
+			return externalEntityAddAttributeRefusal(s.Name.String(), entity.Name, entity.RemoteServiceName, a.Name)
+		}
 		// Not a name another member on the chain has (CE0069, ako/mxcli#1645).
 		if err := refuseMemberNameClash(ctx, s); err != nil {
 			return err
@@ -2267,4 +2275,17 @@ func findIndexByColumns(entity *domainmodel.Entity, cols []ast.IndexColumn) *dom
 		}
 	}
 	return nil
+}
+
+// externalEntityAddAttributeRefusal refuses ADD ATTRIBUTE on an external
+// entity: the attribute is stored as a local value, not mapped to a contract
+// property, and mx check 11.12.6 refuses it with CE6612 whatever its type,
+// AllowCreateChangeLocally or not (ako/mxcli#2477).
+func externalEntityAddAttributeRefusal(entityQN, entityName, service, attrName string) error {
+	return mdlerrors.NewValidation(fmt.Sprintf(
+		"%s is an external entity of %s: an attribute added to it is not mapped to the contract, "+
+			"so mxbuild fails it with CE6612 (\"Attribute '%s' of external entity '%s' is not supported.\"). "+
+			"Its attributes come from the contract: `create or modify external entities from %s` imports "+
+			"every property Mendix supports, an enum-typed one with an enumeration generated from the contract",
+		entityQN, service, attrName, entityName, service))
 }
