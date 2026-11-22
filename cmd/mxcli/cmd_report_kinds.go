@@ -518,7 +518,9 @@ Milestones come from the plan ('mxcli brain milestone "M1" --slice 01-accounts')
 without any, each slice is a milestone. A milestones file (--milestones, or the
 older docs/brain/plan/traceability.json) is still read, with a warning;
 'mxcli brain milestone --import <file>' moves it into the plan. Evidence flags
-are the tests report's.
+are the tests report's. A journey proves a requirement anchored at a page
+when a record of its log lists the page in "pages" ('mxcli report tests --help'
+shows the record) — the only proof for a page fed by database data sources.
 
 Annotation keys: req:<id>.`,
 	example: `  mxcli report traceability -p app.mpr -o traceability.html

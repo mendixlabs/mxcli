@@ -11,10 +11,10 @@ description: "Produce and read the tests report (mxcli report tests): microflow 
 | lines | section |
 |---|---|
 | 31-43 | Preconditions (check every one) |
-| 44-66 | Run it |
-| 67-83 | Reading it |
-| 84-100 | Which gaps deserve a test |
-| 101-104 | Related |
+| 44-78 | Run it |
+| 79-95 | Reading it |
+| 96-112 | Which gaps deserve a test |
+| 113-116 | Related |
 
 <!-- /skill-index -->
 # Tests Report
@@ -57,8 +57,20 @@ mxcli report tests --from docs/testing/tests.json --annotations docs/testing/not
 The journey log is JSONL, one line per journey (or step):
 
 ```json
-{"journey":"Swap a shift","start":"2026-11-12T10:00:01.120Z","end":"2026-11-12T10:00:09.410Z","status":"passed","checks":["sees 3 offers","swap requested"]}
+{"journey":"Swap a shift","step":"open marketplace","start":"2026-11-12T10:00:01.120Z","end":"2026-11-12T10:00:02.410Z","status":"passed","checks":["sees 3 offers"],"pages":["Shifts.Marketplace"]}
 ```
+
+| Field | Meaning |
+|---|---|
+| `journey`, `start`, `end`, `status` | required: the name, the time window spans are matched against, `passed` / `failed` / `skipped` |
+| `step` | the step within the journey; steps of one journey merge into it |
+| `checks` | the script's own assertion messages, shown verbatim |
+| `pages` | the qualified names of the pages the step opened. **List them:** a page fed only by database data sources runs no microflow, so this is the only way a journey proves a requirement anchored at it (`report traceability`) |
+| `message` | why a failed step failed |
+| `run`, `browserMs` | the repeat number and browser time, for `report performance` |
+
+A line `{"meta":true,"database":"fresh seed 2026-11-12","notes":["…"]}` records the
+database state the run used.
 
 Write `checks` from the script's own assertion messages. Prose written from a
 journey's name drifted from what it checks on the prototype; the page shows the
