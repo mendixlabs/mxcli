@@ -850,11 +850,25 @@ func (h xpathAssocEmptyHit) test() string { return h.Assoc + " " + h.Op + " empt
 
 // fix is the spelling Mendix XPath accepts: a path to the associated object
 // tests its presence, `not(…)` around it its absence.
+//
+// Without the project the name cannot be told apart from `Assoc.Attr`, an
+// association and an attribute of its other end with the entity step
+// missing; that reading is the one an agent hit (ako/mxcli#2491), and the
+// absence fix kept the dotted name, so both are offered. `check -p` says
+// which it is.
 func (h xpathAssocEmptyHit) fix() string {
+	var fix string
 	if h.Op == "!=" {
-		return fmt.Sprintf("Test for the presence of the associated object with a path: `[%s/<Module.TargetEntity>]`.", h.Assoc)
+		fix = fmt.Sprintf("Test for the presence of the associated object with a path: `[%s/<Module.TargetEntity>]`.", h.Assoc)
+	} else {
+		fix = fmt.Sprintf("Test for the absence of the associated object with negation: `[not(%s/<Module.TargetEntity>)]`.", h.Assoc)
 	}
-	return fmt.Sprintf("Test for the absence of the associated object with negation: `[not(%s/<Module.TargetEntity>)]`.", h.Assoc)
+	if dot := strings.LastIndex(h.Assoc, "."); dot > 0 {
+		assoc, attr := h.Assoc[:dot], h.Assoc[dot+1:]
+		fix += fmt.Sprintf(" If `%s` is an association and `%s` an attribute of the entity it leads to, the entity step is missing: "+
+			"`[<Module>.%s/<Module.TargetEntity>/%s %s empty]`.", assoc, attr, assoc, attr, h.Op)
+	}
+	return fix
 }
 
 // xpathAssociationEmptyMatches returns the module-qualified associations an

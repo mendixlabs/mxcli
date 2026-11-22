@@ -63,8 +63,8 @@ func TestByNameAndQueueRefs(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	if n != 4 {
-		t.Errorf("emitted %d refs, want 4", n)
+	if n != 5 {
+		t.Errorf("emitted %d refs, want 5", n)
 	}
 	res, err := cat.Query(`SELECT SourceType, SourceName, TargetType, TargetName, RefKind, ModuleName FROM refs ORDER BY RefKind, SourceName, TargetName`)
 	if err != nil {
@@ -73,6 +73,8 @@ func TestByNameAndQueueRefs(t *testing.T) {
 	want := [][]any{
 		{"CONSTANT", "OIDC.Hook", "MICROFLOW", "Loops.Configured", "by_name", "OIDC"},
 		{"CONSTANT", "OIDC.ProvisioningMicroflow", "MICROFLOW", "Loops.Provision", "by_name", "OIDC"},
+		// the caller uses the queue (ako/mxcli#2503)
+		{"MICROFLOW", "Loops.Act_Enqueue", "TASK_QUEUE", "Loops.Background", "enqueue", "Loops"},
 		{"TASK_QUEUE", "Loops.Background", "JAVA_ACTION", "Loops.JA_Export", "queue", "Loops"},
 		{"TASK_QUEUE", "Loops.Background", "MICROFLOW", "Loops.Sub_Background", "queue", "Loops"},
 	}

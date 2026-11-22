@@ -12,18 +12,18 @@ description: "Create and manage JSON structures, import mappings and export mapp
 |---|---|
 | 33-110 | Key Concepts |
 | 111-122 | Export Mappings |
-| 123-187 | JSON Structures |
-| 188-234 | Message Definitions |
-| 235-400 | Import Mappings |
-| 401-498 | Export Mappings |
-| 499-516 | Starting a Mapping Below the Payload Root |
-| 517-600 | Microflow Actions |
-| 601-613 | Browse |
-| 614-661 | Export Workflow: PE → NPE → JSON |
-| 662-668 | Realistic Example: Countries REST API |
-| 669-692 | Placing Documents in Folders |
-| 693-708 | Documentation |
-| 709-723 | Common Mistakes |
+| 123-188 | JSON Structures |
+| 189-235 | Message Definitions |
+| 236-401 | Import Mappings |
+| 402-499 | Export Mappings |
+| 500-517 | Starting a Mapping Below the Payload Root |
+| 518-601 | Microflow Actions |
+| 602-614 | Browse |
+| 615-662 | Export Workflow: PE → NPE → JSON |
+| 663-669 | Realistic Example: Countries REST API |
+| 670-693 | Placing Documents in Folders |
+| 694-709 | Documentation |
+| 710-724 | Common Mistakes |
 
 <!-- /skill-index -->
 # JSON Structures, Import Mappings & Export Mappings
@@ -174,6 +174,7 @@ this structure carries, and it is one of the two names a member resolves by.
 - A root-level array has no key: `item of 'Root' as 'Entry'`.
 - An entry whose key is not in the snippet is an error (`MDL-JSON01`), as is
   `item of` on something that is not an array (`MDL-JSON02`).
+- A custom name is ASCII letters, digits and `_`, not starting with a digit, and not a reserved word in any case (`Owner`, `Type`, `Id`, `class`, ...): else `MDL-JSON03` (CE9524).
 
 ### Browse
 

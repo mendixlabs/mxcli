@@ -55,6 +55,14 @@ import (
 //   - not read in any condition: then there is no guard, dead or otherwise.
 //     (The mirror case, written but never read, is a separate verdict and is
 //     deliberately not in this rule.)
+//   - assigned by a mapping or a database query: an import mapping's value
+//     elements and a database-connection query's `Map:` columns set the attribute
+//     at runtime with no Change activity, so each counts as an unknown write
+//     (ako/mxcli#2501). Without it a flag set from JSON `true` and tested by a
+//     decision was reported as "can only ever be false".
+//   - an attribute of an external entity: the published service supplies the
+//     values, so "nothing in this app assigns it" says nothing about the runtime
+//     value (ako/mxcli#2501).
 //
 // Writes are collected from EVERY module, including Marketplace ones, while
 // only the project's own attributes are reported. A Marketplace flow writing an
@@ -136,7 +144,7 @@ func (r *FixedGuardAttributeRule) Check(ctx *linter.LintContext) []linter.Violat
 
 	var owned []linter.Attribute
 	for e := range ctx.Entities() {
-		if ctx.IsExcluded(e.ModuleName) {
+		if ctx.IsExcluded(e.ModuleName) || !guardableEntity(e) {
 			continue
 		}
 		for a := range ctx.AttributesFor(e.QualifiedName) {
@@ -169,6 +177,62 @@ func (r *FixedGuardAttributeRule) Check(ctx *linter.LintContext) []linter.Violat
 		})
 	}
 	return violations
+}
+
+// guardableEntity reports whether the rule may judge the entity's attributes. An
+// external entity's values come from the published service, so "nothing in this
+// app assigns it" is true of the model and says nothing about the runtime value
+// (ako/mxcli#2501).
+func guardableEntity(e linter.Entity) bool { return !e.IsExternal }
+
+// mappedAttributeNames is every attribute a mapping or a database query assigns
+// at runtime without a Change activity: the value elements of import mappings and
+// the columns of database-connection queries. Sorted and distinct.
+func mappedAttributeNames(imports []*model.ImportMapping, conns []*model.DatabaseConnection) []string {
+	seen := map[string]bool{}
+	var walk func(es []*model.ImportMappingElement)
+	walk = func(es []*model.ImportMappingElement) {
+		for _, e := range es {
+			if e == nil {
+				continue
+			}
+			if e.Attribute != "" {
+				seen[e.Attribute] = true
+			}
+			walk(e.Children)
+		}
+	}
+	for _, m := range imports {
+		if m != nil {
+			walk(m.Elements)
+		}
+	}
+	for _, c := range conns {
+		if c == nil {
+			continue
+		}
+		for _, q := range c.Queries {
+			if q == nil {
+				continue
+			}
+			for _, tm := range q.TableMappings {
+				if tm == nil {
+					continue
+				}
+				for _, col := range tm.Columns {
+					if col != nil && col.Attribute != "" {
+						seen[col.Attribute] = true
+					}
+				}
+			}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for a := range seen {
+		out = append(out, a)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func entityName(qualified string) string {
@@ -384,6 +448,38 @@ func collectAttributeFacts(ctx *linter.LintContext) (map[string]*attrFacts, stri
 			// it mentions.
 			markRead(mc.Value)
 		})
+	}
+	// Writes the runtime makes with no Change activity: an import mapping and a
+	// database query assign the attributes they map (ako/mxcli#2501). They are
+	// unknown writes, like an expression: the value set cannot be enumerated. The
+	// reader reaches these through an assertion, as DomainModels does; a reader
+	// that cannot list them (a test double) simply has none to report.
+	var imports []*model.ImportMapping
+	var conns []*model.DatabaseConnection
+	if r, ok := reader.(interface {
+		ListImportMappings() ([]*model.ImportMapping, error)
+	}); ok {
+		if imports, err = r.ListImportMappings(); err != nil {
+			return nil, fmt.Sprintf("reading import mappings for assigned attributes: %v", err)
+		}
+	}
+	if r, ok := reader.(interface {
+		ListDatabaseConnections() ([]*model.DatabaseConnection, error)
+	}); ok {
+		if conns, err = r.ListDatabaseConnections(); err != nil {
+			return nil, fmt.Sprintf("reading database connections for assigned attributes: %v", err)
+		}
+	}
+	for _, qn := range mappedAttributeNames(imports, conns) {
+		targets := []string{}
+		if f := facts[qn]; f != nil {
+			targets = append(targets, qn)
+		} else {
+			targets = append(targets, byName[entityName(qn)]...)
+		}
+		for _, t := range targets {
+			get(t).unknownWrite = true
+		}
 	}
 	return facts, ""
 }

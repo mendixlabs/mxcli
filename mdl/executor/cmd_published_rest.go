@@ -557,6 +557,12 @@ func execCreatePublishedRestService(ctx *ExecContext, s *ast.CreatePublishedRest
 		return mdlerrors.NewAlreadyExistsMsg("published rest service", s.Name.Module+"."+s.Name.Name,
 			fmt.Sprintf("published rest service already exists: %s.%s (use create or modify to update)", s.Name.Module, s.Name.Name))
 	}
+	// The statement is the whole service: say which stored operations it
+	// removes, which exec did not (MDL-REST06, ako/mxcli#2449).
+	if dropped := droppedPublishedRestOperations(existing, s); len(dropped) > 0 {
+		fmt.Fprintf(ctx.progress(), "Warning [%s]: %s. %s\n", publishedRestOperationDropRule,
+			publishedRestDropMessage(s.Name.String(), dropped), publishedRestDropSuggestion)
+	}
 
 	module, err := findModule(ctx, s.Name.Module)
 	if err != nil {
@@ -925,6 +931,50 @@ func execAlterPublishedRestService(ctx *ExecContext, s *ast.AlterPublishedRestSe
 			}
 			svc.Resources = append(svc.Resources, resource)
 
+		case *ast.PublishedRestAddOperationsAction:
+			// One operation of a stored resource; the resource's other
+			// operations are written back as stored (ako/mxcli#2449).
+			res := publishedRestResourceNamed(svc, a.Resource)
+			if res == nil {
+				return mdlerrors.NewNotFoundMsg("resource", a.Resource, fmt.Sprintf(
+					"resource %s not found on %s.%s: `add operation in resource` adds to a stored resource; a new one is `add resource %s { … }`",
+					mdlQuoted(a.Resource), s.Name.Module, s.Name.Name, mdlQuoted(a.Resource)))
+			}
+			added, err := astResourceDefToModel(&ast.PublishedRestResourceDef{Name: a.Resource, Operations: a.Operations})
+			if err != nil {
+				return err
+			}
+			for _, op := range added.Operations {
+				key := publishedRestOperationKey(a.Resource, op.HTTPMethod, op.Path)
+				for _, stored := range res.Operations {
+					if publishedRestOperationKey(a.Resource, stored.HTTPMethod, stored.Path) == key {
+						return mdlerrors.NewAlreadyExistsMsg("operation", key, fmt.Sprintf(
+							"operation %s already exists on %s.%s: `add operation` adds a new one; to change it, "+
+								"`drop operation %s in resource %s` first and add it back", key, s.Name.Module, s.Name.Name,
+							publishedRestOperationSpelling(op.HTTPMethod, op.Path), mdlQuoted(a.Resource)))
+					}
+				}
+				res.Operations = append(res.Operations, op)
+			}
+
+		case *ast.PublishedRestDropOperationAction:
+			res := publishedRestResourceNamed(svc, a.Resource)
+			if res == nil {
+				return mdlerrors.NewNotFoundMsg("resource", a.Resource, fmt.Sprintf("resource '%s' not found on %s.%s", a.Resource, s.Name.Module, s.Name.Name))
+			}
+			key := publishedRestOperationKey(a.Resource, a.HTTPMethod, a.Path)
+			idx := -1
+			for i, op := range res.Operations {
+				if publishedRestOperationKey(a.Resource, op.HTTPMethod, op.Path) == key {
+					idx = i
+					break
+				}
+			}
+			if idx == -1 {
+				return mdlerrors.NewNotFoundMsg("operation", key, fmt.Sprintf("operation %s not found on %s.%s", key, s.Name.Module, s.Name.Name))
+			}
+			res.Operations = append(res.Operations[:idx], res.Operations[idx+1:]...)
+
 		case *ast.PublishedRestDropResourceAction:
 			idx := -1
 			for i, existing := range svc.Resources {
@@ -955,3 +1005,23 @@ func execAlterPublishedRestService(ctx *ExecContext, s *ast.AlterPublishedRestSe
 }
 
 // Executor wrappers for unmigrated callers.
+
+// publishedRestResourceNamed is the service's resource of that name, or nil.
+func publishedRestResourceNamed(svc *model.PublishedRestService, name string) *model.PublishedRestResource {
+	for _, r := range svc.Resources {
+		if r.Name == name {
+			return r
+		}
+	}
+	return nil
+}
+
+// publishedRestOperationSpelling is an operation as MDL writes it: method and,
+// when there is one, the quoted path.
+func publishedRestOperationSpelling(method, path string) string {
+	m := strings.ToLower(method)
+	if p := strings.Trim(path, "/"); p != "" {
+		return m + " " + mdlQuoted(p)
+	}
+	return m
+}

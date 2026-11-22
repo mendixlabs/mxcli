@@ -152,3 +152,68 @@ func TestDescribeCollectsARootArrayItemName(t *testing.T) {
 		t.Errorf("got %v, want Root -> Entry", got)
 	}
 }
+
+// MDL-JSON03 (CE9524). A custom name must start with an ASCII letter or an
+// underscore and continue with ASCII letters, digits or underscores, and must not be
+// a platform-reserved word. Measured on MxBuild 11.16.1 over 90 names; `check` and
+// `exec` accepted every rejected one and the build reported
+//
+//	[CE9524] JSON element '(Object)/name' has an invalid custom name '1bad'.
+//
+// Rejected: '1a', 'a b', 'a-b', 'a.b', 'a$', ”, '_' (alone), 'Größe', 'naïve', 'Ünï',
+// and every word in types.PlatformReservedWords or SystemAttributeNames in any case
+// (Owner, OWNER, ChangedDate, Type, Id, GUID, Object, class, Int, Null, true, …).
+// Accepted: 'Good_Name1', '_x', 'x1', 'String', 'System', 'Name', 'Value', 'Entity',
+// 'Date', 'List', 'User'. The same check applies to an `item of` name and to the root
+// item. A member whose JSON KEY is invalid needs no entry: the default name is
+// sanitised (`$type` and `research%3Aread` build clean).
+func TestInvalidCustomNames(t *testing.T) {
+	bad := []string{"1a", "a b", "a-b", "a.b", "a$", "", "_", "Größe", "naïve", "Ünï",
+		"Owner", "OWNER", "owner", "ChangedDate", "createdDate", "Type", "Id", "GUID",
+		"CurrentUser", "Object", "class", "Class", "Int", "Null", "true", "Public", "this"}
+	good := []string{"Good_Name1", "_x", "x1", "X_y", "String", "System", "Name", "Value", "Entity", "Date", "List", "User"}
+
+	for _, n := range bad {
+		src := `create json structure M.JSON_A
+  snippet '{"name": "x"}'
+  custom name map ('name' as '` + n + `');`
+		got := jsonNameViolations(t, src)
+		if len(got) != 1 || got[0].RuleID != "MDL-JSON03" || !strings.Contains(got[0].Message, "CE9524") {
+			t.Errorf("name %q: got %v, want one MDL-JSON03 naming CE9524", n, got)
+		}
+	}
+	for _, n := range good {
+		src := `create json structure M.JSON_A
+  snippet '{"name": "x"}'
+  custom name map ('name' as '` + n + `');`
+		if got := jsonNameViolations(t, src); len(got) != 0 {
+			t.Errorf("name %q builds clean, got %v", n, got)
+		}
+	}
+}
+
+// An `item of` name, and the root item, are judged the same way.
+func TestInvalidItemNames(t *testing.T) {
+	got := jsonNameViolations(t, `create json structure M.JSON_A
+  snippet '{"tags": ["a"]}'
+  custom name map (item of 'tags' as 'bad name');`)
+	if len(got) != 1 || got[0].RuleID != "MDL-JSON03" {
+		t.Errorf("item name: got %v, want one MDL-JSON03", got)
+	}
+	got = jsonNameViolations(t, `create json structure M.JSON_B
+  snippet '[{"id": 1}]'
+  custom name map (item of 'Root' as 'class');`)
+	if len(got) != 1 || got[0].RuleID != "MDL-JSON03" {
+		t.Errorf("root item name: got %v, want one MDL-JSON03", got)
+	}
+}
+
+// The member whose JSON key is invalid needs no custom name: the generated name is
+// sanitised, which is what the earlier fixes for $type, owner and %3A did.
+func TestInvalidKeysWithoutACustomNameAreNotReported(t *testing.T) {
+	got := jsonNameViolations(t, `create json structure M.JSON_A
+  snippet '{"$type": "a", "owner": "b", "research%3Aread": "c"}';`)
+	if len(got) != 0 {
+		t.Fatalf("got %v, want none", got)
+	}
+}

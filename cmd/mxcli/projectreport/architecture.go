@@ -4,6 +4,7 @@ package projectreport
 
 import (
 	"fmt"
+	"github.com/mendixlabs/mxcli/mdl/catalog"
 	"math"
 	"path"
 	"regexp"
@@ -190,8 +191,15 @@ func CollectArchitecture(q Querier, opt ArchitectureOptions) (*ArchitectureData,
 		return nil, err
 	}
 	refs := make([]refRow, 0, len(rs))
+	notUse := setOf(catalog.RefKindsNotModuleUse)
 	for _, r := range rs {
 		if excl.out(r["SourceName"]) || excl.out(r["TargetName"]) {
+			continue
+		}
+		// A queue does not use the flows queued on it (the caller does, by
+		// `enqueue`), and a constant naming a flow is configuration
+		// (ako/mxcli#2503).
+		if notUse[r["RefKind"]] {
 			continue
 		}
 		refs = append(refs, refRow{r["SourceName"], r["SourceType"], r["TargetName"], r["TargetType"], r["RefKind"]})

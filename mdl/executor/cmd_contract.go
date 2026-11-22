@@ -581,255 +581,10 @@ func createExternalEntities(ctx *ExecContext, s *ast.CreateExternalEntitiesStmt)
 				continue
 			}
 
-			// Resolve the merged property and key set by walking the BaseType chain.
-			mergedProps, keyProps := mergedPropertiesWithKey(et, typeByQualified)
-
-			// Expand complex-typed properties into one attribute per leaf, the
-			// way Studio Pro imports them (MaxQty -> MaxQty_UoMNId,
-			// MaxQty_QuantityValue). Without this every such property fell
-			// through the `!strings.HasPrefix(p.Type, "Edm.")` drop below and
-			// vanished without a word, and the loss surfaced much later as
-			// CE1613 on a page written against the attributes Studio Pro would
-			// have made (mendixlabs/mxcli#1118).
-			flatProps, nestedComplex := doc.FlattenProperties(mergedProps)
-			for _, u := range nestedComplex {
-				dropped = append(dropped, fmt.Sprintf("%s.%s", mendixName, u))
-			}
-
-			keyPropSet := make(map[string]bool)
-			for _, k := range keyProps {
-				keyPropSet[k] = true
-			}
-
-			// Build key parts from the resolved key (root entity in the chain)
-			var keyParts []*domainmodel.RemoteKeyPart
-			for _, keyName := range keyProps {
-				var keyProp *types.EdmProperty
-				for _, p := range mergedProps {
-					if p.Name == keyName {
-						keyProp = p
-						break
-					}
-				}
-				if keyProp == nil {
-					continue
-				}
-				keyParts = append(keyParts, &domainmodel.RemoteKeyPart{
-					Name:       attrNameForOData(keyName, et.Name),
-					RemoteName: keyName,
-					RemoteType: keyProp.Type,
-					Type:       edmToDomainModelAttrType(keyProp, true),
-					// The key part has its own Filterable, which mxbuild compares with
-					// the service's — the same restrictions the attribute follows.
-					NotFilterable: !entitySet.AttrFilterable(keyName),
-				})
-			}
-
-			// Capability defaults follow Mendix's CONSERVATIVE model: an OData
-			// entity set with no InsertRestrictions/UpdateRestrictions annotation
-			// is treated as read-only (Creatable/Updatable = false). Verified
-			// against `mx check` on the TripPin RESTier service — its metadata has
-			// zero capability annotations, and Mendix reports the entities as
-			// Creatable=False, so the app must match or CE6630 fires. Only an
-			// explicit annotation flips a capability on. Non-top-level (contained/
-			// derived) types default true — they are mutated via their parent's
-			// write flow. (The earlier permissive default regressed this; the
-			// service that motivated #729 was a narrower ETag/Concurrency case.)
-			defaultCreatable := false
-			if !isTopLevel {
-				defaultCreatable = true
-			}
-			if entitySet != nil && entitySet.Insertable != nil {
-				defaultCreatable = *entitySet.Insertable
-			}
-
-			// Updatable does NOT follow UpdateRestrictions, and that asymmetry
-			// with Creatable right above it is the whole of this rule: NO
-			// attribute of a top-level entity is updatable, and EVERY attribute
-			// of a non-top-level one is, because the latter is written through
-			// its parent's flow.
-			//
-			// Measured on mxbuild 11.12.1 across ten contract shapes, each a
-			// top-level set mxbuild reads as updatable and each answering
-			// False — inline <Record>, typed <Record Type=…>,
-			// UpdateMethod=PATCH, +NonUpdatableProperties +DeleteRestrictions,
-			// unannotated, external <Annotations Target=…>,
-			// Core.Permissions/ReadWrite, Core.OptimisticConcurrency (ETag),
-			// DeepUpdateSupport/Supported=true, and NonUpdatableProperties
-			// naming ONLY the key. That last one is what closes it: the service
-			// lists `Id` as the sole non-updatable property, i.e. asserts that
-			// the others ARE updatable, and mxbuild still says False. Following
-			// the annotation is one CE6630 per attribute.
-			//
-			// It is not "the entity is read-only" — Creatable follows
-			// Insertable on the very same attributes. It is not the model's
-			// "allow creating and changing objects locally" either: setting
-			// AllowCreateChangeLocally=Yes left the expectation at False. An
-			// external object can be changed in memory and passed to an
-			// external action, which is what that flag governs; this one
-			// mirrors what the endpoint itself accepts.
-			//
-			// entitySet.Updatable and NonUpdatableProperties are therefore read
-			// but never consulted here. They are left in place deliberately: if
-			// a contract is ever found that mxbuild does treat as updatable,
-			// this is where the per-property list becomes load-bearing again —
-			// and the key would then need its own guard, since mxbuild computes
-			// a top-level key as non-updatable independently (one CE6630 per
-			// key part, measured across the same ten shapes).
-			defaultUpdatable := !isTopLevel
-			nonInsertable := make(map[string]bool)
-			nonUpdatable := make(map[string]bool)
-			// Filter/Sort restrictions name the properties the service refuses to
-			// filter or sort on. Marking them filterable anyway is CE6630
-			// ("'latitude' is marked Filterable=False in the OData service, but
-			// True in the app") — one per property, on an import whose whole job
-			// is to match the contract.
-			// Both restrictions have two shapes — a per-property exclusion list and
-			// a whole-set boolean — so they are resolved by EdmEntitySet rather
-			// than read field by field here; consulting one shape and not the
-			// other is what produced 28 × CE6630 on a single service
-			// (mxcli-formula1 §48). AttrFilterable/AttrSortable are nil-safe.
-			if entitySet != nil {
-				for _, name := range entitySet.NonInsertableProperties {
-					nonInsertable[name] = true
-				}
-				for _, name := range entitySet.NonUpdatableProperties {
-					nonUpdatable[name] = true
-				}
-			}
-
-			// Build attributes from the flattened property set
-			var attrs []*domainmodel.Attribute
-			for _, p := range flatProps {
-				// Drop collection-of-primitive — handled separately as primitive
-				// collection NPEs below.
-				if strings.HasPrefix(p.Type, "Collection(") {
-					continue
-				}
-				// An enum-typed property becomes an enumeration attribute of an
-				// enumeration generated from the contract's EnumType, as Studio
-				// Pro imports it (ako/mxcli#2477). It was dropped, and the
-				// attribute written back by hand was CE6612 (a stored, not a
-				// mapped, value) or, with a plain enumeration, CE4597.
-				var enumType domainmodel.AttributeType
-				if et := doc.FindEnumType(p.Type); et != nil && !strings.HasPrefix(p.Type, "Edm.") {
-					qn, why := odataEnums.ensure(ctx, module.ID, targetModule, serviceRef, p.Type, et)
-					if why != "" {
-						dropped = append(dropped, fmt.Sprintf("%s.%s (%s) — %s", mendixName, p.Path(), p.Type, why))
-						continue
-					}
-					enumType = &domainmodel.EnumerationAttributeType{EnumerationRef: qn}
-				}
-				// Anything still not an Edm type after the flatten is an entity
-				// reference or a complex type this document does not declare.
-				// Neither can become an attribute — but say so: silence here is
-				// what made mendixlabs/mxcli#1118 cost a build to discover.
-				if enumType == nil && !strings.HasPrefix(p.Type, "Edm.") {
-					dropped = append(dropped, fmt.Sprintf("%s.%s (%s) — not a supported attribute type", mendixName, p.Path(), p.Type))
-					continue
-				}
-				// Drop Edm.Duration — Mendix has no native duration type and
-				// Studio Pro skips these properties.
-				if p.Type == "Edm.Duration" {
-					dropped = append(dropped, fmt.Sprintf("%s.%s (Edm.Duration) — Mendix has no duration type; Studio Pro skips it too", mendixName, p.Path()))
-					continue
-				}
-
-				// Contract-side lookups key on the property PATH, which is what
-				// the service names in a PropertyPath annotation and what a
-				// $filter would address: "MaxQty/QuantityValue", not the local
-				// attribute name.
-				remoteName := p.Path()
-
-				isKey := keyPropSet[p.Name]
-
-				creatable := defaultCreatable
-				updatable := defaultUpdatable
-				if nonInsertable[remoteName] || p.Computed {
-					creatable = false
-				}
-				if nonUpdatable[remoteName] || p.Computed || p.Immutable {
-					updatable = false
-				}
-				// The key of a top-level entity is non-updatable for a reason
-				// of its own — a key cannot be changed after the object exists,
-				// which is the symptom that was reported ("'DefinitionId' is
-				// marked Updatable=False in the OData service, but True in the
-				// app") — but it needs no guard here, because defaultUpdatable
-				// already answers false for every top-level attribute. On a
-				// NON-top-level entity the key goes the other way and must stay
-				// updatable: clearing it there is CE6630 inverted, measured on
-				// the live TripPin contract over Trip, PlanItem, Event, Flight,
-				// PublicTransportation, Employee and Manager. `UserName` is the
-				// two-sided control inside that one document — False on Person
-				// (an entity set), True on Employee and Manager (derived).
-				// A property reached through a complex type carries NONE of the
-				// four capabilities, whatever the entity set says.
-				//
-				// Creatable/Updatable follow "External entities that contain
-				// attributes of complex types can only be read or deleted. They
-				// cannot be created, updated, or used in external actions"
-				// (Consumed OData Service Requirements), measured on 11.12.1
-				// against a contract annotated Insertable=true AND
-				// Updatable=true: Mendix still reports them Creatable=False /
-				// Updatable=False, so following the entity set is two CE6630 per
-				// attribute.
-				//
-				// Filterable/Sortable go the same way, but ONLY on an entity
-				// with no entity set. A flattened attribute is queryable exactly
-				// where its entity is: measured on TripPin (11.12.1), which
-				// carries no capability annotations at all, Mendix reports
-				//
-				//	Person   (entity set People)      HomeAddress_Address  True
-				//	Employee (derived, no entity set) HomeAddress_Address  False
-				//	Manager  (derived, no entity set) BossOffice_Address   False
-				//	Event    (derived, no entity set) OccursAt_BuildingInfo False
-				//
-				// so CE6630 fires in BOTH directions and a blanket answer cannot
-				// be right: stamping false everywhere is "marked Filterable=True
-				// in the OData service, but False in the app" on People, and
-				// leaving the default true is the same sentence inverted on the
-				// other three. Manager.BossOffice is Manager's OWN property, so
-				// the split is the entity set, not inheritance.
-				//
-				// Ordinary attributes of a derived type stay filterable — this
-				// is a property of the flattening, not of derived types.
-				filterable := entitySet.AttrFilterable(remoteName)
-				sortable := entitySet.AttrSortable(remoteName)
-				if p.RemotePath != "" {
-					creatable = false
-					updatable = false
-					if !isTopLevel {
-						filterable = false
-						sortable = false
-					}
-				}
-
-				attrName := attrNameForOData(p.Name, et.Name)
-				if attrName != p.Name {
-					// Never let a rename be discovered later, when a page written
-					// against the published $metadata fails with "The selected
-					// attribute … no longer exists" (mxcli-formula1 #28).
-					renamed = append(renamed, fmt.Sprintf("%s.%s: %s -> %s", mendixName, p.Name, p.Name, attrName))
-				}
-				attrType := enumType
-				if attrType == nil {
-					attrType = edmToDomainModelAttrType(p, isKey)
-				}
-				attr := &domainmodel.Attribute{
-					Name:       attrName,
-					Type:       attrType,
-					RemoteName: remoteName,
-					RemoteType: p.Type,
-					Filterable: filterable,
-					Sortable:   sortable,
-					Creatable:  creatable,
-					Updatable:  updatable,
-				}
-				attr.ID = model.ID(types.GenerateID())
-				attrs = append(attrs, attr)
-			}
-
+			parts := contractEntityAttributes(ctx, doc, et, typeByQualified, entitySet, isTopLevel, mendixName, module.ID, targetModule, serviceRef, odataEnums)
+			dropped = append(dropped, parts.dropped...)
+			renamed = append(renamed, parts.renamed...)
+			attrs, keyParts := parts.attrs, parts.keyParts
 			if existingEntity != nil {
 				if !s.CreateOrModify {
 					fmt.Fprintf(ctx.Output, "  SKIPPED: %s.%s (already exists; use create or modify to update)\n", targetModule, mendixName)
@@ -1944,3 +1699,274 @@ func asyncTypeString(p *types.AsyncAPIProperty) string {
 }
 
 // --- Executor method wrappers for backward compatibility ---
+
+// contractEntityParts is what one contract entity type becomes: its
+// attributes (each mapped to its property), its key, and the properties that
+// could not be imported or had to be renamed, with the reason.
+type contractEntityParts struct {
+	attrs    []*domainmodel.Attribute
+	keyParts []*domainmodel.RemoteKeyPart
+	dropped  []string
+	renamed  []string
+}
+
+// contractEntityAttributes builds an entity type's attributes and key from
+// the contract, as Studio Pro imports them. The bulk import and the single
+// `create external entity` both write what this returns, so an attribute is
+// mapped the same way whichever statement wrote it (ako/mxcli#2497).
+func contractEntityAttributes(ctx *ExecContext, doc *types.EdmxDocument, et *types.EdmEntityType,
+	typeByQualified map[string]*types.EdmEntityType, entitySet *types.EdmEntitySet, isTopLevel bool,
+	mendixName string, moduleID model.ID, targetModule, serviceRef string, odataEnums *odataEnumerations) contractEntityParts {
+	var dropped, renamed []string
+
+	// Resolve the merged property and key set by walking the BaseType chain.
+	mergedProps, keyProps := mergedPropertiesWithKey(et, typeByQualified)
+
+	// Expand complex-typed properties into one attribute per leaf, the
+	// way Studio Pro imports them (MaxQty -> MaxQty_UoMNId,
+	// MaxQty_QuantityValue). Without this every such property fell
+	// through the `!strings.HasPrefix(p.Type, "Edm.")` drop below and
+	// vanished without a word, and the loss surfaced much later as
+	// CE1613 on a page written against the attributes Studio Pro would
+	// have made (mendixlabs/mxcli#1118).
+	flatProps, nestedComplex := doc.FlattenProperties(mergedProps)
+	for _, u := range nestedComplex {
+		dropped = append(dropped, fmt.Sprintf("%s.%s", mendixName, u))
+	}
+
+	keyPropSet := make(map[string]bool)
+	for _, k := range keyProps {
+		keyPropSet[k] = true
+	}
+
+	// Build key parts from the resolved key (root entity in the chain)
+	var keyParts []*domainmodel.RemoteKeyPart
+	for _, keyName := range keyProps {
+		var keyProp *types.EdmProperty
+		for _, p := range mergedProps {
+			if p.Name == keyName {
+				keyProp = p
+				break
+			}
+		}
+		if keyProp == nil {
+			continue
+		}
+		keyParts = append(keyParts, &domainmodel.RemoteKeyPart{
+			Name:       attrNameForOData(keyName, et.Name),
+			RemoteName: keyName,
+			RemoteType: keyProp.Type,
+			Type:       edmToDomainModelAttrType(keyProp, true),
+			// The key part has its own Filterable, which mxbuild compares with
+			// the service's — the same restrictions the attribute follows.
+			NotFilterable: !entitySet.AttrFilterable(keyName),
+		})
+	}
+
+	// Capability defaults follow Mendix's CONSERVATIVE model: an OData
+	// entity set with no InsertRestrictions/UpdateRestrictions annotation
+	// is treated as read-only (Creatable/Updatable = false). Verified
+	// against `mx check` on the TripPin RESTier service — its metadata has
+	// zero capability annotations, and Mendix reports the entities as
+	// Creatable=False, so the app must match or CE6630 fires. Only an
+	// explicit annotation flips a capability on. Non-top-level (contained/
+	// derived) types default true — they are mutated via their parent's
+	// write flow. (The earlier permissive default regressed this; the
+	// service that motivated #729 was a narrower ETag/Concurrency case.)
+	defaultCreatable := false
+	if !isTopLevel {
+		defaultCreatable = true
+	}
+	if entitySet != nil && entitySet.Insertable != nil {
+		defaultCreatable = *entitySet.Insertable
+	}
+
+	// Updatable does NOT follow UpdateRestrictions, and that asymmetry
+	// with Creatable right above it is the whole of this rule: NO
+	// attribute of a top-level entity is updatable, and EVERY attribute
+	// of a non-top-level one is, because the latter is written through
+	// its parent's flow.
+	//
+	// Measured on mxbuild 11.12.1 across ten contract shapes, each a
+	// top-level set mxbuild reads as updatable and each answering
+	// False — inline <Record>, typed <Record Type=…>,
+	// UpdateMethod=PATCH, +NonUpdatableProperties +DeleteRestrictions,
+	// unannotated, external <Annotations Target=…>,
+	// Core.Permissions/ReadWrite, Core.OptimisticConcurrency (ETag),
+	// DeepUpdateSupport/Supported=true, and NonUpdatableProperties
+	// naming ONLY the key. That last one is what closes it: the service
+	// lists `Id` as the sole non-updatable property, i.e. asserts that
+	// the others ARE updatable, and mxbuild still says False. Following
+	// the annotation is one CE6630 per attribute.
+	//
+	// It is not "the entity is read-only" — Creatable follows
+	// Insertable on the very same attributes. It is not the model's
+	// "allow creating and changing objects locally" either: setting
+	// AllowCreateChangeLocally=Yes left the expectation at False. An
+	// external object can be changed in memory and passed to an
+	// external action, which is what that flag governs; this one
+	// mirrors what the endpoint itself accepts.
+	//
+	// entitySet.Updatable and NonUpdatableProperties are therefore read
+	// but never consulted here. They are left in place deliberately: if
+	// a contract is ever found that mxbuild does treat as updatable,
+	// this is where the per-property list becomes load-bearing again —
+	// and the key would then need its own guard, since mxbuild computes
+	// a top-level key as non-updatable independently (one CE6630 per
+	// key part, measured across the same ten shapes).
+	defaultUpdatable := !isTopLevel
+	nonInsertable := make(map[string]bool)
+	nonUpdatable := make(map[string]bool)
+	// Filter/Sort restrictions name the properties the service refuses to
+	// filter or sort on. Marking them filterable anyway is CE6630
+	// ("'latitude' is marked Filterable=False in the OData service, but
+	// True in the app") — one per property, on an import whose whole job
+	// is to match the contract.
+	// Both restrictions have two shapes — a per-property exclusion list and
+	// a whole-set boolean — so they are resolved by EdmEntitySet rather
+	// than read field by field here; consulting one shape and not the
+	// other is what produced 28 × CE6630 on a single service
+	// (mxcli-formula1 §48). AttrFilterable/AttrSortable are nil-safe.
+	if entitySet != nil {
+		for _, name := range entitySet.NonInsertableProperties {
+			nonInsertable[name] = true
+		}
+		for _, name := range entitySet.NonUpdatableProperties {
+			nonUpdatable[name] = true
+		}
+	}
+
+	// Build attributes from the flattened property set
+	var attrs []*domainmodel.Attribute
+	for _, p := range flatProps {
+		// Drop collection-of-primitive — handled separately as primitive
+		// collection NPEs below.
+		if strings.HasPrefix(p.Type, "Collection(") {
+			continue
+		}
+		// An enum-typed property becomes an enumeration attribute of an
+		// enumeration generated from the contract's EnumType, as Studio
+		// Pro imports it (ako/mxcli#2477). It was dropped, and the
+		// attribute written back by hand was CE6612 (a stored, not a
+		// mapped, value) or, with a plain enumeration, CE4597.
+		var enumType domainmodel.AttributeType
+		if et := doc.FindEnumType(p.Type); et != nil && !strings.HasPrefix(p.Type, "Edm.") {
+			qn, why := odataEnums.ensure(ctx, moduleID, targetModule, serviceRef, p.Type, et)
+			if why != "" {
+				dropped = append(dropped, fmt.Sprintf("%s.%s (%s) — %s", mendixName, p.Path(), p.Type, why))
+				continue
+			}
+			enumType = &domainmodel.EnumerationAttributeType{EnumerationRef: qn}
+		}
+		// Anything still not an Edm type after the flatten is an entity
+		// reference or a complex type this document does not declare.
+		// Neither can become an attribute — but say so: silence here is
+		// what made mendixlabs/mxcli#1118 cost a build to discover.
+		if enumType == nil && !strings.HasPrefix(p.Type, "Edm.") {
+			dropped = append(dropped, fmt.Sprintf("%s.%s (%s) — not a supported attribute type", mendixName, p.Path(), p.Type))
+			continue
+		}
+		// Drop Edm.Duration — Mendix has no native duration type and
+		// Studio Pro skips these properties.
+		if p.Type == "Edm.Duration" {
+			dropped = append(dropped, fmt.Sprintf("%s.%s (Edm.Duration) — Mendix has no duration type; Studio Pro skips it too", mendixName, p.Path()))
+			continue
+		}
+
+		// Contract-side lookups key on the property PATH, which is what
+		// the service names in a PropertyPath annotation and what a
+		// $filter would address: "MaxQty/QuantityValue", not the local
+		// attribute name.
+		remoteName := p.Path()
+
+		isKey := keyPropSet[p.Name]
+
+		creatable := defaultCreatable
+		updatable := defaultUpdatable
+		if nonInsertable[remoteName] || p.Computed {
+			creatable = false
+		}
+		if nonUpdatable[remoteName] || p.Computed || p.Immutable {
+			updatable = false
+		}
+		// The key of a top-level entity is non-updatable for a reason
+		// of its own — a key cannot be changed after the object exists,
+		// which is the symptom that was reported ("'DefinitionId' is
+		// marked Updatable=False in the OData service, but True in the
+		// app") — but it needs no guard here, because defaultUpdatable
+		// already answers false for every top-level attribute. On a
+		// NON-top-level entity the key goes the other way and must stay
+		// updatable: clearing it there is CE6630 inverted, measured on
+		// the live TripPin contract over Trip, PlanItem, Event, Flight,
+		// PublicTransportation, Employee and Manager. `UserName` is the
+		// two-sided control inside that one document — False on Person
+		// (an entity set), True on Employee and Manager (derived).
+		// A property reached through a complex type carries NONE of the
+		// four capabilities, whatever the entity set says.
+		//
+		// Creatable/Updatable follow "External entities that contain
+		// attributes of complex types can only be read or deleted. They
+		// cannot be created, updated, or used in external actions"
+		// (Consumed OData Service Requirements), measured on 11.12.1
+		// against a contract annotated Insertable=true AND
+		// Updatable=true: Mendix still reports them Creatable=False /
+		// Updatable=False, so following the entity set is two CE6630 per
+		// attribute.
+		//
+		// Filterable/Sortable go the same way, but ONLY on an entity
+		// with no entity set. A flattened attribute is queryable exactly
+		// where its entity is: measured on TripPin (11.12.1), which
+		// carries no capability annotations at all, Mendix reports
+		//
+		//	Person   (entity set People)      HomeAddress_Address  True
+		//	Employee (derived, no entity set) HomeAddress_Address  False
+		//	Manager  (derived, no entity set) BossOffice_Address   False
+		//	Event    (derived, no entity set) OccursAt_BuildingInfo False
+		//
+		// so CE6630 fires in BOTH directions and a blanket answer cannot
+		// be right: stamping false everywhere is "marked Filterable=True
+		// in the OData service, but False in the app" on People, and
+		// leaving the default true is the same sentence inverted on the
+		// other three. Manager.BossOffice is Manager's OWN property, so
+		// the split is the entity set, not inheritance.
+		//
+		// Ordinary attributes of a derived type stay filterable — this
+		// is a property of the flattening, not of derived types.
+		filterable := entitySet.AttrFilterable(remoteName)
+		sortable := entitySet.AttrSortable(remoteName)
+		if p.RemotePath != "" {
+			creatable = false
+			updatable = false
+			if !isTopLevel {
+				filterable = false
+				sortable = false
+			}
+		}
+
+		attrName := attrNameForOData(p.Name, et.Name)
+		if attrName != p.Name {
+			// Never let a rename be discovered later, when a page written
+			// against the published $metadata fails with "The selected
+			// attribute … no longer exists" (mxcli-formula1 #28).
+			renamed = append(renamed, fmt.Sprintf("%s.%s: %s -> %s", mendixName, p.Name, p.Name, attrName))
+		}
+		attrType := enumType
+		if attrType == nil {
+			attrType = edmToDomainModelAttrType(p, isKey)
+		}
+		attr := &domainmodel.Attribute{
+			Name:       attrName,
+			Type:       attrType,
+			RemoteName: remoteName,
+			RemoteType: p.Type,
+			Filterable: filterable,
+			Sortable:   sortable,
+			Creatable:  creatable,
+			Updatable:  updatable,
+		}
+		attr.ID = model.ID(types.GenerateID())
+		attrs = append(attrs, attr)
+	}
+
+	return contractEntityParts{attrs: attrs, keyParts: keyParts, dropped: dropped, renamed: renamed}
+}

@@ -63,7 +63,11 @@ func init() {
 			"CREATE EXTERNAL ENTITY Module.Name\n" +
 			"  FROM CONSUMED ODATA SERVICE Module.Client\n" +
 			"  (EntitySet: 'Name', RemoteName: 'Name')\n" +
-			"  (Attr: Type, ...);\n\n" +
+			"  (Attr: Type, ...);\n" +
+			"-- Each Attr is the contract property of that name, mapped as the bulk\n" +
+			"-- import maps it; the key must be listed, and no list takes them all.\n" +
+			"-- A name the contract lacks, a type it does not publish, or a Countable/\n" +
+			"-- Creatable/Deletable it contradicts (CE6630) is refused.\n\n" +
 			"CREATE EXTERNAL ENTITIES FROM Module.Client\n" +
 			"  [INTO Module] [ENTITIES (Name1, Name2)];\n\n" +
 			"ALTER ENTITY Module.Name SET (AllowCreateChangeLocally: true);\n\n" +
@@ -430,7 +434,7 @@ func init() {
 			"-- Documentation: the /** ... */ doc comment above CREATE, the service's own\n" +
 			"-- documentation (not the OpenAPI description, which MDL keeps unchanged).\n" +
 			"-- On OR MODIFY no comment keeps the stored text, /** */ clears it.\n\n" +
-			"ALTER PUBLISHED REST SERVICE Module.Name SET ( Version: '2.0.0', Authentication: (session) );\nALTER PUBLISHED REST SERVICE Module.Name SET Version = '2.0.0';\nALTER PUBLISHED REST SERVICE Module.Name ADD RESOURCE 'items' { ... };\nALTER PUBLISHED REST SERVICE Module.Name DROP RESOURCE 'legacy';\nDROP PUBLISHED REST SERVICE Module.Name;",
+			"ALTER PUBLISHED REST SERVICE Module.Name SET ( Version: '2.0.0', Authentication: (session) );\nALTER PUBLISHED REST SERVICE Module.Name SET Version = '2.0.0';\nALTER PUBLISHED REST SERVICE Module.Name ADD RESOURCE 'items' { ... };\nALTER PUBLISHED REST SERVICE Module.Name DROP RESOURCE 'legacy';\nALTER PUBLISHED REST SERVICE Module.Name ADD OPERATION IN RESOURCE 'items' {\n  delete '{id}' microflow Module.PRS_DeleteItem;\n};  -- create's operation line; the resource's other operations are kept as stored\nALTER PUBLISHED REST SERVICE Module.Name DROP OPERATION delete '{id}' IN RESOURCE 'items';\nDROP PUBLISHED REST SERVICE Module.Name;",
 		Example: "mdl 1;\nCREATE PUBLISHED REST SERVICE Module.OrderAPI (\n  Path: 'rest/orders/v1',\n  Version: '1.0.0',\n  ServiceName: 'Order API',\n  Authentication: (basic, session)\n)\n{\n  RESOURCE 'orders' {\n    GET '' MICROFLOW Module.GetAllOrders;\n    GET '{id}' MICROFLOW Module.GetOrderById;\n    POST '' MICROFLOW Module.CreateOrder;\n    DELETE '{id}' MICROFLOW Module.DeleteOrder;\n  }\n};\n\nGRANT ACCESS ON PUBLISHED REST SERVICE Module.OrderAPI\n  TO Module.User, Module.Admin;",
 		SeeAlso: []string{"rest", "rest.consumed"},
 	})

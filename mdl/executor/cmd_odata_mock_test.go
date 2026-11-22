@@ -246,6 +246,8 @@ func TestCreateExternalEntity_AcceptsExistingClient(t *testing.T) {
 		BaseElement: model.BaseElement{ID: nextID("cos")},
 		ContainerID: mod.ID,
 		Name:        "ProductsClient",
+		// The attributes come from the contract (ako/mxcli#2497).
+		Metadata: singleSetContract("Demo", "Product", "Products"),
 	}
 	withContainer(h, svc.ContainerID, mod.ID)
 	dm := &domainmodel.DomainModel{BaseElement: model.BaseElement{ID: nextID("dm")}, ContainerID: mod.ID}
@@ -289,6 +291,7 @@ func TestCreateExternalEntity_AllowCreateChangeLocally_Issue534(t *testing.T) {
 		BaseElement: model.BaseElement{ID: nextID("cos")},
 		ContainerID: mod.ID,
 		Name:        "TripPinClient",
+		Metadata:    singleSetContract("Trippin", "Person", "People"),
 	}
 	withContainer(h, svc.ContainerID, mod.ID)
 	dm := &domainmodel.DomainModel{BaseElement: model.BaseElement{ID: nextID("dm")}, ContainerID: mod.ID}
@@ -737,4 +740,19 @@ func TestCreateOrModifyExternalEntity_KeepsAttributeIdentityAndMapping(t *testin
 	if b := updated.Attributes[1]; b.ID == "" || b.ID == "stored-attr-id" || b.RemoteName != "" {
 		t.Errorf("new attribute Added = %+v", b)
 	}
+}
+
+// singleSetContract is a $metadata with one entity type keyed on Id and the
+// entity set that exposes it.
+func singleSetContract(ns, typ, set string) string {
+	return `<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="4.0" xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx">
+  <edmx:DataServices>
+    <Schema Namespace="` + ns + `" xmlns="http://docs.oasis-open.org/odata/ns/edm">
+      <EntityType Name="` + typ + `"><Key><PropertyRef Name="Id"/></Key>
+        <Property Name="Id" Type="Edm.Int64" Nullable="false"/><Property Name="Name" Type="Edm.String"/></EntityType>
+      <EntityContainer Name="C"><EntitySet Name="` + set + `" EntityType="` + ns + `.` + typ + `"/></EntityContainer>
+    </Schema>
+  </edmx:DataServices>
+</edmx:Edmx>`
 }

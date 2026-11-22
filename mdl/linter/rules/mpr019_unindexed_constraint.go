@@ -207,9 +207,16 @@ func indexableEntityIndex(ctx *linter.LintContext) map[string]*indexableEntityIn
 }
 
 // indexableEntity reports whether an entity has a table to index at all.
+//
+// An external entity is stored persistable but its table lives in the app that
+// publishes it, so there is no index here to add (ako/mxcli#2502: all 39 findings
+// on a frontend app were external entities).
 func indexableEntity(e *domainmodel.Entity) bool {
-	return e != nil && e.Persistable && e.Name != ""
+	return e != nil && e.Persistable && e.Name != "" && e.Source != externalEntitySource
 }
+
+// externalEntitySource is the stored Source of an external (OData remote) entity.
+const externalEntitySource = "Rest$ODataRemoteEntitySource"
 
 // attributeRefIndex returns an entity's attributes by UUID and by lower-cased
 // name, the two keys an attribute reference can arrive as.

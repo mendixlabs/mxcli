@@ -225,7 +225,9 @@ func docPreserveCases() []docPreserveCase {
 		{
 			name:       "external entity",
 			storedOnly: true,
-			create: "create odata client MyFirstModule.DocExtOdc (\n  MetadataUrl: 'http://127.0.0.1:9/nope/$metadata'\n);\n" + doc +
+			// The entity's attributes come from the client's cached contract
+			// (ako/mxcli#2497), so the client has one.
+			create: "create odata client MyFirstModule.DocExtOdc (\n  MetadataUrl: '" + thingsContractURL() + "'\n);\n" + doc +
 				"create external entity MyFirstModule.DocExt\nfrom odata client MyFirstModule.DocExtOdc\n(\n  EntitySet: 'Things',\n  Countable: Yes\n);",
 			rewrite: "create or modify external entity MyFirstModule.DocExt\nfrom odata client MyFirstModule.DocExtOdc\n(\n  EntitySet: 'Things',\n  Countable: No\n);",
 		},
@@ -426,4 +428,28 @@ func TestDocumentation_EmptyCommentClears(t *testing.T) {
 	if strings.Contains(out, docMarker) {
 		t.Errorf("an explicitly empty /** */ did not clear the documentation:\n%s", out)
 	}
+}
+
+// thingsContractURL writes a $metadata with one entity set, Things, to a
+// temporary file and returns its file:// URL.
+func thingsContractURL() string {
+	dir, err := os.MkdirTemp("", "doc-ext-contract")
+	if err != nil {
+		panic(err)
+	}
+	path := filepath.Join(dir, "metadata.xml")
+	contract := `<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="4.0" xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx">
+  <edmx:DataServices>
+    <Schema Namespace="Doc" xmlns="http://docs.oasis-open.org/odata/ns/edm">
+      <EntityType Name="Thing"><Key><PropertyRef Name="Code"/></Key>
+        <Property Name="Code" Type="Edm.String" MaxLength="20" Nullable="false"/></EntityType>
+      <EntityContainer Name="C"><EntitySet Name="Things" EntityType="Doc.Thing"/></EntityContainer>
+    </Schema>
+  </edmx:DataServices>
+</edmx:Edmx>`
+	if err := os.WriteFile(path, []byte(contract), 0o644); err != nil {
+		panic(err)
+	}
+	return "file://" + path
 }

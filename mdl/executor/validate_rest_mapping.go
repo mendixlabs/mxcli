@@ -95,8 +95,11 @@ func ValidatePublishedRestCommit(prog *ast.Program) []linter.Violation {
 			}
 		case *ast.AlterPublishedRestServiceStmt:
 			for _, a := range s.Actions {
-				if add, ok := a.(*ast.PublishedRestAddResourceAction); ok {
+				switch add := a.(type) {
+				case *ast.PublishedRestAddResourceAction:
 					visit(add.Resource)
+				case *ast.PublishedRestAddOperationsAction:
+					visit(&ast.PublishedRestResourceDef{Name: add.Resource, Operations: add.Operations})
 				}
 			}
 		}

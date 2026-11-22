@@ -71,7 +71,10 @@ type AssocSystemInfo struct {
 	AssociationName string
 	TableName       string
 	ChildColumnName string
-	StorageFormat   string // decoded: StorageFormatColumn or StorageFormatTable
+	// ParentColumnName is the junction table's column for the parent (FROM)
+	// entity; for column storage Mendix writes `id` here (ako/mxcli#1686).
+	ParentColumnName string
+	StorageFormat    string // decoded: StorageFormatColumn or StorageFormatTable
 }
 
 // decodeStorageFormat normalises a mendixsystem$association.storage_format
@@ -130,15 +133,15 @@ func decodeStorageFormatText(s string) (string, error) {
 // cannot be decoded.
 func LookupAssociationInfo(ctx context.Context, conn *Connection, assocName string) (*AssocSystemInfo, error) {
 	query := `
-		SELECT association_name, table_name, child_column_name, storage_format
+		SELECT association_name, table_name, parent_column_name, child_column_name, storage_format
 		FROM mendixsystem$association
 		WHERE association_name = $1`
 
 	var info AssocSystemInfo
-	var childCol sql.NullString
+	var parentCol, childCol sql.NullString
 	var rawFormat any
 	err := conn.DB.QueryRowContext(ctx, query, assocName).Scan(
-		&info.AssociationName, &info.TableName, &childCol, &rawFormat)
+		&info.AssociationName, &info.TableName, &parentCol, &childCol, &rawFormat)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil // not found — caller will fall back to conventions
@@ -152,6 +155,7 @@ func LookupAssociationInfo(ctx context.Context, conn *Connection, assocName stri
 	}
 	info.StorageFormat = format
 	info.ChildColumnName = childCol.String
+	info.ParentColumnName = parentCol.String
 	return &info, nil
 }
 
@@ -203,6 +207,25 @@ func JunctionTableFromConvention(assocQualifiedName string) string {
 
 // JunctionColumnFromConvention derives a junction table column name.
 // Convention: {module}${entity_name_lower}id
+// JunctionColumns names a junction table's parent and child columns: the
+// ones mendixsystem$association records when it has the row, else the naming
+// convention. A self-association's two ends are one entity, so the convention
+// numbers them — measured on Mendix 11.12.6, Person_Friend from Person to
+// Person is stored as myfirstmodule$personid1 (parent) and
+// myfirstmodule$personid2 (child). Naming both after the entity put one
+// column in the insert twice (ako/mxcli#1686).
+func JunctionColumns(sys *AssocSystemInfo, parentEntity, childEntity string) (parent, child string) {
+	if sys != nil && sys.StorageFormat == StorageFormatTable && sys.ParentColumnName != "" && sys.ChildColumnName != "" {
+		return sys.ParentColumnName, sys.ChildColumnName
+	}
+	parent = JunctionColumnFromConvention(parentEntity)
+	child = JunctionColumnFromConvention(childEntity)
+	if strings.EqualFold(parentEntity, childEntity) {
+		return parent + "1", child + "2"
+	}
+	return parent, child
+}
+
 func JunctionColumnFromConvention(entityQualifiedName string) string {
 	parts := strings.SplitN(entityQualifiedName, ".", 2)
 	if len(parts) != 2 {
