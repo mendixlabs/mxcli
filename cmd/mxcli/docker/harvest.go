@@ -33,6 +33,12 @@ type HarvestResult struct {
 	// something this mechanism was not built for and the caller should say so.
 	Added   []string
 	Removed []string
+	// ValueChanges names the pluggable widget property values the tool
+	// changed, as against the project before it ran. update-widgets resets a
+	// value in a property the widget's editorConfig hides, which is how it
+	// clears such a CE0463, and the value the project set is gone
+	// (ako/mxcli#2507). Empty when only types were resynced.
+	ValueChanges []string
 	// LeftAsStored names units the tool re-saved with a real difference that
 	// were not written back, as "<type> <id>", because the tool has no business
 	// with that kind of document (harvestScope).
@@ -226,6 +232,12 @@ func applyHarvest(projectPath string, fixed map[string]harvestedUnit, order []st
 		return nil, fmt.Errorf("read the restored project: %w", err)
 	}
 
+	// The units written, as stored and as written: their widget values are
+	// compared below. Only written units — a unit the tool re-saved with no
+	// real difference is not written, and comparing its raw output listed
+	// widgets the project never lost a value on.
+	wroteBefore := map[string]harvestedUnit{}
+	wroteAfter := map[string]harvestedUnit{}
 	for _, id := range order {
 		h := fixed[id]
 		prev, ok := stored[id]
@@ -249,6 +261,12 @@ func applyHarvest(projectPath string, fixed map[string]harvestedUnit, order []st
 			return nil, fmt.Errorf("write unit %s: %w", id, err)
 		}
 		res.UnitsWritten++
+		wroteBefore[id] = prev
+		wroteAfter[id] = harvestedUnit{contents: out, unitType: prev.unitType}
+	}
+	// What the tool changed in the values the project set (ako/mxcli#2507).
+	for _, c := range widgetValueChanges(widgetPropertyValues(wroteBefore), widgetPropertyValues(wroteAfter)) {
+		res.ValueChanges = append(res.ValueChanges, c.String())
 	}
 
 	for id, s := range stored {

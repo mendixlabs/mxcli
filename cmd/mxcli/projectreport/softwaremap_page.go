@@ -154,7 +154,7 @@ V.modules=function(){
   h+=h2('Modules');
   h+=table(['Module','Purpose','Entities','Flows','Pages','Entry points'],D.modules.map(function(m){
     var eps=P.entryKinds.filter(function(k){return m.entryPoints[k];}).map(function(k){return '<span class="pill">'+esc(k)+' '+m.entryPoints[k]+'</span>';}).join('');
-    return ['<a class="doc" data-mod="'+esc(m.name)+'">'+esc(m.name)+'</a>'+(m.integration?' <span class="pill">integration</span>':''),esc(m.purpose||''),
+    return ['<a class="doc" data-mod="'+esc(m.name)+'">'+esc(m.name)+'</a>'+(m.integration?' <span class="pill" title="'+esc(m.integrationWhy||'')+'">integration</span>':''),esc(m.purpose||''),
       m.counts.entity||0,(m.counts.microflow||0)+(m.counts.nanoflow||0),m.counts.page||0,eps];}));
   return h;
 };

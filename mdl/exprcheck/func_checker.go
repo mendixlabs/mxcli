@@ -361,11 +361,39 @@ func checkCallExpr(c *CallExpr, ctx Context) []Hint {
 // DateTimes and [%CurrentUser%] is an object. Rather than change what every
 // other rule sees, the argument check types the date tokens and tolerates the
 // rest.
+//
+// An `if` is typed by its branches through this function, not inferKind:
+// `if … then [%CurrentDateTime%] else $X/Date` was a String to inferKind and
+// refused for a DateTime member, which mxbuild builds (ako/mxcli#2508). A
+// branch that is `empty` or unknown says nothing, so the other decides; two
+// branches that disagree are unknown, never a provable mismatch.
 func argKind(e RobustExpr, ctx Context) TypeKind {
-	if t, ok := unwrapParens(e).(*TokenExpr); ok {
-		name := strings.TrimSuffix(t.Token, "UTC")
+	switch n := unwrapParens(e).(type) {
+	case *TokenExpr:
+		name := strings.TrimSuffix(n.Token, "UTC")
 		if name == "CurrentDateTime" || strings.HasPrefix(name, "BeginOf") || strings.HasPrefix(name, "EndOf") {
 			return KindDateTime
+		}
+		return KindUnknown
+	case *IfThenElseExpr:
+		var then, els TypeKind = KindUnknown, KindUnknown
+		if n.Then != nil {
+			then = argKind(n.Then, ctx)
+		}
+		if n.Else != nil {
+			els = argKind(n.Else, ctx)
+		}
+		silent := func(k TypeKind) bool { return k == KindUnknown || k == KindEmpty }
+		switch {
+		case silent(then) && silent(els):
+			if then == KindEmpty && els == KindEmpty {
+				return KindEmpty
+			}
+			return KindUnknown
+		case silent(then):
+			return els
+		case silent(els), then == els:
+			return then
 		}
 		return KindUnknown
 	}

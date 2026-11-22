@@ -159,6 +159,18 @@ func reportFix(out io.Writer, what string, res *docker.HarvestResult) {
 	for _, r := range res.Removed {
 		fmt.Fprintf(out, "  Note: the tool removed a unit this did not remove: %s\n", r)
 	}
+	// A value the tool changed is one the project set and no longer has —
+	// update-widgets resets a property the widget's editorConfig hides
+	// (ako/mxcli#2507). Said, so a script that sets it is fixed at the source.
+	if n := len(res.ValueChanges); n > 0 {
+		fmt.Fprintf(out, "  Values reset: %d widget(s) had property values the tool replaced with the widget's defaults:\n", n)
+		for _, c := range res.ValueChanges {
+			fmt.Fprintf(out, "    %s\n", c)
+		}
+		fmt.Fprintln(out, "  These are typically properties the widget hides for the values given (its editorConfig). A")
+		fmt.Fprintln(out, "  script that sets them will set them again: leave them out of it, or change the values")
+		fmt.Fprintln(out, "  that hide them.")
+	}
 	if n := len(res.LeftAsStored); n > 0 {
 		fmt.Fprintf(out, "  Left as stored: %d unit(s) the tool re-saved that hold no widget (re-encoded only):\n", n)
 		for _, u := range res.LeftAsStored {

@@ -378,11 +378,29 @@ func isSystemPropKey(key string) bool {
 // config, returning the rules and a coverage note (recognized / total hide-calls).
 func rulesFromProject(mpkPath, widgetID string) ([]DescribedRule, string) {
 	rules, recognized, total := ExtractWidgetVisibilityStats(mpkPath, widgetID)
-	coverage := ""
-	if total > 0 {
-		coverage = fmt.Sprintf("%d of %d editor hide-rules recognized", recognized, total)
+	present := total > 0
+	if !present {
+		js, err := mmpk.ReadEditorConfig(mpkPath, widgetID)
+		present = err == nil && strings.TrimSpace(js) != ""
 	}
-	return rulesToDescribed(rules), coverage
+	return rulesToDescribed(rules), ruleCoverageText(present, recognized, total)
+}
+
+// ruleCoverageText says how far the listed rules can be trusted. A widget that
+// ships an editorConfig.js whose hide calls are none of the toolkit helpers
+// mxcli reads — a local `hideProperties(…)` that filters by key — listed
+// "(none discovered)" and nothing else, which reads as "the widget hides
+// nothing" (ako/mxcli#2507). It says the rules exist and were not read.
+func ruleCoverageText(editorConfigPresent bool, recognized, total int) string {
+	switch {
+	case total > 0:
+		return fmt.Sprintf("%d of %d editor hide-rules recognized", recognized, total)
+	case editorConfigPresent:
+		return "the widget ships an editorConfig.js, but none of its hide calls is one mxcli reads " +
+			"(hidePropertyIn, hidePropertiesIn, hideNestedPropertiesIn): any property it hides is unknown here, " +
+			"and a hidden property set to other than its default is CE0463"
+	}
+	return ""
 }
 
 func rulesFromDef(rules []types.WidgetVisibilityRule) []DescribedRule {

@@ -11,10 +11,10 @@ description: "Produce and use the software map (mxcli report map): one interacti
 | lines | section |
 |---|---|
 | 26-39 | Run it |
-| 40-55 | Give each module a purpose |
-| 56-76 | The app by feature |
-| 77-94 | Reading it — and its traps |
-| 95-98 | Related |
+| 40-70 | Give each module a purpose |
+| 71-91 | The app by feature |
+| 92-109 | Reading it — and its traps |
+| 110-113 | Related |
 
 <!-- /skill-index -->
 # Software Map
@@ -52,6 +52,21 @@ items:
 Better still, put the sentence in the model, so every tool (and Studio Pro) sees it:
 `alter module Rooster set documentation 'Builds and publishes the monthly roster.';`
 Lint rule QUAL002 reports app modules that have none.
+
+**Integration ports** are the modules that talk to an outside system. The map flags a
+module as one when it holds outbound clients (consumed REST, OData or MCP, a database
+connection, business events), when its name follows a port convention (`Int_*`,
+`*Connector`, `*Integration`, `*Adapter`), or when its documentation starts "Port to …",
+"Integration with …", "Adapter for …" or "Wraps …". The last two find a port built
+against a mock before its real connection exists. Each flagged module says which.
+Publishing an API does not make a module an integration: the systems list shows the
+published service, whose clients are outside. Where the conventions do not fit:
+
+```yaml
+items:
+  "module:Legacy": {status: integration, note: "Wraps the old mainframe."}
+  "module:Int_Tools": {status: not integration}
+```
 
 ## The app by feature
 
