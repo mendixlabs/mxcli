@@ -355,3 +355,22 @@ func TestVerifyListFindings(t *testing.T) {
 		t.Errorf("listing = %q", got)
 	}
 }
+
+// A lint finding the baseline held and the change removed is "fixed" in lint's
+// comparison; the stage reports it as resolved, as the mx check stage does
+// (ako/mxcli#2506).
+func TestLintOutcomeCarriesFixedAsResolved(t *testing.T) {
+	_, bl, err := parseReport("lint", []byte(`{"violations": [], "baseline": {"new": 0, "unchanged": 451, "fixed": 1}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := lintOutcome(nil, bl, 0, "")
+	if out.Resolved != 1 || out.PreExisting != 451 {
+		t.Errorf("outcome = resolved %d, pre-existing %d; want 1 and 451", out.Resolved, out.PreExisting)
+	}
+	// The control: nothing fixed reports nothing resolved.
+	_, bl, _ = parseReport("lint", []byte(`{"violations": [], "baseline": {"new": 0, "unchanged": 451, "fixed": 0}}`))
+	if out := lintOutcome(nil, bl, 0, ""); out.Resolved != 0 {
+		t.Errorf("resolved = %d with nothing fixed", out.Resolved)
+	}
+}
