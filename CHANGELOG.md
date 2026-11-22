@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Not the fix, recorded because it looks like one: pinning the pool to a single connection also makes the catalog one database and **deadlocks**. The readers nest — `Entities()` yields from an open cursor while the loop body calls `AttributesFor()` — so the inner read waits forever for the connection the outer cursor holds, and a lint run that took seconds hung past 600s.
 
 ### Added
+- **`create navigation NativePhone`, with its bottom bar** (mendixlabs/mxcli#1912) — a native profile (`Navigation$NativeNavigationProfile`, which has no `Kind`) can now be created, and the profile's `{ }` block writes its bottom bar (`NativePages$BottomBarItem`), so a home page whose layout needs a bottom bar no longer stops at **CE6108**. The bottom bar is flat and page-only: a nested group or an `OnClick` other than `show page` is refused. An icon is a glyph (`Icon: glyph <code>`, `Forms$GlyphIcon`); a collection or image icon is refused. The shape is pinned against one Studio Pro-authored NativePhone profile (see `newNativeProfileBson`), so replacing a stored bottom bar is refused when one of its items holds anything else — another type, a key mxcli does not write, a non-glyph icon — instead of dropping it. Hybrid profiles remain unsupported.
 - **`alter published rest service … add operation in resource '<name>' { … }` and `drop operation <method> ['<path>'] in resource '<name>'`** (ako/mxcli#2449, mendixlabs/mxcli#1903) — one operation of a stored resource, written as `create` writes it, added or removed without restating the service; the resource's other operations, and everything MDL cannot spell about them, are written back as stored. An operation the resource already has, or a resource it does not have, is refused by check and exec.
 
 - **A business event message's operations are its children, and one message can both publish and subscribe** (ako/mxcli#2490) — `message X (…) { publish (Entity: M.P); subscribe (Entity: M.C, Microflow: M.H); };` writes one message with both flags and two operations; a consumed service's subscription is `consume X (Entity: …, Microflow: …);`. Declaring a message twice, once per operation (the only way before), stored two messages of one name and the deployment failed ("An item with the same key has already been added"); `check` and `exec` now refuse it. The keyword clauses `publish entity … microflow …` and `consume X entity … microflow …` still parse as deprecated aliases (MDL-DEPR075, MDL-DEPR076), and `fmt --upgrade` rewrites them.
@@ -1857,27 +1858,6 @@ Headline: **Widgets become first-class MDL rather than a second dialect.** Every
 - **A scoped translation run says what it did not consider** — `create or modify translations in Ledger for nl_NL` reported 212 translations set, and in the browser the page text switched to Dutch while the **menu** did not: navigation is a project-level document, not a module one, so `in Ledger` never reaches it. Measured on the reporting project, 151 strings scoped against 546 unscoped.
 
 - **`make digest-status` measures how far the bug-pattern digest has fallen behind**, per area — coverage is computed rather than quoted, because a figure written into prose is stale the next time anyone appends a finding.
-
-- **`create navigation NativePhone`** — the native counterpart to web navigation
-  profile creation (`f2e7c67a`, `b032ec05`). A native profile has no `Kind`
-  property at all (`Navigation$NativeNavigationProfile`, identified purely by
-  `$Type` + `Name`), so it gets its own builder rather than a branch in the web
-  one. Unlike the web kinds, no live Studio Pro create-and-read-back exists for
-  native profiles (PED/MCP explicitly rejects native profile authoring), so the
-  shape is pinned against a real Studio-Pro-authored NativePhone profile instead
-  — see the doc comment on `newNativeProfileBson`. `UpdateNavigationProfile`
-  now writes bottom bar menu items too (`NativePages$BottomBarItem`), reusing
-  the profile's `{ }` block as the web kinds do — so a home page whose layout
-  requires a bottom bar can be added to it directly, clearing **CE6108**
-  instead of needing Studio Pro. The native bottom bar is flat and page-only,
-  unlike the web `Menu`: a nested `MENU 'caption' { … }` group or an `OnClick`
-  other than `SHOW PAGE` is rejected rather than guessed at. Its icon is a
-  numeric glyph code — `Icon: glyph <code>` — round-tripping through
-  `Forms$GlyphIcon`, the one shape confirmed against a real Studio-Pro-authored
-  NativePhone profile; a collection or image icon (`Forms$IconCollectionIcon`/
-  `Forms$ImageIcon`) remains unconfirmed for a native item and is rejected —
-  see the doc comment on `navBottomBarItemBson`. Hybrid remains unsupported —
-  no reference document exists for it either.
 
 ### Changed
 

@@ -381,6 +381,9 @@ func navPatchNativeProfile(doc bson.D, spec types.NavigationProfileSpec) (bson.D
 			navOfflineConfigs(navGetArray(doc, "OfflineEntityConfigs"), spec.OfflineEntities))
 	}
 	if spec.HasMenu {
+		if err := navRefuseUnwritableBottomBar(navGetArray(doc, "BottomBarItems")); err != nil {
+			return nil, err
+		}
 		barItems := bson.A{int32(2)}
 		for _, mi := range spec.MenuItems {
 			bar, err := navBottomBarItemBson(mi)
@@ -392,6 +395,40 @@ func navPatchNativeProfile(doc bson.D, spec types.NavigationProfileSpec) (bson.D
 		doc = navSetField(doc, "BottomBarItems", barItems)
 	}
 	return doc, nil
+}
+
+// navBottomBarItemKeys are the keys navBottomBarItemBson writes. A menu clause
+// replaces the stored bottom bar whole, so a stored item that carries anything
+// else would lose it in silence.
+var navBottomBarItemKeys = map[string]bool{"$ID": true, "$Type": true, "Caption": true, "Icon": true, "Page": true}
+
+// navRefuseUnwritableBottomBar refuses to replace a stored bottom bar holding an
+// item this writer cannot restate: another $Type, a key it does not write, or
+// an icon other than a glyph. Its shape was pinned against one configured
+// fixture (see navBottomBarItemBson), not against what Studio Pro stores for
+// every item, so an unfamiliar item is refused rather than rewritten without
+// what it carries. An empty bottom bar, or one of items in the pinned shape, is
+// replaced as the statement says.
+func navRefuseUnwritableBottomBar(stored bson.A) error {
+	for _, el := range stored {
+		item, ok := el.(bson.D)
+		if !ok {
+			continue // the list marker
+		}
+		name := navGetString(item, "$Type")
+		if name != "NativePages$BottomBarItem" {
+			return fmt.Errorf("the native bottom bar holds a %s, which mxcli cannot write; change the bottom bar in Studio Pro", name)
+		}
+		for _, e := range item {
+			if !navBottomBarItemKeys[e.Key] {
+				return fmt.Errorf("a native bottom bar item stores %q, which mxcli does not write — replacing the bottom bar would drop it; change the bottom bar in Studio Pro", e.Key)
+			}
+		}
+		if icon := navGetDoc(item, "Icon"); icon != nil && navGetString(icon, "$Type") != "Forms$GlyphIcon" {
+			return fmt.Errorf("a native bottom bar item has a %s icon, which mxcli cannot write (only a glyph) — replacing the bottom bar would drop it; change the bottom bar in Studio Pro", navGetString(icon, "$Type"))
+		}
+	}
+	return nil
 }
 
 // navBottomBarItemBson builds a NativePages$BottomBarItem from a menu item spec.
