@@ -78,7 +78,7 @@ Sign off a blocking item with --annotations: readiness:<key> with status
 					continue
 				}
 				fmt.Fprintf(os.Stderr, "report %s ...\n", k)
-				env, err := rk.spec.collect(rk.cmd, projectPath)
+				env, err := collectKind(cmd, rk, projectPath)
 				if err != nil {
 					warnings = append(warnings, fmt.Sprintf("%s could not run: %v", k, err))
 					continue
@@ -86,7 +86,8 @@ Sign off a blocking item with --annotations: readiness:<key> with status
 				envs[k] = env
 			}
 			fmt.Fprintln(os.Stderr, "report quality ...")
-			if r, _, err := buildScoredReport(reportCmd, projectPath, io.Discard); err != nil {
+			var r *linter.Report
+			if err := safely(func() (err error) { r, _, err = buildScoredReport(reportCmd, projectPath, io.Discard); return err }); err != nil {
 				warnings = append(warnings, fmt.Sprintf("the scored report could not run: %v", err))
 			} else if quality, err = qualityJSON(r); err != nil {
 				return nil, err
