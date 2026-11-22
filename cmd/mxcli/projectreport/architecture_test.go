@@ -248,3 +248,46 @@ func TestArchitectureExcludeDocs(t *testing.T) {
 	_ = RenderMarkdown(&md, doc)
 	mustContain(t, md.String(), "2 app documents matching `Billing.ACT_*`, `Billing.Unused` are left out")
 }
+
+// A task queue runs flows of other modules, but its module does not use them:
+// the caller does, through the queue. `queue` and `by_name` edges made the
+// queue's module "depend" on every flow it runs, closing a false 9-module
+// cycle (ako/mxcli#2503).
+func TestQueueAndByNameAreNotModuleDependencies(t *testing.T) {
+	f := newFixture(t)
+	for _, m := range []string{"Rooster", "Ruilen", "Verlof", "OIDC"} {
+		f.module(m, "")
+	}
+	f.microflow("Ruilen.WFA_Goedkeuren", false, "")
+	f.microflow("Ruilen.SUB_Ruiling_Doorvoeren", false, "")
+	f.microflow("Verlof.SUB_Verlof_InRooster", false, "")
+	f.microflow("Rooster.SUB_Rooster", false, "")
+	// The queue lives in Rooster and runs Ruilen's and Verlof's flows.
+	f.ref("Rooster.TQ_RoosterMutaties", "TASK_QUEUE", "Ruilen.SUB_Ruiling_Doorvoeren", "MICROFLOW", "queue")
+	f.ref("Rooster.TQ_RoosterMutaties", "TASK_QUEUE", "Verlof.SUB_Verlof_InRooster", "MICROFLOW", "queue")
+	// Ruilen's caller places the call in Rooster's queue: Ruilen uses Rooster.
+	f.ref("Ruilen.WFA_Goedkeuren", "MICROFLOW", "Rooster.TQ_RoosterMutaties", "TASK_QUEUE", "enqueue")
+	f.call("Ruilen.WFA_Goedkeuren", "Ruilen.SUB_Ruiling_Doorvoeren")
+	// A constant in OIDC names a Rooster flow: configuration, not use.
+	f.ref("OIDC.ProvisioningMicroflow", "CONSTANT", "Rooster.SUB_Rooster", "MICROFLOW", "by_name")
+
+	d, err := CollectArchitecture(f.cat, ArchitectureOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	edges := map[string]bool{}
+	for _, e := range d.DomainEdges {
+		edges[e.From+"->"+e.To] = true
+	}
+	for _, bad := range []string{"Rooster->Ruilen", "Rooster->Verlof", "OIDC->Rooster"} {
+		if edges[bad] {
+			t.Errorf("false dependency %s (edges %v)", bad, edges)
+		}
+	}
+	if !edges["Ruilen->Rooster"] {
+		t.Errorf("the caller's use of the queue is Ruilen -> Rooster (edges %v)", edges)
+	}
+	if len(d.Cycles) != 0 {
+		t.Errorf("no cycle: %+v", d.Cycles)
+	}
+}

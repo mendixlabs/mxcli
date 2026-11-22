@@ -53,7 +53,15 @@ const (
 	RefKindEndpoint    = "endpoint"     // A consumed MCP service reads its server URL from a constant
 	RefKindByName      = "by_name"      // A constant's value (default or a configuration's) is a flow's qualified name: the flow is called by name
 	RefKindQueue       = "queue"        // A task queue runs a microflow or Java action a call places in it
+	RefKindEnqueue     = "enqueue"      // A microflow places a call in a task queue: the caller uses the queue (ako/mxcli#2503)
 )
+
+// RefKindsNotModuleUse are kinds whose edge does not mean the source's module
+// uses the target's: a queue does not depend on the flows queued on it (the
+// caller does, through `enqueue`), and a constant naming a flow is
+// configuration. Module dependencies and module cycles leave them out;
+// reachability (dead assets, callers) still counts them (ako/mxcli#2503).
+var RefKindsNotModuleUse = []string{RefKindQueue, RefKindByName}
 
 // RefKinds is every value that reaches refs.RefKind. It is the vocabulary a
 // consumer of the reference graph iterates when it must decide something per
@@ -72,6 +80,7 @@ var RefKinds = []string{
 	RefKindValue, RefKindMapping, RefKindSplit, RefKindSnippetCall,
 	RefKindMappingCall, RefKindStructure, RefKindTool, RefKindModel,
 	RefKindKey, RefKindEndpoint, RefKindByName, RefKindQueue,
+	RefKindEnqueue,
 }
 
 // Object types recorded in refs.SourceType and refs.TargetType — the catalog's
@@ -1505,8 +1514,9 @@ func (b *Builder) extractByNameRefs(stmt *Stmt, projectID, snapshotID string) in
 }
 
 // extractQueueRefs emits one `queue` edge from a task queue to each microflow
-// or Java action a call runs in it. The caller's own `call` edge is kept: the
-// caller still decides THAT it runs, the queue decides WHEN.
+// or Java action a call runs in it, and one `enqueue` edge from each microflow
+// that places a call in a queue to that queue. The caller's own `call` edge is
+// kept: the caller still decides THAT it runs, the queue decides WHEN.
 func (b *Builder) extractQueueRefs(stmt *Stmt, projectID, snapshotID string) int {
 	b.disown()
 	rows, err := b.tx.Query(`SELECT DISTINCT a.QueueRef, a.ActionRef,
@@ -1528,6 +1538,28 @@ func (b *Builder) extractQueueRefs(stmt *Stmt, projectID, snapshotID string) int
 	}
 	rows.Close()
 	count := 0
+	// The caller's side: the microflow that places the call uses the queue.
+	// Without it the only edge between the two modules ran from the queue's
+	// module to the queued flow's, the wrong way round (ako/mxcli#2503).
+	callers, err := b.tx.Query(`SELECT DISTINCT MicroflowQualifiedName, ModuleName, QueueRef
+		FROM activities_data WHERE COALESCE(QueueRef, '') != '' AND COALESCE(MicroflowQualifiedName, '') != '' ORDER BY 1, 3`)
+	if err == nil {
+		type use struct{ caller, module, queue string }
+		var uses []use
+		for callers.Next() {
+			var u use
+			if callers.Scan(&u.caller, &u.module, &u.queue) == nil {
+				uses = append(uses, u)
+			}
+		}
+		callers.Close()
+		for _, u := range uses {
+			if _, err := stmt.Exec(RefObjectMicroflow, "", u.caller, RefObjectTaskQueue, "", u.queue,
+				RefKindEnqueue, u.module, projectID, snapshotID); err == nil {
+				count++
+			}
+		}
+	}
 	for _, e := range edges {
 		target := RefObjectJavaAction
 		if e.isFlow {
