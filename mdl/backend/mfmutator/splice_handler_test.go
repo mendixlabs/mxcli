@@ -45,18 +45,18 @@ func handlerFlow() ([]bson.D, []bson.D) {
 	a := withEH(obj("a", "Microflows$ActionActivity", 250, 200), microflows.ErrorHandlingTypeCustomWithoutRollback)
 	dSet(a, "Size", "160;60") // resized in Studio Pro: kept
 	return []bson.D{
-		obj("start", "Microflows$StartEvent", 100, 200),
-		a,
-		obj("h", "Microflows$ActionActivity", 250, 330),
-		obj("m", "Microflows$ExclusiveMerge", 400, 200),
-		obj("end", "Microflows$EndEvent", 550, 200),
-	}, []bson.D{
-		flow("f1", "start", "a", 1, 3, false),
-		flow("f2", "a", "m", 1, 3, false),
-		flow("err", "a", "h", 2, 0, true),
-		flow("fh", "h", "m", 1, 2, false),
-		flow("f3", "m", "end", 1, 3, false),
-	}
+			obj("start", "Microflows$StartEvent", 100, 200),
+			a,
+			obj("h", "Microflows$ActionActivity", 250, 330),
+			obj("m", "Microflows$ExclusiveMerge", 400, 200),
+			obj("end", "Microflows$EndEvent", 550, 200),
+		}, []bson.D{
+			flow("f1", "start", "a", 1, 3, false),
+			flow("f2", "a", "m", 1, 3, false),
+			flow("err", "a", "h", 2, 0, true),
+			flow("fh", "h", "m", 1, 2, false),
+			flow("f3", "m", "end", 1, 3, false),
+		}
 }
 
 func TestSplice_ReplaceKeepsTheErrorHandler(t *testing.T) {
