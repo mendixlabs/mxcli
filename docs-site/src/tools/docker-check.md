@@ -62,6 +62,7 @@ CE0463 of the stored project:
 | Label | Meaning | Fix |
 |---|---|---|
 | `` stale widget definition — `mxcli fix widgets` fixes it `` | the resync clears it | `mxcli fix widgets -p app.mpr` updates the project's widgets and keeps MPR v2 |
+| `a value in a property the widget hides — update-widgets clears it by resetting <properties>` | the resync clears it by replacing values the project set with the widget's defaults: properties its editorConfig hides for the values given. The widget's type is unchanged. | not `fix widgets`, which drops the values and leaves a script that sets them to bring the error back: leave the properties out of the script, or change the values that hide them. `mxcli widget describe` says when it could not read the widget's hide rules. |
 | `persists after update-widgets` | the resync does not clear it: something in the stored widget is wrong in a way a resync does not repair (if mxcli wrote the widget, that is an mxcli defect worth reporting) | not a resync; see [Pluggable Widgets](../guides/pluggable-widgets.md) |
 
 The verdict and the exit status are always the stored project's. The re-check
