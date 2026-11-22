@@ -77,8 +77,20 @@ func ValidateDesignProperties(prog *ast.Program, projectPath string, project fun
 
 // nativeLayoutResolver answers whether a layout, by qualified name, is native:
 // one the script creates with a native layout type, or one the project holds.
-// The project is read once, on the first question.
+// The project is read once, on the first question. A layout it cannot resolve
+// is answered web.
 func nativeLayoutResolver(prog *ast.Program, project func() backend.FullBackend) func(string) bool {
+	resolve := layoutPlatformResolver(prog, project)
+	return func(qn string) bool {
+		native, _ := resolve(qn)
+		return native
+	}
+}
+
+// layoutPlatformResolver is nativeLayoutResolver that also says whether it
+// knows: known is false for a layout neither the script nor the project holds,
+// for a caller that must not guess.
+func layoutPlatformResolver(prog *ast.Program, project func() backend.FullBackend) func(string) (native, known bool) {
 	native := map[string]bool{}
 	for _, stmt := range prog.Statements {
 		if s, ok := stmt.(*ast.CreateLayoutStmt); ok {
@@ -88,25 +100,25 @@ func nativeLayoutResolver(prog *ast.Program, project func() backend.FullBackend)
 		}
 	}
 	loaded := project == nil
-	return func(qn string) bool {
+	return func(qn string) (bool, bool) {
 		if n, ok := native[qn]; ok {
-			return n
+			return n, true
 		}
 		if loaded {
-			return false
+			return false, false
 		}
 		loaded = true
 		b := project()
 		if b == nil {
-			return false
+			return false, false
 		}
 		layouts, err := b.ListLayouts()
 		if err != nil {
-			return false
+			return false, false
 		}
 		h, err := NewContainerHierarchyFromBackend(b)
 		if err != nil {
-			return false
+			return false, false
 		}
 		for _, l := range layouts {
 			name := h.GetModuleName(h.FindModuleID(l.ContainerID)) + "." + l.Name
@@ -114,7 +126,8 @@ func nativeLayoutResolver(prog *ast.Program, project func() backend.FullBackend)
 				native[name] = l.Native
 			}
 		}
-		return native[qn]
+		n, ok := native[qn]
+		return n, ok
 	}
 }
 

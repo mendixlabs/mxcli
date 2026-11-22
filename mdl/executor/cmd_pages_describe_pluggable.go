@@ -130,12 +130,17 @@ func extractCustomWidgetType(ctx *ExecContext, w map[string]any) string {
 		case "com.mendix.widget.web.image.Image":
 			return "image"
 		default:
-			// Extract last part of widget ID and uppercase it
+			// The last part of the widget ID, lowercased. It routes describe,
+			// so it must not name a dedicated branch: those were written for
+			// the web widgets matched above, and another widget ending in the
+			// same segment — the native Gallery and Image — was described as
+			// the web one and rebuilt as it on re-run.
 			parts := strings.Split(widgetID, ".")
-			if len(parts) > 0 {
-				return strings.ToLower(parts[len(parts)-1])
+			seg := strings.ToLower(parts[len(parts)-1])
+			if isKnownCustomWidgetType(seg) {
+				return "customwidget"
 			}
-			return strings.ToLower(widgetID)
+			return seg
 		}
 	}
 	return ""

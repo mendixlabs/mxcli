@@ -10,19 +10,20 @@ description: "Inspect and change navigation profiles in MDL — home pages, menu
 
 | lines | section |
 |---|---|
-| 32-41 | When to Use This Skill |
-| 42-60 | Navigation Concepts |
-| 61-78 | Show Commands (Read-Only) |
-| 79-382 | CREATE OR MODIFY NAVIGATION |
-| 383-421 | Change One Item: ALTER NAVIGATION |
-| 422-432 | Round-Trip Workflow |
-| 433-454 | Catalog Queries |
-| 455-494 | Common Patterns |
-| 495-547 | Menu Documents (standalone, reusable) |
-| 548-618 | Offline Profiles |
-| 619-635 | Checklist |
-| 636-639 | Offline synchronization (`CREATE NAVIGATION … SYNC (…)`) |
-| 640-642 | Menu documents (CREATE OR MODIFY/DESCRIBE/DROP MENU) |
+| 33-42 | When to Use This Skill |
+| 43-63 | Navigation Concepts |
+| 64-81 | Show Commands (Read-Only) |
+| 82-385 | CREATE OR MODIFY NAVIGATION |
+| 386-424 | Change One Item: ALTER NAVIGATION |
+| 425-435 | Round-Trip Workflow |
+| 436-457 | Catalog Queries |
+| 458-497 | Common Patterns |
+| 498-550 | Menu Documents (standalone, reusable) |
+| 551-621 | Offline Profiles |
+| 622-673 | Native Profiles |
+| 674-691 | Checklist |
+| 692-695 | Offline synchronization (`CREATE NAVIGATION … SYNC (…)`) |
+| 696-698 | Menu documents (CREATE OR MODIFY/DESCRIBE/DROP MENU) |
 
 <!-- /skill-index -->
 # Navigation Management Skill
@@ -49,7 +50,9 @@ Use when the user asks to:
   | `Phone` | `PhoneOffline` |
   | `Tablet` | `TabletOffline` |
 
-  An invented name (`Mobile`, `Desktop`) is an error, not a new profile: Mendix routes on **User-Agent** to its own kinds, so a profile the platform does not define can never be reached. Native profiles are a different document type and are not creatable from MDL.
+  An invented name (`Mobile`, `Desktop`) is an error, not a new profile: Mendix routes on **User-Agent** to its own kinds, so a profile the platform does not define can never be reached.
+
+  Native profiles are a different document type (`Navigation$NativeNavigationProfile`, no `Kind` property — identified purely by `$Type` + `Name`) and have their own, separate closed set: currently just `NativePhone`. `create or modify navigation NativePhone` creates it the same way the web kinds are created. Hybrid is not supported (no reference document exists for it). A freshly created NativePhone profile has no bottom bar menu items — fill them with a `{ }` block (flat, `OnClick: show page` only, no `Icon:` — see "Native Profiles" below) if the home page's layout requires a bottom bar (CE6108).
 - **Offline Profiles** — An offline profile makes the app work without a connection (a PWA with a local database that syncs). It is not a different document — same properties as its online twin — but it **constrains every page it can reach**, see below.
 - **Home Page** — The default page shown after login. Can be a PAGE or MICROFLOW.
 - **Role-Based Home Pages** — Override the default home page per user role (e.g., admins see a dashboard, users see a task list).
@@ -616,12 +619,65 @@ starts empty and Studio Pro fills it from the entities the reachable pages use;
 only rows that differ from the defaults (`syncMode: Online`, no constraint) are
 stored. MDL does not author per-entity sync modes — set those in Studio Pro.
 
+## Native Profiles
+
+`NativePhone` is created the same way:
+
+```sql
+mdl 1;
+create or modify navigation NativePhone
+  home page NativeMobile.Home_Native;
+```
+
+It is a different document type (`Navigation$NativeNavigationProfile`) from the
+web kinds above — no `Kind` property, identified purely by `$Type` + `Name` —
+but the statement and the create-then-fill flow are the same.
+
+**The bottom bar is the profile's `{ }` block, reusing the same item syntax as
+the web kinds — but it is flat and page-only.** A native profile's bottom bar
+(`NativePages$BottomBarItem`) has no sub-menus and stores only a page, unlike
+the web `Menu`, so:
+
+```sql
+mdl 1;
+create or modify navigation NativePhone
+  home page NativeMobile.Home_Native
+  {
+    menu item 'Home' ( OnClick: show page NativeMobile.Home_Native, Icon: glyph 57377 )
+  };
+```
+
+- Every item needs `OnClick: show page …` — any other action (`call microflow`,
+  `call nanoflow`, `sign out`, …) and an item with no action are rejected (the
+  native bottom bar has no other action). A page argument is rejected too.
+- Nested `menu 'caption' { … }` sub-items are rejected — Mendix's bottom bar
+  menu cannot nest.
+- `Icon: glyph <code>` is the one confirmed icon shape for a native bottom bar
+  item — a numeric code, matching the one real reference document
+  (`Forms$GlyphIcon`). A collection or image icon (`Forms$IconCollectionIcon`/
+  `Forms$ImageIcon`) is rejected — that shape has never been confirmed as
+  valid here; add it in Studio Pro instead.
+
+If the home page's layout has "Bottom bar" enabled, Mendix requires that page
+to appear in the profile's bottom bar menu and reports **CE6108** ("If the
+bottom bar is enabled on a home page, then that page must be included in the
+bottom bar menu of the native navigation profile...") until it does. Either
+include the page in the `{ }` block as above, or point the home page at a
+layout with no bottom bar.
+
+A profile with no home page at all (`create navigation NativePhone;` with
+nothing else) is a valid **empty** profile — Mendix requires a home page before
+the profile can actually route anywhere, reported as **CE0527** ("Select a
+default home page for this profile in the navigation document") until one is
+set, same as leaving a web profile's home page unset.
+
 ## Checklist
 
-- [ ] Profile name is one of Mendix's web kinds (`Responsive`/`Phone`/`Tablet`, or their `*Offline` twins) — an invented name is an error, not a new profile
+- [ ] Profile name is one of Mendix's web kinds (`Responsive`/`Phone`/`Tablet`, or their `*Offline` twins), or the native kind (`NativePhone`) — an invented name is an error, not a new profile
 - [ ] For an **offline** profile, no page it can reach binds an attribute across more than one association (CE6206)
 - [ ] For an **offline** profile, `progressive web app ( Precaching: true )` is set — without it no page opens offline
 - [ ] `app title` is set — a new project's browser tab reads `Mendix - <page title>` otherwise
+- [ ] For a **native** profile whose home page's layout requires a bottom bar (CE6108), the `{ }` block includes that page — flat items only, `OnClick: show page` only; `Icon: glyph <code>` is supported, a collection or image icon is not (add those in Studio Pro)
 - [ ] All PAGE/MICROFLOW targets are fully qualified (`Module.Name`)
 - [ ] Role references in `for` clauses are fully qualified (`Module.Role`)
 - [ ] Menu items are in `{ }` with no `;` between them; sub-menu items in `menu 'caption' { ... }`

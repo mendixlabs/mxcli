@@ -43,9 +43,10 @@ func (b *Backend) AddNavigationProfile(navDocID model.ID, name string) error {
 	if b.writer == nil {
 		return fmt.Errorf("AddNavigationProfile: not connected for writing")
 	}
-	kind, ok := types.CanonicalProfileKind(name)
+	kind, isNative, ok := resolveProfileKind(name)
 	if !ok {
-		return fmt.Errorf("cannot create navigation profile %q: Mendix's web profiles are %s", name, strings.Join(types.WebProfileKindNames(), ", "))
+		return fmt.Errorf("cannot create navigation profile %q: Mendix's web profiles are %s, and its native profiles are %s",
+			name, strings.Join(types.WebProfileKindNames(), ", "), strings.Join(types.NativeProfileKindNames(), ", "))
 	}
 
 	raw, err := b.reader.GetRawUnitBytes(string(navDocID))
@@ -71,7 +72,12 @@ func (b *Backend) AddNavigationProfile(navDocID model.ID, name string) error {
 		}
 	}
 
-	profile := newWebProfileBson(kind)
+	var profile bson.D
+	if isNative {
+		profile = newNativeProfileBson(kind)
+	} else {
+		profile = newWebProfileBson(kind)
+	}
 	if !b.declaresThrowPartialSyncError() {
 		profile = withoutKey(profile, "ThrowPartialSyncError")
 	}
@@ -103,6 +109,22 @@ func withoutKey(d bson.D, key string) bson.D {
 		}
 	}
 	return out
+}
+
+// resolveProfileKind maps a user-written profile name to its canonical Kind (web)
+// or Name (native) and reports which family it belongs to. The two lookups are
+// kept apart rather than merged into one map: a web profile is identified by its
+// Kind property, a native profile has no Kind at all and is identified purely by
+// $Type + Name (see the doc comment on newNativeProfileBson) — blurring the two
+// would make it easy to build a profile with the wrong shape for its own $Type.
+func resolveProfileKind(name string) (kind string, isNative bool, ok bool) {
+	if k, ok := types.CanonicalProfileKind(name); ok {
+		return k, false, true
+	}
+	if k, ok := types.CanonicalNativeProfileKind(name); ok {
+		return k, true, true
+	}
+	return "", false, false
 }
 
 // newWebProfileBson builds an empty profile of the given kind, with every key a
@@ -151,5 +173,85 @@ func newWebProfileBson(kind string) bson.D {
 		// reference project suggested. Turning a PWA on is a user decision.
 		{Key: "ProgressiveWebAppSettings", Value: nil},
 		{Key: "ThrowPartialSyncError", Value: true},
+	}
+}
+
+// newNativeProfileBson builds an empty NativePhone profile.
+//
+// Unlike the web kinds, this shape is NOT pinned by adding a profile through
+// Studio Pro's own model API and reading back what it materialised — that
+// channel does not exist for native profiles at all, on any machine: PED/MCP
+// explicitly rejects native profile authoring (docs/03-development/
+// PED_MCP_CAPABILITIES.md, mdl/backend/mcp/navigation.go), independent of this
+// repo's own environment. The best available evidence instead is a real
+// Studio-Pro-authored NativePhone profile from native-pwa-migrator's
+// fixtures/native-phone-minimal (a raw BSON dump of the .mxunit file, not a PED
+// read) — but that document is a CONFIGURED profile, not a freshly-created one,
+// so it proves the key set, $Type names, and storage keys, not which values are
+// Studio Pro's create-time defaults versus this fixture author's choices.
+//
+// A native profile has no Kind property at all (confirmed against
+// modelsdk/gen/navigation/types.go: NativeNavigationProfile carries no `kind`
+// field, unlike NavigationProfile) — it is distinguished purely by $Type + Name.
+//
+// Per-field provenance, so a future re-pin knows what to re-check:
+//   - Name, $Type: definitional.
+//   - OfflineEntityConfigs, RoleBasedNativeHomePages: the fixture's own document
+//     carries these EMPTY (marker 3 / marker 1 respectively) even though it is
+//     otherwise configured — direct evidence of the unconfigured state, not an
+//     inference.
+//   - NativeHomePage: written explicit nil here, NOT the fixture's configured
+//     home page — this is exactly what UpdateNavigationProfile fills in
+//     afterwards (mirrors NotFoundHomepage/ProgressiveWebAppSettings on the web
+//     side: an unset single child is an explicit null, never an empty
+//     placeholder sub-document). Backed by a real signal in the decoder, not a
+//     guess: NativeNavigationProfile.InitFromRaw only sets nativeHomePage
+//     `if child, err := codec.DecodeChild(raw, "NativeHomePage"); err == nil`,
+//     i.e. the shipped read path already treats a missing/null NativeHomePage as
+//     an ordinary, non-error state.
+//   - BottomBarItems: empty, marker 2 — the fixture's own (non-empty) BottomBarItems
+//     uses marker 2, and the marker is per-field-type rather than count-dependent
+//     (proven by newWebProfileBson itself: HomeItems/AppTitle.Items/
+//     OfflineEntityConfigs are all empty in that SAME reference document yet use
+//     three different markers — 3, 3, 3 vs Menu.Items' 1 — so an empty
+//     collection keeps its type's marker rather than switching to some
+//     "generic empty" one). UpdateNavigationProfile does not patch BottomBarItems
+//     for native profiles (a separate, already-tracked gap), so this value
+//     persists until Studio Pro or a future writer sets it.
+//   - ApplyScreenTransition, EncryptionDbEnabled, LocalFileEncryptionEnabled,
+//     LoggingEnabled, NativeNavigationEnabled, OtaEnabled,
+//     SessionCookieEncryptionEnabled: false, and ScreenNavigationTransition/
+//     PopupNavigationTransition: "SystemDefault" — carried from the fixture.
+//     These are opt-in toggles a minimal fixture is unlikely to have touched,
+//     but that is inference, not measurement.
+//   - NetworkTimeoutMs (60000) and ThrowPartialSyncError (false): carried from
+//     the fixture as observed values. Flagged as the least-certain fields here —
+//     unlike the booleans above, there is no structural reason to expect these
+//     specific values are Studio Pro's create-time defaults rather than this
+//     fixture author's settings that happen not to have been touched.
+//   - HermesEnabled: deliberately OMITTED. modelsdk/gen exposes a setter for it,
+//     but the fixture's real document does not carry this key at all — writing
+//     a value here would be exactly the "assembled from a guess" failure mode
+//     this whole feature exists to avoid.
+func newNativeProfileBson(kind string) bson.D {
+	return bson.D{
+		{Key: "$ID", Value: navID()},
+		{Key: "$Type", Value: "Navigation$NativeNavigationProfile"},
+		{Key: "ApplyScreenTransition", Value: false},
+		{Key: "BottomBarItems", Value: bson.A{int32(2)}},
+		{Key: "EncryptionDbEnabled", Value: false},
+		{Key: "LocalFileEncryptionEnabled", Value: false},
+		{Key: "LoggingEnabled", Value: false},
+		{Key: "Name", Value: kind},
+		{Key: "NativeHomePage", Value: nil},
+		{Key: "NativeNavigationEnabled", Value: false},
+		{Key: "NetworkTimeoutMs", Value: int32(60000)},
+		{Key: "OfflineEntityConfigs", Value: bson.A{int32(3)}},
+		{Key: "OtaEnabled", Value: false},
+		{Key: "PopupNavigationTransition", Value: "SystemDefault"},
+		{Key: "RoleBasedNativeHomePages", Value: bson.A{int32(1)}},
+		{Key: "ScreenNavigationTransition", Value: "SystemDefault"},
+		{Key: "SessionCookieEncryptionEnabled", Value: false},
+		{Key: "ThrowPartialSyncError", Value: false},
 	}
 }
