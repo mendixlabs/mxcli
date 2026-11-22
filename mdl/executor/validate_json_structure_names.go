@@ -35,6 +35,9 @@ func ValidateJsonStructureNames(prog *ast.Program) []linter.Violation {
 		if !ok || (len(s.CustomNameMap) == 0 && len(s.CustomItemNameMap) == 0) {
 			continue
 		}
+		// A name that is itself invalid (CE9524) is judged whether or not its key
+		// is found: it needs no snippet.
+		out = append(out, invalidCustomNameViolations(s)...)
 		keys, arrayKeys, rootIsArray, err := types.SnippetKeys(s.JsonSnippet)
 		if err != nil {
 			// An unparseable snippet is a different, louder failure reported by
@@ -117,5 +120,59 @@ func sortedSet(m map[string]bool) []string {
 		out = append(out, k)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// validCustomName reports whether Mendix accepts name as a JSON element's custom
+// name. Measured on MxBuild 11.16.1 over 90 names (MDL-JSON03): an ASCII letter or
+// underscore, then ASCII letters, digits or underscores, a lone underscore is
+// refused, and so is every platform-reserved word in any case (Owner, ChangedDate,
+// Type, Id, GUID, Object, class, null, …). `String`, `System`, `Name`, `Value`,
+// `Entity`, `Date`, `List` and `User` are accepted.
+func validCustomName(name string) bool {
+	if name == "" || name == "_" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		letter := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+		digit := c >= '0' && c <= '9'
+		if !letter && !(digit && i > 0) {
+			return false
+		}
+	}
+	return !types.IsPlatformReserved(name)
+}
+
+// invalidCustomNameViolations reports (MDL-JSON03) each CUSTOM NAME MAP name, and
+// each `item of` name, that MxBuild rejects as CE9524. The default name of a member
+// whose JSON key is invalid is sanitised, so only a name the author wrote counts.
+func invalidCustomNameViolations(s *ast.CreateJsonStructureStmt) []linter.Violation {
+	var out []linter.Violation
+	check := func(prefix string, m map[string]string) {
+		for _, k := range sortedKeysOf(m) {
+			name := m[k]
+			if validCustomName(name) {
+				continue
+			}
+			out = append(out, linter.Violation{
+				RuleID:   "MDL-JSON03",
+				Severity: linter.SeverityError,
+				Message: fmt.Sprintf("json structure %s: `%s'%s' as '%s'` is not a name Mendix accepts — "+
+					"mxbuild reports CE9524 \"JSON element … has an invalid custom name '%s'\"",
+					s.Name.String(), prefix, k, name, name),
+				Location: linter.Location{
+					Module:       s.Name.Module,
+					DocumentType: "json structure",
+					DocumentName: s.Name.Name,
+				},
+				Suggestion: "Start with an ASCII letter or underscore and continue with ASCII letters, digits or " +
+					"underscores, and avoid platform-reserved words (Owner, Type, Id, class, …). A member whose " +
+					"JSON key is invalid needs no custom name: its default name is sanitised.",
+			})
+		}
+	}
+	check("", s.CustomNameMap)
+	check("item of ", s.CustomItemNameMap)
 	return out
 }

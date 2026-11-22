@@ -1,0 +1,15 @@
+mdl 1;
+-- CONTROL for json-structure-invalid-custom-name.fail.mdl: custom names MxBuild 11.16.1
+-- builds clean, including words that look reserved but are not (String, System, Value,
+-- Entity, Date, List, User).
+create json structure MyFirstModule.JS_GoodNames
+  sample '{"a": "x", "b": "x", "c": "x", "d": "x", "e": "x", "f": "x", "tags": ["t"], "$type": "s", "owner": "o"}'
+  custom name map (
+    'a' as 'Good_Name1',
+    'b' as '_x',
+    'c' as 'String',
+    'd' as 'System',
+    'e' as 'Value',
+    'f' as 'Entity',
+    item of 'tags' as 'Tag'
+  );
