@@ -260,6 +260,26 @@ func AddVerdicts(e Entry, kind string, specs []string) (Entry, error) {
 	return e, nil
 }
 
+// CheckRequirementIDs refuses a verdict spec ("<id>" or "<id>:<reason>")
+// naming a requirement the plan does not have. A nil known set means there is
+// no plan to check against, and nothing is refused. Shared by the flags and
+// --from-json, so both refuse with the same words.
+func CheckRequirementIDs(specs []string, known map[string]bool) error {
+	for _, spec := range specs {
+		id, _, _ := strings.Cut(spec, ":")
+		// Shape first: "nope" is not an id at all, and "no requirement nope
+		// in the plan" would send the reader looking for it.
+		if _, err := VerdictLine(VerdictChanges, id, ""); err != nil {
+			return err
+		}
+		if known != nil && !known[strings.ToLower(strings.TrimSpace(id))] {
+			return fmt.Errorf("no requirement %s in the plan ('brain list --kind requirement' lists them; "+
+				"one that is only staged must be promoted before a verdict can name it)", strings.TrimSpace(id))
+		}
+	}
+	return nil
+}
+
 // RequirementIDs is the set of requirement ids the plan has.
 func (s *Store) RequirementIDs() (map[string]bool, error) {
 	vs, err := s.loadVerdicts()

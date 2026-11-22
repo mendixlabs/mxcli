@@ -20,9 +20,14 @@ import (
 	"time"
 )
 
-// BatchItem is one entry of `brain capture --from-json`. The fields are the
-// input half of what `staged --json` and `list --json` print, so a caller can
-// feed a list straight back in.
+// BatchItem is one entry of `brain capture --from-json`, with a field for each
+// capture flag that describes an entry.
+//
+// It is NOT the shape `staged --json` or `list --json` prints, and their output
+// cannot be fed back in: it carries id, kind, date and shard, which are refused
+// as unknown fields, and it reports acceptances and verdicts as parsed objects
+// rather than as the flag specs below. A round trip would need its own design
+// (which output fields to ignore, how an object maps back to a spec).
 type BatchItem struct {
 	// Text is the single-argument form of capture: first line title, the rest
 	// body. Give it or Title (with an optional Body), not both.
@@ -33,6 +38,23 @@ type BatchItem struct {
 	Slice   string   `json:"slice,omitempty"`
 	Open    bool     `json:"open,omitempty"`
 	Source  string   `json:"source,omitempty"`
+	// Accepts, Changes and PartlyMeets are --accepts, --changes and
+	// --partly-meets: each "<value>" or "<value>:<reason>", written into the
+	// body as the lines lint, check and plan read (ako/mxcli#2524).
+	Accepts     []string `json:"accepts,omitempty"`
+	Changes     []string `json:"changes,omitempty"`
+	PartlyMeets []string `json:"partly_meets,omitempty"`
+}
+
+// BatchChecks is what BuildBatch needs from outside the items.
+type BatchChecks struct {
+	// NormalizeSource resolves an item's source the way --source does on the
+	// command line; nil leaves sources as given.
+	NormalizeSource func(string) (string, error)
+	// KnownRequirements is the plan's requirement ids, which a verdict must
+	// name. Nil means there is no plan to check against (no store yet), and
+	// ids are not checked — as the flags behave.
+	KnownRequirements map[string]bool
 }
 
 // ParseBatch reads a JSON array of items. Unknown fields are refused: a
@@ -59,16 +81,19 @@ func ParseBatch(r io.Reader) ([]BatchItem, error) {
 // writes anything. The first invalid item fails the whole batch, named by its
 // index in the array, so nothing is queued from a list that is partly wrong.
 //
-// normalizeSource resolves an item's source the way --source does on the
-// command line; nil leaves sources as given.
-func BuildBatch(items []BatchItem, now time.Time, normalizeSource func(string) (string, error)) ([]Entry, error) {
+// Acceptances and verdicts are added exactly as the flags add them, in the same
+// order, so the two spellings of one decision produce the same entry.
+func BuildBatch(items []BatchItem, now time.Time, checks BatchChecks) ([]Entry, error) {
 	out := make([]Entry, 0, len(items))
 	for i, it := range items {
 		e, err := it.entry(now)
-		if err == nil && it.Source != "" && normalizeSource != nil {
-			e.Source, err = normalizeSource(it.Source)
+		if err == nil && it.Source != "" && checks.NormalizeSource != nil {
+			e.Source, err = checks.NormalizeSource(it.Source)
 		} else if err == nil {
 			e.Source = it.Source
+		}
+		if err == nil {
+			e, err = it.addVerdictsAndAcceptances(e, checks.KnownRequirements)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("items[%d]: %w; nothing was queued", i, err)
@@ -76,6 +101,20 @@ func BuildBatch(items []BatchItem, now time.Time, normalizeSource func(string) (
 		out = append(out, e)
 	}
 	return out, nil
+}
+
+func (it BatchItem) addVerdictsAndAcceptances(e Entry, known map[string]bool) (Entry, error) {
+	if err := CheckRequirementIDs(append(append([]string{}, it.Changes...), it.PartlyMeets...), known); err != nil {
+		return Entry{}, err
+	}
+	e, err := AddVerdicts(e, VerdictChanges, it.Changes)
+	if err != nil {
+		return Entry{}, err
+	}
+	if e, err = AddVerdicts(e, VerdictPartly, it.PartlyMeets); err != nil {
+		return Entry{}, err
+	}
+	return AddAcceptances(e, it.Accepts)
 }
 
 func (it BatchItem) entry(now time.Time) (Entry, error) {

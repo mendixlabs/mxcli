@@ -317,7 +317,7 @@ cap: the cap is what stops the store becoming a file nobody reads.
 | `mxcli brain init -p app.mpr` | Creates `docs/brain/`. Refuses a `docs/brain/` it did not write |
 | `mxcli brain capture "<text>" [-a @Anchor]…` | Queues an entry. Never commits |
 | `mxcli brain staged [--since <id>] [--slice <n>] [--fail-if-empty]` | Lists the queue with the shard each entry would land in. `--since` is the slice boundary — see below |
-| `mxcli brain capture --from-json <file\|->` | Queues a JSON array of entries as one act: every item validated first, duplicates skipped. Use it for a list, not a loop of captures |
+| `mxcli brain capture --from-json <file\|->` | Queues a JSON array of entries as one act: every item validated first, duplicates skipped. Use it for a list, not a loop of captures. Per item: `text` (or `title`+`body`), `anchors`, `slice`, `open`, `source`, and `accepts` / `changes` / `partly_meets` — the values of `--accepts` / `--changes` / `--partly-meets`, e.g. `"accepts": ["CONV010:demo app"]` |
 | `mxcli brain promote <id>… [--to <shard>]` | Writes them into their shards, all or none. The human step. Re-run after an interruption completes it |
 | `mxcli brain drop <id>` | Removes it from the queue or from its shard |
 | `mxcli brain capture "<text>" --slice <name> [-a @Anchor]…` | Queues a **requirement** of that slice |
