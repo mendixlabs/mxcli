@@ -353,6 +353,7 @@ func jsonToBSONWithMappingAndObjectType(data map[string]any, idMapping map[strin
 	var valueType string
 	var required bool
 	var isLinked bool
+	var translations []types.PropertyTranslation
 	var dataSourceProp string
 	var nestedObjectTypeID string
 	var nestedPropertyIDs map[string]PropertyTypeIDEntry
@@ -398,6 +399,11 @@ func jsonToBSONWithMappingAndObjectType(data map[string]any, idMapping map[strin
 		} else if key == "ValueType" && isPropertyType {
 			// For PropertyTypes, extract ValueType info including nested ObjectType, DefaultValue, Type, Required
 			nestedPropertyIDs = make(map[string]PropertyTypeIDEntry)
+			// The widget-shipped default text, for a visible text template the
+			// author leaves unset (ako/mxcli#2518) as for an item's (#891).
+			if vt, ok := val.(map[string]any); ok {
+				translations = readPropertyTranslations(vt["Translations"])
+			}
 			elem.Value = jsonValueToBSONWithNestedObjectType(val, idMapping, &valueTypeID, &nestedObjectTypeID, nestedPropertyIDs, &nestedKeyOrder, &defaultValue, &valueType, &required, &isLinked, &dataSourceProp)
 		} else {
 			elem.Value = jsonValueToBSONWithMappingAndObjectType(val, idMapping, propertyTypeIDs, &valueTypeID, key == "ValueType", objectTypeID)
@@ -409,13 +415,14 @@ func jsonToBSONWithMappingAndObjectType(data map[string]any, idMapping map[strin
 	// Record PropertyType IDs
 	if isPropertyType && propertyKey != "" {
 		entry := PropertyTypeIDEntry{
-			PropertyTypeID:     propertyTypeIDVal,
-			ValueTypeID:        valueTypeID,
-			DefaultValue:       defaultValue,
-			ValueType:          valueType,
-			Required:           required,
-			IsLinked:           isLinked,
-			DataSourceProperty: dataSourceProp,
+			PropertyTypeID:      propertyTypeIDVal,
+			ValueTypeID:         valueTypeID,
+			DefaultValue:        defaultValue,
+			ValueType:           valueType,
+			Required:            required,
+			IsLinked:            isLinked,
+			DataSourceProperty:  dataSourceProp,
+			DefaultTranslations: translations,
 		}
 		if nestedObjectTypeID != "" {
 			entry.ObjectTypeID = nestedObjectTypeID

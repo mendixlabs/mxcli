@@ -260,6 +260,26 @@ func extractVisibilityRulesFromJS(js string) ([]types.WidgetVisibilityRule, edit
 				keys = kept
 			}
 		}
+		if !ok && len(condKeys) == 0 {
+			// `(A || B) && hide(…)`: hidden when ANY disjunct holds, which is one
+			// rule per disjunct — "any rule hiding it wins" is exactly a
+			// disjunction, so nothing is approximated (ako/mxcli#2518).
+			if terms, dok := disjunctiveGuard(js, callStart, itemIdent); dok {
+				stats.Recognized++
+				for _, key := range keys {
+					for _, term := range terms {
+						sig := listKey + "\x00" + key + "\x00" + term.PropertyKey + term.Operator + term.Value + term.Scope
+						if seen[sig] {
+							continue
+						}
+						seen[sig] = true
+						c := term
+						rules = append(rules, types.WidgetVisibilityRule{PropertyKey: key, ListPropertyKey: listKey, HiddenWhen: &c})
+					}
+				}
+				continue
+			}
+		}
 		if !ok {
 			// `<outer> ? <inner> && hide(...)` — a ternary THEN branch carrying a
 			// second condition. Held back and resolved after the loop, once the
@@ -394,6 +414,107 @@ func extractVisibilityRulesFromJS(js string) ([]types.WidgetVisibilityRule, edit
 type ternaryThenCandidate struct {
 	listKey, key string
 	inner, outer types.WidgetVisibilityCondition
+}
+
+// disjunctiveGuard reads the guard of a hide written `(A || B || …) && hide(…)`
+// as a statement of its own, returning one condition per disjunct. The Data
+// grid Drop-down filter hides emptyOptionCaption this way:
+//
+//	(e.filterable||e.multiSelect)&&A.hidePropertyIn(t,e,"emptyOptionCaption")
+//
+// It is exact or it fails: the parenthesized disjunction must be the whole
+// guard (bounded by a statement separator, not inside a guarded group, not one
+// conjunct of a chain), and every disjunct must be a condition the vocabulary
+// represents on its own — a disjunct that is itself a conjunction fails.
+func disjunctiveGuard(js string, callStart int, itemIdent string) ([]types.WidgetVisibilityCondition, bool) {
+	pre := strings.TrimRight(js[:callStart], " ")
+	if at := nsPrefix(pre); at >= 0 {
+		pre = pre[:at]
+	}
+	pre = stripGroupSiblings(strings.TrimRight(pre, " "))
+	if strings.HasSuffix(pre, "(") {
+		pre = strings.TrimRight(pre[:len(pre)-1], " ")
+	}
+	if !strings.HasSuffix(pre, "&&") {
+		return nil, false
+	}
+	pre = strings.TrimRight(pre[:len(pre)-2], " ")
+	if !strings.HasSuffix(pre, ")") {
+		return nil, false
+	}
+	open := matchingOpenParen(pre)
+	if open < 0 {
+		return nil, false
+	}
+	head := strings.TrimRight(stripReturnPrefixHead(pre[:open]), " ")
+	switch {
+	case head == "", strings.HasSuffix(head, ";"), strings.HasSuffix(head, "{"):
+	case strings.HasSuffix(head, ","):
+		if insideOpenGroup(head) {
+			return nil, false
+		}
+	default:
+		return nil, false
+	}
+	terms := splitTopLevelOr(pre[open+1 : len(pre)-1])
+	if len(terms) < 2 {
+		return nil, false
+	}
+	aliases := enclosingAliases(js, callStart)
+	out := make([]types.WidgetVisibilityCondition, 0, len(terms))
+	for _, term := range terms {
+		c, ok := guardToCondition(strings.TrimSpace(term), false, aliases, itemIdent)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, c)
+	}
+	return out, true
+}
+
+// stripReturnPrefixHead drops a trailing `return` keyword from the text before
+// a guard: `return(A||B)&&hide(…)` is a statement-level guard.
+func stripReturnPrefixHead(head string) string {
+	trimmed := strings.TrimRight(head, " ")
+	if strings.HasSuffix(trimmed, "return") {
+		before := trimmed[:len(trimmed)-len("return")]
+		if before == "" || !isIdentByte(before[len(before)-1]) {
+			return before
+		}
+	}
+	return head
+}
+
+// splitTopLevelOr splits s at each `||` outside parentheses, brackets and
+// string literals.
+func splitTopLevelOr(s string) []string {
+	var out []string
+	depth, start := 0, 0
+	inStr := byte(0)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inStr != 0 {
+			if c == inStr && s[i-1] != '\\' {
+				inStr = 0
+			}
+			continue
+		}
+		switch c {
+		case '"', '\'':
+			inStr = c
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case '|':
+			if depth == 0 && i+1 < len(s) && s[i+1] == '|' {
+				out = append(out, s[start:i])
+				start = i + 2
+				i++
+			}
+		}
+	}
+	return append(out, s[start:])
 }
 
 // splitTernaryThenGuard recognises `<outer> ? <inner>` in a guard parseGuard could
