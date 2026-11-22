@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`check` no longer reports the required properties of a widget mode the statement did not choose** (ako/mxcli#2523) — a combo box bound with `attribute:` was warned (MDL-WIDGET56) about 12 properties of the association and database modes, and a data grid drop-down filter about `refEntity`, `refSearchAttr` and `linkedDs`; mxbuild builds both clean. The widget's hide rules are now judged with the values exec writes for unset properties, a property set through its MDL keyword counts as set, and the drop-down filter's association-mode hide rules are read. A combo box in association mode still reports the caption attribute it needs (CE0642).
 - **Data grid Drop-down filters no longer fail CE0463** (ako/mxcli#2518) — every drop-down filter mxcli created failed with "the definition of this widget has changed". Its `emptyOptionCaption` was written with an empty text, where Studio Pro stores none while `filterable` or `multiSelect` hides it and the widget's default text ("None") while it is visible. Rules that the widget editor writes as `(a || b) && hide(…)` are now read, and a visible text property that is left unset gets the widget's default text. Measured on mx check 11.14.0: 68 pages copied from the testapp went from 9 × CE0463 to 0.
 
 ## [0.33.0] - 2026-11-22
