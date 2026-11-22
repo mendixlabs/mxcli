@@ -236,3 +236,27 @@ func TestGraphAnalysisScopeTracksGraphRefKinds(t *testing.T) {
 		t.Errorf("kinds in graphRefKinds reported as outside the asset graph: %v", excluded)
 	}
 }
+
+// A queue in module A running flows of B is not A using B: the caller in B
+// uses A's queue (`enqueue`). Counting the `queue` edge closed a false cycle
+// across every module whose flow the queue runs — 9 modules on one app — and a
+// constant in A naming a flow in B is configuration, not use (ako/mxcli#2503).
+func TestQueueAndByNameCloseNoModuleCycle(t *testing.T) {
+	cat := moduleCycleCatalog(t, []probeRef{
+		{"Ruilen.WFA_Goedkeuren", "Rooster.TQ_RoosterMutaties", "enqueue"},
+		{"Rooster.TQ_RoosterMutaties", "Ruilen.SUB_Ruiling_Doorvoeren", "queue"},
+		{"Verlof.SUB_Plan", "OIDC.Hook", "call"},
+		{"OIDC.ProvisioningMicroflow", "Verlof.SUB_Provision", "by_name"},
+	})
+	if got := moduleCycleRows(t, cat); len(got) != 0 {
+		t.Errorf("graph_module_cycles = %v, want empty: queue and by_name edges are not module use", got)
+	}
+	// Control: a real use the other way closes the cycle.
+	cat = moduleCycleCatalog(t, []probeRef{
+		{"Ruilen.WFA_Goedkeuren", "Rooster.TQ_RoosterMutaties", "enqueue"},
+		{"Rooster.SUB_Rooster", "Ruilen.SUB_Ruiling_Doorvoeren", "call"},
+	})
+	if got := moduleCycleRows(t, cat); len(got) != 2 {
+		t.Errorf("control: a call back from Rooster closes the cycle, got %v", got)
+	}
+}

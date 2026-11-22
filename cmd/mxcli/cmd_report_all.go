@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -113,7 +114,11 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 		fmt.Fprintf(log, "report %s ...\n", kind)
 		p := reportPage{kind: kind}
 		if kind == "quality" {
-			r, _, err := buildScoredReport(reportCmd, projectPath, io.Discard)
+			var r *linter.Report
+			err := safely(func() (err error) {
+				r, _, err = buildScoredReport(reportCmd, projectPath, io.Discard)
+				return err
+			})
 			if err != nil {
 				p.missing, p.failed = err.Error(), true
 			} else {
@@ -136,11 +141,16 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 			pages = append(pages, p)
 			continue
 		}
-		env, err := rk.spec.collect(rk.cmd, projectPath)
+		env, err := collectKind(cmd, rk, projectPath)
 		if err != nil {
 			p.missing, p.failed = err.Error(), true
 		} else {
 			p.env = env
+			// Written as soon as it exists: a later kind that fails, or a run
+			// that is stopped, no longer takes the finished reports with it.
+			if err := writeFileWith(filepath.Join(dir, kind+".json"), env.WriteJSON); err != nil {
+				return err
+			}
 		}
 		pages = append(pages, p)
 	}
@@ -190,9 +200,6 @@ func runReportAll(cmd *cobra.Command, projectPath, dir string, skip map[string]b
 			ann, err := projectreport.LoadAnnotations(annPath(p.kind))
 			if err != nil {
 				return fmt.Errorf("%s annotations: %w", p.kind, err)
-			}
-			if err := writeFileWith(filepath.Join(dir, p.kind+".json"), p.env.WriteJSON); err != nil {
-				return err
 			}
 			rk := reportKinds[p.kind]
 			if rk.spec.renderHTML != nil {
@@ -456,4 +463,35 @@ func writeReadiness(cmd *cobra.Command, dir, project string, pages []reportPage,
 	}
 	card.Lede, card.Stats = doc.Lede, firstStats(doc.Stats, 4)
 	return card, nil
+}
+
+// collectKind runs one kind's collector the way `report all` and
+// `report readiness` call it: with the calling command's context, which a
+// kind's own command — never executed by cobra — does not have, and with a
+// panic turned into that kind's error. Without the context the dependencies
+// report panicked on the Marketplace ("cannot create context from nil
+// parent") and its vulnerability check failed ("net/http: nil Context"); the
+// panic took the whole run, and every report already computed, with it
+// (ako/mxcli#2500).
+func collectKind(parent *cobra.Command, rk reportKind, projectPath string) (env *projectreport.Envelope, err error) {
+	ctx := parent.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rk.cmd.SetContext(ctx)
+	err = safely(func() (err error) {
+		env, err = rk.spec.collect(rk.cmd, projectPath)
+		return err
+	})
+	return env, err
+}
+
+// safely runs f, turning a panic into an error that names it.
+func safely(f func() error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
+	return f()
 }

@@ -7,6 +7,11 @@ package catalog
 //
 // History:
 //
+//	50 (task queue direction): refs gains `enqueue` edges, from the
+//	    microflow that places a call in a task queue to the queue, and module
+//	    cycles no longer count `queue` and `by_name` edges, which made a
+//	    queue's module "depend" on every flow it runs (ako/mxcli#2503).
+//	    Without the bump a cached catalog keeps the false module cycles.
 //	49 (constant base URL, published REST authentication):
 //	    consumed_rest_services gains BaseUrlConstant, the constant a REST
 //	    client reads its base URL from; BaseUrl held only a literal, so a
@@ -269,7 +274,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "49"
+const CatalogSchemaVersion = "50"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.

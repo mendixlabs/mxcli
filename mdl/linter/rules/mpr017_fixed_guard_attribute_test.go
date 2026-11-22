@@ -3,9 +3,12 @@
 package rules
 
 import (
+	"path/filepath"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/mdl/catalog"
 	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/mendixlabs/mxcli/model"
 )
 
 func attr(entity, name, dataType, def string) linter.Attribute {
@@ -228,5 +231,125 @@ func TestFixedGuardAttributeRule_RequiresFullCatalog(t *testing.T) {
 	// And the computed mode for a run including this rule must be full.
 	if got := linter.RequiredCatalogMode([]linter.Rule{r}); got != linter.CatalogFull {
 		t.Errorf("RequiredCatalogMode([rule]) = %v, want CatalogFull", got)
+	}
+}
+
+// ako/mxcli#2501: four findings, all false, by two mechanisms plus one the
+// report did not list. In each the attribute really is assigned, but not by a
+// Change activity, so the rule read "nothing assigns it".
+//
+//   - an external entity's attributes come from the published service;
+//   - a database-connection query's `Map:` assigns the attributes it maps;
+//   - an import mapping assigns the attributes it maps (reproduced on a project:
+//     a Boolean set from JSON `true` and tested by a decision was reported as
+//     "can only ever be false").
+func TestMappedAttributeNames_ImportMappingsAndDatabaseQueries(t *testing.T) {
+	imports := []*model.ImportMapping{{
+		Name: "IMM",
+		Elements: []*model.ImportMappingElement{{
+			Kind: "Object", Entity: "Shop.Standing",
+			Children: []*model.ImportMappingElement{
+				{Kind: "Value", Attribute: "Shop.Standing.Won"},
+				{Kind: "Object", Entity: "Shop.Line", Children: []*model.ImportMappingElement{
+					{Kind: "Value", Attribute: "Shop.Line.Accepted"},
+				}},
+				{Kind: "Value"}, // an element that maps no attribute
+			},
+		}},
+	}}
+	conns := []*model.DatabaseConnection{{
+		Name: "Db",
+		Queries: []*model.DatabaseQuery{{
+			Name: "Q",
+			TableMappings: []*model.DatabaseTableMapping{{
+				Entity: "Shop.Result",
+				Columns: []*model.DatabaseColumnMapping{
+					{Attribute: "Shop.Result.Accepted"},
+					{Attribute: ""},
+				},
+			}},
+		}},
+	}}
+	got := mappedAttributeNames(imports, conns)
+	want := []string{"Shop.Line.Accepted", "Shop.Result.Accepted", "Shop.Standing.Won"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+	if got := mappedAttributeNames(nil, nil); len(got) != 0 {
+		t.Errorf("nothing mapped: want none, got %v", got)
+	}
+}
+
+// An external entity is not judged: nothing in the consuming app assigns its
+// attributes by construction, so "nothing ever assigns it" says nothing about the
+// runtime value. A local entity is still judged (the control).
+func TestFixedGuardEntity_ExternalEntitiesAreNotJudged(t *testing.T) {
+	if guardableEntity(linter.Entity{QualifiedName: "F1Admin.Narrative", IsExternal: true}) {
+		t.Error("an external entity must not be judged")
+	}
+	if !guardableEntity(linter.Entity{QualifiedName: "Shop.Settings"}) {
+		t.Error("a local entity must still be judged")
+	}
+}
+
+// mappedWritesReader is a reader that also lists import mappings and database
+// connections, the way the production backend does (reached by assertion).
+type mappedWritesReader struct {
+	rawUnitReader
+	imports []*model.ImportMapping
+	conns   []*model.DatabaseConnection
+}
+
+func (r mappedWritesReader) ListImportMappings() ([]*model.ImportMapping, error) {
+	return r.imports, nil
+}
+func (r mappedWritesReader) ListDatabaseConnections() ([]*model.DatabaseConnection, error) {
+	return r.conns, nil
+}
+
+// Through the real entry point: a mapped attribute is an unknown write, so
+// fixedGuards then leaves it alone. The unmapped one (the control) stays reportable.
+func TestCollectAttributeFacts_MappedAttributesAreWrites(t *testing.T) {
+	// A file-backed catalog: an in-memory one gives each pooled connection its own
+	// empty database (ako/mxcli#2417).
+	cat, err := catalog.NewFromFile(filepath.Join(t.TempDir(), "cat.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cat.Close() })
+	for _, q := range []string{
+		`INSERT INTO modules_data (Id, Name, ProjectId, SnapshotId) VALUES ('m1', 'Shop', 'default', 's1')`,
+		`INSERT INTO entities_data (Id, Name, QualifiedName, ModuleName, Folder, EntityType, Description, Generalization, AttributeCount, AccessRuleCount, ValidationRuleCount, HasEventHandlers, IsExternal, ProjectId, SnapshotId) VALUES ('e1', 'Standing', 'Shop.Standing', 'Shop', '', 'PERSISTENT', '', '', 3, 0, 0, 0, 0, 'default', 's1')`,
+		`INSERT INTO attributes_data (Id, Name, EntityId, EntityQualifiedName, ModuleName, DataType, Length, IsUnique, IsRequired, DefaultValue, IsCalculated, Description, ProjectId, SnapshotId) VALUES
+			('a1', 'Won', 'e1', 'Shop.Standing', 'Shop', 'Boolean', 0, 0, 0, 'false', 0, '', 'default', 's1'),
+			('a2', 'Accepted', 'e1', 'Shop.Standing', 'Shop', 'Boolean', 0, 0, 0, 'false', 0, '', 'default', 's1'),
+			('a3', 'Local', 'e1', 'Shop.Standing', 'Shop', 'Boolean', 0, 0, 0, 'false', 0, '', 'default', 's1')`,
+	} {
+		if _, err := cat.CatalogDB().Exec(q); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+	r := mappedWritesReader{
+		imports: []*model.ImportMapping{{Elements: []*model.ImportMappingElement{{Kind: "Object", Entity: "Shop.Standing",
+			Children: []*model.ImportMappingElement{{Kind: "Value", Attribute: "Shop.Standing.Won"}}}}}},
+		conns: []*model.DatabaseConnection{{Queries: []*model.DatabaseQuery{{TableMappings: []*model.DatabaseTableMapping{{
+			Columns: []*model.DatabaseColumnMapping{{Attribute: "Shop.Standing.Accepted"}}}}}}}},
+	}
+	facts, why := collectAttributeFacts(linter.NewLintContext(cat, r))
+	if why != "" {
+		t.Fatalf("collect failed: %s", why)
+	}
+	for _, qn := range []string{"Shop.Standing.Won", "Shop.Standing.Accepted"} {
+		if f := facts[qn]; f == nil || !f.unknownWrite {
+			t.Errorf("%s is assigned by a mapping, so it must count as an unknown write: %+v", qn, f)
+		}
+	}
+	if f := facts["Shop.Standing.Local"]; f == nil || f.unknownWrite {
+		t.Errorf("control: Shop.Standing.Local is mapped by nothing and must not be marked written: %+v", f)
 	}
 }

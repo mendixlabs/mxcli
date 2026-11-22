@@ -291,7 +291,8 @@ func (b *Builder) loadModuleEdges() ([]graph.Edge, map[string]map[string]map[str
 		 FROM refs
 		 WHERE instr(SourceName, '.') > 0 AND instr(TargetName, '.') > 0
 			AND substr(SourceName, 1, instr(SourceName, '.') - 1)
-				!= substr(TargetName, 1, instr(TargetName, '.') - 1)`)
+				!= substr(TargetName, 1, instr(TargetName, '.') - 1)
+			AND RefKind NOT IN (` + notModuleUseSQL() + `)`)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -348,4 +349,13 @@ func (b *Builder) loadGraphEdges() ([]graph.Edge, error) {
 		edges = append(edges, graph.Edge{Source: s, Target: t})
 	}
 	return edges, rows.Err()
+}
+
+// notModuleUseSQL renders RefKindsNotModuleUse as a quoted SQL IN list.
+func notModuleUseSQL() string {
+	quoted := make([]string, len(RefKindsNotModuleUse))
+	for i, k := range RefKindsNotModuleUse {
+		quoted[i] = "'" + k + "'"
+	}
+	return strings.Join(quoted, ", ")
 }
