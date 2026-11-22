@@ -285,6 +285,9 @@ func validateWidgetTreeIn(widgets []*ast.WidgetV3, registry *WidgetRegistry, loc
 			out = append(out, validatePluggableTemplateParams(w, locationPrefix)...)
 		}
 		out = append(out, validateWidgetVisibility(w, registry, locationPrefix)...)
+		// A required property the package declares, left unset: CE0642 /
+		// CE4899 at build time (MDL-WIDGET56).
+		out = append(out, validateWidgetRequired(w, registry, locationPrefix)...)
 		// #1519: several attributes for a widget with one attribute slot — the
 		// drop-down filter. exec refuses it; so does check.
 		if m, attrs, over := singleAttributeOverflow(lookupWidgetDef(w, registry), w); over {
@@ -1539,7 +1542,7 @@ func violation18(locationPrefix string, w *ast.WidgetV3, msg string) linter.Viol
 //
 // The grammar fix removes the known trigger. This rule is the general guard: the
 // next function name promoted to a lexer token fails loudly here instead.
-func validateConsumableConditional(w *ast.WidgetV3, locationPrefix string) []linter.Violation {
+func validateConsumableConditional(w *ast.WidgetV3, def *WidgetDefinition, locationPrefix string) []linter.Violation {
 	var out []linter.Violation
 	for _, p := range []struct{ plain, routed string }{
 		{"Visible", "VisibleIf"},
@@ -1558,7 +1561,14 @@ func validateConsumableConditional(w *ast.WidgetV3, locationPrefix string) []lin
 			// Visible takes any string as its condition; Editable takes an enum
 			// word, a boolean or a condition, and refuses what is none of them
 			// here, because the writer has nowhere to put it.
-			if p.plain == "Editable" {
+			//
+			// Not on a pluggable widget declaring an `editable` key of its own
+			// (the native Slider, Range slider, Rating and Toggle buttons:
+			// `default` | `never`, and no Editability system property). exec
+			// writes the value there, and validatePluggableEnumValues judges
+			// it against the keys the package declares, as for a PDS Button's
+			// own buttonStyle (ako/mxcli#2180).
+			if p.plain == "Editable" && !defDeclaresOwnKey(def, "editable") {
 				if problem := editableValueProblem(w); problem != "" {
 					out = append(out, linter.Violation{
 						RuleID:   "MDL-WIDGET19",
@@ -1635,7 +1645,7 @@ func validateStaticWidgetOf(w *ast.WidgetV3, def *WidgetDefinition, locationPref
 		out = append(out, *v)
 	}
 
-	out = append(out, validateConsumableConditional(w, locationPrefix)...)
+	out = append(out, validateConsumableConditional(w, def, locationPrefix)...)
 
 	// A DataView cannot use a database data source — a data view shows one object,
 	// so Mendix offers only Context / Microflow / Nanoflow / Listen sources.

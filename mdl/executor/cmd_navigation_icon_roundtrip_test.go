@@ -60,14 +60,14 @@ func TestMenuIconMDL_RoundTripsEveryVariant(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := menuItemIconMDL(&tc.item)
+			got := menuItemIconMDL(&tc.item, false)
 			if got != tc.want {
 				t.Fatalf("menuItemIconMDL = %q, want %q", got, tc.want)
 			}
 			// It must also re-parse to the same kind, or DESCRIBE emits something
 			// that reads back as a different icon — which is what the bare form
 			// would have done for an image icon.
-			if note := menuItemIconNote(&tc.item, "CREATE NAVIGATION"); note != "" {
+			if note := menuItemIconNote(&tc.item, "CREATE NAVIGATION", false); note != "" {
 				t.Errorf("still flagged as unreproducible: %q", note)
 			}
 		})
@@ -86,10 +86,10 @@ func TestMenuIconMDL_DeclinesWhatItCannotRebuild(t *testing.T) {
 		// A $Type this build does not know must never be guessed at.
 		{IconType: "Forms$SomeFutureIcon", Icon: "M.X.y"},
 	} {
-		if got := menuItemIconMDL(&item); got != "" {
+		if got := menuItemIconMDL(&item, false); got != "" {
 			t.Errorf("%s: emitted %q, want no clause", item.IconType, got)
 		}
-		if note := menuItemIconNote(&item, "CREATE NAVIGATION"); !strings.Contains(note, "not reproducible") {
+		if note := menuItemIconNote(&item, "CREATE NAVIGATION", false); !strings.Contains(note, "not reproducible") {
 			t.Errorf("%s: dropped silently instead of being flagged: %q", item.IconType, note)
 		}
 	}

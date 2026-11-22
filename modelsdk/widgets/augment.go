@@ -676,11 +676,16 @@ func reconcileEnumValues(node any, byKey map[string][]mpk.EnumValue) {
 func buildEnumValuesArray(opts []mpk.EnumValue) []any {
 	arr := []any{float64(2)}
 	for _, o := range opts {
+		// The caption as the package writes it: Mendix stores it verbatim.
+		caption := o.RawCaption
+		if caption == "" {
+			caption = o.Caption
+		}
 		arr = append(arr, map[string]any{
 			"$ID":     placeholderID(),
 			"$Type":   "CustomWidgets$WidgetEnumerationValue",
 			"_Key":    o.Key,
-			"Caption": o.Caption,
+			"Caption": caption,
 		})
 	}
 	return arr
@@ -852,6 +857,7 @@ func createDefaultValueType(vtID string, bsonType string, p mpk.PropertyDef) map
 		"$Type":                       "CustomWidgets$WidgetValueType",
 		"ActionVariables":             buildActionVariablesArray(p.ActionVariables),
 		"AllowNonPersistableEntities": false,
+		"AllowUpload":                 p.AllowUpload,
 		"AllowedTypes":                allowedTypes,
 		"AssociationTypes":            []any{float64(1)},
 		"DataSourceProperty":          "",
@@ -865,7 +871,7 @@ func createDefaultValueType(vtID string, bsonType string, p mpk.PropertyDef) map
 		"IsPath":                      "No",
 		"Multiline":                   false,
 		"ObjectType":                  nil,
-		"OnChangeProperty":            "",
+		"OnChangeProperty":            p.OnChange,
 		"ParameterIsList":             false,
 		"PathType":                    "None",
 		"Required":                    p.Required,
@@ -1351,6 +1357,9 @@ func syncDefinitionAttrs(propTypes []any, props []mpk.PropertyDef) {
 		}
 		if _, ok := target["OnChangeProperty"]; ok {
 			target["OnChangeProperty"] = p.OnChange
+		}
+		if _, ok := target["AllowUpload"]; ok {
+			target["AllowUpload"] = p.AllowUpload
 		}
 	})
 }

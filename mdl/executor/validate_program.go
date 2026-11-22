@@ -266,6 +266,11 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// can say which layouts are native.
 	violations = append(violations, ValidatePageLayoutGrid(prog, projectNativeLayouts(project))...)
 
+	// A pluggable widget whose package declares the other platform than its
+	// page's — a web combobox on a native page, a native slider on a web one
+	// (MDL-WIDGET55). Judged only where both platforms are known.
+	violations = append(violations, ValidateWidgetPlatforms(prog, projectPath, project)...)
+
 	// A widget data source constraint whose one-hop comparand is the wrong type
 	// (MDL-XPATH02) or names its association unqualified (MDL-XPATH01) —
 	// CE0161 at build time (mendixlabs/mxcli#1466). The script's declarations

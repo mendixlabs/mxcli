@@ -12,10 +12,12 @@ type NavigationBackend interface {
 	ListNavigationDocuments() ([]*types.NavigationDocument, error)
 	GetNavigation() (*types.NavigationDocument, error)
 	UpdateNavigationProfile(navDocID model.ID, profileName string, spec types.NavigationProfileSpec) error
-	// AddNavigationProfile appends a new WEB navigation profile (Responsive,
-	// Phone or Tablet). Mendix's set is fixed, so this takes a kind rather than
-	// an arbitrary name. Callers create then update: this leaves the profile
-	// empty and UpdateNavigationProfile fills it.
+	// AddNavigationProfile appends a new web (Responsive, Phone, Tablet, or their
+	// *Offline twins) or native (NativePhone) navigation profile. Mendix's set is
+	// fixed for both families, so this takes a kind/name rather than an
+	// arbitrary one. Callers create then update: this leaves the profile empty
+	// (or, for native, with its home page/menu still unset) and
+	// UpdateNavigationProfile fills it.
 	AddNavigationProfile(navDocID model.ID, name string) error
 
 	// OpenNavigationProfileForMutation loads the navigation document and
