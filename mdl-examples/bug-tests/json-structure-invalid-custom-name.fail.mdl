@@ -1,0 +1,30 @@
+mdl 1;
+-- NEGATIVE TEST — `mxcli check` must REFUSE this file (MDL-JSON03), with no project.
+--
+-- A CUSTOM NAME MAP name (or an `item of` name) that Mendix refuses. `check` and
+-- `exec` accepted every one and wrote the structure; the build reported
+--
+--   [CE9524] "JSON element '(Object)/name' has an invalid custom name '1bad'. Custom name
+--            should start with a letter or underscore, followed by letters, digits or
+--            underscores."
+--
+-- Measured on MxBuild 11.16.1 over 90 names: the name must be ASCII letters, digits and
+-- underscores, starting with a letter or underscore (a lone `_` is refused too), and must
+-- not be a platform-reserved word in any case (Owner, ChangedDate, Type, Id, GUID, Object,
+-- class, null, …). See json-structure-custom-names.mdl for the names that build clean.
+-- A member whose JSON KEY is invalid needs no custom name: the default is sanitised.
+create json structure MyFirstModule.JS_BadDigit
+  sample '{"name": "a"}'
+  custom name map ('name' as '1bad');
+
+create json structure MyFirstModule.JS_BadSpace
+  sample '{"name": "a"}'
+  custom name map ('name' as 'has space');
+
+create json structure MyFirstModule.JS_Reserved
+  sample '{"name": "a"}'
+  custom name map ('name' as 'Owner');
+
+create json structure MyFirstModule.JS_BadItem
+  sample '{"tags": ["a"]}'
+  custom name map (item of 'tags' as 'class');
