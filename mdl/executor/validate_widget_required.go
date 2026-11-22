@@ -41,6 +41,27 @@ func validateWidgetRequired(w *ast.WidgetV3, registry *WidgetRegistry, locationP
 		return nil
 	}
 	values, explicit := widgetValueMap(w, def)
+	// What the statement wrote, through whichever keyword: `attribute:`
+	// writes attributeEnumeration in a combo box's enumeration mode, and
+	// that property is set although the script never names it
+	// (ako/mxcli#2523).
+	stated := map[string]bool{}
+	for k, v := range values {
+		if v != "" {
+			stated[k] = true
+		}
+	}
+	// The hide rules are judged on the configuration exec writes: what the
+	// statement says, and the template's value for everything else. Judged
+	// on the statement alone, a combo box's `source` and `optionsSourceType`
+	// were unknown, no rule could decide, and every other mode's required
+	// properties were reported — 12 on one combo box, which mxbuild builds
+	// clean (ako/mxcli#2523).
+	for k, v := range templateWrittenDefaults(def.WidgetID) {
+		if lk := strings.ToLower(k); values[lk] == "" {
+			values[lk] = v
+		}
+	}
 	rules := visibilityRulesFor(def, registry)
 	slots, lists := filledSlotsAndLists(w, def)
 
@@ -55,7 +76,11 @@ func validateWidgetRequired(w *ast.WidgetV3, registry *WidgetRegistry, locationP
 			continue
 		case p.Type == "object" && lists[key]:
 			continue
-		case explicit[key]:
+		case explicit[key], stated[key]:
+			continue
+		case p.Type == "datasource" && p.IsLinked:
+			// The containing widget fills it — a Data Grid 2 filter's
+			// `linkedDs` is the grid's list (ako/mxcli#2523).
 			continue
 		}
 		if hiddenByConfiguration(rules, p.Key, values) {
