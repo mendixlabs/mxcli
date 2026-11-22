@@ -166,6 +166,11 @@ func footprint(q Querier, a brain.AnchorResult, mfModule map[string]string, g Ca
 				OR (r.RefKind = 'retrieve' AND EXISTS (SELECT 1 FROM entities e WHERE e.QualifiedName = '` + lit + `'
 					AND upper(COALESCE(e.EntityType, '')) LIKE '%VIEW%')))`
 	case "attribute", "association":
+		if strings.ToLower(a.Kind) == "attribute" {
+			if out, ok, err := calculatedFootprint(q, lit); ok || err != nil {
+				return out, true, err
+			}
+		}
 		out, err := refSources(q, `SELECT DISTINCT SourceName AS TargetName FROM refs WHERE SourceType = 'MICROFLOW' AND TargetName = '`+lit+`'`)
 		if err != nil || len(out) > 0 || strings.ToLower(a.Kind) != "attribute" {
 			return out, false, err
@@ -184,7 +189,50 @@ func footprint(q Querier, a brain.AnchorResult, mfModule map[string]string, g Ca
 		return nil, false, nil
 	}
 	out, err := refSources(q, sql)
-	return out, false, err
+	// The microflows a document runs do their work through their callees, as
+	// an anchored microflow does: give them the same same-module expansion,
+	// or a test that calls a REST handler's sub-microflow directly proves
+	// nothing (ako/mxcli#2504). The shared-helper cut applies afterwards.
+	return sameModuleClosure(out, mfModule, g), false, err
+}
+
+// sameModuleClosure is the given microflows plus what each calls, within the
+// calling microflow's own module.
+func sameModuleClosure(ms []string, mfModule map[string]string, g CallGraph) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, root := range ms {
+		mod := mfModule[root]
+		for _, m := range g.Closure([]string{root}) {
+			if (m == root || mfModule[m] == mod) && !seen[m] {
+				seen[m] = true
+				out = append(out, m)
+			}
+		}
+	}
+	return out
+}
+
+// calculatedFootprint is a calculated attribute's footprint: its entity's
+// calculation microflows, which the runtime runs and no flow calls, and the
+// microflows that retrieve the entity — the runtime calculates the attribute
+// when the object is retrieved. Approximate by nature (ako/mxcli#2504). ok is
+// false for an attribute that is not calculated.
+func calculatedFootprint(q Querier, attr string) ([]string, bool, error) {
+	i := strings.LastIndexByte(attr, '.')
+	if i <= 0 {
+		return nil, false, nil
+	}
+	entity, name := attr[:i], attr[i+1:]
+	rs, err := rows(q, `SELECT COALESCE(IsCalculated, 0) AS C FROM attributes WHERE EntityQualifiedName = '`+entity+`' AND Name = '`+name+`'`)
+	if err != nil || len(rs) == 0 || (rs[0]["C"] != "1" && !strings.EqualFold(rs[0]["C"], "true")) {
+		return nil, false, err
+	}
+	out, err := refSources(q, `SELECT DISTINCT TargetName FROM refs WHERE SourceName = '`+entity+`' AND RefKind = 'calculate' AND TargetType = 'MICROFLOW'
+		UNION SELECT DISTINCT SourceName AS TargetName FROM refs WHERE SourceType = 'MICROFLOW' AND TargetName = '`+entity+`' AND RefKind = 'retrieve'
+		UNION SELECT DISTINCT SourceName AS TargetName FROM refs WHERE SourceType = 'MICROFLOW' AND TargetName = '`+attr+`'`)
+	sort.Strings(out)
+	return out, true, err
 }
 
 func refSources(q Querier, sql string) ([]string, error) {
@@ -460,7 +508,7 @@ func citesID(e brain.Entry, id string) bool {
 var TraceabilityMethod = []string{
 	"Requirements, decisions and open questions are read from the project brain (`docs/brain/`) with `brain list`; each requirement's anchor resolutions come from the same check `brain plan` uses, so \"built\" is defined in one place.",
 	"Status is derived, never ticked off: built when every anchor resolves in the model; not built when one does not; not traceable without anchors; partial or changed when a decision says ``Partly meets requirement `<id>`: …`` or ``Changes requirement `<id>`: …`` (validated by `brain check`).",
-	"Footprint: the microflows that implement a requirement — an anchored microflow plus its same-module callees; microflows a page, workflow, scheduled event or published service anchor calls; microflows that write an anchored entity or retrieve an anchored view entity; microflows that use an anchored attribute or association. Helpers with more than three callers are left out.",
+	"Footprint: the microflows that implement a requirement — an anchored microflow plus its same-module callees; microflows a page, workflow, scheduled event or published service anchor calls, plus their same-module callees; microflows that write an anchored entity or retrieve an anchored view entity; microflows that use an anchored attribute or association. A calculated attribute's footprint is its entity's calculation microflows and the microflows that retrieve the entity, since the runtime calculates it on retrieval (approximate). Helpers with more than three callers are left out.",
 	"A microflow test proves a requirement when what it calls, with their call closure, touches the footprint. A journey proves it when a footprint microflow appears in its spans, or its log names an anchored page.",
 	"Decisions bear on a requirement when they share an anchor (module anchors excluded) or cite its id; open questions also when filed on its slice.",
 	"Milestones come from the plan: a slice's frontmatter (`milestone:`), or a requirement's ``Milestone: `<name>` `` line (`mxcli brain milestone`); without any, each slice is a milestone. They are ordered by first appearance, walking the slices in name order.",

@@ -249,3 +249,61 @@ func TestTraceabilityAgreesWithBrainPlan(t *testing.T) {
 		}
 	}
 }
+
+// Two footprints were narrower than a microflow anchor's (ako/mxcli#2504):
+//   - a published REST service's footprint was its operations' microflows
+//     only, without their same-module callees, so a test that calls the
+//     handler's sub-microflow directly proved nothing;
+//   - a calculated attribute's footprint was its calculation microflow, which
+//     the runtime runs and no flow calls. The runtime calculates it when the
+//     object is retrieved, so the microflows that retrieve its entity are its
+//     (approximate) footprint.
+func TestTraceabilityFootprintReachesCalleesAndCalculation(t *testing.T) {
+	f := newFixture(t)
+	f.module("Agenda", "")
+	f.module("Toets", "")
+	f.module("Util", "")
+	for _, m := range []string{"Agenda.PRS_Rooster", "Agenda.SUB_Agenda_Ics", "Util.SUB_Format", "Toets.CAL_Publiek", "Toets.ACT_Toon"} {
+		f.microflow(m, true, "")
+	}
+	f.exec(`INSERT INTO published_rest_operations_data (Id, ServiceQualifiedName, ResourceName, HttpMethod, Path, Microflow, ModuleName)
+		VALUES ('op', 'Agenda.PRS_Agenda', 'rooster', 'GET', '/rooster', 'Agenda.PRS_Rooster', 'Agenda')`)
+	f.call("Agenda.PRS_Rooster", "Agenda.SUB_Agenda_Ics")
+	f.call("Agenda.PRS_Rooster", "Util.SUB_Format") // another module: not this requirement's work
+	f.exec(`INSERT INTO attributes_data (Id, Name, EntityQualifiedName, ModuleName, DataType, IsCalculated)
+		VALUES ('at', 'PubliekeTekst', 'Toets.Toetsresultaat', 'Toets', 'String', 1)`)
+	f.ref("Toets.Toetsresultaat", "ENTITY", "Toets.CAL_Publiek", "MICROFLOW", "calculate")
+	f.ref("Toets.ACT_Toon", "MICROFLOW", "Toets.Toetsresultaat", "ENTITY", "retrieve")
+
+	in := TraceabilityInput{
+		Requirements: []brain.RequirementResult{
+			req("aaaaaa", "01", "Calendar feed", true, anchor("@Agenda.PRS_Agenda", "published_rest_service", brain.Resolved)),
+			req("bbbbbb", "01", "Public text", true, anchor("@Toets.Toetsresultaat.PubliekeTekst", "attribute", brain.Resolved)),
+		},
+		Evidence: &TestsData{HasResults: true, Tests: []TestInfo{
+			{Name: "ics export", Reached: []string{"Agenda.SUB_Agenda_Ics"}},
+			{Name: "shows the result", Reached: []string{"Toets.ACT_Toon"}},
+		}},
+	}
+	d, err := CollectTraceability(f.cat, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]TraceRequirement{}
+	for _, r := range d.Milestones[0].Requirements {
+		got[r.ID] = r
+	}
+	if fp := got["aaaaaa"].Footprint; !reflect.DeepEqual(fp, []string{"Agenda.PRS_Rooster", "Agenda.SUB_Agenda_Ics"}) {
+		t.Errorf("REST footprint = %v, want the handler and its same-module callee", fp)
+	}
+	if ts := got["aaaaaa"].Tests; !reflect.DeepEqual(ts, []string{"ics export"}) {
+		t.Errorf("REST requirement tests = %v, want the test that calls the callee", ts)
+	}
+	r := got["bbbbbb"]
+	if !r.FootprintApprox || !reflect.DeepEqual(r.Footprint, []string{"Toets.ACT_Toon", "Toets.CAL_Publiek"}) {
+		t.Errorf("calculated attribute footprint = %v (approx %v), want its calculation and the flows that retrieve its entity", r.Footprint, r.FootprintApprox)
+	}
+	if !reflect.DeepEqual(r.Tests, []string{"shows the result"}) {
+		t.Errorf("calculated attribute tests = %v", r.Tests)
+	}
+}
