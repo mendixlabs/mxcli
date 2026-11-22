@@ -100,7 +100,11 @@ var brainCaptureCmd = &cobra.Command{
 	Long: `Queue an entry for a person to review and promote.
 
 --from-json <file|-> queues a JSON array of entries in one act, each
-{"text" | "title"+"body", "anchors": [...], "slice"?, "open"?, "source"?}.
+{"text" | "title"+"body", "anchors": [...], "slice"?, "open"?, "source"?,
+ "accepts"?: [...], "changes"?: [...], "partly_meets"?: [...]} — the last three
+take the values of --accepts, --changes and --partly-meets ("<value>" or
+"<value>:<reason>"). This is not the shape 'staged --json' prints, which cannot
+be fed back in.
 Every item is validated before anything is queued, so one bad item fails the
 batch with its index named. A duplicate of something committed, queued or
 earlier in the batch is skipped and reported with the existing id, so the same
@@ -360,8 +364,13 @@ func runBrainCaptureBatch(dir, from string) {
 	if err != nil {
 		brainFatal(err)
 	}
-	entries, err := brain.BuildBatch(items, time.Now(), func(raw string) (string, error) {
-		return brainSource(dir, raw)
+	known, err := brainKnownRequirements(dir)
+	if err != nil {
+		brainFatal(err)
+	}
+	entries, err := brain.BuildBatch(items, time.Now(), brain.BatchChecks{
+		NormalizeSource:   func(raw string) (string, error) { return brainSource(dir, raw) },
+		KnownRequirements: known,
 	})
 	if err != nil {
 		brainFatal(err)
@@ -1457,6 +1466,10 @@ type promoteReport struct {
 type stagedEntry struct {
 	brain.Entry
 	Shard string `json:"shard"`
+	// As 'list --json' reports them, so a queued decision shows what it will
+	// accept or change before anyone promotes it (ako/mxcli#2524).
+	Verdicts []brain.EntryVerdict    `json:"verdicts,omitempty"`
+	Accepts  []brain.EntryAcceptance `json:"accepts,omitempty"`
 }
 
 // stagedReport renders the queue for a machine. `all` is the unfiltered queue
@@ -1469,7 +1482,8 @@ func stagedReport(all, shown []brain.Entry, filter brain.StagedFilter) map[strin
 		// Explicit, as 'list' gives it: a consumer must not have to know
 		// that an empty kind means a decision.
 		e.Kind = e.EntryKind()
-		out = append(out, stagedEntry{Entry: e, Shard: shard})
+		out = append(out, stagedEntry{Entry: e, Shard: shard,
+			Verdicts: brain.EntryVerdicts(e), Accepts: brain.EntryAcceptances(e)})
 	}
 	rep := map[string]any{"staged": out, "count": len(out)}
 
@@ -1564,23 +1578,28 @@ func applyVerdictFlags(cmd *cobra.Command, dir string, e brain.Entry) (brain.Ent
 	if len(changes) == 0 && len(partly) == 0 {
 		return e, nil
 	}
-	if store := brain.NewStore(dir); store.Exists() {
-		known, err := store.RequirementIDs()
-		if err != nil {
-			return e, err
-		}
-		for _, spec := range append(append([]string{}, changes...), partly...) {
-			id, _, _ := strings.Cut(spec, ":")
-			if !known[strings.ToLower(strings.TrimSpace(id))] {
-				return e, fmt.Errorf("no requirement %s in the plan ('brain list --kind requirement' lists them)", id)
-			}
-		}
+	known, err := brainKnownRequirements(dir)
+	if err != nil {
+		return e, err
 	}
-	e, err := brain.AddVerdicts(e, brain.VerdictChanges, changes)
+	if err := brain.CheckRequirementIDs(append(append([]string{}, changes...), partly...), known); err != nil {
+		return e, err
+	}
+	e, err = brain.AddVerdicts(e, brain.VerdictChanges, changes)
 	if err != nil {
 		return e, err
 	}
 	return brain.AddVerdicts(e, brain.VerdictPartly, partly)
+}
+
+// brainKnownRequirements is the plan's requirement ids, or nil when there is
+// no store yet and so no plan to check a verdict against.
+func brainKnownRequirements(dir string) (map[string]bool, error) {
+	store := brain.NewStore(dir)
+	if !store.Exists() {
+		return nil, nil
+	}
+	return store.RequirementIDs()
 }
 
 func verdictFlag(kind string) string {
