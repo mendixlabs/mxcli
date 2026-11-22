@@ -274,6 +274,14 @@ Journeys: run the app with 'mxcli run --local --trace-otlp http://127.0.0.1:4318
 then either pass --journeys-cmd "<command>" (this command collects spans while
 it runs; the script appends its journey log to $MXCLI_JOURNEY_LOG), or collect
 yourself with 'mxcli report collect-spans' and pass --journeys and --spans.
+The journey log has one JSON line per journey or step:
+
+  {"journey":"Swap a shift","step":"open marketplace","start":"…","end":"…",
+   "status":"passed","checks":["sees 3 offers"],"pages":["Shifts.Marketplace"]}
+
+List in "pages" the pages each step opened: a page fed only by database data
+sources runs no microflow, so it is how a journey proves a requirement
+anchored at that page (report traceability).
 
 Warns when the working tree carries test-runner files: never commit while
 'mxcli test' runs. Annotation keys: gap:<Module>, journey:<name>.`,
