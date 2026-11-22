@@ -50,7 +50,10 @@ type CheckOptions struct {
 
 // The two labels a CE0463 of the stored project gets from the re-check.
 const (
-	staleCE0463Label      = "stale widget definition — `mxcli fix widgets` fixes it"
+	staleCE0463Label = "stale widget definition — `mxcli fix widgets` fixes it"
+	// resetCE0463Label is a CE0463 update-widgets clears by resetting values the
+	// project set: a property the widget hides, not a stale type (#2507).
+	resetCE0463Label      = "a value in a property the widget hides — update-widgets clears it by resetting"
 	persistingCE0463Label = "persists after update-widgets"
 )
 
@@ -217,6 +220,12 @@ func recheckCE0463(w io.Writer, out *pathRewriter, mxPath, workMpr, projectPath 
 		len(stored), plural(len(stored), "error", "errors"))
 	fmt.Fprintln(w, "  `mx update-widgets` to tell stale widget definitions from other causes...")
 
+	// The copy's widget values before the resync, so the re-check can say
+	// which ones update-widgets resets (ako/mxcli#2507).
+	valuesBefore := widgetValues{}
+	if units, _, rerr := readAllUnits(workMpr); rerr == nil {
+		valuesBefore = widgetPropertyValues(units)
+	}
 	var uwOut bytes.Buffer
 	if err := updateWidgetsCmd(mxPath, workMpr, &uwOut, &uwOut); err != nil {
 		// Its output says why (mendixlabs/mxcli#1629: another patch version).
@@ -235,6 +244,15 @@ func recheckCE0463(w io.Writer, out *pathRewriter, mxPath, workMpr, projectPath 
 		return
 	}
 
+	var resets []widgetValueChange
+	if units, _, rerr := readAllUnits(workMpr); rerr == nil {
+		resets = widgetValueChanges(valuesBefore, widgetPropertyValues(units))
+	}
+	resetOn := map[string][]string{}
+	for _, c := range resets {
+		resetOn[c.Widget] = append(resetOn[c.Widget], strings.Join(c.Properties, ", "))
+	}
+
 	remaining := map[string]int{}
 	for _, l := range ce0463Lines(after.String()) {
 		remaining[l]++
@@ -247,23 +265,39 @@ func recheckCE0463(w io.Writer, out *pathRewriter, mxPath, workMpr, projectPath 
 		}
 		total[l]++
 	}
-	stale, persisting := 0, 0
+	// reset counts the CE0463s update-widgets cleared by resetting a value the
+	// project set; they are not stale definitions, and `fix widgets` is not
+	// their fix (ako/mxcli#2507).
+	stale, persisting, reset := 0, 0, 0
 	fmt.Fprintln(w, "CE0463 in the stored project:")
 	for _, l := range order {
 		n := total[l]
 		p := min(remaining[l], n)
 		s := n - p
-		stale += s
 		persisting += p
 		at := ce0463Location(l)
 		if s > 0 {
-			fmt.Fprintf(w, "  at %s%s: %s\n", at, countOf(s, n), staleCE0463Label)
+			if props := resetOn[ce0463WidgetName(at)]; len(props) > 0 {
+				reset += s
+				fmt.Fprintf(w, "  at %s%s: %s %s\n", at, countOf(s, n), resetCE0463Label, strings.Join(props, "; "))
+			} else {
+				stale += s
+				fmt.Fprintf(w, "  at %s%s: %s\n", at, countOf(s, n), staleCE0463Label)
+			}
 		}
 		if p > 0 {
 			fmt.Fprintf(w, "  at %s%s: %s\n", at, countOf(p, n), persistingCE0463Label)
 		}
 	}
+	if reset > 0 {
+		fmt.Fprintf(w, "%s not a stale widget definition: update-widgets clears %s by replacing the values\n",
+			plural(reset, "That one is", "Those are"), plural(reset, "it", "them"))
+		fmt.Fprintln(w, "  named above with the widget's defaults — properties its editorConfig hides for the values")
+		fmt.Fprintln(w, "  given. `fix widgets` would drop them from the project, and a script that sets them brings")
+		fmt.Fprintln(w, "  the error back. Leave them out of the script, or change the values that hide them.")
+	}
 	switch {
+	case stale == 0 && persisting == 0:
 	case persisting == 0 && stale == 1:
 		fmt.Fprintln(w, "It is a stale widget definition. This updates it in the project, as Studio Pro's")
 		fmt.Fprintln(w, "  \"Update all widgets\" does:")
@@ -536,3 +570,14 @@ func AnyCachedMxPath() string {
 // LocalMxForVersion is localMxForVersion: an installed or cached mx of exactly
 // version, or "".
 func LocalMxForVersion(version string) string { return localMxForVersion(version) }
+
+// ce0463WidgetName is the widget name in a CE0463 location, the quoted part of
+// "Chess Board 'previewBoard'"; "" when there is none.
+func ce0463WidgetName(at string) string {
+	i := strings.Index(at, "'")
+	j := strings.LastIndex(at, "'")
+	if i < 0 || j <= i {
+		return ""
+	}
+	return at[i+1 : j]
+}

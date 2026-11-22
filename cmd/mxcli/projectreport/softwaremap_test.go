@@ -184,3 +184,52 @@ func TestSoftwareMap(t *testing.T) {
 	_ = RenderMarkdown(&md, doc)
 	mustContain(t, md.String(), "| constant | `OIDC.ProvisioningMicroflow` | `Core.SSO_Provision` |", "Sales → Core", "Back office")
 }
+
+// An integration port is a module that talks to an outside system: by its
+// outbound clients, its name (Int_*, *Connector, *Integration, *Adapter) or
+// its documentation ("Port to …"), so a port built against a mock is found
+// before the real connection exists. Publishing an API is not being an
+// integration module: that module's clients are outside (ako/mxcli#2505).
+func TestMapRecognisesIntegrationPorts(t *testing.T) {
+	f := newFixture(t)
+	for _, m := range []string{"Int_HR", "PlanningPort", "Billing", "Agenda", "Orders", "Legacy"} {
+		f.module(m, "")
+	}
+	f.exec(`INSERT INTO rest_clients_data (Id, Name, QualifiedName, ModuleName) VALUES ('rc', 'Payments', 'Billing.Payments', 'Billing')`)
+	f.exec(`INSERT INTO published_rest_services_data (Id, Name, QualifiedName, ModuleName, Path) VALUES ('ps', 'PRS_Agenda', 'Agenda.PRS_Agenda', 'Agenda', 'rest/agenda/v1')`)
+	d, err := CollectMap(f.cat, ScopeOptions{}, map[string]string{"PlanningPort": "Port to the planning system, mocked for now."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	why := map[string]string{}
+	integ := map[string]bool{}
+	for _, m := range d.Modules {
+		integ[m.Name], why[m.Name] = m.Integration, m.IntegrationWhy
+	}
+	for m, want := range map[string]bool{"Int_HR": true, "PlanningPort": true, "Billing": true, "Agenda": false, "Orders": false} {
+		if integ[m] != want {
+			t.Errorf("%s integration = %v, want %v (%q)", m, integ[m], want, why[m])
+		}
+	}
+	for m, frag := range map[string]string{"Int_HR": "named", "PlanningPort": "documented", "Billing": "consumed REST"} {
+		if !strings.Contains(why[m], frag) {
+			t.Errorf("%s: why = %q, want it to say %q", m, why[m], frag)
+		}
+	}
+	// An annotation decides when the conventions do not fit.
+	env, _ := NewEnvelope("map", "App", "now", "test", d, MapMethod, MapLimits, nil)
+	doc, err := RenderMap(env, &Annotations{Items: map[string]Note{
+		"module:Legacy": {Status: "integration", Note: "Wraps the old mainframe."},
+		"module:Int_HR": {Status: "not integration"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var md bytes.Buffer
+	_ = RenderMarkdown(&md, doc)
+	out := md.String()
+	if !strings.Contains(out, "| integration module | `Legacy` | annotated |") || strings.Contains(out, "| integration module | `Int_HR` |") ||
+		strings.Contains(out, "| integration module | `Agenda` |") {
+		t.Errorf("annotations set and clear the integration flag, and a published-only module is not one:\n%s", out)
+	}
+}

@@ -167,9 +167,12 @@ func TestNavPatchNativeProfile_OmittedRoleHomesKeepStored(t *testing.T) {
 		{Key: "Name", Value: "NativePhone"},
 		{Key: "RoleBasedNativeHomePages", Value: bson.A{navMarkerHomeItems, roleHome}},
 	}
-	out := navPatchNativeProfile(doc, types.NavigationProfileSpec{
+	out, err := navPatchNativeProfile(doc, types.NavigationProfileSpec{
 		HomePages: []types.NavHomePageSpec{{IsPage: true, Target: "M.Home"}},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	items := navGetArray(out, "RoleBasedNativeHomePages")
 	if len(items) != 2 || navGetString(items[1].(bson.D), "HomePagePage") != "M.UserHome" {
 		t.Errorf("role-based native home page not kept: %v", items)

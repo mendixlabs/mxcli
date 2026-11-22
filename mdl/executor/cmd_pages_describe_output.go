@@ -1033,6 +1033,16 @@ func outputWidgetMDLV3(ctx *ExecContext, w rawWidget, indent int) {
 			}
 		} else {
 			header := fmt.Sprintf("%s %s", widgetType, mdlIdent(w.Name))
+			// A widget with no branch of its own is named the way the
+			// generic branch names it — its definition's keyword where that
+			// round-trips, else the id form. widgetType is the id's last
+			// segment, which names the web widget for a native one
+			// (`badge`) or no widget at all (`activityindicator`), so a
+			// native widget left at its defaults re-ran as the web widget
+			// or was refused.
+			if !isKnownCustomWidgetType(widgetType) && w.WidgetID != "" {
+				header = pluggableWidgetHeader(ctx.GetWidgetRegistry(), w.WidgetID, w.Name)
+			}
 			props := []string{}
 			if w.Caption != "" {
 				props = append(props, fmt.Sprintf("Label: %s", mdlQuote(ctx, w.Caption)))

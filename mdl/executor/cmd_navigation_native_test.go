@@ -38,11 +38,11 @@ func runNav(t *testing.T, mb *mock.MockBackend, script string) (string, error) {
 	return buf.String(), err
 }
 
-// ako/mxcli#980: the native writer applies home pages and sync only, so a menu
-// block (the bottom bar), login / not-found page or on-sync-error on a native
-// profile was dropped while exec reported "updated". It is refused now.
+// ako/mxcli#980: the native writer applies home pages, sync and the bottom bar
+// only, so a login / not-found page or on-sync-error on a native profile was
+// dropped while exec reported "updated". It is refused now.
 func TestNativeProfile_RefusesWhatItsWriterCannotApply(t *testing.T) {
-	for _, clause := range []string{"{ menu item 'X' ( OnClick: show page M.P ) }", "login page M.Login", "not found page M.NF", "on sync error continue"} {
+	for _, clause := range []string{"login page M.Login", "not found page M.NF", "on sync error continue"} {
 		wrote := false
 		mb := nativeNav()
 		mb.UpdateNavigationProfileFunc = func(model.ID, string, types.NavigationProfileSpec) error { wrote = true; return nil }
@@ -51,15 +51,18 @@ func TestNativeProfile_RefusesWhatItsWriterCannotApply(t *testing.T) {
 			t.Errorf("%q: err=%v wrote=%v, want a refusal and no write", clause, err, wrote)
 		}
 	}
-	// CONTROL: home and sync are what the native writer applies.
+	// CONTROL: home, sync and the bottom bar are what the native writer applies.
 	var got types.NavigationProfileSpec
 	mb := nativeNav()
 	mb.UpdateNavigationProfileFunc = func(_ model.ID, _ string, spec types.NavigationProfileSpec) error { got = spec; return nil }
-	if _, err := runNav(t, mb, "create or modify navigation NativePhone home nanoflow M.Home_NF sync ( sync M.Order all; );"); err != nil {
+	if _, err := runNav(t, mb, "create or modify navigation NativePhone home nanoflow M.Home_NF sync ( sync M.Order all; ) { menu item 'X' ( OnClick: show page M.P ) };"); err != nil {
 		t.Fatal(err)
 	}
 	if !got.HasSync || len(got.HomePages) != 1 || got.HomePages[0].IsPage {
 		t.Errorf("spec = %+v", got)
+	}
+	if !got.HasMenu || len(got.MenuItems) != 1 || got.MenuItems[0].Caption != "X" {
+		t.Errorf("bottom bar not passed to the writer: %+v", got.MenuItems)
 	}
 }
 
@@ -77,7 +80,7 @@ func TestNavigationHomeNanoflow(t *testing.T) {
 }
 
 // Describe of a native profile names its nanoflow home `home nanoflow` and
-// lists the bottom bar as comments, so its own output re-runs.
+// emits the bottom bar as the profile's { } block, so its own output re-runs.
 func TestDescribeNativeProfile_ReRuns(t *testing.T) {
 	mb := nativeNav()
 	ctx, buf := newMockCtx(t, withBackend(mb))
@@ -86,8 +89,8 @@ func TestDescribeNativeProfile_ReRuns(t *testing.T) {
 	if !strings.Contains(out, "home nanoflow M.Home_NF") || strings.Contains(out, "home microflow") {
 		t.Errorf("native home:\n%s", out)
 	}
-	if !strings.Contains(out, "--   menu item 'Reports' ( OnClick: show page M.Reports )") {
-		t.Errorf("bottom bar not listed as comments:\n%s", out)
+	if !strings.Contains(out, "{\n  menu item 'Reports' ( OnClick: show page M.Reports )\n};") {
+		t.Errorf("bottom bar not emitted as a { } block:\n%s", out)
 	}
 	mb.UpdateNavigationProfileFunc = func(model.ID, string, types.NavigationProfileSpec) error { return nil }
 	if _, err := runNav(t, mb, out); err != nil {
