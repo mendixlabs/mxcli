@@ -84,6 +84,19 @@ it should not. The corollary for fixtures: a test whose helper restates the
 default under test is not a fixture, it is the hypothesis wearing a test's
 clothes.
 
+**A rule the extractor cannot read fails silently, and only in the configuration
+it governs.** An unread editorConfig hide becomes "always visible", so the
+template's value is written wherever the property should be null — or the reverse.
+The value Studio Pro stores also depends on the configuration: one text property
+held `null` on the filters where it was hidden and the shipped default text on the
+others. A fix that copies one Studio Pro instance's value just moves the failures
+to the other filters (#2518). `mxcli widget describe` prints "N of M editor
+hide-rules recognized", and each one it misses is a candidate. The fastest way to
+find the property is to diff mxcli's widget against **the same widget after
+`mx update-widgets`**, not against a Studio Pro reference. That diff contains only
+what the package rejects; the reference diff also carries order and copy
+differences that do not matter.
+
 **Where a property is an enumeration, compare against the package's
 `enumerationValue` *keys*, not its captions.** Both sides are plain strings, so
 nothing else compares them and a caption-shaped value is stored and built without

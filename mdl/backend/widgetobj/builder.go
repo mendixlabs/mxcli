@@ -988,12 +988,20 @@ func ApplyVisibilityRules(object bson.D, propertyTypeIDs map[string]pages.Proper
 
 	for _, key := range conditional {
 		isHidden := hidden[key]
+		shipped := propertyTypeIDs[key].DefaultTranslations
 		object = updateWidgetPropertyValue(object, propertyTypeIDs, key, func(val bson.D) bson.D {
 			if isHidden {
 				return setBSONField(val, "TextTemplate", nil)
 			}
 			// Never clobber real content — only fill in the absent template.
+			// With shipped default text, the template carries it: that is what
+			// `mx update-widgets` writes for the Drop-down filter's visible
+			// emptyOptionCaption, and an empty one there is CE0463 too
+			// (ako/mxcli#2518).
 			if bsonFieldIsNil(val, "TextTemplate") {
+				if len(shipped) > 0 {
+					return setBSONField(val, "TextTemplate", buildClientTemplateWithTranslations(shipped))
+				}
 				return setBSONField(val, "TextTemplate", BuildEmptyClientTemplate())
 			}
 			return val

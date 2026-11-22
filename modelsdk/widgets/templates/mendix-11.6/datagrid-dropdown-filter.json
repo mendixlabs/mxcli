@@ -1661,7 +1661,19 @@
               "$ID": "5839c2234c144b4995fcd9df68928e35",
               "$Type": "Texts$Text",
               "Items": [
-                3
+                3,
+                {
+                  "$ID": "d1c6a0f4e2b84c1f9a3e5b7d8c2f4a61",
+                  "$Type": "Texts$Translation",
+                  "LanguageCode": "en_US",
+                  "Text": "None"
+                },
+                {
+                  "$ID": "7e3b9d2a5c4f4e8b8a1d6f0c3b2e9a74",
+                  "$Type": "Texts$Translation",
+                  "LanguageCode": "nl_NL",
+                  "Text": "Niets"
+                }
               ]
             }
           },
