@@ -212,3 +212,19 @@ func TestResolveAttributeRef_AcceptsUUIDAndQualifiedName(t *testing.T) {
 		t.Errorf("empty ref = %q, want empty", got)
 	}
 }
+
+// ako/mxcli#2502: MPR019 reported 39 findings on a frontend app, all 39 on an
+// external entity. An external entity is stored persistable, but its table lives
+// in the publishing app, so there is no index here to add. A local persistable
+// entity is still indexable (the control).
+func TestIndexableEntity_ExternalEntityHasNoTableHere(t *testing.T) {
+	e := idxEntity("Calendar", []string{"month"})
+	e.Persistable = true
+	if !indexableEntity(e) {
+		t.Fatal("control: a local persistable entity is indexable")
+	}
+	e.Source = "Rest$ODataRemoteEntitySource"
+	if indexableEntity(e) {
+		t.Error("an external entity has no table in this app, so it is not indexable")
+	}
+}
