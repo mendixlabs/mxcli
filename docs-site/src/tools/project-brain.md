@@ -556,9 +556,25 @@ mxcli brain promote 1a2b3c 4d5e6f 7a8b9c -p app.mpr
 ```
 
 `--from-json` reads a JSON array (`-` for stdin) of
-`{"text" | "title"+"body", "anchors": [...], "slice"?, "open"?, "source"?}`,
-the input fields `staged --json` prints. Every item is checked before anything
-is queued, so one bad item fails the batch and names its index (`items[3]`).
+`{"text" | "title"+"body", "anchors": [...], "slice"?, "open"?, "source"?,
+"accepts"?: [...], "changes"?: [...], "partly_meets"?: [...]}`. The last three
+are `--accepts`, `--changes` and `--partly-meets`, with the same values
+(`"<value>"` or `"<value>:<reason>"`) and the same effect, so a batch can record
+a decision that accepts a lint finding:
+
+```json
+[{"text": "Kept deliberately simple: ACT_ microflows do their own object changes.",
+  "anchors": ["@FieldService.ACT_Triage_Complete"],
+  "accepts": ["CONV010:one-happy-path demo app"]}]
+```
+
+This is not the shape `staged --json` or `list --json` prints — their output
+carries `id`, `kind`, `date` and `shard`, and reports acceptances and verdicts
+as parsed objects — so it cannot be fed back in as it stands. Every item is
+checked before anything is queued, so one bad item fails the batch and names its
+index (`items[3]`): an unknown field, an acceptance on a requirement, a verdict
+naming a requirement the plan does not have. A requirement queued earlier in
+the same batch is not in the plan yet; promote it before a verdict names it.
 A duplicate — of a committed entry, a queued one, or an earlier item — is
 skipped and reported with the existing id, so the same list twice is a no-op.
 

@@ -205,6 +205,18 @@ func extractVisibilityRulesFromJS(js string) ([]types.WidgetVisibilityRule, edit
 		// and a rule keeping only the innermost term claims hidden in
 		// configurations the editor shows.
 		var extra []types.WidgetVisibilityCondition
+		// A hide in a function invoked as a ternary's then-branch runs only on
+		// that ternary's condition (ako/mxcli#2523). Its first statement has no
+		// guard of its own; later ones carry the condition as a further term.
+		iife, firstStmt, inIIFE := ternaryThenIIFECondition(js, callStart, itemIdent)
+		if inIIFE && !inSwitchArm {
+			switch {
+			case !ok && firstStmt:
+				cond, ok = iife, true
+			case ok && len(chain) == 0 && !conjunctive:
+				extra = dedupeConditions(cond, []types.WidgetVisibilityCondition{iife})
+			}
+		}
 		if ok && len(chain) > 0 {
 			// An else-if branch: its own condition, the negated earlier
 			// branches, and whatever groups enclose the chain. Exact or not
@@ -258,6 +270,26 @@ func extractVisibilityRulesFromJS(js string) ([]types.WidgetVisibilityRule, edit
 					continue
 				}
 				keys = kept
+			}
+		}
+		if !ok && len(condKeys) == 0 {
+			// `(A || B) && hide(…)`: hidden when ANY disjunct holds, which is one
+			// rule per disjunct — "any rule hiding it wins" is exactly a
+			// disjunction, so nothing is approximated (ako/mxcli#2518).
+			if terms, dok := disjunctiveGuard(js, callStart, itemIdent); dok {
+				stats.Recognized++
+				for _, key := range keys {
+					for _, term := range terms {
+						sig := listKey + "\x00" + key + "\x00" + term.PropertyKey + term.Operator + term.Value + term.Scope
+						if seen[sig] {
+							continue
+						}
+						seen[sig] = true
+						c := term
+						rules = append(rules, types.WidgetVisibilityRule{PropertyKey: key, ListPropertyKey: listKey, HiddenWhen: &c})
+					}
+				}
+				continue
 			}
 		}
 		if !ok {
@@ -394,6 +426,107 @@ func extractVisibilityRulesFromJS(js string) ([]types.WidgetVisibilityRule, edit
 type ternaryThenCandidate struct {
 	listKey, key string
 	inner, outer types.WidgetVisibilityCondition
+}
+
+// disjunctiveGuard reads the guard of a hide written `(A || B || …) && hide(…)`
+// as a statement of its own, returning one condition per disjunct. The Data
+// grid Drop-down filter hides emptyOptionCaption this way:
+//
+//	(e.filterable||e.multiSelect)&&A.hidePropertyIn(t,e,"emptyOptionCaption")
+//
+// It is exact or it fails: the parenthesized disjunction must be the whole
+// guard (bounded by a statement separator, not inside a guarded group, not one
+// conjunct of a chain), and every disjunct must be a condition the vocabulary
+// represents on its own — a disjunct that is itself a conjunction fails.
+func disjunctiveGuard(js string, callStart int, itemIdent string) ([]types.WidgetVisibilityCondition, bool) {
+	pre := strings.TrimRight(js[:callStart], " ")
+	if at := nsPrefix(pre); at >= 0 {
+		pre = pre[:at]
+	}
+	pre = stripGroupSiblings(strings.TrimRight(pre, " "))
+	if strings.HasSuffix(pre, "(") {
+		pre = strings.TrimRight(pre[:len(pre)-1], " ")
+	}
+	if !strings.HasSuffix(pre, "&&") {
+		return nil, false
+	}
+	pre = strings.TrimRight(pre[:len(pre)-2], " ")
+	if !strings.HasSuffix(pre, ")") {
+		return nil, false
+	}
+	open := matchingOpenParen(pre)
+	if open < 0 {
+		return nil, false
+	}
+	head := strings.TrimRight(stripReturnPrefixHead(pre[:open]), " ")
+	switch {
+	case head == "", strings.HasSuffix(head, ";"), strings.HasSuffix(head, "{"):
+	case strings.HasSuffix(head, ","):
+		if insideOpenGroup(head) {
+			return nil, false
+		}
+	default:
+		return nil, false
+	}
+	terms := splitTopLevelOr(pre[open+1 : len(pre)-1])
+	if len(terms) < 2 {
+		return nil, false
+	}
+	aliases := enclosingAliases(js, callStart)
+	out := make([]types.WidgetVisibilityCondition, 0, len(terms))
+	for _, term := range terms {
+		c, ok := guardToCondition(strings.TrimSpace(term), false, aliases, itemIdent)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, c)
+	}
+	return out, true
+}
+
+// stripReturnPrefixHead drops a trailing `return` keyword from the text before
+// a guard: `return(A||B)&&hide(…)` is a statement-level guard.
+func stripReturnPrefixHead(head string) string {
+	trimmed := strings.TrimRight(head, " ")
+	if strings.HasSuffix(trimmed, "return") {
+		before := trimmed[:len(trimmed)-len("return")]
+		if before == "" || !isIdentByte(before[len(before)-1]) {
+			return before
+		}
+	}
+	return head
+}
+
+// splitTopLevelOr splits s at each `||` outside parentheses, brackets and
+// string literals.
+func splitTopLevelOr(s string) []string {
+	var out []string
+	depth, start := 0, 0
+	inStr := byte(0)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inStr != 0 {
+			if c == inStr && s[i-1] != '\\' {
+				inStr = 0
+			}
+			continue
+		}
+		switch c {
+		case '"', '\'':
+			inStr = c
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case '|':
+			if depth == 0 && i+1 < len(s) && s[i+1] == '|' {
+				out = append(out, s[start:i])
+				start = i + 2
+				i++
+			}
+		}
+	}
+	return append(out, s[start:])
 }
 
 // splitTernaryThenGuard recognises `<outer> ? <inner>` in a guard parseGuard could
@@ -2008,4 +2141,82 @@ func splitTopLevelCommas(args string) []string {
 	}
 	parts = append(parts, args[start:])
 	return parts
+}
+
+// ternaryThenIIFERE matches the head of a function invoked as a ternary's
+// then-branch, up to its body's `{`: `? t=function(e,t){` (the assignment is
+// optional). Group 1 is the parameter list.
+var ternaryThenIIFERE = regexp.MustCompile(`\?\s*(?:[A-Za-z_$][\w$]*\s*=\s*)?function\s*\(([\w$,\s]*)\)\s*$`)
+
+// ternaryThenIIFECondition reports whether the hide at callStart is in the
+// body of a function that is the then-branch of a ternary and is invoked on
+// the spot with its own parameter names — the Datagrid drop-down filter's
+//
+//	"attr"===e.baseType ? t=function(e,t){ hide([…]), … ; return t }(e,t) : …
+//
+// and returns that ternary's condition. firstStmt marks a hide that opens the
+// body (or is a comma sibling of the one that does), whose guard is then the
+// condition alone. A body with any other block between it and the hide, an
+// invocation with other arguments (which would rename `e`), or a condition
+// that does not read gives no result, so the rule stays as before.
+func ternaryThenIIFECondition(js string, callStart int, itemIdent string) (types.WidgetVisibilityCondition, bool, bool) {
+	pos := callStart
+	open := -1
+	for i := 0; i < 8; i++ {
+		o := enclosingOpener(js, pos)
+		if o < 0 {
+			return types.WidgetVisibilityCondition{}, false, false
+		}
+		if js[o] == '{' {
+			open = o
+			break
+		}
+		pos = o
+	}
+	if open < 0 {
+		return types.WidgetVisibilityCondition{}, false, false
+	}
+	start := open - 120
+	if start < 0 {
+		start = 0
+	}
+	head := js[start:open]
+	m := ternaryThenIIFERE.FindStringSubmatchIndex(head)
+	if m == nil {
+		return types.WidgetVisibilityCondition{}, false, false
+	}
+	params := strings.ReplaceAll(head[m[2]:m[3]], " ", "")
+	close := matchingBrace(js, open)
+	if close < 0 || !strings.HasPrefix(strings.ReplaceAll(js[close+1:min(len(js), close+2+len(params)+8)], " ", ""), "("+params+")") {
+		return types.WidgetVisibilityCondition{}, false, false
+	}
+	q := start + m[0] // the ternary's `?`
+	guard := stripReturnPrefix(trailingExpr(js[:q]))
+	c, ok := guardToCondition(guard, false, enclosingAliases(js, q), itemIdent)
+	if !ok {
+		return types.WidgetVisibilityCondition{}, false, false
+	}
+	pre := strings.TrimRight(js[:callStart], " ")
+	if at := nsPrefix(pre); at >= 0 {
+		pre = pre[:at]
+	}
+	pre = strings.TrimRight(stripGroupSiblings(strings.TrimRight(pre, " ")), " ")
+	return c, len(pre) == open+1, true
+}
+
+// matchingBrace returns the index of the `}` closing the `{` at open, or -1.
+func matchingBrace(js string, open int) int {
+	depth := 0
+	for i := open; i < len(js); i++ {
+		switch js[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
 }

@@ -44,14 +44,14 @@ func queueLen(t *testing.T, q *Queue) int {
 func TestBuildBatchRefusesTheWholeBatchNamingTheBadItem(t *testing.T) {
 	bad := items("One", "Two", "Three")
 	bad[1].Anchors = []string{"not an anchor"}
-	if _, err := BuildBatch(bad, day, nil); err == nil || !strings.Contains(err.Error(), "items[1]") {
+	if _, err := BuildBatch(bad, day, BatchChecks{}); err == nil || !strings.Contains(err.Error(), "items[1]") {
 		t.Fatalf("err = %v, want a refusal naming items[1]", err)
 	}
 
 	// Control: the same batch without the bad item builds, and queues N-1.
 	s, q := batchStore(t)
 	good := append(bad[:1:1], bad[2])
-	es, err := BuildBatch(good, day, nil)
+	es, err := BuildBatch(good, day, BatchChecks{})
 	if err != nil {
 		t.Fatalf("control batch refused: %v", err)
 	}
@@ -71,12 +71,12 @@ func TestBuildBatchRefusesAmbiguousOrEmptyItems(t *testing.T) {
 		"bare module requirement": {Title: "Needs a module element", Slice: "01-x",
 			Anchors: []string{"@Sales"}},
 	} {
-		if _, err := BuildBatch([]BatchItem{it}, day, nil); err == nil {
+		if _, err := BuildBatch([]BatchItem{it}, day, BatchChecks{}); err == nil {
 			t.Errorf("%s: accepted, want a refusal", name)
 		}
 	}
 	// title + body is the two-field form of text.
-	es, err := BuildBatch([]BatchItem{{Title: "Head", Body: "Prose"}}, day, nil)
+	es, err := BuildBatch([]BatchItem{{Title: "Head", Body: "Prose"}}, day, BatchChecks{})
 	if err != nil || es[0].Title != "Head" || es[0].Body != "Prose" {
 		t.Fatalf("title+body = %+v, %v", es, err)
 	}
@@ -100,7 +100,7 @@ func TestCaptureBatchSkipsDuplicatesAndIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	es, err := BuildBatch(items("Fresh one", "Already decided", "Fresh two", "Fresh one"), day, nil)
+	es, err := BuildBatch(items("Fresh one", "Already decided", "Fresh two", "Fresh one"), day, BatchChecks{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestCaptureBatchAssignsIDsAgainstEarlierItems(t *testing.T) {
 
 func stage(t *testing.T, s *Store, q *Queue, texts ...string) []string {
 	t.Helper()
-	es, err := BuildBatch(items(texts...), day, nil)
+	es, err := BuildBatch(items(texts...), day, BatchChecks{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -486,6 +486,15 @@ func namesAnchoredPage(pages []string, anchors []brain.AnchorResult) bool {
 	return false
 }
 
+func hasPageAnchor(anchors []brain.AnchorResult) bool {
+	for _, a := range anchors {
+		if strings.EqualFold(a.Kind, "page") {
+			return true
+		}
+	}
+	return false
+}
+
 func sharesAnchor(anchors []string, req []brain.AnchorResult) bool {
 	for _, a := range anchors {
 		an := "@" + strings.TrimPrefix(a, "@")
@@ -517,7 +526,7 @@ var TraceabilityMethod = []string{
 var TraceabilityLimits = []string{
 	"A requirement appears only once it is captured in the brain. A PRD item nobody captured is invisible here — the report pushes the brain to be complete, it does not read the PRD.",
 	"\"Built\" means its anchors exist, not that they do what was asked; that is what the tests column and the decisions are for.",
-	"Pages whose data comes only from database data sources run no microflow, so spans cannot show a journey reaching them unless the journey log names the page.",
+	"Pages whose data comes only from database data sources run no microflow, so spans cannot show a journey reaching them unless a journey-log record lists the page in `pages`.",
 	"Footprints miss microflows reached only from Java actions (ako/mxcli#1819) and nanoflows.",
 }
 
@@ -732,6 +741,11 @@ func everyRequirement(d TraceabilityData) Table {
 				// journey can be seen to reach it: say so, rather than leave a
 				// plain "nothing" beside the highlighted ones.
 				p = "nothing to reach (no microflow implements it)"
+				if hasPageAnchor(r.Anchors) {
+					// A page fed by database data sources only: a journey
+					// that lists it proves it (ako/mxcli#2526).
+					p = "nothing to reach (no microflow implements it; a journey proves it by listing the page in its log's `pages`)"
+				}
 			default:
 				p = "nothing"
 			}

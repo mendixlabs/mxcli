@@ -39,8 +39,12 @@ type PropertyDef struct {
 	// datasource defaulting to an association ("Association"). Like OnChange it
 	// is part of the widget DEFINITION, so storing "None" where the package
 	// declares one is CE0463 (mendixlabs/mxcli#956, File Uploader 2.5.0).
-	DefaultType    string
-	IsList         bool
+	DefaultType string
+	IsList      bool
+	// IsLinked is a datasource's isLinked="true": the containing widget fills
+	// it (a Data Grid 2 filter's `linkedDs` is the grid's own list), so a
+	// script never sets it and leaving it unset is no defect (ako/mxcli#2523).
+	IsLinked       bool
 	Multiline      bool     // for string/textTemplate: multiline="true"
 	SelectionTypes []string // for selection properties: <selectionType name="..."/>
 	IsSystem       bool     // true for <systemProperty> elements
@@ -247,6 +251,7 @@ type xmlProperty struct {
 	OnChange          string             `xml:"onChange,attr"`
 	AllowUpload       string             `xml:"allowUpload,attr"`
 	IsList            string             `xml:"isList,attr"`
+	IsLinked          string             `xml:"isLinked,attr"`
 	Multiline         string             `xml:"multiline,attr"`
 	DataSource        string             `xml:"dataSource,attr"`
 	SelectableObjects string             `xml:"selectableObjects,attr"`
@@ -476,6 +481,7 @@ func walkPropertyGroup(pg xmlPropGroup, parentCategory string, def *WidgetDefini
 			DefaultValue:           p.DefaultValue,
 			DefaultType:            p.DefaultType,
 			IsList:                 p.IsList == "true",
+			IsLinked:               p.IsLinked == "true",
 			Multiline:              p.Multiline == "true",
 			SelectionTypes:         toSelectionTypes(p.SelectionTypes),
 			DataSource:             p.DataSource,
@@ -570,6 +576,7 @@ func collectNestedProperties(pg xmlPropGroup, parent *PropertyDef, parentCategor
 			DefaultValue:           p.DefaultValue,
 			DefaultType:            p.DefaultType,
 			IsList:                 p.IsList == "true",
+			IsLinked:               p.IsLinked == "true",
 			Multiline:              p.Multiline == "true",
 			SelectionTypes:         toSelectionTypes(p.SelectionTypes),
 			DataSource:             p.DataSource,

@@ -3,7 +3,10 @@
 package projectreport
 
 import (
+	"bytes"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -305,5 +308,67 @@ func TestTraceabilityFootprintReachesCalleesAndCalculation(t *testing.T) {
 	}
 	if !reflect.DeepEqual(r.Tests, []string{"shows the result"}) {
 		t.Errorf("calculated attribute tests = %v", r.Tests)
+	}
+}
+
+// A requirement anchored at a page fed only by database data sources runs no
+// microflow, so only a journey naming the page in its log's `pages` proves it;
+// a row without that proof says how to give it (ako/mxcli#2526).
+func TestTraceabilityPageOnlyRequirementProvenByJourneyPages(t *testing.T) {
+	f := newFixture(t)
+	f.module("FieldService", "")
+	f.page("FieldService.LithoSystem_Overview")
+	reqs := []brain.RequirementResult{
+		req("aaaaaa", "01-systems", "See every litho system", true, anchor("@FieldService.LithoSystem_Overview", "page", brain.Resolved)),
+		req("bbbbbb", "01-systems", "See the systems again", true, anchor("@FieldService.LithoSystem_Overview", "page", brain.Resolved)),
+	}
+	dir := t.TempDir()
+	logPath := dir + "/journeys.jsonl"
+	if err := os.WriteFile(logPath, []byte(`{"journey":"Browse systems","step":"open overview","start":"2026-11-22T10:00:01Z","end":"2026-11-22T10:00:02Z","status":"passed","checks":["sees 4 systems"],"pages":["FieldService.LithoSystem_Overview"]}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	log, err := ReadJourneyLog(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var journeys []JourneyInfo
+	for _, j := range log.Journeys() {
+		journeys = append(journeys, JourneyInfo{Name: j.Name, Status: j.Status, Pages: j.Pages})
+	}
+	d, err := CollectTraceability(f.cat, TraceabilityInput{Requirements: reqs[:1], Evidence: &TestsData{Journeys: journeys}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := d.Milestones[0].Requirements[0].Journeys; !reflect.DeepEqual(got, []string{"Browse systems"}) {
+		t.Errorf("the journey naming the page proves it: journeys %v", got)
+	}
+
+	// Without a journey naming the page, the row says how one proves it.
+	d, err = CollectTraceability(f.cat, TraceabilityInput{Requirements: reqs[1:], Evidence: &TestsData{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, _ := NewEnvelope("traceability", "FieldService", "now", "t", d, TraceabilityMethod, TraceabilityLimits, nil)
+	doc, err := RenderTraceability(env, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var md bytes.Buffer
+	_ = RenderMarkdown(&md, doc)
+	mustContain(t, md.String(), "a journey proves it by listing the page in its log's `pages`")
+}
+
+// The skills' journey-log example is the record the reader parses, `pages`
+// included: following the docs is enough to prove a page-only requirement
+// (ako/mxcli#2526).
+func TestJourneyLogExamplesNamePages(t *testing.T) {
+	for _, skill := range []string{"report-tests", "report-traceability"} {
+		b, err := os.ReadFile("../../../.claude/skills/mendix/" + skill + "/SKILL.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(b), `"pages":[`) {
+			t.Errorf("%s: the journey-log example shows no `pages`", skill)
+		}
 	}
 }
