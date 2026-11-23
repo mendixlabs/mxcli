@@ -6,6 +6,7 @@ News, release announcements, and demos from the mxcli team.
 
 | Date | Post |
 |------|------|
+| November 23, 2026 | [Release: mxcli v0.33.1](v0.33.1-release.md) |
 | November 22, 2026 | [Release: mxcli v0.33.0](v0.33.0-release.md) |
 | November 15, 2026 | [Release: mxcli v0.32.0](v0.32.0-release.md) |
 | November 9, 2026 | [Release: mxcli v0.31.0](v0.31.0-release.md) |

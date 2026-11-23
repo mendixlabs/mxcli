@@ -380,6 +380,7 @@
 # Blog
 
 - [Blog](blog/index.md)
+  - [Release: mxcli v0.33.1](blog/v0.33.1-release.md)
   - [Release: mxcli v0.33.0](blog/v0.33.0-release.md)
   - [Release: mxcli v0.32.0](blog/v0.32.0-release.md)
   - [Release: mxcli v0.31.0](blog/v0.31.0-release.md)
