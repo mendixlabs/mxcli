@@ -1243,6 +1243,8 @@ var staticWidgetKnownProps = func() map[string]bool {
 		// box's password flag and its Forms$WidgetValidation. Leaving them out
 		// makes the describe -> create round trip warn about its own output.
 		"Password", "Validation", "ValidationMessage",
+		// A text box's Auto focus (ako/mxcli#2519).
+		"AutoFocus",
 		// a text area's (ako/mxcli#977)
 		"NumberOfLines", "Autocomplete",
 		// button icon-collection reference (issue #602)
