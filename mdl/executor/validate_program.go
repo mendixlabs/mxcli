@@ -61,6 +61,12 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 		if entityStmt, ok := stmt.(*ast.CreateEntityStmt); ok {
 			violations = append(violations, ValidateEntity(entityStmt)...)
 		}
+		// A view entity or a rename lands on a reserved entity name (CE7247);
+		// a created entity reports it through ValidateEntity above.
+		switch stmt.(type) {
+		case *ast.CreateViewEntityStmt, *ast.RenameStmt:
+			violations = append(violations, validateReservedEntityName(stmt)...)
+		}
 		// Apply the same per-attribute checks to ALTER ENTITY ADD ATTRIBUTE
 		if alterStmt, ok := stmt.(*ast.AlterEntityStmt); ok {
 			violations = append(violations, ValidateAlterEntity(alterStmt)...)
