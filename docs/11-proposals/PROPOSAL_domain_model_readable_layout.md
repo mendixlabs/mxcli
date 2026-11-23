@@ -105,7 +105,7 @@ mxcli layout -p app.mpr --module Sales --dry-run
   stored or planned anchors.
 - `--only-overlapping` keeps its contract: it moves only colliding boxes and
   **does not** re-anchor (see Open Questions).
-- A new lint rule, **MPR020 `AssociationCrossesEntity`**, reports an association
+- A new lint rule, **MPR021 `AssociationCrossesEntity`**, reports an association
   line that runs through an entity box. Like MPR016 it uses `Intersects`, not
   `TooClose`, so a finding is real and not just tight. Line × line crossings stay
   out of lint: they are a quality score, not a defect.
@@ -191,7 +191,7 @@ description holds:
    (fixed count, e.g. 4). Keep the ordering with the fewest crossings; ties go to
    the earlier one, so the result stays deterministic.
 3. `--dry-run` / normal output prints `crossings: before -> after`.
-4. MPR020 in `mdl/linter/rules/mpr020_association_crosses_entity.go`.
+4. MPR021 in `mdl/linter/rules/mpr021_association_crosses_entity.go`.
 
 Pockets (rule 6) are out of scope. With estimated box sizes the clearance check
 inside a triangle is too unreliable to do automatically, and the gain is small
@@ -206,7 +206,7 @@ next to Phases 1–4.
 | `mdl/dmlayout/crossings.go` (new) | Segment intersection over estimated boxes; `Crossings` |
 | `mdl/dmlayout/*_test.go` | Tests listed below |
 | `cmd/mxcli/cmd_layout.go` | Write anchors, print anchor and crossing summary, help text |
-| `mdl/linter/rules/mpr020_association_crosses_entity.go` (+ test) | Phase 4 lint rule |
+| `mdl/linter/rules/mpr021_association_crosses_entity.go` (+ test) | Phase 4 lint rule |
 | `.claude/skills/mendix/…` (domain model skill) | "After a domain model change: `mxcli layout --module M`, then `describe --format svg`" |
 | `docs-site/src/` (layout page) | Document the new output lines |
 
