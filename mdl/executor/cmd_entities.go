@@ -1026,6 +1026,9 @@ func droppedEntityMembers(existing, replacement *domainmodel.Entity) []string {
 
 // execCreateViewEntity handles CREATE VIEW ENTITY statements.
 func execCreateViewEntity(ctx *ExecContext, s *ast.CreateViewEntityStmt) error {
+	if err := refuseReservedEntityName(s); err != nil {
+		return err
+	}
 	if !ctx.Connected() {
 		return mdlerrors.NewNotConnected()
 	}

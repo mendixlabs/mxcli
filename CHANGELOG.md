@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`check` reports a value written into a combo box property its mode hides** (ako/mxcli#2522) — `customEditability` on an association combo box passed check and exec and failed the build with CE0463, although `widget describe` lists the rule that hides it. The widget's hide rules are now judged with the values exec writes for unset properties (as #2523 did for required properties), so the rule fires (MDL-WIDGET10). Measured on 11.16.1.
+- **A text box's `AutoFocus` is written and described** (ako/mxcli#2519) — `textbox … (AutoFocus: true)` was refused by check, every text box was stored with Auto focus off, and a describe → exec round trip cleared it on a Studio Pro text box. On native it is what opens the keyboard with the page. It is now written as given and described when on.
+- **`check` refuses an entity named with a reserved word** (ako/mxcli#2531) — an entity named `Owner`, `Type`, `Object`, `Context`, `CreatedDate` or another word the platform reserves passed check and exec, quoted or not, and mxbuild failed it with CE7247. `create entity`, `create view entity` and `rename entity` now refuse it (MDL021, as for attribute names); measured on 11.12.6.
+- **`check` refuses an aggregate over an attribute that is not a number** (ako/mxcli#2528) — `minimum $Items by DueDate` over a DateTime (likewise `maximum`, `sum`, `average`, and any String attribute) passed check and exec, and mxbuild failed it with CE0016 "Attribute must be of type Autonumber, Decimal, Integer, or Long.". check and exec now refuse it; measured on 11.12.6.
+
 ## [0.33.1] - 2026-11-23
 
 Headline: **Data grid drop-down filters build without CE0463, and v0.33.0's MDL-WIDGET56 stops warning about widget modes a statement did not choose.** A patch release: two pluggable-widget fixes, and `brain capture --from-json` accepts the decision options the flags already had.

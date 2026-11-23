@@ -449,6 +449,7 @@ func parseRawWidget(ctx *ExecContext, w map[string]any, parentEntityContext ...s
 		widget.ReadOnlyStyle = extractReadOnlyStyle(ctx, w) // ako/mxcli#977
 		widget.IsPassword, _ = w["IsPasswordBox"].(bool)
 		widget.KeyboardType, _ = w["KeyboardType"].(string)
+		widget.AutoFocus, _ = w["AutoFocus"].(bool) // ako/mxcli#2519
 		widget.ValidationExpression, widget.ValidationMessage = extractWidgetValidation(ctx, w)
 		widget.SubmitBehaviour, widget.SubmitOnInputDelay = extractSubmitBehaviour(w)
 		widget.OnChange = extractOnChangeAction(ctx, w)

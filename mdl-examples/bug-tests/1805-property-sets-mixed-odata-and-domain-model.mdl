@@ -32,13 +32,13 @@ create module Bug1805b;
 -- an alter that rewrites a sibling, rename, move.
 create persistent entity Bug1805.Plain (Code: String(50) unique error message 'Code is unique', At: DateTime);
 create persistent entity Bug1805.Audited (Code: String(50) unique error message 'Code is unique', CreatedDate: AutoCreatedDate, ChangedDate: AutoChangedDate);
-create non-persistent entity Bug1805.Transient (WhenAt: DateTime);
+create non-persistent entity Bug1805.Scratch (WhenAt: DateTime);
 create or modify persistent entity Bug1805.Plain (Code: String(50) unique error message 'Code is unique', At: DateTime, Extra: Integer);
 alter entity Bug1805.Plain add attribute Later: DateTime;
 alter entity Bug1805.Plain modify attribute Later: DateTime not localized;
 create association Bug1805.Plain_Audited from Bug1805.Plain to Bug1805.Audited;
 alter entity Bug1805.Audited set documentation 'Rewrites the domain model around Plain.';
-rename entity Bug1805.Transient to Transient2;
+rename entity Bug1805.Scratch to Scratch2;
 create persistent entity Bug1805.Mover (D: DateTime);
 move entity Bug1805.Mover to Bug1805b;
 

@@ -142,7 +142,12 @@ func (r *flowMemberRefs) statementMembers(flowQN string, st ast.MicroflowStateme
 		}
 	case *ast.AggregateListStmt:
 		if !s.IsExpression && s.Attribute != "" {
-			report(r.listMember(strings.ToLower(s.Operation.String()), s.InputVariable, vars[s.InputVariable], s.Attribute))
+			verb := strings.ToLower(s.Operation.String())
+			msg := r.listMember(verb, s.InputVariable, vars[s.InputVariable], s.Attribute)
+			if msg == "" {
+				msg = r.aggregateAttributeType(verb, s.InputVariable, vars[s.InputVariable], s.Attribute)
+			}
+			report(msg)
 		}
 	}
 	return out
@@ -187,6 +192,39 @@ func (r *flowMemberRefs) listMember(verb, list, entityQN, name string) string {
 		return ""
 	}
 	return listMemberRefusal(listMemberWhere(verb, list, name), entityQN, name, r.nearMembers(entityQN))
+}
+
+// aggregateAttributeType refuses an aggregate by an attribute that is not a
+// number. mxbuild reports CE0016 "Attribute must be of type Autonumber,
+// Decimal, Integer, or Long." for minimum, maximum, sum and average over a
+// DateTime or String attribute — measured on 11.12.6, each of the eight; the
+// same four over an Integer build (ako/mxcli#2528). A type that cannot be
+// read here (an inherited attribute, an unknown list) is not judged.
+func (r *flowMemberRefs) aggregateAttributeType(verb, list, entityQN, name string) string {
+	if !isAggregateVerb(verb) || entityQN == "" || name == "" || strings.Contains(name, ".") {
+		return ""
+	}
+	t, ok := retrieveAttributeType(r.ctx, r.sc, entityQN, name)
+	if !ok {
+		return ""
+	}
+	if t.Kind == ast.TypeUnknown {
+		return ""
+	}
+	return aggregateTypeRefusal(listMemberWhere(verb, list, name), entityQN+"."+name, t.Kind.String())
+}
+
+// aggregateTypeRefusal is the CE0016 refusal check and exec share, or "" for a
+// type an aggregate takes. typeName is the attribute type as MDL spells it.
+func aggregateTypeRefusal(where, attrQN, typeName string) string {
+	switch typeName {
+	case "Integer", "Long", "Decimal", "AutoNumber", "", "Unknown":
+		return ""
+	}
+	return fmt.Sprintf(
+		"%s: %s is %s, and an aggregate takes a number — mxbuild reports CE0016 "+
+			"\"Attribute must be of type Autonumber, Decimal, Integer, or Long.\"",
+		where, attrQN, typeName)
 }
 
 // isAggregateVerb reports an aggregate list function: one that cannot read a
