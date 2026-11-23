@@ -110,18 +110,72 @@ mxcli layout -p app.mpr --module Sales --dry-run
   `TooClose`, so a finding is real and not just tight. Line × line crossings stay
   out of lint: they are a quality score, not a defect.
 
+## Measurements (Studio Pro, 2026-11-23)
+
+Two Studio Pro screenshots (classic domain model editor), measured against
+models whose stored values are known:
+
+- **TestApp, module `Mappings`, 100 % zoom** (`testdata/testapp`, ako/TestApp
+  at the pinned submodule commit). Order (290, 150), Customer (620, 80), OrderLine
+  (630, 250) and Product (640, 410) all map to the screen with one factor, 1.59
+  screen px per model px, in x and y. (Item is ~100 px off, probably moved after
+  the pinned commit, so it is left out.)
+- **An app's `Fulfilment` module, 50 % zoom.** Its entities sit on columns 206–208
+  screen px apart and rows 222–223 apart: 260 × 0.796 and 280 × 0.796. That is
+  exactly `dmlayout.GridSlot` at half of the factor above, so this module is a
+  never-laid-out mxcli model, the case MPR020 reports.
+
+What they settle:
+
+| Quantity | Measured | `dmlayout` today |
+|---|---|---|
+| Box width | **150, fixed** for every entity in both shots; long attribute names are cut off with "…" | `max(160, 8 × longest name + 24)`: too wide, harmless except for compactness |
+| Box height | **`max(84, 36 + 16 × attributes)`**: 84 for 1–3 attributes, 100 for 4, 132 for 6, about 855 for 51 | `max(60, 34 + 16 × attributes)`: about right from 4 attributes up, **18–24 px short for 0–2** |
+| Label width | 83–93 px for 14–17 characters: about 5 px per character plus ~12 | not modelled |
+| Anchor | `Order_Customer` stores from `100;46` / to `0;61`: the line leaves Order's right side 46 % down and reaches Customer's left side 61 % down | read and written, never computed |
+| Cross-module line | Horizontal, from the entity's **left side** to the diagram's left edge, at **mid-height** when the entity has one | not modelled |
+
+Three facts about cross-module lines that change Phase 3:
+
+1. **The target is drawn too, not only the holder.** `persistent_order` belongs to
+   module ViewAssociations (`OrdersVE` → `Mappings.Order`), and the Mappings
+   diagram draws it from Order's left side. So the entities needing a free band
+   are every local entity at either end of a cross-module association, and the
+   associations come from **every** module's `CrossAssociations`, not only this
+   domain model's.
+2. **The line runs through whatever is to its left.** In the Fulfilment shot,
+   Coupon's line crosses DeliveryZone, OrderLine's crosses Order (its label lands
+   on two other lines), and `Cart_ActiveOrder` runs through PaymentAttempt.
+   That is #1929's rule 2, observed.
+3. **Several lines on one entity are spread down its left side**, not all at the
+   middle: Order has `Order_PlacedBy` about 25 % down and `Cart_ActiveOrder` at
+   50 %. One example is not enough to fix the spacing rule.
+
+The same shot shows rule 5. With 150-px boxes 260 px apart, the gap is 110 px.
+Labels such as `PaymentAttempt_Order`, `OrderLogEntry_Order` and
+`OrderLineModifier_OrderLine` do not fit; Studio Pro draws them with a red
+border, cut off or overlapping a box. Many lines also converge on one corner of
+Order.
+
 ## Implementation Plan
 
-Four phases, each its own PR and each shippable alone.
+Phase 0 and four phases, each its own PR and each shippable alone.
+
+### Phase 0 — Correct the box estimate (measured above)
+
+`boxSize` becomes width 150 and height `max(84, 36 + 16 × attributes)`. The
+height is the safety fix: a 0–2-attribute entity is drawn up to 24 px taller than
+estimated, so `Place` and `ResolveOverlaps` can leave it touching the box below,
+and MPR016 can miss the overlap. The width change makes `Plan` more compact.
+Both feed every placement path and MPR016/MPR020, so this is its own PR, with
+tests at the measured sizes.
 
 ### Phase 1 — Label-sized gaps and target-aligned rows (rules 4, 5, 7)
 
 1. **Gap per column boundary.** The gap between layers *i* and *i+1* becomes
    `max(columnGutter, labelWidth(longest association drawn between them) + markerAllowance)`.
-   Here `labelWidth(n) = n × labelPxPerChar + 10` and `markerAllowance = 40`,
-   both from #1929. The skill's 5.5 px/char is measured. `dmlayout` uses
-   8 px/char for *box* text, so use a separate, generous `labelPxPerChar = 7`
-   until it is calibrated (Open Questions).
+   Here `labelWidth(n) = n × labelPxPerChar + 12` with `labelPxPerChar = 5.5`
+   (measured about 5; see Measurements), and `markerAllowance = 40`, from #1929.
 2. **Align rows to targets.** Walk the layers left to right, keeping the
    barycentre order. Each entity's desired top y is the top y of its
    *primary target*: the already-placed target with most edges to it, ties by
@@ -167,16 +221,19 @@ stored):
 
 ### Phase 3 — Cross-module free band (rules 2, 3)
 
-**Blocked on a Studio Pro measurement** (Open Questions 1). The design, if #1929's
-description holds:
+Unblocked by the measurements above. Studio Pro draws a cross-module line from
+the left side of each local end straight to the left edge.
 
-1. `newGraph` records which entities are `ParentID` of a `CrossModuleAssociation`
-   (the "holders").
-2. After Phases 1–2, each holder needs a clear horizontal band. The band runs from
-   the diagram's left edge to the box's left side, at the box's vertical middle,
-   with label height above and below. Nothing may intersect it: no box, no planned
+1. Collect the "band entities": every entity of this module at either end of a
+   `CrossModuleAssociation` in **any** module's domain model (the `ParentID` of
+   this module's own, plus each `ChildRef` naming this module in the others').
+   `Plan` takes a project-wide index of these, not just the one domain model.
+2. After Phases 1–2, each band entity needs a clear horizontal band. The band runs
+   from the diagram's left edge to the box's left side, with label height above
+   and below. It is at mid-height for one line; with several, it covers the left
+   side's span, since the spacing rule is not measured (Open Questions 1). Nothing may intersect it: no box, no planned
    line.
-3. A holder in layer 0 has the band by construction. Any other holder whose band
+3. A band entity in layer 0 has the band by construction. Any other whose band
    is blocked moves down to the first y in its column where the band is clear.
    That keeps its layer, so its same-module lines still run the right way.
 4. The left margin (`OriginX` for layer 0) becomes
@@ -258,16 +315,12 @@ editor, not the runtime):
 
 ## Open Questions
 
-1. **Cross-module line geometry.** #1929 says Studio Pro draws a cross-module
-   association from the left-middle of the holder to the diagram's left edge, and
-   that it cannot be moved. Nothing in the repo confirms this: the SVG renderer
-   does not draw cross-module associations at all. Before Phase 3, a Studio Pro
-   screenshot is needed of a module where a holder sits right of another entity.
-   Also needed: is an entity that is the *target* of another module's association
-   drawn with a line in this module's diagram? If so, it needs a band too.
-2. **Label metrics.** 5.5 px/char (#1929) vs a generous 7. Calibrate from one
-   Studio Pro screenshot using the skill's method (screen px ÷ real px between two
-   boxes whose positions are known).
+1. **Spacing of several cross-module lines on one entity.** *Resolved:* the line
+   geometry, and that a target entity is drawn too (see Measurements). *Open:*
+   where the second and later lines sit. One example puts two at about 25 % and
+   50 % down. A shot of an entity with three would settle it.
+2. **Label metrics.** *Resolved:* about 5 px per character plus ~12, measured in
+   both shots; Phase 1 uses 5.5 per character.
 3. **Anchors under `--only-overlapping`.** Re-anchoring only the associations of
    moved entities would fix the stale-anchor problem there too. But that mode
    exists to respect hand work, and a dragged anchor *is* hand work. Proposal:
