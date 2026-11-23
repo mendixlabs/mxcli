@@ -2885,13 +2885,6 @@ func getActionErrorHandlingType(activity *microflows.ActionActivity) microflows.
 		return ""
 	}
 
-	// The one deliberate exclusion: the field is stored, but Mendix refuses a
-	// custom handler on this action (CE6035), so reporting it would render a
-	// block that cannot be executed back.
-	if _, ok := activity.Action.(*microflows.RestOperationCallAction); ok {
-		return ""
-	}
-
 	if errType := actionErrorHandlingField(activity.Action); errType != "" {
 		return errType
 	}

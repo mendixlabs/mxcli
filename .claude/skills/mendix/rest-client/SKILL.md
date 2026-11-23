@@ -562,7 +562,7 @@ create or modify published rest service Shop.Api (
 | Every operation MUST have an Accept header | CE7062 | Auto-added by serializer if missing |
 | POST/PUT/PATCH MUST have a body | CE7064 | Auto-added by serializer (empty JSON body) |
 | Template placeholders must match parameters | CE7056 | `{name}` requires a parameter named `name` |
-| No custom error handling on SEND REST REQUEST | CE6035 | Always uses abort-on-error semantics |
+| `on error continue` on SEND REST REQUEST | CE6035 | Use a custom handler, `on error [without rollback] begin … end error`, which builds |
 | Data Transformer requires 11.9+ | version check | `checkFeature("integration", "data_transformer", ...)` |
 
 ## BSON Types Reference
