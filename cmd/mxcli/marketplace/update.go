@@ -176,6 +176,9 @@ type SkippedFile struct {
 	Reason  string
 	Kept    string // version left in place, for a version skip
 	Offered string // version the package carried
+	// StyledBy is set when the widget was held back because the module that
+	// styles it is older (ako/mxcli#2537): "DataWidgets 3.5.0".
+	StyledBy string
 }
 
 // PerformUpdate replaces an installed module with the copy in referenceMpr,
@@ -433,6 +436,10 @@ func InstallPackageFiles(mpkPath, projectDir string) (written []string, skipped 
 	defer zr.Close()
 
 	declared, listed := declaredProjectFiles(zr.File)
+	// The module this package installs, and the version of each styling
+	// module the project has, read once and only when needed (#2537).
+	installing, _ := ModuleNameInPackage(mpkPath)
+	stylingVersions := map[string]string{}
 
 	// Which unpacked trees duplicate a .mpk in this same package.
 	twins := map[string]string{}
@@ -502,6 +509,27 @@ func InstallPackageFiles(mpkPath, projectDir string) (written []string, skipped 
 					Offered: want,
 				})
 				continue
+			}
+			// Nor moves a widget past the module that styles it (#2537).
+			if module := stylingModuleFor(f.Name); module != "" && have != "" && want != "" &&
+				!strings.EqualFold(module, installing) {
+				v, read := stylingVersions[module]
+				if !read {
+					v = stylingModuleVersion(projectDir, module)
+					stylingVersions[module] = v
+				}
+				if v != "" && versionLess(v, want) && versionLess(have, want) {
+					skipped = append(skipped, SkippedFile{
+						Path: clean,
+						Reason: fmt.Sprintf("package ships %s, but its styling comes from the %s module, which is %s here; "+
+							"kept %s — update %s to move both (`mxcli marketplace update <id> --to %s`)",
+							want, module, v, have, module, want),
+						Kept:     have,
+						Offered:  want,
+						StyledBy: module + " " + v,
+					})
+					continue
+				}
 			}
 		}
 		if err := os.WriteFile(dst, body, 0o644); err != nil {

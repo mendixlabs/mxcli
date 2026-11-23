@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -147,4 +148,55 @@ func unpackedTwinOf(name string) string {
 		return ""
 	}
 	return strings.TrimSuffix(name, path.Ext(name)) + "/"
+}
+
+// A widget's CSS does not always ship with the widget. The Data Widgets
+// module carries the styling of its nine widgets in themesource/datawidgets,
+// and a release of the widgets needs the styling of the same release — but
+// other modules bundle copies of those widgets without it. Excel Importer
+// 11.2.2 bundles Datagrid and three of its filters at 3.8.1; installed over
+// Data Widgets 3.5.0 it moved the widgets and left the styling behind, and
+// every Data grid 2 collapsed into one column with no error (ako/mxcli#2537).
+//
+// widgetStylingModules names, per styling module, the widgets it styles
+// (measured from the Data Widgets 3.8.1 package). A bundled copy of one is
+// never installed past the version of its styling module in the project,
+// unless the package being installed is that module.
+var widgetStylingModules = map[string][]string{
+	"DataWidgets": {
+		"com.mendix.widget.web.Datagrid", "com.mendix.widget.web.DatagridDateFilter",
+		"com.mendix.widget.web.DatagridDropdownFilter", "com.mendix.widget.web.DatagridNumberFilter",
+		"com.mendix.widget.web.DatagridTextFilter", "com.mendix.widget.web.DropdownSort",
+		"com.mendix.widget.web.Gallery", "com.mendix.widget.web.SelectionHelper",
+		"com.mendix.widget.web.TreeNode",
+	},
+}
+
+// stylingModuleFor returns the module that styles the widget a package entry
+// (widgets/<id>.mpk) holds, or "".
+func stylingModuleFor(entry string) string {
+	id := strings.TrimSuffix(strings.TrimPrefix(entry, "widgets/"), path.Ext(entry))
+	for module, widgets := range widgetStylingModules {
+		for _, w := range widgets {
+			if strings.EqualFold(w, id) {
+				return module
+			}
+		}
+	}
+	return ""
+}
+
+// stylingModuleVersion is the marketplace version of a module in the project
+// at projectDir, or "" when there is no single .mpr, no such module, or it
+// records no version. A variable so tests can answer without a project.
+var stylingModuleVersion = func(projectDir, module string) string {
+	mprs, _ := filepath.Glob(filepath.Join(projectDir, "*.mpr"))
+	if len(mprs) != 1 {
+		return ""
+	}
+	v, _, err := InstalledModule(mprs[0], module)
+	if err != nil {
+		return ""
+	}
+	return v
 }
