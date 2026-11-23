@@ -40,7 +40,7 @@ const (
 	RefKindPublish     = "publish"      // A published service runs a microflow (REST operation, OData resource or action, authentication)
 	RefKindEvent       = "event"        // An event handler runs a microflow (entity event, or a business event a service subscribes to)
 	RefKindMember      = "member"       // A document binds, reads or writes an attribute, navigates an association, or reaches the entity an association step arrives at
-	RefKindXPath       = "xpath"        // An XPath constraint names an attribute, association or enumeration value
+	RefKindXPath       = "xpath"        // An XPath constraint names an attribute, association or enumeration value, or a user role by its token
 	RefKindType        = "type"         // An attribute, parameter or variable is typed as an enumeration, or a result variable, created list or entity-type argument as an entity
 	RefKindValue       = "value"        // An expression names an enumeration value (an ENUMERATION target when that value does not exist)
 	RefKindMapping     = "mapping"      // An import or export mapping maps an entity, or a message definition exposes one
@@ -133,6 +133,8 @@ const (
 	RefObjectPublishedMCPService = "PUBLISHED_MCP_SERVICE"
 	RefObjectConstant            = "CONSTANT"
 	RefObjectTaskQueue           = "TASK_QUEUE"
+	// A user role, named in an XPath by its token `[%UserRole_X%]` (ako/mxcli#2529).
+	RefObjectUserRole = "USER_ROLE"
 )
 
 // RefSourceObjectTypes is every value that reaches refs.SourceType, and
