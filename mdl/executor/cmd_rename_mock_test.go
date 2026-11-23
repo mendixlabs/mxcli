@@ -100,7 +100,7 @@ func TestRename_Entity_NotFound(t *testing.T) {
 	err := execRename(ctx, &ast.RenameStmt{
 		ObjectType: "entity",
 		Name:       ast.QualifiedName{Module: "MyModule", Name: "Missing"},
-		NewName:    "New",
+		NewName:    "Renamed", // not `New`: a Java keyword, CE7247 as an entity name (ako/mxcli#2531)
 	})
 	assertError(t, err)
 	assertContainsStr(t, err.Error(), "not found")
@@ -310,7 +310,7 @@ func TestRename_Entity_BackendError(t *testing.T) {
 	err := execRename(ctx, &ast.RenameStmt{
 		ObjectType: "entity",
 		Name:       ast.QualifiedName{Module: "MyModule", Name: "Ent"},
-		NewName:    "New",
+		NewName:    "Renamed", // not `New`: a Java keyword, CE7247 as an entity name (ako/mxcli#2531)
 	})
 	assertError(t, err)
 	assertContainsStr(t, err.Error(), "scan references")
