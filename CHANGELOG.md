@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - **Lint `MPR020`: a domain model that was never laid out** — linked entities still on the grid slots mxcli gives an entity created without `@position`, the trace of a script that skipped `mxcli layout`. An **error**, so `mxcli lint` and `mxcli verify` fail on it where MPR016's warning let overlapping and tangled diagrams through. Hand-arranged diagrams are not reported (Studio Pro positions do not land on those exact coordinates), nor is (100, 100), nor any entity `mxcli layout` itself placed, so the command the finding names always clears it.
+- **`exec` says when a module it changed is not laid out** — `Domain model Shop is not laid out: 2 linked entities are on the default placement grid (Order, OrderLine). Run: mxcli layout --module Shop`, printed once per module at the end of the script, so the step is named when the script that needs it runs rather than only when the gate does. Not printed with `--quiet` or for Marketplace modules.
 
 ## [0.33.1] - 2026-11-23
 
