@@ -78,6 +78,9 @@ var continueUnsupportedOn = map[string]string{
 	"remove":         "Change list activity",
 	"cast":           "Cast object activity",
 	"show home page": "Show home page action activity",
+	// ako/mxcli#2534, measured on 10.24.11, 11.12.6 and 11.16.1, one project
+	// each: continue is CE6035; no clause and both custom handlers build.
+	"send rest request": "Send REST request activity",
 }
 
 // checkErrorHandlingContinueSupported reports `ON ERROR CONTINUE` on a statement
@@ -157,6 +160,8 @@ func continueUnsupportedStatement(stmt ast.MicroflowStatement) (keyword, activit
 		keyword = "cast"
 	case *ast.ShowHomePageStmt:
 		keyword = "show home page"
+	case *ast.SendRestRequestStmt:
+		keyword = "send rest request"
 	case *ast.ExternalObjectStmt:
 		keyword = "send external object"
 		if s.Delete {
