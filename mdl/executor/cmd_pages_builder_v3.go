@@ -1805,13 +1805,17 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 			},
 		}, nil
 
+	// Save and cancel close the page unless `with (ClosePage: false)` says
+	// otherwise: Studio Pro's default, and what a pop-up's Cancel is for. The
+	// bare form stored false, so a pop-up's Cancel left it open
+	// (ako/mxcli#2536). `close page` still spells true explicitly.
 	case "save":
 		return &pages.SaveChangesClientAction{
 			BaseElement: model.BaseElement{
 				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$SaveChangesClientAction",
 			},
-			ClosePage: action.ClosePage,
+			ClosePage: true,
 		}, nil
 
 	case "cancel":
@@ -1820,7 +1824,7 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 				ID:       model.ID(types.GenerateID()),
 				TypeName: "Forms$CancelChangesClientAction",
 			},
-			ClosePage: action.ClosePage,
+			ClosePage: true,
 		}, nil
 
 	case "close":

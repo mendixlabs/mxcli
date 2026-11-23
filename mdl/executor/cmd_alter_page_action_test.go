@@ -106,8 +106,22 @@ func TestAlterPage_SetAction_DelegatesToCreatePageBuilder(t *testing.T) {
 			},
 		},
 		{
-			name:   "save without close",
+			// The bare form closes, as in Studio Pro (ako/mxcli#2536).
+			name:   "bare save closes",
 			action: &ast.ActionV3{Type: "save"},
+			verify: func(t *testing.T, a pages.ClientAction) {
+				s, ok := a.(*pages.SaveChangesClientAction)
+				if !ok {
+					t.Fatalf("type = %T", a)
+				}
+				if !s.ClosePage {
+					t.Error("ClosePage = false, want true")
+				}
+			},
+		},
+		{
+			name:   "save without close",
+			action: &ast.ActionV3{Type: "save", Settings: &ast.ActionSettingsV3{ClosePage: boolPtr2536(false)}},
 			verify: func(t *testing.T, a pages.ClientAction) {
 				s, ok := a.(*pages.SaveChangesClientAction)
 				if !ok {
@@ -307,3 +321,5 @@ func TestAlterSnippet_InsertedFlowArgBindsSnippetParameter(t *testing.T) {
 		})
 	}
 }
+
+func boolPtr2536(b bool) *bool { return &b }
