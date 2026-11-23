@@ -182,17 +182,20 @@ func TestActionErrorHandlingField(t *testing.T) {
 	}
 }
 
-// RestOperationCallAction stores the field but Mendix refuses a custom handler on
-// it (CE6035), so it is the one action deliberately not reported. A reflection
-// lookup would otherwise pick it up — this is the case that stops the generic fix
-// from being too generic.
-func TestGetActionErrorHandlingType_RestOperationCallIsExcluded(t *testing.T) {
-	activity := &microflows.ActionActivity{
-		Action: &microflows.RestOperationCallAction{
-			ErrorHandlingType: microflows.ErrorHandlingTypeCustom,
-		},
-	}
-	if got := getActionErrorHandlingType(activity); got != "" {
-		t.Errorf("got %q, want empty — Mendix rejects a custom handler here with CE6035", got)
+// RestOperationCallAction was once the one action deliberately not reported, on
+// the claim that Mendix refuses a custom handler on it (CE6035). Measured on
+// 10.24.11, 11.12.6 and 11.16.1 (ako/mxcli#2534): both custom handlers build,
+// only Continue is CE6035. Excluding it deleted every Studio Pro handler on a
+// Send REST request in a describe -> exec round trip.
+func TestGetActionErrorHandlingType_RestOperationCallIsReported_2534(t *testing.T) {
+	for _, eh := range []microflows.ErrorHandlingType{
+		microflows.ErrorHandlingTypeCustom, microflows.ErrorHandlingTypeCustomWithoutRollback,
+	} {
+		activity := &microflows.ActionActivity{
+			Action: &microflows.RestOperationCallAction{ErrorHandlingType: eh},
+		}
+		if got := getActionErrorHandlingType(activity); got != eh {
+			t.Errorf("got %q, want %q — the handler branch would be dropped from describe", got, eh)
+		}
 	}
 }
