@@ -125,15 +125,23 @@ models whose stored values are known:
   exactly `dmlayout.GridSlot` at half of the factor above, so this module is a
   never-laid-out mxcli model, the case MPR020 reports.
 
-What they settle:
+Two more shots, in Studio Pro 11.16.1's **beta** domain model viewer, of
+[ako/PizzaV1](https://github.com/ako/PizzaV1) (`GitPizza.mpr`): Fulfilment at
+75 % and Catalog at 100 %. Positions read from the repository fit them with one
+factor per shot in x and y (1.044 and 1.392). Every Fulfilment and Catalog entity
+is on a `GridSlot`, and on a copy of the project MPR020 reports Catalog,
+Fulfilment, PizzaChat and Shop (Core and Simulation, whose entities are not on
+the grid, are not reported).
+
+What they settle (classic / beta where they differ):
 
 | Quantity | Measured | `dmlayout` today |
 |---|---|---|
-| Box width | **150, fixed** for every entity in both shots; long attribute names are cut off with "…" | `max(160, 8 × longest name + 24)`: too wide, harmless except for compactness |
-| Box height | **`max(84, 36 + 16 × attributes)`**: 84 for 1–3 attributes, 100 for 4, 132 for 6, about 855 for 51 | `max(60, 34 + 16 × attributes)`: about right from 4 attributes up, **18–24 px short for 0–2** |
+| Box width | **fixed**, whatever the names: **150** classic, **158** beta; long names are cut off with "…" | `max(160, 8 × longest name + 24)`: covers both, too wide for long names, which only costs compactness |
+| Box height | classic **`max(84, 36 + 16 × attributes)`** (84 for 1–3, 100 for 4, 132 for 6, ~855 for 51); beta **`max(~76, 28 + 16 × attributes)`** (76 for 3, 93 for 4, 141 for 7, 284 for 16) | `max(60, 34 + 16 × attributes)`: within a few px from 4 attributes up, **16–24 px short for 0–2** in both viewers |
 | Label width | 83–93 px for 14–17 characters: about 5 px per character plus ~12 | not modelled |
 | Anchor | `Order_Customer` stores from `100;46` / to `0;61`: the line leaves Order's right side 46 % down and reaches Customer's left side 61 % down | read and written, never computed |
-| Cross-module line | Horizontal, from the entity's **left side** to the diagram's left edge, at **mid-height** when the entity has one | not modelled |
+| Cross-module line | Horizontal, from the entity's **left side** to the diagram's left edge; with *n* lines on one entity, the *i*-th is at **i / (n + 1)** of its height (mid-height for one) | not modelled |
 
 Three facts about cross-module lines that change Phase 3:
 
@@ -147,15 +155,20 @@ Three facts about cross-module lines that change Phase 3:
    Coupon's line crosses DeliveryZone, OrderLine's crosses Order (its label lands
    on two other lines), and `Cart_ActiveOrder` runs through PaymentAttempt.
    That is #1929's rule 2, observed.
-3. **Several lines on one entity are spread down its left side**, not all at the
-   middle: Order has `Order_PlacedBy` about 25 % down and `Cart_ActiveOrder` at
-   50 %. One example is not enough to fix the spacing rule.
+3. **Several lines on one entity are spaced evenly down its left side, at
+   i / (n + 1) of its height.** Measured in the beta viewer to the pixel:
+   Fulfilment.Order's three (`Order_PlacedBy`, `Cart_ActiveOrder`,
+   `TrackView_Order`) at 25 / 50 / 75 %, Catalog.Product's two at 33 / 67 %,
+   Catalog.Option's five at 17 … 83 %. The classic shot shows the same 25 / 50 %
+   for Order. A line from an entity on the right runs across the whole diagram:
+   Catalog.Ingredient's go through Allergen, Category, Product and ProductSize.
 
-The same shot shows rule 5. With 150-px boxes 260 px apart, the gap is 110 px.
+The same shots show rule 5. With 150-px boxes 260 px apart, the gap is 110 px.
 Labels such as `PaymentAttempt_Order`, `OrderLogEntry_Order` and
-`OrderLineModifier_OrderLine` do not fit; Studio Pro draws them with a red
-border, cut off or overlapping a box. Many lines also converge on one corner of
-Order.
+`OrderLineModifier_OrderLine` do not fit: they are cut off or sit on a box, and
+Studio Pro draws them with a red border. Red does not mean only that, though:
+`OrderAccess_User` is red with room to spare, so the colour is not used as a
+signal here. Many lines also converge on one corner of Order.
 
 ## Implementation Plan
 
@@ -163,10 +176,12 @@ Phase 0 and four phases, each its own PR and each shippable alone.
 
 ### Phase 0 — Correct the box estimate (measured above)
 
-`boxSize` becomes width 150 and height `max(84, 36 + 16 × attributes)`. The
-height is the safety fix: a 0–2-attribute entity is drawn up to 24 px taller than
-estimated, so `Place` and `ResolveOverlaps` can leave it touching the box below,
-and MPR016 can miss the overlap. The width change makes `Plan` more compact.
+`boxSize` becomes width 160 and height `max(84, 36 + 16 × attributes)`: the
+larger of the classic and beta viewers in each dimension, since a project is
+opened in either. The height is the safety fix: a 0–2-attribute entity is drawn
+up to 24 px taller than estimated, so `Place` and `ResolveOverlaps` can leave it
+touching the box below, and MPR016 can miss the overlap. A fixed width makes
+`Plan` more compact for long names.
 Both feed every placement path and MPR016/MPR020, so this is its own PR, with
 tests at the measured sizes.
 
@@ -229,9 +244,8 @@ the left side of each local end straight to the left edge.
    this module's own, plus each `ChildRef` naming this module in the others').
    `Plan` takes a project-wide index of these, not just the one domain model.
 2. After Phases 1–2, each band entity needs a clear horizontal band. The band runs
-   from the diagram's left edge to the box's left side, with label height above
-   and below. It is at mid-height for one line; with several, it covers the left
-   side's span, since the spacing rule is not measured (Open Questions 1). Nothing may intersect it: no box, no planned
+   from the diagram's left edge to the box's left side, at i / (n + 1) of the
+   box's height for its *n* lines, with label height above and below each. Nothing may intersect it: no box, no planned
    line.
 3. A band entity in layer 0 has the band by construction. Any other whose band
    is blocked moves down to the first y in its column where the band is clear.
@@ -315,10 +329,10 @@ editor, not the runtime):
 
 ## Open Questions
 
-1. **Spacing of several cross-module lines on one entity.** *Resolved:* the line
-   geometry, and that a target entity is drawn too (see Measurements). *Open:*
-   where the second and later lines sit. One example puts two at about 25 % and
-   50 % down. A shot of an entity with three would settle it.
+1. **Cross-module lines.** *Resolved* (see Measurements): left side to left edge,
+   target entities included, *n* lines at i / (n + 1). *Open:* the order of the
+   lines on one entity (Order's are not alphabetical). It does not change the
+   band, which covers all of them.
 2. **Label metrics.** *Resolved:* about 5 px per character plus ~12, measured in
    both shots; Phase 1 uses 5.5 per character.
 3. **Anchors under `--only-overlapping`.** Re-anchoring only the associations of
