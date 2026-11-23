@@ -47,8 +47,8 @@ var actionSettingKeys = map[string]struct {
 	// does, so keeping it open needs a spelling (ako/mxcli#2536).
 	"closepage": {canonical: "ClosePage", kinds: []string{"completeTask", "callWorkflow", "saveChanges", "cancelChanges"},
 		what: "`complete task`, `call workflow`, `save changes` and `cancel changes`"},
-	"commit":           {canonical: "Commit", kinds: []string{"completeTask"}, what: "`complete task`"},
-	"defaultpage":      {canonical: "DefaultPage", kinds: []string{"openWorkflow"}, what: "`open workflow`"},
+	"commit":      {canonical: "Commit", kinds: []string{"completeTask"}, what: "`complete task`"},
+	"defaultpage": {canonical: "DefaultPage", kinds: []string{"openWorkflow"}, what: "`open workflow`"},
 	// Show page's "number of pages to close" (ako/mxcli#2106).
 	"numberofpagestoclose": {canonical: "NumberOfPagesToClose", kinds: []string{"showPage"}, what: "`show page`"},
 }
