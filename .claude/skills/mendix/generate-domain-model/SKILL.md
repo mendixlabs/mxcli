@@ -14,10 +14,10 @@ description: "Generate a complete Mendix domain model in MDL — entities, attri
 | 47-53 | When to Use This Skill |
 | 54-65 | Modelling for the client: widgets bind members, not expressions |
 | 66-102 | Documentation Best Practices |
-| 103-231 | Step-by-Step Process |
-| 232-250 | Checklist |
-| 251-259 | References |
-| 260-269 | Tips for AI Assistants |
+| 103-233 | Step-by-Step Process |
+| 234-252 | Checklist |
+| 253-262 | References |
+| 263-272 | Tips for AI Assistants |
 
 <!-- /skill-index -->
 # Creating Mendix Domain Model MDL Scripts
@@ -162,32 +162,34 @@ them anyway.
 `check` reports what `exec` would refuse, including:
 - ✅ Reserved words (MDL021 / CE7247; `CreatedDate`, `Owner`, … are MDL020)
 - ✅ Duplicate names (CE0065)
-- ✅ OQL errors in view entities (CE0174)
+- ✅ OQL errors in view entities (e.g. MDL030, CE0174)
 
 ### 4. Review and Fix Issues
 
-**Common Issues**:
+What `check` prints, and the fix. The code in brackets is what to search for.
 
-1. **Reserved Keyword Error**:
+1. **Reserved member name** (`MDL020`; `Type`, `ID` and the like are `MDL021`):
    ```
-   error: Reserved keyword 'CreatedDate' used as attribute name
-   💡 rename to 'CreationDate'
+   ✗ attribute 'CreatedDate' conflicts with a Mendix system attribute name. Mendix automatically manages 'CreatedDate' on persistent entities [MDL020]
+       → To use the Mendix built-in audit field, declare it with the pseudo-type: 'CreatedDate: AutoCreatedDate'. To store an unrelated date, choose a different name (e.g., 'EntryDate', 'RecordDate')
    ```
-   Fix: Rename to suggested alternative
+   Fix: `CreatedDate: AutoCreatedDate` for the audit field, otherwise rename.
+   Quoting the name does not help; see "Reserved Keywords" in
+   [`reference/syntax.md`](reference/syntax.md).
 
-2. **Duplicate Name Error**:
+2. **Duplicate name** (`MDL-DUPNAME`, Mendix CE0065):
    ```
-   error: Duplicate name 'Status' in module 'Shop'
-   💡 rename one of the enumeration, entity to avoid conflict
+   ✗ cannot create entity Shop.Status: enumeration Shop.Status already has that name — entities, associations and enumerations share one name space per module, whatever their folder, and names compare case-insensitively (Mendix CE0065) [MDL-DUPNAME]
+       → rename one of the two; a different folder does not separate them
    ```
-   Fix: Rename entity to `OrderStatus` or similar
+   Fix: rename one, e.g. the enumeration to `OrderStatus`.
 
-3. **OQL Syntax Error**:
+3. **ORDER BY without LIMIT in a view entity** (`MDL030`):
    ```
-   error: ORDER by requires limit or offset
-   💡 add limit clause to query
+   ✗ ORDER by without limit: view entity OQL queries that use ORDER by must also specify a limit clause [MDL030]
+       → Add a limit clause after ORDER by
    ```
-   Fix: Add `limit 100` to view entity query
+   Fix: add `limit <n>` after the `order by`, or drop the ordering.
 
 ### 5. Apply and Lay Out — Always
 
@@ -239,8 +241,8 @@ Before finalizing an MDL script:
 - [ ] `./mxcli layout --module <Module>` run after `exec` (lint `MPR020` clean)
 - [ ] MARK comments for files 300+ lines (at least 3 sections)
 - [ ] All identifiers quoted with double quotes
-- [ ] No duplicate names (run linter)
-- [ ] Valid OQL queries in view entities (run linter)
+- [ ] No duplicate names (`./mxcli check --references`)
+- [ ] Valid OQL queries in view entities (`./mxcli check --references`)
 - [ ] Consistent naming conventions (PascalCase)
 - [ ] Appropriate data types and lengths
 - [ ] Required fields marked with NOT NULL
@@ -250,20 +252,21 @@ Before finalizing an MDL script:
 
 ## References
 
-- **Reserved Keywords**: `packages/mendix-repl/docs/reference/reserved-keywords.md`
-- **Linter Proposal**: `packages/mendix-repl/docs/proposals/mdl-linter-proposal.md`
-- **Example Scripts**:
-  - `packages/mendix-repl/examples/shop-domain-model.mdl`
-  - `packages/mendix-repl/examples/pet-store-domain-model.mdl`
-- **Linter Test**: `packages/mendix-repl/src/test-linter-standalone.ts`
+- **Syntax**: `./mxcli syntax domain-model` (entities, associations, enumerations,
+  types, keywords), and [`reference/syntax.md`](reference/syntax.md) for the full
+  attribute-type list and the reserved member names.
+- **Worked example and recurring shapes**: [`reference/patterns.md`](reference/patterns.md)
+  (e-commerce model, one-to-many, many-to-many, hierarchy, status-driven entity).
+- **Rules**: `./mxcli lint --list-rules -p app.mpr` (MPR016 overlapping entities, MPR020 not
+  laid out).
 
 ## Tips for AI Assistants
 
 1. **Always quote all identifiers** with double quotes to avoid MDL parser keyword conflicts — but note quoting does **not** exempt platform-reserved member names (`Type`, `CreatedDate`, `ChangedDate`, `Owner`, `ChangedBy`, `ID`, …); rename those
 2. **Use descriptive names** (ServiceType, CustomerOrder)
-3. **Run linter** on generated scripts before presenting to user
-4. **Fix all errors** reported by linter before finalizing
-5. **Follow examples** in shop-domain-model.mdl and pet-store-domain-model.mdl
+3. **Run `./mxcli check --references`** on generated scripts before presenting to user
+4. **Fix all errors** it reports before finalizing
+5. **Follow the worked example** in [`reference/patterns.md`](reference/patterns.md)
 6. **Document thoroughly** - Studio Pro users benefit from good documentation
 7. **Lay out, don't position** - run `./mxcli layout --module <Module>` after every `exec` that creates entities; hand-written `@position` only for a few entities added to a module someone arranged by hand
 8. **Test incrementally** - Generate in sections and validate each part
