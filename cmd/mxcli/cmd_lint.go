@@ -648,6 +648,7 @@ func builtinLintRules() []linter.Rule {
 		rules.NewFixedGuardAttributeRule(),       // MPR017 - a Boolean guard with one reachable value
 		rules.NewModelNameInLiteralRule(),        // MPR018 - a model element named in a string literal
 		rules.NewUnindexedConstraintRule(),       // MPR019 - an XPath-filtered attribute with no leading index
+		rules.NewDomainModelNotLaidOutRule(),     // MPR020 - linked entities still on the auto-placement grid
 		rules.NewNoCommitInLoopRule(),            // CONV011-CONV014 - require BSON inspection
 		rules.NewExclusiveSplitCaptionRule(),
 		rules.NewErrorHandlingOnCallsRule(),

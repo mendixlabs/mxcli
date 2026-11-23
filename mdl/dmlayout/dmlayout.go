@@ -81,16 +81,27 @@ func GridSlot(n int) model.Point {
 	}
 }
 
-// Box size estimates. Studio Pro's real dimensions are not available to mxcli
-// (see the package comment), so these are chosen to clear a typical box with
-// room to spare rather than to match it.
+// Box size estimates, from measurements in Studio Pro: classic viewer and the
+// 11.16 beta viewer, each screenshot calibrated against the positions stored in
+// its project (PROPOSAL_domain_model_readable_layout.md, "Measurements").
+//
+// A project is opened in either viewer, so each dimension takes the larger:
+//
+//   - Width is FIXED: 150 classic, 158 beta, whatever the names, which are cut
+//     off with "…". It does not grow with a long name; an estimate that did
+//     (8 px per character, before) only spread the columns apart.
+//   - Height is the header plus one row per attribute, with a minimum of about
+//     three rows: classic max(84, 36 + 16n), beta max(~76, 28 + 16n). The 4 px
+//     over the classic header absorbs the few px of measurement error, so no
+//     drawn box is taller than its estimate. The minimum matters most: a 0–2
+//     attribute entity is drawn 84 tall, and estimating 60 let the box below it
+//     touch it (MPR016, Place).
 const (
-	minBoxWidth   = 160
-	pixelsPerChar = 8  // rough advance width of the editor's font
-	boxPadding    = 24 // name inset plus the type column's share
-	headerHeight  = 34 // the entity's name bar
+	boxWidth      = 160
+	pixelsPerChar = 8  // rough advance width of the editor's font, for annotation captions
+	headerHeight  = 40 // the entity's name bar, with margin
 	memberHeight  = 16 // one attribute row
-	minBoxHeight  = 60
+	minBoxHeight  = 84 // three rows: what Studio Pro draws for 0–3 attributes
 
 	columnGutter = 90 // horizontal space between layers
 	rowGutter    = 40 // vertical space between entities within a layer
@@ -181,26 +192,14 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 	return out
 }
 
-// boxSize estimates the drawn size of an entity from its members.
+// boxSize estimates the drawn size of an entity from its attribute count. The
+// name does not matter: Studio Pro draws every entity the same width.
 func boxSize(e *domainmodel.Entity) (w, h int) {
-	if e == nil {
-		return minBoxWidth, minBoxHeight
+	n := 0
+	if e != nil {
+		n = len(e.Attributes)
 	}
-	longest := len(e.Name)
-	for _, a := range e.Attributes {
-		if n := len(a.Name); n > longest {
-			longest = n
-		}
-	}
-	w = longest*pixelsPerChar + boxPadding
-	if w < minBoxWidth {
-		w = minBoxWidth
-	}
-	h = headerHeight + len(e.Attributes)*memberHeight
-	if h < minBoxHeight {
-		h = minBoxHeight
-	}
-	return w, h
+	return boxWidth, max(minBoxHeight, headerHeight+n*memberHeight)
 }
 
 // graph is the module's entities plus the local edges between them.

@@ -11,7 +11,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/mendixlabs/mxcli/mdl/catalog"
 	"github.com/mendixlabs/mxcli/mdl/diaglog"
+	"github.com/mendixlabs/mxcli/mdl/dmlayout"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/mdl/langver"
 	"github.com/mendixlabs/mxcli/mdl/types"
@@ -788,6 +791,7 @@ func (e *Executor) finalizeProgramExecution() error {
 		return nil
 	}
 
+	var reminders []string
 	for moduleID, moduleName := range e.cache.modifiedDomainModels {
 		dm, err := e.backend.GetDomainModel(moduleID)
 		if err != nil || dm == nil {
@@ -801,11 +805,56 @@ func (e *Executor) finalizeProgramExecution() error {
 		if count > 0 && !e.quiet {
 			fmt.Fprintf(e.output, "Reconciled %d access rule(s) in module %s\n", count, moduleName)
 		}
+		if r := e.layoutReminder(moduleID, moduleName, dm); r != "" {
+			reminders = append(reminders, r)
+		}
+	}
+	// The map's order is random; the reminders are printed in module order so
+	// two runs of one script print the same thing.
+	sort.Strings(reminders)
+	for _, r := range reminders {
+		fmt.Fprintln(e.output, r)
 	}
 
 	// Clear tracking
 	e.cache.modifiedDomainModels = nil
 	return nil
+}
+
+// layoutReminder is the line telling the author of a script that the module it
+// changed still has linked entities on the auto-placement grid, or "" when it
+// does not. Entities created without @Position land on a grid that knows
+// nothing about their associations; the skills say to run `mxcli layout`
+// afterwards, agents forget, and lint rule MPR020 catches it only when the gate
+// runs. This says it when the script that caused it does.
+//
+// Marketplace modules get no reminder: `mxcli layout` skips them, so the line
+// would name a command that does nothing there.
+func (e *Executor) layoutReminder(moduleID model.ID, moduleName string, dm *domainmodel.DomainModel) string {
+	if e.quiet {
+		return ""
+	}
+	unlaid := dmlayout.NotLaidOut(dm)
+	if len(unlaid) == 0 {
+		return ""
+	}
+	if mod, err := e.backend.GetModule(moduleID); err == nil && isMarketplaceModule(nil, mod) {
+		return ""
+	}
+	names := make([]string, 0, len(unlaid))
+	for _, ent := range unlaid {
+		names = append(names, ent.Name)
+	}
+	const maxNamed = 6
+	if len(names) > maxNamed {
+		names = append(names[:maxNamed], fmt.Sprintf("and %d more", len(unlaid)-maxNamed))
+	}
+	count := fmt.Sprintf("%d linked entities are", len(unlaid))
+	if len(unlaid) == 1 {
+		count = "1 linked entity is"
+	}
+	return fmt.Sprintf("Domain model %s is not laid out: %s on the default placement grid (%s). Run: mxcli layout --module %s",
+		moduleName, count, strings.Join(names, ", "), moduleName)
 }
 
 // Catalog returns the catalog, or nil if not built.
