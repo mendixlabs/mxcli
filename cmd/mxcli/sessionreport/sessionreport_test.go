@@ -227,7 +227,7 @@ func TestDetectFailure(t *testing.T) {
 		{"Edit", true, "<tool_use_error>String to replace not found in file.</tool_use_error>", true, "String to replace not found in file."},
 	}
 	for _, c := range cases {
-		failed, line := detectFailure(c.tool, c.isErr, c.text)
+		failed, line := detectFailure(c.tool, "", c.isErr, c.text)
 		if failed != c.failed || line != c.errLine {
 			t.Errorf("detectFailure(%s, %v, %q) = %v %q, want %v %q", c.tool, c.isErr, c.text, failed, line, c.failed, c.errLine)
 		}

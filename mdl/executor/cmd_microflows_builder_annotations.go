@@ -65,6 +65,9 @@ func (fb *flowBuilder) mergeStatementAnnotations(stmt ast.MicroflowStatement) {
 	if ann.Excluded {
 		fb.pendingAnnotations.Excluded = true
 	}
+	if ann.Documentation != nil {
+		fb.pendingAnnotations.Documentation = ann.Documentation
+	}
 	if ann.Anchor != nil {
 		fb.pendingAnnotations.Anchor = ann.Anchor
 	}
@@ -73,6 +76,12 @@ func (fb *flowBuilder) mergeStatementAnnotations(stmt ast.MicroflowStatement) {
 	}
 	if ann.Merge != nil {
 		fb.pendingAnnotations.Merge = ann.Merge
+	}
+	if ann.MergeSize != nil {
+		fb.pendingAnnotations.MergeSize = ann.MergeSize
+	}
+	if ann.Size != nil {
+		fb.pendingAnnotations.Size = ann.Size
 	}
 	if ann.TrueBranchAnchor != nil {
 		fb.pendingAnnotations.TrueBranchAnchor = ann.TrueBranchAnchor
@@ -100,10 +109,23 @@ func (fb *flowBuilder) applyAnnotations(activityID model.ID, ann *ast.ActivityAn
 	}
 
 	// Find the object by ID for @caption, @color, and @excluded
-	if ann.HasCaption() || ann.Color != "" || ann.Excluded {
+	if ann.HasCaption() || ann.Color != "" || ann.Excluded || ann.Documentation != nil {
 		for _, obj := range fb.objects {
 			if obj.GetID() != activityID {
 				continue
+			}
+			// @documentation (ako/mxcli#2328): the four kinds that store it.
+			if ann.Documentation != nil {
+				switch a := obj.(type) {
+				case *microflows.ActionActivity:
+					a.Documentation = *ann.Documentation
+				case *microflows.ExclusiveSplit:
+					a.Documentation = *ann.Documentation
+				case *microflows.InheritanceSplit:
+					a.Documentation = *ann.Documentation
+				case *microflows.LoopedActivity:
+					a.Documentation = *ann.Documentation
+				}
 			}
 
 			switch activity := obj.(type) {
@@ -191,6 +213,15 @@ func mergePosition(ann *ast.ActivityAnnotations, computedX, computedY int) (int,
 		return computedX, computedY
 	}
 	return ann.Merge.X, ann.Merge.Y
+}
+
+// mergeSize is the box of a split's implicit merge: the size @merge(x, y, w,
+// h) states, or mxcli's 40x40 (ako/mxcli#2369).
+func mergeSize(ann *ast.ActivityAnnotations) model.Size {
+	if ann != nil && ann.MergeSize != nil && ann.MergeSize.Width > 0 && ann.MergeSize.Height > 0 {
+		return model.Size{Width: ann.MergeSize.Width, Height: ann.MergeSize.Height}
+	}
+	return model.Size{Width: MergeSize, Height: MergeSize}
 }
 
 // adoptCurves takes over the @curves a sub-builder recorded, for a caller that
