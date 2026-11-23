@@ -436,6 +436,15 @@ type ActivityAnnotations struct {
 	// own annotation. Before #884 it was placed by the layout pass alone and was
 	// unaddressable, and it routinely landed on top of a neighbouring activity.
 	Merge *Position
+	// MergeSize is that merge's box, the optional third and fourth values of
+	// @merge(x, y, w, h). Studio Pro draws merges 90x60 (and other sizes);
+	// mxcli's are 40x40, and a re-created merge lost its own (ako/mxcli#2369).
+	MergeSize *BoxSize
+
+	// Size is a loop's box, @size(w, h). The builder fits the box to its body,
+	// which differs from what Studio Pro stored, so a re-created loop grew into
+	// its neighbours (MPR008) (ako/mxcli#2369).
+	Size *BoxSize
 
 	// Start positions the StartEvent — the implicit node every flow begins at:
 	// @start(x, y), written on the FIRST statement, the one the start flows into.

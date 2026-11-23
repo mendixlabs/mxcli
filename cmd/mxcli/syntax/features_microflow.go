@@ -974,6 +974,9 @@ func init() {
 			"                                      -- this statement enters by (not its far end)\n" +
 			"@curve(from: (40, -90), to: (-40, 90))  -- the flow's bezier control vectors\n" +
 			"@merge(x, y)                          -- the implicit merge that closes a split\n" +
+			"@merge(x, y, w, h)                    -- … and its box, when not the default 40x40\n" +
+			"@size(w, h)                           -- a LOOP's box, a `while true`'s loop-head merge,\n" +
+			"                                      -- or a `merge <label>`'s box; left out, computed\n" +
 			"@anchor(from: bottom, to: top, true: (…), false: (…))  -- on an IF: to = its incoming flow,\n" +
 			"                                      -- from = the flow leaving its closing merge\n" +
 			"@anchor(true: (to: top))              -- one branch's edge; either side may be left out\n" +

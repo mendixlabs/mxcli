@@ -522,6 +522,13 @@ func emitMergeAnnotation(
 		return
 	}
 	merge := commonMergeAfter(obj.GetID(), flowsByOrigin, activityMap)
+	if merge == nil && buildsMergeForContinuingBranches(obj, flowsByOrigin) {
+		// A type or enum split with a returning case still gets a merge from
+		// the builder, joining the cases that go on — so its stored position
+		// and size are owed too, or the rebuild drops it onto the first
+		// branch (ako/mxcli#2369).
+		merge = mergeAfterContinuingBranches(obj.GetID(), flowsByOrigin, activityMap)
+	}
 	if merge == nil {
 		return
 	}
@@ -533,6 +540,13 @@ func emitMergeAnnotation(
 		return
 	}
 	p := merge.GetPosition()
+	// The merge's own box when it is not the builder's 40x40: Studio Pro
+	// draws 90x60 and other sizes, which a re-created merge lost and, from
+	// its centre, its position too (ako/mxcli#2369).
+	if sz := objectSize(merge); sz.Width > 0 && sz.Height > 0 && (sz.Width != MergeSize || sz.Height != MergeSize) {
+		*lines = append(*lines, indentStr+fmt.Sprintf("@merge(%d, %d, %d, %d)", p.X, p.Y, sz.Width, sz.Height))
+		return
+	}
 	*lines = append(*lines, indentStr+fmt.Sprintf("@merge(%d, %d)", p.X, p.Y))
 }
 
@@ -562,6 +576,40 @@ func commonMergeAfter(
 	splitID model.ID,
 	flowsByOrigin map[model.ID][]*microflows.SequenceFlow,
 	activityMap map[model.ID]microflows.MicroflowObject,
+) microflows.MicroflowObject {
+	return mergeAfterBranches(splitID, flowsByOrigin, activityMap, false)
+}
+
+// buildsMergeForContinuingBranches reports whether the builder closes this
+// split with a merge as soon as any of its cases goes on — a type split, or a
+// split on an enumeration — rather than only when every case does, as for a
+// boolean `if`.
+func buildsMergeForContinuingBranches(obj microflows.MicroflowObject, flowsByOrigin map[model.ID][]*microflows.SequenceFlow) bool {
+	switch obj.(type) {
+	case *microflows.InheritanceSplit:
+		return true
+	case *microflows.ExclusiveSplit:
+		return hasEnumCaseFlows(flowsByOrigin[obj.GetID()])
+	}
+	return false
+}
+
+// mergeAfterContinuingBranches is commonMergeAfter over only the branches that
+// reach a merge at all — a case that returns is left out. At least two must
+// remain: one path alone does not say which downstream merge closes the split.
+func mergeAfterContinuingBranches(
+	splitID model.ID,
+	flowsByOrigin map[model.ID][]*microflows.SequenceFlow,
+	activityMap map[model.ID]microflows.MicroflowObject,
+) microflows.MicroflowObject {
+	return mergeAfterBranches(splitID, flowsByOrigin, activityMap, true)
+}
+
+func mergeAfterBranches(
+	splitID model.ID,
+	flowsByOrigin map[model.ID][]*microflows.SequenceFlow,
+	activityMap map[model.ID]microflows.MicroflowObject,
+	skipTerminal bool,
 ) microflows.MicroflowObject {
 	const maxNodes = 500
 
@@ -594,7 +642,18 @@ func commonMergeAfter(
 		return order
 	}
 
-	first := reachable(branches[0].DestinationID)
+	var perBranch [][]model.ID
+	for _, b := range branches {
+		r := reachable(b.DestinationID)
+		if skipTerminal && len(r) == 0 {
+			continue
+		}
+		perBranch = append(perBranch, r)
+	}
+	if len(perBranch) < 2 {
+		return nil
+	}
+	first := perBranch[0]
 	if len(first) == 0 {
 		return nil
 	}
@@ -602,8 +661,8 @@ func commonMergeAfter(
 	for _, id := range first {
 		inAll[id] = 1
 	}
-	for _, b := range branches[1:] {
-		for _, id := range reachable(b.DestinationID) {
+	for _, r := range perBranch[1:] {
+		for _, id := range r {
 			if inAll[id] > 0 {
 				inAll[id]++
 			}
@@ -611,7 +670,7 @@ func commonMergeAfter(
 	}
 	// Preserve the first branch's breadth-first order, so "nearest" wins.
 	for _, id := range first {
-		if inAll[id] == len(branches) {
+		if inAll[id] == len(perBranch) {
 			return activityMap[id]
 		}
 	}
@@ -1048,6 +1107,11 @@ func emitObjectAnnotations(
 	layout := annotationsByTarget.layoutKeep()
 	if layout.keepsPosition(currentID) {
 		*lines = append(*lines, indentStr+fmt.Sprintf("@position(%d, %d)", pos.X, pos.Y))
+		// A loop's box, which the builder would otherwise fit to its body
+		// and grow into its neighbours (ako/mxcli#2369).
+		if loop, ok := obj.(*microflows.LoopedActivity); ok && loop.Size.Width > 0 && loop.Size.Height > 0 {
+			*lines = append(*lines, indentStr+fmt.Sprintf("@size(%d, %d)", loop.Size.Width, loop.Size.Height))
+		}
 	}
 
 	if flowsByOrigin != nil && flowsByDest != nil {
@@ -1335,6 +1399,7 @@ func traverseFlow(
 		}
 		if mergeHasLoopBackEdge(currentID, flowsByOrigin) {
 			visited[currentID] = true
+			*lines = append(*lines, whileHeaderAnnotations(obj, annotationsByTarget, strings.Repeat("  ", indent))...)
 			*lines = append(*lines, strings.Repeat("  ", indent)+"while true")
 			*lines = append(*lines, strings.Repeat("  ", indent)+"begin")
 			for _, flow := range findNormalFlows(flowsByOrigin[currentID]) {
@@ -1563,6 +1628,7 @@ func traverseFlowUntilMerge(
 		// cycle too, but it is that loop's back-edge, not a loop of its own.
 		if !visited[currentID] && mergeIsUndescribedLoopHeader(currentID, mergeID, flowsByOrigin, visited) {
 			visited[currentID] = true
+			*lines = append(*lines, whileHeaderAnnotations(activityMap[currentID], annotationsByTarget, strings.Repeat("  ", indent))...)
 			*lines = append(*lines, strings.Repeat("  ", indent)+"while true")
 			*lines = append(*lines, strings.Repeat("  ", indent)+"begin")
 			for _, flow := range findNormalFlows(flowsByOrigin[currentID]) {
@@ -1915,6 +1981,7 @@ func emitJoinAsLoopHeader(
 		return false
 	}
 	visited[joinID] = true
+	*lines = append(*lines, whileHeaderAnnotations(activityMap[joinID], annotationsByTarget, strings.Repeat("  ", indent))...)
 	*lines = append(*lines, strings.Repeat("  ", indent)+"while true")
 	*lines = append(*lines, strings.Repeat("  ", indent)+"begin")
 	for _, flow := range findNormalFlows(flowsByOrigin[joinID]) {
@@ -3236,4 +3303,20 @@ func activityDocumentation(obj microflows.MicroflowObject) string {
 		return a.Documentation
 	}
 	return ""
+}
+
+// whileHeaderAnnotations places a `while true`'s loop-head merge: its
+// @position, and its @size when it is not the builder's 40x40. Neither was
+// written, so a re-created manual loop's merge was put where the builder
+// computed and drawn 40x40 (ako/mxcli#2369).
+func whileHeaderAnnotations(merge microflows.MicroflowObject, annotationsByTarget *annotationEmitter, indentStr string) []string {
+	if merge == nil || !annotationsByTarget.layoutKeep().keepsPosition(merge.GetID()) {
+		return nil
+	}
+	p := merge.GetPosition()
+	out := []string{indentStr + fmt.Sprintf("@position(%d, %d)", p.X, p.Y)}
+	if sz := objectSize(merge); sz.Width > 0 && sz.Height > 0 && (sz.Width != MergeSize || sz.Height != MergeSize) {
+		out = append(out, indentStr+fmt.Sprintf("@size(%d, %d)", sz.Width, sz.Height))
+	}
+	return out
 }

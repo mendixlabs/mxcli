@@ -1891,6 +1891,7 @@ var knownActivityAnnotations = map[string]bool{
 	"merge":         true,
 	"start":         true,
 	"documentation": true, // ako/mxcli#2328
+	"size":          true, // a loop's box, ako/mxcli#2369
 }
 
 // invalidAnchorRule refuses an @anchor parameter the visitor could not use.

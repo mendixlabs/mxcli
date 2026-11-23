@@ -382,6 +382,27 @@ func extractMicroflowAnnotations(annotations []parser.IAnnotationContext) *ast.A
 						X: parseAnnotationParamInt(allParams[0]),
 						Y: parseAnnotationParamInt(allParams[1]),
 					}
+					// @merge(x, y, w, h): the merge's own box (ako/mxcli#2369).
+					if len(allParams) >= 4 {
+						result.MergeSize = &ast.BoxSize{
+							Width:  parseAnnotationParamInt(allParams[2]),
+							Height: parseAnnotationParamInt(allParams[3]),
+						}
+					}
+					hasAny = true
+				}
+			}
+			seenActivityMetadata = true
+
+		case "size":
+			// @size(w, h) — a loop's box (ako/mxcli#2369).
+			if params := ann.AnnotationParams(); params != nil {
+				allParams := params.(*parser.AnnotationParamsContext).AllAnnotationParam()
+				if len(allParams) >= 2 {
+					result.Size = &ast.BoxSize{
+						Width:  parseAnnotationParamInt(allParams[0]),
+						Height: parseAnnotationParamInt(allParams[1]),
+					}
 					hasAny = true
 				}
 			}

@@ -77,6 +77,12 @@ func (fb *flowBuilder) mergeStatementAnnotations(stmt ast.MicroflowStatement) {
 	if ann.Merge != nil {
 		fb.pendingAnnotations.Merge = ann.Merge
 	}
+	if ann.MergeSize != nil {
+		fb.pendingAnnotations.MergeSize = ann.MergeSize
+	}
+	if ann.Size != nil {
+		fb.pendingAnnotations.Size = ann.Size
+	}
 	if ann.TrueBranchAnchor != nil {
 		fb.pendingAnnotations.TrueBranchAnchor = ann.TrueBranchAnchor
 	}
@@ -207,6 +213,15 @@ func mergePosition(ann *ast.ActivityAnnotations, computedX, computedY int) (int,
 		return computedX, computedY
 	}
 	return ann.Merge.X, ann.Merge.Y
+}
+
+// mergeSize is the box of a split's implicit merge: the size @merge(x, y, w,
+// h) states, or mxcli's 40x40 (ako/mxcli#2369).
+func mergeSize(ann *ast.ActivityAnnotations) model.Size {
+	if ann != nil && ann.MergeSize != nil && ann.MergeSize.Width > 0 && ann.MergeSize.Height > 0 {
+		return model.Size{Width: ann.MergeSize.Width, Height: ann.MergeSize.Height}
+	}
+	return model.Size{Width: MergeSize, Height: MergeSize}
 }
 
 // adoptCurves takes over the @curves a sub-builder recorded, for a caller that

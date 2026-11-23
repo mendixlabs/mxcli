@@ -585,7 +585,7 @@ func (fb *flowBuilder) addEnumSplit(s *ast.EnumSplitStmt) model.ID {
 				BaseMicroflowObject: microflows.BaseMicroflowObject{
 					BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 					Position:    model.Point{X: mergeX, Y: mergeY},
-					Size:        model.Size{Width: MergeSize, Height: MergeSize},
+					Size:        mergeSize(s.Annotations),
 				},
 			}
 			fb.objects = append(fb.objects, merge)
@@ -1045,7 +1045,7 @@ func (fb *flowBuilder) addStructuredInheritanceSplit(s *ast.InheritanceSplitStmt
 			BaseMicroflowObject: microflows.BaseMicroflowObject{
 				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 				Position:    model.Point{X: mergeX, Y: mergeY},
-				Size:        model.Size{Width: MergeSize, Height: MergeSize},
+				Size:        mergeSize(s.Annotations),
 			},
 		}
 		fb.objects = append(fb.objects, merge)
