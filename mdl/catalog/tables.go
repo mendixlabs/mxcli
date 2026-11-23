@@ -7,6 +7,12 @@ package catalog
 //
 // History:
 //
+//	51 (entry points, user role tokens): microflows_data gains MarkAsUsed
+//	    and URL, pages_data MarkAsUsed, and graph_dead_assets leaves out a
+//	    document marked as used or reachable by URL (ako/mxcli#2241). Also
+//	    covers refs gaining the `xpath` edges to USER_ROLE from
+//	    '[%UserRole_X%]' tokens (ako/mxcli#2529, which shipped without a
+//	    bump): a cached catalog kept answering "no references" for a role.
 //	50 (task queue direction): refs gains `enqueue` edges, from the
 //	    microflow that places a call in a task queue to the queue, and module
 //	    cycles no longer count `queue` and `by_name` edges, which made a
@@ -274,7 +280,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "50"
+const CatalogSchemaVersion = "51"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -499,6 +505,11 @@ func (c *Catalog) createTables() error {
 			-- The flow's "Apply entity access" setting; always 0 for a nanoflow,
 			-- which has no such setting (ako/mxcli#1453).
 			ApplyEntityAccess BOOLEAN DEFAULT 0,
+			-- Studio Pro's "Mark as used", and a microflow's URL (deep link):
+			-- both make a document an entry point with no inbound edge
+			-- (ako/mxcli#2241).
+			MarkAsUsed BOOLEAN DEFAULT 0,
+			URL TEXT,
 			ProjectId TEXT,
 			SnapshotId TEXT
 		)`,
@@ -549,6 +560,8 @@ func (c *Catalog) createTables() error {
 			ParameterCount INTEGER DEFAULT 0,
 			WidgetCount INTEGER DEFAULT 0,
 			Excluded BOOLEAN DEFAULT 0,
+			-- Studio Pro's "Mark as used" (ako/mxcli#2241).
+			MarkAsUsed BOOLEAN DEFAULT 0,
 			-- The page's own Forms$Appearance (full build only, like WidgetCount).
 			Class TEXT,
 			Style TEXT,
@@ -2046,7 +2059,13 @@ func (c *Catalog) createTables() error {
 			SELECT o.QualifiedName, o.ObjectType, o.ModuleName
 			FROM objects o
 			WHERE o.ObjectType IN ('ENTITY', 'MICROFLOW', 'NANOFLOW', 'PAGE', 'SNIPPET')
-				AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.TargetName = o.QualifiedName)`,
+				AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.TargetName = o.QualifiedName)
+				-- An entry point is used without an inbound edge: Studio Pro's
+				-- "Mark as used", and a page or microflow URL (ako/mxcli#2241).
+				AND NOT EXISTS (SELECT 1 FROM microflows m WHERE m.QualifiedName = o.QualifiedName
+					AND (m.MarkAsUsed OR COALESCE(m.URL, '') <> ''))
+				AND NOT EXISTS (SELECT 1 FROM pages p WHERE p.QualifiedName = o.QualifiedName
+					AND (p.MarkAsUsed OR COALESCE(p.URL, '') <> ''))`,
 
 		// graph_refkind_distribution — the edge vocabulary (calibrates the others).
 		`CREATE VIEW IF NOT EXISTS graph_refkind_distribution AS
