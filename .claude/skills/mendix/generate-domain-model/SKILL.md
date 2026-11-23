@@ -14,10 +14,10 @@ description: "Generate a complete Mendix domain model in MDL — entities, attri
 | 47-53 | When to Use This Skill |
 | 54-65 | Modelling for the client: widgets bind members, not expressions |
 | 66-102 | Documentation Best Practices |
-| 103-235 | Step-by-Step Process |
-| 236-254 | Checklist |
-| 255-264 | References |
-| 265-274 | Tips for AI Assistants |
+| 103-236 | Step-by-Step Process |
+| 237-255 | Checklist |
+| 256-265 | References |
+| 266-275 | Tips for AI Assistants |
 
 <!-- /skill-index -->
 # Creating Mendix Domain Model MDL Scripts
@@ -209,7 +209,8 @@ opening the app sees.
 `layout` is idempotent (a second run moves nothing) and lays out from the
 association graph — lookups on the left, each entity one column past what it
 references and on the row of the entity it is most linked to, with the gap between
-columns wide enough for the association names. It **replaces every position in
+columns wide enough for the association names, and re-attaches every association
+line so it runs straight where it can. It **replaces every position in
 the module**:
 
 - **Module this script created, or that mxcli built before:** run it.

@@ -203,37 +203,37 @@ tests at the measured sizes.
 Determinism (`TestPlan_IsDeterministic`) and no-overlap (`TestPlan_NoOverlap`)
 still hold. Neither depends on the gap or the y rule.
 
-### Phase 2 — Recompute anchors (rules 4, 5)
+### Phase 2 — Recompute anchors (rules 4, 5) — implemented
 
-`Plan` returns anchors as well as positions:
+`dmlayout.Anchors(dm, positions)` returns a connection-point pair per
+association, and a full `mxcli layout` writes it into `ParentConnection` /
+`ChildConnection` (`--only-overlapping` keeps the stored ones). For each
+association between two different entities (self-associations keep what is
+stored; generalizations have no stored points):
 
-```go
-type Layout struct {
-    Entities map[model.ID]model.Point
-    Anchors  map[model.ID]AnchorPair // association ID -> parent/child edge points
-}
-```
+- **Side.** The side of each box that faces the other: top/bottom when the boxes
+  overlap horizontally, left/right otherwise.
+- **Straight where the boxes share a span.** Both ends at the same absolute
+  coordinate: in the header (20 px below the lower top) when that is inside the
+  shared span, which keeps the line straight whatever the heights; otherwise the
+  middle of the span. This straightens a referrer *anywhere* beside a tall
+  target, not only the one on its top row. The coordinate is taken on the
+  longer box's whole-percent grid (Mendix stores whole numbers; a percent of an
+  856-px box is 8.6 px), so the shorter box's rounding is worth half a pixel.
+- **Not through a box.** A straight segment that would pass another box (a line
+  between columns that are not adjacent) is not drawn straight.
+- **Parallel associations.** The *k*-th association between the same two
+  entities (by name) runs 20 px further along the span, so two associations
+  are two lines with two labels.
+- **Spreading.** The remaining ends on one side are spread evenly,
+  `(i+1) × 100 / (k+1)`, in the order of their far ends, kept 5 % clear of the
+  straight lines' ends on that side, and never on a corner (1–99).
 
-For each same-module association (not self-associations, which keep what is
-stored):
-
-- **Side.** The side of each box that faces the other box. Horizontally separated
-  → left/right sides; horizontally overlapping → top/bottom.
-- **Exact horizontals.** If both boxes share a top y, both ends are anchored the
-  same pixel distance below the top (`headerAnchorPx = 20`, inside the header,
-  which is the same height on every box). Converted per box:
-  `y% = round(20 × 100 / estimatedHeight)`. A height estimate that is a few px
-  off moves the point by about a pixel. Centre alignment would move it by half
-  the error.
-- **Exact verticals.** Solve `x_a + w_a × p = x_b + w_b × q` for integer
-  percentages, if a solution exists inside both boxes.
-- **Spreading.** When *k* lines leave one side, order them by the position of
-  their far end (top to bottom, or left to right). Spread them evenly
-  (`(i+1) × 100 / (k+1)`) so no two meet at one point and none cross at the side.
-- Otherwise, the facing sides at 50 %.
-
-`runLayout` writes `Anchors` into `Association.ParentConnection` /
-`ChildConnection` before `UpdateDomainModel`.
+Measured on ako/PizzaV1's Fulfilment: before, every referrer of Order met it at
+one point; after, the lines to Coupon, DeliveryZone, Oven, OrderAccess,
+OrderLine, OrderLogEntry, OrderLineModifier and both Courier associations are
+straight. Lines that still cross a box are between non-adjacent columns
+(Catalog's `Product_Allergen`, `RecipeItem_Ingredient`): that is ordering, phase 4.
 
 ### Phase 3 — Cross-module free band (rules 2, 3)
 

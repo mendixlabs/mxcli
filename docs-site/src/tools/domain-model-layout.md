@@ -24,7 +24,11 @@ Entities are layered on the associations between them:
   name drawn across it, plus the 1 / * markers at its ends, so Studio Pro does
   not cut the label off;
 - entities with **no association at all** — non-persistent helpers, mostly — go
-  in a band underneath, rather than being mixed in with the lookups.
+  in a band underneath, rather than being mixed in with the lookups;
+- every association line is **re-attached** on the sides of its two boxes that
+  face each other, straight across where the boxes share a span (and no other
+  box is in the way), the rest spread along the side so no two lines meet at
+  one point. `--only-overlapping` leaves the attachment points alone.
 
 Association lines then mostly run one way instead of crossing the diagram.
 
