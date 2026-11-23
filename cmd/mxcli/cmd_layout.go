@@ -41,9 +41,11 @@ var layoutCmd = &cobra.Command{
 
 Entities are layered on the association graph: an entity that references nothing
 else in the module is a lookup and goes on the left, and everything else sits
-one column past the furthest thing it references. Association lines then mostly
-run one way instead of crossing the diagram. Entities with no association at all
-— non-persistent helpers, mostly — go in a band underneath rather than being
+one column past the furthest thing it references, on the row of the entity it is
+most linked to. Association lines then mostly run one way, and straight across,
+instead of crossing the diagram. The gap between two columns is wide enough for
+the longest association name drawn across it. Entities with no association at
+all — non-persistent helpers, mostly — go in a band underneath rather than being
 mixed in with the lookups.
 
 Positions are a function of the model alone, so running this twice in a row

@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - **A bare `save changes` / `cancel changes` closes the page** (ako/mxcli#2536) — it stored ClosePage false, so a pop-up's Cancel left the pop-up open, while Studio Pro's default is to close (every save and cancel button in a Studio Pro-built app stores it). The bare form now closes; `with (ClosePage: false)` keeps the page open. `describe` prints both explicitly (`close page`, `with (ClosePage: false)`), so its output means the same to older versions. Scripts that relied on the bare form staying on the page need the setting.
+- **`mxcli layout` puts each entity on the row of the entity it is most linked to, and sizes each column gap to its association names** — before, every column was stacked from the top on its own, so most lines ran diagonally, and a fixed 90 px gap cut off any association name over ~10 characters in Studio Pro. On ako/PizzaV1's Catalog, Fulfilment, Shop and PizzaChat modules every horizontal line now has room for its label (16 of 16, against 1 of 16), and more lines run straight across; diagrams with long association names are wider. Phase 1 of `PROPOSAL_domain_model_readable_layout.md`.
 
 ### Fixed
 
