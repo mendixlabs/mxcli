@@ -43,9 +43,12 @@ var actionSettingKeys = map[string]struct {
 	// committed ever since.
 	"assignonopen":     {canonical: "AssignOnOpen", kinds: []string{"openUserTask"}, what: "`open user task`"},
 	"openwhenassigned": {canonical: "OpenWhenAssigned", kinds: []string{"openUserTask"}, what: "`open user task`"},
-	"closepage":        {canonical: "ClosePage", kinds: []string{"completeTask", "callWorkflow"}, what: "`complete task` and `call workflow`"},
-	"commit":           {canonical: "Commit", kinds: []string{"completeTask"}, what: "`complete task`"},
-	"defaultpage":      {canonical: "DefaultPage", kinds: []string{"openWorkflow"}, what: "`open workflow`"},
+	// Save and cancel too: their bare form closes the page, as Studio Pro
+	// does, so keeping it open needs a spelling (ako/mxcli#2536).
+	"closepage": {canonical: "ClosePage", kinds: []string{"completeTask", "callWorkflow", "saveChanges", "cancelChanges"},
+		what: "`complete task`, `call workflow`, `save changes` and `cancel changes`"},
+	"commit":      {canonical: "Commit", kinds: []string{"completeTask"}, what: "`complete task`"},
+	"defaultpage": {canonical: "DefaultPage", kinds: []string{"openWorkflow"}, what: "`open workflow`"},
 	// Show page's "number of pages to close" (ako/mxcli#2106).
 	"numberofpagestoclose": {canonical: "NumberOfPagesToClose", kinds: []string{"showPage"}, what: "`show page`"},
 }
@@ -76,6 +79,10 @@ func actionSettingsKind(act *parser.ActionExprV3Context) string {
 		return "callWorkflow"
 	case (act.SHOW() != nil && act.PAGE() != nil) || act.SHOW_PAGE() != nil:
 		return "showPage"
+	case act.SAVE_CHANGES() != nil:
+		return "saveChanges"
+	case act.CANCEL_CHANGES() != nil:
+		return "cancelChanges"
 	}
 	return "other"
 }

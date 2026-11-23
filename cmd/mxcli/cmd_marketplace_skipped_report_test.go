@@ -50,3 +50,26 @@ func TestReportAddOnModules_NamesTheMxmoduleWritten(t *testing.T) {
 		t.Errorf("an ordinary bundled file was reported as an add-on:\n%s", got)
 	}
 }
+
+// ako/mxcli#2537: a widget held back for its styling module is not a widget
+// "the package would have rolled back" — the package ships a NEWER one. It is
+// listed on its own, with the module to update.
+func TestReportSkippedFiles_HeldBackForStyling_2537(t *testing.T) {
+	var out bytes.Buffer
+	reportSkippedFiles(&out, []marketplace.SkippedFile{
+		{Path: "widgets/com.mendix.widget.web.Datagrid.mpk", Kept: "3.5.0", Offered: "3.8.1", StyledBy: "DataWidgets 3.5.0"},
+		{Path: "widgets/com.mendix.widget.web.Image.mpk", Kept: "1.5.0", Offered: "1.4.3"},
+	})
+	got := out.String()
+	for _, want := range []string{
+		"Kept 1 newer widget(s)",
+		"Held back 1 widget(s)",
+		"styled by DataWidgets 3.5.0",
+		"Update the DataWidgets module",
+		"--to 3.8.1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("report lacks %q:\n%s", want, got)
+		}
+	}
+}

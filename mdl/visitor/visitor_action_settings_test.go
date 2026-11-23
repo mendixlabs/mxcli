@@ -171,7 +171,7 @@ func TestActionSettings_WorkflowActions(t *testing.T) {
 
 func TestActionSettings_WorkflowRefusals(t *testing.T) {
 	for action, want := range map[string]string{
-		"open user task with (ClosePage: false)":          "`complete task` and `call workflow` only",
+		"open user task with (ClosePage: false)":          "`call workflow`, `save changes` and `cancel changes` only",
 		"complete task 'X' with (AssignOnOpen: false)":    "`open user task` only",
 		"call workflow M.WF with (ProgressBar: Blocking)": "`call microflow` and `call nanoflow` only",
 		"call workflow M.WF with (Commit: false)":         "`complete task` only",
