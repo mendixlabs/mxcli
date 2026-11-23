@@ -43,7 +43,6 @@ create enumeration ECommerce.OrderStatus (
  * @since 1.0.0
  * @see ECommerce.SalesOrder
  */
-@position(50, 50)
 create persistent entity ECommerce.Customer (
   /** Unique customer identifier */
   CustomerId: long not null error message 'Customer ID is required' unique error message 'Customer ID must be unique',
@@ -62,7 +61,6 @@ create persistent entity ECommerce.Customer (
  *
  * @since 1.0.0
  */
-@position(50, 250)
 create persistent entity ECommerce.Product (
   /** Unique product identifier */
   ProductId: long not null error message 'Product ID is required' unique error message 'Product ID must be unique',
@@ -83,7 +81,6 @@ create persistent entity ECommerce.Product (
  *
  * @since 1.0.0
  */
-@position(300, 150)
 create persistent entity ECommerce.SalesOrder (
   /** Unique order identifier */
   OrderId: long not null error message 'Order ID is required' unique error message 'Order ID must be unique',
@@ -112,6 +109,11 @@ from ECommerce.Customer to ECommerce.SalesOrder
 type ReferenceSet
 owner both;
 ```
+
+No `@position` anywhere: after `./mxcli exec`, run
+`./mxcli layout -p app.mpr --module ECommerce` to arrange the diagram from the
+associations (see SKILL.md, step 5).
+
 ## Common Patterns
 
 ### One-to-Many Relationship
@@ -239,35 +241,14 @@ alter entity Module.Customer
 >
 > To clear a default value use **`DROP DEFAULT ON ATTRIBUTE <name>`**.
 
-### Entity Positioning Guidelines
+### Entity Positioning
 
-When creating or repositioning entities, follow these layout rules for readable domain models:
-
-- **Horizontal spacing:** 350px between columns (x = 50, 400, 750, 1100, ...)
-- **Vertical spacing:** calculate per-column based on the entity above: `y = previous_y + 50 + (previous_entity_attribute_count * 20)`
-- Entity header is ~40px, each attribute adds ~20px of height, plus ~50px padding
-- **Position column-by-column**, not in rigid rows — avoids wasting space when entities have different attribute counts
-- **Place related entities** in the same column or adjacent columns so associations are short
-
-Example layout for entities with varying attribute counts:
-
-```
-column 1 (x=50):          column 2 (x=400):
-  entity A (4 attrs)        entity C (14 attrs)
-  y=50                      y=50
-
-  entity B (10 attrs)       entity D (3 attrs)
-  y=180 (50+50+4*20)        y=380 (50+50+14*20)
-```
-
-```sql
-mdl 1;
--- Position entities after creation
-alter entity Module.EntityA set position (50, 50);
-alter entity Module.EntityB set position (50, 180);
-alter entity Module.EntityC set position (400, 50);
-alter entity Module.EntityD set position (400, 380);
-```
+Don't compute positions by hand. Run `./mxcli layout -p app.mpr --module <Module>`
+after `exec`: it sizes each box from its attributes, keeps the boxes apart, and
+puts related entities next to each other. Hand-written `@position` or
+`alter entity … set position (x, y)` is for a few entities added to a module
+someone arranged in Studio Pro, where `layout` would move the rest (SKILL.md,
+step 5).
 
 ### Entity Migration with CREATE OR MODIFY
 
