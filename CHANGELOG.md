@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Lint `MPR020`: a domain model that was never laid out** — linked entities still on the grid slots mxcli gives an entity created without `@position`, the trace of a script that skipped `mxcli layout`. An **error**, so `mxcli lint` and `mxcli verify` fail on it where MPR016's warning let overlapping and tangled diagrams through. Hand-arranged diagrams are not reported (Studio Pro positions do not land on those exact coordinates), nor is (100, 100), nor any entity `mxcli layout` itself placed, so the command the finding names always clears it.
+
 ## [0.33.1] - 2026-11-23
 
 Headline: **Data grid drop-down filters build without CE0463, and v0.33.0's MDL-WIDGET56 stops warning about widget modes a statement did not choose.** A patch release: two pluggable-widget fixes, and `brain capture --from-json` accepts the decision options the flags already had.
