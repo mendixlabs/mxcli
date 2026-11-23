@@ -12,8 +12,8 @@ description: "Produce and read the PRD-to-app traceability report (mxcli report 
 |---|---|
 | 25-74 | Preconditions |
 | 75-85 | Run it |
-| 86-103 | Reading it |
-| 104-107 | Related |
+| 86-110 | Reading it |
+| 111-114 | Related |
 
 <!-- /skill-index -->
 # Traceability Report
@@ -92,8 +92,15 @@ seed, tracing on, never commit while tests run).
   callees, microflows a page/workflow/service calls, microflows that write an anchored
   entity, use an anchored attribute or association. Helpers with more than three
   callers are left out — they belong to no single requirement.
-- **Tests / journeys** reach the footprint (or the journey log names an anchored
-  page — needed for pages with only database data sources, which run no microflow).
+- **Tests / journeys** reach the footprint, or the journey log lists an anchored
+  page in a record's `pages` — needed for pages with only database data sources,
+  which run no microflow. Write the pages each step opened into its record:
+
+  ```json
+  {"journey":"Browse systems","step":"open overview","start":"…","end":"…","status":"passed","checks":["sees 4 systems"],"pages":["FieldService.LithoSystem_Overview"]}
+  ```
+
+  A row "nothing to reach" anchored at a page stays so until a journey lists it.
 - **Decisions / open questions** share an anchor or cite the id. Linking by shared
   anchor is noisy around hub elements; cite the id in the body when it matters.
 
