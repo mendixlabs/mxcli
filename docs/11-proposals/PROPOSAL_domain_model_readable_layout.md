@@ -186,7 +186,7 @@ touching the box below, and MPR016 can miss the overlap. A fixed width makes
 Both feed every placement path and MPR016/MPR020, so this is its own PR, with
 tests at the measured sizes.
 
-### Phase 1 — Label-sized gaps and target-aligned rows (rules 4, 5, 7)
+### Phase 1 — Label-sized gaps and target-aligned rows (rules 4, 5, 7) — implemented
 
 1. **Gap per column boundary.** The gap between layers *i* and *i+1* becomes
    `max(columnGutter, labelWidth(longest association drawn between them) + markerAllowance)`.

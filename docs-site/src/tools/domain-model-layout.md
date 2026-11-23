@@ -17,7 +17,12 @@ Entities are layered on the associations between them:
 
 - an entity that references nothing else in the module is a **lookup**, and goes
   in the leftmost column;
-- everything else sits one column past the furthest thing it references;
+- everything else sits one column past the furthest thing it references, on the
+  **row of the entity it is most linked to**, so the line between them runs
+  straight across (the next free spot below when that row is taken);
+- the **gap between two columns** is wide enough for the longest association
+  name drawn across it, plus the 1 / * markers at its ends, so Studio Pro does
+  not cut the label off;
 - entities with **no association at all** — non-persistent helpers, mostly — go
   in a band underneath, rather than being mixed in with the lookups.
 
