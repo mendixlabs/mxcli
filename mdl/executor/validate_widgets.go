@@ -736,6 +736,9 @@ func validateWidgetVisibility(w *ast.WidgetV3, registry *WidgetRegistry, locatio
 		return nil
 	}
 	values, explicit := widgetValueMap(w, def)
+	// The configuration exec writes, not only what the statement states
+	// (ako/mxcli#2522): a rule on `source` was never judged.
+	fillTemplateValues(values, def)
 	defaults := widgetPropertyDefaults(registryProjectPath(registry), def.WidgetID)
 
 	var out []linter.Violation
