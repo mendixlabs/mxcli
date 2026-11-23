@@ -125,8 +125,12 @@ func applyWorkflowActionSettings(a pages.ClientAction, s *ast.ActionSettingsV3) 
 			x.ClosePage = *s.ClosePage
 		case *pages.CallWorkflowClientAction:
 			x.ClosePage = *s.ClosePage
+		case *pages.SaveChangesClientAction:
+			x.ClosePage = *s.ClosePage
+		case *pages.CancelChangesClientAction:
+			x.ClosePage = *s.ClosePage
 		default:
-			return mdlerrors.NewValidation("ClosePage is a setting of `complete task` and `call workflow` only")
+			return mdlerrors.NewValidation("ClosePage is a setting of `complete task`, `call workflow`, `save changes` and `cancel changes` only")
 		}
 	}
 	if s.Commit != nil {

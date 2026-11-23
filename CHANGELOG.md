@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **A bare `save changes` / `cancel changes` closes the page** (ako/mxcli#2536) — it stored ClosePage false, so a pop-up's Cancel left the pop-up open, while Studio Pro's default is to close (every save and cancel button in a Studio Pro-built app stores it). The bare form now closes; `with (ClosePage: false)` keeps the page open. `describe` prints both explicitly (`close page`, `with (ClosePage: false)`), so its output means the same to older versions. Scripts that relied on the bare form staying on the page need the setting.
+
 ### Fixed
 
 - **A user role named by its XPath token is found, and kept from being dropped** (ako/mxcli#2529) — `'[%UserRole_X%]'` in a retrieve, data source or access rule was invisible: `show references to` / `show impact of` on the role found nothing, `search "%UserRole_X%"` reported no matches (the `%` made the query a syntax error), and `drop user role X` passed check and exec and then failed the build with CE1613 at each constraint. The tokens are now reference edges, search treats `%`, `[`, `]` and other punctuation as separators, and the drop is refused naming each document that holds the token. Measured on 11.12.6.

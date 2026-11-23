@@ -39,6 +39,13 @@ func renderClientActionSettingsMDL(ctx *ExecContext, action map[string]any) stri
 		if closePage, ok := action["ClosePage"].(bool); ok && !closePage {
 			props = append(props, "ClosePage: false")
 		}
+	case "Forms$SaveChangesClientAction", "Pages$SaveChangesClientAction",
+		"Forms$CancelChangesClientAction", "Pages$CancelChangesClientAction":
+		// True prints as the action's own `close page`; false needs the
+		// setting, since the bare form closes (ako/mxcli#2536).
+		if closePage, ok := action["ClosePage"].(bool); ok && !closePage {
+			props = append(props, "ClosePage: false")
+		}
 	case "Forms$SetTaskOutcomeClientAction", "Pages$SetTaskOutcomeClientAction":
 		for _, key := range []string{"ClosePage", "Commit"} {
 			if v, ok := action[key].(bool); ok && !v {
