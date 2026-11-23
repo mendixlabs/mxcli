@@ -383,6 +383,10 @@ func execDropUserRole(ctx *ExecContext, s *ast.DropUserRoleStmt) error {
 	if len(holders) > 0 {
 		return mdlerrors.NewValidation(demoUserRoleDropRefusal(s.Name, holders))
 	}
+	// An XPath token naming the role (CE1613 at each constraint, ako/mxcli#2529).
+	if users := userRoleTokenUsers(ctx, s.Name); len(users) > 0 {
+		return mdlerrors.NewValidation(userRoleTokenDropRefusal(s.Name, users))
+	}
 
 	if err := ctx.Backend.RemoveUserRole(ps.ID, s.Name); err != nil {
 		return mdlerrors.NewBackend("drop user role", err)

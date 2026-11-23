@@ -95,7 +95,8 @@ var nativeWidgetKinds = map[string]nativeWidgetKind{
 	// Inputs.
 	"textbox": {stored: "Forms$TextBox", tail: true, visible: true,
 		reads: withReads(inputReads, "Placeholder", "ReadOnlyStyle", "Password", "Validation", "ValidationMessage",
-			"SubmitBehaviour", "SubmitOnInputDelay", "KeyboardType", "OnEnterKeyPress", "OnEnterKeyPressAction")},
+			"SubmitBehaviour", "SubmitOnInputDelay", "KeyboardType", "OnEnterKeyPress", "OnEnterKeyPressAction",
+			"AutoFocus")},
 	"textarea": {stored: "Forms$TextArea", tail: true, visible: true,
 		reads: withReads(inputReads, "Placeholder", "ReadOnlyStyle", "NumberOfLines", "Autocomplete",
 			"SubmitBehaviour", "SubmitOnInputDelay")},

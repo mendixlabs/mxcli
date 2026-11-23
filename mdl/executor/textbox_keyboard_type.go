@@ -66,6 +66,10 @@ func textBoxKeyboardType(w *ast.WidgetV3) (string, error) {
 // describeKeyboardType appends a text box's KeyboardType when it is not the
 // default.
 func describeKeyboardType(props []string, w rawWidget) []string {
+	if w.AutoFocus {
+		// Only when set: false is every ordinary text box (ako/mxcli#2519).
+		props = append(props, "AutoFocus: true")
+	}
 	if w.KeyboardType != "" && w.KeyboardType != "Default" {
 		props = append(props, "KeyboardType: "+w.KeyboardType)
 	}

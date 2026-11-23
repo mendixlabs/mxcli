@@ -44,6 +44,7 @@ func validateGrantReferences(ctx *ExecContext, prog *ast.Program) []error {
 	g.laterModuleRoles, g.laterUserRoles = map[string]bool{}, map[string]bool{}
 	g.scriptServices, g.laterServices = map[string]bool{}, map[string]bool{}
 	g.droppedModuleRoles, g.droppedUserRoles = map[string]bool{}, map[string]bool{}
+	g.scriptDocs = map[string]bool{}
 	for _, stmt := range prog.Statements {
 		g.recordLater(stmt)
 	}
@@ -74,6 +75,10 @@ type grantResolver struct {
 	scriptServices, laterServices       map[string]bool // "odata:M.S" / "rest:M.S"
 	// Roles a DROP above the statement removed, stored or not.
 	droppedModuleRoles, droppedUserRoles map[string]bool
+	// Documents a statement above created or dropped, by the label
+	// userRoleTokenUsers gives them: what they hold is the script's, not the
+	// stored one's, so a stored role token there no longer counts (#2529).
+	scriptDocs map[string]bool
 
 	moduleRoles   map[string]map[string]bool // module -> role names; nil value = unreadable
 	userRoles     map[string]bool            // lower-cased; nil until read
@@ -119,6 +124,9 @@ func (g *grantResolver) recordLater(stmt ast.Statement) {
 // statements after it resolve against it. A DROP takes the role away again:
 // exec would not find it either.
 func (g *grantResolver) record(stmt ast.Statement) {
+	if label := scriptDocumentLabel(stmt); label != "" {
+		g.scriptDocs[label] = true
+	}
 	switch s := stmt.(type) {
 	case *ast.CreateModuleRoleStmt:
 		g.scriptModuleRoles[s.Name.String()] = true
@@ -273,6 +281,16 @@ func (g *grantResolver) check(stmt ast.Statement) []string {
 		}
 		if len(holders) > 0 {
 			add(demoUserRoleDropRefusal(s.Name, holders))
+		}
+		// And an XPath token naming it in a stored document (ako/mxcli#2529).
+		var users []string
+		for _, u := range userRoleTokenUsers(g.ctx, s.Name) {
+			if !g.scriptDocs[u] {
+				users = append(users, u)
+			}
+		}
+		if len(users) > 0 {
+			add(userRoleTokenDropRefusal(s.Name, users))
 		}
 	case *ast.CreatePageStmtV3, *ast.CreateSnippetStmtV3, *ast.AlterPageStmt:
 		// `Visible: roles (…)` stores the names unresolved, as `create user
@@ -846,4 +864,32 @@ func grantStatementLabel(stmt ast.Statement) string {
 		return "alter " + strings.ToLower(s.ContainerType) + " " + s.PageName.String()
 	}
 	return "statement"
+}
+
+// scriptDocumentLabel is the userRoleTokenUsers label of a document a
+// statement creates or drops, or "".
+func scriptDocumentLabel(stmt ast.Statement) string {
+	switch s := stmt.(type) {
+	case *ast.CreateMicroflowStmt:
+		return "microflow " + s.Name.String()
+	case *ast.DropMicroflowStmt:
+		return "microflow " + s.Name.String()
+	case *ast.CreateNanoflowStmt:
+		return "nanoflow " + s.Name.String()
+	case *ast.DropNanoflowStmt:
+		return "nanoflow " + s.Name.String()
+	case *ast.CreatePageStmtV3:
+		return "page " + s.Name.String()
+	case *ast.DropPageStmt:
+		return "page " + s.Name.String()
+	case *ast.CreateSnippetStmtV3:
+		return "snippet " + s.Name.String()
+	case *ast.DropSnippetStmt:
+		return "snippet " + s.Name.String()
+	case *ast.CreateWorkflowStmt:
+		return "workflow " + s.Name.String()
+	case *ast.DropWorkflowStmt:
+		return "workflow " + s.Name.String()
+	}
+	return ""
 }

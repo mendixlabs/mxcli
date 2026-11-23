@@ -562,6 +562,8 @@ func ValidateEntity(stmt *ast.CreateEntityStmt) []linter.Violation {
 	violations = append(violations, validateBareGeneralization(stmt)...)
 	// MDL071: the entity's own name reads as an OQL keyword in `from Module.X`.
 	violations = append(violations, ValidateOQLReservedEntityName(stmt)...)
+	// MDL021 for the entity's own name (ako/mxcli#2531).
+	violations = append(violations, validateReservedEntityName(stmt)...)
 	for _, attr := range stmt.Attributes {
 		violations = append(violations, validateEntityAttribute(attr, kind, entityName)...)
 		if !persistent {

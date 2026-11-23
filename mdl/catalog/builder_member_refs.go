@@ -4,6 +4,7 @@ package catalog
 
 import (
 	"database/sql"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -598,6 +599,9 @@ var xpathSourceTypes = map[string]string{
 	"DOMAIN_MODEL": RefObjectEntity,
 }
 
+// userRoleTokenRe matches a user role token and captures the role's name.
+var userRoleTokenRe = regexp.MustCompile(`\[%UserRole_([^%\]]+)%\]`)
+
 // extractXPathRefs emits `xpath` edges for the attributes, associations and
 // enumeration values each recorded XPath constraint names, resolved against the
 // constraint's target entity. buildXPathExpressions runs before buildReferences
@@ -618,6 +622,15 @@ func (b *Builder) extractXPathRefs(stmt *Stmt, idx *memberRefIndex, projectID, s
 	}
 	rows.Close()
 
+	// User roles, for the `[%UserRole_X%]` tokens (ako/mxcli#2529): an edge
+	// only to a role that exists, matched case-sensitively as mxbuild does.
+	userRoles := map[string]bool{}
+	if ps, err := b.reader.GetProjectSecurity(); err == nil && ps != nil {
+		for _, ur := range ps.UserRoles {
+			userRoles[ur.Name] = true
+		}
+	}
+
 	count := 0
 	written := map[string]bool{}
 	for _, r := range all {
@@ -633,6 +646,11 @@ func (b *Builder) extractXPathRefs(stmt *Stmt, idx *memberRefIndex, projectID, s
 		scanPaths(r.xpath, r.target, idx, func(targetType, name string) {
 			set.add(targetType, name, RefKindXPath)
 		})
+		for _, m := range userRoleTokenRe.FindAllStringSubmatch(r.xpath, -1) {
+			if userRoles[m[1]] {
+				set.add(RefObjectUserRole, m[1], RefKindXPath)
+			}
+		}
 		for _, e := range set.sorted() {
 			key := sourceType + "\x00" + r.docQN + "\x00" + e.TargetType + "\x00" + e.TargetName
 			if written[key] {

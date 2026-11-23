@@ -70,6 +70,9 @@ type TextBox struct {
 	// hard-coded, so a rewrite reset a native text box's keyboard
 	// (ako/mxcli#1209).
 	KeyboardType string `json:"keyboardType,omitempty"`
+	// AutoFocus is Forms$TextBox.AutoFocus — on native, the keyboard opens with
+	// the page. It was hard-coded false (ako/mxcli#2519).
+	AutoFocus bool `json:"autoFocus,omitempty"`
 	// ReadOnlyStyle: Inherit, Control or Text, as on CheckBox. Empty writes
 	// Studio Pro's default, Inherit (ako/mxcli#977).
 	ReadOnlyStyle string `json:"readOnlyStyle,omitempty"`

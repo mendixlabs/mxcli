@@ -35,6 +35,9 @@ var ruleIDPattern = regexp.MustCompile(`RuleID:\s+"([A-Z][A-Z0-9-]*)"`)
 // user-visible change (it appears in output, in --format json and sarif, and in
 // suppressions), so an existing overlap is recorded rather than fixed here.
 var ruleIDsSharedDeliberately = map[string]string{
+	"MDL021": "one rule, two sites: a name the platform reserves (CE7247). cmd_enumerations.go " +
+		"asks it of an attribute, validate_reserved_entity_names.go of the entity itself " +
+		"(ako/mxcli#2531). Someone suppressing MDL021 means both, so splitting the number would be wrong",
 	"MDL-WIDGET11": "one rule, two sites: a design-property KEY the project's theme does not " +
 		"declare. validate_design_properties.go asks it of the widget trees a statement CARRIES; " +
 		"validate_alter_styling.go asks it of ALTER STYLING, which names a stored widget instead. " +
