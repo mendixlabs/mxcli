@@ -316,7 +316,7 @@ func handleLine(line []byte, s *Session, builders map[string]*convBuilder, order
 			call.ResultTokens += imageTokens(img)
 		}
 		call.resultText = text
-		call.Failed, call.ErrorLine = detectFailure(call.Tool, bl.IsError, text)
+		call.Failed, call.ErrorLine = detectFailure(call.Tool, call.Command, bl.IsError, text)
 	}
 }
 

@@ -479,10 +479,14 @@ var exitCodeLine = regexp.MustCompile(`^Exit code \d+$`)
 // detectFailure decides whether a result is a failure, and picks the line that
 // says why. A result is a failure when the harness marked it is_error (for
 // Bash: a non-zero exit), or — for Bash only — when a line of the output
-// starts like an mxcli or test-runner error.
-func detectFailure(tool string, isError bool, text string) (bool, string) {
+// starts like an mxcli or test-runner error. The line rule is for a command
+// whose exit code a pipe hides; a call that only reads (every segment is
+// orientation: cat, sed -n, grep, mxcli syntax/help, …) hides nothing, and
+// what it prints is the file's text — a skill quoting an error is not one
+// (ako/mxcli#2525).
+func detectFailure(tool, command string, isError bool, text string) (bool, string) {
 	failed := isError
-	if !failed && tool == "Bash" {
+	if !failed && tool == "Bash" && !onlyReads(command) {
 		for _, l := range strings.Split(text, "\n") {
 			if errorLine.MatchString(l) {
 				failed = true
@@ -612,4 +616,19 @@ func NormalizeError(s string) string {
 	s = digits.ReplaceAllString(s, "N")
 	s = spaces.ReplaceAllString(s, " ")
 	return truncate(strings.TrimSpace(s), 90)
+}
+
+// onlyReads reports whether every segment of a Bash command is orientation.
+// An empty command is not known to read.
+func onlyReads(command string) bool {
+	segs := ParseBash(command, nil)
+	if len(segs) == 0 {
+		return false
+	}
+	for _, s := range segs {
+		if cat, ok := segmentCategory(s); !ok || cat != CatOrientation {
+			return false
+		}
+	}
+	return true
 }
