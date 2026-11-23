@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`@documentation 'text'` on a microflow or nanoflow statement** (ako/mxcli#2328) — an activity's, decision's or loop's documentation had no MDL spelling: describe left it out, so an activity replaced by `create or modify` lost it and the script could not carry it. Describe now prints it; a statement that leaves it out keeps the stored text, as it keeps the node's position.
+
 ### Changed
 
 - **A bare `save changes` / `cancel changes` closes the page** (ako/mxcli#2536) — it stored ClosePage false, so a pop-up's Cancel left the pop-up open, while Studio Pro's default is to close (every save and cancel button in a Studio Pro-built app stores it). The bare form now closes; `with (ClosePage: false)` keeps the page open. `describe` prints both explicitly (`close page`, `with (ClosePage: false)`), so its output means the same to older versions. Scripts that relied on the bare form staying on the page need the setting.

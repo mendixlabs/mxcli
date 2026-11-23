@@ -303,6 +303,16 @@ func extractMicroflowAnnotations(annotations []parser.IAnnotationContext) *ast.A
 			}
 			seenActivityMetadata = true
 
+		case "documentation":
+			// @documentation 'text' — the activity's documentation (ako/mxcli#2328).
+			if valCtx := ann.AnnotationValue(); valCtx != nil {
+				if text, ok := annotationValueString(valCtx); ok {
+					result.Documentation = &text
+					hasAny = true
+				}
+			}
+			seenActivityMetadata = true
+
 		case "color":
 			// @color Green — bare annotationValue (identifier)
 			if valCtx := ann.AnnotationValue(); valCtx != nil {

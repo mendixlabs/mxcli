@@ -1089,6 +1089,11 @@ func emitObjectAnnotations(
 	// stored loop never carries one and this only ever emitted MDL that check
 	// would then report as MDL042 (mendixlabs/mxcli#1187).
 
+	// @documentation, on the four kinds that store it (ako/mxcli#2328).
+	if doc := activityDocumentation(obj); doc != "" {
+		*lines = append(*lines, indentStr+"@documentation "+annotationsByTarget.quote(doc))
+	}
+
 	// @annotation (attached Annotation objects)
 	*lines = append(*lines, annotationsByTarget.lines(currentID, pos, objectHeight(obj), indentStr)...)
 }
@@ -3215,4 +3220,20 @@ func joinCrossedMerge(id model.ID, labels mergeLabels, lines *[]string, indent i
 func isLabelledMerge(id model.ID, labels mergeLabels) bool {
 	_, ok := labels.of(id)
 	return ok
+}
+
+// activityDocumentation is the documentation an activity, decision or loop
+// stores, or "".
+func activityDocumentation(obj microflows.MicroflowObject) string {
+	switch a := obj.(type) {
+	case *microflows.ActionActivity:
+		return a.Documentation
+	case *microflows.ExclusiveSplit:
+		return a.Documentation
+	case *microflows.InheritanceSplit:
+		return a.Documentation
+	case *microflows.LoopedActivity:
+		return a.Documentation
+	}
+	return ""
 }

@@ -1881,15 +1881,16 @@ func (v *microflowValidator) checkInheritanceSplitSpelling(stmt *ast.Inheritance
 // TestKnownAnnotationsMatchTheVisitor, because a name added to one and not the
 // other either rejects a valid annotation or silently drops an invalid one.
 var knownActivityAnnotations = map[string]bool{
-	"position":   true,
-	"caption":    true,
-	"color":      true,
-	"annotation": true,
-	"excluded":   true,
-	"anchor":     true,
-	"curve":      true,
-	"merge":      true,
-	"start":      true,
+	"position":      true,
+	"caption":       true,
+	"color":         true,
+	"annotation":    true,
+	"excluded":      true,
+	"anchor":        true,
+	"curve":         true,
+	"merge":         true,
+	"start":         true,
+	"documentation": true, // ako/mxcli#2328
 }
 
 // invalidAnchorRule refuses an @anchor parameter the visitor could not use.

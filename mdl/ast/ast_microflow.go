@@ -393,6 +393,11 @@ type ActivityAnnotations struct {
 	Excluded  bool         // @excluded
 	Anchor    *FlowAnchors // @anchor(from: X, to: Y) — From for the flow leaving, To for the flow arriving
 
+	// Documentation is the activity's documentation, `@documentation 'text'`
+	// (ako/mxcli#2328). nil is not stated: `create or modify` keeps what is
+	// stored, as for a node's geometry; an empty string clears it.
+	Documentation *string
+
 	// Split-specific anchors for IF statements. When the statement is not an
 	// IF these remain nil. The grammar accepts them on IfStmt only:
 	//   @anchor(true: (from: right, to: left), false: (from: bottom, to: left))

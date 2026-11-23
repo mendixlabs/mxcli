@@ -569,6 +569,7 @@ annotationName
     | ANNOTATION
     | ANCHOR
     | MERGE       // @merge(x, y) — the layout hint predates the `merge` keyword
+    | DOCUMENTATION // @documentation 'text' — an activity's documentation (ako/mxcli#2328)
     ;
 
 annotationParams

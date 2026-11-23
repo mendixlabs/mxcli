@@ -958,7 +958,7 @@ func init() {
 
 	Register(SyntaxFeature{
 		Path:    "microflow.layout",
-		Summary: "Canvas layout annotations — @position, @start, @anchor, @curve, @caption, @color, @excluded",
+		Summary: "Canvas layout annotations — @position, @start, @anchor, @curve, @caption, @color, @excluded, @documentation",
 		Keywords: []string{
 			"position", "start", "anchor", "curve", "layout", "canvas",
 			"annotation", "caption", "color", "excluded", "bezier",
@@ -980,6 +980,8 @@ func init() {
 			"@anchor(Open: (from: right), (empty): (from: bottom))  -- on a CASE: one outcome's edge,\n" +
 			"                                      -- keyed by its WHEN value; from = its merge's exit\n" +
 			"@caption 'text'\n@color Green\n@annotation 'a note'\n@excluded\n" +
+			"@documentation 'text'                 -- an action's, decision's or loop's documentation;\n" +
+			"                                      -- left out, create or modify keeps the stored one\n" +
 			"@applyentityaccess | @applyentityaccess(false)  -- DOCUMENT-level, before CREATE MICROFLOW/RULE\n" +
 			"@annotation(id: n1, text: 'a note', position: (x, y), size: (w, h))\n" +
 			"@annotation(id: n1)                   -- attaches THAT note to another activity\n" +

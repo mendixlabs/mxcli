@@ -65,6 +65,9 @@ func (fb *flowBuilder) mergeStatementAnnotations(stmt ast.MicroflowStatement) {
 	if ann.Excluded {
 		fb.pendingAnnotations.Excluded = true
 	}
+	if ann.Documentation != nil {
+		fb.pendingAnnotations.Documentation = ann.Documentation
+	}
 	if ann.Anchor != nil {
 		fb.pendingAnnotations.Anchor = ann.Anchor
 	}
@@ -100,10 +103,23 @@ func (fb *flowBuilder) applyAnnotations(activityID model.ID, ann *ast.ActivityAn
 	}
 
 	// Find the object by ID for @caption, @color, and @excluded
-	if ann.HasCaption() || ann.Color != "" || ann.Excluded {
+	if ann.HasCaption() || ann.Color != "" || ann.Excluded || ann.Documentation != nil {
 		for _, obj := range fb.objects {
 			if obj.GetID() != activityID {
 				continue
+			}
+			// @documentation (ako/mxcli#2328): the four kinds that store it.
+			if ann.Documentation != nil {
+				switch a := obj.(type) {
+				case *microflows.ActionActivity:
+					a.Documentation = *ann.Documentation
+				case *microflows.ExclusiveSplit:
+					a.Documentation = *ann.Documentation
+				case *microflows.InheritanceSplit:
+					a.Documentation = *ann.Documentation
+				case *microflows.LoopedActivity:
+					a.Documentation = *ann.Documentation
+				}
 			}
 
 			switch activity := obj.(type) {
