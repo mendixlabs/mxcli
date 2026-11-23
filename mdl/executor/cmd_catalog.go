@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend"
@@ -1452,7 +1453,19 @@ func escapeFTSQuery(q string) string {
 	for _, sep := range []string{"/", ".", "-", ":"} {
 		q = strings.ReplaceAll(q, sep, " ")
 	}
-	return q
+	// Any other punctuation is not an FTS5 bareword character, and a query
+	// holding one is a syntax error that search reports as no rows: the token
+	// `[%UserRole_X%]` and `$Var/Attr` pasted from a model never matched
+	// (ako/mxcli#2529). It becomes a separator too. FTS5's own syntax stays: a
+	// "phrase", a prefix*, and parentheses.
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '_' || r == '"' || r == '*' || r == '(' || r == ')' || r == '\'' || unicode.IsLetter(r) ||
+			unicode.IsDigit(r) || unicode.IsSpace(r):
+			return r
+		}
+		return ' '
+	}, q)
 }
 
 // search performs a full-text search with the specified output format.
