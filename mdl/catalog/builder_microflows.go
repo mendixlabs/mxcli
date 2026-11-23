@@ -242,7 +242,7 @@ func (b *Builder) buildMicroflows() error {
 			countFlowActivities(nf.ObjectCollection, true),
 			complexity,
 			nf.Excluded,
-			false, // a nanoflow runs client-side: entity access always applies, there is no setting
+			false,             // a nanoflow runs client-side: entity access always applies, there is no setting
 			nf.MarkAsUsed, "", // a nanoflow has no URL
 			projectID, snapshotID,
 		)
