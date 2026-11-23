@@ -174,9 +174,10 @@ signal here. Many lines also converge on one corner of Order.
 
 Phase 0 and four phases, each its own PR and each shippable alone.
 
-### Phase 0 — Correct the box estimate (measured above)
+### Phase 0 — Correct the box estimate (measured above) — implemented
 
-`boxSize` becomes width 160 and height `max(84, 36 + 16 × attributes)`: the
+`boxSize` becomes width 160 and height `max(84, 40 + 16 × attributes)` (4 px over
+the classic header for measurement error): the
 larger of the classic and beta viewers in each dimension, since a project is
 opened in either. The height is the safety fix: a 0–2-attribute entity is drawn
 up to 24 px taller than estimated, so `Place` and `ResolveOverlaps` can leave it

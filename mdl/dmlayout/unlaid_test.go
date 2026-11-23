@@ -158,8 +158,9 @@ func TestNotLaidOut_NilModel(t *testing.T) {
 }
 
 // Plan's coordinates are sums of box heights and gutters, so they can land on a
-// grid slot by arithmetic. Six lookups stacked in column 0 with heights
-// 60, 60, 60, 66, 114 put the sixth at y = 660 = GridSlot(12). Plan placed it,
+// grid slot by arithmetic. Three lookups stacked in column 0 with heights
+// 84, 84 and 552 (plus a 40 px gutter each) put the fourth at
+// y = 100 + 124 + 124 + 592 = 940 = GridSlot(18). Plan placed it,
 // so it must not be reported: the finding names `mxcli layout` as its repair,
 // and a repair that leaves its own finding behind can never pass a gate.
 func TestNotLaidOut_PlanThatLandsOnASlotIsNotReported(t *testing.T) {
@@ -171,24 +172,22 @@ func TestNotLaidOut_PlanThatLandsOnASlotIsNotReported(t *testing.T) {
 	}
 	dm := &domainmodel.DomainModel{
 		Entities: []*domainmodel.Entity{
-			withAttrs(entAt("a", "A", model.Point{}), 1), // h = 60 (minimum)
-			withAttrs(entAt("b", "B", model.Point{}), 1), // h = 60
-			withAttrs(entAt("c", "C", model.Point{}), 1), // h = 60
-			withAttrs(entAt("d", "D", model.Point{}), 2), // h = 66
-			withAttrs(entAt("e", "E", model.Point{}), 5), // h = 114
+			withAttrs(entAt("a", "A", model.Point{}), 1),  // h = 84 (minimum)
+			withAttrs(entAt("b", "B", model.Point{}), 1),  // h = 84
+			withAttrs(entAt("c", "C", model.Point{}), 32), // h = 40 + 32*16 = 552
 			entAt("f", "F", model.Point{}),
 			entAt("r", "Referrer", model.Point{}),
 		},
 	}
-	for _, to := range []string{"a", "b", "c", "d", "e", "f"} {
+	for _, to := range []string{"a", "b", "c", "f"} {
 		dm.Associations = append(dm.Associations, link("r", to))
 	}
 	plan := Plan(dm)
 	for _, e := range dm.Entities {
 		e.Location = plan[e.ID]
 	}
-	if f := dm.Entities[5]; f.Location != GridSlot(12) {
-		t.Fatalf("precondition: Plan put F at %v, want GridSlot(12) = %v", f.Location, GridSlot(12))
+	if f := dm.Entities[3]; f.Location != GridSlot(18) {
+		t.Fatalf("precondition: Plan put F at %v, want GridSlot(18) = %v", f.Location, GridSlot(18))
 	}
 	if got := NotLaidOut(dm); len(got) != 0 {
 		t.Fatalf("NotLaidOut = %v, want none: Plan placed every entity", entityNames(got))
