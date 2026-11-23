@@ -12,7 +12,7 @@ import "testing"
 func TestReadPrintingErrorTextIsNotAFailure_2525(t *testing.T) {
 	for _, tc := range []struct {
 		cmd, out string
-		failed  bool
+		failed   bool
 	}{
 		{"sed -n 440,537p .ai-context/skills/write-workflows/SKILL.md",
 			"ERROR - Client: You can't complete this user task, it is not assigned to you.", false},
