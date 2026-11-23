@@ -200,6 +200,7 @@ var (
 		RefObjectKnowledgeBase,
 		RefObjectConsumedMCPService,
 		RefObjectConstant,
+		RefObjectUserRole, // an XPath token '[%UserRole_X%]' (ako/mxcli#2529)
 	}
 )
 
