@@ -36,7 +36,7 @@ func TestThrowsCatchesEveryCallKind(t *testing.T) {
 	for _, c := range errorRaisingCalls {
 		t.Run(c.kind, func(t *testing.T) {
 			tc := parseOne(t, "/**\n * @test it raises\n * @throws 'Only http and https csv urls are supported'\n */\n"+c.stmt+"\n/\n")
-			assertHandled(t, "endpoint runner", GenerateTestFlows(&TestSuite{Name: "s", Tests: []TestCase{tc}}), c.stmt)
+			assertLeftToTheEndpoint(t, GenerateTestFlows(&TestSuite{Name: "s", Tests: []TestCase{tc}}), c.stmt)
 			assertHandled(t, "legacy runner", GenerateTestRunner(&TestSuite{Name: "s", Tests: []TestCase{tc}}), legacyStmt(c.stmt))
 		})
 	}
@@ -49,11 +49,7 @@ func TestVerdictCatchesEveryCallKind(t *testing.T) {
 	for _, c := range errorRaisingCalls {
 		t.Run(c.kind, func(t *testing.T) {
 			tc := parseOne(t, "/**\n * @test it runs\n */\n"+c.stmt+"\n/\n")
-			mdl := GenerateTestFlows(&TestSuite{Name: "s", Tests: []TestCase{tc}})
-			assertHandled(t, "endpoint runner", mdl, c.stmt)
-			if !strings.Contains(mdl, verdictFailPrefix+"exception during execution: ") {
-				t.Errorf("no FAIL verdict in the handler:\n%s", mdl)
-			}
+			assertLeftToTheEndpoint(t, GenerateTestFlows(&TestSuite{Name: "s", Tests: []TestCase{tc}}), c.stmt)
 			assertHandled(t, "legacy runner", GenerateTestRunner(&TestSuite{Name: "s", Tests: []TestCase{tc}}), legacyStmt(c.stmt))
 		})
 	}
@@ -66,6 +62,22 @@ func TestNonCallStatementsGetNoHandler(t *testing.T) {
 	mdl := GenerateTestFlows(&TestSuite{Name: "s", Tests: []TestCase{tc}})
 	if strings.Contains(mdl, "ON ERROR BEGIN") {
 		t.Errorf("a LOG mentioning a call was given a handler:\n%s", mdl)
+	}
+}
+
+// assertLeftToTheEndpoint checks the endpoint runner's side: the call is kept as
+// written, with no handler, so an error of any kind leaves the test microflow and
+// the endpoint reports it (toResult makes it the verdict). A handler reading the
+// message is what mxbuild --serve rejects incrementally (CE0108,
+// mendixlabs/mxcli#1874).
+func assertLeftToTheEndpoint(t *testing.T, mdl, stmt string) {
+	t.Helper()
+	call := strings.TrimSuffix(stmt, ";")
+	if !strings.Contains(mdl, stmt) || strings.Contains(mdl, call+" ON ERROR BEGIN") {
+		t.Errorf("endpoint runner: %q is not left as written:\n%s", call, mdl)
+	}
+	if _, errs := visitor.Build(mdl); len(errs) > 0 {
+		t.Errorf("endpoint runner: generated MDL does not parse: %v\n%s", errs[0], mdl)
 	}
 }
 

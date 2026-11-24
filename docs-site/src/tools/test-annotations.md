@@ -110,9 +110,9 @@ wrong value (FAIL).
 
 ## `@throws`
 
-Marks a body that is expected to raise an error. The verdict starts as a failure
-and only the error handler clears it, so a body that completes normally fails the
-test.
+Marks a body that is expected to raise an error. The verdict starts as a failure,
+so a body that completes normally fails the test; an error that leaves the test
+microflow is compared with the message.
 
 ```mdl
 /**
@@ -149,28 +149,28 @@ $result = call microflow Sales.ACT_Submit(Order = $empty);
 Anything after `@throws` that is not a single-quoted string is an error, not a
 message — `@throws not found` is refused rather than read as an unquoted one.
 
-The handler is attached to every **call** in the body: `call microflow`,
-`call nanoflow`, `call java action`, `call external action`, `call web service`,
-`call workflow`, `call rest service`, `send rest request` and
-`execute database query`. An error raised by any other statement — a `commit`,
-a `change`, a `create` — is not caught; move it into a microflow and call that.
-The same handler turns an unexpected error in a test without `@throws` into a
-FAIL reading `exception during execution: <message>`.
+An error raised by **any** statement in the body — a call, a `commit`, a
+`change` — leaves the test microflow, and the test endpoint reports its message.
+Without `@throws` that is a FAIL reading `exception during execution: <message>`;
+with it, the message is compared as above. The runner adds no error handler of
+its own to the body (mendixlabs/mxcli#1874: a generated handler that read the
+message made mxbuild's incremental build report CE0108, so `test --attach` could
+not run a test that called a microflow).
 
 ### A call with its own error handling
 
-A call that already has an `on error` clause keeps it and gets no second
-handler, so a test runs the statement exactly as production code does. What the
+A call that has an `on error` clause keeps it, so a test runs the statement
+exactly as production code does. What the
 test then reports depends on the clause (measured on Mendix 11.13 with a Java
 action that throws):
 
 | Clause on the call | Without `@throws` | With `@throws` |
 |---|---|---|
 | none | FAIL `exception during execution: <message>` | PASS when the message matches |
-| `on error rollback` | same as none — it is Mendix's default spelled out, so the runner's handler takes its place | same as none |
+| `on error rollback` | same as none — it is Mendix's default spelled out | same as none |
 | `on error continue` | the error is swallowed; the assertions decide (`$r` is empty) | FAIL `expected an exception but none was thrown` |
 | custom handler that ends normally | FAIL `not every assertion was evaluated` when an assertion reads the call's result; an assertion on what the handler did is evaluated | FAIL `expected an exception but none was thrown` |
-| custom handler that re-raises (`raise error`) | ERROR with the message — the error leaves the test microflow | ERROR with the message |
+| custom handler that re-raises (`raise error`) | FAIL `exception during execution: <message>` — the error leaves the test microflow | PASS when the message matches |
 
 A custom handler that ends normally rejoins the flow after every statement that
 reads the failed call's output, because that variable does not exist on the
