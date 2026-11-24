@@ -306,6 +306,16 @@ GET bookings/{id} [MDL-REST06]
 
 **Solution:** List every operation the service keeps; `describe published rest service` prints them. To add or remove one operation, leave the rest of the service alone with `alter published rest service … add operation in resource '<name>' { <operation>; }` and `drop operation <method> ['<path>'] in resource '<name>'`. `check` refuses `add resource` with the name of a stored resource, and `add operation` with an operation the resource already has, as exec does.
 
+### MDL-NATIVEBAR01: A native bottom bar item exec cannot write
+
+```
+✗ navigation NativePhone: bottom bar item "Menu" has a collection or image icon — the native bottom bar is flat, opens a page, and shows a glyph icon [MDL-NATIVEBAR01]
+```
+
+**Cause:** A `NativePhone` profile's `{ }` block is its bottom bar. It is flat, each item opens a page by name, and its icon is a glyph code. A nested `menu`, a collection or image icon, and an `OnClick` other than `show page` without arguments are refused by exec. Before this check existed, exec named them one at a time, and `check` only warned that items had no icon for a web sidebar (MDL077), which a native profile does not have (ako/mxcli#2561).
+
+**Solution:** List each page as a bottom bar item of its own, write `Icon: glyph <code>` or leave the icon out, and use `OnClick: show page Module.Page`.
+
 ## mxcli Parser Errors
 
 
