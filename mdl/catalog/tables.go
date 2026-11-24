@@ -7,6 +7,13 @@ package catalog
 //
 // History:
 //
+//	52 (change data capture): change_data_capture_services and
+//	    change_data_capture_sources, the latter carrying the Kafka topic each
+//	    tracked entity publishes to; refs gains `expose` edges from a CDC
+//	    service to the entity, attributes and associations it publishes
+//	    (ako/mxcli#2384 A2). Without the bump a cached catalog keeps reading a
+//	    CDC-only entity as unreferenced, which is what QUAL004 advises
+//	    removing.
 //	51 (entry points, user role tokens): microflows_data gains MarkAsUsed
 //	    and URL, pages_data MarkAsUsed, and graph_dead_assets leaves out a
 //	    document marked as used or reachable by URL (ako/mxcli#2241). Also
@@ -280,7 +287,7 @@ package catalog
 //	    SnapshotSource / SourceId / SourceBranch / SourceRevision columns
 //	    from every row (issue #576).
 //	1 — initial flat schema with denormalized snapshot columns on every row.
-const CatalogSchemaVersion = "51"
+const CatalogSchemaVersion = "52"
 
 // MetaSchemaVersion is the catalog_meta key that records the schema version
 // the cache was built against.
@@ -1217,6 +1224,52 @@ func (c *Catalog) createTables() error {
 		)`,
 		viewWithFullSnapshot("business_event_services"),
 
+		// change_data_capture_services — one row per
+		// ChangeDataCapture$EntityChangeDataCaptureService document.
+		//
+		// Revision is the BASELINE's version, not a live one: it is what
+		// mxbuild compares the live sources against (CE1585), so it is the
+		// number that says whether the document is accepted.
+		`CREATE TABLE IF NOT EXISTS change_data_capture_services_data (
+			Id TEXT PRIMARY KEY,
+			Name TEXT,
+			QualifiedName TEXT,
+			ModuleName TEXT,
+			Documentation TEXT,
+			ServiceName TEXT,
+			AppName TEXT,
+			Excluded INTEGER DEFAULT 0,
+			Revision TEXT,
+			SourceCount INTEGER DEFAULT 0,
+			PropertyCount INTEGER DEFAULT 0,
+			ProjectId TEXT,
+			SnapshotId TEXT
+		)`,
+		viewWithFullSnapshot("change_data_capture_services"),
+
+		// change_data_capture_sources — one row per tracked entity.
+		//
+		// Topic is the Kafka topic the entity's changes land on, computed as
+		// Studio Pro's editor computes it (model.ChangeDataCaptureService.Topic):
+		// the only value a downstream consumer needs, and the one the document
+		// does not store, because it is assembled from three properties in two
+		// different halves of it.
+		`CREATE TABLE IF NOT EXISTS change_data_capture_sources_data (
+			Id TEXT PRIMARY KEY,
+			ServiceId TEXT,
+			ServiceQualifiedName TEXT,
+			Entity TEXT,
+			ExposedName TEXT,
+			Version TEXT,
+			Topic TEXT,
+			AttributeCount INTEGER DEFAULT 0,
+			AssociationCount INTEGER DEFAULT 0,
+			ModuleName TEXT,
+			ProjectId TEXT,
+			SnapshotId TEXT
+		)`,
+		viewWithSnapshotDateSource("change_data_capture_sources"),
+
 		// navigation_profiles
 		`CREATE TABLE IF NOT EXISTS navigation_profiles_data (
 			ProfileName TEXT PRIMARY KEY,
@@ -1780,6 +1833,10 @@ func (c *Catalog) createTables() error {
 				ProjectId, ProjectName, SnapshotId, SnapshotDate, SnapshotSource
 			FROM business_event_services
 			UNION ALL
+			SELECT Id, 'CHANGE_DATA_CAPTURE_SERVICE' as ObjectType, Name, QualifiedName, ModuleName, '' as Folder, Documentation as Description,
+				ProjectId, ProjectName, SnapshotId, SnapshotDate, SnapshotSource
+			FROM change_data_capture_services
+			UNION ALL
 			SELECT Id, 'DATABASE_CONNECTION' as ObjectType, Name, QualifiedName, ModuleName, Folder, '' as Description,
 				ProjectId, ProjectName, SnapshotId, SnapshotDate, SnapshotSource
 			FROM database_connections
@@ -1963,6 +2020,10 @@ func (c *Catalog) createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_external_actions_module ON external_actions_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_business_events_service ON business_events_data(ServiceId)`,
 		`CREATE INDEX IF NOT EXISTS idx_business_events_module ON business_events_data(ModuleName)`,
+		`CREATE INDEX IF NOT EXISTS idx_cdc_services_name ON change_data_capture_services_data(QualifiedName)`,
+		`CREATE INDEX IF NOT EXISTS idx_cdc_services_module ON change_data_capture_services_data(ModuleName)`,
+		`CREATE INDEX IF NOT EXISTS idx_cdc_sources_service ON change_data_capture_sources_data(ServiceId)`,
+		`CREATE INDEX IF NOT EXISTS idx_cdc_sources_entity ON change_data_capture_sources_data(Entity)`,
 		`CREATE INDEX IF NOT EXISTS idx_contract_entities_service ON contract_entities_data(ServiceId)`,
 		`CREATE INDEX IF NOT EXISTS idx_contract_entities_module ON contract_entities_data(ModuleName)`,
 		`CREATE INDEX IF NOT EXISTS idx_contract_actions_service ON contract_actions_data(ServiceId)`,

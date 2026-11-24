@@ -632,11 +632,26 @@ with 0 errors, and the control (baseline omitted) fails it.
 Two shapes that only a document could have told us: the live and baseline sides use
 **different list markers** (live 3, baseline 2), and the service carries `Excluded` even
 at its default — the shape test caught the second rather than a reviewer.
-A2 is merged for `LIST` / `DESCRIBE` — the gen properties it needed landed first
-(ako/mxcli#2395). Still open from A2: the catalog tables
-(`change_data_capture_services` + sources), the `RefKind`s that would let
-`show callers` and impact analysis see CDC exposure, and the
-`CatalogSchemaVersion` bump.
+A2 is complete. `LIST` / `DESCRIBE` landed first (the gen properties they needed
+in ako/mxcli#2395), and the catalog now carries the rest:
+`change_data_capture_services`, `change_data_capture_sources` and `expose` edges
+from a service to the entity, attributes and associations it publishes, at
+schema 52.
+
+The edges are the part that mattered. A CDC service is an **exit** from the
+model — nothing in the app calls it — so before them an entity tracked only by
+CDC had no inbound edge at all: `refs` said "no references", `impact` agreed,
+and QUAL004 advised removing it. Dropping or renaming that entity ends or moves
+a Kafka topic, and a major bump starts a new one, which downstream is a new
+table with no history.
+
+The sources table carries the **topic** per source, which is also why
+`cdcTopic` moved to `model.ChangeDataCaptureService.Topic`: it is assembled from
+the service's `AppName`, the source's `ExposedName` and the **baseline's** major
+for that source — three properties in two halves of the document — and a second
+copy of that formula in the builder would have been a copy that drifts. The
+per-source major is load-bearing: two sources of one service can be on
+different majors, which a single service-level version would have got wrong.
 
 B4 is implemented: the seven rules of §5.1 as `MDL-BE01`..`MDL-BE07`, errors for the
 five a statement decides and warnings for the two that are per-environment project

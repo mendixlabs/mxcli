@@ -1731,3 +1731,47 @@ func (v *ChangeVersion) String() string {
 	}
 	return fmt.Sprintf("%d.%d", v.Major, v.Minor)
 }
+
+// SourceVersion is the version the baseline froze for a live source, found
+// through the source's pointer into the baseline, or by exposed name when the
+// pointer is absent. mxbuild does not validate those pointers, so a document
+// with none still has to describe. nil when there is no baseline, or no
+// matching source in it.
+func (s *ChangeDataCaptureService) SourceVersion(src *ChangeSource) *ChangeVersion {
+	if s == nil || src == nil || s.Baseline == nil {
+		return nil
+	}
+	for _, b := range s.Baseline.Sources {
+		if src.VersionedSourceID != "" && b.ID == src.VersionedSourceID {
+			return b.Version
+		}
+	}
+	for _, b := range s.Baseline.Sources {
+		if b.ExposedName == src.ExposedName {
+			return b.Version
+		}
+	}
+	return nil
+}
+
+// Topic is the Kafka topic a source publishes to. Studio Pro's editor shows it
+// beside the revision, and every segment but the last is a model value: the
+// AppName, the source's ExposedName and the *major* version. So a major bump,
+// an AppName change or a rename starts a NEW topic — downstream, a new table
+// with no history — which is why describe prints it, and the catalog stores it,
+// rather than leaving a reader to assemble it from three properties that live
+// in two different halves of the document.
+//
+// "" when the service has no AppName, the source no ExposedName, or the
+// baseline no version for it: a topic missing a segment would be a topic no
+// producer writes to, and printing one is worse than printing none.
+func (s *ChangeDataCaptureService) Topic(src *ChangeSource) string {
+	if s == nil || src == nil || s.AppName == "" || src.ExposedName == "" {
+		return ""
+	}
+	v := s.SourceVersion(src)
+	if v == nil {
+		return ""
+	}
+	return fmt.Sprintf("cdc.%s.%s.%d.{space}", s.AppName, src.ExposedName, v.Major)
+}
