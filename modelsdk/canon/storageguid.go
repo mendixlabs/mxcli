@@ -197,6 +197,37 @@ type elementGUID struct {
 	name string
 }
 
+// ElementGUIDs maps every element's $ID to the GUID stored on it, for one
+// unit's raw BSON.
+//
+// It exists for a writer that must reference an element by the identity the
+// DATABASE uses rather than the one the file uses: a CDC service's baseline
+// names the entities and members it tracks by GUID, and nothing above raw BSON
+// surfaces them -- the generated domain-model types have no GUID accessor, so a
+// writer that could not read them here would have to mint them, which is the
+// data loss this package exists to prevent.
+//
+// Reading them here rather than in each writer is deliberate. This package
+// already owns the reasoning about what a GUID is and what changing one costs;
+// a second reader elsewhere is how the two come to disagree.
+//
+// Returns nil when raw does not unmarshal. An element with no GUID is absent
+// from the map rather than present and empty, so a caller can tell "no GUID
+// stored" from "GUID is the zero value" -- the all-zero GUID is a value Studio
+// Pro writes deliberately (a VersionedProperty's AssociatedEntityGuid for an
+// attribute).
+func ElementGUIDs(raw []byte) map[string]string {
+	src := elementGUIDs(raw)
+	if src == nil {
+		return nil
+	}
+	out := make(map[string]string, len(src))
+	for id, eg := range src {
+		out[id] = eg.guid
+	}
+	return out
+}
+
 // elementGUIDs maps element $ID -> elementGUID for every element in raw that
 // carries both an $ID and a GUID.
 func elementGUIDs(raw []byte) map[string]elementGUID {

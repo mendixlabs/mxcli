@@ -143,6 +143,27 @@ func (m *MockBackend) ListChangeDataCaptureServices() ([]*model.ChangeDataCaptur
 	return nil, nil
 }
 
+func (m *MockBackend) CreateChangeDataCaptureService(svc *model.ChangeDataCaptureService) error {
+	if m.CreateChangeDataCaptureServiceFunc != nil {
+		return m.CreateChangeDataCaptureServiceFunc(svc)
+	}
+	return nil
+}
+
+func (m *MockBackend) UpdateChangeDataCaptureService(svc *model.ChangeDataCaptureService) error {
+	if m.UpdateChangeDataCaptureServiceFunc != nil {
+		return m.UpdateChangeDataCaptureServiceFunc(svc)
+	}
+	return nil
+}
+
+func (m *MockBackend) DeleteChangeDataCaptureService(id model.ID) error {
+	if m.DeleteChangeDataCaptureServiceFunc != nil {
+		return m.DeleteChangeDataCaptureServiceFunc(id)
+	}
+	return nil
+}
+
 func (m *MockBackend) CreateBusinessEventService(svc *model.BusinessEventService) error {
 	if m.CreateBusinessEventServiceFunc != nil {
 		return m.CreateBusinessEventServiceFunc(svc)

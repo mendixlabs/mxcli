@@ -137,9 +137,9 @@ func TestDescribeChangeDataCaptureService_Mock(t *testing.T) {
 	assertContainsStr(t, s, "revision 1.1   topic cdc.TestApp.Order.1.{space}")
 	assertContainsStr(t, s, "revision 2.0   topic cdc.TestApp.Client.2.{space}")
 
-	// It must not pretend to be executable: there is no CREATE for this
-	// document yet, so an LLM reading the output has to be told.
-	assertContainsStr(t, s, "no CREATE statement for this document yet")
+	// It must say where the authored half ends: only the live side is written,
+	// so a reader (or an LLM) has to be told the baseline is derived.
+	assertContainsStr(t, s, "the baseline below is computed from the domain model, never authored")
 }
 
 // A name that is not there names the ones that are: the likeliest slip is the

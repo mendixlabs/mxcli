@@ -195,39 +195,42 @@ type MockBackend struct {
 	OpenMenuDocumentForMutationFunc      func(id model.ID) (backend.MenuMutator, error)
 
 	// ServiceBackend
-	ListConsumedODataServicesFunc     func() ([]*model.ConsumedODataService, error)
-	ListPublishedODataServicesFunc    func() ([]*model.PublishedODataService, error)
-	CreateConsumedODataServiceFunc    func(svc *model.ConsumedODataService) error
-	UpdateConsumedODataServiceFunc    func(svc *model.ConsumedODataService) error
-	DeleteConsumedODataServiceFunc    func(id model.ID) error
-	CreatePublishedODataServiceFunc   func(svc *model.PublishedODataService) error
-	UpdatePublishedODataServiceFunc   func(svc *model.PublishedODataService) error
-	DeletePublishedODataServiceFunc   func(id model.ID) error
-	ListConsumedRestServicesFunc      func() ([]*model.ConsumedRestService, error)
-	ListPublishedRestServicesFunc     func() ([]*model.PublishedRestService, error)
-	CreateConsumedRestServiceFunc     func(svc *model.ConsumedRestService) error
-	UpdateConsumedRestServiceFunc     func(svc *model.ConsumedRestService) error
-	EditConsumedRestServiceFunc       func(id model.ID, edit *backend.ConsumedRestServiceEdit) error
-	DeleteConsumedRestServiceFunc     func(id model.ID) error
-	CreatePublishedRestServiceFunc    func(svc *model.PublishedRestService) error
-	UpdatePublishedRestServiceFunc    func(svc *model.PublishedRestService) error
-	DeletePublishedRestServiceFunc    func(id model.ID) error
-	ListBusinessEventServicesFunc     func() ([]*model.BusinessEventService, error)
-	CreateBusinessEventServiceFunc    func(svc *model.BusinessEventService) error
-	UpdateBusinessEventServiceFunc    func(svc *model.BusinessEventService) error
-	DeleteBusinessEventServiceFunc    func(id model.ID) error
-	ListChangeDataCaptureServicesFunc func() ([]*model.ChangeDataCaptureService, error)
-	ListDatabaseConnectionsFunc       func() ([]*model.DatabaseConnection, error)
-	CreateDatabaseConnectionFunc      func(conn *model.DatabaseConnection) error
-	UpdateDatabaseConnectionFunc      func(conn *model.DatabaseConnection) error
-	MoveDatabaseConnectionFunc        func(conn *model.DatabaseConnection) error
-	MoveJavaActionFunc                func(ja *javaactions.JavaAction) error
-	MovePublishedODataServiceFunc     func(svc *model.PublishedODataService) error
-	DeleteDatabaseConnectionFunc      func(id model.ID) error
-	ListDataTransformersFunc          func() ([]*model.DataTransformer, error)
-	CreateDataTransformerFunc         func(dt *model.DataTransformer) error
-	UpdateDataTransformerFunc         func(dt *model.DataTransformer) error
-	DeleteDataTransformerFunc         func(id model.ID) error
+	ListConsumedODataServicesFunc      func() ([]*model.ConsumedODataService, error)
+	ListPublishedODataServicesFunc     func() ([]*model.PublishedODataService, error)
+	CreateConsumedODataServiceFunc     func(svc *model.ConsumedODataService) error
+	UpdateConsumedODataServiceFunc     func(svc *model.ConsumedODataService) error
+	DeleteConsumedODataServiceFunc     func(id model.ID) error
+	CreatePublishedODataServiceFunc    func(svc *model.PublishedODataService) error
+	UpdatePublishedODataServiceFunc    func(svc *model.PublishedODataService) error
+	DeletePublishedODataServiceFunc    func(id model.ID) error
+	ListConsumedRestServicesFunc       func() ([]*model.ConsumedRestService, error)
+	ListPublishedRestServicesFunc      func() ([]*model.PublishedRestService, error)
+	CreateConsumedRestServiceFunc      func(svc *model.ConsumedRestService) error
+	UpdateConsumedRestServiceFunc      func(svc *model.ConsumedRestService) error
+	EditConsumedRestServiceFunc        func(id model.ID, edit *backend.ConsumedRestServiceEdit) error
+	DeleteConsumedRestServiceFunc      func(id model.ID) error
+	CreatePublishedRestServiceFunc     func(svc *model.PublishedRestService) error
+	UpdatePublishedRestServiceFunc     func(svc *model.PublishedRestService) error
+	DeletePublishedRestServiceFunc     func(id model.ID) error
+	ListBusinessEventServicesFunc      func() ([]*model.BusinessEventService, error)
+	CreateBusinessEventServiceFunc     func(svc *model.BusinessEventService) error
+	UpdateBusinessEventServiceFunc     func(svc *model.BusinessEventService) error
+	DeleteBusinessEventServiceFunc     func(id model.ID) error
+	ListChangeDataCaptureServicesFunc  func() ([]*model.ChangeDataCaptureService, error)
+	CreateChangeDataCaptureServiceFunc func(svc *model.ChangeDataCaptureService) error
+	UpdateChangeDataCaptureServiceFunc func(svc *model.ChangeDataCaptureService) error
+	DeleteChangeDataCaptureServiceFunc func(id model.ID) error
+	ListDatabaseConnectionsFunc        func() ([]*model.DatabaseConnection, error)
+	CreateDatabaseConnectionFunc       func(conn *model.DatabaseConnection) error
+	UpdateDatabaseConnectionFunc       func(conn *model.DatabaseConnection) error
+	MoveDatabaseConnectionFunc         func(conn *model.DatabaseConnection) error
+	MoveJavaActionFunc                 func(ja *javaactions.JavaAction) error
+	MovePublishedODataServiceFunc      func(svc *model.PublishedODataService) error
+	DeleteDatabaseConnectionFunc       func(id model.ID) error
+	ListDataTransformersFunc           func() ([]*model.DataTransformer, error)
+	CreateDataTransformerFunc          func(dt *model.DataTransformer) error
+	UpdateDataTransformerFunc          func(dt *model.DataTransformer) error
+	DeleteDataTransformerFunc          func(id model.ID) error
 
 	// MappingBackend
 	ListImportMappingsFunc                func() ([]*model.ImportMapping, error)

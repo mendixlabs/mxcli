@@ -698,17 +698,30 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 	// ── Change data capture ───────────────────────────────────────────
 
 	Register(SyntaxFeature{
-		Path:    "change-data-capture",
-		Summary: "Entity change data capture services — read what a project streams to a lake (no CREATE yet)",
+		Path:     "change-data-capture",
+		Features: []string{"integration/change_data_capture"},
+		Summary:  "Entity change data capture services — declare and inspect what a project streams to a lake",
 		Keywords: []string{
 			"change data capture", "cdc", "entity change", "kafka",
 			"debezium", "lake", "topic", "baseline", "revision", "exposed name",
 		},
 		Syntax: "LIST CHANGE DATA CAPTURE SERVICES [IN Module];\n" +
 			"DESCRIBE CHANGE DATA CAPTURE SERVICE Module.Name;\n\n" +
-			"-- Read-only for now. DESCRIBE reports what is stored as comments,\n" +
-			"-- because there is no CREATE statement for this document yet; the\n" +
-			"-- write path is part C of PROPOSAL_kafka_event_integration.md.\n" +
+			"CREATE [OR MODIFY] CHANGE DATA CAPTURE SERVICE Module.Name\n" +
+			"( ServiceName: 'Name' )\n" +
+			"{\n" +
+			"  ENTITY Module.Order (OrderId, Price AS 'Amount', Order_Customer);\n" +
+			"  ENTITY Module.Customer AS 'Client' (CustomerId, Address);\n" +
+			"};\n\n" +
+			"DROP CHANGE DATA CAPTURE SERVICE Module.Name;\n\n" +
+			"-- A member is NAMED, not typed: it resolves to an attribute or an\n" +
+			"-- association of that entity and its type comes from the domain model.\n" +
+			"-- `id` is implicit and must not be listed. AppName is not settable.\n" +
+			"--\n" +
+			"-- Only the live side is authored. The baseline is computed from the\n" +
+			"-- domain model, because it identifies what it tracks by the GUIDs the\n" +
+			"-- runtime keys the database on \u2014 a GUID an author could write is one\n" +
+			"-- they could get wrong, and a wrong one detaches a table from its rows.\n" +
 			"--\n" +
 			"-- The document is two-sided: Sources is the live model and the\n" +
 			"-- baseline is the copy Studio Pro's \"accept changes\" froze, which\n" +
@@ -722,7 +735,7 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 			"-- history.\n" +
 			"--\n" +
 			"-- Needs Mendix 11.10+ (where the baseline was introduced).",
-		Example: "LIST CHANGE DATA CAPTURE SERVICES;\nDESCRIBE CHANGE DATA CAPTURE SERVICE CdcPublish.OrdersCDCService;",
+		Example: "mdl 1;\nCREATE OR MODIFY CHANGE DATA CAPTURE SERVICE CdcPublish.OrdersCDCService\n( ServiceName: 'OrdersCDCService' )\n{\n  ENTITY CdcPublish.Order (OrderId, CustomerName, Price, Order_Customer);\n  ENTITY CdcPublish.Customer (CustomerId, Address);\n};\n\nDESCRIBE CHANGE DATA CAPTURE SERVICE CdcPublish.OrdersCDCService;",
 		SeeAlso: []string{"business-events", "integration"},
 	})
 
