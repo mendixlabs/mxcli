@@ -316,6 +316,16 @@ GET bookings/{id} [MDL-REST06]
 
 **Solution:** List each page as a bottom bar item of its own, write `Icon: glyph <code>` or leave the icon out, and use `OnClick: show page Module.Page`.
 
+### MDL-NATIVEBAR02: A bottom bar item no user role may see
+
+```
+⚠ navigation NativePhone: no user role may view the page of any bottom bar item ("Menu" (NativeApp.Home_Native)), so every item is hidden and the bottom bar is not shown [MDL-NATIVEBAR02]
+```
+
+**Cause:** mxbuild gives each native bottom bar item the roles that may view its page. The native client keeps an item only when the user has one of them, and shows no bottom bar when none is left. Pages just created in a new module have no `grant view`, so the app opened its home page with no bar while `check`, `exec` and `mx check` all passed (ako/mxcli#2565). Reported at security Prototype or Production only, from page access and user roles as the project stores them and the script changes them.
+
+**Solution:** `grant view on page <page> to <Module.Role>`, with that module role in a user role: `alter user role <Role> add module roles (<Module.Role>)`.
+
 ## mxcli Parser Errors
 
 
