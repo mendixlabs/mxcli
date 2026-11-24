@@ -608,7 +608,9 @@ DISCONNECT;`,
 -- MDL-NATIVEBAR01, with no project needed. A home page (or a role's) whose
 -- layout has "Bottom bar" enabled must appear in this block, or Mendix reports
 -- CE6108; check -p and exec refuse it, reading the layout from the script or
--- the project.`,
+-- the project. An item shows only to a user whose roles may view its page, and
+-- a bar with no item left is not shown at all: check -p warns MDL-NATIVEBAR02
+-- (grant view on page … to a module role that is in a user role).`,
 		Example: `mdl 1;
 CREATE OR MODIFY NAVIGATION Responsive
   APP TITLE 'Order Desk'
