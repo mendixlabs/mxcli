@@ -43,8 +43,12 @@ BYOK constants but the model contract is the same):
   `businessevents.<channel>.<EventBrokerSpace>`, else the `ChannelName` constant.
   `<channel>` is the `ChannelName` UUID stored in the publisher's definition.
 - **One Kafka consumer per subscribed event**, group id
-  `<projectId>-<serviceName>-<eventName>` (normalised, lowercased; prefixed variants for
-  a space or a config-map prefix). Every subscription reads the whole channel topic and
+  `<projectId>-<space>-<serviceName>-<eventName>` (normalised, lowercased). **Measured**
+  against a running app (see "Measured against a running app" below), which corrects an
+  earlier reading of this as `<projectId>-<serviceName>-<eventName>` with the space only
+  as a "prefixed variant": the space is a segment of the id, between the project id and
+  the service name. Observed:
+  `7844f052-e1ef-4335-a833-4fe39c4b63a5-local-orderseventservice-orderplaceevent`. Every subscription reads the whole channel topic and
   filters on CloudEvent `type == eventName` (`shouldCallMicroFlow`), logging others as
   skipped. App instances share a group, so an event is handled once per app.
 - `enable.auto.commit=false`; `auto.offset.reset` earliest/latest from "subscribe from
@@ -87,6 +91,56 @@ check rule in §5.1. (This answers §9.5.)
 constant instead routes *every* message of the app to that one topic — simpler against a
 local broker, at the cost of one table for all messages. Either way mxcli cannot read a
 publisher's channel id today; see §5.4.
+
+## 1a. Measured against a running app
+
+Everything in §3–§5 was read off fixtures. This section is the one part that was
+observed end to end: `ako/TestApp` at `619864b` (the commit the §2 fixtures came from),
+Mendix 11.16.1, booted with `mxcli run --local --db-type hsqldb` against a
+DuckGraphLake broker on 127.0.0.1:9092, with `BusinessEvents.ServerUrl` and
+`BusinessEvents.EventBrokerSpace=local` supplied through `mxcli constant set`. One
+Customer and one Order were created and committed by a microflow, and the rows arrived
+in the lake. Both halves of the module ran: the CDC publisher and the business event
+consumer.
+
+**The topic's second segment is the CDC document's `AppName`, not the module name.**
+The runtime published to `cdc.TestApp.Customer.1.local` and `cdc.TestApp.Order.1.local`
+for entities in module `CdcPublish`. §5.2's template was right and `describe`'s computed
+topic matches the runtime exactly; what this corrects is a *fixture producer* that had
+used the module name and so produced to `cdc.CdcPublish.*`. Only a runtime can settle
+this: a hand-built producer reproduces whatever its author believed.
+
+**The envelope matches the fixture's** in every comparable field — `op`, `connector`
+(`mendix_event_broker_cdc`), `version` (`11.16.1`), `snapshot`, `sequence`, Decimal at
+scale 8, an association as an array of object ids, and no `id` property beyond the object
+id itself (§5.2's claim). `tx_id` is a UUID per transaction, not a synthetic label.
+
+**Object-id type codes are not a tidy sequence.** Observed `Order` id
+`281474976710839` (type code **1**) and `Customer` id `16888498602639508` (type code
+**60**) — adjacent entities in one module, codes 1 and 60. They are distinct per entity,
+which is what a consumer needs to resolve an association's target, but anything that
+assumes small or contiguous codes is wrong. A fixture using plain small integers makes
+every entity share code 0, and DuckGraphLake then resolves an association to the wrong
+entity.
+
+**CDC works on HSQLDB.** The publisher logs
+`SystemPropertyManager.supportsUpdate is false; snapshot overlap protection is degraded`
+and publishes normally; it needs no PostgreSQL for a dev loop. The snapshot decision is
+remembered per revision — `2 entities to snapshot` on a first boot against an empty
+database, `skipping 2 unchanged` on the next — so a snapshot missed because the data was
+created before the app first ran is not re-sent (DuckGraphLake's `help cdc` says the
+same).
+
+**The business event channel id reaches the broker as the topic.** The consumer
+subscribed to `businessevents.f2477dc90f714d69bb12df0df1ee9cce.local`, where the 32-hex
+id is what `list business events` and `export contract` report for the publisher. §1's
+topic rule is therefore measured, not inferred.
+
+**Driving it headlessly:** the app's demo-user picker cannot be clicked by Playwright
+(the container is transformed; the click is refused as off-viewport and a dispatched DOM
+click does not take), so the data was created by authoring a seed microflow and a no-auth
+published REST service **with mxcli**, restarting, and POSTing to it. For a login,
+`create_admin_user` on the m2ee admin port works. Mendix 11.16.1 needs **JDK 25**.
 
 ## 2. Fixtures
 
@@ -348,6 +402,7 @@ $$
 | handler shape | microflow has exactly one parameter, of the consumed entity |
 | module present | the `BusinessEvents` marketplace module is in the project |
 | module started | `BusinessEvents.StartupBusinessEvents` is reachable from the configured after-startup microflow (§1) — without it the app consumes nothing, silently, and every other check passes |
+| broker configured | `BusinessEvents.ServerUrl` is non-blank, and at least one of `BusinessEvents.ChannelName` / `BusinessEvents.EventBrokerSpace` is set. **Measured**: with either missing the app does not merely consume nothing, it **fails to boot** — `StartupBusinessEvents` throws in the after-startup action and the runtime shuts down (`Resolved value for constant: BusinessEvents.ServerUrl was not found or blank`, then `Constant BusinessEvents.ChannelName or BusinessEvents.EventBrokerSpace should be set`). Both are per-environment values, so the rule is a warning on an empty *default* rather than an error: `mxcli constant set` or `--constant` supplies them for a dev run |
 
 ### 5.2 CDC service (part C)
 
@@ -623,7 +678,10 @@ so CDC over `--mcp` is likely feasible as a follow-up — it needs a live Studio
   proves the test detects the defect).
 - **Runtime (optional, Linux):** with a local Kafka-compatible broker (§9), produce an
   event with the module's CloudEvents headers and assert the handler microflow ran — the
-  only test that proves an authored consumer actually consumes.
+  only test that proves an authored consumer actually consumes. **The CDC half of this is
+  done** (§1a): a running app published real change events to the broker, which is what
+  corrected the topic's second segment. The consumer half — injecting an event and
+  asserting the handler ran — is still open.
 
 ## 9. Needs Studio Pro later (not blocking)
 
