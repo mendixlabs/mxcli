@@ -169,7 +169,7 @@ would make Studio Pro 11.13 fail to open it — a branch with no upstream, or
 | `--setup` | off | Prepare prerequisites (cache MxBuild+runtime, ensure DB) and exit without booting — for a SessionStart hook |
 | `--app-port` | 8080 | App HTTP port |
 | `--admin-port` | 8090 | M2EE admin API port |
-| `--serve-port` | 6543 | `mxbuild --serve` port |
+| `--serve-port` | 6543, or a free port when 6543 is busy | `mxbuild --serve` port. Unset, a run keeps 6543 when it can and moves to a free port when another run holds it, so a second app needs no port flags for it; the handshake publishes whichever it chose. Set explicitly, that port is used and a collision is refused |
 | `--listen-addr` | `127.0.0.1` | IP address the app binds to (not a host name). `0.0.0.0` binds all IPv4 interfaces, `::` all interfaces, so other machines on the network can open the app; the URLs it is reachable at are printed after boot. The runtime does not derive an application root URL from this address, so if the app builds absolute URLs (SSO redirects, links in emails) pass `--runtime-setting ApplicationRootUrl=http://<host>:<port>/` or set a real host in the configuration (a warning says so). The M2EE admin API is unaffected and always binds `127.0.0.1` |
 | `--mxbuild-path` | resolved for this host | The mxbuild to build with, overriding resolution (Studio Pro on macOS/Windows, the cached CDN download on Linux). `MXCLI_MXBUILD_PATH` sets the same override from the environment; the flag wins |
 | `--db-host` | 127.0.0.1:5432 | Database `host:port`; bracket IPv6 endpoints (`[::1]:5432`) |
@@ -454,9 +454,9 @@ cache.
 
 ## "My edit didn't show up" — it's usually a stale process, not a cache
 
-`run --local` refuses to boot if its ports (`8080` app, `8090` admin, `6543` serve)
-are already answering — because a previous `run --local` (or a stray `mxbuild --serve`
-/ runtime) left alive would otherwise be **silently adopted**: the startup readiness
+`run --local` refuses to boot if its **app** or **admin** port (`8080`, `8090`) is
+already answering — because a previous `run --local` (or a stray runtime) left alive
+would otherwise be **silently adopted**: the startup readiness
 probes only check that the port answers, so a fresh run would attach to the old
 process and keep serving old output. That reads exactly like a stale cache but is a
 stale **process**.

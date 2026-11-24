@@ -134,7 +134,7 @@ func (o *LocalAppOptions) applyDefaults() {
 		o.AdminPort = 8090
 	}
 	if o.ServePort == 0 {
-		o.ServePort = 6543
+		o.ServePort = defaultServePort()
 	}
 	if o.AdminPass == "" {
 		o.AdminPass = defaultLocalAdminPass
