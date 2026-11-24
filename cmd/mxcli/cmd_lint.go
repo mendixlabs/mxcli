@@ -43,7 +43,7 @@ Built-in rules check for:
 Bundled Starlark rules (in .claude/lint-rules/):
   Security:
   - Guest access enabled (SEC004) - review anonymous user entity access
-  - Strict mode disabled (SEC005) - XPath constraint enforcement off
+  - Strict mode disabled (SEC005) - the client API can reach any object the role can access
   - PII attributes exposed (SEC006) - PII-sounding attributes need access rules
   - Anonymous unconstrained READ (SEC007) - DIVD-2022-00019 pattern detection
   - PII unconstrained READ (SEC008) - PII entities readable without row scoping
