@@ -533,7 +533,7 @@ func init() {
 			"reduce", "all", "any", "fold",
 			// A CE number in the cached `syntax --json` index leads an agent
 			// debugging the build error back to the right topic (issue #1002).
-			"$currentObject", "predicate", "CE0117", "CE0109", "CE0023", "MDL101", "MDL-LISTOP01",
+			"$currentObject", "predicate", "CE0117", "CE0109", "CE0016", "CE0023", "MDL101", "MDL-LISTOP01",
 			"contains", "equals", "by", "where", "MDL-DEPR003", "MDL-DEPR004", "MDL-V1-LIST",
 		},
 		Syntax: "$List = CREATE LIST OF Module.Entity;\n" +
@@ -557,6 +557,8 @@ func init() {
 			"$Bool   = CONTAINS $Object IN $List;\n$Bool   = EQUALS $L1 AND $L2;\n" +
 			"$Result = RANGE $List OFFSET offset LIMIT amount;\n\n" +
 			"-- Aggregate list: BY an attribute, or OF an expression over $currentObject.\n" +
+			"-- SUM, AVERAGE, MINIMUM and MAXIMUM BY take an AutoNumber, Decimal, Integer or Long\n" +
+			"-- attribute; any other type is CE0016 (refused by check).\n" +
 			"$Count = COUNT $List;\n$Sum = SUM $List BY Attr;\n$Sum = SUM $List OF expression;\n" +
 			"$Avg = AVERAGE $List BY Attr;\n$Min = MINIMUM $List BY Attr;\n$Max = MAXIMUM $List BY Attr;\n" +
 			"$AllMatch = ALL $List WHERE boolean-expression;\n$AnyMatch = ANY $List WHERE boolean-expression;\n\n" +
@@ -956,7 +958,7 @@ func init() {
 
 	Register(SyntaxFeature{
 		Path:    "microflow.layout",
-		Summary: "Canvas layout annotations — @position, @start, @anchor, @curve, @caption, @color, @excluded",
+		Summary: "Canvas layout annotations — @position, @start, @anchor, @curve, @caption, @color, @excluded, @documentation",
 		Keywords: []string{
 			"position", "start", "anchor", "curve", "layout", "canvas",
 			"annotation", "caption", "color", "excluded", "bezier",
@@ -972,12 +974,17 @@ func init() {
 			"                                      -- this statement enters by (not its far end)\n" +
 			"@curve(from: (40, -90), to: (-40, 90))  -- the flow's bezier control vectors\n" +
 			"@merge(x, y)                          -- the implicit merge that closes a split\n" +
+			"@merge(x, y, w, h)                    -- … and its box, when not the default 40x40\n" +
+			"@size(w, h)                           -- a LOOP's box, a `while true`'s loop-head merge,\n" +
+			"                                      -- or a `merge <label>`'s box; left out, computed\n" +
 			"@anchor(from: bottom, to: top, true: (…), false: (…))  -- on an IF: to = its incoming flow,\n" +
 			"                                      -- from = the flow leaving its closing merge\n" +
 			"@anchor(true: (to: top))              -- one branch's edge; either side may be left out\n" +
 			"@anchor(Open: (from: right), (empty): (from: bottom))  -- on a CASE: one outcome's edge,\n" +
 			"                                      -- keyed by its WHEN value; from = its merge's exit\n" +
 			"@caption 'text'\n@color Green\n@annotation 'a note'\n@excluded\n" +
+			"@documentation 'text'                 -- an action's, decision's or loop's documentation;\n" +
+			"                                      -- left out, create or modify keeps the stored one\n" +
 			"@applyentityaccess | @applyentityaccess(false)  -- DOCUMENT-level, before CREATE MICROFLOW/RULE\n" +
 			"@annotation(id: n1, text: 'a note', position: (x, y), size: (w, h))\n" +
 			"@annotation(id: n1)                   -- attaches THAT note to another activity\n" +

@@ -129,8 +129,9 @@ mxcli layout -p app.mpr --module MyModule             # apply
 ```
 
 That lays entities out from the association graph — lookups on the left, each
-entity one column past the furthest thing it references — so the lines mostly
-run one way. It is idempotent (a second run moves nothing) and local (adding an
+entity one column past the furthest thing it references, on the row of the
+entity it is most linked to — so the lines mostly run one way and straight
+across, with room between columns for the association names. It is idempotent (a second run moves nothing) and local (adding an
 entity later moves a handful, not the model). It REPLACES positions you set by
 hand in the module it touches, which is the reason it is a separate command
 rather than something `exec` does on its own. To fix only boxes that collide
@@ -741,19 +742,17 @@ create persistent entity Module.Item (
 ```
 ## Entity Positioning
 
-Use `@position(x, y)` to control layout in Studio Pro:
-- Place related entities near each other
-- Use consistent spacing (e.g., 250 pixels horizontal, 200 vertical)
-- Group by domain concept
+For a generated domain model, write **no** `@position` and run
+`mxcli layout --module <Module>` after `exec` (see "Entities" above). Lint rule
+`MPR020` fails `mxcli lint` / `mxcli verify` while linked entities still sit on the
+default placement grid.
 
-Example layout:
+Use `@position(x, y)` only for a few entities added to a module someone arranged
+by hand in Studio Pro, where `mxcli layout` would move the hand-placed ones. Put
+each beside the entities it links to, leaving room for the association name
+between the boxes:
+
 ```sql
-@position(50, 50)      -- Top-left: Core entity
-create persistent entity Module.Customer (...);
-
-@position(300, 50)     -- Same row: Related entity
-create persistent entity Module.Address (...);
-
-@position(50, 250)     -- Below: Dependent entity
-create persistent entity Module.Order (...);
+@position(620, 40)     -- right of Order, which sits at (340, 40)
+create persistent entity Module.Invoice (...);
 ```

@@ -126,5 +126,52 @@ func noReferencesMessage(ctx *ExecContext, target string) string {
 			"Not checked: decision branches on an enumeration, which store the bare value name.\n"+
 			"Run `search '%s'` before treating it as unused.", target, target, member, member)
 	}
+	if why := entryPointReason(ctx, target); why != "" {
+		// Used without an inbound edge (ako/mxcli#2241): a page or microflow
+		// opened by its URL, or one Studio Pro is told to treat as used.
+		return fmt.Sprintf("(no references found: nothing in the catalog's reference graph points at %s,\n"+
+			"but it is an entry point: %s — do not treat it as unused)", target, why)
+	}
 	return fmt.Sprintf("(no references found: nothing in the catalog's reference graph points at %s)", target)
+}
+
+// entryPointReason says why a page or microflow is used without anything
+// referencing it — its URL, or Studio Pro's "Mark as used" — or "".
+func entryPointReason(ctx *ExecContext, target string) string {
+	if ctx == nil || ctx.Catalog == nil {
+		return ""
+	}
+	esc := escapeSQLString(target)
+	res, err := ctx.Catalog.Query(fmt.Sprintf(
+		`select 'page', COALESCE(URL, ''), MarkAsUsed from pages where QualifiedName = '%s'
+		 union all
+		 select lower(MicroflowType), COALESCE(URL, ''), MarkAsUsed from microflows where QualifiedName = '%s'`, esc, esc))
+	if err != nil || res == nil || len(res.Rows) == 0 {
+		return ""
+	}
+	row := res.Rows[0]
+	kind, _ := row[0].(string)
+	url, _ := row[1].(string)
+	var reasons []string
+	if url != "" {
+		reasons = append(reasons, fmt.Sprintf("the %s has URL '%s'", kind, url))
+	}
+	if truthy(row[2]) {
+		reasons = append(reasons, "it is marked as used in Studio Pro")
+	}
+	return strings.Join(reasons, ", and ")
+}
+
+func truthy(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case int64:
+		return x != 0
+	case int:
+		return x != 0
+	case string:
+		return x == "1" || strings.EqualFold(x, "true")
+	}
+	return false
 }

@@ -22,9 +22,9 @@ func (b *Builder) buildPages() error {
 
 	pageStmt, err := b.tx.Prepare(`
 		INSERT INTO pages_data (Id, Name, QualifiedName, ModuleName, Folder, Title, URL, LayoutRef,
-			Description, ParameterCount, WidgetCount, Excluded, Class, Style, DynamicClasses,
+			Description, ParameterCount, WidgetCount, Excluded, MarkAsUsed, Class, Style, DynamicClasses,
 			ProjectId, SnapshotId)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -99,6 +99,7 @@ func (b *Builder) buildPages() error {
 			len(pg.Parameters),
 			widgetCnt,
 			pg.Excluded,
+			pg.MarkAsUsed, // ako/mxcli#2241
 			class, style, dynamicClasses,
 			projectID, snapshotID,
 		)

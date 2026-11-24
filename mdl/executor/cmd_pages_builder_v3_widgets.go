@@ -563,6 +563,14 @@ func (pb *pageBuilder) buildTextBoxV3(w *ast.WidgetV3) (*pages.TextBox, error) {
 		}
 		tb.IsPassword = v
 	}
+	// Forms$TextBox.AutoFocus; unset keeps false (ako/mxcli#2519).
+	if raw, ok := lookupPropCI(w, "AutoFocus"); ok {
+		v, err := propBool(raw)
+		if err != nil {
+			return nil, mdlerrors.NewBackend("textbox AutoFocus", err)
+		}
+		tb.AutoFocus = v
+	}
 	// Forms$WidgetValidation. Both fields are optional and empty means "not
 	// authored", which leaves the writer emitting the empty validation Studio
 	// Pro stores on a widget that has none.

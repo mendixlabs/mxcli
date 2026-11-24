@@ -50,6 +50,9 @@ func execRename(ctx *ExecContext, s *ast.RenameStmt) error {
 
 // execRenameEntity renames an entity and updates all BY_NAME references.
 func execRenameEntity(ctx *ExecContext, s *ast.RenameStmt) error {
+	if err := refuseReservedEntityName(s); err != nil {
+		return err
+	}
 	// Find the entity
 	module, err := findModule(ctx, s.Name.Module)
 	if err != nil {

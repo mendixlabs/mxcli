@@ -124,7 +124,7 @@ if $RootResult != empty then  -- ERROR!
 - `StatusCode` (Integer) — HTTP status code (200, 404, etc.)
 
 **Restrictions:**
-- `send rest request` does **NOT** support custom error handling (`on error continue/rollback` causes CE6035). Errors are always handled by aborting.
+- `send rest request` takes a custom error handler, `on error [without rollback] begin … end error`, like any call action. Only `on error continue` is refused (CE6035, MDL076 at check time) — measured on 10.24, 11.12 and 11.16.
 - The operation must be defined via `create consumed rest service` with a three-part qualified name: `Module.ServiceDocument.OperationName`.
 
 ### REST CALL — Inline HTTP Calls

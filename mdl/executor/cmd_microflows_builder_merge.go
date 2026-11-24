@@ -109,6 +109,9 @@ func (fb *flowBuilder) addMergeStatement(s *ast.MergeStmt) model.ID {
 	// Adopt the declaration's position even when a forward `join` created the
 	// object earlier at whatever the cursor happened to be.
 	m.Position = model.Point{X: fb.posX, Y: fb.posY}
+	if s.Annotations != nil && s.Annotations.Size != nil && s.Annotations.Size.Width > 0 && s.Annotations.Size.Height > 0 {
+		m.Size = model.Size{Width: s.Annotations.Size.Width, Height: s.Annotations.Size.Height}
+	}
 	fb.posX += fb.spacing / 2
 	// A merge is a join point, not a terminator: whatever follows continues from
 	// it, so an end event is owed again even if the path that reached here
@@ -342,4 +345,72 @@ func (fb *flowBuilder) takeBranchJoin(
 		return fb.takePendingJoin(splitID, branchCase, branchAnchor)
 	}
 	return fb.takePendingJoin(lastInBranch, pendingCase, prevAnchor)
+}
+
+// collapseCoincidentMerges folds a merge into the next one when its only way
+// out is a straight flow to another merge with the same position and size.
+//
+// Studio Pro lets one merge close both a split and a split nested in one of its
+// branches: the inner branches go straight to the outer merge. MDL has one
+// merge per block, so DESCRIBE writes the same @merge on both and the rebuild
+// made two merges stacked exactly on top of each other (ako/mxcli#2369). Two
+// coincident merges are never two intended nodes — neither can be seen or
+// clicked — so the inner one's incoming flows are moved onto the outer one,
+// which is the model Studio Pro had.
+func (fb *flowBuilder) collapseCoincidentMerges() {
+	for {
+		byID := map[model.ID]*microflows.ExclusiveMerge{}
+		for _, o := range fb.objects {
+			if m, ok := o.(*microflows.ExclusiveMerge); ok {
+				byID[m.ID] = m
+			}
+		}
+		if len(byID) < 2 {
+			return
+		}
+		noted := map[model.ID]bool{}
+		for _, af := range fb.annotationFlows {
+			noted[af.OriginID], noted[af.DestinationID] = true, true
+		}
+		out := map[model.ID][]*microflows.SequenceFlow{}
+		for _, f := range fb.flows {
+			out[f.OriginID] = append(out[f.OriginID], f)
+		}
+		var inner, outer *microflows.ExclusiveMerge
+		var link *microflows.SequenceFlow
+		for _, o := range fb.objects {
+			m, ok := o.(*microflows.ExclusiveMerge)
+			if !ok || noted[m.ID] || len(out[m.ID]) != 1 {
+				continue
+			}
+			f := out[m.ID][0]
+			next, ok := byID[f.DestinationID]
+			if !ok || next == m || f.IsErrorHandler || next.Position != m.Position || next.Size != m.Size {
+				continue
+			}
+			inner, outer, link = m, next, f
+			break
+		}
+		if inner == nil {
+			return
+		}
+		flows := fb.flows[:0]
+		for _, f := range fb.flows {
+			if f == link {
+				continue
+			}
+			if f.DestinationID == inner.ID {
+				f.DestinationID = outer.ID
+			}
+			flows = append(flows, f)
+		}
+		fb.flows = flows
+		objects := fb.objects[:0]
+		for _, o := range fb.objects {
+			if o != microflows.MicroflowObject(inner) {
+				objects = append(objects, o)
+			}
+		}
+		fb.objects = objects
+	}
 }

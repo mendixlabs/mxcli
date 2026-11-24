@@ -165,7 +165,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 			BaseMicroflowObject: microflows.BaseMicroflowObject{
 				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 				Position:    model.Point{X: mergeX, Y: mergeY},
-				Size:        model.Size{Width: MergeSize, Height: MergeSize},
+				Size:        mergeSize(s.Annotations),
 			},
 		}
 		fb.objects = append(fb.objects, merge)
@@ -810,6 +810,10 @@ func (fb *flowBuilder) addLoopStatement(s *ast.LoopStmt) model.ID {
 	// statement count measured before the body existed (#884 problem 1). Recompute
 	// the centre too: the width just changed under it.
 	loopWidth, loopHeight = fitContainerSize(loopBuilder.objects, innerStartX, MinLoopWidth, MinLoopHeight)
+	if s.Annotations != nil && s.Annotations.Size != nil && s.Annotations.Size.Width > 0 && s.Annotations.Size.Height > 0 {
+		// The box Studio Pro stored, @size(w, h) (ako/mxcli#2369).
+		loopWidth, loopHeight = s.Annotations.Size.Width, s.Annotations.Size.Height
+	}
 	loopCenterX = loopLeftX + loopWidth/2
 	if s.Annotations != nil && s.Annotations.Position != nil {
 		loopCenterX = s.Annotations.Position.X
@@ -987,7 +991,7 @@ func (fb *flowBuilder) addManualWhileTrueStatement(s *ast.WhileStmt) model.ID {
 		BaseMicroflowObject: microflows.BaseMicroflowObject{
 			BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 			Position:    model.Point{X: mergeX, Y: mergeY},
-			Size:        model.Size{Width: MergeSize, Height: MergeSize},
+			Size:        whileMergeSize(s.Annotations),
 		},
 	}
 	fb.objects = append(fb.objects, merge)
@@ -1162,6 +1166,10 @@ func (fb *flowBuilder) addWhileStatement(s *ast.WhileStmt) model.ID {
 
 	// Size from the built children, as addLoopStatement does (#884 problem 1).
 	loopWidth, loopHeight = fitContainerSize(loopBuilder.objects, innerStartX, MinLoopWidth, MinLoopHeight)
+	if s.Annotations != nil && s.Annotations.Size != nil && s.Annotations.Size.Width > 0 && s.Annotations.Size.Height > 0 {
+		// The box Studio Pro stored, @size(w, h) (ako/mxcli#2369).
+		loopWidth, loopHeight = s.Annotations.Size.Width, s.Annotations.Size.Height
+	}
 	loopCenterX = loopLeftX + loopWidth/2
 	if s.Annotations != nil && s.Annotations.Position != nil {
 		loopCenterX = s.Annotations.Position.X
@@ -1243,4 +1251,13 @@ func (fb *flowBuilder) addContinueEvent() model.ID {
 	fb.objects = append(fb.objects, event)
 	fb.posX += fb.spacing
 	return event.ID
+}
+
+// whileMergeSize is a `while true`'s loop-head merge box: the @size the
+// statement states, or the builder's 40x40 (ako/mxcli#2369).
+func whileMergeSize(ann *ast.ActivityAnnotations) model.Size {
+	if ann != nil && ann.Size != nil && ann.Size.Width > 0 && ann.Size.Height > 0 {
+		return model.Size{Width: ann.Size.Width, Height: ann.Size.Height}
+	}
+	return model.Size{Width: MergeSize, Height: MergeSize}
 }

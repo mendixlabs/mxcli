@@ -247,6 +247,12 @@ would not produce it on its own. A flow written without annotations describes
 without them. A statement placed by hand keeps its `@position`, and the
 statements the layout places after it follow from it without one.
 
+Sizes are written the same way. A loop whose box is not the one the layout
+would compute prints `@size(w, h)`, as does a `while true` loop-head merge or a
+`merge <label>` that is not 40×40, and a decision's closing merge of another
+size prints it as `@merge(x, y, w, h)`. Studio Pro draws merges at 90×60, so a
+flow from Studio Pro keeps its boxes when it is dropped and created again.
+
 Whether an annotation is needed is not guessed from the coordinates. `DESCRIBE`
 builds the flow again from its own output, exactly as `CREATE OR MODIFY` would
 (nothing is written), and every node that lands elsewhere keeps its annotation.

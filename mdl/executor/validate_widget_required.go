@@ -57,11 +57,7 @@ func validateWidgetRequired(w *ast.WidgetV3, registry *WidgetRegistry, locationP
 	// were unknown, no rule could decide, and every other mode's required
 	// properties were reported — 12 on one combo box, which mxbuild builds
 	// clean (ako/mxcli#2523).
-	for k, v := range templateWrittenDefaults(def.WidgetID) {
-		if lk := strings.ToLower(k); values[lk] == "" {
-			values[lk] = v
-		}
-	}
+	fillTemplateValues(values, def)
 	rules := visibilityRulesFor(def, registry)
 	slots, lists := filledSlotsAndLists(w, def)
 
@@ -219,4 +215,18 @@ func filledSlotsAndLists(w *ast.WidgetV3, def *WidgetDefinition) (slots, lists m
 		slots[key] = true
 	}
 	return slots, lists
+}
+
+// fillTemplateValues gives each property the statement leaves unset the value
+// exec writes for it from the widget's template — a combo box's `source`
+// "context", `optionsSourceType` "enumeration" — so an editorConfig rule on
+// those properties can be judged. Without it every such rule read as
+// undeterminable: the required check reported other modes' properties
+// (ako/mxcli#2523) and the hidden-value check never fired (ako/mxcli#2522).
+func fillTemplateValues(values map[string]string, def *WidgetDefinition) {
+	for k, v := range templateWrittenDefaults(def.WidgetID) {
+		if lk := strings.ToLower(k); values[lk] == "" {
+			values[lk] = v
+		}
+	}
 }

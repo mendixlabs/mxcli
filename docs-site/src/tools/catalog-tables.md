@@ -161,6 +161,8 @@ nanoflow subset).
 | `ActivityCount` | Activities at the top level of the flow, excluding start/end events and merges. A loop counts as one |
 | `TotalActivityCount` | `ActivityCount` plus every activity inside a loop, at any depth |
 | `Complexity` | McCabe cyclomatic complexity |
+| `MarkAsUsed` | 1 when Studio Pro's "Mark as used" is set: an entry point with no inbound reference |
+| `URL` | The microflow's URL (deep link), if any; empty for nanoflows and rules |
 
 ```sql
 SELECT Name, ReturnType, ActivityCount, TotalActivityCount
@@ -299,6 +301,7 @@ Information about pages and their properties.
 | `ParameterCount` | Number of page parameters |
 | `WidgetCount` | Number of widgets (full build only; 0 otherwise) |
 | `Excluded` | 1 when the page is excluded from the project |
+| `MarkAsUsed` | 1 when Studio Pro's "Mark as used" is set |
 | `Class`, `Style`, `DynamicClasses` | The page's own Appearance: CSS class, inline style and dynamic-classes expression (full build only) |
 
 ```sql

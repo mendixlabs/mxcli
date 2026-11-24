@@ -34,6 +34,10 @@ func init() {
 // serializeRestOperationCallAction field-for-field.
 func restOperationCallActionToGen(a *microflows.RestOperationCallAction) element.Element {
 	g := newElem("Microflows$RestOperationCallAction", string(a.ID))
+	// The action carries its own error handling like every other call action;
+	// it was never written, so an `on error` clause stored Rollback
+	// (ako/mxcli#2534).
+	addStr(g, "ErrorHandlingType", orDefault(string(a.ErrorHandlingType), "Rollback"))
 	addStr(g, "Operation", a.Operation)
 
 	if a.OutputVariable != nil {

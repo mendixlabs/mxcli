@@ -411,10 +411,12 @@ func reportSkippedFiles(out io.Writer, skipped []marketplace.SkippedFile) {
 	if len(skipped) == 0 {
 		return
 	}
-	var kept, dupes []marketplace.SkippedFile
+	var kept, styled, dupes []marketplace.SkippedFile
 	var metadata []string
 	for _, s := range skipped {
 		switch {
+		case s.StyledBy != "":
+			styled = append(styled, s)
 		case s.Kept != "":
 			kept = append(kept, s)
 		case s.Reason == marketplace.ReasonNotAProjectFile:
@@ -432,6 +434,18 @@ func reportSkippedFiles(out io.Writer, skipped []marketplace.SkippedFile) {
 		for _, s := range kept {
 			fmt.Fprintf(out, "    %s — kept %s, package ships %s\n", s.Path, s.Kept, s.Offered)
 		}
+	}
+	if len(styled) > 0 {
+		// A widget whose CSS ships in another module moves only with it: a
+		// newer widget over older styling renders broken with no error
+		// (ako/mxcli#2537).
+		fmt.Fprintf(out, "\n  Held back %d widget(s) at the version their styling module supports:\n", len(styled))
+		for _, s := range styled {
+			fmt.Fprintf(out, "    %s — kept %s, package ships %s; styled by %s\n", s.Path, s.Kept, s.Offered, s.StyledBy)
+		}
+		module := strings.Fields(styled[0].StyledBy)[0]
+		fmt.Fprintf(out, "  Update the %s module to move its widgets and their styling together:\n"+
+			"    mxcli marketplace update <%s content id> -p <app.mpr> --to %s\n", module, module, styled[0].Offered)
 	}
 	for _, s := range dupes {
 		fmt.Fprintf(out, "  Skipped %s (%s).\n", s.Path, s.Reason)

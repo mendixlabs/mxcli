@@ -81,21 +81,46 @@ func GridSlot(n int) model.Point {
 	}
 }
 
-// Box size estimates. Studio Pro's real dimensions are not available to mxcli
-// (see the package comment), so these are chosen to clear a typical box with
-// room to spare rather than to match it.
+// Box size estimates, from measurements in Studio Pro: classic viewer and the
+// 11.16 beta viewer, each screenshot calibrated against the positions stored in
+// its project (PROPOSAL_domain_model_readable_layout.md, "Measurements").
+//
+// A project is opened in either viewer, so each dimension takes the larger:
+//
+//   - Width is FIXED: 150 classic, 158 beta, whatever the names, which are cut
+//     off with "…". It does not grow with a long name; an estimate that did
+//     (8 px per character, before) only spread the columns apart.
+//   - Height is the header plus one row per attribute, with a minimum of about
+//     three rows: classic max(84, 36 + 16n), beta max(~76, 28 + 16n). The 4 px
+//     over the classic header absorbs the few px of measurement error, so no
+//     drawn box is taller than its estimate. The minimum matters most: a 0–2
+//     attribute entity is drawn 84 tall, and estimating 60 let the box below it
+//     touch it (MPR016, Place).
 const (
-	minBoxWidth   = 160
-	pixelsPerChar = 8  // rough advance width of the editor's font
-	boxPadding    = 24 // name inset plus the type column's share
-	headerHeight  = 34 // the entity's name bar
+	boxWidth      = 160
+	pixelsPerChar = 8  // rough advance width of the editor's font, for annotation captions
+	headerHeight  = 40 // the entity's name bar, with margin
 	memberHeight  = 16 // one attribute row
-	minBoxHeight  = 60
+	minBoxHeight  = 84 // three rows: what Studio Pro draws for 0–3 attributes
 
-	columnGutter = 90 // horizontal space between layers
+	columnGutter = 90 // horizontal space between layers, at least
 	rowGutter    = 40 // vertical space between entities within a layer
 	bandGutter   = 140
+
+	// An association's name label and the 1/* markers at its two ends share
+	// the line between two boxes; a shorter line cuts the label off or draws
+	// it on a box (mendixlabs/mxcli#1929, rule 5). Measured in Studio Pro
+	// (classic and 11.16 beta): about 5 px per character plus ~12 of padding.
+	// 5.5 leaves room for wide glyphs.
+	labelPxPerChar2 = 11 // 5.5 px per character, kept in integer halves
+	labelPadding    = 12
+	markerAllowance = 40 // the 1 / * markers and their margin, both ends
 )
+
+// labelWidth estimates the drawn width of an association's name label.
+func labelWidth(name string) int {
+	return (len(name)*labelPxPerChar2+1)/2 + labelPadding
+}
 
 // Plan computes a position for every entity in one domain model.
 //
@@ -124,24 +149,37 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 	layers, isolated := g.layers()
 	out := make(map[model.ID]model.Point, len(g.order))
 
+	layerOf := make(map[model.ID]int, len(g.order))
+	for li, layer := range layers {
+		for _, id := range layer {
+			layerOf[id] = li
+		}
+	}
+	gaps := g.columnGaps(layerOf, len(layers))
+
 	x := OriginX
 	maxY := OriginY
-	for _, layer := range layers {
+	for li, layer := range layers {
 		widest := 0
-		y := OriginY
+		var col column
 		for _, id := range layer {
-			e := g.byID[id]
-			w, h := boxSize(e)
-			if w > widest {
-				widest = w
+			w, h := boxSize(g.byID[id])
+			widest = max(widest, w)
+			// On the row of the entity it is most linked to, so the line between
+			// them runs straight across (rule 4). Layer 0 references nothing
+			// placed yet, so it stacks; so does an entity whose only targets
+			// share its layer (a cycle).
+			want := col.bottom()
+			if t, ok := g.primaryTarget(id, out); ok {
+				want = out[t].Y
 			}
+			y := col.place(want, h)
 			out[id] = model.Point{X: x, Y: y}
-			y += h + rowGutter
 		}
-		if y > maxY {
-			maxY = y
+		maxY = max(maxY, col.bottom())
+		if li < len(gaps) {
+			x += widest + gaps[li]
 		}
-		x += widest + columnGutter
 	}
 
 	// The isolated band: a plain grid under everything else, so it reads as a
@@ -181,32 +219,21 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 	return out
 }
 
-// boxSize estimates the drawn size of an entity from its members.
+// boxSize estimates the drawn size of an entity from its attribute count. The
+// name does not matter: Studio Pro draws every entity the same width.
 func boxSize(e *domainmodel.Entity) (w, h int) {
-	if e == nil {
-		return minBoxWidth, minBoxHeight
+	n := 0
+	if e != nil {
+		n = len(e.Attributes)
 	}
-	longest := len(e.Name)
-	for _, a := range e.Attributes {
-		if n := len(a.Name); n > longest {
-			longest = n
-		}
-	}
-	w = longest*pixelsPerChar + boxPadding
-	if w < minBoxWidth {
-		w = minBoxWidth
-	}
-	h = headerHeight + len(e.Attributes)*memberHeight
-	if h < minBoxHeight {
-		h = minBoxHeight
-	}
-	return w, h
+	return boxWidth, max(minBoxHeight, headerHeight+n*memberHeight)
 }
 
 // graph is the module's entities plus the local edges between them.
 type graph struct {
 	byID  map[model.ID]*domainmodel.Entity
 	order []model.ID // entity ids, sorted by name — the determinism anchor
+	edges []edge     // every local edge, in model order
 	out   map[model.ID][]model.ID
 	deg   map[model.ID]int // total edges, either direction
 }
@@ -240,22 +267,25 @@ func newGraph(dm *domainmodel.DomainModel) *graph {
 		return g.byID[g.order[i]].Name < g.byID[g.order[j]].Name
 	})
 
-	add := func(from, to model.ID) {
+	add := func(from, to model.ID, label string) {
 		if from == to || g.byID[from] == nil || g.byID[to] == nil {
 			return
 		}
 		g.out[from] = append(g.out[from], to)
 		g.deg[from]++
 		g.deg[to]++
+		g.edges = append(g.edges, edge{from: from, to: to, label: label})
 	}
 	for _, a := range dm.Associations {
 		if a != nil {
-			add(a.ParentID, a.ChildID)
+			add(a.ParentID, a.ChildID, a.Name)
 		}
 	}
+	// A generalization is drawn as an arrow with no name and no multiplicity,
+	// so it asks nothing of the gap it crosses.
 	for _, e := range dm.Entities {
 		if e != nil && e.GeneralizationID != "" {
-			add(e.ID, e.GeneralizationID)
+			add(e.ID, e.GeneralizationID, "")
 		}
 	}
 	for from := range g.out {
@@ -264,6 +294,110 @@ func newGraph(dm *domainmodel.DomainModel) *graph {
 		})
 	}
 	return g
+}
+
+// edge is one local association or generalization, FROM the referencing entity
+// TO the referenced one. label is the association's name, drawn on the line;
+// empty for a generalization.
+type edge struct {
+	from, to model.ID
+	label    string
+}
+
+// columnGaps returns the horizontal gap after each layer but the last: the
+// gutter, or wider where an association between that layer and the next needs
+// room for its name and both multiplicity markers (rule 5).
+//
+// Only associations between ADJACENT layers size a gap. A line spanning several
+// layers has its label over a middle column whatever the gaps are, which is a
+// crossing to avoid (rule 1), not a gap to widen.
+func (g *graph) columnGaps(layerOf map[model.ID]int, n int) []int {
+	if n < 2 {
+		return nil
+	}
+	gaps := make([]int, n-1)
+	for i := range gaps {
+		gaps[i] = columnGutter
+	}
+	for _, e := range g.edges {
+		if e.label == "" {
+			continue
+		}
+		a, b := layerOf[e.from], layerOf[e.to]
+		if a > b {
+			a, b = b, a
+		}
+		if b-a != 1 {
+			continue
+		}
+		gaps[a] = max(gaps[a], labelWidth(e.label)+markerAllowance)
+	}
+	return gaps
+}
+
+// primaryTarget is the already-placed entity that id references most, ties
+// broken by name: the one whose row id takes. g.out is sorted by name and holds
+// one entry per edge, so the first to reach the highest count wins.
+func (g *graph) primaryTarget(id model.ID, placed map[model.ID]model.Point) (model.ID, bool) {
+	counts := map[model.ID]int{}
+	var best model.ID
+	bestN := 0
+	for _, t := range g.out[id] {
+		if _, ok := placed[t]; !ok {
+			continue
+		}
+		counts[t]++
+		if counts[t] > bestN {
+			best, bestN = t, counts[t]
+		}
+	}
+	return best, bestN > 0
+}
+
+// column is the vertical spans already taken in one layer, each box with the
+// row gutter under it.
+type column struct {
+	spans [][2]int // [top, bottom+rowGutter)
+}
+
+// bottom is where the next box stacked under everything would go.
+func (c *column) bottom() int {
+	y := OriginY
+	for _, s := range c.spans {
+		y = max(y, s[1])
+	}
+	return y
+}
+
+// place takes the free y nearest at or below want for a box of height h, and
+// records it. Candidates are want itself and the end of every span below it;
+// the lowest one that clears every span wins.
+func (c *column) place(want, h int) int {
+	want = max(want, OriginY)
+	cands := []int{want}
+	for _, s := range c.spans {
+		if s[1] > want {
+			cands = append(cands, s[1])
+		}
+	}
+	sort.Ints(cands)
+	for _, y := range cands {
+		free := true
+		for _, s := range c.spans {
+			if y < s[1] && s[0] < y+h+rowGutter {
+				free = false
+				break
+			}
+		}
+		if free {
+			c.spans = append(c.spans, [2]int{y, y + h + rowGutter})
+			return y
+		}
+	}
+	// Unreachable: the end of the lowest span is always free.
+	y := c.bottom()
+	c.spans = append(c.spans, [2]int{y, y + h + rowGutter})
+	return y
 }
 
 // layers assigns each connected entity a layer and returns the layers in order,

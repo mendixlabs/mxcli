@@ -1964,10 +1964,12 @@ func (fb *flowBuilder) addSendRestRequestAction(s *ast.SendRestRequestStmt) mode
 	// QueryParameterMappings (query) based on the operation definition.
 	paramMappings, queryParamMappings := buildRestParameterMappings(s.Parameters, opDef, operationQN)
 
-	// RestOperationCallAction does not support custom error handling (CE6035).
-	// ON ERROR clauses in the MDL are silently ignored for this action type.
+	// A custom error handler is allowed here, as on every call action; it was
+	// dropped on the strength of an unmeasured CE6035 (ako/mxcli#2534).
+	// explicitErrorHandling keeps an activity with no clause as it was stored.
 	action := &microflows.RestOperationCallAction{
 		BaseElement:            model.BaseElement{ID: model.ID(types.GenerateID())},
+		ErrorHandlingType:      explicitErrorHandling(fb, s.ErrorHandling),
 		Operation:              operationQN,
 		OutputVariable:         outputVar,
 		BodyVariable:           bodyVar,
@@ -1975,6 +1977,7 @@ func (fb *flowBuilder) addSendRestRequestAction(s *ast.SendRestRequestStmt) mode
 		QueryParameterMappings: queryParamMappings,
 	}
 
+	activityX := fb.posX
 	activity := &microflows.ActionActivity{
 		BaseActivity: microflows.BaseActivity{
 			BaseMicroflowObject: microflows.BaseMicroflowObject{
@@ -1989,6 +1992,8 @@ func (fb *flowBuilder) addSendRestRequestAction(s *ast.SendRestRequestStmt) mode
 
 	fb.objects = append(fb.objects, activity)
 	fb.posX += fb.spacing
+
+	fb.finishCustomErrorHandler(activity.ID, activityX, s.ErrorHandling, s.OutputVariable)
 
 	return activity.ID
 }

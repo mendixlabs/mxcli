@@ -936,6 +936,8 @@ type rawWidget struct {
 	// IsPassword is Forms$TextBox.IsPasswordBox. Security-relevant: a text box
 	// that round-trips without it renders the value in plaintext (ako/mxcli#550).
 	IsPassword bool
+	// AutoFocus is Forms$TextBox.AutoFocus (ako/mxcli#2519).
+	AutoFocus bool
 	// KeyboardType is a text box's Forms$TextBox.KeyboardType (ako/mxcli#1209).
 	KeyboardType string
 	// NumberOfLines and Autocomplete are a text area's; nil when not stored

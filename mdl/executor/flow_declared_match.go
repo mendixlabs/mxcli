@@ -77,6 +77,7 @@ var geometryFields = map[reflect.Type]map[string]bool{
 	annotationsStructType: {
 		"Position": true, "Anchor": true, "TrueBranchAnchor": true, "FalseBranchAnchor": true,
 		"IteratorAnchor": true, "BodyTailAnchor": true, "CaseAnchors": true, "Curve": true, "Merge": true, "Start": true,
+		"MergeSize": true, "Size": true, // ako/mxcli#2369
 	},
 	noteStructType:  {"Position": true, "Size": true},
 	paramStructType: {"Position": true},
@@ -89,6 +90,14 @@ var geometryFields = map[reflect.Type]map[string]bool{
 // re-spliced on every run, and next to a loop the run of "changes" swallowed
 // the loop and rebuilt it with new $IDs under mdl 1. They exist only for
 // diagnostics (MDL067, MDL065) and nothing downstream branches on them.
+// unstatedFields names, per AST type, the content fields a script may leave
+// out without that being a difference: nil states nothing, and the stored
+// value is kept. Unlike geometry they are compared in every mode — a changed
+// documentation is never "only layout" (ako/mxcli#2328).
+var unstatedFields = map[reflect.Type]map[string]bool{
+	annotationsStructType: {"Documentation": true},
+}
+
 var spellingFields = map[reflect.Type]map[string]bool{
 	// `commit $X with events` is a bare `commit $X`: both store events on.
 	// WithoutEvents, which IS stored, is still compared.
@@ -159,6 +168,9 @@ func matchValue(d, s reflect.Value, mode matchMode) bool {
 			skip := mode == matchAnyLayout ||
 				(mode == matchAnyPosition && d.Type() == annotationsStructType && positionFields[name])
 			if geo[name] && df.Kind() == reflect.Pointer && (skip || df.IsNil()) {
+				continue
+			}
+			if unstatedFields[d.Type()][name] && df.IsNil() {
 				continue
 			}
 			if d.Type() == sourceExprStructType && name == "Source" {

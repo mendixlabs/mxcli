@@ -594,7 +594,7 @@ func widgetToGen(w pages.Widget) (element.Element, error) {
 		g := genPg.NewTextBox()
 		applyWidgetBase(g, &x.BaseWidget)
 		g.SetAriaRequired(false)
-		g.SetAutoFocus(false)
+		g.SetAutoFocus(x.AutoFocus) // ako/mxcli#2519
 		g.SetAutocomplete(true)
 		g.SetAutocompletePurpose("On")
 		if ref := inputAttributeRefToGen(x.AttributePath, x.AttributeRefSteps); ref != nil {

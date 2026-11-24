@@ -51,8 +51,8 @@ func (b *Builder) buildMicroflows() error {
 	mfStmt, err := b.tx.Prepare(`
 		INSERT INTO microflows_data (Id, Name, QualifiedName, ModuleName, Folder, MicroflowType,
 			Description, ReturnType, ParameterCount, ActivityCount, TotalActivityCount,
-			Complexity, Excluded, ApplyEntityAccess, ProjectId, SnapshotId)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			Complexity, Excluded, ApplyEntityAccess, MarkAsUsed, URL, ProjectId, SnapshotId)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -181,6 +181,7 @@ func (b *Builder) buildMicroflows() error {
 			complexity,
 			mf.Excluded,
 			mf.ApplyEntityAccess,
+			mf.MarkAsUsed, mf.URL, // ako/mxcli#2241
 			projectID, snapshotID,
 		)
 		if err != nil {
@@ -241,7 +242,8 @@ func (b *Builder) buildMicroflows() error {
 			countFlowActivities(nf.ObjectCollection, true),
 			complexity,
 			nf.Excluded,
-			false, // a nanoflow runs client-side: entity access always applies, there is no setting
+			false,             // a nanoflow runs client-side: entity access always applies, there is no setting
+			nf.MarkAsUsed, "", // a nanoflow has no URL
 			projectID, snapshotID,
 		)
 		if err != nil {
@@ -300,6 +302,7 @@ func (b *Builder) buildMicroflows() error {
 			calculateRuleComplexity(rule),
 			rule.Excluded,
 			rule.ApplyEntityAccess,
+			rule.MarkAsUsed, "",
 			projectID, snapshotID,
 		)
 		if err != nil {

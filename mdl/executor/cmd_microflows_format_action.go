@@ -1690,9 +1690,6 @@ func formatRestOperationCallAction(ctx *ExecContext, a *microflows.RestOperation
 		sb.WriteString(a.BodyVariable.VariableName)
 	}
 
-	// RestOperationCallAction does not support custom error handling (CE6035)
-	// so we don't emit ON ERROR clauses.
-
 	sb.WriteString(";")
 	return sb.String()
 }

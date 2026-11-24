@@ -31,8 +31,8 @@
 7	syntax	.claude/skills/mendix/database-connections/SKILL.md
 19	syntax	.claude/skills/mendix/demo-data/SKILL.md
 9	syntax	.claude/skills/mendix/fragments/SKILL.md
-9	syntax	.claude/skills/mendix/generate-domain-model/SKILL.md
-10	syntax	.claude/skills/mendix/generate-domain-model/reference/syntax.md
+8	syntax	.claude/skills/mendix/generate-domain-model/SKILL.md
+8	syntax	.claude/skills/mendix/generate-domain-model/reference/syntax.md
 4	syntax	.claude/skills/mendix/java-actions/SKILL.md
 2	syntax	.claude/skills/mendix/javascript-actions/SKILL.md
 2	syntax	.claude/skills/mendix/json-structures-and-mappings/SKILL.md

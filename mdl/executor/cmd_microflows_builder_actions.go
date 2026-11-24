@@ -585,7 +585,7 @@ func (fb *flowBuilder) addEnumSplit(s *ast.EnumSplitStmt) model.ID {
 				BaseMicroflowObject: microflows.BaseMicroflowObject{
 					BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 					Position:    model.Point{X: mergeX, Y: mergeY},
-					Size:        model.Size{Width: MergeSize, Height: MergeSize},
+					Size:        mergeSize(s.Annotations),
 				},
 			}
 			fb.objects = append(fb.objects, merge)
@@ -1045,7 +1045,7 @@ func (fb *flowBuilder) addStructuredInheritanceSplit(s *ast.InheritanceSplitStmt
 			BaseMicroflowObject: microflows.BaseMicroflowObject{
 				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
 				Position:    model.Point{X: mergeX, Y: mergeY},
-				Size:        model.Size{Width: MergeSize, Height: MergeSize},
+				Size:        mergeSize(s.Annotations),
 			},
 		}
 		fb.objects = append(fb.objects, merge)
@@ -2358,6 +2358,7 @@ func (fb *flowBuilder) addAggregateListAction(s *ast.AggregateListStmt) model.ID
 		if entityType := fb.listElementEntity(s.InputVariable); entityType != "" {
 			if declared, ok := fb.resolveAttributeInEntityHierarchy(entityType, s.Attribute); ok && !strings.Contains(s.Attribute, ".") {
 				action.AttributeQualifiedName = declared
+				fb.refuseNonNumericAggregate(strings.ToLower(s.Operation.String()), s.InputVariable, declared, s.Attribute)
 			} else {
 				fb.refuseMissingListMember(strings.ToLower(s.Operation.String()), s.InputVariable, entityType, s.Attribute)
 				action.AttributeQualifiedName = entityType + "." + s.Attribute
@@ -2947,6 +2948,38 @@ func (fb *flowBuilder) entityIsSubtypeOf(candidateQN, ancestorQN string) bool {
 		currentQN = entity.GeneralizationRef
 	}
 	return false
+}
+
+// refuseNonNumericAggregate records the CE0016 refusal for an aggregate by an
+// attribute that is not a number (ako/mxcli#2528), with check's message. A
+// declaring entity or attribute that cannot be read is not judged.
+func (fb *flowBuilder) refuseNonNumericAggregate(verb, list, attrQN, member string) {
+	if fb == nil || fb.backend == nil || !isAggregateVerb(verb) {
+		return
+	}
+	parts := strings.Split(attrQN, ".")
+	if len(parts) != 3 {
+		return
+	}
+	mod, err := fb.backend.GetModuleByName(parts[0])
+	if err != nil || mod == nil {
+		return
+	}
+	dm, err := fb.backend.GetDomainModel(mod.ID)
+	if err != nil || dm == nil {
+		return
+	}
+	entity := dm.FindEntityByName(parts[1])
+	if entity == nil {
+		return
+	}
+	attr := entity.FindAttributeByName(parts[2])
+	if attr == nil {
+		return
+	}
+	if msg := aggregateTypeRefusal(listMemberWhere(verb, list, member), attrQN, getAttributeTypeName(attr.Type)); msg != "" {
+		fb.addError("%s", msg)
+	}
 }
 
 // refuseMissingListMember records the refusal for a list operation's or an

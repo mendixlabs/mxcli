@@ -272,6 +272,10 @@ func (fb *flowBuilder) buildFlowGraph(stmts []ast.MicroflowStatement, returns *a
 	// end event, so it cannot create the over-connection that pass fixes.
 	fb.resolveJoins()
 
+	// After every merge and every flow into one exists, before anything moves:
+	// the test is "same position", which is only the declared one here.
+	fb.collapseCoincidentMerges()
+
 	// Rows last: every object exists and every container has its final size, so
 	// this is the first point where a row's real depth is known.
 	fb.separateRows()
