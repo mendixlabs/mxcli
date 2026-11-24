@@ -49,10 +49,12 @@ version you actually have at the moment you create the widget.
    a DataGrid 2 with selection off hides the selection labels. That logic lives in each
    widget's compiled `editorConfig.js`. mxcli **runs** that file's `getProperties` the
    way Studio Pro does — in an embedded JavaScript interpreter, for the widget's actual
-   settings and Studio Pro's `desktop` target — and applies the answer, so a
+   settings — and applies the answer, so a
    freshly-created widget carries exactly the defaults Studio Pro would give it. The
    script has no access to files, the network or processes, and a call that does not
-   return within a second is stopped.
+   return within a second is stopped. A property hidden only for one `target` (`"web"`
+   or `"desktop"`, as TreeNode's `advancedMode` is) does not count as hidden: mxbuild
+   enforces neither branch, so only what both hide must hold its default.
 
    A property the widget hides must hold its default, or the build fails with CE0463.
    So a hidden property you leave out is written at its default; one you set to its

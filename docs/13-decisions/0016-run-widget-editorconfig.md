@@ -17,10 +17,9 @@ the guard shapes around them, one shape per fix. Measured over the 123 distinct
 packages on the development machine: 96 of 170 widget versions had hide calls
 the reader could not state. A widget that hides through its own helper had no
 rule at all (ChessClock, #2507). And a guard on `target` was read as if it held
-in Studio Pro: TreeNode, Maps and every chart hide one set of properties in
-Studio (`"web"`) and another in Studio Pro (`"desktop"`), so mxcli reported
-Studio Pro-visible properties as hidden. Each miss is a script that passes
-`check` and `exec` and fails the build.
+unconditionally: TreeNode, Maps and every chart hide one set of properties for
+`"web"` and another for `"desktop"`. Each miss is a script that passes `check`
+and `exec` and fails the build, or a valid one that is refused.
 
 Running the function over the same packages (goja, a pure-Go engine) loaded
 all 106 editorConfig bundles and answered all 84 that define `getProperties` (the
@@ -30,10 +29,20 @@ other 22 define none, so they hide nothing), at 1–4 ms a call.
 
 For a widget's own (top-level) properties, mxcli answers "is it hidden?" by
 running the installed package's `getProperties` with the widget's actual values
-and the `"desktop"` target, in goja. The answer replaces the rules read from the
+for both targets, `"web"` and `"desktop"`, in goja, and counts a property as
+hidden only when both answers hide it. The answer replaces the rules read from the
 source for those properties, for that configuration. The read rules remain the
 fallback when the bundle cannot be run, and the only source for the properties
 of object-list items until those are evaluated too.
+
+Why both targets, measured on Mendix 11.16.1 with TreeNode 3.4.0 (whose bundle
+hides `advancedMode` unless the target is `"web"`, and for `"web"` hides
+`animate` while advancedMode is off): `advancedMode: true`, and `animate: false`
+with advancedMode off, each pass `mx check` with 0 errors, and
+`mx update-widgets` resets neither — mxbuild enforces neither branch. A hide that
+does not depend on the target is enforced (Image's `iconSize` outside icon mode
+is CE0463). The first version asked `"desktop"` only and refused a valid
+`advancedMode: true` (ako/mxcli#2549).
 
 ## Consequences
 
