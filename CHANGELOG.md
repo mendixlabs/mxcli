@@ -21,6 +21,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A Tree node without a data source fails with the error that names it** — mxcli stored its header caption template as null, which made mxbuild report CE0463 "the definition of this widget has changed" instead of CE0642 "Data source is required", the error check's MDL-WIDGET56 warning names. A template bound to a data source is now nulled only when that data source is optional, the case #1967 measured; a required one keeps the empty template Studio Pro writes.
+
 - **Drop + create keeps a Studio Pro microflow's merges and loop boxes** (ako/mxcli#2369) — re-creating a flow from its own `describe` output recomputed every loop box (which then overlapped its neighbours, MPR008), shrank every merge from Studio Pro's 90×60 to 40×40, rebuilt a type split's merge on top of its first branch when one case returned, and made two stacked merges of a merge that closed both an `if` and the `if` nested in it. Describe now prints a size that is not the default — `@merge(x, y, w, h)`, and `@size(w, h)` on a loop, a `while true` loop-head merge or a `merge <label>` — and create builds a shared merge once. A merge with one incoming path is still not described (the warning from #923 says so).
 
 - **`diag session-report` no longer counts a read as a failure** (ako/mxcli#2525) — a Bash call that only reads (`sed -n`, `cat`, `grep`, `mxcli syntax`) and printed text quoting an error was reported as a failed call, and the next call as a retry. Error lines in the output now count only for commands that do more than read; a non-zero exit still counts for all.

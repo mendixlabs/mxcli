@@ -20,6 +20,11 @@ import (
 // stays empty (the reporter's control), so the rule keys on X, not on the
 // template.
 //
+// The rule is for an OPTIONAL data source (`required="false"`, the reporter's
+// widget). A required one left unset keeps the empty template: that is what
+// `mx update-widgets` writes for Tree node 3.4.0's headerCaption, and the null
+// was CE0463 on every Tree node mxcli created.
+//
 // Only an UNSET template is nulled: authored text is the statement's, and is
 // never dropped here. Only the widget's own properties: a binding to the
 // enclosing widget's data source ("../datasource", a column's) names one that
@@ -51,6 +56,12 @@ func NullTemplatesOfUnsetDataSources(object bson.D, propertyTypeIDs map[string]p
 	for key, entry := range propertyTypeIDs {
 		ds := entry.DataSourceProperty
 		if !strings.EqualFold(entry.ValueType, "TextTemplate") || ds == "" || strings.Contains(ds, "/") {
+			continue
+		}
+		// Only an OPTIONAL data source: with a required one left unset, Studio
+		// Pro and `mx update-widgets` keep the empty template, and a null is
+		// CE0463 itself (Tree node's headerCaption, mx check 11.16.1).
+		if propertyTypeIDs[ds].Required {
 			continue
 		}
 		dsValue, ok := valueOf(ds)
