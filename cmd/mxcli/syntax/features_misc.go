@@ -523,10 +523,10 @@ DISCONNECT;`,
 -- resolved like any image reference by check --references and by exec; NONE
 -- clears it. OMITTED, both stay as stored (ako/mxcli#1756).
 --
--- A NATIVE profile's flow home is HOME NANOFLOW; mxcli writes its home pages
--- and SYNC block only and refuses a { } block (the bottom bar), LOGIN PAGE,
--- NOT FOUND PAGE, ON SYNC ERROR, PROGRESSIVE WEB APP, APP TITLE and APP ICON
--- on it.
+-- A NATIVE profile's flow home is HOME NANOFLOW; mxcli writes its home pages,
+-- its SYNC block and its { } block (the bottom bar, below), and refuses LOGIN
+-- PAGE, NOT FOUND PAGE, ON SYNC ERROR, PROGRESSIVE WEB APP, APP TITLE and APP
+-- ICON on it.
 
 -- FOR takes a USER role, written BARE (FOR Administrator). User roles are
 -- project-level and have no module part; a module role is a different thing
@@ -604,8 +604,9 @@ DISCONNECT;`,
 -- (NativePages$BottomBarItem): no nested MENU groups, no OnClick other than
 -- SHOW PAGE. Its icon is a numeric glyph code -- Icon: GLYPH <code> -- not a
 -- qualified name; a collection or image icon is unconfirmed for a native
--- bottom bar item and rejected. A home page whose layout has "Bottom bar"
--- enabled must appear in this block, or Mendix reports CE6108.`,
+-- bottom bar item and rejected. check reports each of these as
+-- MDL-NATIVEBAR01, with no project needed. A home page whose layout has
+-- "Bottom bar" enabled must appear in this block, or Mendix reports CE6108.`,
 		Example: `mdl 1;
 CREATE OR MODIFY NAVIGATION Responsive
   APP TITLE 'Order Desk'
