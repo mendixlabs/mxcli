@@ -141,9 +141,34 @@ type flowBuilder struct {
 	// quiet silences the builder's own stderr warnings. Set for describe's
 	// layout check (derivedFlowLayout), which rebuilds a flow it only reads and
 	// must not repeat, once per round, a warning nobody asked for.
-	quiet                bool
-	hierarchy            *ContainerHierarchy          // For resolving container IDs to module names
-	pendingAnnotations   *ast.ActivityAnnotations     // Pending annotations to attach to next activity
+	quiet              bool
+	hierarchy          *ContainerHierarchy      // For resolving container IDs to module names
+	pendingAnnotations *ast.ActivityAnnotations // Pending annotations to attach to next activity
+	// pendingAuthoredPos holds the canvas @position the statement being built
+	// consumed, until the dispatch produces the object's ID; addStatement then
+	// files it into authoredPos. A loop's ObjectCollection stores positions
+	// relative to the loop's own frame, so these canvas values are translated
+	// into the frame of the collection that holds them once every container
+	// has its final size (#1935). Top-level objects keep canvas coordinates
+	// and are never translated.
+	pendingAuthoredPos *model.Point
+	// authoredPos maps a built object to the canvas @position its statement
+	// authored. Nested builders hand theirs up alongside their objects, so the
+	// root builder holds the whole table when the translation pass runs.
+	authoredPos map[model.ID]model.Point // canvas @position per built object
+	// sidedTails are enum-split tail flows whose destination side mergeSideFor
+	// derived from body geometry. A container's finalize re-derives them after
+	// the hand-placed children hold their frame positions, because during the
+	// build that comparison can read two coordinate spaces at once (#1935).
+	sidedTails []*microflows.SequenceFlow
+	// containerCursor is the frame-space line an inContainer builder's
+	// auto-placed statements continue on, saved across an authored statement's
+	// canvas detour (see addStatement).
+	containerCursorX, containerCursorY int
+	// inContainer marks a builder whose objects are stored inside a
+	// container's ObjectCollection (a loop body) rather than on the
+	// microflow's canvas.
+	inContainer          bool
 	restServices         []*model.ConsumedRestService // Cached REST services for parameter classification
 	listInputVariables   map[string]bool              // Variables later consumed by list-only actions
 	objectInputVariables map[string]bool              // Variables later consumed through object/attribute access
@@ -242,6 +267,11 @@ func (fb *flowBuilder) nestedBuilder(x, y int) *flowBuilder {
 		posY:    y,
 		baseY:   y,
 		spacing: HorizontalSpacing,
+		// A nested builder's objects live in a container's frame, so its
+		// cursor stays frame-relative: an authored canvas @position places
+		// that one object and does not drag the auto-placed line that
+		// follows it out of the frame (#1935).
+		inContainer: true,
 
 		varTypes:     fb.varTypes,     // one variable scope
 		declaredVars: fb.declaredVars, // (fixes a nil map panic)

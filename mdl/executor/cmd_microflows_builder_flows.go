@@ -983,6 +983,12 @@ func (fb *flowBuilder) addErrorHandlerFlow(sourceActivityID model.ID, sourceX in
 	fb.flows = append(fb.flows, errBuilder.flows...)
 	fb.annotationFlows = append(fb.annotationFlows, errBuilder.annotationFlows...)
 	fb.errors = append(fb.errors, errBuilder.errors...)
+	for id, p := range errBuilder.authoredPos {
+		if fb.authoredPos == nil {
+			fb.authoredPos = map[model.ID]model.Point{}
+		}
+		fb.authoredPos[id] = p
+	}
 	// The handler's objects land in this collection, so its stated notes are
 	// this builder's to pin too.
 	for id := range errBuilder.statedNotes {

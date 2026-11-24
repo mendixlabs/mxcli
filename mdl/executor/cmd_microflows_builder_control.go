@@ -169,6 +169,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 			},
 		}
 		fb.objects = append(fb.objects, merge)
+		fb.noteAuthoredMerge(merge, s.Annotations)
 		mergeID = merge.ID
 	}
 	if needMerge {
@@ -807,9 +808,16 @@ func (fb *flowBuilder) addLoopStatement(s *ast.LoopStmt) model.ID {
 	}
 
 	// Size the box from the children that were actually built, not from the
-	// statement count measured before the body existed (#884 problem 1). Recompute
-	// the centre too: the width just changed under it.
-	loopWidth, loopHeight = fitContainerSize(loopBuilder.objects, innerStartX, MinLoopWidth, MinLoopHeight)
+	// statement count measured before the body existed (#884 problem 1).
+	// Hand-placed children bound the box around this loop's own anchor so it
+	// does not grow with canvas position (#1935). Recompute the centre too:
+	// the width just changed under it.
+	anchorX, symmetricX := loopLeftX, false
+	if s.Annotations != nil && s.Annotations.Position != nil {
+		anchorX, symmetricX = s.Annotations.Position.X, true
+	}
+	loopWidth, loopHeight = fitContainerSizeWithAuthored(
+		loopBuilder.objects, loopBuilder.authoredPos, symmetricX, anchorX, fb.posY, MinLoopWidth, MinLoopHeight)
 	if s.Annotations != nil && s.Annotations.Size != nil && s.Annotations.Size.Width > 0 && s.Annotations.Size.Height > 0 {
 		// The box Studio Pro stored, @size(w, h) (ako/mxcli#2369).
 		loopWidth, loopHeight = s.Annotations.Size.Width, s.Annotations.Size.Height
@@ -818,6 +826,36 @@ func (fb *flowBuilder) addLoopStatement(s *ast.LoopStmt) model.ID {
 	if s.Annotations != nil && s.Annotations.Position != nil {
 		loopCenterX = s.Annotations.Position.X
 		loopLeftX = loopCenterX - loopWidth/2
+	}
+
+	// Children that carry a canvas @position are stored frame-relative — a
+	// loop's ObjectCollection positions its children from the box's top-left
+	// corner (#1935) — and every geometry decision the rest of the build makes
+	// about them (flow siding, box growth) reads this list, so they must hold
+	// frame values from here on, not after some post-pass. The frame is final:
+	// fitContainerSizeWithAuthored bounded it and @size may have overridden
+	// it. The post-pass in buildFlowGraph repeats the same arithmetic for what
+	// this loop cannot see here — its own centre, when the loop is itself a
+	// child of another body.
+	frameLeft, frameTop := loopLeftX, fb.posY-loopHeight/2
+	for _, obj := range loopBuilder.objects {
+		if obj == nil {
+			continue
+		}
+		if a, ok := loopBuilder.authoredPos[obj.GetID()]; ok {
+			obj.SetPosition(model.Point{X: a.X - frameLeft, Y: a.Y - frameTop})
+		}
+	}
+	// Re-derive the enum-split tail sides from the final frame geometry: the
+	// creation-time comparison read hand-placed children in canvas coordinates
+	// against auto-placed ones in frame coordinates (#1935). Both ends hold
+	// their stored positions now, which is the geometry the side must match.
+	for _, st := range loopBuilder.sidedTails {
+		origin, dest := loopBuilder.objectByID(st.OriginID), loopBuilder.objectByID(st.DestinationID)
+		if origin == nil || dest == nil {
+			continue
+		}
+		st.DestinationConnectionIndex = mergeSideFor(origin.GetPosition(), dest.GetPosition())
 	}
 
 	// Create LoopedActivity with calculated size
@@ -862,6 +900,12 @@ func (fb *flowBuilder) addLoopStatement(s *ast.LoopStmt) model.ID {
 	// dropped on the floor, so exec reported success on a flow it had silently
 	// written wrong (#1077).
 	fb.errors = append(fb.errors, loopBuilder.errors...)
+	for id, p := range loopBuilder.authoredPos {
+		if fb.authoredPos == nil {
+			fb.authoredPos = map[model.ID]model.Point{}
+		}
+		fb.authoredPos[id] = p
+	}
 	if fb.annotationsByLabel == nil {
 		fb.annotationsByLabel = loopBuilder.annotationsByLabel
 	}
@@ -1164,8 +1208,14 @@ func (fb *flowBuilder) addWhileStatement(s *ast.WhileStmt) model.ID {
 
 	whileExpr := fb.exprToString(s.Condition)
 
-	// Size from the built children, as addLoopStatement does (#884 problem 1).
-	loopWidth, loopHeight = fitContainerSize(loopBuilder.objects, innerStartX, MinLoopWidth, MinLoopHeight)
+	// Size from the built children, as addLoopStatement does (#884 problem 1),
+	// bounded around this loop's own anchor (#1935).
+	anchorX, symmetricX := loopLeftX, false
+	if s.Annotations != nil && s.Annotations.Position != nil {
+		anchorX, symmetricX = s.Annotations.Position.X, true
+	}
+	loopWidth, loopHeight = fitContainerSizeWithAuthored(
+		loopBuilder.objects, loopBuilder.authoredPos, symmetricX, anchorX, fb.posY, MinLoopWidth, MinLoopHeight)
 	if s.Annotations != nil && s.Annotations.Size != nil && s.Annotations.Size.Width > 0 && s.Annotations.Size.Height > 0 {
 		// The box Studio Pro stored, @size(w, h) (ako/mxcli#2369).
 		loopWidth, loopHeight = s.Annotations.Size.Width, s.Annotations.Size.Height
@@ -1174,6 +1224,26 @@ func (fb *flowBuilder) addWhileStatement(s *ast.WhileStmt) model.ID {
 	if s.Annotations != nil && s.Annotations.Position != nil {
 		loopCenterX = s.Annotations.Position.X
 		loopLeftX = loopCenterX - loopWidth/2
+	}
+
+	// Children that carry a canvas @position are stored frame-relative, as
+	// addLoopStatement does (#1935): the frame is final here, and the rest of
+	// the build reads these positions.
+	frameLeft, frameTop := loopLeftX, fb.posY-loopHeight/2
+	for _, obj := range loopBuilder.objects {
+		if obj == nil {
+			continue
+		}
+		if a, ok := loopBuilder.authoredPos[obj.GetID()]; ok {
+			obj.SetPosition(model.Point{X: a.X - frameLeft, Y: a.Y - frameTop})
+		}
+	}
+	for _, st := range loopBuilder.sidedTails {
+		origin, dest := loopBuilder.objectByID(st.OriginID), loopBuilder.objectByID(st.DestinationID)
+		if origin == nil || dest == nil {
+			continue
+		}
+		st.DestinationConnectionIndex = mergeSideFor(origin.GetPosition(), dest.GetPosition())
 	}
 
 	loop := &microflows.LoopedActivity{
@@ -1206,6 +1276,12 @@ func (fb *flowBuilder) addWhileStatement(s *ast.WhileStmt) model.ID {
 	// dropped on the floor, so exec reported success on a flow it had silently
 	// written wrong (#1077).
 	fb.errors = append(fb.errors, loopBuilder.errors...)
+	for id, p := range loopBuilder.authoredPos {
+		if fb.authoredPos == nil {
+			fb.authoredPos = map[model.ID]model.Point{}
+		}
+		fb.authoredPos[id] = p
+	}
 	if fb.annotationsByLabel == nil {
 		fb.annotationsByLabel = loopBuilder.annotationsByLabel
 	}

@@ -56,6 +56,13 @@ var nestedBuilderInherits = map[string]bool{
 	"emptyErrorHandlerFrom": false, "errorHandlerTailFrom": false, "errorHandlerSource": false,
 	"errorHandlerSkipVar": false, "errorHandlerTailCase": false, "errorHandlerTailAnchor": false,
 	"errorHandlerTailIsSource": false, "errorHandlerReturnValue": false, "pendingErrorHandlers": false,
+	// #1935: pendingAuthoredPos is per-statement transient; authoredPos is the
+	// body's own table, handed up at the adopt site like errors; the cursor
+	// save and the inContainer mark are the body's own frame-space state;
+	// sidedTails are the body's own, re-derived at its finalize.
+	"pendingAuthoredPos": false, "authoredPos": false,
+	"containerCursorX": false, "containerCursorY": false, "inContainer": false,
+	"sidedTails": false,
 
 	// Set by the one site that shares it: an error handler's body is in its
 	// parent's collection and on its path (addErrorHandlerFlow); a loop's is
@@ -74,6 +81,14 @@ var nestedBuilderInherits = map[string]bool{
 	// validateFlowBody's, which builds no nested builder.
 	"duplicateNamesOwnedElsewhere": false, "checkAssocShapes": false,
 	"assocObjectVars": false, "joinScopes": false,
+}
+
+// nestedBuilderStamps are fields nestedBuilder itself sets on the body it
+// builds, so the test wants the stamped value rather than the parent's or
+// zero. inContainer: every nested body lives in a container's frame, which
+// is the whole point of the mark (#1935).
+var nestedBuilderStamps = map[string]bool{
+	"inContainer": true,
 }
 
 func TestNestedBuilder_InheritsSharedState(t *testing.T) {
@@ -117,6 +132,10 @@ func TestNestedBuilder_InheritsSharedState(t *testing.T) {
 		case nestedBuilderInherits[name]:
 			if !sameValue(p, c) {
 				t.Errorf("a nested body does not inherit flowBuilder.%s", name)
+			}
+		case nestedBuilderStamps[name]:
+			if !c.Bool() {
+				t.Errorf("nestedBuilder does not stamp flowBuilder.%s; a nested body must build in its container's frame (#1935)", name)
 			}
 		case !c.IsZero():
 			t.Errorf("a nested body inherits flowBuilder.%s, classified as its own", name)

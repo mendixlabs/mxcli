@@ -566,3 +566,127 @@ func fitContainerSize(objects []microflows.MicroflowObject, leftInset, minWidth,
 	_ = leftInset
 	return width, height
 }
+
+// fitContainerSizeWithAuthored sizes a container box around both families of
+// children a loop body can hold (mendixlabs/mxcli#1935).
+//
+// Auto-placed children were built in the container's own frame, so their
+// bound is the plain fitContainerSize rule: right/bottom edge + padding.
+// Hand-placed children carry a canvas @position — the language's one
+// coordinate space everywhere else — and their stored form only becomes
+// frame-relative in the translation pass, so here they are bounded directly
+// against where the frame will anchor:
+//
+//   - a loop that states its own @position is sized SYMMETRICALLY around that
+//     centre: width ≥ 2·(|x−cx| + half + padding). The centre is the one
+//     canvas anchor that does not move when the width changes, so the bound is
+//     exact and — the point of #1935 — independent of where the loop sits on
+//     the canvas.
+//   - a flow-placed loop keeps its LEFT edge pinned where the flow line put it
+//     (centre = left + width/2 moves with the width), so the bound is linear:
+//     width ≥ (x−left) + half + padding. A child authored left of that edge
+//     cannot stretch the box leftward; MPR011 reports it, as for any child
+//     placed outside its container.
+//   - vertically every loop is centred on its row (fb.posY), so height is
+//     always the symmetric bound around it.
+func fitContainerSizeWithAuthored(objects []microflows.MicroflowObject, authored map[model.ID]model.Point, symmetricX bool, anchorX, centreY, minWidth, minHeight int) (width, height int) {
+	width, height = minWidth, minHeight
+	auto := make([]microflows.MicroflowObject, 0, len(objects))
+	for _, o := range objects {
+		if o == nil {
+			continue
+		}
+		if _, hand := authored[o.GetID()]; hand {
+			continue
+		}
+		auto = append(auto, o)
+	}
+	_, _, maxX, maxY, n := containerBounds(auto)
+	if n > 0 {
+		width = max(width, maxX+LoopPadding)
+		height = max(height, maxY+LoopPadding)
+	}
+	for _, o := range objects {
+		if o == nil {
+			continue
+		}
+		a, hand := authored[o.GetID()]
+		if !hand {
+			continue
+		}
+		hw, hh := halfBoxOf(o)
+		dx := a.X - anchorX
+		if symmetricX {
+			width = max(width, 2*(absInt(dx)+hw+LoopPadding))
+		} else {
+			width = max(width, dx+hw+LoopPadding)
+		}
+		dy := a.Y - centreY
+		height = max(height, 2*(absInt(dy)+hh+LoopPadding))
+	}
+	return width, height
+}
+
+// halfBoxOf is half the object's stored box, the amount by which a centre
+// point's box pokes past its position. Objects without a size (annotations)
+// contribute nothing, matching containerBounds.
+func halfBoxOf(o microflows.MicroflowObject) (hw, hh int) {
+	if withSize, ok := o.(interface{ GetSize() model.Size }); ok {
+		if sz := withSize.GetSize(); sz.Width > 0 || sz.Height > 0 {
+			return sz.Width / 2, sz.Height / 2
+		}
+	}
+	return 0, 0
+}
+
+// noteAuthoredMerge files a merge created at its @merge position under the
+// canvas coordinate it states, so a container's finalize translates it into
+// the frame like any hand-placed child (#1935). Outside a container the merge
+// keeps canvas coordinates and nothing is recorded. Without this, a
+// merge-positioned merge stayed frame-raw during the body build while the
+// hand-placed statements around it held canvas values, and the geometry
+// comparisons that side their flows (mergeSideFor) read two spaces at once.
+func (fb *flowBuilder) noteAuthoredMerge(merge *microflows.ExclusiveMerge, ann *ast.ActivityAnnotations) {
+	if !fb.inContainer || merge == nil || ann == nil || ann.Merge == nil {
+		return
+	}
+	if fb.authoredPos == nil {
+		fb.authoredPos = map[model.ID]model.Point{}
+	}
+	fb.authoredPos[merge.ID] = model.Point{X: ann.Merge.X, Y: ann.Merge.Y}
+}
+
+// translateAuthoredLoopChildren moves every hand-placed object from the
+// canvas coordinates its @position authored into the frame of the collection
+// that holds it: a loop's ObjectCollection positions its children relative to
+// the loop's own top-left corner, which is how Studio Pro stores them
+// (mendixlabs/mxcli#1935). origin is the canvas coordinate of the current
+// frame's origin — (0,0) at the top level, so top-level objects keep canvas
+// coordinates and are never moved. Authored objects translate before the walk
+// descends, so a nested loop's frame is read from its already-translated
+// centre and nesting composes.
+func translateAuthoredLoopChildren(objects []microflows.MicroflowObject, authored map[model.ID]model.Point, origin model.Point) {
+	for _, obj := range objects {
+		if obj == nil {
+			continue
+		}
+		if a, ok := authored[obj.GetID()]; ok {
+			obj.SetPosition(model.Point{X: a.X - origin.X, Y: a.Y - origin.Y})
+		}
+		loop, ok := obj.(*microflows.LoopedActivity)
+		if !ok || loop.ObjectCollection == nil {
+			continue
+		}
+		translateAuthoredLoopChildren(loop.ObjectCollection.Objects, authored, model.Point{
+			X: origin.X + loop.Position.X - loop.Size.Width/2,
+			Y: origin.Y + loop.Position.Y - loop.Size.Height/2,
+		})
+	}
+}
+
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}

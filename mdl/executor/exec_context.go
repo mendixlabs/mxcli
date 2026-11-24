@@ -181,6 +181,14 @@ type ExecContext struct {
 	// every loop body; see traverseFlowUntilMerge.
 	describeFallsOn bool
 
+	// describeFrameOrigin is the canvas coordinate of the frame origin of the
+	// loop body DESCRIBE is currently walking, nil on the microflow's own
+	// canvas. A loop's ObjectCollection stores child positions relative to the
+	// loop's top-left corner, but the language's @position is a canvas
+	// coordinate, so emission adds the frame back (#1935). Set and restored by
+	// emitLoopBody as it descends.
+	describeFrameOrigin *model.Point
+
 	// describeIn, when set, is the exact language DESCRIBE writes, in place of
 	// describeLanguage's default. create or modify pins it to the script's own
 	// version to describe the stored side of its diff, so both sides are read

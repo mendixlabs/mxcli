@@ -589,6 +589,7 @@ func (fb *flowBuilder) addEnumSplit(s *ast.EnumSplitStmt) model.ID {
 				},
 			}
 			fb.objects = append(fb.objects, merge)
+			fb.noteAuthoredMerge(merge, s.Annotations)
 		}
 		return merge
 	}
@@ -784,6 +785,11 @@ func (fb *flowBuilder) addEnumSplit(s *ast.EnumSplitStmt) model.ID {
 			}
 			if origins != nil {
 				tail.DestinationConnectionIndex = mergeSideFor(fb.objectPosition(lastID), fb.objectPosition(ensureMerge().ID))
+				// The side is re-derived at the container's finalize, once every
+				// hand-placed child holds its frame position (#1935): during the
+				// build this comparison can read a canvas coordinate against a
+				// frame one, and the final geometry is what the side must match.
+				fb.sidedTails = append(fb.sidedTails, tail)
 			}
 			if column != nil {
 				tail.OriginConnectionIndex, tail.DestinationConnectionIndex = AnchorRight, AnchorBottom
@@ -1049,6 +1055,7 @@ func (fb *flowBuilder) addStructuredInheritanceSplit(s *ast.InheritanceSplitStmt
 			},
 		}
 		fb.objects = append(fb.objects, merge)
+		fb.noteAuthoredMerge(merge, s.Annotations)
 		for _, tail := range branchTails {
 			if tail.fromSplit {
 				var flow *microflows.SequenceFlow

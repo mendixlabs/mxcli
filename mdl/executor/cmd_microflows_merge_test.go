@@ -181,7 +181,7 @@ func TestMergeIsNotEmittedForANonSplit(t *testing.T) {
 	act := &microflows.ActionActivity{}
 	act.ID = model.ID("a")
 	var lines []string
-	emitMergeAnnotation(act, map[model.ID][]*microflows.SequenceFlow{}, map[model.ID]microflows.MicroflowObject{}, nil, &lines, "")
+	emitMergeAnnotation(act, map[model.ID][]*microflows.SequenceFlow{}, map[model.ID]microflows.MicroflowObject{}, nil, nil, &lines, "")
 	if len(lines) != 0 {
 		t.Errorf("emitted %v for a plain activity, want nothing", lines)
 	}

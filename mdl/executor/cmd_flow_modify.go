@@ -1677,7 +1677,10 @@ func bodyRefusal(lc mfmutator.Candidate, at ast.MicroflowStatement, why string) 
 // its nodes are drawn at, in the loop box's coordinates: each statement's
 // @position and its notes' positions. Making room in that body then moves no
 // node away from where the script draws it — under mdl 1, as at top level
-// (statedPoints).
+// (statedPoints). The locator's frame origin is the box's canvas origin
+// (within), and the language's @position is a canvas coordinate (#1935), so
+// position pins are translated into the box; a note's position: is stated in
+// the box's own coordinates and pins as stored.
 func (pd *patchDiff) pinBody(loop model.ID, declared []ast.MicroflowStatement) {
 	for _, st := range declared {
 		ann := statementAnnotations(st)
@@ -1685,7 +1688,11 @@ func (pd *patchDiff) pinBody(loop model.ID, declared []ast.MicroflowStatement) {
 			continue
 		}
 		if ann.Position != nil {
-			pd.bodyPins = append(pd.bodyPins, bodyPin{loop: loop, at: model.Point{X: ann.Position.X, Y: ann.Position.Y}})
+			at := model.Point{X: ann.Position.X, Y: ann.Position.Y}
+			if pd.loc != nil && pd.loc.inFrame {
+				at = model.Point{X: at.X - pd.loc.frameOrigin.X, Y: at.Y - pd.loc.frameOrigin.Y}
+			}
+			pd.bodyPins = append(pd.bodyPins, bodyPin{loop: loop, at: at})
 		}
 		for _, n := range ann.Notes {
 			if n.Position != nil {
@@ -2058,6 +2065,12 @@ func lcsStatements(declared, stored []ast.MicroflowStatement) [][2]int {
 type storedLocator struct {
 	byPos map[model.Point][]mfmutator.Candidate
 	cands []mfmutator.Candidate
+	// frameOrigin is the canvas coordinate of this collection's frame origin,
+	// set by within for a loop body: the language's @position is a canvas
+	// coordinate, describe emits it as one, and the stored body keeps frame
+	// coordinates — locate translates (#1935). Top level keeps raw canvas.
+	frameOrigin model.Point
+	inFrame     bool
 }
 
 func newStoredLocator(a *alterFlowContext) *storedLocator {
@@ -2065,10 +2078,18 @@ func newStoredLocator(a *alterFlowContext) *storedLocator {
 }
 
 // within is the locator of a stored loop's body: describe prints a body
-// statement's @position relative to the loop box, unique among the body's
-// own objects but not across the flow.
+// statement's @position on the canvas, while the stored body keeps positions
+// relative to the loop box (#1935) — locate translates by the box's canvas
+// origin. The body's coordinates are unique among the body's own objects but
+// not across the flow, which is why the body gets its own locator.
 func (l *storedLocator) within(loop *microflows.LoopedActivity) *storedLocator {
-	return locatorOver(l.cands, loop.ObjectCollection)
+	inner := locatorOver(l.cands, loop.ObjectCollection)
+	inner.frameOrigin = model.Point{
+		X: l.frameOrigin.X + loop.Position.X - loop.Size.Width/2,
+		Y: l.frameOrigin.Y + loop.Position.Y - loop.Size.Height/2,
+	}
+	inner.inFrame = true
+	return inner
 }
 
 func locatorOver(cands []mfmutator.Candidate, oc *microflows.MicroflowObjectCollection) *storedLocator {
@@ -2094,6 +2115,11 @@ func (l *storedLocator) locate(st ast.MicroflowStatement) (mfmutator.Candidate, 
 		return mfmutator.Candidate{}, cannotSplice("the stored statement %q has no activity to address (a join, merge or end of a branch)", statementKind(st))
 	}
 	p := model.Point{X: ann.Position.X, Y: ann.Position.Y}
+	if l.inFrame {
+		// The script speaks canvas coordinates; the stored body speaks
+		// frame-relative ones (#1935).
+		p = model.Point{X: p.X - l.frameOrigin.X, Y: p.Y - l.frameOrigin.Y}
+	}
 	switch cs := l.byPos[p]; len(cs) {
 	case 1:
 		return cs[0], nil

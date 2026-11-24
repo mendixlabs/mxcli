@@ -9,6 +9,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend"
 	"github.com/mendixlabs/mxcli/mdl/backend/mfmutator"
+	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
@@ -104,14 +105,26 @@ func (a *alterFlowContext) storedLoopStatement(ctx *ExecContext, target mfmutato
 	}
 	stmts := storedBody(a.storedDesc)
 	around := a.loopsAround(target.ID)
+	// The description states canvas coordinates; the stored loops keep frame
+	// positions, so each level's position is its stored centre plus the
+	// enclosing boxes' canvas origins (#1935).
+	origin := model.Point{}
 	for i := len(around) - 1; i >= 0; i-- {
-		st := statementDrawnAt(stmts, around[i].Position)
+		lp := model.Point{X: around[i].Position.X + origin.X, Y: around[i].Position.Y + origin.Y}
+		st := statementDrawnAt(stmts, lp)
 		if st == nil {
-			return nil, fmt.Errorf("no stored loop is drawn at (%d, %d)", around[i].Position.X, around[i].Position.Y)
+			return nil, fmt.Errorf("no stored loop is drawn at (%d, %d)", lp.X, lp.Y)
+		}
+		origin = model.Point{
+			X: origin.X + around[i].Position.X - around[i].Size.Width/2,
+			Y: origin.Y + around[i].Position.Y - around[i].Size.Height/2,
 		}
 		stmts = loopStatements(st)
 	}
-	p := target.Object.GetPosition()
+	p := model.Point{
+		X: target.Object.GetPosition().X + origin.X,
+		Y: target.Object.GetPosition().Y + origin.Y,
+	}
 	switch st := statementDrawnAt(stmts, p).(type) {
 	case *ast.LoopStmt, *ast.WhileStmt:
 		return st, nil

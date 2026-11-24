@@ -492,6 +492,19 @@ func emitCurveAnnotation(
 //
 // The merge is found by walking forward from EVERY branch of the split and
 // taking the first node reachable from all of them that is an ExclusiveMerge.
+// describedCanvasPos adds the frame the describe walk is in back onto a
+// stored position: a loop body's children are stored relative to the loop's
+// frame, while the language's @position and @merge state canvas coordinates
+// (#1935). The walk's frame origin rides on the emitter's ExecContext and is
+// zero on the microflow's own canvas.
+func describedCanvasPos(annotationsByTarget *annotationEmitter, p model.Point) model.Point {
+	if annotationsByTarget != nil && annotationsByTarget.ctx != nil && annotationsByTarget.ctx.describeFrameOrigin != nil {
+		o := *annotationsByTarget.ctx.describeFrameOrigin
+		return model.Point{X: p.X + o.X, Y: p.Y + o.Y}
+	}
+	return p
+}
+
 // The describer's own split→merge map is not in scope at this call site, and
 // threading it here would mean touching ten-plus call sites of
 // emitObjectAnnotations — the multi-site change that silently skips one. Both
@@ -501,6 +514,7 @@ func emitMergeAnnotation(
 	flowsByOrigin map[model.ID][]*microflows.SequenceFlow,
 	activityMap map[model.ID]microflows.MicroflowObject,
 	layout *flowLayoutKeep,
+	annotationsByTarget *annotationEmitter,
 	lines *[]string,
 	indentStr string,
 ) {
@@ -514,7 +528,7 @@ func emitMergeAnnotation(
 		// through: the description drops the merge's label, so its position
 		// rides on the activity (#750).
 		if m := fallThroughRejoinMerge(obj.GetID(), flowsByOrigin, activityMap); m != "" {
-			p := activityMap[m].GetPosition()
+			p := describedCanvasPos(annotationsByTarget, activityMap[m].GetPosition())
 			*lines = append(*lines, indentStr+fmt.Sprintf("@merge(%d, %d)", p.X, p.Y))
 		}
 		return
@@ -539,7 +553,7 @@ func emitMergeAnnotation(
 	if !layout.keepsPosition(merge.GetID()) && len(findNormalFlows(flowsByOrigin[merge.GetID()])) > 0 {
 		return
 	}
-	p := merge.GetPosition()
+	p := describedCanvasPos(annotationsByTarget, merge.GetPosition())
 	// The merge's own box when it is not the builder's 40x40: Studio Pro
 	// draws 90x60 and other sizes, which a re-created merge lost and, from
 	// its centre, its position too (ako/mxcli#2369).
@@ -1104,6 +1118,10 @@ func emitObjectAnnotations(
 	currentID := obj.GetID()
 
 	pos := obj.GetPosition()
+	// A loop body's children are stored relative to the loop's frame; the
+	// language's @position is a canvas coordinate, so emission adds the frame
+	// the walk is in back on (#1935). Zero on the microflow's own canvas.
+	pos = describedCanvasPos(annotationsByTarget, pos)
 	layout := annotationsByTarget.layoutKeep()
 	if layout.keepsPosition(currentID) {
 		*lines = append(*lines, indentStr+fmt.Sprintf("@position(%d, %d)", pos.X, pos.Y))
@@ -1126,7 +1144,7 @@ func emitObjectAnnotations(
 		if layout.keepsCurve(currentID) {
 			emitCurveAnnotation(obj, flowsByOrigin, activityMap, lines, indentStr)
 		}
-		emitMergeAnnotation(obj, flowsByOrigin, activityMap, layout, lines, indentStr)
+		emitMergeAnnotation(obj, flowsByOrigin, activityMap, layout, annotationsByTarget, lines, indentStr)
 	}
 
 	if activity, ok := obj.(*microflows.ActionActivity); ok {
@@ -2109,6 +2127,22 @@ func emitLoopBody(
 		prevFallsOn := ctx.describeFallsOn
 		ctx.describeFallsOn = false
 		defer func() { ctx.describeFallsOn = prevFallsOn }()
+		// Children describe in CANVAS coordinates: their stored positions are
+		// relative to this loop's frame, the language's @position is a canvas
+		// coordinate, so emission adds the frame back (#1935). A nested loop's
+		// own frame is read from its centre in this (parent) frame, so the
+		// offsets compose.
+		parent := model.Point{}
+		if ctx.describeFrameOrigin != nil {
+			parent = *ctx.describeFrameOrigin
+		}
+		childOrigin := model.Point{
+			X: parent.X + loop.Position.X - loop.Size.Width/2,
+			Y: parent.Y + loop.Position.Y - loop.Size.Height/2,
+		}
+		prevOrigin := ctx.describeFrameOrigin
+		ctx.describeFrameOrigin = &childOrigin
+		defer func() { ctx.describeFrameOrigin = prevOrigin }()
 	}
 
 	loopAnnotationsByTarget := annotationsByTarget.withOverlay(buildAnnotationsByTarget(loop.ObjectCollection))
@@ -3313,7 +3347,7 @@ func whileHeaderAnnotations(merge microflows.MicroflowObject, annotationsByTarge
 	if merge == nil || !annotationsByTarget.layoutKeep().keepsPosition(merge.GetID()) {
 		return nil
 	}
-	p := merge.GetPosition()
+	p := describedCanvasPos(annotationsByTarget, merge.GetPosition())
 	out := []string{indentStr + fmt.Sprintf("@position(%d, %d)", p.X, p.Y)}
 	if sz := objectSize(merge); sz.Width > 0 && sz.Height > 0 && (sz.Width != MergeSize || sz.Height != MergeSize) {
 		out = append(out, indentStr+fmt.Sprintf("@size(%d, %d)", sz.Width, sz.Height))

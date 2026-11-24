@@ -280,6 +280,14 @@ func (fb *flowBuilder) buildFlowGraph(stmts []ast.MicroflowStatement, returns *a
 	// this is the first point where a row's real depth is known.
 	fb.separateRows()
 
+	// Hand-placed children authored a CANVAS @position, but a loop's
+	// ObjectCollection stores positions relative to the loop's own frame.
+	// Translate each authored object into the frame of the collection that
+	// holds it (#1935). After separateRows so every container has its final
+	// size, and top-down: a nested loop's frame is read from its centre after
+	// that centre itself was translated into its parent's frame.
+	translateAuthoredLoopChildren(fb.objects, fb.authoredPos, model.Point{})
+
 	// Note lines after everything has moved: the sides that face each other
 	// depend on where the note and its element finally sit.
 	orientAnnotationFlows(fb.objects, fb.annotationFlows)
@@ -633,7 +641,37 @@ func (fb *flowBuilder) addTerminalEndEventForPendingHandler(returns *ast.Microfl
 }
 
 // addStatement converts an AST statement to a microflow activity and returns its ID.
+//
+// A statement that consumed a @position has that canvas coordinate filed under
+// the created object's ID (authoredPos), so the loop-frame translation can
+// find it later (#1935).
 func (fb *flowBuilder) addStatement(stmt ast.MicroflowStatement) model.ID {
+	// A dispatch that builds sub-statements (an IF's branches) recurses through
+	// here; the inner statements must not wipe the @position THIS statement is
+	// still waiting to file under its own object. Saved across the dispatch.
+	savedAuthoredPos := fb.pendingAuthoredPos
+	fb.pendingAuthoredPos = nil
+
+	id := fb.addStatementDispatch(stmt)
+	if id != "" && fb.pendingAuthoredPos != nil {
+		if fb.authoredPos == nil {
+			fb.authoredPos = map[model.ID]model.Point{}
+		}
+		fb.authoredPos[id] = *fb.pendingAuthoredPos
+		// Inside a container the statement's canvas detour must not drag the
+		// auto-placed line with it: restore the frame cursor so what follows
+		// stays frame-relative (#1935). On the canvas the detour IS the row
+		// semantics (#1768) and the cursor keeps the canvas spot.
+		if fb.inContainer {
+			fb.posX = fb.containerCursorX + fb.spacing
+			fb.posY = fb.containerCursorY
+		}
+	}
+	fb.pendingAuthoredPos = savedAuthoredPos
+	return id
+}
+
+func (fb *flowBuilder) addStatementDispatch(stmt ast.MicroflowStatement) model.ID {
 	// The loop-body tail is this statement's alone: only an IF reads it, and a
 	// CASE or anything else must not leave it set for an IF nested inside,
 	// which is not at the tail (atBodyTail).
@@ -646,9 +684,17 @@ func (fb *flowBuilder) addStatement(stmt ast.MicroflowStatement) model.ID {
 
 	// Apply @position before creating the activity so it's placed at the right position
 	if fb.pendingAnnotations != nil && fb.pendingAnnotations.Position != nil {
+		if fb.inContainer {
+			// Remember the frame-space line so addStatement can put the
+			// auto-placed cursor back after this canvas detour (#1935).
+			fb.containerCursorX, fb.containerCursorY = fb.posX, fb.posY
+		}
 		fb.posX = fb.pendingAnnotations.Position.X
 		fb.posY = fb.pendingAnnotations.Position.Y
+		p := fb.pendingAnnotations.Position
+		fb.pendingAuthoredPos = &model.Point{X: p.X, Y: p.Y}
 	} else {
+		fb.pendingAuthoredPos = nil
 		fb.clearLowerLane(stmt)
 	}
 	if fb.pendingAnnotations != nil {

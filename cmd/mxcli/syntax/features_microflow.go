@@ -1023,6 +1023,12 @@ func init() {
 			"pixel offset from its end of the line. (0, 0) at both ends is straight.\n" +
 			"@position on a split belongs to the SPLIT, so its end-if join has its own\n" +
 			"annotation. Container Size is still computed, not authorable.\n\n" +
+			"@position and @merge are CANVAS coordinates everywhere, inside a loop body\n" +
+			"too: state where the statement sits on the flow's canvas, and the loop box\n" +
+			"is sized from the body's bounds RELATIVE to the loop, so moving the loop\n" +
+			"never changes its box (mendixlabs/mxcli#1935). DESCRIBE prints those\n" +
+			"statements in canvas coordinates as well; what Mendix stores inside the\n" +
+			"box is the loop's own business.\n\n" +
 			"WITHOUT @position the builder places everything. The main line runs left to\n" +
 			"right and wraps onto a new row past 2880px; the line joining two rows leaves\n" +
 			"the bottom of one and arrives on top of the next. A guard (if … return; end\n" +
