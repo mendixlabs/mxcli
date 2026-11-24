@@ -35,6 +35,14 @@ import (
 //
 // The result is sorted by name, so a finding does not move between runs.
 func NotLaidOut(dm *domainmodel.DomainModel) []*domainmodel.Entity {
+	return NotLaidOutWith(dm, nil)
+}
+
+// NotLaidOutWith is NotLaidOut against the layout `mxcli layout` actually
+// makes for a module with cross-module lines (PlanWith): an entity moved for
+// the band its cross-module line needs is laid out, not unplaced, even if the
+// move happens to land it on a grid slot.
+func NotLaidOutWith(dm *domainmodel.DomainModel, cross CrossLines) []*domainmodel.Entity {
 	if dm == nil {
 		return nil
 	}
@@ -51,7 +59,7 @@ func NotLaidOut(dm *domainmodel.DomainModel) []*domainmodel.Entity {
 		return nil
 	}
 
-	plan := Plan(dm)
+	plan := PlanWith(dm, cross)
 	var out []*domainmodel.Entity
 	for _, e := range candidates {
 		if p, ok := plan[e.ID]; ok && p == e.Location {

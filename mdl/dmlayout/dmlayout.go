@@ -124,20 +124,36 @@ func labelWidth(name string) int {
 
 // Plan computes a position for every entity in one domain model.
 //
-// The layout is layered on the association graph. An entity that references
-// nothing else in the module is layer 0; anything else sits one layer past the
-// furthest thing it references. Layers become columns, so the things everything
-// points at — the lookup tables — end up on the left and the leaves on the
-// right, with most association lines running the same way.
+// The layout is layered on the association graph. An entity sits one layer
+// past the furthest thing it references, and a lookup (one that references
+// nothing in the module) one layer left of its nearest referrer. Layers become
+// columns, so what an entity points at is to its left and the leaves are on
+// the right, with most association lines running the same way. After placing,
+// each lookup follows its referrers' row where there is room (pullLookups).
 //
 // Entities with no local edge at all (a non-persistent helper, a freshly created
-// entity nothing points at yet) are not lookups and do not belong in layer 0
-// beside them; they go in their own band underneath.
+// entity nothing points at yet) are not lookups and do not belong among them;
+// they fill the free space beside or below the graph (packIsolated).
 //
 // The result is deterministic for a given model: every iteration order here is
 // sorted, because a map range would produce a different diagram on every run and
 // re-writing the unit each time is exactly the churn ADR-0008 exists to prevent.
 func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
+	return PlanWith(dm, nil)
+}
+
+// PlanWith is Plan for a module whose diagram also draws cross-module lines:
+// cross names, per entity, the lines Studio Pro draws from its left side to
+// the canvas edge (see CrossLines). Each such entity is placed where all of
+// its lines, label height included, miss every box to its left (rule 2 of
+// mendixlabs/mxcli#1929): in its column, at its target's row when that is
+// clear, otherwise the first clear y below. Column 0 starts far enough right
+// for the longest name drawn from it, since the label sits between the canvas
+// edge and the box (rule 3). An unconnected entity with such a line is placed
+// where its lines clear what is to its left (packIsolated).
+//
+// PlanWith(dm, nil) is Plan(dm).
+func PlanWith(dm *domainmodel.DomainModel, cross CrossLines) map[model.ID]model.Point {
 	if dm == nil {
 		return nil
 	}
@@ -146,7 +162,162 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 		return map[model.ID]model.Point{}
 	}
 
-	layers, isolated := g.layers()
+	base, isolated := g.layers()
+
+	// Rule 1 of mendixlabs/mxcli#1929: as few crossings as possible. The order
+	// of the entities within each column decides many of them. Starting from
+	// the order the layering made, swap two neighbours in a column and keep the
+	// swap when the whole placement, scored on the lines it actually draws,
+	// has strictly fewer crossings; repeat until no swap helps. A swap is kept
+	// only on a strict improvement, so the result is never worse than the
+	// layering's order by this measure, and it stays deterministic.
+	//
+	// Whole-column barycentre sweeps (the textbook step) were tried first and
+	// dropped: on ako/PizzaV1 and on thousands of random models they never
+	// produced a better order than this start, because row alignment and the
+	// cross-module bands decide most positions; single swaps did (PizzaV1
+	// Catalog: 8 crossings to 6).
+	score := func(layers [][]model.ID) (map[model.ID]model.Point, layoutScore) {
+		pos := g.place(layers, isolated, cross)
+		lines, boxes := Crossings(dm, pos, Anchors(dm, pos), cross)
+		// A line through a box hides what is in it; a crossing only costs a
+		// moment's tracing. Then the frame: how far the diagram is from fitting
+		// a landscape screen.
+		w, h := g.extent(pos)
+		return pos, layoutScore{crossings: lines + 2*boxes, boxes: boxes, width: w, height: h}
+	}
+	bestLayers := base
+	best, bestScore := score(base)
+	// A lookup that has a column to itself may share its nearest referrer's
+	// column instead (placed after it; the swaps below may put it above when
+	// that crosses less): a short vertical line and a column fewer (Catalog's
+	// Allergen under Ingredient: 10 crossings to 5, a column narrower). Kept
+	// when it has fewer crossings, or as many and the diagram gets narrower
+	// without getting taller; a plain pair stacked on end would trade its
+	// horizontal line for height, so it stays side by side. Only a lookup
+	// alone in its column: moving one that shares it saves no column and
+	// reshuffles one.
+	for _, id := range g.order {
+		if len(g.out[id]) > 0 || len(g.in[id]) == 0 || !aloneInLayer(bestLayers, id) {
+			continue
+		}
+		if cand, ok := lookupBelowReferrer(bestLayers, id, g); ok {
+			pos, sc := score(cand)
+			if sc.boxes > bestScore.boxes {
+				// Never a new line through a box, whatever it saves: that is
+				// what MPR021 reports (Shop's Cart, moved under its referrers,
+				// put MenuView_Cart straight through HomeView).
+				continue
+			}
+			fewer := sc.crossings < bestScore.crossings
+			smaller := sc.crossings == bestScore.crossings && sc.width < bestScore.width && sc.height <= bestScore.height
+			if fewer || smaller {
+				bestLayers, best, bestScore = cand, pos, sc
+			}
+		}
+	}
+
+	// Then swap neighbours within a column while that strictly lowers the
+	// crossings (only the crossings: ranking swaps by size too reshuffled
+	// columns for a few pixels and made the layout no longer local).
+	try := func(cand [][]model.ID) bool {
+		if pos, sc := score(cand); sc.crossings < bestScore.crossings {
+			bestLayers, best, bestScore = cand, pos, sc
+			return true
+		}
+		return false
+	}
+
+	// The budget grows with the model, so a large module stays fast.
+	budget := 8 * len(g.order)
+	for improved := true; improved && budget > 0; {
+		improved = false
+		for li := range bestLayers {
+			for i := 0; i+1 < len(bestLayers[li]) && budget > 0; i++ {
+				cand := copyLayers(bestLayers)
+				cand[li][i], cand[li][i+1] = cand[li][i+1], cand[li][i]
+				budget--
+				if try(cand) {
+					improved = true
+				}
+			}
+		}
+	}
+	return best
+}
+
+// layoutScore is what a candidate placement is judged on: its crossings
+// (rule 1 of mendixlabs/mxcli#1929) and its extent (rule 7).
+type layoutScore struct {
+	crossings     int // lines crossing lines, plus 2 x lines through a box
+	boxes         int // lines through a box, on their own
+	width, height int
+}
+
+// aloneInLayer reports whether id is the only entity in its layer.
+func aloneInLayer(layers [][]model.ID, id model.ID) bool {
+	for _, l := range layers {
+		if len(l) == 1 && l[0] == id {
+			return true
+		}
+	}
+	return false
+}
+
+// extent is the diagram's bounding box size.
+func (g *graph) extent(pos map[model.ID]model.Point) (w, h int) {
+	minX, minY, maxX, maxY := 1<<30, 1<<30, 0, 0
+	for id, p := range pos {
+		bw, bh := boxSize(g.byID[id])
+		minX, minY = min(minX, p.X), min(minY, p.Y)
+		maxX, maxY = max(maxX, p.X+bw), max(maxY, p.Y+bh)
+	}
+	if maxX == 0 {
+		return 0, 0
+	}
+	return maxX - minX, maxY - minY
+}
+
+// lookupBelowReferrer moves lookup id into the layer of its nearest referrer
+// (the one in the lowest layer, ties by name order), right after it, so it is
+// placed below it (until a swap finds above crosses less). It reports false when id has no referrer or already shares
+// that layer.
+func lookupBelowReferrer(layers [][]model.ID, id model.ID, g *graph) ([][]model.ID, bool) {
+	at := map[model.ID][2]int{}
+	for li, l := range layers {
+		for i, x := range l {
+			at[x] = [2]int{li, i}
+		}
+	}
+	from, ok := at[id]
+	if !ok {
+		return nil, false
+	}
+	var ref model.ID
+	best := -1
+	for _, r := range g.in[id] {
+		if p, ok := at[r]; ok && (best < 0 || p[0] < best) {
+			best, ref = p[0], r
+		}
+	}
+	if best < 0 || best == from[0] {
+		return nil, false
+	}
+	out := copyLayers(layers)
+	src := out[from[0]]
+	out[from[0]] = append(src[:from[1]:from[1]], src[from[1]+1:]...)
+	dst := out[best]
+	pos := at[ref][1] + 1
+	out[best] = append(dst[:pos:pos], append([]model.ID{id}, dst[pos:]...)...)
+	if len(out[from[0]]) == 0 {
+		out = append(out[:from[0]], out[from[0]+1:]...)
+	}
+	return out, true
+}
+
+// place lays out one ordering of the layers, plus the unconnected entities: the body
+// of PlanWith for a fixed order of the entities within each column.
+func (g *graph) place(layers [][]model.ID, isolated []model.ID, cross CrossLines) map[model.ID]model.Point {
 	out := make(map[model.ID]model.Point, len(g.order))
 
 	layerOf := make(map[model.ID]int, len(g.order))
@@ -157,7 +328,32 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 	}
 	gaps := g.columnGaps(layerOf, len(layers))
 
-	x := OriginX
+	// The isolated entities with a cross-module line go first in the band, each
+	// in a row of its own at the left (see below).
+	var crossIso, plainIso []model.ID
+	for _, id := range isolated {
+		if len(cross[id]) > 0 {
+			crossIso = append(crossIso, id)
+		} else {
+			plainIso = append(plainIso, id)
+		}
+	}
+
+	// Column 0 is where the canvas edge is closest: its cross-module labels
+	// need the room between x = 0 and the box.
+	x0 := OriginX
+	var leftmost []model.ID
+	if len(layers) > 0 {
+		leftmost = append(leftmost, layers[0]...)
+	}
+	for _, id := range append(leftmost, crossIso...) {
+		for _, name := range cross[id] {
+			x0 = max(x0, labelWidth(name)+markerAllowance)
+		}
+	}
+
+	var placed []Rect
+	x := x0
 	maxY := OriginY
 	for li, layer := range layers {
 		widest := 0
@@ -173,8 +369,21 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 			if t, ok := g.primaryTarget(id, out); ok {
 				want = out[t].Y
 			}
-			y := col.place(want, h)
+			var y int
+			if n := len(cross[id]); n > 0 {
+				// The first spot where every one of its cross-module lines is
+				// clear of the boxes to its left; under all of them if nothing
+				// nearer is, which always is.
+				clear := func(y int) bool { return bandClear(placed, x, y, h, n) }
+				var ok bool
+				if y, ok = col.placeWhere(want, h, bandCandidates(placed, x, h, n, want), clear); !ok {
+					y = col.place(max(want, belowLeft(placed, x)), h)
+				}
+			} else {
+				y = col.place(want, h)
+			}
 			out[id] = model.Point{X: x, Y: y}
+			placed = append(placed, Rect{X: x, Y: y, W: w, H: h})
 		}
 		maxY = max(maxY, col.bottom())
 		if li < len(gaps) {
@@ -182,40 +391,19 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 		}
 	}
 
-	// The isolated band: a plain grid under everything else, so it reads as a
-	// separate group rather than as another layer of the graph.
-	if len(isolated) > 0 {
-		// Rows are as tall as their tallest member, not a fixed pitch: a fixed
-		// pitch is the #1479 overlap all over again for a 20-attribute helper.
-		//
-		// Columns are as wide as their widest member for the same reason: a long
-		// entity name is wider than GridColumnPitch.
-		colX := make([]int, GridColumns)
-		colW := make([]int, GridColumns)
-		for i, id := range isolated {
-			if w, _ := boxSize(g.byID[id]); w > colW[i%GridColumns] {
-				colW[i%GridColumns] = w
-			}
-		}
-		x := OriginX
-		for c := range colX {
-			colX[c] = x
-			x += colW[c] + columnGutter
-		}
-		y := maxY + bandGutter
-		rowHeight := 0
-		for i, id := range isolated {
-			if i > 0 && i%GridColumns == 0 {
-				y += rowHeight + rowGutter
-				rowHeight = 0
-			}
+	// Lookups were stacked before anything referencing them was placed; now
+	// they can follow their referrers' rows.
+	g.pullLookups(layers, layerOf, out, cross)
+	for _, id := range g.order {
+		if p, ok := out[id]; ok {
 			_, h := boxSize(g.byID[id])
-			if h > rowHeight {
-				rowHeight = h
-			}
-			out[id] = model.Point{X: colX[i%GridColumns], Y: y}
+			maxY = max(maxY, p.Y+h+rowGutter)
 		}
 	}
+
+	// The entities with no association in the module fill the free space
+	// beside or below the graph (see packIsolated).
+	g.packIsolated(append(crossIso, plainIso...), cross, x0, out)
 	return out
 }
 
@@ -235,7 +423,8 @@ type graph struct {
 	order []model.ID // entity ids, sorted by name — the determinism anchor
 	edges []edge     // every local edge, in model order
 	out   map[model.ID][]model.ID
-	deg   map[model.ID]int // total edges, either direction
+	in    map[model.ID][]model.ID // the entities referencing each one
+	deg   map[model.ID]int        // total edges, either direction
 }
 
 // newGraph indexes the domain model. An edge runs FROM the entity that holds the
@@ -252,6 +441,7 @@ func newGraph(dm *domainmodel.DomainModel) *graph {
 	g := &graph{
 		byID: make(map[model.ID]*domainmodel.Entity, len(dm.Entities)),
 		out:  map[model.ID][]model.ID{},
+		in:   map[model.ID][]model.ID{},
 		deg:  map[model.ID]int{},
 	}
 	for _, e := range dm.Entities {
@@ -272,6 +462,7 @@ func newGraph(dm *domainmodel.DomainModel) *graph {
 			return
 		}
 		g.out[from] = append(g.out[from], to)
+		g.in[to] = append(g.in[to], from)
 		g.deg[from]++
 		g.deg[to]++
 		g.edges = append(g.edges, edge{from: from, to: to, label: label})
@@ -370,9 +561,18 @@ func (c *column) bottom() int {
 }
 
 // place takes the free y nearest at or below want for a box of height h, and
-// records it. Candidates are want itself and the end of every span below it;
-// the lowest one that clears every span wins.
+// records it.
 func (c *column) place(want, h int) int {
+	y, _ := c.placeWhere(want, h, nil, nil)
+	return y
+}
+
+// placeWhere is place with a further condition: the lowest candidate at or
+// below want that is free in the column AND passes ok (nil: always) wins.
+// Candidates are want, the end of every span below it, and extra. When none
+// passes ok it reports false and records nothing; the column-free fallback
+// below everything is always free, so with ok nil it always succeeds.
+func (c *column) placeWhere(want, h int, extra []int, ok func(y int) bool) (int, bool) {
 	want = max(want, OriginY)
 	cands := []int{want}
 	for _, s := range c.spans {
@@ -380,24 +580,31 @@ func (c *column) place(want, h int) int {
 			cands = append(cands, s[1])
 		}
 	}
-	sort.Ints(cands)
-	for _, y := range cands {
-		free := true
-		for _, s := range c.spans {
-			if y < s[1] && s[0] < y+h+rowGutter {
-				free = false
-				break
-			}
-		}
-		if free {
-			c.spans = append(c.spans, [2]int{y, y + h + rowGutter})
-			return y
+	for _, y := range extra {
+		if y >= want {
+			cands = append(cands, y)
 		}
 	}
-	// Unreachable: the end of the lowest span is always free.
-	y := c.bottom()
-	c.spans = append(c.spans, [2]int{y, y + h + rowGutter})
-	return y
+	cands = append(cands, max(want, c.bottom()))
+	sort.Ints(cands)
+	for _, y := range cands {
+		if !c.free(y, h) || (ok != nil && !ok(y)) {
+			continue
+		}
+		c.spans = append(c.spans, [2]int{y, y + h + rowGutter})
+		return y, true
+	}
+	return 0, false
+}
+
+// free reports whether a box of height h at y clears every span in the column.
+func (c *column) free(y, h int) bool {
+	for _, s := range c.spans {
+		if y < s[1] && s[0] < y+h+rowGutter {
+			return false
+		}
+	}
+	return true
 }
 
 // layers assigns each connected entity a layer and returns the layers in order,
@@ -443,6 +650,26 @@ func (g *graph) layers() (layers [][]model.ID, isolated []model.ID) {
 		if d := visit(id); d > maxDepth {
 			maxDepth = d
 		}
+	}
+
+	// A lookup (references nothing, is referenced) goes in the column just left
+	// of its nearest referrer rather than always in column 0: a lookup only a
+	// deep entity uses would otherwise sit columns away from it, its line
+	// crossing everything between. Only lookups move, so every other layer
+	// stays one past what it references; a lookup's referrers are all at least
+	// one layer deeper than it, so the result is still at least 0 and still
+	// left of every referrer.
+	for _, id := range g.order {
+		if g.deg[id] == 0 || len(g.out[id]) > 0 || len(g.in[id]) == 0 {
+			continue
+		}
+		nearest := -1
+		for _, r := range g.in[id] {
+			if nearest < 0 || depth[r] < nearest {
+				nearest = depth[r]
+			}
+		}
+		depth[id] = max(0, nearest-1)
 	}
 
 	layers = make([][]model.ID, maxDepth+1)

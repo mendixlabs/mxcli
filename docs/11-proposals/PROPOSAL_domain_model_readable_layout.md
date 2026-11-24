@@ -203,67 +203,115 @@ tests at the measured sizes.
 Determinism (`TestPlan_IsDeterministic`) and no-overlap (`TestPlan_NoOverlap`)
 still hold. Neither depends on the gap or the y rule.
 
-### Phase 2 — Recompute anchors (rules 4, 5)
+**Follow-up — lookups beside what uses them (implemented).** Phase 1 left every
+lookup in column 0, stacked from the top; with phase 3 pushing referrers down,
+lookups such as Catalog's Category sat far above and columns away from their
+only referrer. A lookup now takes the column just left of its nearest referrer
+(the layering is otherwise unchanged) and, after placing, moves to the median
+row of its referrers when that is free in its column, keeps its own
+cross-module lines clear, stays out of those of the entities to its right, and
+is closer than before. PizzaV1 Catalog: 8 of 10 lines straight (was 6), 160 px
+shorter, no cross-module line blocked. The locality test now states its
+contract as "only the new entity's column and the isolated band move".
 
-`Plan` returns anchors as well as positions:
+**Follow-up — compaction (implemented).** Two refinements after looking at the
+PizzaV1 renders:
+- Unconnected entities no longer go in a band under the graph. They fill the
+  free space to its right or below it, each at the candidate position (outside
+  the graph's area, clear of every box, its cross-module lines clear, not in
+  another's lines) that keeps the diagram closest to a landscape frame
+  (`max(width, 1.5 × height)`); those with cross-module lines shortest first.
+  Shop 3717 → 2408 px tall, PizzaChat 1216 → 728.
+- A lookup alone in its column may share its nearest referrer's column, kept
+  when it has fewer crossings, or as many and the diagram is narrower and no
+  taller, and never when it adds a line through a box. Above or below is the
+  swap search's call. Catalog: Allergen with Ingredient (above it: 1 crossing,
+  against 3 below), crossings 6 → 2, 317 px narrower.
 
-```go
-type Layout struct {
-    Entities map[model.ID]model.Point
-    Anchors  map[model.ID]AnchorPair // association ID -> parent/child edge points
-}
-```
+### Phase 2 — Recompute anchors (rules 4, 5) — implemented
 
-For each same-module association (not self-associations, which keep what is
-stored):
+`dmlayout.Anchors(dm, positions)` returns a connection-point pair per
+association, and a full `mxcli layout` writes it into `ParentConnection` /
+`ChildConnection` (`--only-overlapping` keeps the stored ones). For each
+association between two different entities (self-associations keep what is
+stored; generalizations have no stored points):
 
-- **Side.** The side of each box that faces the other box. Horizontally separated
-  → left/right sides; horizontally overlapping → top/bottom.
-- **Exact horizontals.** If both boxes share a top y, both ends are anchored the
-  same pixel distance below the top (`headerAnchorPx = 20`, inside the header,
-  which is the same height on every box). Converted per box:
-  `y% = round(20 × 100 / estimatedHeight)`. A height estimate that is a few px
-  off moves the point by about a pixel. Centre alignment would move it by half
-  the error.
-- **Exact verticals.** Solve `x_a + w_a × p = x_b + w_b × q` for integer
-  percentages, if a solution exists inside both boxes.
-- **Spreading.** When *k* lines leave one side, order them by the position of
-  their far end (top to bottom, or left to right). Spread them evenly
-  (`(i+1) × 100 / (k+1)`) so no two meet at one point and none cross at the side.
-- Otherwise, the facing sides at 50 %.
+- **Side.** The side of each box that faces the other: top/bottom when the boxes
+  overlap horizontally, left/right otherwise.
+- **Straight where the boxes share a span.** Both ends at the same absolute
+  coordinate: in the header (20 px below the lower top) when that is inside the
+  shared span, which keeps the line straight whatever the heights; otherwise the
+  middle of the span. This straightens a referrer *anywhere* beside a tall
+  target, not only the one on its top row. The coordinate is taken on the
+  longer box's whole-percent grid (Mendix stores whole numbers; a percent of an
+  856-px box is 8.6 px), so the shorter box's rounding is worth half a pixel.
+- **Not through a box.** A straight segment that would pass another box (a line
+  between columns that are not adjacent) is not drawn straight.
+- **Parallel associations.** The *k*-th association between the same two
+  entities (by name) runs 20 px further along the span, so two associations
+  are two lines with two labels.
+- **Spreading.** The remaining ends on one side are spread evenly,
+  `(i+1) × 100 / (k+1)`, in the order of their far ends, kept 5 % clear of the
+  straight lines' ends on that side, and never on a corner (1–99).
 
-`runLayout` writes `Anchors` into `Association.ParentConnection` /
-`ChildConnection` before `UpdateDomainModel`.
+Measured on ako/PizzaV1's Fulfilment: before, every referrer of Order met it at
+one point; after, the lines to Coupon, DeliveryZone, Oven, OrderAccess,
+OrderLine, OrderLogEntry, OrderLineModifier and both Courier associations are
+straight. Lines that still cross a box are between non-adjacent columns
+(Catalog's `Product_Allergen`, `RecipeItem_Ingredient`): that is ordering, phase 4.
 
-### Phase 3 — Cross-module free band (rules 2, 3)
+### Phase 3 — Cross-module free band (rules 2, 3) — implemented
 
-Unblocked by the measurements above. Studio Pro draws a cross-module line from
-the left side of each local end straight to the left edge.
+`dmlayout.CrossLinesFor(module, dm, allDomainModels)` collects, per entity, the
+cross-module associations drawn at it: its own module's (the `ParentID`) and
+every other module's whose `ChildRef` names it. `PlanWith(dm, cross)` places
+each such entity, in its column, at the first y where each of its *n* lines (at
+i / (n+1) of its height, ±10 px for the label) misses every box to its left:
+its target's row when that is clear, otherwise the nearest clear y below,
+otherwise under everything to its left. Column 0 starts at
+`max(OriginX, longest cross-module name drawn from it + markers)`, the label
+sitting between the canvas edge (x = 0, measured) and the box. An isolated
+entity with a cross-module line gets a row of its own at the left of the band.
+`Plan(dm)` is `PlanWith(dm, nil)`. `mxcli layout`, MPR020 and the `exec`
+reminder all use the cross-aware plan, so `layout` still clears MPR020.
 
-1. Collect the "band entities": every entity of this module at either end of a
-   `CrossModuleAssociation` in **any** module's domain model (the `ParentID` of
-   this module's own, plus each `ChildRef` naming this module in the others').
-   `Plan` takes a project-wide index of these, not just the one domain model.
-2. After Phases 1–2, each band entity needs a clear horizontal band. The band runs
-   from the diagram's left edge to the box's left side, at i / (n + 1) of the
-   box's height for its *n* lines, with label height above and below each. Nothing may intersect it: no box, no planned
-   line.
-3. A band entity in layer 0 has the band by construction. Any other whose band
-   is blocked moves down to the first y in its column where the band is clear.
-   That keeps its layer, so its same-module lines still run the right way.
-4. The left margin (`OriginX` for layer 0) becomes
-   `max(OriginX, labelWidth(longest cross-module name in layer 0) + markerAllowance)`.
+Measured on ako/PizzaV1 (Catalog, Fulfilment, Shop, PizzaChat, Core,
+Simulation): **28 of 39** cross-module lines ran through a box after phase 2,
+**0** after this. Straight in-module lines stay about the same (22 → 21 of 29).
 
-### Phase 4 — Crossing count, better ordering, lint (rule 1)
+The cost is height. A module where most entities carry cross-module lines
+(Catalog: Product, Option, Ingredient, ProductSize, Allergen) becomes a
+staircase, each column stepping below the one to its left; Shop grows from 2292
+to 3717 px tall. Some in-module lines become long diagonals and two labels can
+meet where lines cross. That trade is what #1929's priority order asks for
+(rule 2 above rule 4 and rule 7). The crossings are phase 4's.
 
-1. `dmlayout.Crossings(dm, layout) (lineLine, lineBox int)`: segment geometry over
-   the estimated boxes and anchors. Generalizations count as lines between box
-   centres.
-2. Ordering: replace the single sweep with alternating down/up barycentre sweeps
-   (fixed count, e.g. 4). Keep the ordering with the fewest crossings; ties go to
-   the earlier one, so the result stays deterministic.
-3. `--dry-run` / normal output prints `crossings: before -> after`.
-4. MPR021 in `mdl/linter/rules/mpr021_association_crosses_entity.go`.
+### Phase 4 — Crossing count, better ordering, lint (rule 1) — implemented
+
+1. `dmlayout.Lines` / `Crossings(dm, pos, anchors, cross) (lines, boxes)`:
+   segments over the estimated boxes, for associations (from their anchors;
+   `StoredAnchors` reads them, with Studio Pro's 0;50 / 100;50 default),
+   generalizations (centre to centre) and cross-module lines (left side to
+   x = 0). Lines sharing an entity meet at its box and are not a crossing; a
+   line along an edge does not count as through a box.
+2. Ordering: **not** the barycentre sweeps first planned. They were built and
+   measured, and never produced a better order, on PizzaV1 or on ~7,000 random
+   models, because row alignment and the cross-module bands decide most
+   positions. What did help is a neighbour-swap search: swap two entities in a
+   column, keep the swap when the full placement, scored on the lines it
+   actually draws (`lines + 2 × through a box`), is strictly better; repeat
+   until nothing helps, within a budget of 8 swaps per entity. Strict
+   improvement only, so never worse than the layering's order, and
+   deterministic. PizzaV1 Catalog: 8 to 6; the other modules were already at
+   their best.
+3. `mxcli layout` prints `crossings A -> B (lines crossing lines …, lines
+   through a box …; estimated)` for every module it changes. On PizzaV1:
+   Catalog 30 → 6, Fulfilment 13 → 3, Shop 30 → 8 (grid as stored → laid out).
+4. MPR021 `AssociationCrossesEntity` (warning): any of those lines through an
+   entity it does not connect, against each box inset by 8 px so a line grazing
+   an estimated edge is not reported. PizzaV1: 27 findings as stored, 1 after
+   `mxcli layout` (Catalog's `Product_Allergen`, Allergen being used from
+   columns 1 and 3). TestApp: 1, a real crossing in a hand-arranged diagram.
 
 Pockets (rule 6) are out of scope. With estimated box sizes the clearance check
 inside a triangle is too unreliable to do automatically, and the gain is small

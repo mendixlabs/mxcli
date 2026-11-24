@@ -838,6 +838,15 @@ func (e *Executor) layoutReminder(moduleID model.ID, moduleName string, dm *doma
 	if len(unlaid) == 0 {
 		return ""
 	}
+	// Judge it against the layout `mxcli layout` would make, cross-module lines
+	// included. Reading every domain model costs something, so only when there
+	// is a finding to confirm.
+	if all, err := e.backend.ListDomainModels(); err == nil {
+		unlaid = dmlayout.NotLaidOutWith(dm, dmlayout.CrossLinesFor(moduleName, dm, all))
+		if len(unlaid) == 0 {
+			return ""
+		}
+	}
 	if mod, err := e.backend.GetModule(moduleID); err == nil && isMarketplaceModule(nil, mod) {
 		return ""
 	}

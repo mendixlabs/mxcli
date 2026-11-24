@@ -10,6 +10,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/dmlayout"
 	"github.com/mendixlabs/mxcli/model"
+	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 	"github.com/spf13/cobra"
 )
 
@@ -39,14 +40,22 @@ var layoutCmd = &cobra.Command{
 	Short: "Arrange a module's domain model from its association graph",
 	Long: `Arrange the entities of a domain model so related ones sit together.
 
-Entities are layered on the association graph: an entity that references nothing
-else in the module is a lookup and goes on the left, and everything else sits
-one column past the furthest thing it references, on the row of the entity it is
-most linked to. Association lines then mostly run one way, and straight across,
+Entities are layered on the association graph: an entity sits one column past
+the furthest thing it references, on the row of the entity it is most linked
+to, and a lookup (one that references nothing else in the module) sits one
+column left of its nearest referrer, on the row of what references it where
+there is room. Association lines then mostly run one way, and straight across,
 instead of crossing the diagram. The gap between two columns is wide enough for
-the longest association name drawn across it. Entities with no association at
-all — non-persistent helpers, mostly — go in a band underneath rather than being
-mixed in with the lookups.
+the longest association name drawn across it. An entity with a cross-module
+association (at either end) is placed where Studio Pro's line for it, which
+always runs from its left side straight to the left edge, passes no other box.
+Within each column the order is then searched for the fewest crossings, and
+every module that changes reports its crossings before and after (estimated,
+from the same box sizes). Entities with no association at
+all — non-persistent helpers, mostly — fill the free space to the right of the
+graph or below it, never its columns. Every association line is then re-attached: on the
+sides of its two boxes that face each other, straight across where the boxes
+share a span and nothing is in the way, the others spread along their side.
 
 Positions are a function of the model alone, so running this twice in a row
 changes nothing the second time and re-running after adding an entity moves only
@@ -59,7 +68,8 @@ modules and System are never touched.
 --only-overlapping repairs instead of rearranging: an entity whose box does not
 collide with another entity or an annotation keeps its position, and of two that
 collide the first in reading order (top to bottom, then left to right) stays put
-while the other moves to the nearest free spot. Annotations never move. Box
+while the other moves to the nearest free spot. Annotations never move, and
+association lines keep the attachment points they have. Box
 sizes are estimated from the entity's name and attribute count — Studio Pro
 does not store them — so the estimate errs on the generous side.
 
@@ -121,7 +131,14 @@ func runLayout(cmd *cobra.Command) error {
 		return err
 	}
 
-	movedTotal, unchangedTotal := 0, 0
+	// Cross-module lines are drawn in BOTH modules' diagrams, so placing a
+	// module needs the other modules' cross-module associations too.
+	allDMs, err := b.ListDomainModels()
+	if err != nil {
+		return fmt.Errorf("read domain models: %w", err)
+	}
+
+	movedTotal, unchangedTotal, reanchoredTotal := 0, 0, 0
 	for _, m := range targets {
 		dm, err := b.GetDomainModel(m.ID)
 		if err != nil {
@@ -131,11 +148,22 @@ func runLayout(cmd *cobra.Command) error {
 			continue
 		}
 
+		cross := dmlayout.CrossLinesFor(m.Name, dm, allDMs)
+		// The diagram as stored, for the crossings report: captured before
+		// anything below moves an entity or re-anchors a line.
+		beforePos := map[model.ID]model.Point{}
+		for _, e := range dm.Entities {
+			if e != nil {
+				beforePos[e.ID] = e.Location
+			}
+		}
+		beforeAnchors := dmlayout.StoredAnchors(dm)
+
 		var plan map[model.ID]model.Point
 		if layoutOnlyOverlapping {
 			plan = dmlayout.ResolveOverlaps(dm)
 		} else {
-			plan = dmlayout.Plan(dm)
+			plan = dmlayout.PlanWith(dm, cross)
 		}
 		moved := 0
 		var moves []string
@@ -153,7 +181,17 @@ func runLayout(cmd *cobra.Command) error {
 		}
 		sort.Strings(moves)
 
-		if moved == 0 {
+		// A full layout also places every line: the stored connection points
+		// were chosen for the old positions, and Studio Pro's default (both
+		// mid-height) slants a line between boxes of different heights.
+		// --only-overlapping keeps them, as it keeps every other hand-placed
+		// thing it does not have to move.
+		reanchored := 0
+		if !layoutOnlyOverlapping {
+			reanchored = applyAnchors(dm, plan, !layoutDryRun)
+		}
+
+		if moved == 0 && reanchored == 0 {
 			unchangedTotal += len(dm.Entities)
 			if layoutOnlyOverlapping {
 				fmt.Fprintf(cmd.OutOrStdout(), "%s: no overlapping entities (%d entities)\n", m.Name, len(dm.Entities))
@@ -165,6 +203,15 @@ func runLayout(cmd *cobra.Command) error {
 		for _, line := range moves {
 			fmt.Fprintln(cmd.OutOrStdout(), line)
 		}
+		if reanchored > 0 {
+			verb := "re-anchored"
+			if layoutDryRun {
+				verb = "would be re-anchored"
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "  %s: %d association line(s) %s\n", m.Name, reanchored, verb)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s\n", m.Name,
+			crossingsReport(dm, beforePos, beforeAnchors, plan, cross, !layoutOnlyOverlapping))
 		if layoutDryRun {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s: %d of %d entities would move\n", m.Name, moved, len(dm.Entities))
 		} else {
@@ -174,15 +221,75 @@ func runLayout(cmd *cobra.Command) error {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s: moved %d of %d entities\n", m.Name, moved, len(dm.Entities))
 		}
 		movedTotal += moved
+		reanchoredTotal += reanchored
 	}
 
 	switch {
-	case movedTotal == 0 && unchangedTotal == 0:
+	case movedTotal == 0 && unchangedTotal == 0 && reanchoredTotal == 0:
 		fmt.Fprintln(cmd.OutOrStdout(), "Nothing to lay out.")
 	case layoutDryRun:
 		fmt.Fprintf(cmd.OutOrStdout(), "Dry run: %d entities would move. Re-run without --dry-run to apply.\n", movedTotal)
 	}
 	return nil
+}
+
+// crossingsReport compares the lines that cross each other or run through a
+// box before and after the layout (rule 1 of mendixlabs/mxcli#1929). Both are
+// estimates from the same box sizes the layout uses, which is why the report
+// says so. reanchor says whether the layout also places the lines; when it does
+// not (--only-overlapping), the stored anchors are kept for "after" too.
+func crossingsReport(dm *domainmodel.DomainModel, before map[model.ID]model.Point, beforeAnchors map[model.ID]dmlayout.AnchorPair,
+	plan map[model.ID]model.Point, cross dmlayout.CrossLines, reanchor bool) string {
+	after := make(map[model.ID]model.Point, len(before))
+	for id, p := range before {
+		after[id] = p
+		if q, ok := plan[id]; ok {
+			after[id] = q
+		}
+	}
+	afterAnchors := beforeAnchors
+	if reanchor {
+		afterAnchors = dmlayout.Anchors(dm, after)
+	}
+	l0, b0 := dmlayout.Crossings(dm, before, beforeAnchors, cross)
+	l1, b1 := dmlayout.Crossings(dm, after, afterAnchors, cross)
+	return fmt.Sprintf("crossings %d -> %d (lines crossing lines %d -> %d, lines through a box %d -> %d; estimated)",
+		l0+b0, l1+b1, l0, l1, b0, b1)
+}
+
+// applyAnchors sets each association's connection points to where
+// dmlayout.Anchors places them for the planned positions (an entity the plan
+// does not move keeps its own), and returns how many associations change. With
+// write false it only counts.
+func applyAnchors(dm *domainmodel.DomainModel, plan map[model.ID]model.Point, write bool) int {
+	pos := make(map[model.ID]model.Point, len(dm.Entities))
+	for _, e := range dm.Entities {
+		if e == nil {
+			continue
+		}
+		pos[e.ID] = e.Location
+		if p, ok := plan[e.ID]; ok {
+			pos[e.ID] = p
+		}
+	}
+	anchors := dmlayout.Anchors(dm, pos)
+	changed := 0
+	for _, a := range dm.Associations {
+		pair, ok := anchors[a.ID]
+		if !ok {
+			continue
+		}
+		if a.ParentConnection != nil && a.ChildConnection != nil &&
+			*a.ParentConnection == pair.Parent && *a.ChildConnection == pair.Child {
+			continue
+		}
+		changed++
+		if write {
+			parent, child := pair.Parent, pair.Child
+			a.ParentConnection, a.ChildConnection = &parent, &child
+		}
+	}
+	return changed
 }
 
 // layoutTargets picks the modules to touch.

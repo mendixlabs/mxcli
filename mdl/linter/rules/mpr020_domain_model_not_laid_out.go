@@ -63,7 +63,7 @@ func (r *DomainModelNotLaidOutRule) Check(ctx *linter.LintContext) []linter.Viol
 		if module == "" || ctx.IsExcluded(module) {
 			continue
 		}
-		unlaid := dmlayout.NotLaidOut(dm)
+		unlaid := dmlayout.NotLaidOutWith(dm, dmlayout.CrossLinesFor(module, dm, dms))
 		if len(unlaid) == 0 || ctx.IsDocumentExcluded(module+"."+unlaid[0].Name) {
 			continue
 		}

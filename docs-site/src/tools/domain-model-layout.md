@@ -15,29 +15,57 @@ mxcli layout -p app.mpr                            # every module the project ow
 
 Entities are layered on the associations between them:
 
-- an entity that references nothing else in the module is a **lookup**, and goes
-  in the leftmost column;
+- an entity that references nothing else in the module is a **lookup**: it goes
+  in the column just left of its **nearest referrer**, and moves to the row of
+  the entities referencing it where its column has room;
 - everything else sits one column past the furthest thing it references, on the
   **row of the entity it is most linked to**, so the line between them runs
   straight across (the next free spot below when that row is taken);
 - the **gap between two columns** is wide enough for the longest association
   name drawn across it, plus the 1 / * markers at its ends, so Studio Pro does
   not cut the label off;
-- entities with **no association at all** — non-persistent helpers, mostly — go
-  in a band underneath, rather than being mixed in with the lookups.
+- entities with **no association at all** — non-persistent helpers, mostly — are
+  kept out of the graph's columns: they fill the free space to its right or
+  below it, wherever the diagram stays closest to a landscape screen;
+- a lookup that would have a column to itself may instead share its nearest
+  referrer's column, directly above or below it, when that crosses less or
+  makes the diagram narrower without making it taller;
+- an entity with a **cross-module association** — at either end, the module's
+  own or another module's pointing in — is placed where Studio Pro's line for
+  it, which always runs from the box's left side straight to the canvas edge,
+  passes no other box; the leftmost column starts far enough right for those
+  labels. Modules where most entities have such lines get taller: each column
+  steps below the one to its left;
+- every association line is **re-attached** on the sides of its two boxes that
+  face each other, straight across where the boxes share a span (and no other
+  box is in the way), the rest spread along the side so no two lines meet at
+  one point. `--only-overlapping` leaves the attachment points alone.
 
-Association lines then mostly run one way instead of crossing the diagram.
+Association lines then mostly run one way instead of crossing the diagram. On
+top of that, `layout` tries swapping neighbouring entities in each column and
+keeps a swap whenever it leaves fewer lines crossing each other or running
+through a box. Every module it changes reports the count, before and after:
 
-On a real 16-entity model the layering falls out of the associations with no
-hints:
+```
+  Catalog: crossings 30 -> 6 (lines crossing lines 10 -> 4, lines through a box 20 -> 2; estimated)
+```
+
+Lint rule **MPR021** reports a line that still runs through an entity it does
+not connect, so a crossing `layout` cannot remove gets a name.
+
+On the 15-entity test model (`capTrack` in `mdl/dmlayout`) the layering falls
+out of the associations with no hints:
 
 | column | entities |
 |---|---|
-| 1 | `Department`, `EmploymentType`, `MovementReason`, `PlanType`, `PlanningYear`, `Region` |
-| 2 | `Team`, `GoalBucket` |
-| 3 | `GoalChange`, `GoalRegionValue`, `PlanScope`, `CapTrackUser` |
-| 4 | `Employee`, `ScopeMonth` |
+| 1 | `Department`, `PlanningYear` |
+| 2 | `Region`, `PlanType`, `Team`, `GoalBucket` |
+| 3 | `EmploymentType`, `PlanScope` |
+| 4 | `MovementReason`, `ScopeMonth`, `Employee` |
 | 5 | `EmployeeMonth`, `Movement` |
+
+`EmploymentType` and `MovementReason` are lookups only `Employee` and `Movement`
+use, so they sit beside them rather than in column 1.
 
 ## It replaces positions you set by hand
 
