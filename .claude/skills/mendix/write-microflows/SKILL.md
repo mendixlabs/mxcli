@@ -645,7 +645,7 @@ $var/Module.AssociationName/attribute   -- Chained
 
 ### Annotation Pattern
 ```mdl
-@position(200, 200)          -- optional: omit it and mxcli lays the flow out in the project's layout-config.yaml style (never imitate a style with @position; keep, never hand-write, a `@mxcli-layout:` doc line); to re-arrange an existing flow run `mxcli layout flows`
+@position(200, 200)          -- optional: omit it and mxcli lays the flow out in the project's layout-config.yaml style (never imitate a style with @position; keep, never hand-write, a `@mxcli-layout:` doc line); to re-arrange an existing flow run `mxcli layout flows`; inside a LOOP body @position is in the loop BOX's coordinates (from its top-left), not the canvas's (ako/mxcli#2564)
 @caption 'Persist order'
 @color Green
 @annotation 'Note about the next activity'

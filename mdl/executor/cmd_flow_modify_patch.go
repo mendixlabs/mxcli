@@ -47,10 +47,24 @@ import (
 //     rerouted, which the patch does not do.
 
 // flowMove is a stored node the declared statement draws somewhere else.
+//
+// With fit set it is the box of the loop id instead, fitted to its body once
+// the script has moved the body's nodes (ako/mxcli#2564). With optional, the
+// node may be gone by the time the move is applied a second time: a body
+// activity the splice replaced by one of another kind, whose fragment is
+// drawn where the script states.
 type flowMove struct {
-	id   model.ID
-	to   model.Point
-	what string
+	id       model.ID
+	to       model.Point
+	what     string
+	fit      *loopFit
+	optional bool
+}
+
+// loopFit is how a loop box is fitted: to the stated @size, or (nil) to the
+// moved body.
+type loopFit struct {
+	size *model.Size
 }
 
 // endSpacing is how far right of the statement before it the builder draws the
@@ -74,7 +88,13 @@ func patch(ctx *ExecContext, a *alterFlowContext, ops []*ast.AlterFlowOperation,
 	}
 	move := func() error {
 		for _, mv := range moves {
-			if err := mut.Move(mv.id, mv.to); err != nil {
+			if mv.fit != nil {
+				if err := mut.FitLoop(mv.id, mv.fit.size, model.Size{Width: MinLoopWidth, Height: MinLoopHeight}); err != nil {
+					return fmt.Errorf("fit the %s to its body: %w", mv.what, err)
+				}
+				continue
+			}
+			if err := mut.Move(mv.id, mv.to); err != nil && !(mv.optional && mutatorNodeGone(err)) {
 				return fmt.Errorf("move the %s: %w", mv.what, err)
 			}
 		}
@@ -130,12 +150,71 @@ func (pd *patchDiff) moved(d, s ast.MicroflowStatement) error {
 		}
 		return nil
 	}
+	if loopStatements(s) != nil || loopStatements(d) != nil {
+		return pd.movedInLoop(d, s)
+	}
 	clear := func(a *ast.ActivityAnnotations) { a.Position = nil }
 	if !declaredMatches(withAnnotations(d, clear), withAnnotations(s, clear)) {
 		return cannotSplice("a node inside the %s is moved; the splice moves the nodes of the flow and of an if's branches, "+
 			"not those inside a loop body or an error handler", describeAt(s))
 	}
 	return nil
+}
+
+// movedInLoop records the moves of the nodes of a stored loop's body the
+// declared loop draws elsewhere (ako/mxcli#2564). A body is drawn in the loop
+// box's coordinates, so its nodes are moved in them, and the box is then
+// fitted to where they are — to the stated @size, else the way `create` sizes
+// the loop — so the flow reads as a create of the same script would. The
+// loop's own node has been moved already (movedNode).
+func (pd *patchDiff) movedInLoop(d, s ast.MicroflowStatement) error {
+	db, sb := loopStatements(d), loopStatements(s)
+	if len(db) != len(sb) {
+		return redrawn(s)
+	}
+	c, err := pd.loc.locate(s)
+	if err != nil {
+		return err
+	}
+	loop, ok := c.Object.(*microflows.LoopedActivity)
+	if !ok {
+		return cannotSplice("the stored %s is not drawn as a loop", describeAt(s))
+	}
+	outer := pd.loc
+	pd.loc = outer.within(loop)
+	defer func() { pd.loc = outer }()
+	for i := range db {
+		if declaredMatches(db[i], sb[i]) {
+			continue
+		}
+		if err := pd.moved(db[i], sb[i]); err != nil {
+			return err
+		}
+	}
+	pd.fitLoop(c.ID, d, s)
+	return nil
+}
+
+// fitLoop records that the box of the stored loop id is fitted once its body's
+// moves are made: to the @size the declared loop d states, else to its body.
+// A loop whose body moves nothing is left as it is drawn. Recorded once.
+func (pd *patchDiff) fitLoop(id model.ID, d, s ast.MicroflowStatement) {
+	for _, mv := range pd.moves {
+		if mv.fit != nil && mv.id == id {
+			return
+		}
+	}
+	fit := &loopFit{}
+	if a := statementAnnotations(d); a != nil && a.Size != nil && a.Size.Width > 0 && a.Size.Height > 0 {
+		fit.size = &model.Size{Width: a.Size.Width, Height: a.Size.Height}
+	}
+	pd.moves = append(pd.moves, flowMove{id: id, fit: fit, what: describeAt(s)})
+}
+
+// mutatorNodeGone reports whether err is the mutator's "not in the flow" for a
+// node an operation took out.
+func mutatorNodeGone(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "is not in the stored flow")
 }
 
 // movedNode records a move of the stored statement's own node when the

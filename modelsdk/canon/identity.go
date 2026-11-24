@@ -167,7 +167,7 @@ func Reconcile(contents, stored []byte, opts ...Option) (out []byte, unchanged b
 	// The rest of what MDL cannot state: an expression's surrounding whitespace
 	// and an empty screen-reader label Studio Pro stores as a ClientTemplate
 	// (ako/mxcli#1897).
-	contents = CarryUnexpressed(contents, stored)
+	contents = carryUnexpressed(contents, stored, o.contentsOwnElementIDs)
 
 	if alwaysWrite() {
 		return contents, false
@@ -235,7 +235,7 @@ func reconcileInPasses(contents, stored []byte, opts ...Option) (out []byte, unc
 	// The rest of what MDL cannot state: an expression's surrounding whitespace
 	// and an empty screen-reader label Studio Pro stores as a ClientTemplate
 	// (ako/mxcli#1897).
-	contents = CarryUnexpressed(contents, stored)
+	contents = carryUnexpressed(contents, stored, o.contentsOwnElementIDs)
 
 	if alwaysWrite() {
 		return contents, false
