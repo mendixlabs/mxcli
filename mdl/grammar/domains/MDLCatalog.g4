@@ -111,6 +111,8 @@ showStatement
     | showOrList DESIGN PROPERTIES (FOR widgetTypeKeyword)?
     | showOrList STRUCTURE (DEPTH NUMBER_LITERAL)? (IN (qualifiedName | IDENTIFIER))? ALL? /* @alias MDL-DEPR090 */
     | showOrList BUSINESS EVENT SERVICES (IN (qualifiedName | IDENTIFIER))?
+    // Entity change data capture: the Kind of thing a lake subscribes to.
+    | showOrList CHANGE DATA CAPTURE SERVICES (IN (qualifiedName | IDENTIFIER))?
     | showOrList BUSINESS EVENT CLIENTS (IN (qualifiedName | IDENTIFIER))?
     | showOrList BUSINESS EVENTS (IN (qualifiedName | IDENTIFIER))?
     | showOrList SETTINGS   // the settings sections, one row each: `list settings`
@@ -198,6 +200,7 @@ describeStatement
     | DESCRIBE STYLING ON (PAGE | SNIPPET) qualifiedName (WIDGET IDENTIFIER)?  // DESCRIBE STYLING ON PAGE Module.Page [WIDGET name]
     | DESCRIBE CATALOG DOT (catalogTableName)  // DESCRIBE CATALOG.ENTITIES
     | DESCRIBE BUSINESS EVENT SERVICE qualifiedName  // DESCRIBE BUSINESS EVENT SERVICE Module.Name
+    | DESCRIBE CHANGE DATA CAPTURE SERVICE qualifiedName  // DESCRIBE CHANGE DATA CAPTURE SERVICE Module.Name
     | DESCRIBE taskQueueKw qualifiedName               // DESCRIBE TASK QUEUE Module.Name
     | DESCRIBE SCHEDULED EVENT qualifiedName           // DESCRIBE SCHEDULED EVENT Module.Name
     | DESCRIBE REGULAR EXPRESSION qualifiedName        // DESCRIBE REGULAR EXPRESSION Module.Name

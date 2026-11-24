@@ -10,9 +10,9 @@ func init() {
 		Summary: "Unified discovery of all external services and integration assets",
 		Keywords: []string{
 			"integration", "services", "external", "contract",
-			"odata", "rest", "business events", "database",
+			"odata", "rest", "business events", "database", "change data capture",
 		},
-		Syntax:  "LIST CONSUMED ODATA SERVICES [IN Module];\nLIST CONSUMED REST SERVICES [IN Module];\nLIST PUBLISHED REST SERVICES [IN Module];\nLIST BUSINESS EVENT SERVICES [IN Module];\nLIST DATABASE CONNECTIONS [IN Module];\nLIST EXTERNAL ENTITIES [IN Module];\nLIST EXTERNAL ACTIONS [IN Module];",
+		Syntax:  "LIST CONSUMED ODATA SERVICES [IN Module];\nLIST CONSUMED REST SERVICES [IN Module];\nLIST PUBLISHED REST SERVICES [IN Module];\nLIST BUSINESS EVENT SERVICES [IN Module];\nLIST CHANGE DATA CAPTURE SERVICES [IN Module];\nLIST DATABASE CONNECTIONS [IN Module];\nLIST EXTERNAL ENTITIES [IN Module];\nLIST EXTERNAL ACTIONS [IN Module];",
 		Example: "LIST CONSUMED ODATA SERVICES;\nLIST CONSUMED REST SERVICES IN MyModule;\nLIST EXTERNAL ENTITIES;\nSELECT * FROM CATALOG.CONSUMED_REST_SERVICES;",
 		SeeAlso: []string{"odata", "rest", "sql", "business-events"},
 	})
@@ -693,6 +693,37 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 			"  CONSUME CustomerChangedEvent (Entity: Module.CBE_CustomerChangedEvent, Microflow: Module.HandleBE_CustomerChangedEvent);\n};\n\n" +
 			"DROP BUSINESS EVENT SERVICE Module.CustomerEventsApi;",
 		SeeAlso: []string{"business-events"},
+	})
+
+	// ── Change data capture ───────────────────────────────────────────
+
+	Register(SyntaxFeature{
+		Path:    "change-data-capture",
+		Summary: "Entity change data capture services — read what a project streams to a lake (no CREATE yet)",
+		Keywords: []string{
+			"change data capture", "cdc", "entity change", "kafka",
+			"debezium", "lake", "topic", "baseline", "revision", "exposed name",
+		},
+		Syntax: "LIST CHANGE DATA CAPTURE SERVICES [IN Module];\n" +
+			"DESCRIBE CHANGE DATA CAPTURE SERVICE Module.Name;\n\n" +
+			"-- Read-only for now. DESCRIBE reports what is stored as comments,\n" +
+			"-- because there is no CREATE statement for this document yet; the\n" +
+			"-- write path is part C of PROPOSAL_kafka_event_integration.md.\n" +
+			"--\n" +
+			"-- The document is two-sided: Sources is the live model and the\n" +
+			"-- baseline is the copy Studio Pro's \"accept changes\" froze, which\n" +
+			"-- names what it tracks by GUID. mxbuild reports CE1585 when they\n" +
+			"-- disagree and CE1577 on an empty AppName.\n" +
+			"--\n" +
+			"-- DESCRIBE prints each source's revision and its Kafka topic,\n" +
+			"-- cdc.<AppName>.<ExposedName>.<Major>.<space>. Every segment but the\n" +
+			"-- last is a model value, so a major bump, an AppName change or a\n" +
+			"-- rename starts a NEW topic — and downstream a new table with no\n" +
+			"-- history.\n" +
+			"--\n" +
+			"-- Needs Mendix 11.10+ (where the baseline was introduced).",
+		Example: "LIST CHANGE DATA CAPTURE SERVICES;\nDESCRIBE CHANGE DATA CAPTURE SERVICE CdcPublish.OrdersCDCService;",
+		SeeAlso: []string{"business-events", "integration"},
 	})
 
 	// ── XPath ─────────────────────────────────────────────────────────

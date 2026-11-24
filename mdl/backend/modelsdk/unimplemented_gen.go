@@ -651,6 +651,11 @@ func (unimplemented) ListBusinessEventServices() ([]*model.BusinessEventService,
 	return r0, errUnimplemented("ListBusinessEventServices")
 }
 
+func (unimplemented) ListChangeDataCaptureServices() ([]*model.ChangeDataCaptureService, error) {
+	var r0 []*model.ChangeDataCaptureService
+	return r0, errUnimplemented("ListChangeDataCaptureServices")
+}
+
 func (unimplemented) ListConstants() ([]*model.Constant, error) {
 	var r0 []*model.Constant
 	return r0, errUnimplemented("ListConstants")

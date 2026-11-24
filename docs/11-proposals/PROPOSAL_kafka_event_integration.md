@@ -1,6 +1,6 @@
 ---
 title: Kafka event integration — consumed business events and change data capture
-status: proposed
+status: partial
 date: 2026-11-17
 related:
   - archive/PROPOSAL_business_events_support.md
@@ -557,6 +557,21 @@ entities from `testapp-describe.mdl`), mutate with a few lines of Go over
 |---|---|---|
 | A1 consumer describe/list | `mdl/executor/cmd_businessevents.go` | fix the lossy describe first; it is a data-loss bug on round-trip (ako/mxcli#2381). Also surface the publisher's channel id (§5.4) |
 | A2 CDC read | new `mdl/backend/modelsdk/cdc_read.go`, `mdl/backend/service.go` (interface), mock, `mdl/executor/cmd_cdc.go`, catalog builder + tables, registry | gen types exist; add the 4 missing properties (§4) first so reads see them |
+
+**Done so far:** A1 (consumer describe/list, channel id), B1–B3 and E1 are merged.
+A2 is merged for `LIST` / `DESCRIBE` — the gen properties it needed landed first
+(ako/mxcli#2395). Still open from A2: the catalog tables
+(`change_data_capture_services` + sources), the `RefKind`s that would let
+`show callers` and impact analysis see CDC exposure, and the
+`CatalogSchemaVersion` bump. B4 (check rules) and all of C and D are untouched.
+
+Measured while implementing A2, and worth keeping: the storage layer refuses the
+document outright below 11.10 and names the properties and their versions
+(`Baseline` 11.10.0+, `ServiceName` 11.8.0+, `EntityChangeSource.ExposedName` and
+`.Properties` 11.9.0+), so §5.2's version gate needs no separate check — it is
+already enforced where it matters. And the topic template computed from the model
+reproduces the two values this document records from Studio Pro's editor exactly:
+`cdc.TestApp.Order.1.{space}` and `cdc.TestApp.Customer.1.{space}`.
 | B1 grammar/AST | `MDLParser.g4` (`Contract`/`ContractFile`/`ContractFrom` keys, `DOLLAR_STRING` as a property value, `consume` body item), `ast_businessevents.go`, `visitor_businessevents.go` | |
 | B2 AsyncAPI renderer | new `mdl/businessevents/asyncapi.go` | golden test = `asyncapi-OrdersEventService.yaml`, byte-for-byte |
 | B3 write | `mdl/backend/modelsdk/business_event_write.go` | `Definition` null, `Document`, subscribe ops; identity carry by message name |
