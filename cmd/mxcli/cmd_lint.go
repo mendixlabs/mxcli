@@ -630,6 +630,7 @@ func builtinLintRules() []linter.Rule {
 		rules.NewSnippetCallAppearanceRule(),
 		rules.NewAgentWithoutSelectedModelRule(),
 		rules.NewConsumedMCPServiceWithoutEndpointRule(),
+		rules.NewAgentDocumentDanglingReferenceRule(),
 		rules.NewEmptyContainerRule(),
 		rules.NewGallerySelectionListenerRule(),
 		rules.NewDataViewLayoutGridRule(),

@@ -119,3 +119,103 @@ func versionBefore(v string, major, minor int) bool {
 	}
 	return maj < major || (maj == major && mn < minor)
 }
+
+// AgentDocumentDanglingReferenceRule reports an Agent Editor reference that
+// names a document the project does not have (ako/mxcli#2265).
+//
+// An agent names its tools, knowledge bases, MCP services, model and context
+// entity — and a model, knowledge base or MCP service its constants and
+// microflows — by qualified name inside its Contents JSON. Studio Pro's
+// agent-editor extension keeps those names in step with a rename or a move;
+// mx and mxbuild never load it, so an edit made without Studio Pro (an older
+// mxcli, a script, a merge) can leave one naming a document that is gone.
+// `mx check` and the build stay green, because Agent Editor's consistency
+// checks do not run headlessly either: the broken reference shows only when
+// the project is opened in Studio Pro, or when the agent runs.
+type AgentDocumentDanglingReferenceRule struct{}
+
+// NewAgentDocumentDanglingReferenceRule creates the rule.
+func NewAgentDocumentDanglingReferenceRule() *AgentDocumentDanglingReferenceRule {
+	return &AgentDocumentDanglingReferenceRule{}
+}
+
+func (r *AgentDocumentDanglingReferenceRule) ID() string { return "MPR022" }
+func (r *AgentDocumentDanglingReferenceRule) Name() string {
+	return "AgentDocumentDanglingReference"
+}
+func (r *AgentDocumentDanglingReferenceRule) Category() string { return "correctness" }
+func (r *AgentDocumentDanglingReferenceRule) DefaultSeverity() linter.Severity {
+	return linter.SeverityError
+}
+
+func (r *AgentDocumentDanglingReferenceRule) Description() string {
+	return "Checks for agent, model, knowledge base and MCP service documents that name a document the project does not have, which mx check does not see"
+}
+
+// RequiredCatalogMode: the references are refs rows, which REFRESH CATALOG
+// FULL writes.
+func (r *AgentDocumentDanglingReferenceRule) RequiredCatalogMode() linter.CatalogMode {
+	return linter.CatalogFull
+}
+
+// Check reports each reference out of an Agent Editor document whose target is
+// not in the catalog. A System name is not judged: the catalog does not hold
+// the System module's documents.
+func (r *AgentDocumentDanglingReferenceRule) Check(ctx *linter.LintContext) []linter.Violation {
+	rows, err := ctx.Query(`
+		SELECT DISTINCT r.SourceType, r.SourceName, r.TargetType, r.TargetName, COALESCE(r.ModuleName, '')
+		FROM refs r
+		LEFT JOIN modules m ON m.Name = r.ModuleName
+		WHERE r.SourceType IN ('AGENT', 'AI_MODEL', 'KNOWLEDGE_BASE', 'CONSUMED_MCP_SERVICE', 'PUBLISHED_MCP_SERVICE')
+		  AND COALESCE(m.Source, '') = ''
+		  AND r.TargetName NOT LIKE 'System.%'
+		  AND r.TargetName NOT IN (SELECT QualifiedName FROM objects)
+		ORDER BY r.SourceName, r.TargetName`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []linter.Violation
+	for rows.Next() {
+		var sourceType, source, targetType, target, module string
+		if rows.Scan(&sourceType, &source, &targetType, &target, &module) != nil {
+			continue
+		}
+		if ctx.IsExcluded(module) {
+			continue
+		}
+		kind := agentDocumentKind(sourceType)
+		out = append(out, linter.Violation{
+			RuleID:   r.ID(),
+			Severity: r.DefaultSeverity(),
+			Message: fmt.Sprintf("%s %s names %s %s, which the project does not have: Studio Pro reports it when the project is opened, "+
+				"and the reference fails at runtime; mx check does not see it", kind, source, agentTargetKind(targetType), target),
+			Location: linter.Location{Module: module, DocumentType: kind, DocumentName: source},
+			Suggestion: fmt.Sprintf("open %s in Studio Pro and pick the document again, or remove the reference; "+
+				"mxcli's rename and move keep these names in step", source),
+		})
+	}
+	return out
+}
+
+// agentDocumentKind is the MDL name of an Agent Editor document's refs type.
+func agentDocumentKind(refType string) string {
+	switch refType {
+	case "AGENT":
+		return "agent"
+	case "AI_MODEL":
+		return "model"
+	case "KNOWLEDGE_BASE":
+		return "knowledge base"
+	case "CONSUMED_MCP_SERVICE":
+		return "consumed mcp service"
+	case "PUBLISHED_MCP_SERVICE":
+		return "published mcp service"
+	}
+	return strings.ToLower(refType)
+}
+
+// agentTargetKind is a refs target type in words.
+func agentTargetKind(refType string) string {
+	return strings.ReplaceAll(agentDocumentKind(refType), "_", " ")
+}
