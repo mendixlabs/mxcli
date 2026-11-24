@@ -20,39 +20,10 @@ import (
 // the domain model and computes the baseline from them — there is no GUID an
 // author can write, and therefore none they can get wrong.
 
-// cdcTopic is the Kafka topic a source publishes to. Studio Pro's editor shows
-// it beside the revision, and every segment but the last is a model value: the
-// AppName, the source's ExposedName and the *major* version. So a major bump, an
-// AppName change or a rename starts a NEW topic — downstream, a new table with
-// no history — which is why describe prints it rather than leaving the reader to
-// assemble it.
-func cdcTopic(appName, exposedName string, major int) string {
-	if appName == "" || exposedName == "" {
-		return ""
-	}
-	return fmt.Sprintf("cdc.%s.%s.%d.{space}", appName, exposedName, major)
-}
-
-// sourceVersion is the version the baseline froze for a live source, found
-// through the source's pointer into the baseline, or by exposed name when the
-// pointer is absent. mxbuild does not validate those pointers, so a document
-// with none still has to describe.
-func sourceVersion(svc *model.ChangeDataCaptureService, src *model.ChangeSource) *model.ChangeVersion {
-	if svc.Baseline == nil {
-		return nil
-	}
-	for _, b := range svc.Baseline.Sources {
-		if src.VersionedSourceID != "" && b.ID == src.VersionedSourceID {
-			return b.Version
-		}
-	}
-	for _, b := range svc.Baseline.Sources {
-		if b.ExposedName == src.ExposedName {
-			return b.Version
-		}
-	}
-	return nil
-}
+// The topic a source publishes to and the version the baseline froze for it
+// are model.ChangeDataCaptureService.Topic and .SourceVersion: the catalog
+// stores both (ako/mxcli#2384 A2), and a second copy of the formula here would
+// be a copy that drifts.
 
 func listChangeDataCaptureServices(ctx *ExecContext, inModule string) error {
 	if !ctx.Connected() {
@@ -182,7 +153,7 @@ func describeChangeDataCaptureService(ctx *ExecContext, name ast.QualifiedName) 
 	fmt.Fprintln(out, "-- the baseline below is computed from the domain model, never authored.")
 
 	for _, src := range svc.Sources {
-		v := sourceVersion(svc, src)
+		v := svc.SourceVersion(src)
 		fmt.Fprintln(out)
 		fmt.Fprintf(out, "-- entity %s", src.Entity)
 		if src.ExposedName != "" && src.ExposedName != cdcLastSegment(src.Entity) {
@@ -190,7 +161,7 @@ func describeChangeDataCaptureService(ctx *ExecContext, name ast.QualifiedName) 
 		}
 		fmt.Fprintln(out)
 		if v != nil {
-			fmt.Fprintf(out, "--   revision %s   topic %s\n", v.String(), cdcTopic(svc.AppName, src.ExposedName, v.Major))
+			fmt.Fprintf(out, "--   revision %s   topic %s\n", v.String(), svc.Topic(src))
 		}
 		for _, p := range src.Properties {
 			kind := "attribute"

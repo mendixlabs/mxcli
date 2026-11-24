@@ -441,6 +441,8 @@ func objectTypeToCompletionKind(objectType string) (protocol.CompletionItemKind,
 		return protocol.CompletionItemKindInterface, "database connection"
 	case "BUSINESS_EVENT_SERVICE":
 		return protocol.CompletionItemKindEvent, "business event service"
+	case "CHANGE_DATA_CAPTURE_SERVICE":
+		return protocol.CompletionItemKindEvent, "change data capture service"
 	case "MODULE":
 		return protocol.CompletionItemKindModule, "module"
 	default:

@@ -69,6 +69,7 @@ type CatalogReader interface {
 	ListConsumedRestServices() ([]*model.ConsumedRestService, error)
 	ListPublishedRestServices() ([]*model.PublishedRestService, error)
 	ListBusinessEventServices() ([]*model.BusinessEventService, error)
+	ListChangeDataCaptureServices() ([]*model.ChangeDataCaptureService, error)
 	ListDatabaseConnections() ([]*model.DatabaseConnection, error)
 	ListModuleSettings() ([]*types.ModuleSettings, error)
 
@@ -184,6 +185,7 @@ type Builder struct {
 	enumerationCache        []*model.Enumeration
 	workflowCache           []*workflows.Workflow
 	businessEventCache      []*model.BusinessEventService
+	changeDataCaptureCache  []*model.ChangeDataCaptureService
 	databaseConnectionCache []*model.DatabaseConnection
 	moduleSettingsCache     []*types.ModuleSettings
 }
@@ -492,6 +494,7 @@ func (b *Builder) phases() []buildPhase {
 		{"OData services", b.buildODataServices},
 		{"workflows", b.buildWorkflows},
 		{"business event services", b.buildBusinessEventServices},
+		{"change data capture services", b.buildChangeDataCaptureServices},
 		{"widget definitions", b.buildWidgetDefinitions},
 		{"database connections", b.buildDatabaseConnections},
 		{"jar dependencies", b.buildJarDependencies},
@@ -766,6 +769,7 @@ func (b *Builder) resetCollected() {
 	b.enumerationCache = nil
 	b.workflowCache = nil
 	b.businessEventCache = nil
+	b.changeDataCaptureCache = nil
 	b.databaseConnectionCache = nil
 	b.moduleSettingsCache = nil
 	b.scheduledEventRefs = nil
