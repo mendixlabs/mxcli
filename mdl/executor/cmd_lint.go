@@ -39,6 +39,7 @@ func execLint(ctx *ExecContext, s *ast.LintStmt) error {
 		rules.NewSnippetCallAppearanceRule(),
 		rules.NewAgentWithoutSelectedModelRule(),
 		rules.NewConsumedMCPServiceWithoutEndpointRule(),
+		rules.NewAgentDocumentDanglingReferenceRule(),
 		rules.NewMissingTranslationsRule(),
 		rules.NewRequiredCaptionDefaultLanguageRule(),
 		rules.NewGallerySelectionListenerRule(),
@@ -159,6 +160,7 @@ func listLintRules(ctx *ExecContext) error {
 	lint.AddRule(rules.NewSnippetCallAppearanceRule())
 	lint.AddRule(rules.NewAgentWithoutSelectedModelRule())
 	lint.AddRule(rules.NewConsumedMCPServiceWithoutEndpointRule())
+	lint.AddRule(rules.NewAgentDocumentDanglingReferenceRule())
 	lint.AddRule(rules.NewMissingTranslationsRule())
 	lint.AddRule(rules.NewRequiredCaptionDefaultLanguageRule())
 	lint.AddRule(rules.NewGallerySelectionListenerRule())

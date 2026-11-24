@@ -53,8 +53,19 @@ func (b *Backend) UpdateQualifiedNameInAllUnits(oldName, newName string) (int, e
 		if err := bson.Unmarshal(raw, &doc); err != nil {
 			continue
 		}
-		if replaced, ok := replaceQNInValueWith(doc, rewrite); ok {
-			contents, err := bson.Marshal(replaced)
+		changed := rewriteBlobContents(doc, oldName, newName) > 0
+		blob := isCustomBlobDocument(doc)
+		for i, elem := range doc {
+			if blob && elem.Key == blobContentsKey {
+				continue // rewritten as JSON above, never as an expression
+			}
+			if nv, ok := replaceQNInValueWith(elem.Value, rewrite); ok {
+				doc[i].Value = nv
+				changed = true
+			}
+		}
+		if changed {
+			contents, err := bson.Marshal(doc)
 			if err != nil {
 				return updated, fmt.Errorf("UpdateQualifiedNameInAllUnits: marshal %s: %w", id, err)
 			}
@@ -212,7 +223,18 @@ func docNameOf(doc bson.D) string {
 // replaceQNInDocCounted is replaceQNInValue with a running count of replacements,
 // used by RenameReferences to report per-unit hit counts.
 func replaceQNInDocCounted(doc bson.D, oldName, newName string, count *int) bson.D {
+	blob := isCustomBlobDocument(doc)
 	for i, elem := range doc {
+		// An Agent Editor document names what it uses inside its Contents
+		// JSON; see rewriteBlobContents.
+		if blob && elem.Key == blobContentsKey {
+			if s, ok := elem.Value.(string); ok {
+				rewritten, n := types.RewriteBlobQualifiedNames(s, oldName, newName)
+				*count += n
+				doc[i].Value = rewritten
+				continue
+			}
+		}
 		// A view entity's OQL is the one place a qualified name is stored inside
 		// a sentence rather than as a property of its own, so the whole-string
 		// match below never sees it. Without this, renaming an entity a view
@@ -231,6 +253,41 @@ func replaceQNInDocCounted(doc bson.D, oldName, newName string, count *int) bson
 		doc[i].Value = replaceQNInValueCounted(elem.Value, oldName, newName, count)
 	}
 	return doc
+}
+
+// blobContentsKey is where an Agent Editor document keeps its JSON payload.
+const blobContentsKey = "Contents"
+
+// isCustomBlobDocument reports whether doc is an Agent Editor document.
+func isCustomBlobDocument(doc bson.D) bool {
+	t, _ := docField(doc, "$Type").(string)
+	return t == types.CustomBlobDocumentUnitType
+}
+
+// rewriteBlobContents rewrites the references to oldName inside an Agent
+// Editor document's Contents JSON and returns how many it rewrote
+// (ako/mxcli#2265). The references are {"documentId", "qualifiedName"} pairs
+// inside one string, which the string sweep cannot see; Studio Pro's
+// agent-editor extension re-syncs them, and nothing headless does. The sweep
+// skips Contents: it is JSON, not an expression, and a prompt that mentions a
+// name is text the user wrote.
+func rewriteBlobContents(doc bson.D, oldName, newName string) int {
+	if !isCustomBlobDocument(doc) {
+		return 0
+	}
+	for i, elem := range doc {
+		if elem.Key != blobContentsKey {
+			continue
+		}
+		s, ok := elem.Value.(string)
+		if !ok {
+			return 0
+		}
+		rewritten, n := types.RewriteBlobQualifiedNames(s, oldName, newName)
+		doc[i].Value = rewritten
+		return n
+	}
+	return 0
 }
 
 // oqlPropertyKey is where DomainModels$OqlViewEntitySource keeps the query.
