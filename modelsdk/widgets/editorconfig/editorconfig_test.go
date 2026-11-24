@@ -57,17 +57,18 @@ func TestHiddenRunsTheWidgetsOwnLogic(t *testing.T) {
 	}
 }
 
-// Studio Pro passes "desktop"; a bundle that hides one set in Studio ("web")
-// and another in Studio Pro must give the Studio Pro answer (TreeNode, Maps,
-// the charts).
-func TestHiddenUsesTheStudioProTarget(t *testing.T) {
+// A hide that depends on the target is not one mxbuild enforces: TreeNode hides
+// advancedMode unless the target is "web", and animate (with advancedMode off)
+// when it is — and on 11.16.1 both `advancedMode: true` and `animate: false`
+// build with 0 errors (ako/mxcli#2549). Only what both targets hide counts.
+func TestHiddenRequiresBothTargets(t *testing.T) {
 	js := `exports.getProperties = function (values, props, target) {
-  var drop = target === "web" ? "animate" : "advancedMode";
+  var drop = target === "web" ? ["animate", "always"] : ["advancedMode", "always"];
   props.forEach(function (g) { g.propertyGroups.forEach(function (pg) {
-    pg.properties = pg.properties.filter(function (p) { return p.key !== drop }) }) });
+    pg.properties = pg.properties.filter(function (p) { return drop.indexOf(p.key) < 0 }) }) });
   return props;
 };`
-	ev, err := New(js, []mpk.PropertyDef{{Key: "animate", Type: "boolean"}, {Key: "advancedMode", Type: "boolean"}})
+	ev, err := New(js, []mpk.PropertyDef{{Key: "animate", Type: "boolean"}, {Key: "advancedMode", Type: "boolean"}, {Key: "always", Type: "boolean"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,8 +76,8 @@ func TestHiddenUsesTheStudioProTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got["advancedMode"] || got["animate"] {
-		t.Errorf("hidden %v, want advancedMode only (target %q)", SortedKeys(got), Target)
+	if got["advancedMode"] || got["animate"] || !got["always"] {
+		t.Errorf("hidden %v, want only `always`, the property both targets hide", SortedKeys(got))
 	}
 }
 

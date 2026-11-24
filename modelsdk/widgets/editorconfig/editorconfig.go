@@ -33,10 +33,19 @@ import (
 	"github.com/mendixlabs/mxcli/modelsdk/widgets/mpk"
 )
 
-// Target is the `target` argument Studio Pro passes. Bundles branch on it —
-// TreeNode, Maps and every chart hide one set in Studio ("web") and another in
-// Studio Pro ("desktop") — and only the desktop answer is what mxbuild checks.
-const Target = "desktop"
+// Targets are the `target` values a bundle can be asked about. Bundles branch
+// on it — TreeNode, Maps and every chart hide one set of properties for "web"
+// and another for "desktop".
+//
+// A property counts as hidden only when BOTH answers hide it. Measured on
+// Mendix 11.16.1 with TreeNode 3.4.0, whose bundle hides `advancedMode` unless
+// the target is "web" and, for "web", hides `animate` and the icons unless
+// advancedMode is on: `advancedMode: true`, and `animate: false` with
+// advancedMode off, each pass `mx check` with 0 errors and `mx update-widgets`
+// resets neither — mxbuild enforces neither branch. A hide that does not depend
+// on the target is enforced (Image's iconSize outside icon mode: CE0463).
+// Asking "desktop" alone refused a valid `advancedMode: true` (ako/mxcli#2549).
+var Targets = []string{"web", "desktop"}
 
 // Timeout bounds one getProperties call.
 const Timeout = time.Second
@@ -146,9 +155,21 @@ func (e *Evaluator) Hidden(values map[string]string) (map[string]bool, error) {
 	}
 	e.mu.Unlock()
 
-	hidden, err := e.run(key)
-	if err != nil {
-		return nil, err
+	var hidden map[string]bool
+	for _, target := range Targets {
+		h, err := e.run(key, target)
+		if err != nil {
+			return nil, err
+		}
+		if hidden == nil {
+			hidden = h
+			continue
+		}
+		for k := range hidden {
+			if !h[k] {
+				delete(hidden, k)
+			}
+		}
 	}
 	e.mu.Lock()
 	e.cache[key] = hidden
@@ -166,7 +187,7 @@ const collectKeys = `(function collect(groups, out) {
   return out;
 })`
 
-func (e *Evaluator) run(valuesJSON string) (hidden map[string]bool, err error) {
+func (e *Evaluator) run(valuesJSON, target string) (hidden map[string]bool, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			hidden, err = nil, fmt.Errorf("editorConfig.js: %v", r)
@@ -215,7 +236,7 @@ func (e *Evaluator) run(valuesJSON string) (hidden map[string]bool, err error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := getProperties(goja.Undefined(), values, tree, vm.ToValue(Target))
+	result, err := getProperties(goja.Undefined(), values, tree, vm.ToValue(target))
 	if err != nil {
 		return nil, fmt.Errorf("getProperties: %w", err)
 	}
