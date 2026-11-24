@@ -123,6 +123,7 @@ live distinction is **MPR vs MCP**.
 | **OData Clients / Services** | Y | Y | Y | N | Not wired |
 | **External Entities** | Y | Y | Y | N | Not wired |
 | **Business Events** | Y | Y | Y | P | SHOW/DESCRIBE read the local `.mpr`; DROP via `ped_delete_document` (Studio Pro 11.16+). **CREATE/ALTER blocked** — PED won't create `BusinessEvents$BusinessEventService` (off the create whitelist). The supporting domain model (published-event entities `extends BusinessEvents.PublishedBusinessEvent`, constants) IS creatable. |
+| **Change Data Capture** | Y | Y | Y | N | SHOW/DESCRIBE/CREATE [OR MODIFY]/DROP. Only the live side is authored; the baseline is computed from the domain model, whose GUIDs the runtime keys the database on. Verified against Studio Pro's own document: `create or modify` over it reports **Unchanged**, so the rebuild is byte-identical after normalisation. Over MCP, Studio Pro 11.16.1's PED returns a constructor schema for `ChangeDataCapture$EntityChangeDataCaptureService` (`name`, `appName`, `serviceName`) — the service shell only, not the tracked entities. Needs Mendix 11.10+ to store. |
 | **Navigation** | Y | Y | Y | N | Not wired |
 | **Project Settings** | Y | Y | Y | N | Not wired |
 
@@ -179,6 +180,7 @@ live distinction is **MPR vs MCP**.
 | **Modules** | Y | Y | Y | N | Y | N | all | Y | Y | Y | Y | Y | Y | N | Y | N | N |
 | **Navigation** | Y | Y | Y | - | - | Y | 11 | N | Y | Y | Y | Y | Y | N | N | Y | N |
 | **Business Events** | Y | Y | Y | N | Y | N | 13 | N | Y | N | Y | N | Y | N | Y | Y | N |
+| **Change Data Capture** | Y | Y | Y | Y | Y | N | - | Y | N | N | Y | N | Y | N | Y | Y | N |
 | **Project Settings** | Y | Y | - | - | - | Y | 14 | N | Y | Y | Y | N | Y | N | N | Y | P |
 | **Task Queues** | Y | Y | Y | Y | Y | N | Y | Y | Y | N | N | Y | Y | N | Y | Y | N |
 | **Scheduled Events** | Y | Y | Y | Y | Y | N | Y | Y | Y | Y | N | Y | Y | N | Y | Y | N |

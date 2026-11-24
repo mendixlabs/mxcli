@@ -5,10 +5,10 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"strings"
 	"time"
-
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // ID represents a unique identifier for model elements.
@@ -1618,3 +1618,116 @@ func (u *UnknownElement) GetCaption() string { return u.Caption }
 
 // ActivityType returns the type name (satisfies workflows.WorkflowActivity).
 func (u *UnknownElement) ActivityType() string { return u.TypeName }
+
+// ── Change data capture (ChangeDataCapture$*) ──────────────────────────────
+//
+// A CDC service is two-sided: Sources is the live model, Baseline the frozen
+// copy Studio Pro's "accept changes" writes, and the two are cross-linked by
+// VersionedSourceID / VersionedPropertyID. The baseline identifies what it
+// tracks by **GUID**, which is the identity the runtime keys the database on
+// (CLAUDE.md), not by $ID and not by name — so a reader must surface the GUIDs
+// rather than resolve them away.
+
+// ChangeDataCaptureService represents ChangeDataCapture$EntityChangeDataCaptureService.
+type ChangeDataCaptureService struct {
+	BaseElement
+	ContainerID   ID     `json:"containerId"`
+	Name          string `json:"name"`
+	Documentation string `json:"documentation,omitempty"`
+	Excluded      bool   `json:"excluded,omitempty"`
+	ExportLevel   string `json:"exportLevel,omitempty"`
+	// ServiceName is the document's service name; AppName is the second segment
+	// of every topic it publishes to (cdc.<AppName>.<ExposedName>.<Major>.<space>).
+	ServiceName string `json:"serviceName,omitempty"`
+	AppName     string `json:"appName,omitempty"`
+	// Sources is the live side: what the model says is tracked today.
+	Sources []*ChangeSource `json:"sources,omitempty"`
+	// Baseline is the accepted side, against which mxbuild raises CE1585.
+	Baseline *ChangeBaseline `json:"baseline,omitempty"`
+}
+
+// GetName returns the service's name.
+func (s *ChangeDataCaptureService) GetName() string { return s.Name }
+
+// GetContainerID returns the ID of the containing module.
+func (s *ChangeDataCaptureService) GetContainerID() ID { return s.ContainerID }
+
+// ChangeSource is one tracked entity on the live side
+// (ChangeDataCapture$EntityChangeSource).
+type ChangeSource struct {
+	BaseElement
+	Entity      string `json:"entity"`      // qualified name of the tracked entity
+	ExposedName string `json:"exposedName"` // the topic's third segment
+	// VersionedSourceID points at the matching baseline source in the same unit.
+	VersionedSourceID ID                `json:"versionedSourceId,omitempty"`
+	Properties        []*ChangeProperty `json:"properties,omitempty"`
+}
+
+// ChangeProperty is one tracked member on the live side: an
+// AttributeProperty or an AssociationProperty. Exactly one of Attribute and
+// Association is set, and which it is says what the member is.
+type ChangeProperty struct {
+	BaseElement
+	ExposedName string `json:"exposedName"`
+	Attribute   string `json:"attribute,omitempty"`   // qualified name
+	Association string `json:"association,omitempty"` // qualified name
+	// VersionedPropertyID points at the matching baseline property.
+	VersionedPropertyID ID `json:"versionedPropertyId,omitempty"`
+}
+
+// IsAssociation is true for an AssociationProperty.
+func (p *ChangeProperty) IsAssociation() bool { return p.Association != "" }
+
+// Member is the qualified name of whichever member this property tracks.
+func (p *ChangeProperty) Member() string {
+	if p.Association != "" {
+		return p.Association
+	}
+	return p.Attribute
+}
+
+// ChangeBaseline is the frozen side
+// (ChangeDataCapture$VersionedEntityChangeDataCaptureService).
+type ChangeBaseline struct {
+	BaseElement
+	Version *ChangeVersion           `json:"version,omitempty"`
+	Sources []*VersionedChangeSource `json:"sources,omitempty"`
+}
+
+// VersionedChangeSource is one tracked entity as the baseline froze it. It
+// names the entity by GUID, so a renamed entity still resolves.
+type VersionedChangeSource struct {
+	BaseElement
+	EntityGUID  string                     `json:"entityGuid"`
+	ExposedName string                     `json:"exposedName"`
+	Version     *ChangeVersion             `json:"version,omitempty"`
+	Properties  []*VersionedChangeProperty `json:"properties,omitempty"`
+}
+
+// VersionedChangeProperty is one tracked member as the baseline froze it.
+// AssociatedEntityGUID is the TO entity's GUID for an association and the
+// all-zero GUID for an attribute.
+type VersionedChangeProperty struct {
+	BaseElement
+	ExposedName          string `json:"exposedName"`
+	PropertyGUID         string `json:"propertyGuid"`
+	AssociatedEntityGUID string `json:"associatedEntityGuid,omitempty"`
+	Type                 string `json:"type,omitempty"`
+}
+
+// ChangeVersion is ChangeDataCapture$Version. The major is a topic component,
+// so a major bump starts a new topic — and downstream, a new table with no
+// history.
+type ChangeVersion struct {
+	BaseElement
+	Major int `json:"major"`
+	Minor int `json:"minor"`
+}
+
+// String renders the version the way Studio Pro's editor shows it.
+func (v *ChangeVersion) String() string {
+	if v == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d.%d", v.Major, v.Minor)
+}

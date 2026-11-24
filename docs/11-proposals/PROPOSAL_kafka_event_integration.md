@@ -1,6 +1,6 @@
 ---
 title: Kafka event integration — consumed business events and change data capture
-status: proposed
+status: partial
 date: 2026-11-17
 related:
   - archive/PROPOSAL_business_events_support.md
@@ -43,8 +43,12 @@ BYOK constants but the model contract is the same):
   `businessevents.<channel>.<EventBrokerSpace>`, else the `ChannelName` constant.
   `<channel>` is the `ChannelName` UUID stored in the publisher's definition.
 - **One Kafka consumer per subscribed event**, group id
-  `<projectId>-<serviceName>-<eventName>` (normalised, lowercased; prefixed variants for
-  a space or a config-map prefix). Every subscription reads the whole channel topic and
+  `<projectId>-<space>-<serviceName>-<eventName>` (normalised, lowercased). **Measured**
+  against a running app (see "Measured against a running app" below), which corrects an
+  earlier reading of this as `<projectId>-<serviceName>-<eventName>` with the space only
+  as a "prefixed variant": the space is a segment of the id, between the project id and
+  the service name. Observed:
+  `7844f052-e1ef-4335-a833-4fe39c4b63a5-local-orderseventservice-orderplaceevent`. Every subscription reads the whole channel topic and
   filters on CloudEvent `type == eventName` (`shouldCallMicroFlow`), logging others as
   skipped. App instances share a group, so an event is handled once per app.
 - `enable.auto.commit=false`; `auto.offset.reset` earliest/latest from "subscribe from
@@ -87,6 +91,56 @@ check rule in §5.1. (This answers §9.5.)
 constant instead routes *every* message of the app to that one topic — simpler against a
 local broker, at the cost of one table for all messages. Either way mxcli cannot read a
 publisher's channel id today; see §5.4.
+
+## 1a. Measured against a running app
+
+Everything in §3–§5 was read off fixtures. This section is the one part that was
+observed end to end: `ako/TestApp` at `619864b` (the commit the §2 fixtures came from),
+Mendix 11.16.1, booted with `mxcli run --local --db-type hsqldb` against a
+DuckGraphLake broker on 127.0.0.1:9092, with `BusinessEvents.ServerUrl` and
+`BusinessEvents.EventBrokerSpace=local` supplied through `mxcli constant set`. One
+Customer and one Order were created and committed by a microflow, and the rows arrived
+in the lake. Both halves of the module ran: the CDC publisher and the business event
+consumer.
+
+**The topic's second segment is the CDC document's `AppName`, not the module name.**
+The runtime published to `cdc.TestApp.Customer.1.local` and `cdc.TestApp.Order.1.local`
+for entities in module `CdcPublish`. §5.2's template was right and `describe`'s computed
+topic matches the runtime exactly; what this corrects is a *fixture producer* that had
+used the module name and so produced to `cdc.CdcPublish.*`. Only a runtime can settle
+this: a hand-built producer reproduces whatever its author believed.
+
+**The envelope matches the fixture's** in every comparable field — `op`, `connector`
+(`mendix_event_broker_cdc`), `version` (`11.16.1`), `snapshot`, `sequence`, Decimal at
+scale 8, an association as an array of object ids, and no `id` property beyond the object
+id itself (§5.2's claim). `tx_id` is a UUID per transaction, not a synthetic label.
+
+**Object-id type codes are not a tidy sequence.** Observed `Order` id
+`281474976710839` (type code **1**) and `Customer` id `16888498602639508` (type code
+**60**) — adjacent entities in one module, codes 1 and 60. They are distinct per entity,
+which is what a consumer needs to resolve an association's target, but anything that
+assumes small or contiguous codes is wrong. A fixture using plain small integers makes
+every entity share code 0, and DuckGraphLake then resolves an association to the wrong
+entity.
+
+**CDC works on HSQLDB.** The publisher logs
+`SystemPropertyManager.supportsUpdate is false; snapshot overlap protection is degraded`
+and publishes normally; it needs no PostgreSQL for a dev loop. The snapshot decision is
+remembered per revision — `2 entities to snapshot` on a first boot against an empty
+database, `skipping 2 unchanged` on the next — so a snapshot missed because the data was
+created before the app first ran is not re-sent (DuckGraphLake's `help cdc` says the
+same).
+
+**The business event channel id reaches the broker as the topic.** The consumer
+subscribed to `businessevents.f2477dc90f714d69bb12df0df1ee9cce.local`, where the 32-hex
+id is what `list business events` and `export contract` report for the publisher. §1's
+topic rule is therefore measured, not inferred.
+
+**Driving it headlessly:** the app's demo-user picker cannot be clicked by Playwright
+(the container is transformed; the click is refused as off-viewport and a dispatched DOM
+click does not take), so the data was created by authoring a seed microflow and a no-auth
+published REST service **with mxcli**, restarting, and POSTing to it. For a login,
+`create_admin_user` on the m2ee admin port works. Mendix 11.16.1 needs **JDK 25**.
 
 ## 2. Fixtures
 
@@ -348,6 +402,7 @@ $$
 | handler shape | microflow has exactly one parameter, of the consumed entity |
 | module present | the `BusinessEvents` marketplace module is in the project |
 | module started | `BusinessEvents.StartupBusinessEvents` is reachable from the configured after-startup microflow (§1) — without it the app consumes nothing, silently, and every other check passes |
+| broker configured | `BusinessEvents.ServerUrl` is non-blank, and at least one of `BusinessEvents.ChannelName` / `BusinessEvents.EventBrokerSpace` is set. **Measured**: with either missing the app does not merely consume nothing, it **fails to boot** — `StartupBusinessEvents` throws in the after-startup action and the runtime shuts down (`Resolved value for constant: BusinessEvents.ServerUrl was not found or blank`, then `Constant BusinessEvents.ChannelName or BusinessEvents.EventBrokerSpace should be set`). Both are per-environment values, so the rule is a warning on an empty *default* rather than an error: `mxcli constant set` or `--constant` supplies them for a dev run |
 
 ### 5.2 CDC service (part C)
 
@@ -528,6 +583,13 @@ reproduces the `business events service should have definitions` exception (§6)
 
 ## 6. Measured `mx check` behaviour (mxbuild 11.16.1)
 
+**An absent baseline crashes mxbuild rather than reporting CE1585.** Measured while
+building part C: a document whose `Baseline` is omitted entirely makes `mx check` exit 1
+with `System.AggregateException: ... The given key '<guid>' was not present in the
+dictionary.` CE1585 is what an *inconsistent* baseline reports; a *missing* one is not
+handled. This matters for the control in §8 — the test asserts a non-zero exit and the
+dictionary message, not CE1585.
+
 On a copy of the fixture project; each variant mutates one unit's BSON. Control: the
 unmodified copy → **0 errors**.
 
@@ -557,6 +619,32 @@ entities from `testapp-describe.mdl`), mutate with a few lines of Go over
 |---|---|---|
 | A1 consumer describe/list | `mdl/executor/cmd_businessevents.go` | fix the lossy describe first; it is a data-loss bug on round-trip (ako/mxcli#2381). Also surface the publisher's channel id (§5.4) |
 | A2 CDC read | new `mdl/backend/modelsdk/cdc_read.go`, `mdl/backend/service.go` (interface), mock, `mdl/executor/cmd_cdc.go`, catalog builder + tables, registry | gen types exist; add the 4 missing properties (§4) first so reads see them |
+
+**Done so far:** A1 (consumer describe/list, channel id), B1–B3 and E1 are merged.
+C1–C3 are implemented: `create [or modify] / drop change data capture service`, the live
+side authored and the baseline computed from the domain model's GUIDs, with the version
+policy below. The strongest check available says the writer is right: `create or modify`
+over **Studio Pro's own** `OrdersCDCService` reports **Unchanged**, so mxcli's rebuild is
+byte-identical to Studio Pro's after normalisation — GUIDs, property sets, both list
+markers and the cross-pointers included. An MDL-authored service also passes `mx check`
+with 0 errors, and the control (baseline omitted) fails it.
+
+Two shapes that only a document could have told us: the live and baseline sides use
+**different list markers** (live 3, baseline 2), and the service carries `Excluded` even
+at its default — the shape test caught the second rather than a reviewer.
+A2 is merged for `LIST` / `DESCRIBE` — the gen properties it needed landed first
+(ako/mxcli#2395). Still open from A2: the catalog tables
+(`change_data_capture_services` + sources), the `RefKind`s that would let
+`show callers` and impact analysis see CDC exposure, and the
+`CatalogSchemaVersion` bump. B4 (check rules) and all of C and D are untouched.
+
+Measured while implementing A2, and worth keeping: the storage layer refuses the
+document outright below 11.10 and names the properties and their versions
+(`Baseline` 11.10.0+, `ServiceName` 11.8.0+, `EntityChangeSource.ExposedName` and
+`.Properties` 11.9.0+), so §5.2's version gate needs no separate check — it is
+already enforced where it matters. And the topic template computed from the model
+reproduces the two values this document records from Studio Pro's editor exactly:
+`cdc.TestApp.Order.1.{space}` and `cdc.TestApp.Customer.1.{space}`.
 | B1 grammar/AST | `MDLParser.g4` (`Contract`/`ContractFile`/`ContractFrom` keys, `DOLLAR_STRING` as a property value, `consume` body item), `ast_businessevents.go`, `visitor_businessevents.go` | |
 | B2 AsyncAPI renderer | new `mdl/businessevents/asyncapi.go` | golden test = `asyncapi-OrdersEventService.yaml`, byte-for-byte |
 | B3 write | `mdl/backend/modelsdk/business_event_write.go` | `Definition` null, `Document`, subscribe ops; identity carry by message name |
@@ -608,7 +696,10 @@ so CDC over `--mcp` is likely feasible as a follow-up — it needs a live Studio
   proves the test detects the defect).
 - **Runtime (optional, Linux):** with a local Kafka-compatible broker (§9), produce an
   event with the module's CloudEvents headers and assert the handler microflow ran — the
-  only test that proves an authored consumer actually consumes.
+  only test that proves an authored consumer actually consumes. **The CDC half of this is
+  done** (§1a): a running app published real change events to the broker, which is what
+  corrected the topic's second segment. The consumer half — injecting an event and
+  asserting the handler ran — is still open.
 
 ## 9. Needs Studio Pro later (not blocking)
 
@@ -629,7 +720,16 @@ Studio Pro export can settle.
    `ContractFrom` (`Contract` / `ContractFile` are unaffected).
 2. CDC version policy (§5.2): add, rename and remove a property in Studio Pro, accept,
    and record the versions it picks.
-3. CDC `Type` for Integer/Boolean/DateTime/Enumeration/Binary/AutoNumber/HashString.
+3. ~~CDC `Type` for Integer/Boolean/DateTime/Enumeration/Binary/AutoNumber/HashString.~~
+   **Answered — no Studio Pro export needed.** mxbuild ships Studio Pro's CDC editor as
+   readable JavaScript (`modeler/ide-client/change-data-capture-editor/editor.js`) and it
+   carries the mapping as an explicit switch on the attribute type's `$Type`:
+   Binary/Boolean/DateTime/Decimal to themselves, Enumeration to `Enumeration`, Integer to
+   `Int32`, Long and AutoNumber to `Int64`, String and HashedString to `String`, an
+   association to `ArrayOfInt64`. Those ten cases are every Mendix attribute type, so the
+   editor's `default: throw` is unreachable for a valid model and the mapping is total.
+   mxcli's own `Date` spelling stores as `DateTimeAttributeType` ("Mendix has no date-only
+   type"), so it is a `DateTime` too. Implemented in `cdcTypeForAttribute`.
 4. Whether Studio Pro (not just mxbuild) opens a document with the pointers present but
    pointing at mxcli-minted baseline `$ID`s — expected yes; confirm once.
 5. ~~What registers the subscriptions at startup.~~ **Answered — see §1.**

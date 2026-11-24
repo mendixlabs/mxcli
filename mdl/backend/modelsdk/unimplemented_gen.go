@@ -104,6 +104,10 @@ func (unimplemented) CreateBusinessEventService(_ *model.BusinessEventService) e
 	return errUnimplemented("CreateBusinessEventService")
 }
 
+func (unimplemented) CreateChangeDataCaptureService(_ *model.ChangeDataCaptureService) error {
+	return errUnimplemented("CreateChangeDataCaptureService")
+}
+
 func (unimplemented) CreateConstant(_ *model.Constant) error {
 	return errUnimplemented("CreateConstant")
 }
@@ -263,6 +267,10 @@ func (unimplemented) DeleteAttribute(_ model.ID, _ model.ID, _ model.ID) error {
 
 func (unimplemented) DeleteBusinessEventService(_ model.ID) error {
 	return errUnimplemented("DeleteBusinessEventService")
+}
+
+func (unimplemented) DeleteChangeDataCaptureService(_ model.ID) error {
+	return errUnimplemented("DeleteChangeDataCaptureService")
 }
 
 func (unimplemented) DeleteConstant(_ model.ID) error {
@@ -649,6 +657,11 @@ func (unimplemented) ListBuildingBlocks() ([]*pages.BuildingBlock, error) {
 func (unimplemented) ListBusinessEventServices() ([]*model.BusinessEventService, error) {
 	var r0 []*model.BusinessEventService
 	return r0, errUnimplemented("ListBusinessEventServices")
+}
+
+func (unimplemented) ListChangeDataCaptureServices() ([]*model.ChangeDataCaptureService, error) {
+	var r0 []*model.ChangeDataCaptureService
+	return r0, errUnimplemented("ListChangeDataCaptureServices")
 }
 
 func (unimplemented) ListConstants() ([]*model.Constant, error) {
@@ -1173,6 +1186,10 @@ func (unimplemented) UpdateAttribute(_ model.ID, _ model.ID, _ *domainmodel.Attr
 
 func (unimplemented) UpdateBusinessEventService(_ *model.BusinessEventService) error {
 	return errUnimplemented("UpdateBusinessEventService")
+}
+
+func (unimplemented) UpdateChangeDataCaptureService(_ *model.ChangeDataCaptureService) error {
+	return errUnimplemented("UpdateChangeDataCaptureService")
 }
 
 func (unimplemented) UpdateConstant(_ *model.Constant) error {

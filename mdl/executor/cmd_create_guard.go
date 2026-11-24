@@ -179,6 +179,10 @@ func createGuardTargetOf(stmt ast.Statement) (createGuardTarget, bool) {
 		return doc("odata service", s.Name, func(ctx *ExecContext) (any, error) { return ctx.Backend.ListPublishedODataServices() })
 	case *ast.CreateBusinessEventServiceStmt:
 		return doc("business event service", s.Name, func(ctx *ExecContext) (any, error) { return ctx.Backend.ListBusinessEventServices() })
+	case *ast.CreateChangeDataCaptureServiceStmt:
+		return doc("change data capture service", s.Name, func(ctx *ExecContext) (any, error) {
+			return ctx.Backend.ListChangeDataCaptureServices()
+		})
 	case *ast.CreateWorkflowStmt:
 		return doc("workflow", s.Name, func(ctx *ExecContext) (any, error) { return ctx.Backend.ListWorkflows() })
 	case *ast.CreateImageCollectionStmt:

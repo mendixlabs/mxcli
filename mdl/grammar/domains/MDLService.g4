@@ -428,6 +428,30 @@ odataHeaderEntry
 // property list and binds events from it (`consume …`). Both shapes are
 // accepted here and told apart in the visitor, which refuses a statement that
 // mixes them — a parse error could not say which half to drop (#2384 §5.1).
+// Entity change data capture (part C of PROPOSAL_kafka_event_integration.md).
+//
+// The members of a source are named, not typed: each resolves to an attribute or
+// an association of that entity, and its CDC type is derived from the domain
+// model. `id` is implicit and must NOT be authored -- Studio Pro's editor shows
+// it as a checked, disabled row but does not store it.
+//
+// The baseline is computed, never authored: it is what Studio Pro's "accept
+// changes" freezes, and it carries the GUIDs the runtime keys the database on.
+createChangeDataCaptureServiceStatement
+    : CHANGE DATA CAPTURE SERVICE ifNotExists? qualifiedName
+      (LPAREN odataPropertyAssignment (COMMA odataPropertyAssignment)* RPAREN)?
+      LBRACE cdcSourceDef+ RBRACE
+    ;
+
+cdcSourceDef
+    : ENTITY qualifiedName (AS STRING_LITERAL)?
+      LPAREN cdcMemberDef (COMMA cdcMemberDef)* RPAREN SEMICOLON
+    ;
+
+cdcMemberDef
+    : identifierOrKeyword (AS STRING_LITERAL)?
+    ;
+
 createBusinessEventServiceStatement
     : BUSINESS EVENT SERVICE ifNotExists? qualifiedName
       LPAREN odataPropertyAssignment (COMMA odataPropertyAssignment)* RPAREN
