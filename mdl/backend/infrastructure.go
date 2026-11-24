@@ -58,6 +58,12 @@ type RawUnitBackend interface {
 	// missing from its output is missing on purpose, and carrying it back would
 	// undo a deliberate deletion.
 	UpdateRawUnitOwningTranslations(unitID string, contents []byte) error
+	// UpdateRawUnitPatch is UpdateRawUnit for a write that patched the stored
+	// bytes in place rather than rebuilding them: it carries every stored $ID,
+	// translation and loop box it means to keep, so none is carried back.
+	// `layout flows` is one (ako/mxcli#2564): carrying the stored loop sizes
+	// kept every box it had just fitted to its body at the old size.
+	UpdateRawUnitPatch(unitID string, contents []byte) error
 
 	// UpdateRawUnitOwningStorageGUIDs is UpdateRawUnit for a write that
 	// deliberately transplants storage GUIDs onto elements that keep their $ID.

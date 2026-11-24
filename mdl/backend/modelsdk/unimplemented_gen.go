@@ -1317,6 +1317,10 @@ func (unimplemented) UpdateRawUnitOwningTranslations(_ string, _ []uint8) error 
 	return errUnimplemented("UpdateRawUnitOwningTranslations")
 }
 
+func (unimplemented) UpdateRawUnitPatch(_ string, _ []uint8) error {
+	return errUnimplemented("UpdateRawUnitPatch")
+}
+
 func (unimplemented) UpdateRegularExpression(_ *model.RegularExpression) error {
 	return errUnimplemented("UpdateRegularExpression")
 }

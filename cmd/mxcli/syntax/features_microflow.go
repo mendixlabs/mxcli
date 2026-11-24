@@ -1022,7 +1022,16 @@ func init() {
 			"Mendix stores no waypoints — a flow's shape is two control vectors, each a\n" +
 			"pixel offset from its end of the line. (0, 0) at both ends is straight.\n" +
 			"@position on a split belongs to the SPLIT, so its end-if join has its own\n" +
-			"annotation. Container Size is still computed, not authorable.\n\n" +
+			"annotation.\n\n" +
+			"Inside a LOOP or WHILE body, @position is in the LOOP BOX's coordinates,\n" +
+			"from its top-left corner, not the canvas's: Mendix stores a body node that\n" +
+			"way, and describe prints it so. A box left without @size is sized to reach\n" +
+			"its body (the body's right and bottom edges plus 50px), so a body written in\n" +
+			"canvas coordinates under a loop at x = 1200 makes a box over 1200px wide\n" +
+			"that covers its neighbours (ako/mxcli#2564). The first body activity sits\n" +
+			"at (210, height / 2). create or modify moves a body node to a changed\n" +
+			"@position and fits the box to the moved body, or to the @size it states;\n" +
+			"`mxcli layout flows` refits every box.\n\n" +
 			"WITHOUT @position the builder places everything. The main line runs left to\n" +
 			"right and wraps onto a new row past 2880px; the line joining two rows leaves\n" +
 			"the bottom of one and arrives on top of the next. A guard (if … return; end\n" +

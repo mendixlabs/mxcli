@@ -88,6 +88,13 @@ func (m *MockBackend) UpdateRawUnit(unitID string, contents []byte) error {
 	return nil
 }
 
+func (m *MockBackend) UpdateRawUnitPatch(unitID string, contents []byte) error {
+	if m.UpdateRawUnitPatchFunc != nil {
+		return m.UpdateRawUnitPatchFunc(unitID, contents)
+	}
+	return m.UpdateRawUnit(unitID, contents)
+}
+
 func (m *MockBackend) UpdateRawUnitOwningTranslations(unitID string, contents []byte) error {
 	if m.UpdateRawUnitOwningTranslationsFunc != nil {
 		return m.UpdateRawUnitOwningTranslationsFunc(unitID, contents)

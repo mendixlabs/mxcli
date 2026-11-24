@@ -49,6 +49,12 @@ func (b *Backend) UpdateRawUnitOwningTranslations(unitID string, contents []byte
 	return b.writer.UpdateRawUnitOwningTranslations(unitID, contents)
 }
 
+// UpdateRawUnitPatch writes a unit whose contents patch the stored bytes in
+// place (canon.ContentsOwnElementIDs, canon.ContentsOwnTranslations).
+func (b *Backend) UpdateRawUnitPatch(unitID string, contents []byte) error {
+	return b.writer.UpdateRawUnitPatch(unitID, contents)
+}
+
 // UpdateRawUnitOwningStorageGUIDs writes a unit whose contents deliberately move
 // storage GUIDs — see the interface for why that needs saying out loud.
 func (b *Backend) UpdateRawUnitOwningStorageGUIDs(unitID string, contents []byte) error {
