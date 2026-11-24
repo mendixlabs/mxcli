@@ -106,8 +106,11 @@ example cannot know a name from your project.
 
 **The example is narrowed by the widget's own editor rules.** A property the
 widget hides under the configuration the example picked is left out, so what you
-see is what that configuration actually supports. The footer reports how many of
-the widget's hide-rules were recognised; an unrecognised rule never prunes.
+see is what that configuration actually supports. With the widget's `.mpk` in the
+project, which properties are hidden is decided by running its `editorConfig.js`,
+as Studio Pro does. The listed rules are the ones mxcli could also read from the
+source; the footer reports how many, and those are what an object-list item's
+properties still go by.
 
 The count is of **hide-calls whose condition was read**, which is not the same
 as every property being accounted for. A widget editor often builds one call's

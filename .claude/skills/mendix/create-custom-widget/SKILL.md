@@ -15,13 +15,13 @@ description: "Build a Mendix pluggable widget from scratch with React and TypeSc
 | 118-252 | Step 2: Define Widget Properties (widget.xml) |
 | 253-313 | Step 3: Write the Entry Component |
 | 314-339 | Step 4: Write the React Component |
-| 340-368 | Step 5: Editor Config (optional but recommended) |
-| 369-380 | Step 6: CSS Styles |
-| 381-390 | Step 7: Build |
-| 391-398 | Step 8: Install to Mendix Project |
-| 399-422 | Common Widget Patterns |
-| 423-435 | Checklist Before Build |
-| 436-443 | Troubleshooting |
+| 340-376 | Step 5: Editor Config (optional but recommended) |
+| 377-388 | Step 6: CSS Styles |
+| 389-398 | Step 7: Build |
+| 399-406 | Step 8: Install to Mendix Project |
+| 407-430 | Common Widget Patterns |
+| 431-443 | Checklist Before Build |
+| 444-451 | Troubleshooting |
 
 <!-- /skill-index -->
 # Create Custom Pluggable Widget
@@ -365,6 +365,14 @@ export function getProperties(
     return defaultProperties;
 }
 ```
+
+To hide a property, remove it from the returned tree, with the toolkit's
+`hidePropertyIn` or a helper of your own. mxcli runs this function itself, the way
+Studio Pro does (target `"desktop"`), to decide which properties `check` and `exec`
+treat as hidden. A hidden property must hold its default, or the build fails with
+CE0463. So keep the compiled bundle self-contained (no `require` at load time) and
+the function synchronous: one that throws or takes longer than a second is ignored,
+and mxcli falls back to the rules it can read from the source.
 
 ## Step 6: CSS Styles
 

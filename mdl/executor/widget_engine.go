@@ -469,9 +469,10 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	// it is the template's captured configuration — the values an unmapped
 	// property will actually be stored with. A rule keyed on one of those has to
 	// be evaluated against them; see hiddenUnnamedProperties.
+	storedValues := builder.PrimitiveValues()
 	hiddenSkip := e.hiddenUnnamedProperties(def, w,
 		widgetPropertyDefaults(e.pageBuilder.getProjectPath(), def.WidgetID),
-		builder.PrimitiveValues())
+		storedValues)
 	for _, mapping := range mappings {
 		if reset, hidden := hiddenSkip[strings.ToLower(mapping.PropertyKey)]; hidden {
 			if reset != "" && mapping.Operation == "primitive" {
@@ -507,7 +508,9 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	//
 	// The set of properties that must be default-valued is the widget's to decide,
 	// not mxcli's; making it a subset of what MDL has words for was the mistake.
-	for propKey, reset := range unmappedHiddenResets(mappings, e.visibilityRules(def), hiddenSkip) {
+	scriptValues, _ := widgetValueMap(w, def)
+	skipRules := e.evaluatedRules(def, configurationValues(storedValues, scriptValues))
+	for propKey, reset := range unmappedHiddenResets(mappings, skipRules, hiddenSkip) {
 		resetToDeclaredDefault(builder, propertyTypeIDs, propKey, reset)
 	}
 
@@ -873,10 +876,12 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	// generator skips — lift them on the fly from the installed .mpk's
 	// editorConfig.js (#574 Phase 2), so version-specific applicability is
 	// honoured without a hand-maintained table.
-	visibility := def.PropertyVisibility
-	if len(visibility) == 0 {
-		visibility = resolveWidgetVisibilityRules(e.pageBuilder.getProjectPath(), def.WidgetID)
-	}
+	// Asked of the FINAL configuration — every mapping applied — and answered by
+	// the package's own getProperties where it runs (ako/mxcli#1776): a widget
+	// with its own hide helper had no lifted rule, so its hidden text templates
+	// kept their default text, CE0463 on a property the script never set
+	// (ako/mxcli#2507).
+	visibility := e.evaluatedRules(def, builder.PrimitiveValues())
 	if len(visibility) > 0 {
 		builder.ApplyPropertyVisibility(visibility)
 	}
@@ -948,11 +953,11 @@ func (e *PluggableWidgetEngine) isPrimaryAttributeMapping(mapping PropertyMappin
 // Rules come from the .def.json, falling back to a live lift from the installed
 // .mpk (the same two sources the visibility application uses).
 func (e *PluggableWidgetEngine) hiddenUnnamedProperties(def *WidgetDefinition, w *ast.WidgetV3, defaults, stored map[string]string) map[string]string {
-	rules := e.visibilityRules(def)
+	values, explicit := widgetValueMap(w, def)
+	rules := e.evaluatedRules(def, configurationValues(stored, values))
 	if len(rules) == 0 {
 		return nil
 	}
-	values, explicit := widgetValueMap(w, def)
 	out := map[string]string{}
 	for _, rule := range rules {
 		if rule.Nested() || rule.HiddenWhen == nil {
@@ -961,6 +966,14 @@ func (e *PluggableWidgetEngine) hiddenUnnamedProperties(def *WidgetDefinition, w
 		key := strings.ToLower(rule.PropertyKey)
 		if explicit[key] {
 			continue // named by the script — MDL-WIDGET10's business, not ours
+		}
+		if rule.Evaluated() {
+			// The package's own answer for this configuration: no condition to
+			// resolve (ako/mxcli#1776).
+			if rule.HiddenWhen.Operator == types.OperatorAlways {
+				out[key] = defaults[defaultsKey("", rule.PropertyKey)]
+			}
+			continue
 		}
 		condKey := strings.ToLower(rule.HiddenWhen.PropertyKey)
 		condVal, known := values[condKey]
@@ -1038,7 +1051,39 @@ func (e *PluggableWidgetEngine) visibilityRules(def *WidgetDefinition) []types.W
 	if len(def.PropertyVisibility) > 0 {
 		return def.PropertyVisibility
 	}
-	return resolveWidgetVisibilityRules(e.pageBuilder.getProjectPath(), def.WidgetID)
+	return resolveWidgetVisibilityRules(e.engineProjectPath(), def.WidgetID)
+}
+
+// engineProjectPath is the project the engine builds into, "" when it has none
+// (a unit test's bare engine).
+func (e *PluggableWidgetEngine) engineProjectPath() string {
+	if e == nil || e.pageBuilder == nil {
+		return ""
+	}
+	return e.pageBuilder.getProjectPath()
+}
+
+// evaluatedRules is the widget's visibility for one configuration: the lifted
+// rules, with the top-level ones replaced by the answer of running the
+// installed package's getProperties on values (ako/mxcli#1776) when it runs.
+func (e *PluggableWidgetEngine) evaluatedRules(def *WidgetDefinition, values map[string]string) []types.WidgetVisibilityRule {
+	return evaluatedVisibilityRules(e.engineProjectPath(), def.WidgetID, e.visibilityRules(def), values)
+}
+
+// configurationValues is what a property-visibility question is asked about:
+// the template's captured values, overridden by what the statement resolves to.
+// Keys of both may differ in case; the evaluator compares them case-insensitively.
+func configurationValues(stored, script map[string]string) map[string]string {
+	out := make(map[string]string, len(stored)+len(script))
+	for k, v := range stored {
+		out[strings.ToLower(k)] = v
+	}
+	for k, v := range script {
+		if v != "" {
+			out[strings.ToLower(k)] = v
+		}
+	}
+	return out
 }
 
 // unmappedHiddenResets returns the hidden properties that the property-mapping
