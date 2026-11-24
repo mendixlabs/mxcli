@@ -81,6 +81,7 @@ const (
 	ShowBusinessEventServices        // SHOW BUSINESS EVENT SERVICES [IN module]
 	ShowBusinessEventClients         // SHOW BUSINESS EVENT CLIENTS [IN module]
 	ShowBusinessEvents               // SHOW BUSINESS EVENTS [IN module] (individual messages)
+	ShowChangeDataCaptureServices    // SHOW CHANGE DATA CAPTURE SERVICES [IN module]
 	ShowSettings                     // SHOW SETTINGS
 	ShowFragments                    // SHOW FRAGMENTS
 	ShowDatabaseConnections          // SHOW DATABASE CONNECTIONS [IN module]
@@ -213,6 +214,8 @@ func (t ShowObjectType) String() string {
 		return "BUSINESS EVENT CLIENTS"
 	case ShowBusinessEvents:
 		return "BUSINESS EVENTS"
+	case ShowChangeDataCaptureServices:
+		return "CHANGE DATA CAPTURE SERVICES"
 	case ShowSettings:
 		return "SETTINGS"
 	case ShowFragments:
@@ -351,6 +354,7 @@ const (
 	DescribeNavigation                  // DESCRIBE NAVIGATION [profile]
 	DescribeWorkflow                    // DESCRIBE WORKFLOW Module.Name
 	DescribeBusinessEventService        // DESCRIBE BUSINESS EVENT SERVICE Module.Name
+	DescribeChangeDataCaptureService    // DESCRIBE CHANGE DATA CAPTURE SERVICE Module.Name
 	DescribeDatabaseConnection          // DESCRIBE DATABASE CONNECTION Module.Name
 	DescribeSettings                    // DESCRIBE SETTINGS
 	DescribeFragment                    // DESCRIBE FRAGMENT Name
@@ -430,6 +434,8 @@ func (t DescribeObjectType) String() string {
 		return "WORKFLOW"
 	case DescribeBusinessEventService:
 		return "BUSINESS EVENT SERVICE"
+	case DescribeChangeDataCaptureService:
+		return "CHANGE DATA CAPTURE SERVICE"
 	case DescribeDatabaseConnection:
 		return "DATABASE CONNECTION"
 	case DescribeSettings:

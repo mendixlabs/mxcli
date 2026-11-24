@@ -136,6 +136,13 @@ func (m *MockBackend) ListBusinessEventServices() ([]*model.BusinessEventService
 	return nil, nil
 }
 
+func (m *MockBackend) ListChangeDataCaptureServices() ([]*model.ChangeDataCaptureService, error) {
+	if m.ListChangeDataCaptureServicesFunc != nil {
+		return m.ListChangeDataCaptureServicesFunc()
+	}
+	return nil, nil
+}
+
 func (m *MockBackend) CreateBusinessEventService(svc *model.BusinessEventService) error {
 	if m.CreateBusinessEventServiceFunc != nil {
 		return m.CreateBusinessEventServiceFunc(svc)

@@ -124,6 +124,8 @@ func execShow(ctx *ExecContext, s *ast.ShowStmt) error {
 		return listBusinessEventClients(ctx, s.InModule)
 	case ast.ShowBusinessEvents:
 		return listBusinessEvents(ctx, s.InModule)
+	case ast.ShowChangeDataCaptureServices:
+		return listChangeDataCaptureServices(ctx, s.InModule)
 	case ast.ShowSettings:
 		return listSettings(ctx)
 	case ast.ShowLanguages:
@@ -300,6 +302,8 @@ func describeByKind(ctx *ExecContext, s *ast.DescribeStmt) error {
 		return describeWorkflow(ctx, s.Name)
 	case ast.DescribeBusinessEventService:
 		return describeBusinessEventService(ctx, s.Name)
+	case ast.DescribeChangeDataCaptureService:
+		return describeChangeDataCaptureService(ctx, s.Name)
 	case ast.DescribeDatabaseConnection:
 		return describeDatabaseConnection(ctx, s.Name)
 	case ast.DescribeSettings:
@@ -424,6 +428,8 @@ func describeObjectTypeLabel(t ast.DescribeObjectType) string {
 		return "workflow"
 	case ast.DescribeBusinessEventService:
 		return "businesseventservice"
+	case ast.DescribeChangeDataCaptureService:
+		return "changedatacaptureservice"
 	case ast.DescribeDatabaseConnection:
 		return "databaseconnection"
 	case ast.DescribeSettings:

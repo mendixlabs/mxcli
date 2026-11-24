@@ -742,6 +742,11 @@ func (unsupportedBackend) ListBusinessEventServices() (r0 []*model.BusinessEvent
 	return
 }
 
+func (unsupportedBackend) ListChangeDataCaptureServices() (r0 []*model.ChangeDataCaptureService, err1 error) {
+	err1 = errUnsupported("ListChangeDataCaptureServices")
+	return
+}
+
 func (unsupportedBackend) ListConstants() (r0 []*model.Constant, err1 error) {
 	err1 = errUnsupported("ListConstants")
 	return
