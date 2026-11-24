@@ -18,12 +18,12 @@ description: "Write and run MDL-based microflow tests with `mxcli test` — anno
 | 249-272 | Running Tests |
 | 273-471 | How It Works |
 | 472-510 | Check a test file before you run it |
-| 511-632 | Writing Good Tests |
-| 633-647 | Test File Organization |
-| 648-660 | Interpreting Failures |
-| 661-682 | CI Integration |
-| 683-689 | Related Skills |
-| 690-694 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
+| 511-633 | Writing Good Tests |
+| 634-648 | Test File Organization |
+| 649-661 | Interpreting Failures |
+| 662-683 | CI Integration |
+| 684-690 | Related Skills |
+| 691-695 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
 
 <!-- /skill-index -->
 # Test Microflows Skill
