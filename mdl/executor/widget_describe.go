@@ -87,6 +87,15 @@ func DescribeWidget(arg, projectPath string) (*WidgetDescription, error) {
 		}
 	}
 	desc.defDefaults = definitionDefaults(def)
+	if desc.Source == "project .mpk" {
+		// The package's own answer for the configuration the example writes
+		// (ako/mxcli#1776): it sees what the lifted rules cannot, a guard on
+		// Studio's `target` included.
+		if hidden, ok := evaluateHiddenProperties(projectPath, widgetID, exampleValues(desc)); ok {
+			desc.evaluatedHidden, desc.evaluated = hidden, true
+			desc.RuleCoverage = evaluatedCoverageText(desc.RuleCoverage)
+		}
+	}
 	desc.Example, desc.OmittedFromExample = buildUsageExample(desc)
 	return &desc, nil
 }
@@ -152,6 +161,26 @@ type WidgetDescription struct {
 	// defaultValue there, so gallery's `itemSelection` looked indeterminable
 	// and the example emitted the `keepSelection` that "Single" hides.
 	defDefaults map[string]string
+
+	// evaluatedHidden is what running the package's getProperties hides at the
+	// example's configuration, valid when evaluated is set. It decides
+	// hiddenUnder outright: it is the editor's own answer.
+	evaluatedHidden map[string]bool
+	evaluated       bool
+}
+
+// evaluatedCoverageText is the coverage note once the package's getProperties
+// has run: the listed rules are what could be READ from the source, and are no
+// longer the limit of what check and exec know — they run the function itself.
+func evaluatedCoverageText(lifted string) string {
+	const runs = "check and exec run the widget's editorConfig.js, as Studio Pro does, for its own properties (an object-list item's still go by the listed rules)"
+	switch {
+	case strings.HasPrefix(lifted, "the widget ships an editorConfig.js, but none"):
+		return "the widget's own hide logic is not written with the toolkit helpers, so no rule is listed; " + runs
+	case lifted == "":
+		return runs
+	}
+	return lifted + " as rules; " + runs
 }
 
 // DescribedContainer is one child slot or object list of a widget.
@@ -1020,6 +1049,14 @@ func definitionDefaults(def *WidgetDefinition) map[string]string {
 // need would send them to a build error, which is the failure this whole area
 // keeps producing.
 func hiddenUnder(d WidgetDescription, propertyKey string) bool {
+	if d.evaluated {
+		for k, h := range d.evaluatedHidden {
+			if h && strings.EqualFold(k, propertyKey) {
+				return true
+			}
+		}
+		return false
+	}
 	values := exampleValues(d)
 	for _, r := range d.Rules {
 		if r.Nested || r.Cond == nil || !strings.EqualFold(r.Property, propertyKey) {

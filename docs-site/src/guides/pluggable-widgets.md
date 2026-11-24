@@ -47,9 +47,12 @@ version you actually have at the moment you create the widget.
 3. **Apply the widget's own dynamic rules.** Which properties a widget shows depends on
    its *configuration* — a Combo box in enumeration mode hides the association properties;
    a DataGrid 2 with selection off hides the selection labels. That logic lives in each
-   widget's compiled `editorConfig.js`. mxcli statically extracts those **dynamic property
-   rules** and applies them, so a freshly-created widget carries exactly the defaults
-   Studio Pro would give it.
+   widget's compiled `editorConfig.js`. mxcli **runs** that file's `getProperties` the
+   way Studio Pro does — in an embedded JavaScript interpreter, for the widget's actual
+   settings and Studio Pro's `desktop` target — and applies the answer, so a
+   freshly-created widget carries exactly the defaults Studio Pro would give it. The
+   script has no access to files, the network or processes, and a call that does not
+   return within a second is stopped.
 
    A property the widget hides must hold its default, or the build fails with CE0463.
    So a hidden property you leave out is written at its default; one you set to its
@@ -59,10 +62,13 @@ version you actually have at the moment you create the widget.
    Timeline grouped by `'day'` hides `groupByMonthOptions`, and one with
    `customVisualization: true` hides both format enumerations.
 
-   This only covers rules mxcli recognises. `mxcli widget describe <name> -p app.mpr`
-   ends with "*N* of *M* editor hide-rules recognized". A rule it cannot read hides
-   nothing as far as `check` knows, so a value set behind one reaches `mx check`
-   unwarned.
+   This covers the widget's own properties, whatever JavaScript the widget uses to hide
+   them. The properties of an object-list **item** (a chart series, a Data grid column)
+   still go by the rules mxcli can read from the source: `mxcli widget describe <name>
+   -p app.mpr` lists them and ends with "*N* of *M* editor hide-rules recognized as
+   rules". A value set behind an item rule mxcli cannot read reaches `mx check`
+   unwarned. Without the widget's `.mpk` in the project (a widget described from
+   mxcli's embedded templates), only the read rules apply.
 
 The result: widgets created by mxcli open cleanly across Mendix 10.x and 11.x with the
 widget packages bundled with those releases — verified on Mendix 11.12 with Data

@@ -109,6 +109,7 @@ This preserves the audit trail.
 | [0013](0013-activity-settings-property-list.md) | Microflow activity settings: words for the statement, one property list for the dialog (refines R2/R3 of 0010 for activities) | Proposed |
 | [0014](0014-incremental-catalog-builds.md) | Catalog rows belong to a unit, and a refresh rebuilds only the changed units | Accepted |
 | [0015](0015-content-keyed-unit-caches.md) | What mxcli keeps of a unit is keyed by the unit's content | Proposed |
+| [0016](0016-run-widget-editorconfig.md) | Which widget properties are hidden is answered by running the widget's editorConfig | Proposed |
 
 ## Candidates to back-fill
 

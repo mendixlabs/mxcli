@@ -317,6 +317,13 @@ func mergeDeclarationLines(indent int, label string, obj microflows.MicroflowObj
 		p := obj.GetPosition()
 		out = append(out, fmt.Sprintf("%s@position(%d, %d)", pad, p.X, p.Y))
 	}
+	// A Studio Pro merge is often larger than the builder's 40×40; without the
+	// size, drop + create shrinks it (ako/mxcli#2369).
+	if obj != nil {
+		if sz := objectSize(obj); sz.Width > 0 && sz.Height > 0 && (sz.Width != MergeSize || sz.Height != MergeSize) {
+			out = append(out, fmt.Sprintf("%s@size(%d, %d)", pad, sz.Width, sz.Height))
+		}
+	}
 	// The side the flow LEAVES the merge on, when it is not the default right.
 	// An if whose closing merge is this one prints that side as its own
 	// `@anchor(from: …)` (mergeExitAnchor, #767), but once the merge is declared

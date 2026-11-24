@@ -60,8 +60,9 @@ func TestMergeStatementAnnotationsCopiesEveryField(t *testing.T) {
 	}
 	pos := &ast.Position{X: 1, Y: 2}
 	anchors := &ast.FlowAnchors{From: ast.AnchorSideRight, To: ast.AnchorSideLeft}
+	doc := "d"
 	full := &ast.ActivityAnnotations{
-		Position: pos, Caption: "c", CaptionSet: true, Color: "Green",
+		Position: pos, Caption: "c", CaptionSet: true, Color: "Green", Documentation: &doc,
 		Notes:     []ast.MicroflowAnnotation{{Text: "n"}},
 		FreeNotes: []ast.MicroflowAnnotation{{Text: "f"}},
 		Excluded:  true, Anchor: anchors,
@@ -69,6 +70,7 @@ func TestMergeStatementAnnotationsCopiesEveryField(t *testing.T) {
 		IteratorAnchor: anchors, BodyTailAnchor: anchors,
 		CaseAnchors: []ast.CaseAnchor{{Value: "A", Anchors: anchors}},
 		Curve:       &ast.FlowCurve{From: pos, To: pos}, Merge: pos, Start: pos,
+		MergeSize: &ast.BoxSize{Width: 90, Height: 60}, Size: &ast.BoxSize{Width: 300, Height: 200},
 		InvalidCurves: []string{"x"}, InvalidAnchors: []string{"x"},
 		InvalidNotes: []string{"x"}, UnknownNames: []string{"x"},
 	}
