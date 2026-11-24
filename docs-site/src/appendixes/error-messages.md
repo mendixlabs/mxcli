@@ -399,6 +399,49 @@ mxbuild does not read agent documents, so the build is green.
 **Solution:** Shorten the value. Lengths are counted in characters, not bytes. It is a warning,
 like MDL-AGENT01..03, because the lengths belong to the installed AgentCommons version.
 
+### MDL-BE01..BE07: A consumed business event service that cannot work
+
+```
+statement 1: business event service Shop.OrdersEventClient: MDL-BE02: `consume OrderPlacedEvent`
+names a message the contract does not define — it declares OrderPlaceEvent. mxbuild reports
+nothing (measured, #2384 §6): the service builds and subscribes to no such event, so the
+handler never runs. Message names are case-sensitive
+```
+
+**Severity:** BE01-BE05 are errors, refusing `exec`; BE06 and BE07 are warnings.
+
+| Code | Condition | Severity |
+|---|---|---|
+| `MDL-BE01` | the contract is AsyncAPI 2.x YAML with at least one channel | error |
+| `MDL-BE02` | each `consume` names a message in `components.messages` | error |
+| `MDL-BE03` | the consumed entity is persistent and extends `BusinessEvents.ConsumedBusinessEvent` | error |
+| `MDL-BE03` | it declares an attribute per payload property, of the mapped type | warning |
+| `MDL-BE04` | the handler takes exactly one parameter, accepting the consumed object | error |
+| `MDL-BE05` | the `BusinessEvents` marketplace module is in the project | error |
+| `MDL-BE06` | `BusinessEvents.StartupBusinessEvents` is reachable from the after-startup microflow | warning |
+| `MDL-BE07` | `BusinessEvents.ServerUrl` is set, and one of `ChannelName` / `EventBrokerSpace` | warning |
+
+**Cause:** mxbuild validates none of this. Measured on mxbuild 11.16.1 (ako/mxcli#2384 §6), a
+consumer whose `consume` names a message the contract does not contain builds with **0 errors**,
+and the build never looks at the consumed entity, the handler's signature, the marketplace module
+or the broker constants. What fails is the running app: it consumes nothing, silently, or — for
+BE07 — does not boot at all, because `StartupBusinessEvents` throws in the after-startup action
+("Resolved value for constant: BusinessEvents.ServerUrl was not found or blank", then "Constant
+BusinessEvents.ChannelName or BusinessEvents.EventBrokerSpace should be set").
+
+**Solution:** The three-statement recipe — the `CBE_` entity, the handler, then the service — is in
+the `business-events` skill. BE06 is wired in App Settings > Runtime > After startup, by a
+microflow that calls `BusinessEvents.StartupBusinessEvents` (directly or through another
+microflow; the check follows the call graph). BE07's two values are per-environment, which is why
+an empty **default** only warns: supply them with `mxcli constant set BusinessEvents.ServerUrl
+'<broker>:9092'` or `--constant` for a dev run.
+
+**Why some of it only warns:** BE03's attribute half is a warning because the contract-to-Mendix
+type mapping is measured for `Long` (`integer`/`int64`) alone (ako/mxcli#2384 §9.1) — a type the
+mapping cannot vouch for is not judged at all. BE06 and BE07 are project configuration a later
+statement or a deployment may legitimately supply, so refusing `exec` over them would block
+authoring a consumer before the app is wired up.
+
 ### MDL-LISTOP02: A list operation nested inside another one
 
 ```

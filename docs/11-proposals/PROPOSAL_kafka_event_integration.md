@@ -636,7 +636,14 @@ A2 is merged for `LIST` / `DESCRIBE` — the gen properties it needed landed fir
 (ako/mxcli#2395). Still open from A2: the catalog tables
 (`change_data_capture_services` + sources), the `RefKind`s that would let
 `show callers` and impact analysis see CDC exposure, and the
-`CatalogSchemaVersion` bump. B4 (check rules) and all of C and D are untouched.
+`CatalogSchemaVersion` bump.
+
+B4 is implemented: the seven rules of §5.1 as `MDL-BE01`..`MDL-BE07`, errors for the
+five a statement decides and warnings for the two that are per-environment project
+configuration. The severity split is not cosmetic — BE03's attribute half warns because
+the contract-to-Mendix type mapping is measured for `Long` alone (§9.1), and a rule that
+judged an unmeasured mapping would refuse correct scripts. All of C is implemented
+(above); D is untouched.
 
 Measured while implementing A2, and worth keeping: the storage layer refuses the
 document outright below 11.10 and names the properties and their versions
