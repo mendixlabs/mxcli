@@ -147,16 +147,17 @@ func TestToResult(t *testing.T) {
 			wantMsg:    "expected $r = 'x'",
 		},
 		{
-			name:       "a thrown microflow is an ERROR, not a FAIL",
+			// The verdict the generated handler used to return (#1874).
+			name:       "a thrown test microflow is a FAIL naming the error",
 			resp:       runResponse{OK: false, Error: "NullPointerException"},
-			wantStatus: StatusError,
-			wantMsg:    "NullPointerException",
+			wantStatus: StatusFail,
+			wantMsg:    "exception during execution: NullPointerException",
 		},
 		{
 			name:       "a throw with no message still says something",
 			resp:       runResponse{OK: false},
-			wantStatus: StatusError,
-			wantMsg:    "microflow threw, but the runtime reported no message",
+			wantStatus: StatusFail,
+			wantMsg:    "exception during execution: microflow threw, but the runtime reported no message",
 		},
 		{
 			name:       "an unrecognised verdict is an ERROR",
@@ -179,6 +180,33 @@ func TestToResult(t *testing.T) {
 				t.Errorf("identity not carried over: got %q/%q", got.ID, got.Name)
 			}
 		})
+	}
+}
+
+// TestToResult_ThrownTestMicroflow pins @throws: the error leaves the test
+// microflow, so the comparison with the annotation is the runner's (#1874).
+// Measured on 11.16.1 against the generated handler it replaces: the same PASS
+// and the same FAIL text, `actual: For input string: "abc"`.
+func TestToResult_ThrownTestMicroflow(t *testing.T) {
+	thrown := &runResponse{OK: false, Error: `For input string: "abc"`}
+	for _, c := range []struct {
+		throws, wantMsg string
+		bare            bool
+		want            TestStatus
+	}{
+		{throws: "abc", want: StatusPass},
+		{bare: true, want: StatusPass},
+		{throws: "no such text", want: StatusFail,
+			wantMsg: `expected an error containing 'no such text', actual: For input string: "abc"`},
+	} {
+		tc := TestCase{ID: "t", Name: "n", Throws: c.throws}
+		if c.bare {
+			tc.ExpectsThrow = true
+		}
+		got := toResult(tc, thrown)
+		if got.Status != c.want || got.Message != c.wantMsg {
+			t.Errorf("@throws %q: got %v %q, want %v %q", c.throws, got.Status, got.Message, c.want, c.wantMsg)
+		}
 	}
 }
 

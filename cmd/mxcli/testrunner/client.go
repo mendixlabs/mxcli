@@ -204,10 +204,26 @@ func toResult(tc TestCase, rr *runResponse) TestResult {
 	res.Duration = time.Duration(rr.DurationMicros) * time.Microsecond
 	switch {
 	case !rr.OK:
-		res.Status = StatusError
-		res.Message = rr.Error
-		if res.Message == "" {
-			res.Message = "microflow threw, but the runtime reported no message"
+		// The test microflow threw. Its calls carry no generated handler (see
+		// rewriteBodyForVerdict), so this is the verdict the handler used to
+		// return: the expected error of an @throws test, or a failure that
+		// names what was raised.
+		msg := rr.Error
+		if msg == "" {
+			msg = "microflow threw, but the runtime reported no message"
+		}
+		// The annotation holds the message as an MDL string literal's content,
+		// so an apostrophe is doubled there.
+		want := strings.ReplaceAll(tc.Throws, "''", "'")
+		switch {
+		case tc.expectsThrow() && (want == "" || strings.Contains(rr.Error, want)):
+			res.Status = StatusPass
+		case tc.expectsThrow():
+			res.Status = StatusFail
+			res.Message = "expected an error containing " + quoteForMessage(want) + ", actual: " + msg
+		default:
+			res.Status = StatusFail
+			res.Message = "exception during execution: " + msg
 		}
 	case rr.Result == verdictPass:
 		res.Status = StatusPass

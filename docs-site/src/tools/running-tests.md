@@ -460,15 +460,15 @@ system context, which entity access does not restrict, so what a test reads and
 writes is the same either way.
 
 An applying microflow may not read the attributes of `System.Error`
-(CE0150), so the runner's own error handlers pass `$latestError` to a generated
-helper, `MxTest.Test_ErrorMessage`, which does not apply entity access and
-returns the message. A test whose **own** error handler reads `$latestError/…`
-keeps a test microflow that does not apply entity access, so it builds as it
-did; if that test also calls a microflow that applies entity access, no setting
-serves both, and the handler has to pass `$latestError` to a microflow of yours
-that does not apply it, as CE0150's own text says. Under `--legacy-runner` the
-whole suite shares one microflow, so one such test keeps all of them
-non-applying.
+(CE0150). The runner's test microflows do not need to: an error leaves the test
+microflow and the endpoint reports its message. A test whose **own** error
+handler reads `$latestError/…` keeps a test microflow that does not apply entity
+access, so it builds as it did; if that test also calls a microflow that applies
+entity access, no setting serves both, and the handler has to pass `$latestError`
+to a microflow of yours that does not apply it, as CE0150's own text says. Under
+`--legacy-runner` the whole suite shares one microflow — and its handlers still
+read the message through a generated helper, `MxTest.Test_ErrorMessage` — so one
+such test keeps all of them non-applying.
 
 A build error located in `MxTest.RegisterEndpoint`,
 `MxTest.RegisterTestEndpoint` or `MxTest.Test_ErrorMessage` is reported as

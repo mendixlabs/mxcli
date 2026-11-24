@@ -606,9 +606,10 @@ call microflow Sales.ValidateOrder(Total = -1);
 Anything else after the tag is an error, not a message: `@throws not found` is
 refused rather than read as an unquoted one.
 
-A call that already has its own `on error` clause keeps it — the runner adds
-its handler only to calls without one, so the test runs the statement exactly as
-production does:
+The runner adds no error handler to the body: an error from any statement leaves
+the test microflow and the endpoint reports it — FAIL `exception during
+execution: …`, or PASS under a matching `@throws`. A call with its own `on error`
+clause keeps it, so the test runs the statement exactly as production does:
 
 - `on error rollback` is Mendix's default spelled out and behaves like no clause:
   FAIL `exception during execution: …`, or PASS under a matching `@throws`.
@@ -617,12 +618,12 @@ production does:
 - A custom handler that ends normally skips every statement reading the failed
   call's result — the assertions — so the test FAILs with `not every assertion
   was evaluated`. Assert on something the handler sets instead.
-- A custom handler that re-raises lets the error leave the test: ERROR with the
-  message, also under `@throws`. Under Docker / `--legacy-runner` it ends the
-  whole run.
+- A custom handler that re-raises lets the error leave the test, as no clause
+  does: FAIL with the message, or PASS under a matching `@throws`. Under Docker /
+  `--legacy-runner` it ends the whole run.
 
 `@throws` and `@expect` cannot be combined. A `@throws` test compiles to a
-different shape — the verdict starts as a failure and only the error handler
+different shape — the verdict starts as a failure and only a raised error
 clears it — and the `@expect` checks are not emitted into it at all, so the
 assertion was counted and never evaluated. There is nothing to assert on either
 way: the body was expected not to produce a result. Assert on the error with

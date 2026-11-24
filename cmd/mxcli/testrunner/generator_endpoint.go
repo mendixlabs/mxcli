@@ -50,10 +50,8 @@ func GenerateTestFlows(suite *TestSuite) string {
 	v := suiteVersion(suite)
 	writeScriptHeader(&b, v)
 	b.WriteString("\n")
-	if suiteHasFlows(suite) {
-		writeErrorMessageFlow(&b)
-		b.WriteString("\n")
-	}
+	// No errorMessageFlow: the test flows no longer read a raised error's
+	// message (rewriteBodyForVerdict); the endpoint reports it.
 	for _, tc := range suite.Tests {
 		// A test with an uncompilable @expect gets no microflow. The runner
 		// reports it as an ERROR from the parse message, which is more useful
@@ -224,33 +222,27 @@ func failVerdictExpr(exp Expect) string {
 	return "'" + escapeMDLString(msg+", actual: ") + "' + " + exp.Actual
 }
 
-// rewriteBodyForVerdict attaches an ON ERROR handler to every CALL in the test
-// body, turning a thrown error into a FAIL verdict and an early return.
+// rewriteBodyForVerdict returns the test body as written: an error a call raises
+// leaves the test microflow, and the endpoint, which catches it, reports its
+// message. toResult turns that into the FAIL verdict "exception during
+// execution: <message>".
 //
-// The verdict carries the raised message: a bare "exception during execution"
-// left the user guessing, e.g. at an unresolvable [%CurrentUser%] token (tests
-// run in a system context with no user). The message is read through
-// errorMessageFlow, as in throwsHandler: the test flow applies entity access.
+// The body used to give every call an ON ERROR handler that read the message
+// through errorMessageFlow and returned the verdict itself. mxbuild --serve's
+// incremental build rejects any use of a variable a handler creates (CE0108,
+// measured on 11.16.1; a full build accepts the same model), so every test that
+// called a microflow fell back to a cold build, which `test --attach` cannot
+// apply (mendixlabs/mxcli#1874). The endpoint had the message all along.
 func rewriteBodyForVerdict(lines []string, tc TestCase) []string {
-	return attachOnError(lines, tc.Version, func(n int) []string {
-		msg := errorMessageVar("", n)
-		return []string{
-			readErrorMessage(msg),
-			fmt.Sprintf("  SET $Verdict = '%s' + %s;",
-				escapeMDLString(verdictFailPrefix+"exception during execution: "), msg),
-			"  RETURN $Verdict;",
-		}
-	})
+	return lines
 }
 
-// rewriteBodyForThrows attaches an ON ERROR handler that clears the pre-set
-// failure verdict — the error is the expected outcome.
-//
-// With a want, the handler clears it only for a matching message and otherwise
-// replaces it with one naming both sides, so a failing @throws says what was
-// raised instead of only what was expected.
+// rewriteBodyForThrows returns an @throws test's body as written, for the same
+// reason: the error leaves the microflow, and toResult compares the message the
+// endpoint reports with the annotation. A body that completes returns the
+// pre-set failing verdict.
 func rewriteBodyForThrows(lines []string, want string, v langver.Version) []string {
-	return attachOnError(lines, v, func(n int) []string { return throwsHandler(want, errorMessageVar("", n)) })
+	return lines
 }
 
 // throwsHandler builds the ON ERROR body of an @throws test.

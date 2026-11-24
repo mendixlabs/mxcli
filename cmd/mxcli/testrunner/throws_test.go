@@ -80,17 +80,16 @@ func TestThrowsMessageIsCompared(t *testing.T) {
 $result = call microflow M.MF_Import(Json = '{}');
 /
 `)
-	suite := &TestSuite{Name: "s", Tests: []TestCase{tc}}
-	mdl := GenerateTestFlows(suite)
-
-	want := "IF contains($MxTestErrorMessage_1, 'the object was not found') THEN"
-	if !strings.Contains(mdl, want) {
-		t.Errorf("generated handler does not compare the message.\nwant a line: %s\ngot:\n%s", want, mdl)
+	// The comparison is the runner's: the error leaves the test microflow and
+	// the endpoint reports it (mendixlabs/mxcli#1874).
+	if got := toResult(tc, &runResponse{OK: false, Error: "Import: the object was not found."}); got.Status != StatusPass {
+		t.Errorf("a matching error gave %v %q, want PASS", got.Status, got.Message)
 	}
-	// The failing branch must name what was actually raised — a verdict that
-	// says only what was expected tells you nothing about what came back.
-	if !strings.Contains(mdl, "actual: ' + $MxTestErrorMessage_1") {
-		t.Errorf("generated handler does not report the raised message:\n%s", mdl)
+	// The failing branch names what was actually raised — a verdict that says
+	// only what was expected tells you nothing about what came back.
+	got := toResult(tc, &runResponse{OK: false, Error: "a different error"})
+	if got.Status != StatusFail || !strings.Contains(got.Message, "actual: a different error") {
+		t.Errorf("a different error gave %v %q, want a FAIL naming it", got.Status, got.Message)
 	}
 }
 
@@ -121,9 +120,12 @@ func TestThrowsMessageIsEscaped(t *testing.T) {
 $result = call microflow M.MF_Import(Json = '{}');
 /
 `)
-	mdl := GenerateTestFlows(&TestSuite{Name: "s", Tests: []TestCase{tc}})
-	if !strings.Contains(mdl, "contains($MxTestErrorMessage_1, 'it''''s missing')") {
-		t.Errorf("apostrophe not doubled for MDL:\n%s", mdl)
+	if got := toResult(tc, &runResponse{OK: false, Error: "it's missing here"}); got.Status != StatusPass {
+		t.Errorf("an apostrophe in the expected message did not match: %v %q", got.Status, got.Message)
+	}
+	// The legacy runner still writes the message into MDL, doubled.
+	if mdl := GenerateTestRunner(&TestSuite{Name: "s", Tests: []TestCase{tc}}); !strings.Contains(mdl, "'it''''s missing'") {
+		t.Errorf("apostrophe not doubled for MDL in the legacy runner:\n%s", mdl)
 	}
 }
 

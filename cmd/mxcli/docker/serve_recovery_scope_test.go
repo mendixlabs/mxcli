@@ -50,6 +50,26 @@ func TestServeRecovery_IncrementalCE0108IsCheckedOnAFreshProcess(t *testing.T) {
 	}
 }
 
+// The recheck says what the incremental build reported, document and message:
+// when the full build passes, those lines are the only record of the error
+// (mendixlabs/mxcli#1874 showed only the code, even with --verbose).
+func TestServeRecovery_RecheckPrintsTheIncrementalError(t *testing.T) {
+	f := &scriptedServe{build: func(proc, _ int) (*BuildResult, error) {
+		if proc == 0 {
+			return buildCE("CE0108", ce0108Msg), nil
+		}
+		return buildOK(true), nil
+	}}
+	var out strings.Builder
+	r := &serveRecovery{serve: f, out: &out}
+	if _, err := r.Build(BuildRequest{ProjectFilePath: "/p/App.mpr"}); err != nil {
+		t.Fatal(err)
+	}
+	if want := "CE0108 at Microflow 'TMP_ReproAct': " + ce0108Msg; !strings.Contains(out.String(), want) {
+		t.Errorf("want %q in:\n%s", want, out.String())
+	}
+}
+
 // A genuine CE0108 costs one recheck, not one per save while it persists.
 func TestServeRecovery_ConfirmedCE0108IsNotRecheckedUntilABuildPasses(t *testing.T) {
 	pass := false
