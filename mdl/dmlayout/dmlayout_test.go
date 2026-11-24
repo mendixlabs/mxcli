@@ -4,6 +4,8 @@ package dmlayout
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/mendixlabs/mxcli/model"
@@ -147,8 +149,10 @@ func TestPlan_ReferencedEntitiesSitLeftOfTheirReferrers(t *testing.T) {
 	}
 }
 
-// The lookups nothing points out of share the leftmost column, and the deepest
-// entity is well clear of it.
+// A lookup (references nothing, is referenced) sits one column left of its
+// nearest referrer, and the deepest entity is well clear of the first column.
+// The lookups used to share column 0 whatever used them; a lookup only Employee
+// references then sat three columns from it.
 func TestPlan_LayersTheModel(t *testing.T) {
 	dm := capTrack()
 	pos := Plan(dm)
@@ -156,15 +160,37 @@ func TestPlan_LayersTheModel(t *testing.T) {
 	for _, e := range dm.Entities {
 		byName[e.Name] = pos[e.ID]
 	}
-
-	lookups := []string{"Department", "Region", "PlanType", "PlanningYear", "EmploymentType", "MovementReason"}
-	first := byName[lookups[0]].X
-	for _, n := range lookups[1:] {
-		if byName[n].X != first {
-			t.Errorf("%s is at x=%d, not in the lookup column x=%d", n, byName[n].X, first)
+	columns := map[int]int{} // x -> column index
+	var xs []int
+	for n, p := range byName {
+		if strings.HasPrefix(n, "NP_") { // the isolated band has its own grid
+			continue
+		}
+		if _, ok := columns[p.X]; !ok {
+			columns[p.X] = 0
+			xs = append(xs, p.X)
 		}
 	}
-	if byName["EmployeeMonth"].X <= byName["PlanScope"].X {
+	sort.Ints(xs)
+	for i, x := range xs {
+		columns[x] = i
+	}
+	col := func(n string) int { return columns[byName[n].X] }
+
+	for lookup, nearest := range map[string]string{
+		"Department":     "Team",
+		"PlanningYear":   "GoalBucket",
+		"Region":         "PlanScope",
+		"PlanType":       "PlanScope",
+		"EmploymentType": "Employee",
+		"MovementReason": "Movement",
+	} {
+		if col(lookup) != col(nearest)-1 {
+			t.Errorf("%s is in column %d, want %d: one left of %s, its nearest referrer",
+				lookup, col(lookup), col(nearest)-1, nearest)
+		}
+	}
+	if col("EmployeeMonth") <= col("PlanScope") {
 		t.Error("the deepest entity did not end up past the middle of the graph")
 	}
 }
@@ -264,9 +290,13 @@ func TestPlan_EmptyModel(t *testing.T) {
 // commit an unreadable diff, which is the practical reason to care about this
 // beyond aesthetics.
 //
-// Measured on the real thing: adding one entity with one association to
-// CapTrack's 16 moved 3 of 17 — the new entity and the two below it in its
-// column.
+// The contract: only the new entity's own column and the isolated band under
+// the graph may move; every other column is untouched. Within its column the
+// new entity can take a row and push the entities under it down a slot; the
+// band sits under the tallest column, so it moves when that column grows.
+// (This used to be "at most a quarter of the model"; once lookups sat beside
+// their nearest referrer instead of all in column 0, the new entity's column
+// held more of them, and the column, not a count, is what stays local.)
 func TestPlan_AddingAnEntityMovesFewOthers(t *testing.T) {
 	before := capTrack()
 	posBefore := Plan(before)
@@ -277,16 +307,21 @@ func TestPlan_AddingAnEntityMovesFewOthers(t *testing.T) {
 	after.Associations = append(after.Associations, assoc("AuditEntry_Department", "AuditEntry", "Department"))
 	posAfter := Plan(after)
 
-	movedNames := []string{}
+	newCol := posAfter[extra.ID].X
+	isolated := map[string]bool{"NP_NewEmployee": true, "NP_UserDeptToggle": true}
+	moved := 0
 	for _, e := range before.Entities {
-		if posBefore[e.ID] != posAfter[e.ID] {
-			movedNames = append(movedNames, e.Name)
+		if posBefore[e.ID] == posAfter[e.ID] {
+			continue
+		}
+		moved++
+		if posBefore[e.ID].X != newCol && !isolated[e.Name] {
+			t.Errorf("%s moved %v -> %v, outside the new entity's column (x %d) and the band: the layout is not local",
+				e.Name, posBefore[e.ID], posAfter[e.ID], newCol)
 		}
 	}
-	// A quarter of the model is a generous ceiling; the real figure here is 2.
-	if len(movedNames) > len(before.Entities)/4 {
-		t.Errorf("adding one entity moved %d of %d existing entities (%v) — the layout is not local",
-			len(movedNames), len(before.Entities), movedNames)
+	if moved == 0 {
+		t.Error("nothing moved: the new entity's column should have made room for it")
 	}
 	if _, ok := posAfter[extra.ID]; !ok {
 		t.Error("the added entity got no position")

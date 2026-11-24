@@ -203,6 +203,17 @@ tests at the measured sizes.
 Determinism (`TestPlan_IsDeterministic`) and no-overlap (`TestPlan_NoOverlap`)
 still hold. Neither depends on the gap or the y rule.
 
+**Follow-up — lookups beside what uses them (implemented).** Phase 1 left every
+lookup in column 0, stacked from the top; with phase 3 pushing referrers down,
+lookups such as Catalog's Category sat far above and columns away from their
+only referrer. A lookup now takes the column just left of its nearest referrer
+(the layering is otherwise unchanged) and, after placing, moves to the median
+row of its referrers when that is free in its column, keeps its own
+cross-module lines clear, stays out of those of the entities to its right, and
+is closer than before. PizzaV1 Catalog: 8 of 10 lines straight (was 6), 160 px
+shorter, no cross-module line blocked. The locality test now states its
+contract as "only the new entity's column and the isolated band move".
+
 ### Phase 2 — Recompute anchors (rules 4, 5) — implemented
 
 `dmlayout.Anchors(dm, positions)` returns a connection-point pair per

@@ -207,7 +207,7 @@ follow-up to offer: a diagram nobody laid out is the first thing a developer
 opening the app sees.
 
 `layout` is idempotent (a second run moves nothing) and lays out from the
-association graph — lookups on the left, each entity one column past what it
+association graph — each lookup just left of what uses it, each entity one column past what it
 references and on the row of the entity it is most linked to, with the gap between
 columns wide enough for the association names, and re-attaches every association
 line so it runs straight where it can. It **replaces every position in

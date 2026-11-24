@@ -15,8 +15,9 @@ mxcli layout -p app.mpr                            # every module the project ow
 
 Entities are layered on the associations between them:
 
-- an entity that references nothing else in the module is a **lookup**, and goes
-  in the leftmost column;
+- an entity that references nothing else in the module is a **lookup**: it goes
+  in the column just left of its **nearest referrer**, and moves to the row of
+  the entities referencing it where its column has room;
 - everything else sits one column past the furthest thing it references, on the
   **row of the entity it is most linked to**, so the line between them runs
   straight across (the next free spot below when that row is taken);
@@ -38,16 +39,19 @@ Entities are layered on the associations between them:
 
 Association lines then mostly run one way instead of crossing the diagram.
 
-On a real 16-entity model the layering falls out of the associations with no
-hints:
+On the 15-entity test model (`capTrack` in `mdl/dmlayout`) the layering falls
+out of the associations with no hints:
 
 | column | entities |
 |---|---|
-| 1 | `Department`, `EmploymentType`, `MovementReason`, `PlanType`, `PlanningYear`, `Region` |
-| 2 | `Team`, `GoalBucket` |
-| 3 | `GoalChange`, `GoalRegionValue`, `PlanScope`, `CapTrackUser` |
-| 4 | `Employee`, `ScopeMonth` |
+| 1 | `Department`, `PlanningYear` |
+| 2 | `Region`, `PlanType`, `Team`, `GoalBucket` |
+| 3 | `EmploymentType`, `PlanScope` |
+| 4 | `MovementReason`, `ScopeMonth`, `Employee` |
 | 5 | `EmployeeMonth`, `Movement` |
+
+`EmploymentType` and `MovementReason` are lookups only `Employee` and `Movement`
+use, so they sit beside them rather than in column 1.
 
 ## It replaces positions you set by hand
 

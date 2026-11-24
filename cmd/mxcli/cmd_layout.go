@@ -40,10 +40,11 @@ var layoutCmd = &cobra.Command{
 	Short: "Arrange a module's domain model from its association graph",
 	Long: `Arrange the entities of a domain model so related ones sit together.
 
-Entities are layered on the association graph: an entity that references nothing
-else in the module is a lookup and goes on the left, and everything else sits
-one column past the furthest thing it references, on the row of the entity it is
-most linked to. Association lines then mostly run one way, and straight across,
+Entities are layered on the association graph: an entity sits one column past
+the furthest thing it references, on the row of the entity it is most linked
+to, and a lookup (one that references nothing else in the module) sits one
+column left of its nearest referrer, on the row of what references it where
+there is room. Association lines then mostly run one way, and straight across,
 instead of crossing the diagram. The gap between two columns is wide enough for
 the longest association name drawn across it. An entity with a cross-module
 association (at either end) is placed where Studio Pro's line for it, which

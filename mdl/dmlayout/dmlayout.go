@@ -124,15 +124,16 @@ func labelWidth(name string) int {
 
 // Plan computes a position for every entity in one domain model.
 //
-// The layout is layered on the association graph. An entity that references
-// nothing else in the module is layer 0; anything else sits one layer past the
-// furthest thing it references. Layers become columns, so the things everything
-// points at — the lookup tables — end up on the left and the leaves on the
-// right, with most association lines running the same way.
+// The layout is layered on the association graph. An entity sits one layer
+// past the furthest thing it references, and a lookup (one that references
+// nothing in the module) one layer left of its nearest referrer. Layers become
+// columns, so what an entity points at is to its left and the leaves are on
+// the right, with most association lines running the same way. After placing,
+// each lookup follows its referrers' row where there is room (pullLookups).
 //
 // Entities with no local edge at all (a non-persistent helper, a freshly created
-// entity nothing points at yet) are not lookups and do not belong in layer 0
-// beside them; they go in their own band underneath.
+// entity nothing points at yet) are not lookups and do not belong among them;
+// they go in their own band underneath.
 //
 // The result is deterministic for a given model: every iteration order here is
 // sorted, because a map range would produce a different diagram on every run and
@@ -235,6 +236,16 @@ func PlanWith(dm *domainmodel.DomainModel, cross CrossLines) map[model.ID]model.
 		}
 	}
 
+	// Lookups were stacked before anything referencing them was placed; now
+	// they can follow their referrers' rows.
+	g.pullLookups(layers, layerOf, out, cross)
+	for _, id := range g.order {
+		if p, ok := out[id]; ok {
+			_, h := boxSize(g.byID[id])
+			maxY = max(maxY, p.Y+h+rowGutter)
+		}
+	}
+
 	// The isolated band: a plain grid under everything else, so it reads as a
 	// separate group rather than as another layer of the graph. Entities in it
 	// with a cross-module line come first, one per row at the left edge, the
@@ -300,7 +311,8 @@ type graph struct {
 	order []model.ID // entity ids, sorted by name — the determinism anchor
 	edges []edge     // every local edge, in model order
 	out   map[model.ID][]model.ID
-	deg   map[model.ID]int // total edges, either direction
+	in    map[model.ID][]model.ID // the entities referencing each one
+	deg   map[model.ID]int        // total edges, either direction
 }
 
 // newGraph indexes the domain model. An edge runs FROM the entity that holds the
@@ -317,6 +329,7 @@ func newGraph(dm *domainmodel.DomainModel) *graph {
 	g := &graph{
 		byID: make(map[model.ID]*domainmodel.Entity, len(dm.Entities)),
 		out:  map[model.ID][]model.ID{},
+		in:   map[model.ID][]model.ID{},
 		deg:  map[model.ID]int{},
 	}
 	for _, e := range dm.Entities {
@@ -337,6 +350,7 @@ func newGraph(dm *domainmodel.DomainModel) *graph {
 			return
 		}
 		g.out[from] = append(g.out[from], to)
+		g.in[to] = append(g.in[to], from)
 		g.deg[from]++
 		g.deg[to]++
 		g.edges = append(g.edges, edge{from: from, to: to, label: label})
@@ -524,6 +538,26 @@ func (g *graph) layers() (layers [][]model.ID, isolated []model.ID) {
 		if d := visit(id); d > maxDepth {
 			maxDepth = d
 		}
+	}
+
+	// A lookup (references nothing, is referenced) goes in the column just left
+	// of its nearest referrer rather than always in column 0: a lookup only a
+	// deep entity uses would otherwise sit columns away from it, its line
+	// crossing everything between. Only lookups move, so every other layer
+	// stays one past what it references; a lookup's referrers are all at least
+	// one layer deeper than it, so the result is still at least 0 and still
+	// left of every referrer.
+	for _, id := range g.order {
+		if g.deg[id] == 0 || len(g.out[id]) > 0 || len(g.in[id]) == 0 {
+			continue
+		}
+		nearest := -1
+		for _, r := range g.in[id] {
+			if nearest < 0 || depth[r] < nearest {
+				nearest = depth[r]
+			}
+		}
+		depth[id] = max(0, nearest-1)
 	}
 
 	layers = make([][]model.ID, maxDepth+1)
