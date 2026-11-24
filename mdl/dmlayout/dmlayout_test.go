@@ -221,19 +221,28 @@ func TestPlan_NoOverlap(t *testing.T) {
 	}
 }
 
-// Unconnected entities are not lookups. Putting them in layer 0 would mix the
-// non-persistent helpers in with the real reference data.
-func TestPlan_IsolatedEntitiesGoInTheirOwnBand(t *testing.T) {
+// Unconnected entities are not lookups, and not part of the graph: they sit
+// outside the graph's area — to its right or below it — never in its columns.
+// (They used to go in a fixed band underneath; the space beside the graph is
+// used now, which keeps a module with tall helpers from doubling in height.)
+func TestPlan_IsolatedEntitiesStayOutOfTheGraph(t *testing.T) {
 	dm := capTrack()
 	pos := Plan(dm)
-	byName := map[string]model.Point{}
+	right, bottom := 0, 0
 	for _, e := range dm.Entities {
-		byName[e.Name] = pos[e.ID]
+		if strings.HasPrefix(e.Name, "NP_") {
+			continue
+		}
+		w, h := boxSize(e)
+		right, bottom = max(right, pos[e.ID].X+w), max(bottom, pos[e.ID].Y+h)
 	}
-	for _, n := range []string{"NP_NewEmployee", "NP_UserDeptToggle"} {
-		if byName[n].Y <= byName["Department"].Y {
-			t.Errorf("%s (y=%d) is level with the graph, not in the band below (Department y=%d)",
-				n, byName[n].Y, byName["Department"].Y)
+	for _, e := range dm.Entities {
+		if !strings.HasPrefix(e.Name, "NP_") {
+			continue
+		}
+		p := pos[e.ID]
+		if p.X < right+columnGutter && p.Y < bottom+bandGutter {
+			t.Errorf("%s at %v is inside the graph's area (right %d, bottom %d)", e.Name, p, right, bottom)
 		}
 	}
 }

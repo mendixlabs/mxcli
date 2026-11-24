@@ -135,3 +135,71 @@ func TestPlanWith_LookupKeepsItsOwnLineClear(t *testing.T) {
 		t.Fatalf("lookup's own line blocked:\n%s", strings.Join(v, "\n"))
 	}
 }
+
+// A lookup can share its nearest referrer's column instead of having a column
+// of its own left of it: Catalog's Allergen with Ingredient, a short vertical
+// line, one column fewer, crossings 10 -> 5. Whether it goes above or below
+// is the crossing search's call (above: 1 crossing, below: 3).
+func TestPlanWith_LookupSharesItsReferrersColumnWhenThatIsBetter(t *testing.T) {
+	dm, cross := catalog()
+	pos := PlanWith(dm, cross)
+	byName := map[string]*domainmodel.Entity{}
+	for _, e := range dm.Entities {
+		byName[e.Name] = e
+	}
+	al, in := pos[byName["Allergen"].ID], pos[byName["Ingredient"].ID]
+	if al.X != in.X {
+		t.Fatalf("Allergen at %v, Ingredient at %v: want them in one column", al, in)
+	}
+	_, hAl := boxSize(byName["Allergen"])
+	_, hIn := boxSize(byName["Ingredient"])
+	if !(al.Y+hAl+rowGutter == in.Y || in.Y+hIn+rowGutter == al.Y) {
+		t.Errorf("Allergen (y %d) and Ingredient (y %d) are not directly above one another", al.Y, in.Y)
+	}
+	if v := crossViolations(dm, pos, cross); len(v) > 0 {
+		t.Fatalf("cross-module lines blocked:\n%s", strings.Join(v, "\n"))
+	}
+}
+
+// The lookup move never adds a line through a box. On Shop (ako/PizzaV1's
+// real module: entities with their attribute counts, associations and the
+// cross-module lines drawn at them), Cart, alone in its column, moved into its
+// referrers' column scored fewer crossings overall but sent MenuView_Cart
+// straight through HomeView.
+func TestPlanWith_LookupMoveNeverAddsALineThroughABox(t *testing.T) {
+	dm, cross := shop()
+	pos := PlanWith(dm, cross)
+	if _, boxes := Crossings(dm, pos, Anchors(dm, pos), cross); boxes != 0 {
+		t.Fatalf("%d line(s) through a box", boxes)
+	}
+}
+
+func shop() (*domainmodel.DomainModel, CrossLines) {
+	sizes := map[string]int{
+		"Cart": 28, "CartLine": 21, "CheckoutForm": 51, "Choice": 11, "ErrorView": 1,
+		"HomeView": 17, "LookupAttempt": 1, "LookupForm": 3, "MenuView": 10, "TrackView": 69,
+	}
+	dm := &domainmodel.DomainModel{}
+	for _, n := range []string{"Cart", "CartLine", "CheckoutForm", "Choice", "ErrorView", "HomeView", "LookupAttempt", "LookupForm", "MenuView", "TrackView"} {
+		dm.Entities = append(dm.Entities, withN(n, sizes[n]))
+	}
+	dm.Associations = []*domainmodel.Association{
+		named("CartLine_Cart", "CartLine", "Cart"),
+		named("CartLine_EditOf", "CartLine", "CartLine"),
+		named("Choice_Line", "Choice", "CartLine"),
+		named("HomeView_Cart", "HomeView", "Cart"),
+		named("MenuView_Cart", "MenuView", "Cart"),
+	}
+	cross := CrossLines{}
+	for n, lines := range map[string][]string{
+		"Cart":          {"Cart_ActiveOrder", "Cart_Coupon", "Cart_Owner"},
+		"CartLine":      {"CartLine_Allergen", "CartLine_Cheese", "CartLine_Crust", "CartLine_Extra", "CartLine_Product", "CartLine_Removed", "CartLine_Sauce", "CartLine_Size"},
+		"CheckoutForm":  {"CheckoutForm_Owner", "CheckoutForm_Zone"},
+		"Choice":        {"Choice_Ingredient", "Choice_Option", "Choice_Size"},
+		"LookupAttempt": {"LookupAttempt_User"},
+		"TrackView":     {"TrackView_Order"},
+	} {
+		cross[ent(n).ID] = lines
+	}
+	return dm, cross
+}

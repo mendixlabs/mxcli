@@ -52,8 +52,8 @@ always runs from its left side straight to the left edge, passes no other box.
 Within each column the order is then searched for the fewest crossings, and
 every module that changes reports its crossings before and after (estimated,
 from the same box sizes). Entities with no association at
-all — non-persistent helpers, mostly — go in a band underneath rather than being
-mixed in with the lookups. Every association line is then re-attached: on the
+all — non-persistent helpers, mostly — fill the free space to the right of the
+graph or below it, never its columns. Every association line is then re-attached: on the
 sides of its two boxes that face each other, straight across where the boxes
 share a span and nothing is in the way, the others spread along their side.
 

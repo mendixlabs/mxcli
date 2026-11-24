@@ -214,6 +214,20 @@ is closer than before. PizzaV1 Catalog: 8 of 10 lines straight (was 6), 160 px
 shorter, no cross-module line blocked. The locality test now states its
 contract as "only the new entity's column and the isolated band move".
 
+**Follow-up — compaction (implemented).** Two refinements after looking at the
+PizzaV1 renders:
+- Unconnected entities no longer go in a band under the graph. They fill the
+  free space to its right or below it, each at the candidate position (outside
+  the graph's area, clear of every box, its cross-module lines clear, not in
+  another's lines) that keeps the diagram closest to a landscape frame
+  (`max(width, 1.5 × height)`); those with cross-module lines shortest first.
+  Shop 3717 → 2408 px tall, PizzaChat 1216 → 728.
+- A lookup alone in its column may share its nearest referrer's column, kept
+  when it has fewer crossings, or as many and the diagram is narrower and no
+  taller, and never when it adds a line through a box. Above or below is the
+  swap search's call. Catalog: Allergen with Ingredient (above it: 1 crossing,
+  against 3 below), crossings 6 → 2, 317 px narrower.
+
 ### Phase 2 — Recompute anchors (rules 4, 5) — implemented
 
 `dmlayout.Anchors(dm, positions)` returns a connection-point pair per

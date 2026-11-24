@@ -24,8 +24,12 @@ Entities are layered on the associations between them:
 - the **gap between two columns** is wide enough for the longest association
   name drawn across it, plus the 1 / * markers at its ends, so Studio Pro does
   not cut the label off;
-- entities with **no association at all** — non-persistent helpers, mostly — go
-  in a band underneath, rather than being mixed in with the lookups;
+- entities with **no association at all** — non-persistent helpers, mostly — are
+  kept out of the graph's columns: they fill the free space to its right or
+  below it, wherever the diagram stays closest to a landscape screen;
+- a lookup that would have a column to itself may instead share its nearest
+  referrer's column, directly above or below it, when that crosses less or
+  makes the diagram narrower without making it taller;
 - an entity with a **cross-module association** — at either end, the module's
   own or another module's pointing in — is placed where Studio Pro's line for
   it, which always runs from the box's left side straight to the canvas edge,

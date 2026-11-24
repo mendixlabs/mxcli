@@ -129,8 +129,12 @@ func TestPlanWith_IsolatedEntityWithCrossLineHasItsOwnRow(t *testing.T) {
 	}
 	dm := &domainmodel.DomainModel{Entities: ents}
 	cross := CrossLines{ents[3].ID: {"D_Account"}} // D, fourth in the grid
-	if v := crossViolations(dm, Plan(dm), cross); len(v) == 0 {
-		t.Fatalf("control: in the plain grid D's line should run through A, B and C")
+	grid := map[model.ID]model.Point{}
+	for i, e := range ents {
+		grid[e.ID] = GridSlot(i)
+	}
+	if v := crossViolations(dm, grid, cross); len(v) == 0 {
+		t.Fatalf("control: on the default grid D's line should run through A, B and C")
 	}
 	pos := PlanWith(dm, cross)
 	if v := crossViolations(dm, pos, cross); len(v) > 0 {
@@ -171,5 +175,67 @@ func TestCrossLinesFor(t *testing.T) {
 	}
 	if fmt.Sprint(got["c"]) != "[Lead_Customer]" {
 		t.Errorf("Customer's lines = %v, want [Lead_Customer]", got["c"])
+	}
+}
+
+// Unconnected entities with cross-module lines share a row when their lines
+// clear what is to their left: short ones first, so a taller one's lines run
+// below its shorter neighbours. Shop had CheckoutForm, LookupAttempt and
+// TrackView one per row, a single tall column.
+func TestPlanWith_IsolatedCrossEntitiesShareARowWhereClear(t *testing.T) {
+	short := ent("LookupAttempt", "a")
+	mid := ent("CheckoutForm", strings.Split(strings.Repeat("a,", 20), ",")[:20]...)
+	tall := ent("TrackView", strings.Split(strings.Repeat("a,", 60), ",")[:60]...)
+	dm := &domainmodel.DomainModel{Entities: []*domainmodel.Entity{mid, short, tall}}
+	cross := CrossLines{
+		short.ID: {"LookupAttempt_User"},
+		mid.ID:   {"CheckoutForm_Zone"},
+		tall.ID:  {"TrackView_Order"},
+	}
+	pos := PlanWith(dm, cross)
+	if v := crossViolations(dm, pos, cross); len(v) > 0 {
+		t.Fatalf("lines blocked:\n%s", strings.Join(v, "\n"))
+	}
+	if pos[short.ID].Y != pos[mid.ID].Y || pos[mid.ID].Y != pos[tall.ID].Y {
+		t.Fatalf("want one row, got y %d / %d / %d", pos[short.ID].Y, pos[mid.ID].Y, pos[tall.ID].Y)
+	}
+	if !(pos[short.ID].X < pos[mid.ID].X && pos[mid.ID].X < pos[tall.ID].X) {
+		t.Errorf("want shortest first: x %d / %d / %d", pos[short.ID].X, pos[mid.ID].X, pos[tall.ID].X)
+	}
+}
+
+// Two of the same height cannot share a row: the second's line, at its
+// middle, would run through the first. It starts a new row.
+func TestPlanWith_IsolatedCrossEntitiesOfOneHeightStack(t *testing.T) {
+	a, b := ent("A", "x", "y", "z", "w"), ent("B", "x", "y", "z", "w")
+	dm := &domainmodel.DomainModel{Entities: []*domainmodel.Entity{a, b}}
+	cross := CrossLines{a.ID: {"A_X"}, b.ID: {"B_X"}}
+	pos := PlanWith(dm, cross)
+	if v := crossViolations(dm, pos, cross); len(v) > 0 {
+		t.Fatalf("lines blocked:\n%s", strings.Join(v, "\n"))
+	}
+	if pos[a.ID].Y == pos[b.ID].Y {
+		t.Fatalf("A and B share a row; B's line would run through A")
+	}
+}
+
+// A tall entity whose line, at its middle, would hit its shorter neighbour
+// starts a little lower in the same row rather than a whole new row: Shop's
+// TrackView next to CheckoutForm. Its line must still be clear.
+func TestPlanWith_TallIsolatedEntityStaggersInsteadOfANewRow(t *testing.T) {
+	mid := ent("CheckoutForm", strings.Split(strings.Repeat("a,", 50), ",")[:50]...)
+	tall := ent("TrackView", strings.Split(strings.Repeat("a,", 90), ",")[:90]...)
+	dm := &domainmodel.DomainModel{Entities: []*domainmodel.Entity{mid, tall}}
+	cross := CrossLines{mid.ID: {"CheckoutForm_Zone"}, tall.ID: {"TrackView_Order"}}
+	pos := PlanWith(dm, cross)
+	if v := crossViolations(dm, pos, cross); len(v) > 0 {
+		t.Fatalf("lines blocked:\n%s", strings.Join(v, "\n"))
+	}
+	_, hMid := boxSize(mid)
+	if pos[tall.ID].X == pos[mid.ID].X {
+		t.Fatalf("TrackView is under CheckoutForm (x %d): want it beside, a little lower", pos[tall.ID].X)
+	}
+	if pos[tall.ID].Y >= pos[mid.ID].Y+hMid+rowGutter {
+		t.Errorf("TrackView y %d is a whole row down (CheckoutForm ends at %d)", pos[tall.ID].Y, pos[mid.ID].Y+hMid)
 	}
 }
