@@ -304,8 +304,8 @@ Practical consequences:
 
 ## "My edit didn't show up" — stale process, not stale cache
 
-`run --local` refuses to boot when its ports (8080/8090/6543) are already answering,
-because a leftover `run --local` / `mxbuild --serve` / runtime would otherwise be
+`run --local` refuses to boot when its **app or admin** port (8080/8090) is already
+answering, because a leftover `run --local` / runtime would otherwise be
 silently adopted and keep serving old output (it looks like a cache but is a stale
 **process**). If a background `run --local` died while its serve+runtime kept serving,
 **the refusal names the pid** — on Linux it resolves the listener through `/proc`, so
@@ -343,7 +343,7 @@ run's process session), and `run status` reports them. Do **not**
 | `--web-client-timeout` | `$MXCLI_WEB_CLIENT_TIMEOUT`, else `5m` | Limit for one web client bundle build; on timeout the tail of `deployment/log/web-client-build.log` is printed |
 | `--ensure-db` | off | Provision local Postgres + app database if missing |
 | `--db-admin-user` / `--db-admin-password` | postgres / — | Superuser login for `--ensure-db` when it has a password (Windows); only with `--ensure-db` |
-| `--app-port` / `--admin-port` / `--serve-port` | 8080 / 8090 / 6543 | Ports |
+| `--app-port` / `--admin-port` / `--serve-port` | 8080 / 8090 / 6543 | Ports. The serve port is the only one that moves on its own: unset, a run keeps 6543 when it can and takes a free port when another run holds it, so a second app needs no flag for it |
 | `--listen-addr` | `127.0.0.1` | IP the app binds to. `0.0.0.0` (or `::`) makes it reachable from other machines; the network URLs are printed once it runs. If the app builds absolute URLs (SSO redirects, email links), pair it with `--runtime-setting ApplicationRootUrl=http://<host>:<port>/` (or a real host in the configuration): the runtime does not derive one from the bind address — a warning says so. The M2EE admin API always stays on loopback |
 | `--db-host` / `--db-name` / `--db-user` / `--db-password` | 127.0.0.1:5432 / derived / mendix / mendix | Database; bracket IPv6 endpoints (`[::1]:5432`). Never type a real password: `--db-password @env:VAR` or `@file:path` (owner-only) keeps it out of `ps`, history and run state, and `run restart` still works; same for `--db-admin-password`, `--screenshot-password`, `--hub-secret`, `--debug-pass` |
 | `--db-type` | `postgresql` | `hsqldb` runs on the runtime's built-in file database: no database server, no `--ensure-db`, works offline. Data lives in `<project>/deployment/data/database/hsqldb/`. Refused together with `--db-host`/`--db-user`/`--db-password`/`--ensure-db`. Local development only |
