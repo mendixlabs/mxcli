@@ -69,7 +69,7 @@ These are loaded automatically from `.claude/lint-rules/`:
 | Rule | Category | Description |
 |------|----------|-------------|
 | SEC004 | security | GuestAccessEnabled - Review anonymous user entity access |
-| SEC005 | security | StrictModeDisabled - XPath constraint enforcement off |
+| SEC005 | security | StrictModeDisabled - client API not restricted (Production, React client) |
 | SEC006 | security | PIIAttributesExposed - PII-sounding attributes need access rules |
 | SEC007 | security | UnconstrainedAnonymousEntityRead - DIVD-2022-00019 detection |
 | SEC008 | security | PIIUnconstrainedRead - PII entities readable without row scoping |
