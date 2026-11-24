@@ -49,7 +49,9 @@ instead of crossing the diagram. The gap between two columns is wide enough for
 the longest association name drawn across it. An entity with a cross-module
 association (at either end) is placed where Studio Pro's line for it, which
 always runs from its left side straight to the left edge, passes no other box.
-Entities with no association at
+Within each column the order is then searched for the fewest crossings, and
+every module that changes reports its crossings before and after (estimated,
+from the same box sizes). Entities with no association at
 all — non-persistent helpers, mostly — go in a band underneath rather than being
 mixed in with the lookups. Every association line is then re-attached: on the
 sides of its two boxes that face each other, straight across where the boxes
@@ -146,11 +148,22 @@ func runLayout(cmd *cobra.Command) error {
 			continue
 		}
 
+		cross := dmlayout.CrossLinesFor(m.Name, dm, allDMs)
+		// The diagram as stored, for the crossings report: captured before
+		// anything below moves an entity or re-anchors a line.
+		beforePos := map[model.ID]model.Point{}
+		for _, e := range dm.Entities {
+			if e != nil {
+				beforePos[e.ID] = e.Location
+			}
+		}
+		beforeAnchors := dmlayout.StoredAnchors(dm)
+
 		var plan map[model.ID]model.Point
 		if layoutOnlyOverlapping {
 			plan = dmlayout.ResolveOverlaps(dm)
 		} else {
-			plan = dmlayout.PlanWith(dm, dmlayout.CrossLinesFor(m.Name, dm, allDMs))
+			plan = dmlayout.PlanWith(dm, cross)
 		}
 		moved := 0
 		var moves []string
@@ -197,6 +210,8 @@ func runLayout(cmd *cobra.Command) error {
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "  %s: %d association line(s) %s\n", m.Name, reanchored, verb)
 		}
+		fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s\n", m.Name,
+			crossingsReport(dm, beforePos, beforeAnchors, plan, cross, !layoutOnlyOverlapping))
 		if layoutDryRun {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s: %d of %d entities would move\n", m.Name, moved, len(dm.Entities))
 		} else {
@@ -216,6 +231,30 @@ func runLayout(cmd *cobra.Command) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "Dry run: %d entities would move. Re-run without --dry-run to apply.\n", movedTotal)
 	}
 	return nil
+}
+
+// crossingsReport compares the lines that cross each other or run through a
+// box before and after the layout (rule 1 of mendixlabs/mxcli#1929). Both are
+// estimates from the same box sizes the layout uses, which is why the report
+// says so. reanchor says whether the layout also places the lines; when it does
+// not (--only-overlapping), the stored anchors are kept for "after" too.
+func crossingsReport(dm *domainmodel.DomainModel, before map[model.ID]model.Point, beforeAnchors map[model.ID]dmlayout.AnchorPair,
+	plan map[model.ID]model.Point, cross dmlayout.CrossLines, reanchor bool) string {
+	after := make(map[model.ID]model.Point, len(before))
+	for id, p := range before {
+		after[id] = p
+		if q, ok := plan[id]; ok {
+			after[id] = q
+		}
+	}
+	afterAnchors := beforeAnchors
+	if reanchor {
+		afterAnchors = dmlayout.Anchors(dm, after)
+	}
+	l0, b0 := dmlayout.Crossings(dm, before, beforeAnchors, cross)
+	l1, b1 := dmlayout.Crossings(dm, after, afterAnchors, cross)
+	return fmt.Sprintf("crossings %d -> %d (lines crossing lines %d -> %d, lines through a box %d -> %d; estimated)",
+		l0+b0, l1+b1, l0, l1, b0, b1)
 }
 
 // applyAnchors sets each association's connection points to where

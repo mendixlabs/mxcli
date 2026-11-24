@@ -272,16 +272,32 @@ to 3717 px tall. Some in-module lines become long diagonals and two labels can
 meet where lines cross. That trade is what #1929's priority order asks for
 (rule 2 above rule 4 and rule 7). The crossings are phase 4's.
 
-### Phase 4 — Crossing count, better ordering, lint (rule 1)
+### Phase 4 — Crossing count, better ordering, lint (rule 1) — implemented
 
-1. `dmlayout.Crossings(dm, layout) (lineLine, lineBox int)`: segment geometry over
-   the estimated boxes and anchors. Generalizations count as lines between box
-   centres.
-2. Ordering: replace the single sweep with alternating down/up barycentre sweeps
-   (fixed count, e.g. 4). Keep the ordering with the fewest crossings; ties go to
-   the earlier one, so the result stays deterministic.
-3. `--dry-run` / normal output prints `crossings: before -> after`.
-4. MPR021 in `mdl/linter/rules/mpr021_association_crosses_entity.go`.
+1. `dmlayout.Lines` / `Crossings(dm, pos, anchors, cross) (lines, boxes)`:
+   segments over the estimated boxes, for associations (from their anchors;
+   `StoredAnchors` reads them, with Studio Pro's 0;50 / 100;50 default),
+   generalizations (centre to centre) and cross-module lines (left side to
+   x = 0). Lines sharing an entity meet at its box and are not a crossing; a
+   line along an edge does not count as through a box.
+2. Ordering: **not** the barycentre sweeps first planned. They were built and
+   measured, and never produced a better order, on PizzaV1 or on ~7,000 random
+   models, because row alignment and the cross-module bands decide most
+   positions. What did help is a neighbour-swap search: swap two entities in a
+   column, keep the swap when the full placement, scored on the lines it
+   actually draws (`lines + 2 × through a box`), is strictly better; repeat
+   until nothing helps, within a budget of 8 swaps per entity. Strict
+   improvement only, so never worse than the layering's order, and
+   deterministic. PizzaV1 Catalog: 8 to 6; the other modules were already at
+   their best.
+3. `mxcli layout` prints `crossings A -> B (lines crossing lines …, lines
+   through a box …; estimated)` for every module it changes. On PizzaV1:
+   Catalog 30 → 6, Fulfilment 13 → 3, Shop 30 → 8 (grid as stored → laid out).
+4. MPR021 `AssociationCrossesEntity` (warning): any of those lines through an
+   entity it does not connect, against each box inset by 8 px so a line grazing
+   an estimated edge is not reported. PizzaV1: 27 findings as stored, 1 after
+   `mxcli layout` (Catalog's `Product_Allergen`, Allergen being used from
+   columns 1 and 3). TestApp: 1, a real crossing in a hand-arranged diagram.
 
 Pockets (rule 6) are out of scope. With estimated box sizes the clearance check
 inside a triangle is too unreliable to do automatically, and the gain is small

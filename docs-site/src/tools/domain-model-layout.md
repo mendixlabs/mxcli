@@ -37,7 +37,17 @@ Entities are layered on the associations between them:
   box is in the way), the rest spread along the side so no two lines meet at
   one point. `--only-overlapping` leaves the attachment points alone.
 
-Association lines then mostly run one way instead of crossing the diagram.
+Association lines then mostly run one way instead of crossing the diagram. On
+top of that, `layout` tries swapping neighbouring entities in each column and
+keeps a swap whenever it leaves fewer lines crossing each other or running
+through a box. Every module it changes reports the count, before and after:
+
+```
+  Catalog: crossings 30 -> 6 (lines crossing lines 10 -> 4, lines through a box 20 -> 2; estimated)
+```
+
+Lint rule **MPR021** reports a line that still runs through an entity it does
+not connect, so a crossing `layout` cannot remove gets a name.
 
 On the 15-entity test model (`capTrack` in `mdl/dmlayout`) the layering falls
 out of the associations with no hints:

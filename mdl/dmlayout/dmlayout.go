@@ -162,7 +162,52 @@ func PlanWith(dm *domainmodel.DomainModel, cross CrossLines) map[model.ID]model.
 		return map[model.ID]model.Point{}
 	}
 
-	layers, isolated := g.layers()
+	base, isolated := g.layers()
+
+	// Rule 1 of mendixlabs/mxcli#1929: as few crossings as possible. The order
+	// of the entities within each column decides many of them. Starting from
+	// the order the layering made, swap two neighbours in a column and keep the
+	// swap when the whole placement, scored on the lines it actually draws,
+	// has strictly fewer crossings; repeat until no swap helps. A swap is kept
+	// only on a strict improvement, so the result is never worse than the
+	// layering's order by this measure, and it stays deterministic.
+	//
+	// Whole-column barycentre sweeps (the textbook step) were tried first and
+	// dropped: on ako/PizzaV1 and on thousands of random models they never
+	// produced a better order than this start, because row alignment and the
+	// cross-module bands decide most positions; single swaps did (PizzaV1
+	// Catalog: 8 crossings to 6).
+	score := func(layers [][]model.ID) (map[model.ID]model.Point, int) {
+		pos := g.place(layers, isolated, cross)
+		lines, boxes := Crossings(dm, pos, Anchors(dm, pos), cross)
+		// A line through a box hides what is in it; a crossing only costs a
+		// moment's tracing.
+		return pos, lines + 2*boxes
+	}
+	bestLayers := base
+	best, bestScore := score(base)
+	// The budget grows with the model, so a large module stays fast.
+	budget := 8 * len(g.order)
+	for improved := true; improved && budget > 0 && bestScore > 0; {
+		improved = false
+		for li := range bestLayers {
+			for i := 0; i+1 < len(bestLayers[li]) && budget > 0; i++ {
+				cand := copyLayers(bestLayers)
+				cand[li][i], cand[li][i+1] = cand[li][i+1], cand[li][i]
+				budget--
+				if pos, sc := score(cand); sc < bestScore {
+					bestLayers, best, bestScore = cand, pos, sc
+					improved = true
+				}
+			}
+		}
+	}
+	return best
+}
+
+// place lays out one ordering of the layers, plus the isolated band: the body
+// of PlanWith for a fixed order of the entities within each column.
+func (g *graph) place(layers [][]model.ID, isolated []model.ID, cross CrossLines) map[model.ID]model.Point {
 	out := make(map[model.ID]model.Point, len(g.order))
 
 	layerOf := make(map[model.ID]int, len(g.order))
