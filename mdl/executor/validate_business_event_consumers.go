@@ -10,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
+	"github.com/mendixlabs/mxcli/mdl/businessevents"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
@@ -237,19 +238,23 @@ func (c *beContract) payloadProperties(payload beContractSchema) map[string]beCo
 	return payload.Properties
 }
 
-// mendixAttributeTypeFor is the inverse of businessevents.asyncAPIType: the
-// Mendix attribute type a payload property maps onto, and whether that mapping
-// has been MEASURED against a Studio Pro export.
-//
-// Only Long is (#2384 §9.1): the one fixture carries two Long attributes and
-// nothing else. Everything else returns false, and the caller then says nothing
-// about the type — the renderer refuses to GUESS in the other direction for the
-// same reason.
-func mendixAttributeTypeFor(p beContractProperty) (string, bool) {
-	if strings.EqualFold(p.Type, "integer") && strings.EqualFold(p.Format, "int64") {
-		return "Long", true
+// contractTypeLabel renders a payload property's encoding the way the contract
+// writes it, for the warning: "integer/int64", or just "string" with no format.
+func contractTypeLabel(p beContractProperty) string {
+	if p.Format == "" {
+		return p.Type
 	}
-	return "", false
+	return p.Type + "/" + p.Format
+}
+
+// containsFold reports whether want is in list, ignoring case.
+func containsFold(list []string, want string) bool {
+	for _, s := range list {
+		if strings.EqualFold(s, want) {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------------------------------------------------------------------------
@@ -299,12 +304,13 @@ func consumedEntityErrors(ctx *ExecContext, sc *scriptContext, where string, con
 				where, beEntityShapeRule, cons.MessageName, name, cons.Entity))
 			continue
 		}
-		want, measured := mendixAttributeTypeFor(props[name])
-		if measured && attrType != "" && !strings.EqualFold(attrType, want) {
+		accepted, known := businessevents.MendixAttributeTypesFor(props[name].Type, props[name].Format)
+		if known && attrType != "" && !containsFold(accepted, attrType) {
 			sc.warnings = append(sc.warnings, fmt.Sprintf(
-				"%s: %s: the contract types %s.%s as %s/%s, which is Mendix %s, but the attribute is %s",
+				"%s: %s: the contract types %s.%s as %s, which a %s attribute holds, but %s.%s is %s",
 				where, beEntityShapeRule, cons.MessageName, name,
-				props[name].Type, props[name].Format, want, attrType))
+				contractTypeLabel(props[name]), strings.Join(accepted, " or "),
+				cons.Entity, name, attrType))
 		}
 	}
 	return errs

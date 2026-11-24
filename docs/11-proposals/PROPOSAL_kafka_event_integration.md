@@ -655,10 +655,10 @@ different majors, which a single service-level version would have got wrong.
 
 B4 is implemented: the seven rules of §5.1 as `MDL-BE01`..`MDL-BE07`, errors for the
 five a statement decides and warnings for the two that are per-environment project
-configuration. The severity split is not cosmetic — BE03's attribute half warns because
-the contract-to-Mendix type mapping is measured for `Long` alone (§9.1), and a rule that
-judged an unmeasured mapping would refuse correct scripts. All of C is implemented
-(above); D is untouched.
+configuration. BE03's attribute half warns because mxbuild does not validate the
+contract-to-entity mapping at all, so a mismatch is a runtime fact; it judges the
+encoding against a SET of acceptable attribute types, since an enumeration travels
+as its key. All of C is implemented (above); D is untouched.
 
 Measured while implementing A2, and worth keeping: the storage layer refuses the
 document outright below 11.10 and names the properties and their versions
@@ -736,10 +736,30 @@ Mendix app and no Studio Pro**. That gives §8 a runtime check and retires item 
 It does **not** retire items 1–4: those are about what Studio Pro *writes*, which only a
 Studio Pro export can settle.
 
-1. AsyncAPI rendering of Integer, Decimal, Boolean, String, DateTime and Enumeration
-   payload fields: add one attribute of each to `OrdersEventService`, export, diff
-   against the generator. Until then the renderer refuses those types for
-   `ContractFrom` (`Contract` / `ContractFile` are unaffected).
+1. ~~AsyncAPI rendering of Integer, Decimal, Boolean, String, DateTime and Enumeration
+   payload fields.~~ **Answered for the six types a business event may carry — no Studio
+   Pro export needed.** `Mendix.Modeler.BusinessEvents.dll` IS the generator, and its
+   string heap holds every literal of the export plus exactly four JSON Schema type
+   values and four formats, with nothing else: `boolean`, `number`, `integer`, `string`,
+   `int32`, `int64`, `binary`, `date-time`. So the generator cannot emit anything outside
+   that set. Mendix's published REST JSON-schema reference gives the same four pairings
+   (Long/int64, Integer/int32, Date and time/date-time, Decimal/number) for a different
+   feature, and a contract carrying string, date and decimal fields was measured
+   round-tripping on 11.16.1. Implemented in `asyncAPIType`.
+
+   **The other four are not a gap in mxcli.** Mendix documents AutoNumber, Binary and
+   Hashed string as *unsupported* for a business event attribute ("Attribute Types",
+   Business Events configuration), so there is no encoding to find. Enumeration is
+   supported from Studio Pro 10.0, but "the enumeration items are stored in the exported
+   AsyncAPI document" and a message attribute carries only a name, a type and a length —
+   there is no enumeration for the renderer to take the items from. Rendering it as a
+   bare `string` would drop them silently, which is the one failure refusing was there to
+   prevent, so both cases stay refused with their real reason. Adding Enumeration needs
+   the item encoding **and** a model field naming the enumeration.
+
+   A first attempt mapped all ten by elimination — "eight literals, ten types, nothing
+   left over". That argument was wrong: `binary` is in the heap and unreachable for a
+   business event attribute, which is what checking the weakest step caught.
 2. CDC version policy (§5.2): add, rename and remove a property in Studio Pro, accept,
    and record the versions it picks.
 3. ~~CDC `Type` for Integer/Boolean/DateTime/Enumeration/Binary/AutoNumber/HashString.~~
