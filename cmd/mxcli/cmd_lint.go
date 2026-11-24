@@ -43,7 +43,7 @@ Built-in rules check for:
 Bundled Starlark rules (in .claude/lint-rules/):
   Security:
   - Guest access enabled (SEC004) - review anonymous user entity access
-  - Strict mode disabled (SEC005) - XPath constraint enforcement off
+  - Strict mode disabled (SEC005) - the client API can reach any object the role can access
   - PII attributes exposed (SEC006) - PII-sounding attributes need access rules
   - Anonymous unconstrained READ (SEC007) - DIVD-2022-00019 pattern detection
   - PII unconstrained READ (SEC008) - PII entities readable without row scoping
@@ -630,6 +630,7 @@ func builtinLintRules() []linter.Rule {
 		rules.NewSnippetCallAppearanceRule(),
 		rules.NewAgentWithoutSelectedModelRule(),
 		rules.NewConsumedMCPServiceWithoutEndpointRule(),
+		rules.NewAgentDocumentDanglingReferenceRule(),
 		rules.NewEmptyContainerRule(),
 		rules.NewGallerySelectionListenerRule(),
 		rules.NewDataViewLayoutGridRule(),
@@ -649,6 +650,7 @@ func builtinLintRules() []linter.Rule {
 		rules.NewModelNameInLiteralRule(),        // MPR018 - a model element named in a string literal
 		rules.NewUnindexedConstraintRule(),       // MPR019 - an XPath-filtered attribute with no leading index
 		rules.NewDomainModelNotLaidOutRule(),     // MPR020 - linked entities still on the auto-placement grid
+		rules.NewAssociationCrossesEntityRule(),  // MPR021 - a diagram line through an entity it does not connect
 		rules.NewNoCommitInLoopRule(),            // CONV011-CONV014 - require BSON inspection
 		rules.NewExclusiveSplitCaptionRule(),
 		rules.NewErrorHandlingOnCallsRule(),

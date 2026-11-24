@@ -38,6 +38,16 @@ func generatedBy(t *testing.T, body string) map[string]string {
 	}
 }
 
+// runnerHandlers is how many handlers the runner should add where the legacy
+// runner adds legacy: the endpoint runner adds none, since a thrown error leaves
+// the test microflow and the endpoint reports it (mendixlabs/mxcli#1874).
+func runnerHandlers(runner string, legacy int) int {
+	if strings.HasPrefix(runner, "endpoint") {
+		return 0
+	}
+	return legacy
+}
+
 func mustParse(t *testing.T, runner, mdl string) {
 	t.Helper()
 	if _, errs := visitor.Build(mdl); len(errs) > 0 {
@@ -108,10 +118,11 @@ func TestOnErrorRollbackIsTheDefaultSpelledOut(t *testing.T) {
 	} {
 		for runner, mdl := range generatedBy(t, body) {
 			mustParse(t, runner, mdl)
-			if n := strings.Count(mdl, runnerHandler); n != 1 {
-				t.Errorf("%s: want the runner's handler once in place of `on error rollback`, got %d:\n%s", runner, n, mdl)
+			want := runnerHandlers(runner, 1)
+			if n := strings.Count(mdl, runnerHandler); n != want {
+				t.Errorf("%s: want the runner's handler %d time(s) in place of `on error rollback`, got %d:\n%s", runner, want, n, mdl)
 			}
-			if strings.Contains(strings.ToLower(mdl), "on error rollback") {
+			if want > 0 && strings.Contains(strings.ToLower(mdl), "on error rollback") {
 				t.Errorf("%s: `on error rollback` was kept beside the runner's handler:\n%s", runner, mdl)
 			}
 		}
@@ -125,12 +136,14 @@ func TestUnhandledCallStillFails(t *testing.T) {
 	got := generatedBy(t, "$r = call java action Shop.JA_Upper(Text = 'abc');")
 	for runner, mdl := range got {
 		mustParse(t, runner, mdl)
-		if n := strings.Count(mdl, runnerHandler); n != 1 {
-			t.Errorf("%s: want one runner handler on an unhandled call, got %d:\n%s", runner, n, mdl)
+		if n, want := strings.Count(mdl, runnerHandler), runnerHandlers(runner, 1); n != want {
+			t.Errorf("%s: want %d runner handler(s) on an unhandled call, got %d:\n%s", runner, want, n, mdl)
 		}
 	}
-	if !strings.Contains(got["endpoint @expect"], verdictFailPrefix+"exception during execution: ") {
-		t.Errorf("the endpoint handler does not FAIL the test:\n%s", got["endpoint @expect"])
+	// The endpoint test lets the error leave the microflow; toResult makes it
+	// the FAIL (TestToResult_ThrownTestMicroflow).
+	if strings.Contains(got["endpoint @expect"], "MxTestErrorMessage") {
+		t.Errorf("the endpoint flow still reads the message in a handler (CE0108 under mxbuild --serve):\n%s", got["endpoint @expect"])
 	}
 	if !strings.Contains(got["legacy @expect"], "MXTEST:FAIL:") {
 		t.Errorf("the legacy handler does not FAIL the test:\n%s", got["legacy @expect"])
@@ -151,8 +164,8 @@ func TestOnErrorTextThatIsNotAClause(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			for runner, mdl := range generatedBy(t, body) {
 				mustParse(t, runner, mdl)
-				if n := strings.Count(mdl, runnerHandler); n != 1 {
-					t.Errorf("%s: want exactly one runner handler, got %d:\n%s", runner, n, mdl)
+				if n, want := strings.Count(mdl, runnerHandler), runnerHandlers(runner, 1); n != want {
+					t.Errorf("%s: want %d runner handler(s), got %d:\n%s", runner, want, n, mdl)
 				}
 			}
 		})
@@ -178,8 +191,8 @@ func TestHandlerDecisionIsPerCall(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			for runner, mdl := range generatedBy(t, body) {
 				mustParse(t, runner, mdl)
-				if n := strings.Count(mdl, runnerHandler); n != 1 {
-					t.Errorf("%s: want the runner's handler on the one unhandled call, got %d:\n%s", runner, n, mdl)
+				if n, want := strings.Count(mdl, runnerHandler), runnerHandlers(runner, 1); n != want {
+					t.Errorf("%s: want the runner's handler %d time(s), got %d:\n%s", runner, want, n, mdl)
 				}
 			}
 		})

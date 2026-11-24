@@ -119,6 +119,11 @@ func (unsupportedBackend) CreateBusinessEventService(_ *model.BusinessEventServi
 	return
 }
 
+func (unsupportedBackend) CreateChangeDataCaptureService(_ *model.ChangeDataCaptureService) (err0 error) {
+	err0 = errUnsupported("CreateChangeDataCaptureService")
+	return
+}
+
 func (unsupportedBackend) CreateConstant(_ *model.Constant) (err0 error) {
 	err0 = errUnsupported("CreateConstant")
 	return
@@ -316,6 +321,11 @@ func (unsupportedBackend) DeleteAttribute(_ model.ID, _ model.ID, _ model.ID) (e
 
 func (unsupportedBackend) DeleteBusinessEventService(_ model.ID) (err0 error) {
 	err0 = errUnsupported("DeleteBusinessEventService")
+	return
+}
+
+func (unsupportedBackend) DeleteChangeDataCaptureService(_ model.ID) (err0 error) {
+	err0 = errUnsupported("DeleteChangeDataCaptureService")
 	return
 }
 
@@ -739,6 +749,11 @@ func (unsupportedBackend) ListBuildingBlocks() (r0 []*pages.BuildingBlock, err1 
 
 func (unsupportedBackend) ListBusinessEventServices() (r0 []*model.BusinessEventService, err1 error) {
 	err1 = errUnsupported("ListBusinessEventServices")
+	return
+}
+
+func (unsupportedBackend) ListChangeDataCaptureServices() (r0 []*model.ChangeDataCaptureService, err1 error) {
+	err1 = errUnsupported("ListChangeDataCaptureServices")
 	return
 }
 
@@ -1298,6 +1313,11 @@ func (unsupportedBackend) UpdateAttribute(_ model.ID, _ model.ID, _ *domainmodel
 
 func (unsupportedBackend) UpdateBusinessEventService(_ *model.BusinessEventService) (err0 error) {
 	err0 = errUnsupported("UpdateBusinessEventService")
+	return
+}
+
+func (unsupportedBackend) UpdateChangeDataCaptureService(_ *model.ChangeDataCaptureService) (err0 error) {
+	err0 = errUnsupported("UpdateChangeDataCaptureService")
 	return
 }
 

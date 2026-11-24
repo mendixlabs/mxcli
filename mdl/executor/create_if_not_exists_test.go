@@ -48,6 +48,8 @@ var createGuardCases = map[string]createGuardCase{
 		lister: "ListPublishedODataServicesFunc"},
 	"businesseventservice": {src: "create business event service if not exists M.X (ServiceName: 'X', EventNamePrefix: '') { message E (Id: Long) publish entity M.PBE; };",
 		lister: "ListBusinessEventServicesFunc"},
+	"changedatacaptureservice": {src: "create change data capture service if not exists M.X (ServiceName: 'X') { entity M.Order (OrderId); };",
+		lister: "ListChangeDataCaptureServicesFunc"},
 	"workflow":                    {src: "create workflow if not exists M.X parameter $Context: M.C begin end workflow;", lister: "ListWorkflowsFunc"},
 	"imagecollection":             {src: "create image collection if not exists M.X;", lister: "ListImageCollectionsFunc"},
 	"queue":                       {src: "create task queue if not exists M.X (Parallelism: 3);", lister: "ListQueuesFunc"},

@@ -544,6 +544,17 @@ func (b *Builder) ExitShowStatement(ctx *parser.ShowStatementContext) {
 			}
 		}
 		b.statements = append(b.statements, stmt)
+	} else if ctx.CHANGE() != nil && ctx.DATA() != nil && ctx.CAPTURE() != nil && ctx.SERVICES() != nil {
+		// SHOW CHANGE DATA CAPTURE SERVICES [IN module]
+		stmt := &ast.ShowStmt{ObjectType: ast.ShowChangeDataCaptureServices}
+		if ctx.IN() != nil {
+			if qn := ctx.QualifiedName(); qn != nil {
+				stmt.InModule = getQualifiedNameText(qn)
+			} else if id := ctx.IDENTIFIER(); id != nil {
+				stmt.InModule = id.GetText()
+			}
+		}
+		b.statements = append(b.statements, stmt)
 	} else if ctx.BUSINESS() != nil && ctx.EVENT() != nil && ctx.CLIENTS() != nil {
 		// SHOW BUSINESS EVENT CLIENTS [IN module]
 		stmt := &ast.ShowStmt{ObjectType: ast.ShowBusinessEventClients}
@@ -977,6 +988,17 @@ func (b *Builder) ExitDescribeStatement(ctx *parser.DescribeStatementContext) {
 			b.statements = append(b.statements, &ast.DescribeStmt{
 				ObjectType: ast.DescribeExternalEntity,
 				Name:       name,
+			})
+		}
+		return
+	}
+
+	// Handle DESCRIBE CHANGE DATA CAPTURE SERVICE Module.Name
+	if ctx.CHANGE() != nil && ctx.DATA() != nil && ctx.CAPTURE() != nil && ctx.SERVICE() != nil {
+		if qn := ctx.QualifiedName(); qn != nil {
+			b.statements = append(b.statements, &ast.DescribeStmt{
+				ObjectType: ast.DescribeChangeDataCaptureService,
+				Name:       buildQualifiedName(qn),
 			})
 		}
 		return

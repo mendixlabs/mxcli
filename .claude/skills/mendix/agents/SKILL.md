@@ -13,10 +13,10 @@ description: "Author Mendix AI agent documents in MDL — Model, Knowledge Base,
 | 24-50 | Overview |
 | 51-195 | Syntax |
 | 196-222 | Altering existing documents |
-| 223-284 | Gotchas |
-| 285-307 | Common Patterns |
-| 308-375 | Calling Agents from Microflows |
-| 376-378 | AI agent documents |
+| 223-294 | Gotchas |
+| 295-317 | Common Patterns |
+| 318-385 | Calling Agents from Microflows |
+| 386-388 | AI agent documents |
 
 <!-- /skill-index -->
 # Agents
@@ -263,6 +263,16 @@ Single-quoted strings cannot span lines. Use `$$...$$` for any SystemPrompt or U
 
 ### documentId vs qualifiedName
 Each reference stores a `qualifiedName` (e.g. `Module.MyModel`) and a `documentId`. A document reference's id is that document's unit id; an agent's `Entity` holds the entity element's `$ID`, which mxcli resolves and writes as Studio Pro does. For a **System** entity the id comes from a measured table (`modelsdk/meta/system_entity_ids.go`): System.User, System.Language and the other System entities have a fixed `$ID` that is the same in 10.24 and 11.16 builds. A dozen — System.Thumbnail, PrivateFileDocument, BackgroundJob, ChangeHash, WorkflowVersion and others — get an `$ID` minted each time the model loads, so there is none to write: those are stored by name with an empty `documentId`, and a rewrite keeps whatever id is already stored.
+
+### Rename and move keep the references in step
+`rename` and `move` of a microflow, constant, entity, model, knowledge base or
+MCP service (and `rename module`) rewrite the `qualifiedName` inside every agent
+document that names it, keep its `documentId`, and list the agent in `dry run`.
+Studio Pro does this itself through its agent-editor extension; `mx` and
+mxbuild never load that extension, so a reference left stale by an edit made
+without Studio Pro passes `mx check` and the build. `mxcli lint` reports one
+(MPR022, needs the full catalog) before Studio Pro does. A prompt that mentions
+a name is the user's text and is not rewritten.
 
 ### Drop order
 Agents reference Model, Knowledge Base, and MCP Service documents. Always drop Agents before dropping their dependencies:

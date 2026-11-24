@@ -731,17 +731,22 @@ func validateWidgetVisibility(w *ast.WidgetV3, registry *WidgetRegistry, locatio
 	if def == nil {
 		return nil
 	}
-	rules := visibilityRulesFor(def, registry)
-	if len(rules) == 0 {
-		return nil
-	}
 	values, explicit := widgetValueMap(w, def)
 	// The configuration exec writes, not only what the statement states
 	// (ako/mxcli#2522): a rule on `source` was never judged.
 	fillTemplateValues(values, def)
+	// Answered by the package's own getProperties where it runs (ako/mxcli#1776).
+	rules := evaluatedVisibilityRules(registryProjectPath(registry), def.WidgetID, visibilityRulesFor(def, registry), values)
+	if len(rules) == 0 {
+		return nil
+	}
 	defaults := widgetPropertyDefaults(registryProjectPath(registry), def.WidgetID)
 
 	var out []linter.Violation
+	reported := map[string]bool{}
+	// A property the package hides can carry both its lifted rule and the
+	// evaluated one; the lifted one names the condition, so it reports first.
+	sortLiftedFirst(rules)
 	for _, rule := range rules {
 		// A nested rule is about a property of an object-list ITEM, not of the
 		// widget — validateWidgetItemVisibility evaluates those, against the item.
@@ -760,6 +765,10 @@ func validateWidgetVisibility(w *ast.WidgetV3, registry *WidgetRegistry, locatio
 		if !determinable || !fires {
 			continue // indeterminable, or the configuration does not hide it
 		}
+		if reported[strings.ToLower(rule.PropertyKey)] {
+			continue
+		}
+		reported[strings.ToLower(rule.PropertyKey)] = true
 		out = append(out, hiddenPropertyViolation(locationPrefix, w.Name, def.MDLName, "", rule,
 			values[strings.ToLower(rule.PropertyKey)],
 			declaredDefault(defaults, def.PropertyMappings, nil, "", rule.PropertyKey),

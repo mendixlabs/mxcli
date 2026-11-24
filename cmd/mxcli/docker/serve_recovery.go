@@ -231,6 +231,13 @@ func (r *serveRecovery) recheckIncrementalErrors(req BuildRequest, incremental *
 	}
 	fmt.Fprintf(r.out, "  the incremental build reports %s, which mxbuild --serve has reported for a model a full build accepts; "+
 		"restarting mxbuild --serve for a full build to check...\n", strings.Join(codes, ", "))
+	// Say what it reported: the recheck may pass, and then these lines are the
+	// only record of an error nobody can otherwise find (mendixlabs/mxcli#1874).
+	for _, p := range incremental.Errors() {
+		if incrementalScopeErrors[p.ErrorCode] {
+			fmt.Fprintf(r.out, "    %s%s: %s\n", p.ErrorCode, problemWhere(p), p.Message)
+		}
+	}
 	fresh, err := r.rebuildFresh(req)
 	if err != nil || fresh == nil {
 		return fresh, err
@@ -382,4 +389,17 @@ func (b prebuiltBundle) lostIn(after prebuiltBundle) []string {
 		return nil
 	}
 	return lost
+}
+
+// problemWhere is " at <document>" for a problem's first location, or "".
+func problemWhere(p BuildProblem) string {
+	for _, l := range p.Locations {
+		switch {
+		case l.Module != "" && l.Document != "":
+			return " at " + l.Module + " " + l.Document
+		case l.Document != "":
+			return " at " + l.Document
+		}
+	}
+	return ""
 }

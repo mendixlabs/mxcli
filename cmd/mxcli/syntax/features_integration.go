@@ -10,9 +10,9 @@ func init() {
 		Summary: "Unified discovery of all external services and integration assets",
 		Keywords: []string{
 			"integration", "services", "external", "contract",
-			"odata", "rest", "business events", "database",
+			"odata", "rest", "business events", "database", "change data capture",
 		},
-		Syntax:  "LIST CONSUMED ODATA SERVICES [IN Module];\nLIST CONSUMED REST SERVICES [IN Module];\nLIST PUBLISHED REST SERVICES [IN Module];\nLIST BUSINESS EVENT SERVICES [IN Module];\nLIST DATABASE CONNECTIONS [IN Module];\nLIST EXTERNAL ENTITIES [IN Module];\nLIST EXTERNAL ACTIONS [IN Module];",
+		Syntax:  "LIST CONSUMED ODATA SERVICES [IN Module];\nLIST CONSUMED REST SERVICES [IN Module];\nLIST PUBLISHED REST SERVICES [IN Module];\nLIST BUSINESS EVENT SERVICES [IN Module];\nLIST CHANGE DATA CAPTURE SERVICES [IN Module];\nLIST DATABASE CONNECTIONS [IN Module];\nLIST EXTERNAL ENTITIES [IN Module];\nLIST EXTERNAL ACTIONS [IN Module];",
 		Example: "LIST CONSUMED ODATA SERVICES;\nLIST CONSUMED REST SERVICES IN MyModule;\nLIST EXTERNAL ENTITIES;\nSELECT * FROM CATALOG.CONSUMED_REST_SERVICES;",
 		SeeAlso: []string{"odata", "rest", "sql", "business-events"},
 	})
@@ -693,6 +693,50 @@ DESCRIBE DATABASE CONNECTION Ops.Erp;`,
 			"  CONSUME CustomerChangedEvent (Entity: Module.CBE_CustomerChangedEvent, Microflow: Module.HandleBE_CustomerChangedEvent);\n};\n\n" +
 			"DROP BUSINESS EVENT SERVICE Module.CustomerEventsApi;",
 		SeeAlso: []string{"business-events"},
+	})
+
+	// ── Change data capture ───────────────────────────────────────────
+
+	Register(SyntaxFeature{
+		Path:     "change-data-capture",
+		Features: []string{"integration/change_data_capture"},
+		Summary:  "Entity change data capture services — declare and inspect what a project streams to a lake",
+		Keywords: []string{
+			"change data capture", "cdc", "entity change", "kafka",
+			"debezium", "lake", "topic", "baseline", "revision", "exposed name",
+		},
+		Syntax: "LIST CHANGE DATA CAPTURE SERVICES [IN Module];\n" +
+			"DESCRIBE CHANGE DATA CAPTURE SERVICE Module.Name;\n\n" +
+			"CREATE [OR MODIFY] CHANGE DATA CAPTURE SERVICE Module.Name\n" +
+			"( ServiceName: 'Name' )\n" +
+			"{\n" +
+			"  ENTITY Module.Order (OrderId, Price AS 'Amount', Order_Customer);\n" +
+			"  ENTITY Module.Customer AS 'Client' (CustomerId, Address);\n" +
+			"};\n\n" +
+			"DROP CHANGE DATA CAPTURE SERVICE Module.Name;\n\n" +
+			"-- A member is NAMED, not typed: it resolves to an attribute or an\n" +
+			"-- association of that entity and its type comes from the domain model.\n" +
+			"-- `id` is implicit and must not be listed. AppName is not settable.\n" +
+			"--\n" +
+			"-- Only the live side is authored. The baseline is computed from the\n" +
+			"-- domain model, because it identifies what it tracks by the GUIDs the\n" +
+			"-- runtime keys the database on \u2014 a GUID an author could write is one\n" +
+			"-- they could get wrong, and a wrong one detaches a table from its rows.\n" +
+			"--\n" +
+			"-- The document is two-sided: Sources is the live model and the\n" +
+			"-- baseline is the copy Studio Pro's \"accept changes\" froze, which\n" +
+			"-- names what it tracks by GUID. mxbuild reports CE1585 when they\n" +
+			"-- disagree and CE1577 on an empty AppName.\n" +
+			"--\n" +
+			"-- DESCRIBE prints each source's revision and its Kafka topic,\n" +
+			"-- cdc.<AppName>.<ExposedName>.<Major>.<space>. Every segment but the\n" +
+			"-- last is a model value, so a major bump, an AppName change or a\n" +
+			"-- rename starts a NEW topic — and downstream a new table with no\n" +
+			"-- history.\n" +
+			"--\n" +
+			"-- Needs Mendix 11.10+ (where the baseline was introduced).",
+		Example: "mdl 1;\nCREATE OR MODIFY CHANGE DATA CAPTURE SERVICE CdcPublish.OrdersCDCService\n( ServiceName: 'OrdersCDCService' )\n{\n  ENTITY CdcPublish.Order (OrderId, CustomerName, Price, Order_Customer);\n  ENTITY CdcPublish.Customer (CustomerId, Address);\n};\n\nDESCRIBE CHANGE DATA CAPTURE SERVICE CdcPublish.OrdersCDCService;",
+		SeeAlso: []string{"business-events", "integration"},
 	})
 
 	// ── XPath ─────────────────────────────────────────────────────────

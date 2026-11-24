@@ -128,8 +128,8 @@ mxcli layout -p app.mpr --module MyModule --dry-run   # see the moves
 mxcli layout -p app.mpr --module MyModule             # apply
 ```
 
-That lays entities out from the association graph — lookups on the left, each
-entity one column past the furthest thing it references, on the row of the
+That lays entities out from the association graph — each lookup just left of
+what uses it, each entity one column past the furthest thing it references, on the row of the
 entity it is most linked to — so the lines mostly run one way and straight
 across, with room between columns for the association names. It is idempotent (a second run moves nothing) and local (adding an
 entity later moves a handful, not the model). It REPLACES positions you set by

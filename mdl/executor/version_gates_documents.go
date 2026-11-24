@@ -264,6 +264,19 @@ var documentTypeGates = []statementTypeGate{
 	},
 	{
 		typeGate: typeGate{
+			versionGate: versionGate{"integration", "change_data_capture", "create change data capture service",
+				"this version cannot store the baseline a change data capture service needs (ChangeDataCapture$VersionedEntityChangeDataCaptureService, 11.10.0+): upgrade the project"},
+			types: []string{
+				"ChangeDataCapture$EntityChangeDataCaptureService", "ChangeDataCapture$EntityChangeSource",
+				"ChangeDataCapture$AttributeProperty", "ChangeDataCapture$AssociationProperty",
+				"ChangeDataCapture$VersionedEntityChangeDataCaptureService", "ChangeDataCapture$VersionedEntityChangeSource",
+				"ChangeDataCapture$VersionedProperty", "ChangeDataCapture$Version",
+			},
+		},
+		applies: func(stmt ast.Statement) bool { _, ok := stmt.(*ast.CreateChangeDataCaptureServiceStmt); return ok },
+	},
+	{
+		typeGate: typeGate{
 			versionGate: versionGate{"integration", "rest_client_authentication", "authentication: basic (on a consumed REST service)",
 				"this version has no authentication scheme on a consumed REST service (Rest$BasicAuthenticationScheme): set the header yourself, or upgrade the project"},
 			types:      []string{"Rest$BasicAuthenticationScheme"},

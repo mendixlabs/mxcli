@@ -3,6 +3,7 @@
 package testrunner
 
 import (
+	"github.com/mendixlabs/mxcli/mdl/visitor"
 	"strings"
 	"testing"
 )
@@ -89,46 +90,34 @@ func TestGenerateTestFlowsNotEqualIsRewritten(t *testing.T) {
 	}
 }
 
-func TestGenerateTestFlowsWrapsCallsWithErrorHandling(t *testing.T) {
+// A call that throws is left to the endpoint, which catches the error and
+// reports its message; toResult makes it the FAIL verdict
+// (TestToResult_ThrownTestMicroflow). The flow used to give each call a handler
+// that read the message into a variable, and mxbuild --serve's incremental build
+// rejects any use of such a variable (CE0108, measured on 11.16.1), so every
+// `test --attach` of a test calling a microflow fell back to a cold build it
+// could not apply (mendixlabs/mxcli#1874).
+func TestGenerateTestFlowsLeavesCallsToTheEndpoint(t *testing.T) {
 	suite := &TestSuite{Tests: []TestCase{{
 		ID: "test_1", Name: "throwing", MDL: "$r = CALL MICROFLOW Mod.A();",
 	}}}
 	mdl := GenerateTestFlows(suite)
-
-	if !strings.Contains(mdl, "ON ERROR BEGIN") {
-		t.Errorf("the CALL was not wrapped in ON ERROR:\n%s", mdl)
-	}
-	if !strings.Contains(mdl, verdictFailPrefix+"exception during execution") {
-		t.Errorf("the error handler does not set a FAIL verdict:\n%s", mdl)
-	}
-}
-
-// TestGenerateTestFlowsFailVerdictCarriesErrorMessage pins that a CALL which
-// throws reports what was raised. The handler used to set the fixed text
-// "FAIL:exception during execution" and discard the error, so a test failing on
-// e.g. an unresolvable [%CurrentUser%] token (tests run in a system context)
-// gave no hint of the cause.
-func TestGenerateTestFlowsFailVerdictCarriesErrorMessage(t *testing.T) {
-	suite := &TestSuite{Tests: []TestCase{{
-		ID: "test_1", Name: "throwing", MDL: "$r = CALL MICROFLOW Mod.A();",
-	}}}
-	mdl := GenerateTestFlows(suite)
-
-	// The message comes through errorMessageFlow: the test flow applies entity
-	// access and may not read $latestError/Message itself (ako/mxcli#2100).
-	for _, want := range []string{
-		readErrorMessage("$MxTestErrorMessage_1"),
-		"SET $Verdict = '" + verdictFailPrefix + "exception during execution: ' + $MxTestErrorMessage_1;",
-	} {
-		if !strings.Contains(mdl, want) {
-			t.Errorf("the error handler does not carry the raised message into the verdict; want %q in:\n%s", want, mdl)
+	for _, unwanted := range []string{"ON ERROR BEGIN", "MxTestErrorMessage", errorMessageFlow} {
+		if strings.Contains(mdl, unwanted) {
+			t.Errorf("generated flows contain %q:\n%s", unwanted, mdl)
 		}
+	}
+	if !strings.Contains(mdl, "$r = CALL MICROFLOW Mod.A();") {
+		t.Errorf("the call is not kept as written:\n%s", mdl)
+	}
+	if _, errs := visitor.Build(mdl); len(errs) > 0 {
+		t.Errorf("generated MDL does not parse: %v\n%s", errs[0], mdl)
 	}
 }
 
 // TestGenerateTestFlowsThrowsTestStartsFailed pins that an @throws test whose
-// body completes normally fails: the verdict is pre-set to a failure and only
-// the error handler clears it.
+// body completes normally fails: the verdict is pre-set to a failure, and only
+// an error (judged by toResult) can turn the test into a pass.
 func TestGenerateTestFlowsThrowsTestStartsFailed(t *testing.T) {
 	suite := &TestSuite{Tests: []TestCase{{
 		ID: "test_1", Name: "expects a throw", MDL: "$r = CALL MICROFLOW Mod.A();",
@@ -137,18 +126,15 @@ func TestGenerateTestFlowsThrowsTestStartsFailed(t *testing.T) {
 	mdl := GenerateTestFlows(suite)
 
 	failIdx := strings.Index(mdl, verdictFailPrefix+"expected an exception")
-	handlerIdx := strings.Index(mdl, "ON ERROR BEGIN")
-	if failIdx < 0 {
-		t.Fatalf("no pre-set failure verdict:\n%s", mdl)
+	callIdx := strings.Index(mdl, "$r = CALL MICROFLOW Mod.A();")
+	if failIdx < 0 || callIdx < 0 {
+		t.Fatalf("want the pre-set failure verdict and the call as written:\n%s", mdl)
 	}
-	if handlerIdx < 0 {
-		t.Fatalf("no error handler:\n%s", mdl)
+	if failIdx > callIdx {
+		t.Error("the failure verdict is set after the body; a non-throwing body would pass")
 	}
-	if failIdx > handlerIdx {
-		t.Error("the failure verdict is set after the handler; a non-throwing body would pass")
-	}
-	if !strings.Contains(mdl[handlerIdx:], "SET $Verdict = '"+verdictPass+"';") {
-		t.Error("the error handler does not clear the failure verdict")
+	if strings.Contains(mdl, "ON ERROR BEGIN") {
+		t.Errorf("a handler was generated:\n%s", mdl)
 	}
 }
 
@@ -158,12 +144,11 @@ func TestGenerateTestFlowsMultiLineCall(t *testing.T) {
 		MDL: "$r = CALL MICROFLOW Mod.A(\n  FirstName = 'John',\n  LastName = 'Doe'\n);",
 	}}}
 	mdl := GenerateTestFlows(suite)
-
-	if !strings.Contains(mdl, ") ON ERROR BEGIN") {
-		t.Errorf("a statement spanning lines was not joined before ON ERROR was attached:\n%s", mdl)
+	if strings.Contains(mdl, "ON ERROR BEGIN") {
+		t.Errorf("a handler was generated:\n%s", mdl)
 	}
-	if strings.Count(mdl, "ON ERROR BEGIN") != 1 {
-		t.Errorf("expected exactly one handler for one call:\n%s", mdl)
+	if _, errs := visitor.Build(mdl); len(errs) > 0 {
+		t.Errorf("a statement spanning lines does not parse: %v\n%s", errs[0], mdl)
 	}
 }
 

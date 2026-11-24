@@ -76,3 +76,44 @@ func TestNullTemplatesOfUnsetDataSources(t *testing.T) {
 		t.Error("a template bound to the enclosing widget's data source was nulled")
 	}
 }
+
+// A text template bound to a REQUIRED data source keeps its empty template
+// when the data source is unset: `mx update-widgets` writes one there, and a
+// null is CE0463. Measured on Tree node 3.4.0 (`datasource` declares no
+// required="false"), mx check 11.16.1. The #1967 null is for an optional one.
+func TestNullTemplatesOfUnsetDataSources_RequiredDataSourceKeepsItsTemplate(t *testing.T) {
+	const (
+		dsID   = "44444444-4444-4444-4444-444444444444"
+		textID = "55555555-5555-5555-5555-555555555555"
+	)
+	ids := map[string]pages.PropertyTypeIDEntry{
+		"datasource":    {PropertyTypeID: dsID, ValueType: "DataSource", Required: true},
+		"headerCaption": {PropertyTypeID: textID, ValueType: "TextTemplate", DataSourceProperty: "datasource"},
+	}
+	prop := func(id string, tt any) bson.D {
+		return bson.D{
+			{Key: "$Type", Value: "CustomWidgets$WidgetProperty"},
+			{Key: "TypePointer", Value: types.UUIDToBlob(id)},
+			{Key: "Value", Value: bson.D{
+				{Key: "$Type", Value: "CustomWidgets$WidgetValue"},
+				{Key: "DataSource", Value: nil},
+				{Key: "TextTemplate", Value: tt},
+			}},
+		}
+	}
+	obj := bson.D{{Key: "Properties", Value: bson.A{int32(2), prop(dsID, nil), prop(textID, BuildEmptyClientTemplate())}}}
+	out := NullTemplatesOfUnsetDataSources(obj, ids)
+	for _, item := range out[0].Value.(bson.A)[1:] {
+		p := item.(bson.D)
+		if propertyTypePointerID(p) != normalizeID(textID) {
+			continue
+		}
+		for _, e := range widgetValueOfProperty(p) {
+			if e.Key == "TextTemplate" && e.Value == nil {
+				t.Fatal("headerCaption nulled: its data source is required, so the empty template stays")
+			}
+		}
+		return
+	}
+	t.Fatal("no headerCaption property")
+}

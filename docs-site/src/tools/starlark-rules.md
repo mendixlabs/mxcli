@@ -9,7 +9,7 @@ In addition to the built-in Go rules, mxcli bundles 29 Starlark-based lint rules
 | Rule | Description |
 |------|-------------|
 | **SEC004** | Guest access -- Warns about overly permissive guest/anonymous access |
-| **SEC005** | Strict mode -- Checks for strict security mode settings |
+| **SEC005** | Strict mode -- Flags strict mode off at Production level with the React client: the client API is not restricted |
 | **SEC006** | PII exposure -- Detects potentially sensitive data without restricted access |
 | **SEC007** | Anonymous access -- Flags entities accessible to anonymous users |
 | **SEC008** | Member restrictions -- Checks for overly broad member-level access |

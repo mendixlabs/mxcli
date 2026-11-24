@@ -12,6 +12,7 @@ type ServiceBackend interface {
 	ODataBackend
 	RESTBackend
 	BusinessEventBackend
+	ChangeDataCaptureBackend
 	DatabaseConnectionBackend
 	DataTransformerBackend
 }
@@ -53,6 +54,20 @@ type BusinessEventBackend interface {
 	CreateBusinessEventService(svc *model.BusinessEventService) error
 	UpdateBusinessEventService(svc *model.BusinessEventService) error
 	DeleteBusinessEventService(id model.ID) error
+}
+
+// ChangeDataCaptureBackend reads entity change data capture services.
+//
+// Read-only for now: the write path is part C of the Kafka proposal, and it is not a
+// small one — the baseline identifies what it tracks by GUID, the identity the
+// runtime keys the database on, so a writer that mints those instead of reading
+// them from the domain model loses a table's rows on the next deploy with no
+// build error (CLAUDE.md).
+type ChangeDataCaptureBackend interface {
+	ListChangeDataCaptureServices() ([]*model.ChangeDataCaptureService, error)
+	CreateChangeDataCaptureService(svc *model.ChangeDataCaptureService) error
+	UpdateChangeDataCaptureService(svc *model.ChangeDataCaptureService) error
+	DeleteChangeDataCaptureService(id model.ID) error
 }
 
 // DatabaseConnectionBackend manages database connections.

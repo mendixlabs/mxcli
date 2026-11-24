@@ -18,12 +18,12 @@ description: "Write and run MDL-based microflow tests with `mxcli test` — anno
 | 249-272 | Running Tests |
 | 273-471 | How It Works |
 | 472-510 | Check a test file before you run it |
-| 511-632 | Writing Good Tests |
-| 633-647 | Test File Organization |
-| 648-660 | Interpreting Failures |
-| 661-682 | CI Integration |
-| 683-689 | Related Skills |
-| 690-694 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
+| 511-633 | Writing Good Tests |
+| 634-648 | Test File Organization |
+| 649-661 | Interpreting Failures |
+| 662-683 | CI Integration |
+| 684-690 | Related Skills |
+| 691-695 | Warm test loop (`mxcli test --local [--watch]`, `--attach`, `run --local --test-endpoint`) |
 
 <!-- /skill-index -->
 # Test Microflows Skill
@@ -606,9 +606,10 @@ call microflow Sales.ValidateOrder(Total = -1);
 Anything else after the tag is an error, not a message: `@throws not found` is
 refused rather than read as an unquoted one.
 
-A call that already has its own `on error` clause keeps it — the runner adds
-its handler only to calls without one, so the test runs the statement exactly as
-production does:
+The runner adds no error handler to the body: an error from any statement leaves
+the test microflow and the endpoint reports it — FAIL `exception during
+execution: …`, or PASS under a matching `@throws`. A call with its own `on error`
+clause keeps it, so the test runs the statement exactly as production does:
 
 - `on error rollback` is Mendix's default spelled out and behaves like no clause:
   FAIL `exception during execution: …`, or PASS under a matching `@throws`.
@@ -617,12 +618,12 @@ production does:
 - A custom handler that ends normally skips every statement reading the failed
   call's result — the assertions — so the test FAILs with `not every assertion
   was evaluated`. Assert on something the handler sets instead.
-- A custom handler that re-raises lets the error leave the test: ERROR with the
-  message, also under `@throws`. Under Docker / `--legacy-runner` it ends the
-  whole run.
+- A custom handler that re-raises lets the error leave the test, as no clause
+  does: FAIL with the message, or PASS under a matching `@throws`. Under Docker /
+  `--legacy-runner` it ends the whole run.
 
 `@throws` and `@expect` cannot be combined. A `@throws` test compiles to a
-different shape — the verdict starts as a failure and only the error handler
+different shape — the verdict starts as a failure and only a raised error
 clears it — and the `@expect` checks are not emitted into it at all, so the
 assertion was counted and never evaluated. There is nothing to assert on either
 way: the body was expected not to produce a result. Assert on the error with

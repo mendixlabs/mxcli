@@ -90,6 +90,7 @@ var createOrReplaceCases = map[string]string{
 	"externalentities":            "external entities from M.Api into Integration;",
 	"navigation":                  "navigation Responsive home page M.Home_Web;",
 	"businesseventservice":        "business event service M.CustomerEventsApi (ServiceName: 'CustomerEventsApi', EventNamePrefix: '') { message CustomerChangedEvent (CustomerId: Long) { publish (Entity: M.PBE_CustomerChangedEvent); }; };",
+	"changedatacaptureservice":    "change data capture service M.OrdersCDCService (ServiceName: 'OrdersCDCService') { entity M.Order (OrderId, Order_Customer); };",
 	"workflow":                    "workflow M.LeaveApproval parameter $Context: M.LeaveRequest begin end workflow;",
 	"userrole":                    "user role Clerk ( ModuleRoles: (M.User) );",
 	"demouser":                    "demo user 'demo' ( Password: 'Password1!', UserRoles: (Clerk) );",

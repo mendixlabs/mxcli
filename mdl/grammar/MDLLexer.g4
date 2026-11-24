@@ -981,6 +981,9 @@ TIMES: T I M E S;
 
 // Data transformer tokens
 DATA: D A T A;
+// CAPTURE is only ever part of CHANGE DATA CAPTURE; it is in the `keyword` rule
+// so `capture` stays usable as an element name (the ako/mxcli#2389 lesson).
+CAPTURE: C A P T U R E;
 TRANSFORM: T R A N S F O R M;
 TRANSFORMER: T R A N S F O R M E R;
 TRANSFORMERS: T R A N S F O R M E R S;

@@ -43,6 +43,15 @@ import (
 //     mxcli computes and a loop drawn larger in Studio Pro overlapped its
 //     neighbours (carryLoopSize).
 //
+// and, measured on the Marketplace modules FactoryManagement ships
+// (ako/mxcli#2106, AgentCommons and MxGenAIConnector on 11.16.1):
+//
+//   - A widget's TabIndex. Studio Pro stores what the author set (1, -1); MDL
+//     cannot state it and the writer writes 0 (carryTabIndex).
+//   - The parameters of an input widget's label template. MDL states a label
+//     as text only, so a check box labelled '{1}' came back with none, and the
+//     label would have read "{1}" (carryLabelParameters).
+//
 // Only elements whose $ID the stored document already has take anything, which
 // after TransplantIDs means the elements that correspond; a real change — other
 // expression text, a label with text — is not touched and still lands.
@@ -76,6 +85,12 @@ func CarryUnexpressed(contents, stored []byte) []byte {
 			changed = true
 		}
 		if carryLoopSize(d, old) {
+			changed = true
+		}
+		if carryTabIndex(d, old) {
+			changed = true
+		}
+		if carryLabelParameters(d, old, used) {
 			changed = true
 		}
 		for i, e := range d {
@@ -339,4 +354,92 @@ func anyIDUsedOutside(items bson.A, used map[string]bool, replaced bson.A) bool 
 		}
 	})
 	return clash
+}
+
+// carryTabIndex keeps a widget's stored TabIndex when the writer wrote 0. No
+// MDL statement sets one, so a 0 written over a stored value is never a change
+// the author asked for.
+//
+// Studio Pro stores it as int64 and the writer as int32, so both widths count;
+// the stored value is put back as it was stored.
+func carryTabIndex(d, old bson.D) bool {
+	stored := docLookup(old, "TabIndex")
+	if n, ok := bsonInt(stored); !ok || n == 0 {
+		return false
+	}
+	for i := range d {
+		if d[i].Key != "TabIndex" {
+			continue
+		}
+		if w, isInt := bsonInt(d[i].Value); isInt && w == 0 {
+			d[i].Value = stored
+			return true
+		}
+		return false
+	}
+	return false
+}
+
+// bsonInt reads an int32 or int64 BSON value.
+func bsonInt(v any) (int64, bool) {
+	switch n := v.(type) {
+	case int32:
+		return int64(n), true
+	case int64:
+		return n, true
+	}
+	return 0, false
+}
+
+// carryLabelParameters keeps the stored parameters of a widget's LabelTemplate
+// when the written one has the same template text and none. MDL states a label
+// as text, so a written label with no parameters over a stored one with some,
+// and the same text, is never a change the author asked for; other text, or
+// parameters the statement does write, still land.
+func carryLabelParameters(d, old bson.D, used map[string]bool) bool {
+	nt, ok := docLookup(d, "LabelTemplate").(bson.D)
+	if !ok {
+		return false
+	}
+	st, ok := docLookup(old, "LabelTemplate").(bson.D)
+	if !ok {
+		return false
+	}
+	np, _ := docLookup(nt, "Parameters").(bson.A)
+	sp, _ := docLookup(st, "Parameters").(bson.A)
+	if len(sp) <= 1 || len(np) > 1 {
+		return false // nothing stored to keep, or the statement wrote its own
+	}
+	if templateTexts(docLookup(nt, "Template")) != templateTexts(docLookup(st, "Template")) {
+		return false
+	}
+	if anyIDUsed(bson.D{{Key: "Parameters", Value: sp}}, used) {
+		return false
+	}
+	for i := range nt {
+		if nt[i].Key == "Parameters" {
+			nt[i].Value = sp
+			return true
+		}
+	}
+	return false
+}
+
+// templateTexts is a Texts$Text's translations as "lang=text" lines, for
+// comparing two templates by what they say rather than by their $IDs.
+func templateTexts(v any) string {
+	t, ok := v.(bson.D)
+	if !ok {
+		return ""
+	}
+	items, _ := docLookup(t, "Items").(bson.A)
+	var out []string
+	for _, it := range items {
+		if tr, ok := it.(bson.D); ok {
+			lang, _ := docLookup(tr, "LanguageCode").(string)
+			text, _ := docLookup(tr, "Text").(string)
+			out = append(out, lang+"="+text)
+		}
+	}
+	return strings.Join(out, "\n")
 }

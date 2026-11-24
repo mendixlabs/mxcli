@@ -100,42 +100,16 @@ func TestEndpointTestFlowsApplyEntityAccess(t *testing.T) {
 			t.Errorf("%s does not apply entity access, so it cannot call a microflow that does (CE0114)", testFlowName(tc))
 		}
 	}
-	helper := flows[errorMessageFlow]
-	if helper == nil {
-		t.Fatalf("no %s in:\n%s", errorMessageFlow, mdl)
-	}
-	if applies(helper) {
-		t.Errorf("%s applies entity access, so it cannot read the error's message either (CE0150)", errorMessageFlow)
-	}
-	if n := strings.Count(mdl, createFlow+" "+errorMessageFlow); n != 1 {
-		t.Errorf("%s is defined %d times, want once", errorMessageFlow, n)
-	}
-	if m := errorAttributeRead.FindString(outsideHelper(mdl)); m != "" {
-		t.Errorf("an applying test flow reads %q directly (CE0150):\n%s", m, mdl)
-	}
-	// The verdict and the @throws comparison still carry the message.
-	for _, want := range []string{
-		"CALL MICROFLOW " + errorMessageFlow + "(RaisedError = $latestError)",
-		"'" + verdictFailPrefix + "exception during execution: ' + $MxTestErrorMessage_1",
-		"contains($MxTestErrorMessage_1, 'must be positive')",
-	} {
-		if !strings.Contains(mdl, want) {
-			t.Errorf("generated flows do not contain %q:\n%s", want, mdl)
-		}
+	// No test flow reads a raised error's message any more — the endpoint
+	// reports it — so there is no helper, and nothing reads $latestError's
+	// attributes in an applying flow (CE0150).
+	if flows[errorMessageFlow] != nil || strings.Contains(mdl, "$latestError") {
+		t.Errorf("the endpoint flows still read the raised error:\n%s", mdl)
 	}
 }
 
 // Every handler reads the message into its own variable: a body with two
 // calls gets two handlers in one microflow.
-func TestErrorMessageVariablePerHandler(t *testing.T) {
-	mdl := GenerateTestFlows(callerSuite(t, callerSuiteSrc))
-	for _, v := range []string{"$MxTestErrorMessage_1 = CALL", "$MxTestErrorMessage_2 = CALL"} {
-		if !strings.Contains(mdl, v) {
-			t.Errorf("want %q in:\n%s", v, mdl)
-		}
-	}
-}
-
 func TestLegacyTestRunnerAppliesEntityAccess(t *testing.T) {
 	mdl := GenerateTestRunner(callerSuite(t, callerSuiteSrc))
 	flows := microflowsIn(t, mdl)

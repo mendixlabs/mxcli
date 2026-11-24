@@ -148,6 +148,8 @@ func stmtCreateKind(stmt ast.Statement) (docType, name string, idempotent bool) 
 		return "workflow", s.Name.String(), s.CreateOrModify
 	case *ast.CreateBusinessEventServiceStmt:
 		return "business-event-service", s.Name.String(), s.CreateOrModify
+	case *ast.CreateChangeDataCaptureServiceStmt:
+		return "change-data-capture-service", s.Name.String(), s.CreateOrModify
 	case *ast.CreatePublishedRestServiceStmt:
 		return "published-rest-service", s.Name.String(), s.CreateOrModify
 	case *ast.CreateJsonStructureStmt:
@@ -253,6 +255,8 @@ func stmtDropInfo(stmt ast.Statement) (docType, name string) {
 		return "workflow", s.Name.String()
 	case *ast.DropBusinessEventServiceStmt:
 		return "business-event-service", s.Name.String()
+	case *ast.DropChangeDataCaptureServiceStmt:
+		return "change-data-capture-service", s.Name.String()
 	case *ast.DropPublishedRestServiceStmt:
 		return "published-rest-service", s.Name.String()
 	case *ast.DropJsonStructureStmt:
@@ -340,6 +344,8 @@ func friendlyDocType(docType string) string {
 		return "model"
 	case "business-event-service":
 		return "business event service"
+	case "change-data-capture-service":
+		return "change data capture service"
 	case "consumed-mcp-service":
 		return "consumed MCP service"
 	case "published-mcp-service":
@@ -512,6 +518,8 @@ func (ps *projectNameSets) setFor(docType string) map[string]bool {
 		set = listedQualifiedNames(h, ctx.Backend.ListWorkflows)
 	case "business-event-service":
 		set = listedQualifiedNames(h, ctx.Backend.ListBusinessEventServices)
+	case "change-data-capture-service":
+		set = listedQualifiedNames(h, ctx.Backend.ListChangeDataCaptureServices)
 	case "published-rest-service":
 		set = listedQualifiedNames(h, ctx.Backend.ListPublishedRestServices)
 	case "json-structure":
