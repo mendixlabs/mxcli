@@ -65,6 +65,9 @@ type BusinessEventBackend interface {
 // build error (CLAUDE.md).
 type ChangeDataCaptureBackend interface {
 	ListChangeDataCaptureServices() ([]*model.ChangeDataCaptureService, error)
+	CreateChangeDataCaptureService(svc *model.ChangeDataCaptureService) error
+	UpdateChangeDataCaptureService(svc *model.ChangeDataCaptureService) error
+	DeleteChangeDataCaptureService(id model.ID) error
 }
 
 // DatabaseConnectionBackend manages database connections.

@@ -583,6 +583,13 @@ reproduces the `business events service should have definitions` exception (§6)
 
 ## 6. Measured `mx check` behaviour (mxbuild 11.16.1)
 
+**An absent baseline crashes mxbuild rather than reporting CE1585.** Measured while
+building part C: a document whose `Baseline` is omitted entirely makes `mx check` exit 1
+with `System.AggregateException: ... The given key '<guid>' was not present in the
+dictionary.` CE1585 is what an *inconsistent* baseline reports; a *missing* one is not
+handled. This matters for the control in §8 — the test asserts a non-zero exit and the
+dictionary message, not CE1585.
+
 On a copy of the fixture project; each variant mutates one unit's BSON. Control: the
 unmodified copy → **0 errors**.
 
@@ -614,6 +621,17 @@ entities from `testapp-describe.mdl`), mutate with a few lines of Go over
 | A2 CDC read | new `mdl/backend/modelsdk/cdc_read.go`, `mdl/backend/service.go` (interface), mock, `mdl/executor/cmd_cdc.go`, catalog builder + tables, registry | gen types exist; add the 4 missing properties (§4) first so reads see them |
 
 **Done so far:** A1 (consumer describe/list, channel id), B1–B3 and E1 are merged.
+C1–C3 are implemented: `create [or modify] / drop change data capture service`, the live
+side authored and the baseline computed from the domain model's GUIDs, with the version
+policy below. The strongest check available says the writer is right: `create or modify`
+over **Studio Pro's own** `OrdersCDCService` reports **Unchanged**, so mxcli's rebuild is
+byte-identical to Studio Pro's after normalisation — GUIDs, property sets, both list
+markers and the cross-pointers included. An MDL-authored service also passes `mx check`
+with 0 errors, and the control (baseline omitted) fails it.
+
+Two shapes that only a document could have told us: the live and baseline sides use
+**different list markers** (live 3, baseline 2), and the service carries `Excluded` even
+at its default — the shape test caught the second rather than a reviewer.
 A2 is merged for `LIST` / `DESCRIBE` — the gen properties it needed landed first
 (ako/mxcli#2395). Still open from A2: the catalog tables
 (`change_data_capture_services` + sources), the `RefKind`s that would let
@@ -702,7 +720,16 @@ Studio Pro export can settle.
    `ContractFrom` (`Contract` / `ContractFile` are unaffected).
 2. CDC version policy (§5.2): add, rename and remove a property in Studio Pro, accept,
    and record the versions it picks.
-3. CDC `Type` for Integer/Boolean/DateTime/Enumeration/Binary/AutoNumber/HashString.
+3. ~~CDC `Type` for Integer/Boolean/DateTime/Enumeration/Binary/AutoNumber/HashString.~~
+   **Answered — no Studio Pro export needed.** mxbuild ships Studio Pro's CDC editor as
+   readable JavaScript (`modeler/ide-client/change-data-capture-editor/editor.js`) and it
+   carries the mapping as an explicit switch on the attribute type's `$Type`:
+   Binary/Boolean/DateTime/Decimal to themselves, Enumeration to `Enumeration`, Integer to
+   `Int32`, Long and AutoNumber to `Int64`, String and HashedString to `String`, an
+   association to `ArrayOfInt64`. Those ten cases are every Mendix attribute type, so the
+   editor's `default: throw` is unreachable for a valid model and the mapping is total.
+   mxcli's own `Date` spelling stores as `DateTimeAttributeType` ("Mendix has no date-only
+   type"), so it is a `DateTime` too. Implemented in `cdcTypeForAttribute`.
 4. Whether Studio Pro (not just mxbuild) opens a document with the pointers present but
    pointing at mxcli-minted baseline `$ID`s — expected yes; confirm once.
 5. ~~What registers the subscriptions at startup.~~ **Answered — see §1.**

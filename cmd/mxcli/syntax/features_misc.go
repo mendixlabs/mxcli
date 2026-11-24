@@ -184,6 +184,7 @@ func init() {
 			"DROP CONSUMED REST SERVICE Module.Name;\n" +
 			"DROP PUBLISHED REST SERVICE Module.Name;\n" +
 			"DROP BUSINESS EVENT SERVICE Module.Name;\n" +
+			"DROP CHANGE DATA CAPTURE SERVICE Module.Name;\n" +
 			"DROP DATABASE CONNECTION Module.Name;\n" +
 			"DROP JSON STRUCTURE Module.Name;\n" +
 			"DROP MESSAGE DEFINITION COLLECTION Module.Name;\n" +

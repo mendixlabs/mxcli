@@ -195,6 +195,8 @@ func allKnownStatements() []ast.Statement {
 		&ast.CreateAgentStmt{},
 		&ast.CreateAssociationStmt{},
 		&ast.CreateBusinessEventServiceStmt{},
+		&ast.CreateChangeDataCaptureServiceStmt{},
+		&ast.DropChangeDataCaptureServiceStmt{},
 		&ast.CreateConfigurationStmt{},
 		&ast.CreateConsumedMCPServiceStmt{},
 		&ast.CreatePublishedMCPServiceStmt{},

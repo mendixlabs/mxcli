@@ -29,7 +29,6 @@ const (
 	fixtureCustomerEntityGUID = "bae3f172-aebb-49a6-ad92-783f53cf5014"
 	fixtureOrderIdAttrGUID    = "f3bcaa9f-4ed8-46de-9b7d-dad81425bc33"
 	fixtureAssocGUID          = "4057dfad-680c-44cb-bfd2-97706b919d3e"
-	zeroGUID                  = "00000000-0000-0000-0000-000000000000"
 )
 
 // cdcFixtureProject copies a project and inserts the Studio Pro-authored CDC

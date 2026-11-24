@@ -11,11 +11,14 @@ import (
 	"github.com/mendixlabs/mxcli/model"
 )
 
-// Entity change data capture, read side (part A2 of
-// docs/11-proposals/PROPOSAL_kafka_event_integration.md). There is no CREATE
-// yet: part C writes the two-sided document, and its baseline identifies what it
-// tracks by GUID — the identity the runtime keys the database on — so the write
-// path is deliberately not a by-product of the read one.
+// Entity change data capture (parts A2 and C of
+// docs/11-proposals/PROPOSAL_kafka_event_integration.md): LIST, DESCRIBE,
+// CREATE [OR MODIFY] and DROP.
+//
+// Only the live side is authored. The baseline identifies what it tracks by the
+// GUIDs the runtime keys the database on, so the backend reads every one from
+// the domain model and computes the baseline from them — there is no GUID an
+// author can write, and therefore none they can get wrong.
 
 // cdcTopic is the Kafka topic a source publishes to. Studio Pro's editor shows
 // it beside the revision, and every segment but the last is a model value: the
@@ -170,8 +173,13 @@ func describeChangeDataCaptureService(ctx *ExecContext, name ast.QualifiedName) 
 		fmt.Fprintf(out, "-- Documentation: %s\n", strings.ReplaceAll(svc.Documentation, "\n", " "))
 	}
 	fmt.Fprintln(out, "--")
-	fmt.Fprintln(out, "-- There is no CREATE statement for this document yet (part C of")
-	fmt.Fprintln(out, "-- PROPOSAL_kafka_event_integration.md), so this is a report, not a script.")
+	// A report, not a script: the authored form carries only the live side, so
+	// re-emitting it as MDL would hide the versions, the topics and the GUIDs
+	// that make this output worth reading. `create or modify` over an unchanged
+	// service is elided anyway (ADR-0008), so a round-trippable describe would
+	// buy nothing.
+	fmt.Fprintln(out, "-- Author the live side with `create or modify change data capture service`;")
+	fmt.Fprintln(out, "-- the baseline below is computed from the domain model, never authored.")
 
 	for _, src := range svc.Sources {
 		v := sourceVersion(svc, src)
@@ -238,4 +246,133 @@ func cdcLastSegment(qualified string) string {
 		return qualified[i+1:]
 	}
 	return qualified
+}
+
+// createChangeDataCaptureService applies CREATE [OR MODIFY] CHANGE DATA CAPTURE
+// SERVICE.
+//
+// Only the live side comes from the statement; the backend resolves every
+// tracked member against the domain model and computes the baseline from it,
+// because the baseline identifies what it tracks by the GUIDs the runtime keys
+// the database on.
+func createChangeDataCaptureService(ctx *ExecContext, stmt *ast.CreateChangeDataCaptureServiceStmt) error {
+	if !ctx.ConnectedForWrite() {
+		return mdlerrors.NewNotConnectedWrite()
+	}
+	moduleName := stmt.Name.Module
+	module, err := findModule(ctx, moduleName)
+	if err != nil {
+		return mdlerrors.NewNotFound("module", moduleName)
+	}
+
+	existing, err := ctx.Backend.ListChangeDataCaptureServices()
+	if err != nil {
+		return mdlerrors.NewBackend("list change data capture services", err)
+	}
+	h, err := getHierarchy(ctx)
+	if err != nil {
+		return mdlerrors.NewBackend("build hierarchy", err)
+	}
+
+	var stored *model.ChangeDataCaptureService
+	if found, ok := pickLive(existing,
+		func(s *model.ChangeDataCaptureService) bool {
+			return strings.EqualFold(h.GetModuleName(h.FindModuleID(s.ContainerID)), moduleName) &&
+				strings.EqualFold(s.Name, stmt.Name.Name)
+		},
+		func(s *model.ChangeDataCaptureService) bool { return s.Excluded },
+	); ok {
+		// `if not exists` is honoured centrally, in the dispatch
+		// (skipExistingCreate), by embedding ast.CreateGuard.
+		if !stmt.CreateOrModify {
+			return mdlerrors.NewAlreadyExistsMsg("change data capture service",
+				moduleName+"."+stmt.Name.Name,
+				fmt.Sprintf("change data capture service already exists: %s.%s (use create or modify to update)",
+					moduleName, stmt.Name.Name))
+		}
+		stored = found
+	}
+
+	containerID := module.ID
+	if stmt.Folder != "" {
+		folderID, err := resolveFolder(ctx, module.ID, stmt.Folder)
+		if err != nil {
+			return mdlerrors.NewBackend(fmt.Sprintf("resolve folder '%s'", stmt.Folder), err)
+		}
+		containerID = folderID
+	} else if stored != nil {
+		// Placement is carried when the statement says nothing about folders.
+		containerID = stored.ContainerID
+	}
+
+	svc := &model.ChangeDataCaptureService{
+		ContainerID:   containerID,
+		Name:          stmt.Name.Name,
+		ServiceName:   stmt.ServiceName,
+		Documentation: stmt.Documentation,
+		ExportLevel:   "Hidden",
+	}
+	for _, src := range stmt.Sources {
+		cs := &model.ChangeSource{
+			Entity:      src.Entity.String(),
+			ExposedName: src.ExposedName,
+		}
+		for _, mem := range src.Members {
+			// Which kind it is comes from the domain model, so the member name
+			// travels in Attribute and the backend moves it if it turns out to
+			// be an association.
+			cs.Properties = append(cs.Properties, &model.ChangeProperty{
+				Attribute:   mem.Name,
+				ExposedName: mem.ExposedName,
+			})
+		}
+		svc.Sources = append(svc.Sources, cs)
+	}
+
+	if stored != nil {
+		svc.ID = stored.ID
+		svc.Excluded = stored.Excluded
+		svc.AppName = stored.AppName
+		svc.Documentation = carriedDocumentation(stmt.DocumentationSet, stmt.Documentation, stored.Documentation)
+		if err := ctx.Backend.UpdateChangeDataCaptureService(svc); err != nil {
+			return mdlerrors.NewBackend("update change data capture service", err)
+		}
+		ctx.ReportMutation("Modified", "change data capture service: %s.%s", moduleName, svc.Name)
+		return nil
+	}
+	if err := ctx.Backend.CreateChangeDataCaptureService(svc); err != nil {
+		return mdlerrors.NewBackend("create change data capture service", err)
+	}
+	fmt.Fprintf(ctx.Output, "Created change data capture service: %s.%s\n", moduleName, svc.Name)
+	return nil
+}
+
+// dropChangeDataCaptureService applies DROP CHANGE DATA CAPTURE SERVICE.
+func dropChangeDataCaptureService(ctx *ExecContext, stmt *ast.DropChangeDataCaptureServiceStmt) error {
+	if !ctx.ConnectedForWrite() {
+		return mdlerrors.NewNotConnectedWrite()
+	}
+	services, err := ctx.Backend.ListChangeDataCaptureServices()
+	if err != nil {
+		return mdlerrors.NewBackend("list change data capture services", err)
+	}
+	h, err := getHierarchy(ctx)
+	if err != nil {
+		return mdlerrors.NewBackend("build hierarchy", err)
+	}
+	for _, s := range services {
+		mod := h.GetModuleName(h.FindModuleID(s.ContainerID))
+		if strings.EqualFold(mod, stmt.Name.Module) && strings.EqualFold(s.Name, stmt.Name.Name) {
+			if err := ctx.Backend.DeleteChangeDataCaptureService(s.ID); err != nil {
+				return mdlerrors.NewBackend("delete change data capture service", err)
+			}
+			fmt.Fprintf(ctx.Output, "Dropped change data capture service: %s\n", stmt.Name.String())
+			return nil
+		}
+	}
+	if stmt.IfExists {
+		fmt.Fprintf(ctx.Output, "Change data capture service %s does not exist — skipped\n", stmt.Name)
+		return nil
+	}
+	return mdlerrors.NewNotFound("change data capture service", stmt.Name.String())
 }

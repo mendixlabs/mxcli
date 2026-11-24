@@ -328,6 +328,12 @@ func registerBusinessEventHandlers(r *Registry) {
 	r.Register(&ast.CreateBusinessEventServiceStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
 		return createBusinessEventService(ctx, stmt.(*ast.CreateBusinessEventServiceStmt))
 	})
+	r.Register(&ast.CreateChangeDataCaptureServiceStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
+		return createChangeDataCaptureService(ctx, stmt.(*ast.CreateChangeDataCaptureServiceStmt))
+	})
+	r.Register(&ast.DropChangeDataCaptureServiceStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
+		return dropChangeDataCaptureService(ctx, stmt.(*ast.DropChangeDataCaptureServiceStmt))
+	})
 	r.Register(&ast.DropBusinessEventServiceStmt{}, func(ctx *ExecContext, stmt ast.Statement) error {
 		return dropBusinessEventService(ctx, stmt.(*ast.DropBusinessEventServiceStmt))
 	})

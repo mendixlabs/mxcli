@@ -259,6 +259,10 @@ features:
       min_version: "9.24.0"
       mdl: "CREATE BUSINESS EVENT SERVICE Module.Name ..."
       notes: "BusinessEvents$BusinessEventService and its children introduced in 9.24.0 (mendixmodelsdk 4.117.0). mx 9.24.30 loads a service mxcli writes; its errors there are the content (the Business Events module, an attribute's length). Was 10.0.0 (ako/mxcli#1811)."
+    change_data_capture:
+      min_version: "11.10.0"
+      mdl: "CREATE CHANGE DATA CAPTURE SERVICE Module.Name (...) { ENTITY ... }"
+      notes: "ChangeDataCapture$EntityChangeDataCaptureService is 11.5.0 and EntityChangeSource.ExposedName/.Properties 11.9.0, but the Baseline mxcli writes (a ChangeDataCapture$VersionedEntityChangeDataCaptureService, with its Version and VersionedProperty children) is 11.10.0 — and the baseline is not optional: mxbuild reports CE1585 without one, and an ABSENT baseline makes mx check crash rather than report it (PROPOSAL_kafka_event_integration.md §6). So the floor for a service mxcli can write is 11.10.0, not 11.5.0."
     odata_client:
       min_version: "10.0.0"
     published_odata_service:
