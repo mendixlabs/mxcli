@@ -881,7 +881,13 @@ func (e *PluggableWidgetEngine) Build(def *WidgetDefinition, w *ast.WidgetV3) (*
 	// with its own hide helper had no lifted rule, so its hidden text templates
 	// kept their default text, CE0463 on a property the script never set
 	// (ako/mxcli#2507).
-	visibility := e.evaluatedRules(def, builder.PrimitiveValues())
+	//
+	// The whole configuration, as the resets above and check see it: the
+	// primitives the builder holds, and every value the statement binds — an
+	// attribute, an expression, an action. Primitives alone made an attribute
+	// the statement binds read as unset, so a rule `!isSet(values.evaluation)`
+	// hid, and nulled, a text template the script had set (ako/mxcli#2548).
+	visibility := e.evaluatedRules(def, configurationValues(builder.PrimitiveValues(), scriptValues))
 	if len(visibility) > 0 {
 		builder.ApplyPropertyVisibility(visibility)
 	}
