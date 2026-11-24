@@ -74,6 +74,18 @@ func hiddenPropertyViolation(locationPrefix, widgetName, mdlName, itemLabel stri
 	if itemLabel != "" {
 		where = " " + itemLabel
 	}
+	if rule.Evaluated() {
+		// No condition to name: the package's getProperties hides it for this
+		// configuration (ako/mxcli#1776).
+		return linter.Violation{
+			RuleID:   "MDL-WIDGET10",
+			Severity: severity,
+			Message: fmt.Sprintf(
+				"%s: %s%s property `%s` is hidden by the widget's editor configuration for these settings — %s",
+				locationPrefix, widgetLabel(widgetName, mdlName), where, rule.PropertyKey, consequence,
+			),
+		}
+	}
 	scope := ""
 	if rule.HiddenWhen.Scope == types.ConditionScopeItem && itemLabel != "" {
 		scope = "its own "

@@ -58,7 +58,8 @@ func validateWidgetRequired(w *ast.WidgetV3, registry *WidgetRegistry, locationP
 	// properties were reported — 12 on one combo box, which mxbuild builds
 	// clean (ako/mxcli#2523).
 	fillTemplateValues(values, def)
-	rules := visibilityRulesFor(def, registry)
+	// Answered by the package's own getProperties where it runs (ako/mxcli#1776).
+	rules := evaluatedVisibilityRules(registryProjectPath(registry), def.WidgetID, visibilityRulesFor(def, registry), values)
 	slots, lists := filledSlotsAndLists(w, def)
 
 	var out []linter.Violation

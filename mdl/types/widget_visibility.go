@@ -61,6 +61,13 @@ func (r WidgetVisibilityRule) Fires(lookup func(c WidgetVisibilityCondition) (st
 	}
 	all := true
 	for _, c := range conds {
+		switch c.Operator {
+		case OperatorAlways:
+			continue
+		case OperatorNever:
+			all = false
+			continue
+		}
 		v, ok := lookup(c)
 		if !ok {
 			return false, false
@@ -112,6 +119,23 @@ type WidgetVisibilityCondition struct {
 	Scope string `json:"scope,omitempty"`
 }
 
+// OperatorAlways and OperatorNever are the conditions of a rule that was not
+// read from the editorConfig's source but obtained by RUNNING its
+// getProperties for one widget's values (ako/mxcli#1776): the answer for that
+// configuration, so the rule hides its property, or does not, whatever a
+// lookup would return. Such rules are built per widget instance and never
+// stored in a .def.json.
+const (
+	OperatorAlways = "always"
+	OperatorNever  = "never"
+)
+
+// Evaluated reports whether the rule is a per-instance answer from running the
+// widget's getProperties rather than a rule lifted from its source.
+func (r WidgetVisibilityRule) Evaluated() bool {
+	return r.HiddenWhen != nil && (r.HiddenWhen.Operator == OperatorAlways || r.HiddenWhen.Operator == OperatorNever)
+}
+
 // ConditionScopeItem marks a condition evaluated against the object-list item
 // that carries the rule's property, rather than against the widget.
 const ConditionScopeItem = "item"
@@ -141,6 +165,10 @@ func (c *WidgetVisibilityCondition) Hidden(values map[string]string) bool {
 		return containsCSV(c.Value, current)
 	case "notin":
 		return !containsCSV(c.Value, current)
+	case OperatorAlways:
+		return true
+	case OperatorNever:
+		return false
 	default:
 		return false
 	}
