@@ -100,6 +100,9 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 		violations = append(violations, validateIndexNames(stmt)...)
 		violations = append(violations, validateEnumValueDocs(stmt)...)
 		violations = append(violations, validateMenuItemIcons(stmt)...)
+		// A NativePhone bottom bar is flat, page-only and glyph-iconed; exec
+		// refuses the rest, one at a time (MDL-NATIVEBAR01, ako/mxcli#2561).
+		violations = append(violations, validateNativeBottomBar(stmt)...)
 		violations = append(violations, validateGlyphCodes(stmt)...)
 		// A `[%Token%]` whose name Mendix does not have where it is written:
 		// lexed whatever the name, so a typo passed check and exec and the build

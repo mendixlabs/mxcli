@@ -51,6 +51,13 @@ func validateMenuItemIcons(stmt ast.Statement) []linter.Violation {
 
 	switch s := stmt.(type) {
 	case *ast.CreateNavigationStmt:
+		// A native profile's { } block is its bottom bar, not a sidebar that
+		// collapses to icons; its icon rules are MDL-NATIVEBAR01's
+		// (ako/mxcli#2561), and the collection icon this rule suggests is one
+		// the bottom bar refuses.
+		if isNativeProfileName(s.ProfileName) {
+			return nil
+		}
 		items, where = s.MenuItems, "navigation "+s.ProfileName
 	case *ast.CreateMenuStmt:
 		items, where = s.Items, "menu "+s.Name.String()
