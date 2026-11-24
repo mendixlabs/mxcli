@@ -279,6 +279,11 @@ func layoutFromGen(u mprread.Unit[*genPg.Layout]) *pages.Layout {
 		Native:        layoutIsNative(u.Element),
 		Class:         appearanceClassOf(u.Element),
 	}
+	// Whether a native layout shows the bottom bar: a home page drawn on one
+	// must be a bottom bar item, or mx check reports CE6108 (ako/mxcli#2560).
+	if c, ok := u.Element.Content().(*genPg.NativeLayoutContent); ok && c != nil {
+		l.ShowBottomBar = c.ShowBottomBar()
+	}
 	l.ID = model.ID(u.Element.ID())
 	return l
 }

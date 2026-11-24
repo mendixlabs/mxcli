@@ -327,6 +327,7 @@ func validateNavigationTargets(ctx *ExecContext, prog *ast.Program, sc *scriptCo
 		return nil
 	}
 	native := func(profile string) bool { return navProfileIsNative(ctx, profile) }
+	bars := newNativeBarScript(prog)
 
 	var errs []error
 	for i, stmt := range prog.Statements {
@@ -336,6 +337,9 @@ func validateNavigationTargets(ctx *ExecContext, prog *ast.Program, sc *scriptCo
 		}
 		unresolved := unresolvedNavigationTargets(ctx, targets, sc)
 		unresolved = append(unresolved, navigationAppIconErrors(ctx, stmt, sc)...)
+		// A native home page on a bottom-bar layout that is not in the bar:
+		// CE6108 at build time (ako/mxcli#2560).
+		unresolved = append(unresolved, nativeHomeBottomBarErrors(ctx, stmt, bars)...)
 		if len(unresolved) == 0 {
 			continue
 		}
@@ -376,6 +380,7 @@ func validateNavigationTargetsForExec(ctx *ExecContext, stmt ast.Statement) erro
 	// The images are in the project by now: a collection the script creates is
 	// written before this statement runs, as a page's image widget assumes.
 	unresolved = append(unresolved, navigationAppIconErrors(ctx, stmt, nil)...)
+	unresolved = append(unresolved, nativeHomeBottomBarErrors(ctx, stmt, nil)...)
 	if len(unresolved) > 0 {
 		return navigationTargetError(label, unresolved)
 	}

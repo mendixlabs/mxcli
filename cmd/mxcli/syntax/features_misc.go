@@ -605,8 +605,10 @@ DISCONNECT;`,
 -- SHOW PAGE. Its icon is a numeric glyph code -- Icon: GLYPH <code> -- not a
 -- qualified name; a collection or image icon is unconfirmed for a native
 -- bottom bar item and rejected. check reports each of these as
--- MDL-NATIVEBAR01, with no project needed. A home page whose layout has
--- "Bottom bar" enabled must appear in this block, or Mendix reports CE6108.`,
+-- MDL-NATIVEBAR01, with no project needed. A home page (or a role's) whose
+-- layout has "Bottom bar" enabled must appear in this block, or Mendix reports
+-- CE6108; check -p and exec refuse it, reading the layout from the script or
+-- the project.`,
 		Example: `mdl 1;
 CREATE OR MODIFY NAVIGATION Responsive
   APP TITLE 'Order Desk'
