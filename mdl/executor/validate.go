@@ -638,6 +638,12 @@ func validateProgramWithWarnings(ctx *ExecContext, prog *ast.Program) ([]error, 
 	// inherits (BusinessEvents.PublishedBusinessEvent's, read from the project):
 	// mxbuild reports the duplicate after exec wrote it (mendixlabs/mxcli#1525).
 	errors = append(errors, validateBusinessEventInheritedMembers(ctx, prog, sc)...)
+	// The seven rules of #2384 §5.1 for a CONSUMED business event service:
+	// the contract, the messages it defines, the entity and handler each
+	// `consume` binds, and the module, startup wiring and broker constants the
+	// app needs. mxbuild reports none of them (measured, §6) — the failure is a
+	// silent runtime one, or a boot that stops.
+	errors = append(errors, validateBusinessEventConsumers(ctx, prog, sc)...)
 	// A message declared twice (two messages of one name: the deployment
 	// fails) and the shape of `publish subscribe` (ako/mxcli#2490): what
 	// exec refuses, reported first.

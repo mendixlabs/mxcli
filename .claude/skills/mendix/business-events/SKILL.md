@@ -16,7 +16,7 @@ description: "Define event-driven APIs over Kafka with Mendix business event ser
 | 201-208 | Service Properties |
 | 209-216 | Operations |
 | 217-263 | Publishing Events from Microflows |
-| 264-276 | Checklist |
+| 264-300 | Checklist |
 
 <!-- /skill-index -->
 # Business Events
@@ -274,3 +274,27 @@ any action before you call it.
 - [ ] The DESCRIBE output is parseable and can be used as a CREATE statement
 - [ ] To publish events from microflows, use `call java action BusinessEvents.PublishBusinessEvent_V2`
 - [ ] The `BusinessEvents` module must be included in the project (marketplace module)
+
+### What `check -p … --references` Reports for a CONSUMER (MDL-BE01..BE07)
+
+mxbuild validates **none** of this: measured on 11.16.1, a consumer whose `consume` names a
+message the contract does not contain builds with 0 errors, and the build never looks at the
+consumed entity, the handler, the module or the broker constants. The failure is the running
+app's — it consumes nothing, silently, or does not boot.
+
+- [ ] **BE01** the contract parses as AsyncAPI 2.x and declares at least one channel (an empty
+      one makes mxbuild throw "business events service should have definitions")
+- [ ] **BE02** every `consume` names a message in `components.messages` — **case-sensitively**
+- [ ] **BE03** the consumed entity is persistent (not a view) and extends
+      `BusinessEvents.ConsumedBusinessEvent`; a payload property with no attribute, or an
+      attribute whose type contradicts the one measured mapping (`integer`/`int64` → `Long`),
+      **warns**
+- [ ] **BE04** the handler takes exactly one parameter, of the consumed entity or an ancestor
+- [ ] **BE05** the `BusinessEvents` module is in the project
+- [ ] **BE06** `BusinessEvents.StartupBusinessEvents` is reachable from the after-startup
+      microflow, directly or through another microflow — **warns**, because without it the app
+      consumes nothing while every other check stays green
+- [ ] **BE07** `BusinessEvents.ServerUrl` has a default, and one of `BusinessEvents.ChannelName`
+      / `BusinessEvents.EventBrokerSpace` — **warns**, since both are per-environment values
+      (`mxcli constant set BusinessEvents.ServerUrl '<broker>:9092'` for a dev run). Measured:
+      with either missing the app **fails to boot**
