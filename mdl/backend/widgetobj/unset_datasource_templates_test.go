@@ -117,4 +117,3 @@ func TestNullTemplatesOfUnsetDataSources_RequiredDataSourceKeepsItsTemplate(t *t
 	}
 	t.Fatal("no headerCaption property")
 }
-
