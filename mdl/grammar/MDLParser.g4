@@ -211,6 +211,7 @@ createStatement
       | createExternalEntitiesStatement
       | createNavigationStatement
       | createBusinessEventServiceStatement
+      | createChangeDataCaptureServiceStatement
       | createWorkflowStatement
       | createUserRoleStatement
       | createDemoUserStatement
@@ -928,6 +929,7 @@ dropStatement
     | DROP consumedODataServiceKw ifExists? qualifiedName
     | DROP publishedODataServiceKw ifExists? qualifiedName
     | DROP BUSINESS EVENT SERVICE ifExists? qualifiedName
+    | DROP CHANGE DATA CAPTURE SERVICE ifExists? qualifiedName
     | DROP WORKFLOW ifExists? qualifiedName
     | DROP IMAGE COLLECTION ifExists? qualifiedName
     | DROP ANNOTATION STRING_LITERAL IN identifierOrKeyword
@@ -1044,6 +1046,7 @@ moveDocumentType
     | consumedODataServiceKw
     | publishedODataServiceKw
     | BUSINESS EVENT SERVICE
+    | CHANGE DATA CAPTURE SERVICE
     | aiModelKw
     | AGENT
     | KNOWLEDGE BASE

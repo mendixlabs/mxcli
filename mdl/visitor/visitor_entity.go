@@ -1151,6 +1151,10 @@ func (b *Builder) ExitDropStatement(ctx *parser.DropStatementContext) {
 		b.statements = append(b.statements, &ast.DropODataServiceStmt{
 			Name: buildQualifiedName(names[0]),
 		})
+	} else if ctx.CHANGE() != nil && ctx.DATA() != nil && ctx.CAPTURE() != nil && ctx.SERVICE() != nil {
+		b.statements = append(b.statements, &ast.DropChangeDataCaptureServiceStmt{
+			Name: buildQualifiedName(names[0]),
+		})
 	} else if ctx.BUSINESS() != nil && ctx.EVENT() != nil && ctx.SERVICE() != nil {
 		b.statements = append(b.statements, &ast.DropBusinessEventServiceStmt{
 			Name: buildQualifiedName(names[0]),
