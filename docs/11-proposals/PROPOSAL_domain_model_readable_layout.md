@@ -235,24 +235,31 @@ OrderLine, OrderLogEntry, OrderLineModifier and both Courier associations are
 straight. Lines that still cross a box are between non-adjacent columns
 (Catalog's `Product_Allergen`, `RecipeItem_Ingredient`): that is ordering, phase 4.
 
-### Phase 3 — Cross-module free band (rules 2, 3)
+### Phase 3 — Cross-module free band (rules 2, 3) — implemented
 
-Unblocked by the measurements above. Studio Pro draws a cross-module line from
-the left side of each local end straight to the left edge.
+`dmlayout.CrossLinesFor(module, dm, allDomainModels)` collects, per entity, the
+cross-module associations drawn at it: its own module's (the `ParentID`) and
+every other module's whose `ChildRef` names it. `PlanWith(dm, cross)` places
+each such entity, in its column, at the first y where each of its *n* lines (at
+i / (n+1) of its height, ±10 px for the label) misses every box to its left:
+its target's row when that is clear, otherwise the nearest clear y below,
+otherwise under everything to its left. Column 0 starts at
+`max(OriginX, longest cross-module name drawn from it + markers)`, the label
+sitting between the canvas edge (x = 0, measured) and the box. An isolated
+entity with a cross-module line gets a row of its own at the left of the band.
+`Plan(dm)` is `PlanWith(dm, nil)`. `mxcli layout`, MPR020 and the `exec`
+reminder all use the cross-aware plan, so `layout` still clears MPR020.
 
-1. Collect the "band entities": every entity of this module at either end of a
-   `CrossModuleAssociation` in **any** module's domain model (the `ParentID` of
-   this module's own, plus each `ChildRef` naming this module in the others').
-   `Plan` takes a project-wide index of these, not just the one domain model.
-2. After Phases 1–2, each band entity needs a clear horizontal band. The band runs
-   from the diagram's left edge to the box's left side, at i / (n + 1) of the
-   box's height for its *n* lines, with label height above and below each. Nothing may intersect it: no box, no planned
-   line.
-3. A band entity in layer 0 has the band by construction. Any other whose band
-   is blocked moves down to the first y in its column where the band is clear.
-   That keeps its layer, so its same-module lines still run the right way.
-4. The left margin (`OriginX` for layer 0) becomes
-   `max(OriginX, labelWidth(longest cross-module name in layer 0) + markerAllowance)`.
+Measured on ako/PizzaV1 (Catalog, Fulfilment, Shop, PizzaChat, Core,
+Simulation): **28 of 39** cross-module lines ran through a box after phase 2,
+**0** after this. Straight in-module lines stay about the same (22 → 21 of 29).
+
+The cost is height. A module where most entities carry cross-module lines
+(Catalog: Product, Option, Ingredient, ProductSize, Allergen) becomes a
+staircase, each column stepping below the one to its left; Shop grows from 2292
+to 3717 px tall. Some in-module lines become long diagonals and two labels can
+meet where lines cross. That trade is what #1929's priority order asks for
+(rule 2 above rule 4 and rule 7). The crossings are phase 4's.
 
 ### Phase 4 — Crossing count, better ordering, lint (rule 1)
 

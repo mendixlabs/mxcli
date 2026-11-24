@@ -138,6 +138,21 @@ func labelWidth(name string) int {
 // sorted, because a map range would produce a different diagram on every run and
 // re-writing the unit each time is exactly the churn ADR-0008 exists to prevent.
 func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
+	return PlanWith(dm, nil)
+}
+
+// PlanWith is Plan for a module whose diagram also draws cross-module lines:
+// cross names, per entity, the lines Studio Pro draws from its left side to
+// the canvas edge (see CrossLines). Each such entity is placed where all of
+// its lines, label height included, miss every box to its left (rule 2 of
+// mendixlabs/mxcli#1929): in its column, at its target's row when that is
+// clear, otherwise the first clear y below. Column 0 starts far enough right
+// for the longest name drawn from it, since the label sits between the canvas
+// edge and the box (rule 3). An entity in the isolated band with such a line
+// gets a row of its own at the left.
+//
+// PlanWith(dm, nil) is Plan(dm).
+func PlanWith(dm *domainmodel.DomainModel, cross CrossLines) map[model.ID]model.Point {
 	if dm == nil {
 		return nil
 	}
@@ -157,7 +172,32 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 	}
 	gaps := g.columnGaps(layerOf, len(layers))
 
-	x := OriginX
+	// The isolated entities with a cross-module line go first in the band, each
+	// in a row of its own at the left (see below).
+	var crossIso, plainIso []model.ID
+	for _, id := range isolated {
+		if len(cross[id]) > 0 {
+			crossIso = append(crossIso, id)
+		} else {
+			plainIso = append(plainIso, id)
+		}
+	}
+
+	// Column 0 is where the canvas edge is closest: its cross-module labels
+	// need the room between x = 0 and the box.
+	x0 := OriginX
+	var leftmost []model.ID
+	if len(layers) > 0 {
+		leftmost = append(leftmost, layers[0]...)
+	}
+	for _, id := range append(leftmost, crossIso...) {
+		for _, name := range cross[id] {
+			x0 = max(x0, labelWidth(name)+markerAllowance)
+		}
+	}
+
+	var placed []Rect
+	x := x0
 	maxY := OriginY
 	for li, layer := range layers {
 		widest := 0
@@ -173,8 +213,21 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 			if t, ok := g.primaryTarget(id, out); ok {
 				want = out[t].Y
 			}
-			y := col.place(want, h)
+			var y int
+			if n := len(cross[id]); n > 0 {
+				// The first spot where every one of its cross-module lines is
+				// clear of the boxes to its left; under all of them if nothing
+				// nearer is, which always is.
+				clear := func(y int) bool { return bandClear(placed, x, y, h, n) }
+				var ok bool
+				if y, ok = col.placeWhere(want, h, bandCandidates(placed, x, h, n, want), clear); !ok {
+					y = col.place(max(want, belowLeft(placed, x)), h)
+				}
+			} else {
+				y = col.place(want, h)
+			}
 			out[id] = model.Point{X: x, Y: y}
+			placed = append(placed, Rect{X: x, Y: y, W: w, H: h})
 		}
 		maxY = max(maxY, col.bottom())
 		if li < len(gaps) {
@@ -183,7 +236,19 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 	}
 
 	// The isolated band: a plain grid under everything else, so it reads as a
-	// separate group rather than as another layer of the graph.
+	// separate group rather than as another layer of the graph. Entities in it
+	// with a cross-module line come first, one per row at the left edge, the
+	// only place in a grid row where nothing is to their left.
+	y0 := maxY + bandGutter
+	for _, id := range crossIso {
+		_, h := boxSize(g.byID[id])
+		out[id] = model.Point{X: x0, Y: y0}
+		y0 += h + rowGutter
+	}
+	if len(crossIso) > 0 {
+		maxY = y0 - bandGutter
+	}
+	isolated = plainIso
 	if len(isolated) > 0 {
 		// Rows are as tall as their tallest member, not a fixed pitch: a fixed
 		// pitch is the #1479 overlap all over again for a 20-attribute helper.
@@ -197,7 +262,7 @@ func Plan(dm *domainmodel.DomainModel) map[model.ID]model.Point {
 				colW[i%GridColumns] = w
 			}
 		}
-		x := OriginX
+		x := x0
 		for c := range colX {
 			colX[c] = x
 			x += colW[c] + columnGutter
@@ -370,9 +435,18 @@ func (c *column) bottom() int {
 }
 
 // place takes the free y nearest at or below want for a box of height h, and
-// records it. Candidates are want itself and the end of every span below it;
-// the lowest one that clears every span wins.
+// records it.
 func (c *column) place(want, h int) int {
+	y, _ := c.placeWhere(want, h, nil, nil)
+	return y
+}
+
+// placeWhere is place with a further condition: the lowest candidate at or
+// below want that is free in the column AND passes ok (nil: always) wins.
+// Candidates are want, the end of every span below it, and extra. When none
+// passes ok it reports false and records nothing; the column-free fallback
+// below everything is always free, so with ok nil it always succeeds.
+func (c *column) placeWhere(want, h int, extra []int, ok func(y int) bool) (int, bool) {
 	want = max(want, OriginY)
 	cands := []int{want}
 	for _, s := range c.spans {
@@ -380,24 +454,31 @@ func (c *column) place(want, h int) int {
 			cands = append(cands, s[1])
 		}
 	}
-	sort.Ints(cands)
-	for _, y := range cands {
-		free := true
-		for _, s := range c.spans {
-			if y < s[1] && s[0] < y+h+rowGutter {
-				free = false
-				break
-			}
-		}
-		if free {
-			c.spans = append(c.spans, [2]int{y, y + h + rowGutter})
-			return y
+	for _, y := range extra {
+		if y >= want {
+			cands = append(cands, y)
 		}
 	}
-	// Unreachable: the end of the lowest span is always free.
-	y := c.bottom()
-	c.spans = append(c.spans, [2]int{y, y + h + rowGutter})
-	return y
+	cands = append(cands, max(want, c.bottom()))
+	sort.Ints(cands)
+	for _, y := range cands {
+		if !c.free(y, h) || (ok != nil && !ok(y)) {
+			continue
+		}
+		c.spans = append(c.spans, [2]int{y, y + h + rowGutter})
+		return y, true
+	}
+	return 0, false
+}
+
+// free reports whether a box of height h at y clears every span in the column.
+func (c *column) free(y, h int) bool {
+	for _, s := range c.spans {
+		if y < s[1] && s[0] < y+h+rowGutter {
+			return false
+		}
+	}
+	return true
 }
 
 // layers assigns each connected entity a layer and returns the layers in order,

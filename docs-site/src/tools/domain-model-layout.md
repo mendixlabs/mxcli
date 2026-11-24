@@ -25,6 +25,12 @@ Entities are layered on the associations between them:
   not cut the label off;
 - entities with **no association at all** — non-persistent helpers, mostly — go
   in a band underneath, rather than being mixed in with the lookups;
+- an entity with a **cross-module association** — at either end, the module's
+  own or another module's pointing in — is placed where Studio Pro's line for
+  it, which always runs from the box's left side straight to the canvas edge,
+  passes no other box; the leftmost column starts far enough right for those
+  labels. Modules where most entities have such lines get taller: each column
+  steps below the one to its left;
 - every association line is **re-attached** on the sides of its two boxes that
   face each other, straight across where the boxes share a span (and no other
   box is in the way), the rest spread along the side so no two lines meet at

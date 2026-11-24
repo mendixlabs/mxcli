@@ -45,7 +45,10 @@ else in the module is a lookup and goes on the left, and everything else sits
 one column past the furthest thing it references, on the row of the entity it is
 most linked to. Association lines then mostly run one way, and straight across,
 instead of crossing the diagram. The gap between two columns is wide enough for
-the longest association name drawn across it. Entities with no association at
+the longest association name drawn across it. An entity with a cross-module
+association (at either end) is placed where Studio Pro's line for it, which
+always runs from its left side straight to the left edge, passes no other box.
+Entities with no association at
 all — non-persistent helpers, mostly — go in a band underneath rather than being
 mixed in with the lookups. Every association line is then re-attached: on the
 sides of its two boxes that face each other, straight across where the boxes
@@ -125,6 +128,13 @@ func runLayout(cmd *cobra.Command) error {
 		return err
 	}
 
+	// Cross-module lines are drawn in BOTH modules' diagrams, so placing a
+	// module needs the other modules' cross-module associations too.
+	allDMs, err := b.ListDomainModels()
+	if err != nil {
+		return fmt.Errorf("read domain models: %w", err)
+	}
+
 	movedTotal, unchangedTotal, reanchoredTotal := 0, 0, 0
 	for _, m := range targets {
 		dm, err := b.GetDomainModel(m.ID)
@@ -139,7 +149,7 @@ func runLayout(cmd *cobra.Command) error {
 		if layoutOnlyOverlapping {
 			plan = dmlayout.ResolveOverlaps(dm)
 		} else {
-			plan = dmlayout.Plan(dm)
+			plan = dmlayout.PlanWith(dm, dmlayout.CrossLinesFor(m.Name, dm, allDMs))
 		}
 		moved := 0
 		var moves []string
