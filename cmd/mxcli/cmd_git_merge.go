@@ -106,7 +106,13 @@ Once the merge commits, the plan template beside the .mpr is removed.
 
 The merge is refused while Studio Pro has the project open (.mpr.lock).
 MPR v2 projects only. The mx binary is resolved for the project's Mendix
-version (PATH, the mxcli cache, or the Studio Pro installation).`,
+version (PATH, the mxcli cache, or the Studio Pro installation), and a model
+merge runs only on an mx of that exact release: another Mendix version's
+engine would write this project's model, so an mx of another version, or one
+whose version cannot be told, is refused before it runs (the merge is
+aborted, nothing is committed). Install the matching one with
+'mxcli setup mxbuild --version <project version>'. --mxbuild-path names the
+mx to use on purpose; with it a version mismatch is only warned about.`,
 	Example: `  mxcli git merge feature/orders -p app.mpr
   mxcli git merge origin/main -p app.mpr --push
   mxcli git merge feature/orders -p app.mpr --theirs   # after reviewing the report
@@ -125,6 +131,8 @@ func init() {
 	gitMergeCmd.Flags().Bool("theirs", false, "on a model conflict mx cannot resolve, take their side of every conflicted model file")
 	gitMergeCmd.Flags().String("plan", "", "resolve per unit from a plan file written by a previous run (<mpr>.merge-plan.json)")
 	gitMergeCmd.Flags().Bool("push", false, "push the branch and the notes ref to their remote afterwards")
+	gitMergeCmd.Flags().String("mxbuild-path", "",
+		"path to the Mendix installation to take mx from; it overrides the version check (a mismatch only warns)")
 	gitCmd.AddCommand(gitMergeCmd)
 }
 
@@ -136,6 +144,7 @@ func runGitMerge(cmd *cobra.Command, args []string) error {
 	plan, _ := cmd.Flags().GetString("plan")
 	push, _ := cmd.Flags().GetBool("push")
 	project, _ := cmd.Flags().GetString("project")
+	mxbuildPath, _ := cmd.Flags().GetString("mxbuild-path")
 	strategy := ""
 	switch {
 	case ours && theirs:
@@ -147,7 +156,14 @@ func runGitMerge(cmd *cobra.Command, args []string) error {
 	case theirs:
 		strategy = "theirs"
 	}
-	return mergeRun(project, ref, message, strategy, plan, push, mxRunners{merge: realMxMerge, diff: realMxDiff}, cmd.OutOrStdout())
+	if mxbuildPath != "" {
+		// ResolveMxForVersion quietly falls back to an mx on PATH when this
+		// path is bad, which would turn a typo into an unchecked merge.
+		if _, err := os.Stat(mxbuildPath); err != nil {
+			return fmt.Errorf("--mxbuild-path %s: %w", mxbuildPath, err)
+		}
+	}
+	return mergeRun(project, ref, message, strategy, plan, push, mxRunnersFor(mxbuildPath, cmd.ErrOrStderr()), cmd.OutOrStdout())
 }
 
 // mxRunners are the mx invocations, injected for tests.
@@ -640,14 +656,96 @@ func projectMendixVersion(mprPath string) string {
 	return v
 }
 
-// realMxMerge shells out to `mx merge -v BASE MINE THEIRS` over the three
+// resolveMxForMerge and mergeMxVersion are injected for tests.
+var (
+	resolveMxForMerge = docker.ResolveMxForVersion
+	mergeMxVersion    = docker.MxBinaryVersion
+)
+
+// mxLookup finds the mx for the project file at mprPath.
+type mxLookup func(mprPath string) (string, error)
+
+// mergeMxLookup resolves the mx a merge runs, and refuses one that is not the
+// project's Mendix release.
+//
+// ResolveMxForVersion prefers an mx on PATH over the project's version and
+// falls back to any cached one, so on a machine with only another version
+// cached the merge engine — which writes the merged model — would silently be
+// another Mendix version's. The version check makes that a refusal, the way
+// `mxcli new` and `marketplace package` already treat a substituted mx. With
+// --mxbuild-path (override) the same findings are warned about once on stderr.
+func mergeMxLookup(mxbuildPath string, stderr io.Writer) mxLookup {
+	warned := false
+	return func(mprPath string) (string, error) {
+		version := projectMendixVersion(mprPath)
+		mxPath, err := resolveMxForMerge(mxbuildPath, version)
+		if err != nil {
+			return "", fmt.Errorf("no mx for Mendix %s: %w (model conflicts need it)\nhint: run 'mxcli setup mxbuild --version %s'", version, err, version)
+		}
+		problem := mergeMxProblem(mxPath, version)
+		if problem == "" {
+			return mxPath, nil
+		}
+		if mxbuildPath != "" {
+			if !warned {
+				fmt.Fprintf(stderr, "warning: %s; going on because --mxbuild-path was given\n", problem)
+				warned = true
+			}
+			return mxPath, nil
+		}
+		return "", fmt.Errorf("%s.\nA model merge by another Mendix version's engine than the project's is refused.\n"+
+			"hint: run 'mxcli setup mxbuild --version %s' to install the matching mx (an mx on PATH is used before it,\n"+
+			"so take that one off PATH); to use this mx on purpose, pass --mxbuild-path", problem, version)
+	}
+}
+
+// mergeMxProblem says why the mx at mxPath must not merge a project of
+// version, or "" when it may: it is the same Mendix release. An unknown
+// project version is not checked (ResolveMxForVersion had nothing to prefer
+// either); an mx whose own version cannot be told is a problem.
+func mergeMxProblem(mxPath, version string) string {
+	if version == "" {
+		return ""
+	}
+	got := mergeMxVersion(mxPath)
+	if docker.SameMendixRelease(got, version) {
+		return ""
+	}
+	if got == "" {
+		return fmt.Sprintf("cannot tell which Mendix version %s is, and the project is Mendix %s", mxPath, version)
+	}
+	return fmt.Sprintf("the mx found, %s, is Mendix %s, but the project is Mendix %s", mxPath, got, version)
+}
+
+// mxRunnersFor wires the real mx invocations to one version-checked lookup.
+func mxRunnersFor(mxbuildPath string, stderr io.Writer) mxRunners {
+	mx := mergeMxLookup(mxbuildPath, stderr)
+	return mxRunners{
+		merge: func(baseMpr, mineMpr, theirsMpr string, shas [3]string) (int, string, error) {
+			return runMxMerge(mx, baseMpr, mineMpr, theirsMpr)
+		},
+		diff: func(base, mine, outJSON string) error {
+			return runMxDiff(mx, base, mine, outJSON)
+		},
+	}
+}
+
+// realMxMerge and realMxDiff are the runners with no --mxbuild-path.
+func realMxMerge(baseMpr, mineMpr, theirsMpr string, shas [3]string) (int, string, error) {
+	return mxRunnersFor("", os.Stderr).merge(baseMpr, mineMpr, theirsMpr, shas)
+}
+
+func realMxDiff(base, mine, outJSON string) error {
+	return mxRunnersFor("", os.Stderr).diff(base, mine, outJSON)
+}
+
+// runMxMerge shells out to `mx merge -v BASE MINE THEIRS` over the three
 // revisions' project files, mx resolved for the project's Mendix version;
 // -v makes the engine print its per-unit conflict list.
-func realMxMerge(baseMpr, mineMpr, theirsMpr string, shas [3]string) (int, string, error) {
-	version := projectMendixVersion(mineMpr)
-	mxPath, err := docker.ResolveMxForVersion("", version)
+func runMxMerge(mx mxLookup, baseMpr, mineMpr, theirsMpr string) (int, string, error) {
+	mxPath, err := mx(mineMpr)
 	if err != nil {
-		return 1, "", fmt.Errorf("no mx for Mendix %s: %w (model conflicts need it)", version, err)
+		return 1, "", err
 	}
 	cmd := exec.Command(mxPath, "merge", "-v", baseMpr, mineMpr, theirsMpr)
 	docker.PrepareMxCommand(cmd)
@@ -1059,12 +1157,12 @@ func statusOrNone(s string) string {
 	return s
 }
 
-// realMxDiff shells out to `mx diff BASE MINE OUTPUT` (resolved like the merge).
-func realMxDiff(base, mine, outJSON string) error {
-	version := projectMendixVersion(mine)
-	mxPath, err := docker.ResolveMxForVersion("", version)
+// runMxDiff shells out to `mx diff BASE MINE OUTPUT` (resolved and
+// version-checked like the merge).
+func runMxDiff(mx mxLookup, base, mine, outJSON string) error {
+	mxPath, err := mx(mine)
 	if err != nil {
-		return fmt.Errorf("no mx for Mendix %s: %w", version, err)
+		return err
 	}
 	cmd := exec.Command(mxPath, "diff", base, mine, outJSON)
 	docker.PrepareMxCommand(cmd)

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`git merge` no longer runs another Mendix version's merge engine** — the engine was resolved by preference, so with only another version cached (a Linux container, a CI runner) or an `mx` on PATH, `mx merge` of that version wrote the project's merged model and nothing said so. A model merge now runs only on an mx of the project's own release: another version's, or one whose version cannot be told, is refused before it runs, the merge is aborted, and the message names `mxcli setup mxbuild --version <project version>`. The `mx diff` behind the conflict review is held to the same check. `--mxbuild-path` names an mx on purpose; with it a mismatch only warns, as in `marketplace package`.
+
 ## [0.34.0] - 2026-11-27
 
 Headline: **Mendix 11.17 support, domain model diagrams that `mxcli layout` actually untangles, and pluggable widgets judged by running their own `editorConfig.js`.** Workflows with boundary events, pages and change data capture services are written in the shape 11.17 reads, and `run --local --watch` drops its client-copy workaround there. `mxcli layout` places entities by what they link to, re-attaches every association line and reports crossings, while new lint rules `MPR020`-`MPR022` flag a diagram never laid out, a line through an unrelated entity and an agent naming a missing document. Microflows gain Metrics activities (`increment counter`, `set gauge`), `@documentation` on a statement and a `@curve` per decision outcome.
