@@ -516,7 +516,7 @@ func execCreateEntity(ctx *ExecContext, s *ast.CreateEntityStmt) error {
 		fmt.Fprintf(ctx.Output, "Created entity: %s\n", s.Name)
 	}
 
-	ctx.trackModifiedDomainModel(module.ID, module.Name)
+	ctx.trackModifiedDomainModel(module)
 	return nil
 }
 
@@ -2011,7 +2011,7 @@ func execAlterEntity(ctx *ExecContext, s *ast.AlterEntityStmt) error {
 		return mdlerrors.NewUnsupported("unsupported alter entity operation")
 	}
 
-	ctx.trackModifiedDomainModel(module.ID, module.Name)
+	ctx.trackModifiedDomainModel(module)
 	return nil
 }
 

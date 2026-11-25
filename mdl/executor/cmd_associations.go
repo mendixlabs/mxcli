@@ -154,7 +154,7 @@ func execCreateAssociation(ctx *ExecContext, s *ast.CreateAssociationStmt) error
 					}
 					invalidateHierarchy(ctx)
 					invalidateDomainModelsCache(ctx)
-					ctx.trackModifiedDomainModel(module.ID, module.Name)
+					ctx.trackModifiedDomainModel(module)
 					ctx.ReportMutation("Modified", "association: %s", s.Name)
 					return nil
 				}
@@ -182,7 +182,7 @@ func execCreateAssociation(ctx *ExecContext, s *ast.CreateAssociationStmt) error
 					}
 					invalidateHierarchy(ctx)
 					invalidateDomainModelsCache(ctx)
-					ctx.trackModifiedDomainModel(module.ID, module.Name)
+					ctx.trackModifiedDomainModel(module)
 					ctx.ReportMutation("Modified", "association: %s", s.Name)
 					// Under OWNER Both the TO entity holds a member entry, in its own
 					// module. Only the declaring module was reconciled (at the end of
@@ -297,7 +297,7 @@ func execCreateAssociation(ctx *ExecContext, s *ast.CreateAssociationStmt) error
 		}
 	}
 
-	ctx.trackModifiedDomainModel(module.ID, module.Name)
+	ctx.trackModifiedDomainModel(module)
 	fmt.Fprintf(ctx.Output, "Created association: %s\n", s.Name)
 	return nil
 }
@@ -492,7 +492,7 @@ func reconcileModuleAccess(ctx *ExecContext, moduleName, why string) error {
 	if count > 0 {
 		fmt.Fprintf(ctx.Output, "Reconciled %d access rule(s) in module %s %s\n", count, mod.Name, why)
 	}
-	ctx.trackModifiedDomainModel(mod.ID, mod.Name)
+	ctx.trackModifiedDomainModel(mod)
 	return nil
 }
 

@@ -61,6 +61,9 @@ type executorCache struct {
 
 	// Track domain models modified during this session for finalization
 	modifiedDomainModels map[model.ID]string // domain model unit ID -> module name
+	// marketplaceModules are the modified domain models' modules that came from
+	// the Marketplace (trackModifiedDomainModel).
+	marketplaceModules map[model.ID]bool
 
 	// Project default language for describe text selection (issue #702). Loaded
 	// once (pre-warmed before any parallel widget extraction) so the getter is a
@@ -818,6 +821,7 @@ func (e *Executor) finalizeProgramExecution() error {
 
 	// Clear tracking
 	e.cache.modifiedDomainModels = nil
+	e.cache.marketplaceModules = nil
 	return nil
 }
 
@@ -847,7 +851,10 @@ func (e *Executor) layoutReminder(moduleID model.ID, moduleName string, dm *doma
 			return ""
 		}
 	}
-	if mod, err := e.backend.GetModule(moduleID); err == nil && isMarketplaceModule(nil, mod) {
+	// The statement that changed the domain model held its module, and noted
+	// whether it is a Marketplace module (trackModifiedDomainModel); reading it
+	// again here was one unit read more per reminder (ako/mxcli#2555).
+	if e.cache.marketplaceModules[moduleID] {
 		return ""
 	}
 	names := make([]string, 0, len(unlaid))

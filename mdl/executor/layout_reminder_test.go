@@ -40,12 +40,21 @@ func finalizeWith(t *testing.T, dm *domainmodel.DomainModel, mod *model.Module, 
 	e := New(&buf)
 	e.SetQuiet(quiet)
 	e.backend = &mock.MockBackend{
-		IsConnectedFunc:             func() bool { return true },
-		GetDomainModelFunc:          func(model.ID) (*domainmodel.DomainModel, error) { return dm, nil },
-		GetModuleFunc:               func(model.ID) (*model.Module, error) { return mod, nil },
+		IsConnectedFunc:    func() bool { return true },
+		GetDomainModelFunc: func(model.ID) (*domainmodel.DomainModel, error) { return dm, nil },
+		// ako/mxcli#2555: the statement that changed the domain model held
+		// the module already; reading it again at the end was one unit read
+		// more per reminder on the benchmark.
+		GetModuleFunc: func(model.ID) (*model.Module, error) {
+			t.Error("the reminder read the module again; the statement that changed it recorded it")
+			return mod, nil
+		},
 		ReconcileMemberAccessesFunc: func(model.ID, string) (int, error) { return 0, nil },
 	}
-	e.cache = &executorCache{modifiedDomainModels: map[model.ID]string{mod.ID: mod.Name}}
+	e.cache = &executorCache{}
+	// As a statement records it: with the module it already read.
+	ctx := &ExecContext{Backend: e.backend, Cache: e.cache}
+	ctx.trackModifiedDomainModel(mod)
 	if err := e.finalizeProgramExecution(); err != nil {
 		t.Fatalf("finalizeProgramExecution: %v", err)
 	}
