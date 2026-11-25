@@ -169,3 +169,68 @@ func startsPathStep(text string, i int) bool {
 	p := text[i-1]
 	return !isNameByte(p) && p != '.' && p != '$' && p != '@'
 }
+
+// RewriteModulePrefix renames the module of every qualified reference in a
+// Mendix expression, an XPath constraint or an OQL query: `oldModule.` followed
+// by a name, as a whole token, becomes `newModule.` (ako/mxcli#2590). It is the
+// module-rename counterpart of RewriteExpressionReferences, which takes a
+// qualified name and so never saw a module rename's bare name — `rename module`
+// left every `[Old.Assoc = $X]` and `@Old.Constant` naming the old module, and
+// the build failed with CE1613.
+//
+// A prefix is rewritten where a reference may begin: not after a name
+// character or `.` (a longer module name, a member), nor `$` (a variable that
+// happens to share the name). After `/` and `@` it is a path step or a constant,
+// both of which name the module. Text inside a string literal is data and is
+// left alone.
+func RewriteModulePrefix(text, oldModule, newModule string) (string, int) {
+	if !isIdentifier(oldModule) || !isIdentifier(newModule) || !strings.Contains(text, oldModule+".") {
+		return text, 0
+	}
+	prefix := oldModule + "."
+	var b strings.Builder
+	count := 0
+	inLiteral := false
+	for i := 0; i < len(text); {
+		c := text[i]
+		if c == '\'' {
+			if inLiteral && i+1 < len(text) && text[i+1] == '\'' {
+				b.WriteString("''")
+				i += 2
+				continue
+			}
+			inLiteral = !inLiteral
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		if !inLiteral && strings.HasPrefix(text[i:], prefix) && isNameStartByte(byteAt(text, i+len(prefix))) {
+			p := byteAt(text, i-1)
+			if i == 0 || (!isNameByte(p) && p != '.' && p != '$') {
+				b.WriteString(newModule + ".")
+				i += len(prefix)
+				count++
+				continue
+			}
+		}
+		b.WriteByte(c)
+		i++
+	}
+	if count == 0 {
+		return text, 0
+	}
+	return b.String(), count
+}
+
+// isIdentifier reports whether s is a bare name: a module name, no dot.
+func isIdentifier(s string) bool {
+	if s == "" || !isNameStartByte(s[0]) {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if !isNameByte(s[i]) {
+			return false
+		}
+	}
+	return true
+}
