@@ -11,15 +11,15 @@ description: "Validate MDL with `mxcli check` before presenting or executing it,
 | lines | section |
 |---|---|
 | 29-35 | When to Use This Skill |
-| 36-295 | `exec` refuses what `check` rejects |
-| 296-431 | Pre-Flight Validation Checklist |
-| 432-467 | Two rules that only real validation used to catch |
-| 468-514 | Validation Workflow |
-| 515-536 | Script Execution Behavior |
-| 537-597 | Script Organization |
-| 598-659 | Troubleshooting Parse Errors |
-| 660-667 | Studio Pro MCP — Verification Only |
-| 668-673 | Related Skills |
+| 36-300 | `exec` refuses what `check` rejects |
+| 301-436 | Pre-Flight Validation Checklist |
+| 437-472 | Two rules that only real validation used to catch |
+| 473-519 | Validation Workflow |
+| 520-541 | Script Execution Behavior |
+| 542-602 | Script Organization |
+| 603-664 | Troubleshooting Parse Errors |
+| 665-672 | Studio Pro MCP — Verification Only |
+| 673-678 | Related Skills |
 
 <!-- /skill-index -->
 # MDL Syntax Validation Skill
@@ -280,6 +280,11 @@ A **warning** rather than a refusal, because the model is valid and builds:
   `trim($v) != ''`, which also covers an empty `$v`.
   Not reported when the same `and`/`or` chain also compares that call with
   `''` (`trim($v) != empty and trim($v) != ''`): redundant, but correct.
+- **`$v != empty and trim($v) != ''`** — E016 (info). The `empty` half is
+  dead: `trim(empty)` is `''`, so `trim($v) != ''` alone decides it. Keep only
+  that.
+- **`$v != empty and $v != ''`** — E017 (info). A value of only spaces passes
+  as text. Write `trim($v) != ''`. Both also in an `or` chain with `=`.
 
 **One thing to know about hint ordering**: the reference check runs before
 expression checking and **exits on its first error**, so an unrelated mistake
