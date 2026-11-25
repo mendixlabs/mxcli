@@ -428,7 +428,7 @@ handler never runs. Message names are case-sensitive
 | `MDL-BE03` | it declares an attribute per payload property, of a type that encoding holds | warning |
 | `MDL-BE04` | the handler takes exactly one parameter, accepting the consumed object | error |
 | `MDL-BE05` | the `BusinessEvents` marketplace module is in the project | error |
-| `MDL-BE06` | `BusinessEvents.StartupBusinessEvents` is reachable from the after-startup microflow | warning |
+| `MDL-BE06` | the app does **not** call `BusinessEvents.StartupBusinessEvents` (Mendix 11.16.1+, where MxBuild starts the module itself) | warning |
 | `MDL-BE07` | `BusinessEvents.ServerUrl` is set, and one of `ChannelName` / `EventBrokerSpace` | warning |
 
 **Cause:** mxbuild validates none of this. Measured on mxbuild 11.16.1 (ako/mxcli#2384 §6), a
@@ -440,9 +440,22 @@ BE07 — does not boot at all, because `StartupBusinessEvents` throws in the aft
 BusinessEvents.ChannelName or BusinessEvents.EventBrokerSpace should be set").
 
 **Solution:** The three-statement recipe — the `CBE_` entity, the handler, then the service — is in
-the `business-events` skill. BE06 is wired in App Settings > Runtime > After startup, by a
-microflow that calls `BusinessEvents.StartupBusinessEvents` (directly or through another
-microflow; the check follows the call graph). BE07's two values are per-environment, which is why
+the `business-events` skill. BE06 is satisfied by **removing** any call to
+`BusinessEvents.StartupBusinessEvents`. Measured on Mendix 11.16.1 with module 3.12.1,
+MxBuild starts the module itself: it writes a microflow `BusinessEvents.ASu_BusinessEvents`
+into the compiled model — present in neither the project nor the module package — and calls
+it from the app's after-startup microflow, which in turn calls `ConsumeBusinessEvent` (the
+consumers) and `StartupBusinessEvents`. An explicit call is a second start, and
+`HeartbeatService.init` replaces its scheduled thread pool without shutting the old one
+down, so it leaks a pool and leaves two heartbeat schedules running. The symptom is the
+start-up pair logged twice. Event flow does not test the call: consumers come from
+`ConsumeBusinessEvent`, so events keep flowing while metrics, the summary log and the
+heartbeat stop. Below 11.16.1 the rule says nothing — which versions started wiring it in
+is not measured, and on one that does not the call is required.
+
+**BE06 previously demanded this call**, on the premise that nothing else started the module.
+It warned on correctly wired apps and then, once the call was removed, asked for it back
+(ako/mxcli#2384 B1/M4). BE07's two values are per-environment, which is why
 an empty **default** only warns: supply them with `mxcli constant set BusinessEvents.ServerUrl
 '<broker>:9092'` or `--constant` for a dev run.
 

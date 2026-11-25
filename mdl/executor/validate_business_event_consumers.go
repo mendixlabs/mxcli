@@ -13,6 +13,7 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/businessevents"
 	mdlerrors "github.com/mendixlabs/mxcli/mdl/errors"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
+	"github.com/mendixlabs/mxcli/sdk/versions"
 )
 
 // The seven rules of #2384 §5.1, for a CONSUMED business event service — the
@@ -538,50 +539,96 @@ func businessEventsRuntimeWarnings(ctx *ExecContext, prog *ast.Program, sc *scri
 	sc.warnings = append(sc.warnings, businessEventsBrokerWarnings(ctx)...)
 }
 
-// businessEventsStartupWarning is BE06: BusinessEvents.StartupBusinessEvents has
-// to be reachable from the after-startup microflow, or the app consumes nothing
-// and every other check passes.
+// mxbuildWiresStartupFrom is the Mendix version from which MxBuild starts the
+// Business Events module itself, so an app that calls StartupBusinessEvents
+// starts it TWICE.
 //
-// It says nothing when the script itself touches the wiring — it creates a
-// microflow that calls StartupBusinessEvents, or sets the after-startup
-// microflow. What the project will look like afterwards is then the script's
-// business, and warning from the stored state would be wrong.
+// MEASURED on Mendix 11.16.1 with module 3.12.1 (ako/mxcli#2384 B1). MxBuild
+// writes a microflow `BusinessEvents.ASu_BusinessEvents` into the compiled model
+// (deployment/model/model.mdp) that exists neither in the project nor in the
+// module package, and injects a call to it into the app's after-startup
+// microflow. An OpenTelemetry trace of one boot shows the whole chain on one
+// thread:
+//
+//	Microflow Fulfilment.ASU_Startup
+//	  Microflow BusinessEvents.ASu_BusinessEvents
+//	    Java action BusinessEvents.ConsumeBusinessEvent    (registers consumers)
+//	    Java action BusinessEvents.StartupBusinessEvents   <- first start
+//	  Java action BusinessEvents.StartupBusinessEvents     <- the app's call, second
+//
+// Which earlier versions do this is NOT measured, so the gate sits at the
+// version that was. Below it nothing is reported: on a version that does not
+// wire the startup the call is required, and warning against it would be the
+// mirror image of the defect this replaced.
+var mxbuildWiresStartupFrom = versions.SemVer{Major: 11, Minor: 16, Patch: 1}
+
+// mxbuildWiresStartup reports whether this project's Mendix version is one where
+// MxBuild starts the module itself. False when the version cannot be read — a
+// warning is for something known, never for something assumed.
+func mxbuildWiresStartup(ctx *ExecContext) bool {
+	rpv := ctx.Backend.ProjectVersion()
+	if rpv == nil {
+		return false
+	}
+	pv := versions.SemVer{Major: rpv.MajorVersion, Minor: rpv.MinorVersion, Patch: rpv.PatchVersion}
+	return pv.AtLeast(mxbuildWiresStartupFrom)
+}
+
+// businessEventsStartupWarning is BE06, now the other way round: it reports an
+// app that starts the Business Events module a SECOND time.
+//
+// It used to demand the call, on the premise that nothing else starts the
+// module. That premise was wrong on 11.16.1 (see mxbuildWiresStartupFrom), and
+// the rule warned on correctly wired apps and then, once the call was removed,
+// told them to add back the thing that causes the double start.
+//
+// The second start is not cosmetic. StartupService.init initialises
+// EventRateMetricsService, LogCollectorService and HeartbeatService, and
+// HeartbeatService.init assigns a fresh ScheduledExecutorService to its static
+// pulseThread and schedules a new fixed-rate task without shutting down the pool
+// already there. So a second start leaks a thread pool and leaves two heartbeat
+// schedules running, of which ShutdownBusinessEvents stops only the last.
+//
+// Nothing is reported about a MISSING after-startup microflow. MxBuild injects
+// its call into whichever microflow the app configures, and whether it supplies
+// one when the app configures none has not been measured — asserting it would
+// repeat the mistake this rule is recovering from.
 func businessEventsStartupWarning(ctx *ExecContext, prog *ast.Program) string {
-	if scriptWiresBusinessEventsStartup(prog) {
+	if !mxbuildWiresStartup(ctx) {
 		return ""
+	}
+	if scriptAddsBusinessEventsStartupCall(prog) {
+		return fmt.Sprintf(
+			"%s: this script calls %s, and from Mendix %s MxBuild already starts the module itself "+
+				"(it generates BusinessEvents.ASu_BusinessEvents and calls it from the after-startup "+
+				"microflow). The explicit call is a SECOND start: it leaks HeartbeatService's thread pool "+
+				"and leaves two heartbeat schedules running. Remove it",
+			beModuleStartedRule, startupBusinessEvents, mxbuildWiresStartupFrom.String())
 	}
 	ps, err := ctx.Backend.GetProjectSettings()
 	if err != nil || ps == nil || ps.Model == nil {
 		return "" // cannot tell
 	}
 	after := ps.Model.AfterStartupMicroflow
-	if after == "" {
-		return fmt.Sprintf(
-			"%s: this app has no after-startup microflow, so %s never runs and no event is ever consumed. "+
-				"Point App Settings > Runtime > After startup at a microflow that calls it "+
-				"(`alter settings model set AfterStartupMicroflow '<Module.Microflow>'`)",
-			beModuleStartedRule, startupBusinessEvents)
-	}
-	if microflowReaches(ctx, after, startupBusinessEvents) {
+	if after == "" || !microflowStartsBusinessEvents(ctx, after) {
 		return ""
 	}
 	return fmt.Sprintf(
-		"%s: the after-startup microflow %s does not reach %s, so the consumer is never started and no "+
-			"event is consumed — silently, with every other check green. Add a call to it there",
-		beModuleStartedRule, after, startupBusinessEvents)
+		"%s: the after-startup microflow %s reaches %s, and from Mendix %s MxBuild already starts the "+
+			"module itself (it generates BusinessEvents.ASu_BusinessEvents and calls it from the "+
+			"after-startup microflow). That is a SECOND start: it leaks HeartbeatService's thread pool and "+
+			"leaves two heartbeat schedules running, of which ShutdownBusinessEvents stops only the last. "+
+			"Remove the call",
+		beModuleStartedRule, after, startupBusinessEvents, mxbuildWiresStartupFrom.String())
 }
 
-// scriptWiresBusinessEventsStartup reports whether the script itself arranges
-// the startup call, in which case BE06 keeps quiet.
-func scriptWiresBusinessEventsStartup(prog *ast.Program) bool {
+// scriptAddsBusinessEventsStartupCall reports a script that calls
+// StartupBusinessEvents in a flow it creates or alters. On a version where
+// MxBuild wires the startup there is no reason to call it, so the call is
+// reported wherever the script puts it.
+func scriptAddsBusinessEventsStartupCall(prog *ast.Program) bool {
 	for _, stmt := range prog.Statements {
 		switch s := stmt.(type) {
-		case *ast.AlterSettingsStmt:
-			if strings.EqualFold(s.Section, "model") {
-				if _, ok := s.Properties["AfterStartupMicroflow"]; ok {
-					return true
-				}
-			}
 		case *ast.CreateMicroflowStmt:
 			if flowCallsStartupBusinessEvents(s.Body) {
 				return true
@@ -600,23 +647,47 @@ func scriptWiresBusinessEventsStartup(prog *ast.Program) bool {
 	return false
 }
 
-// flowCallsStartupBusinessEvents reports a `call microflow
-// BusinessEvents.StartupBusinessEvents` anywhere in an MDL flow body.
+// flowCallsStartupBusinessEvents reports a call to
+// BusinessEvents.StartupBusinessEvents anywhere in an MDL flow body.
+//
+// `call java action` is the spelling that matters — the module ships the
+// startup as a Java action (see microflowStartsBusinessEvents) — and
+// `call microflow` is accepted for a version that wraps it.
 func flowCallsStartupBusinessEvents(body []ast.MicroflowStatement) bool {
 	found := false
 	walkFlowStatements(body, func(s ast.MicroflowStatement) {
-		if c, ok := s.(*ast.CallMicroflowStmt); ok &&
-			strings.EqualFold(c.MicroflowName.String(), startupBusinessEvents) {
-			found = true
+		switch c := s.(type) {
+		case *ast.CallJavaActionStmt:
+			if strings.EqualFold(c.ActionName.String(), startupBusinessEvents) {
+				found = true
+			}
+		case *ast.CallMicroflowStmt:
+			if strings.EqualFold(c.MicroflowName.String(), startupBusinessEvents) {
+				found = true
+			}
 		}
 	})
 	return found
 }
 
-// microflowReaches reports whether target is called from fromQN, directly or
-// through other microflows. Nanoflows are not followed: the after-startup
-// microflow runs server-side and cannot call one.
-func microflowReaches(ctx *ExecContext, fromQN, target string) bool {
+// microflowStartsBusinessEvents reports whether fromQN, or any microflow it
+// calls, starts the Business Events module.
+//
+// In Business Events 3.12.1 `StartupBusinessEvents` is a **Java action**
+// (`Private/Java_Actions`, javasource/businessevents/actions/
+// StartupBusinessEvents.java); the module ships no microflow of that name. The
+// first version of this walk followed microflow calls only, so it warned on
+// every correctly wired consumer and told the author to add a call that was
+// already there (ako/mxcli#2384 M4). A Java action call is what to look for.
+//
+// A microflow of that name is accepted too, rather than replacing one check
+// with the other: the module is a marketplace dependency whose shape mxcli does
+// not control, and an older or newer version wrapping the action in a microflow
+// would otherwise bring the false warning straight back.
+//
+// Nanoflows are not followed: the after-startup microflow runs server-side and
+// cannot call one.
+func microflowStartsBusinessEvents(ctx *ExecContext, fromQN string) bool {
 	seen := map[string]bool{}
 	queue := []string{fromQN}
 	for len(queue) > 0 {
@@ -627,21 +698,29 @@ func microflowReaches(ctx *ExecContext, fromQN, target string) bool {
 			continue
 		}
 		seen[key] = true
-		if strings.EqualFold(qn, target) {
+		// A microflow BY that name, for a module version that ships one.
+		if strings.EqualFold(qn, startupBusinessEvents) {
 			return true
 		}
 		mf := findMicroflowByQualifiedName(ctx, qn)
 		if mf == nil {
 			continue
 		}
-		queue = append(queue, calledMicroflows(mf.ObjectCollection)...)
+		calls, javaActions := flowCallTargets(mf.ObjectCollection)
+		for _, ja := range javaActions {
+			if strings.EqualFold(ja, startupBusinessEvents) {
+				return true
+			}
+		}
+		queue = append(queue, calls...)
 	}
 	return false
 }
 
-// calledMicroflows names the microflows a flow body calls, following loops.
-func calledMicroflows(oc *microflows.MicroflowObjectCollection) []string {
-	var out []string
+// flowCallTargets names the microflows and the Java actions a flow body calls,
+// following loops. Two lists because they are resolved differently: a microflow
+// is followed, a Java action is a leaf.
+func flowCallTargets(oc *microflows.MicroflowObjectCollection) (microflowCalls, javaActionCalls []string) {
 	var walk func(*microflows.MicroflowObjectCollection)
 	walk = func(c *microflows.MicroflowObjectCollection) {
 		if c == nil {
@@ -650,9 +729,14 @@ func calledMicroflows(oc *microflows.MicroflowObjectCollection) []string {
 		for _, obj := range c.Objects {
 			switch o := obj.(type) {
 			case *microflows.ActionActivity:
-				if a, ok := o.Action.(*microflows.MicroflowCallAction); ok && a != nil && a.MicroflowCall != nil {
-					if a.MicroflowCall.Microflow != "" {
-						out = append(out, a.MicroflowCall.Microflow)
+				switch a := o.Action.(type) {
+				case *microflows.MicroflowCallAction:
+					if a != nil && a.MicroflowCall != nil && a.MicroflowCall.Microflow != "" {
+						microflowCalls = append(microflowCalls, a.MicroflowCall.Microflow)
+					}
+				case *microflows.JavaActionCallAction:
+					if a != nil && a.JavaAction != "" {
+						javaActionCalls = append(javaActionCalls, a.JavaAction)
 					}
 				}
 			case *microflows.LoopedActivity:
@@ -661,7 +745,7 @@ func calledMicroflows(oc *microflows.MicroflowObjectCollection) []string {
 		}
 	}
 	walk(oc)
-	return out
+	return microflowCalls, javaActionCalls
 }
 
 // businessEventsBrokerWarnings is BE07: ServerUrl non-blank, and at least one of

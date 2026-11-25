@@ -9,6 +9,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/backend/mock"
+	"github.com/mendixlabs/mxcli/mdl/types"
 	"github.com/mendixlabs/mxcli/model"
 	"github.com/mendixlabs/mxcli/sdk/domainmodel"
 	"github.com/mendixlabs/mxcli/sdk/microflows"
@@ -63,6 +64,9 @@ type beConsumerFixture struct {
 	microflows   []*microflows.Microflow
 	constants    []*model.Constant
 	afterStartup string
+	// mendix is the project's Mendix version; BE06 only speaks where MxBuild is
+	// known to wire the startup itself.
+	mendix string
 }
 
 func newBEConsumerFixture() *beConsumerFixture {
@@ -95,17 +99,22 @@ func newBEConsumerFixture() *beConsumerFixture {
 			be.ID:   {cbe},
 			shop.ID: {order},
 		},
+		// No microflow named StartupBusinessEvents: in Business Events 3.12.1 it
+		// is a Java action, and ASU_Startup calls it as one.
 		microflows: []*microflows.Microflow{
-			beFlow(be.ID, "StartupBusinessEvents", nil, nil),
 			beFlow(shop.ID, "HandleBE_OrderPlaceEvent",
 				[]*microflows.MicroflowParameter{beObjectParam("Event", "Shop.CBE_OrderPlaceEvent")}, nil),
-			beFlow(shop.ID, "ASU_Startup", nil, []string{startupBusinessEvents}),
+			// CORRECTLY wired for Mendix 11.16.1: the after-startup microflow does
+			// NOT call StartupBusinessEvents, because MxBuild starts the module
+			// itself (ako/mxcli#2384 B1).
+			beJavaActionFlow(shop.ID, "ASU_Startup", "Shop.SeedData"),
 		},
 		constants: []*model.Constant{
 			beConstant(be.ID, "ServerUrl", "kafka:9092"),
 			beConstant(be.ID, "ChannelName", "default"),
 		},
 		afterStartup: "Shop.ASU_Startup",
+		mendix:       "11.16.1",
 	}
 }
 
@@ -173,6 +182,14 @@ func (f *beConsumerFixture) ctx(t *testing.T) *ExecContext {
 			dm.ID = nextID("dm")
 			return dm, nil
 		},
+		ProjectVersionFunc: func() *types.ProjectVersion {
+			if f.mendix == "" {
+				return nil
+			}
+			var maj, min, pat int
+			fmt.Sscanf(f.mendix, "%d.%d.%d", &maj, &min, &pat)
+			return &types.ProjectVersion{ProductVersion: f.mendix, MajorVersion: maj, MinorVersion: min, PatchVersion: pat}
+		},
 		ListMicroflowsFunc:     func() ([]*microflows.Microflow, error) { return f.microflows, nil },
 		ListConstantsFunc:      func() ([]*model.Constant, error) { return f.constants, nil },
 		GetProjectSettingsFunc: func() (*model.ProjectSettings, error) { return ps, nil },
@@ -185,18 +202,39 @@ func beFlow(container model.ID, name string, params []*microflows.MicroflowParam
 	mf := &microflows.Microflow{Name: name, ContainerID: container, Parameters: params}
 	mf.ID = nextID("mf" + name)
 	if len(calls) > 0 {
-		oc := &microflows.MicroflowObjectCollection{}
-		for _, target := range calls {
-			act := &microflows.ActionActivity{
-				Action: &microflows.MicroflowCallAction{
-					MicroflowCall: &microflows.MicroflowCall{Microflow: target},
-				},
-			}
-			act.ID = nextID("act")
-			oc.Objects = append(oc.Objects, act)
-		}
-		mf.ObjectCollection = oc
+		mf.ObjectCollection = beCalls(microflowCall, calls...)
 	}
+	return mf
+}
+
+// beCalls builds a flow body of calls of one kind.
+func beCalls(kind func(string) microflows.MicroflowAction, targets ...string) *microflows.MicroflowObjectCollection {
+	oc := &microflows.MicroflowObjectCollection{}
+	for _, target := range targets {
+		act := &microflows.ActionActivity{Action: kind(target)}
+		act.ID = nextID("act")
+		oc.Objects = append(oc.Objects, act)
+	}
+	return oc
+}
+
+func microflowCall(target string) microflows.MicroflowAction {
+	return &microflows.MicroflowCallAction{MicroflowCall: &microflows.MicroflowCall{Microflow: target}}
+}
+
+// javaActionCall is the module's REAL shape: StartupBusinessEvents is a Java
+// action, not a microflow (ako/mxcli#2384 M4). The fixture used a microflow
+// call, so the rule's blindness to a Java action call passed every test while
+// warning on every correctly wired app.
+func javaActionCall(target string) microflows.MicroflowAction {
+	return &microflows.JavaActionCallAction{JavaAction: target}
+}
+
+// beJavaActionFlow is a microflow whose body calls Java actions.
+func beJavaActionFlow(container model.ID, name string, actions ...string) *microflows.Microflow {
+	mf := &microflows.Microflow{Name: name, ContainerID: container}
+	mf.ID = nextID("mf" + name)
+	mf.ObjectCollection = beCalls(javaActionCall, actions...)
 	return mf
 }
 
@@ -548,79 +586,141 @@ func TestBEConsumer_BE05_ModulePresent(t *testing.T) {
 	}
 }
 
-func TestBEConsumer_BE06_ModuleStarted(t *testing.T) {
-	t.Run("no after-startup microflow", func(t *testing.T) {
+// BE06, the other way round (ako/mxcli#2384 B1). From Mendix 11.16.1 MxBuild
+// generates BusinessEvents.ASu_BusinessEvents and calls it from the app's
+// after-startup microflow, so the module starts without the app asking. An
+// explicit call is a SECOND start, which leaks HeartbeatService's thread pool
+// and leaves two heartbeat schedules running.
+//
+// The rule used to demand that call. It therefore warned on every correctly
+// wired app and, once the call was removed, told the author to add back the
+// thing that causes the double start.
+func TestBEConsumer_BE06_DoubleStart(t *testing.T) {
+	// The after-startup microflow calls the Java action: a second start.
+	t.Run("explicit call in the after-startup microflow", func(t *testing.T) {
 		f := newBEConsumerFixture()
-		f.afterStartup = ""
+		f.microflow("ASU_Startup").ObjectCollection = beCalls(javaActionCall, startupBusinessEvents)
 		errs, warnings := runBEConsumerCheck(f.ctx(t), beDefaultStmt())
 		if len(errs) != 0 {
 			t.Fatalf("BE06 must not block: %v", errs)
 		}
-		if got := findingWith(nil, warnings, beModuleStartedRule); !strings.Contains(got, "no after-startup microflow") {
-			t.Fatalf("want a %s warning, got %v", beModuleStartedRule, warnings)
+		got := findingWith(nil, warnings, beModuleStartedRule)
+		for _, want := range []string{"SECOND start", "ASu_BusinessEvents", "Remove the call"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("warning should mention %q: %s", want, got)
+			}
 		}
 	})
 
-	t.Run("after-startup does not reach the startup microflow", func(t *testing.T) {
+	// Reached through another microflow is the same double start.
+	t.Run("explicit call reached transitively", func(t *testing.T) {
 		f := newBEConsumerFixture()
-		f.microflow("ASU_Startup").ObjectCollection = nil
-		_, warnings := runBEConsumerCheck(f.ctx(t), beDefaultStmt())
-		if got := findingWith(nil, warnings, beModuleStartedRule); !strings.Contains(got, "does not reach") {
-			t.Fatalf("want a %s warning, got %v", beModuleStartedRule, warnings)
-		}
-	})
-
-	// CONTROL: reached through another microflow, which is how a real app wires
-	// it — an ASU_ flow calling several startup flows.
-	t.Run("reached transitively", func(t *testing.T) {
-		f := newBEConsumerFixture()
-		f.microflow("ASU_Startup").ObjectCollection =
-			beFlow(f.module("Shop").ID, "x", nil, []string{"Shop.StartIntegrations"}).ObjectCollection
+		f.microflow("ASU_Startup").ObjectCollection = beCalls(microflowCall, "Shop.StartIntegrations")
 		f.microflows = append(f.microflows,
-			beFlow(f.module("Shop").ID, "StartIntegrations", nil, []string{startupBusinessEvents}))
+			beJavaActionFlow(f.module("Shop").ID, "StartIntegrations", startupBusinessEvents))
+		_, warnings := runBEConsumerCheck(f.ctx(t), beDefaultStmt())
+		if got := findingWith(nil, warnings, beModuleStartedRule); !strings.Contains(got, "SECOND start") {
+			t.Fatalf("want the double-start warning, got %v", warnings)
+		}
+	})
+
+	// A module version shipping the startup as a microflow is the same case.
+	t.Run("a microflow of that name is also a double start", func(t *testing.T) {
+		f := newBEConsumerFixture()
+		f.microflow("ASU_Startup").ObjectCollection = beCalls(microflowCall, startupBusinessEvents)
+		f.microflows = append(f.microflows,
+			beFlow(f.module(businessEventsModule).ID, "StartupBusinessEvents", nil, nil))
+		_, warnings := runBEConsumerCheck(f.ctx(t), beDefaultStmt())
+		if got := findingWith(nil, warnings, beModuleStartedRule); !strings.Contains(got, "SECOND start") {
+			t.Fatalf("want the double-start warning, got %v", warnings)
+		}
+	})
+
+	// A script that adds the call is reported before it is written.
+	t.Run("a script adding the call", func(t *testing.T) {
+		f := newBEConsumerFixture()
+		wiring := &ast.CreateMicroflowStmt{
+			Name: ast.QualifiedName{Module: "Shop", Name: "ASU_New"},
+			Body: []ast.MicroflowStatement{&ast.CallJavaActionStmt{
+				ActionName: ast.QualifiedName{Module: businessEventsModule, Name: "StartupBusinessEvents"},
+			}},
+		}
+		_, warnings := runBEConsumerCheck(f.ctx(t), wiring, beDefaultStmt())
+		if got := findingWith(nil, warnings, beModuleStartedRule); !strings.Contains(got, "SECOND start") {
+			t.Fatalf("want the double-start warning for the script's call, got %v", warnings)
+		}
+	})
+
+	// CONTROL: the fixture is wired the way an 11.16.1 app should be — no
+	// explicit call — and must be silent. This is the case the old rule warned
+	// on, and the reason it had to change.
+	t.Run("no explicit call is correct and silent", func(t *testing.T) {
+		f := newBEConsumerFixture()
 		_, warnings := runBEConsumerCheck(f.ctx(t), beDefaultStmt())
 		if got := findingWith(nil, warnings, beModuleStartedRule); got != "" {
-			t.Fatalf("a transitive call must satisfy the rule: %s", got)
+			t.Fatalf("an app that leaves the startup to MxBuild must be silent: %s", got)
+		}
+	})
+
+	// CONTROL: below the measured version nothing is reported. On a Mendix that
+	// does not wire the startup the call is required, and warning against it
+	// would be the mirror image of the defect this replaced.
+	t.Run("below the measured version, silent", func(t *testing.T) {
+		for _, v := range []string{"11.15.0", "10.24.0"} {
+			f := newBEConsumerFixture()
+			f.mendix = v
+			f.microflow("ASU_Startup").ObjectCollection = beCalls(javaActionCall, startupBusinessEvents)
+			_, warnings := runBEConsumerCheck(f.ctx(t), beDefaultStmt())
+			if got := findingWith(nil, warnings, beModuleStartedRule); got != "" {
+				t.Errorf("Mendix %s is not measured as wiring the startup: %s", v, got)
+			}
+		}
+	})
+
+	// CONTROL: a backend that cannot report a version is not guessed at.
+	t.Run("no readable version, silent", func(t *testing.T) {
+		f := newBEConsumerFixture()
+		f.mendix = ""
+		f.microflow("ASU_Startup").ObjectCollection = beCalls(javaActionCall, startupBusinessEvents)
+		_, warnings := runBEConsumerCheck(f.ctx(t), beDefaultStmt())
+		if got := findingWith(nil, warnings, beModuleStartedRule); got != "" {
+			t.Fatalf("want nothing without a version: %s", got)
+		}
+	})
+
+	// CONTROL: an unrelated Java action is not the startup.
+	t.Run("another java action is not a start", func(t *testing.T) {
+		f := newBEConsumerFixture()
+		f.microflow("ASU_Startup").ObjectCollection =
+			beCalls(javaActionCall, "BusinessEvents.ShutdownBusinessEvents")
+		_, warnings := runBEConsumerCheck(f.ctx(t), beDefaultStmt())
+		if got := findingWith(nil, warnings, beModuleStartedRule); got != "" {
+			t.Fatalf("an unrelated Java action must not be read as a start: %s", got)
 		}
 	})
 
 	// CONTROL: a cycle in the call graph must not hang the walk.
 	t.Run("call cycle terminates", func(t *testing.T) {
 		f := newBEConsumerFixture()
-		f.microflow("ASU_Startup").ObjectCollection =
-			beFlow(f.module("Shop").ID, "x", nil, []string{"Shop.Loop"}).ObjectCollection
+		f.microflow("ASU_Startup").ObjectCollection = beCalls(microflowCall, "Shop.Loop")
 		f.microflows = append(f.microflows,
 			beFlow(f.module("Shop").ID, "Loop", nil, []string{"Shop.ASU_Startup"}))
 		_, warnings := runBEConsumerCheck(f.ctx(t), beDefaultStmt())
-		if got := findingWith(nil, warnings, beModuleStartedRule); !strings.Contains(got, "does not reach") {
-			t.Fatalf("want the warning, not a hang: %v", warnings)
+		if got := findingWith(nil, warnings, beModuleStartedRule); got != "" {
+			t.Fatalf("no startup call in the cycle, so nothing to report: %s", got)
 		}
 	})
 
-	// CONTROL: a script that wires the startup itself is judged on what it will
-	// produce, not on what is stored now.
-	t.Run("script wires it", func(t *testing.T) {
-		for _, name := range []string{"create microflow", "alter settings"} {
-			f := newBEConsumerFixture()
-			f.afterStartup = ""
-			var wiring ast.Statement
-			if name == "create microflow" {
-				wiring = &ast.CreateMicroflowStmt{
-					Name: ast.QualifiedName{Module: "Shop", Name: "ASU_New"},
-					Body: []ast.MicroflowStatement{&ast.CallMicroflowStmt{
-						MicroflowName: ast.QualifiedName{Module: businessEventsModule, Name: "StartupBusinessEvents"},
-					}},
-				}
-			} else {
-				wiring = &ast.AlterSettingsStmt{
-					Section:    "model",
-					Properties: map[string]any{"AfterStartupMicroflow": "Shop.ASU_New"},
-				}
-			}
-			_, warnings := runBEConsumerCheck(f.ctx(t), wiring, beDefaultStmt())
-			if got := findingWith(nil, warnings, beModuleStartedRule); got != "" {
-				t.Errorf("%s: the script wires startup, so the rule must keep quiet: %s", name, got)
-			}
+	// CONTROL: nothing is said about a MISSING after-startup microflow. MxBuild
+	// injects its call into whichever microflow the app configures; whether it
+	// supplies one when the app configures none is not measured, and asserting
+	// it would repeat the mistake this rule is recovering from.
+	t.Run("no after-startup microflow is not judged", func(t *testing.T) {
+		f := newBEConsumerFixture()
+		f.afterStartup = ""
+		_, warnings := runBEConsumerCheck(f.ctx(t), beDefaultStmt())
+		if got := findingWith(nil, warnings, beModuleStartedRule); got != "" {
+			t.Fatalf("want nothing for a missing after-startup microflow: %s", got)
 		}
 	})
 }

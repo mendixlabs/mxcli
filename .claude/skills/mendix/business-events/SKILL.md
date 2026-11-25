@@ -15,8 +15,8 @@ description: "Define event-driven APIs over Kafka with Mendix business event ser
 | 169-200 | Message Definition Syntax |
 | 201-208 | Service Properties |
 | 209-216 | Operations |
-| 217-263 | Publishing Events from Microflows |
-| 264-301 | Checklist |
+| 217-300 | Publishing Events from Microflows |
+| 301-337 | Checklist |
 
 <!-- /skill-index -->
 # Business Events
@@ -249,8 +249,45 @@ any action before you call it.
 | `BusinessEvents.PublishBusinessEvent` | Publish an event (legacy) |
 | `BusinessEvents.ConsumeBusinessEvent` | Consume/acknowledge an event |
 | `BusinessEvents.PublishEvents` | Publish multiple events |
-| `BusinessEvents.StartupBusinessEvents` | Initialize the event broker connection |
+| `BusinessEvents.StartupBusinessEvents` | Initialize the event broker connection — **MxBuild calls this for you** from 11.16.1; see below |
 | `BusinessEvents.ShutdownBusinessEvents` | Shut down the event broker connection |
+
+### Do Not Start the Module Yourself (Mendix 11.16.1+)
+
+**MEASURED on Mendix 11.16.1 with module 3.12.1: do not call
+`BusinessEvents.StartupBusinessEvents` from your after-startup microflow.** MxBuild starts
+the module itself. It writes a microflow `BusinessEvents.ASu_BusinessEvents` into the
+compiled model (`deployment/model/model.mdp`) that is in neither the project nor the module
+package, and injects a call to it into the app's after-startup microflow. An OpenTelemetry
+trace of one boot (`mxcli run --trace`) shows the chain on one thread:
+
+```
+Microflow Fulfilment.ASU_Startup
+  Microflow BusinessEvents.ASu_BusinessEvents
+    Java action BusinessEvents.ConsumeBusinessEvent    (registers the consumers)
+    Java action BusinessEvents.StartupBusinessEvents   <- first start
+  Java action BusinessEvents.StartupBusinessEvents     <- an explicit call: second start
+```
+
+An explicit call is therefore a **second** start, and it is not harmless:
+`StartupService.init` initialises `EventRateMetricsService`, `LogCollectorService` and
+`HeartbeatService`, and `HeartbeatService.init` assigns a fresh `ScheduledExecutorService`
+to its static `pulseThread` and schedules a new task **without shutting down the pool
+already there**. Two starts leak a pool and leave two heartbeat schedules running, of which
+`ShutdownBusinessEvents` stops only the last. The visible symptom is the start-up pair
+logged twice a few milliseconds apart:
+
+```
+INFO - BusinessEvents: Business events started successfully
+INFO - BusinessEvents: Business events module is using the Space constant with value:"…" to resolve topics.
+```
+
+**Event flow is not a test for the call.** Consumers are registered by
+`ConsumeBusinessEvent`, not by `StartupService`, so events keep flowing with the call
+removed while metrics, the summary log and the heartbeat stop silently.
+
+Which Mendix versions before 11.16.1 wire this in is **not measured**. On a version that
+does not, the call is required — which is why `MDL-BE06` says nothing below 11.16.1.
 
 ### Typical Pattern
 
@@ -292,9 +329,8 @@ app's — it consumes nothing, silently, or does not boot.
       an `Enumeration` or a `HashedString`)
 - [ ] **BE04** the handler takes exactly one parameter, of the consumed entity or an ancestor
 - [ ] **BE05** the `BusinessEvents` module is in the project
-- [ ] **BE06** `BusinessEvents.StartupBusinessEvents` is reachable from the after-startup
-      microflow, directly or through another microflow — **warns**, because without it the app
-      consumes nothing while every other check stays green
+- [ ] **BE06** the app does **not** call `BusinessEvents.StartupBusinessEvents` — **warns**
+      when it does, on Mendix 11.16.1 and later. See "Do not start the module yourself" below
 - [ ] **BE07** `BusinessEvents.ServerUrl` has a default, and one of `BusinessEvents.ChannelName`
       / `BusinessEvents.EventBrokerSpace` — **warns**, since both are per-environment values
       (`mxcli constant set BusinessEvents.ServerUrl '<broker>:9092'` for a dev run). Measured:
