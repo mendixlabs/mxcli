@@ -96,6 +96,44 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
+		Path:     "microflow.metrics",
+		Features: []string{"microflows/metrics_activities"},
+		Summary:  "INCREMENT COUNTER / SET GAUGE — the metrics activities (OpenTelemetry, Prometheus, … via Micrometer)",
+		Keywords: []string{
+			"metrics", "metric", "counter", "increment counter", "gauge", "set gauge",
+			"opentelemetry", "otel", "otlp", "prometheus", "micrometer", "telemetry",
+			"observability", "meter", "tags",
+		},
+		Syntax: "INCREMENT COUNTER <name> [( Tags: ( <key>: <value>, ... ) )] [ON ERROR ...];\n" +
+			"INCREMENT COUNTER <name> BY <value> [( Tags: (...) )] [ON ERROR ...];\n" +
+			"SET GAUGE <name> TO <value> [( Tags: (...) )] [ON ERROR ...];\n\n" +
+			"Microflow only, Mendix 9.5+. Studio Pro's Metrics Activities: without BY,\n" +
+			"Increment Counter (by one; Microflows$IncrementCounterMeterAction); with BY,\n" +
+			"Counter (Microflows$CounterMeterAction); SET GAUGE is Gauge\n" +
+			"(Microflows$GaugeMeterAction). The runtime reports them through the\n" +
+			"registries in the Metrics.Registries custom runtime setting\n" +
+			"(opentelemetry, prometheus, jmx, influx, statsd).\n\n" +
+			"The name, the value and every tag key and value are expressions, as Studio\n" +
+			"Pro stores them: a quoted literal or a constant (@Module.MetricName).\n" +
+			"Name, tag keys and tag values are String; a counter's BY is Integer/Long;\n" +
+			"a gauge's TO is Decimal (Integer accepted). Anything else is CE0117\n" +
+			"(`check --references` reports E009 first).\n\n" +
+			"A literal name starts with a letter, holds only letters, digits, dots and\n" +
+			"underscores, and does not start with 'mx' in any case (MDL-METRIC01;\n" +
+			"mxbuild CE7040/CE7048/CE7049). A counter only goes up: BY with a negative\n" +
+			"literal is MDL-METRIC02 (mxbuild accepts it; the runtime does not).\n" +
+			"ON ERROR CONTINUE is CE6035 on all three (MDL076); a custom handler works.",
+		Example: "mdl 1;\n" +
+			"create or modify microflow Shop.ACT_PlaceOrder ($Order: Shop.Order)\n" +
+			"begin\n" +
+			"  increment counter 'shop.orders.placed' (Tags: ('channel': $Order/Channel));\n" +
+			"  increment counter 'shop.orders.items' by $Order/ItemCount;\n" +
+			"  set gauge @Shop.OpenOrdersMetric to $Order/OpenOrderCount (Tags: ('region': 'eu'));\n" +
+			"end;",
+		SeeAlso: []string{"microflow.error-handling", "microflow.nanoflow"},
+	})
+
+	Register(SyntaxFeature{
 		Path:     "microflow.create",
 		Features: []string{"microflows/deep_link_url"},
 		Summary:  "Create a microflow with parameters, return type, and body",

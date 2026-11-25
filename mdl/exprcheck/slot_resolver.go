@@ -37,6 +37,14 @@ var staticExpectations = map[string]SlotConstraint{
 	"SendEmailStmt.Port":          {Kind: KindInteger, AlsoAccepts: []TypeKind{KindLong}, Mxbuild: "CE9528 \"The expression for 'Server Port' should be of type Integer/Long\""},
 	"SendEmailStmt.Credential":    {Kind: KindString, Mxbuild: "CE9528 \"The expression for '…' should be of type String\""},
 	"SendEmailStmt.TemplateParam": {Kind: KindString},
+	// Metrics activities, measured on mxbuild 11.16.1 (ako/TestApp): a name of
+	// 42, a counter value of 1.5, a gauge value of 'abc' and a tag key 1 or
+	// value 2 are each CE0117 "Error(s) in expression."; a gauge value of 2
+	// (Integer) builds.
+	"MeterStmt.Name":         {Kind: KindString, Mxbuild: "CE0117 \"Error(s) in expression.\""},
+	"MeterStmt.CounterValue": {Kind: KindInteger, AlsoAccepts: []TypeKind{KindLong}, Mxbuild: "CE0117 \"Error(s) in expression.\""},
+	"MeterStmt.GaugeValue":   {Kind: KindDecimal, AlsoAccepts: []TypeKind{KindInteger, KindLong}, Mxbuild: "CE0117 \"Error(s) in expression.\""},
+	"MeterStmt.Tag":          {Kind: KindString, Mxbuild: "CE0117 \"Error(s) in expression.\""},
 	// Resolved by the adapter, which hands the declared primitive type to the
 	// checker as Context.Target (checkTargetKind), not by a slot-path qualifier:
 	// DECLARE, SET and RETURN are typed by their own declaration.

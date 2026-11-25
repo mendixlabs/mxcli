@@ -324,6 +324,37 @@ reports a missing one as CE0166.
 Studio Pro's *Test Email* tab is an editor tool and is not part of MDL; rewriting
 the microflow stores it empty.
 
+## Metrics
+
+### INCREMENT COUNTER / SET GAUGE
+
+The three **Metrics Activities** of Studio Pro's toolbox (Mendix 9.5+, microflows
+only). The runtime reports them through Micrometer to the registries configured
+in the `Metrics.Registries` custom runtime setting — `opentelemetry`,
+`prometheus`, `jmx`, `influx` or `statsd`.
+
+```sql
+INCREMENT COUNTER 'shop.orders.placed' (Tags: ('channel': $Order/Channel));  -- Increment Counter
+INCREMENT COUNTER 'shop.orders.items' BY $Order/ItemCount;                   -- Counter
+SET GAUGE @Shop.OpenOrdersMetric TO $OpenOrders (Tags: ('region': 'eu'));    -- Gauge
+```
+
+- `INCREMENT COUNTER` without `BY` adds one (Studio Pro's *Increment Counter*);
+  with `BY` it adds the value (*Counter*). `SET GAUGE … TO` sets a gauge.
+- The **name**, the **value** and every **tag key and value** are expressions,
+  as Studio Pro stores them: a quoted literal or a constant. The name and the
+  tags are String; `BY` is Integer or Long; `TO` is Decimal (Integer is
+  accepted). Anything else is CE0117 at build; `check --references` reports it
+  first (E009).
+- A literal name starts with a letter, holds only letters, digits, dots and
+  underscores, and does not start with `mx` in any case — Mendix reserves that
+  prefix for its own metrics (MDL-METRIC01; mxbuild CE7040, CE7048, CE7049).
+- A counter only goes up: `BY` with a negative literal is refused
+  (MDL-METRIC02). mxbuild accepts it; the runtime does not.
+- `Tags` is the one setting of the property list (ADR-0013).
+- `ON ERROR CONTINUE` is CE6035 on all three (MDL076); a custom handler, with or
+  without rollback, works.
+
 ## Database Query Execution
 
 ### EXECUTE DATABASE QUERY
@@ -370,5 +401,6 @@ The query name follows a three-part naming convention: `Module.ConnectionName.Qu
 | Log | `LOG INFO\|WARNING\|ERROR [NODE 'name'] 'msg';` | -- |
 | DB query | `$Var = EXECUTE DATABASE QUERY Module.Conn.Query;` | Result set |
 | Send email | `SEND EMAIL (From: …, To: …, Subject: '…', Host: …, Port: …);` (11.13+) | -- |
+| Metrics | `INCREMENT COUNTER 'name' [BY n] [(Tags: (…))];` / `SET GAUGE 'name' TO n;` (9.5+) | -- |
 | Assignment | `SET $Var = expression;` | -- |
 | Change list | `ADD $Item TO $List;` / `REMOVE $Item FROM $List;` / `CLEAR $List;` / `SET $List = $Other;` | -- |

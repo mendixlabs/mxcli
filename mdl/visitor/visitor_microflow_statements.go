@@ -154,6 +154,10 @@ func buildMicroflowStatement(ctx parser.IMicroflowStatementContext) ast.Microflo
 		stmt = buildRestCallStatement(restCall)
 	} else if sendEmail := mfCtx.SendEmailStatement(); sendEmail != nil {
 		stmt = buildSendEmailStatement(sendEmail)
+	} else if incCounter := mfCtx.IncrementCounterStatement(); incCounter != nil {
+		stmt = buildIncrementCounterStatement(incCounter)
+	} else if setGauge := mfCtx.SetGaugeStatement(); setGauge != nil {
+		stmt = buildSetGaugeStatement(setGauge)
 	} else if sendRest := mfCtx.SendRestRequestStatement(); sendRest != nil {
 		stmt = buildSendRestRequestStatement(sendRest)
 	} else if importMapping := mfCtx.ImportFromMappingStatement(); importMapping != nil {

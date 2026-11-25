@@ -678,6 +678,24 @@ ignored or the header fails only when a mail is sent.
 `CheckServerIdentity`; rename the header, e.g.
 `Headers: ('X-Correlation-Id': 'value')`.
 
+### MDL-METRIC01 / 02: A metric name or counter increment mxbuild or the runtime refuses
+
+```
+increment counter: metric name "mx.orders" must not start with 'mx', which Mendix reserves for its own metrics [MDL-METRIC01]
+increment counter: a counter cannot be incremented by a negative value [MDL-METRIC02]
+```
+
+**Cause:** A metric name written as a string literal must start with a letter,
+hold only letters, digits, dots and underscores, and not start with `mx` in any
+case (MDL-METRIC01) — mxbuild reports the same as CE7040, CE7048 and CE7049. A
+counter only goes up (MDL-METRIC02); mxbuild 11.16.1 accepts `by -1`, so the
+runtime is the first to refuse it. A name given as a constant or another
+expression is not judged.
+
+**Solution:** Use a name like `'acme.orders.placed'`, a prefix for your
+organisation and app followed by dots or underscores. For a value that goes down
+as well as up, use `set gauge … to …`.
+
 ### MDL-TEMPLATE01: A message written as an expression followed by `with (…)`
 
 ```

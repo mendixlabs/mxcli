@@ -2478,6 +2478,78 @@ func (fb *flowBuilder) addSendEmailAction(s *ast.SendEmailStmt) model.ID {
 	return activity.ID
 }
 
+// addIncrementCounterAction writes `increment counter`: Studio Pro's Increment
+// Counter (by one) without `by`, its Counter (by a value) with it.
+func (fb *flowBuilder) addIncrementCounterAction(s *ast.IncrementCounterStmt) model.ID {
+	eh := microflows.ErrorHandlingTypeRollback
+	if s.ErrorHandling != nil {
+		eh = fb.ehType(s.ErrorHandling)
+	}
+	var action microflows.MicroflowAction
+	if s.By != nil {
+		action = &microflows.CounterMeterAction{
+			BaseElement:       model.BaseElement{ID: model.ID(types.GenerateID())},
+			ErrorHandlingType: eh,
+			Name:              fb.optExprToString(s.Name),
+			Value:             fb.optExprToString(s.By),
+			Tags:              fb.meterTags(s.Tags),
+		}
+	} else {
+		action = &microflows.IncrementCounterMeterAction{
+			BaseElement:       model.BaseElement{ID: model.ID(types.GenerateID())},
+			ErrorHandlingType: eh,
+			Name:              fb.optExprToString(s.Name),
+			Tags:              fb.meterTags(s.Tags),
+		}
+	}
+	return fb.addMeterActivity(action, s.ErrorHandling)
+}
+
+// addSetGaugeAction writes `set gauge … to …` (GaugeMeterAction).
+func (fb *flowBuilder) addSetGaugeAction(s *ast.SetGaugeStmt) model.ID {
+	eh := microflows.ErrorHandlingTypeRollback
+	if s.ErrorHandling != nil {
+		eh = fb.ehType(s.ErrorHandling)
+	}
+	action := &microflows.GaugeMeterAction{
+		BaseElement:       model.BaseElement{ID: model.ID(types.GenerateID())},
+		ErrorHandlingType: eh,
+		Name:              fb.optExprToString(s.Name),
+		Value:             fb.optExprToString(s.Value),
+		Tags:              fb.meterTags(s.Tags),
+	}
+	return fb.addMeterActivity(action, s.ErrorHandling)
+}
+
+func (fb *flowBuilder) meterTags(tags []ast.MeterTag) []*microflows.MeterTag {
+	out := make([]*microflows.MeterTag, 0, len(tags))
+	for _, t := range tags {
+		mt := &microflows.MeterTag{Key: fb.optExprToString(t.Key), Value: fb.optExprToString(t.Value)}
+		mt.ID = model.ID(types.GenerateID())
+		out = append(out, mt)
+	}
+	return out
+}
+
+func (fb *flowBuilder) addMeterActivity(action microflows.MicroflowAction, eh *ast.ErrorHandlingClause) model.ID {
+	activity := &microflows.ActionActivity{
+		BaseActivity: microflows.BaseActivity{
+			BaseMicroflowObject: microflows.BaseMicroflowObject{
+				BaseElement: model.BaseElement{ID: model.ID(types.GenerateID())},
+				Position:    model.Point{X: fb.posX, Y: fb.posY},
+				Size:        model.Size{Width: ActivityWidth, Height: ActivityHeight},
+			},
+			AutoGenerateCaption: true,
+		},
+		Action: action,
+	}
+	activityX := fb.posX
+	fb.objects = append(fb.objects, activity)
+	fb.posX += fb.spacing
+	fb.finishCustomErrorHandler(activity.ID, activityX, eh, "")
+	return activity.ID
+}
+
 // emailSecurityType maps the MDL security word to the stored enum value.
 func emailSecurityType(word string) (microflows.EmailSecurityType, bool) {
 	switch strings.ToLower(word) {

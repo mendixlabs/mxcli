@@ -13,20 +13,20 @@ description: "Microflow syntax reference in MDL — every activity type, control
 | 34-51 | Reference files |
 | 52-61 | When to Use This Skill |
 | 62-76 | Changing an Existing Microflow |
-| 77-95 | When to Use a Microflow vs a Nanoflow |
-| 96-112 | Key Differences from Nanoflows |
-| 113-267 | Microflow Structure |
-| 268-345 | Variable Declarations |
-| 346-403 | Operators |
-| 404-420 | Logging |
-| 421-446 | Special Values |
-| 447-493 | Complete Example |
-| 494-550 | Calling Microflows |
-| 551-578 | Page Navigation |
-| 579-595 | Validation Checklist |
-| 596-607 | Tips for Success |
-| 608-614 | Related Documentation |
-| 615-727 | Quick Reference |
+| 77-96 | When to Use a Microflow vs a Nanoflow |
+| 97-113 | Key Differences from Nanoflows |
+| 114-268 | Microflow Structure |
+| 269-346 | Variable Declarations |
+| 347-404 | Operators |
+| 405-421 | Logging |
+| 422-447 | Special Values |
+| 448-494 | Complete Example |
+| 495-551 | Calling Microflows |
+| 552-579 | Page Navigation |
+| 580-596 | Validation Checklist |
+| 597-608 | Tips for Success |
+| 609-615 | Related Documentation |
+| 616-728 | Quick Reference |
 
 <!-- /skill-index -->
 # Mendix Microflow Skill
@@ -80,6 +80,7 @@ Choose the mode by who owns the microflow ([choose-edit-mode](../choose-edit-mod
 |----------|-----|
 | Querying the database | Microflow |
 | Calling REST services or external actions, or sending email (`send email`, 11.13+) | Microflow |
+| Reporting metrics — OpenTelemetry, Prometheus, … (`increment counter`, `set gauge`; `mxcli syntax microflow.metrics`) | Microflow |
 | Running Java actions | Microflow |
 | File generation or download | Microflow |
 | Transactional commits (rollback on error) | Microflow |

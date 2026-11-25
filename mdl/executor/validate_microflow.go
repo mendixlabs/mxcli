@@ -452,6 +452,10 @@ func (v *microflowValidator) walkBody(body []ast.MicroflowStatement) {
 			v.checkSynchronizeIsNanoflowOnly()
 		case *ast.SendEmailStmt:
 			v.checkSendEmail(stmt)
+		case *ast.IncrementCounterStmt:
+			v.checkMeterActivity("increment counter", stmt.Name, stmt.By)
+		case *ast.SetGaugeStmt:
+			v.checkMeterActivity("set gauge", stmt.Name, stmt.Value)
 		case *ast.ListOperationStmt:
 			v.checkRangeHasABound(stmt)
 		case *ast.WhileStmt:

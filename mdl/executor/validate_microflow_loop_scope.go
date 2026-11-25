@@ -347,6 +347,10 @@ func loopRefVars(stmt ast.MicroflowStatement) []string {
 		add(s.FileDocument)
 	case *ast.SynchronizeStmt:
 		add(s.Variables...)
+	case *ast.IncrementCounterStmt:
+		addExpr(s.Expressions()...)
+	case *ast.SetGaugeStmt:
+		addExpr(s.Expressions()...)
 	case *ast.SendEmailStmt:
 		addExpr(s.Expressions()...)
 		if s.Attachment != "" {
