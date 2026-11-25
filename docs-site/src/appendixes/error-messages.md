@@ -425,7 +425,7 @@ handler never runs. Message names are case-sensitive
 | `MDL-BE01` | the contract is AsyncAPI 2.x YAML with at least one channel | error |
 | `MDL-BE02` | each `consume` names a message in `components.messages` | error |
 | `MDL-BE03` | the consumed entity is persistent and extends `BusinessEvents.ConsumedBusinessEvent` | error |
-| `MDL-BE03` | it declares an attribute per payload property, of the mapped type | warning |
+| `MDL-BE03` | it declares an attribute per payload property, of a type that encoding holds | warning |
 | `MDL-BE04` | the handler takes exactly one parameter, accepting the consumed object | error |
 | `MDL-BE05` | the `BusinessEvents` marketplace module is in the project | error |
 | `MDL-BE06` | `BusinessEvents.StartupBusinessEvents` is reachable from the after-startup microflow | warning |
@@ -446,9 +446,13 @@ microflow; the check follows the call graph). BE07's two values are per-environm
 an empty **default** only warns: supply them with `mxcli constant set BusinessEvents.ServerUrl
 '<broker>:9092'` or `--constant` for a dev run.
 
-**Why some of it only warns:** BE03's attribute half is a warning because the contract-to-Mendix
-type mapping is measured for `Long` (`integer`/`int64`) alone (ako/mxcli#2384 §9.1) — a type the
-mapping cannot vouch for is not judged at all. BE06 and BE07 are project configuration a later
+**Why some of it only warns:** BE03's attribute half is a warning because mxbuild does not
+validate the contract-to-entity mapping at all, so a mismatch is a runtime fact rather than a
+build error. The encodings themselves are now known for every type a business event may carry
+(`businessevents.MendixAttributeTypesFor`), and an encoding Mendix never writes is still not
+judged. The check accepts a **set** per encoding rather than one type: an enumeration travels as
+its key, so a `string` property is as well served by an `Enumeration` attribute as by a `String`,
+and demanding the single type Mendix renders would flag correct models. BE06 and BE07 are project configuration a later
 statement or a deployment may legitimately supply, so refusing `exec` over them would block
 authoring a consumer before the app is wired up.
 

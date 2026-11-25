@@ -16,7 +16,7 @@ description: "Define event-driven APIs over Kafka with Mendix business event ser
 | 201-208 | Service Properties |
 | 209-216 | Operations |
 | 217-263 | Publishing Events from Microflows |
-| 264-300 | Checklist |
+| 264-301 | Checklist |
 
 <!-- /skill-index -->
 # Business Events
@@ -287,8 +287,9 @@ app's — it consumes nothing, silently, or does not boot.
 - [ ] **BE02** every `consume` names a message in `components.messages` — **case-sensitively**
 - [ ] **BE03** the consumed entity is persistent (not a view) and extends
       `BusinessEvents.ConsumedBusinessEvent`; a payload property with no attribute, or an
-      attribute whose type contradicts the one measured mapping (`integer`/`int64` → `Long`),
-      **warns**
+      attribute whose type no encoding of that property holds, **warns** (the set per encoding
+      is in `businessevents.MendixAttributeTypesFor` — a `string` property accepts a `String`,
+      an `Enumeration` or a `HashedString`)
 - [ ] **BE04** the handler takes exactly one parameter, of the consumed entity or an ancestor
 - [ ] **BE05** the `BusinessEvents` module is in the project
 - [ ] **BE06** `BusinessEvents.StartupBusinessEvents` is reachable from the after-startup

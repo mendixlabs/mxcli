@@ -385,32 +385,49 @@ func TestBEConsumer_BE03_EntityShape(t *testing.T) {
 		}
 	})
 
-	// The one MEASURED type mapping: integer/int64 is Mendix Long.
-	t.Run("measured type mismatch warns", func(t *testing.T) {
-		f := newBEConsumerFixture()
-		f.entity("CBE_OrderPlaceEvent").Attributes[0].Type = &domainmodel.StringAttributeType{}
-		errs, warnings := runBEConsumerCheck(f.ctx(t), beDefaultStmt())
-		if len(errs) != 0 {
-			t.Fatalf("a type mismatch must not block: %v", errs)
-		}
-		got := findingWith(nil, warnings, beEntityShapeRule)
-		if !strings.Contains(got, "Long") || !strings.Contains(got, "String") {
-			t.Fatalf("want a warning contrasting Long and String, got %v", warnings)
-		}
-	})
-
-	// CONTROL for the type half: a mapping that is NOT measured says nothing,
-	// whatever the attribute is — the renderer refuses to guess in the other
-	// direction for the same reason (#2384 §9.1).
-	t.Run("unmeasured type is not judged", func(t *testing.T) {
+	// A real mismatch warns: the contract says the property is a string, and
+	// the attribute is a Long.
+	t.Run("type mismatch warns", func(t *testing.T) {
 		f := newBEConsumerFixture()
 		contract := strings.Replace(beConsumerContract,
 			"          type: integer\n          format: int64", "          type: string", -1)
-		f.entity("CBE_OrderPlaceEvent").Attributes[0].Type = &domainmodel.BinaryAttributeType{}
+		_, warnings := runBEConsumerCheck(f.ctx(t),
+			beConsumerStmt(contract, "OrderPlaceEvent", "Shop.CBE_OrderPlaceEvent", "Shop.HandleBE_OrderPlaceEvent"))
+		got := findingWith(nil, warnings, beEntityShapeRule)
+		if !strings.Contains(got, "string") || !strings.Contains(got, "Long") {
+			t.Fatalf("want a warning contrasting the contract's string with the Long attribute, got %v", warnings)
+		}
+	})
+
+	// CONTROL: more than one attribute type legitimately holds an encoding — an
+	// enumeration travels as its key, so a `string` property is as well served
+	// by an Enumeration attribute as by a String. A check that demanded the one
+	// type Mendix RENDERS for `string` would flag this correct model
+	// (businessevents.MendixAttributeTypesFor returns a set for exactly this).
+	t.Run("an encoding's other valid type is accepted", func(t *testing.T) {
+		f := newBEConsumerFixture()
+		contract := strings.Replace(beConsumerContract,
+			"          type: integer\n          format: int64", "          type: string", -1)
+		for _, a := range f.entity("CBE_OrderPlaceEvent").Attributes {
+			a.Type = &domainmodel.EnumerationAttributeType{}
+		}
 		_, warnings := runBEConsumerCheck(f.ctx(t),
 			beConsumerStmt(contract, "OrderPlaceEvent", "Shop.CBE_OrderPlaceEvent", "Shop.HandleBE_OrderPlaceEvent"))
 		if got := findingWith(nil, warnings, beEntityShapeRule); got != "" {
-			t.Fatalf("an unmeasured mapping must not be judged: %s", got)
+			t.Fatalf("an Enumeration attribute holds a string property: %s", got)
+		}
+	})
+
+	// CONTROL: an encoding Mendix never writes is not judged at all — a
+	// non-Mendix publisher's contract must not make mxcli invent a verdict.
+	t.Run("an unknown encoding is not judged", func(t *testing.T) {
+		f := newBEConsumerFixture()
+		contract := strings.Replace(beConsumerContract,
+			"          type: integer\n          format: int64", "          type: array", -1)
+		_, warnings := runBEConsumerCheck(f.ctx(t),
+			beConsumerStmt(contract, "OrderPlaceEvent", "Shop.CBE_OrderPlaceEvent", "Shop.HandleBE_OrderPlaceEvent"))
+		if got := findingWith(nil, warnings, beEntityShapeRule); got != "" {
+			t.Fatalf("an encoding Mendix does not write must not be judged: %s", got)
 		}
 	})
 
