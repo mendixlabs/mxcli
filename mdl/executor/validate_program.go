@@ -265,7 +265,7 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// catches typos in property keys before MxBuild does. Uses built-in
 	// definitions alone when no project is given; with --project, also
 	// loads project-installed .def.json files for full coverage.
-	violations = append(violations, ValidateWidgetProperties(prog, projectPath)...)
+	violations = append(violations, withoutWebOnlyNotesOnNativePages(ValidateWidgetProperties(prog, projectPath), prog, project)...)
 
 	// Warn (MPR010) when an edit/new form (a parameter-bound DataView) is not
 	// wrapped in a layout grid — its label/input widths only render correctly
