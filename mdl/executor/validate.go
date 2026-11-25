@@ -80,7 +80,10 @@ type scriptContext struct {
 	// creates (CustomDocumentTypeName + " " + Module.Name): what a call's
 	// template and document arguments are checked against (ako/mxcli#1451).
 	javaActionTemplateParams map[string]map[string]bool
-	customDocuments          map[string]bool
+	// The parameters a call to a Java action the script creates must pass:
+	// its entity-type and its required ones (ako/mxcli#2464, #2577).
+	javaActionMustPass map[string]codeActionMustPass
+	customDocuments    map[string]bool
 
 	// Entities the script declares, and those it alters, for resolving the
 	// bare members of a retrieve constraint on an entity the project does not
@@ -182,6 +185,7 @@ func newScriptContext() *scriptContext {
 
 		javaActionFlowParams:     make(map[string]map[string]bool),
 		javaActionTemplateParams: make(map[string]map[string]bool),
+		javaActionMustPass:       make(map[string]codeActionMustPass),
 		customDocuments:          make(map[string]bool),
 		entityDecls:              make(map[string]*ast.CreateEntityStmt),
 		viewEntityDecls:          make(map[string]*ast.CreateViewEntityStmt),
@@ -411,6 +415,7 @@ func (sc *scriptContext) collectSingle(stmt ast.Statement) {
 			sc.javaActions[s.Name.String()] = codeActionParamNames(s.Parameters)
 			sc.javaActionFlowParams[s.Name.String()] = microflowTypedParams(s.Parameters)
 			sc.javaActionTemplateParams[s.Name.String()] = templateTypedParams(s.Parameters)
+			sc.javaActionMustPass[s.Name.String()] = mustPassParams(s.Parameters)
 		}
 	case *ast.CreateAgentStmt:
 		sc.customDocuments["agenteditor.agent "+s.Name.String()] = true
@@ -1732,6 +1737,8 @@ func validateFlowBodyReferences(ctx *ExecContext, body []ast.MicroflowStatement,
 			// output. mxcli-chat FINDINGS §37.
 			if declared, inScript := sc.javaActions[ref.name]; inScript {
 				errors = append(errors, validateCodeActionParams("java action", ref, declared)...)
+				must := sc.javaActionMustPass[ref.name]
+				errors = append(errors, missingCodeActionArgs("java action", ref, declared, must.entityType, must.required)...)
 				errors = append(errors, microflowParamArgErrors(ref, sc.javaActionFlowParams[ref.name])...)
 				errors = append(errors, javaActionCallValueErrors(ctx, sc, ref, sc.javaActionTemplateParams[ref.name], nil)...)
 				continue
@@ -1745,9 +1752,12 @@ func validateFlowBodyReferences(ctx *ExecContext, body []ast.MicroflowStatement,
 				flowParams := map[string]bool{}
 				templates := map[string]bool{}
 				documents := map[string]string{}
-				var entityTypeParams []string
+				var entityTypeParams, requiredParams []string
 				for _, p := range ja.Parameters {
 					declared = append(declared, p.Name)
+					if p.IsRequired {
+						requiredParams = append(requiredParams, p.Name)
+					}
 					switch pt := p.ParameterType.(type) {
 					case *javaactions.EntityTypeParameterType:
 						entityTypeParams = append(entityTypeParams, p.Name)
@@ -1760,7 +1770,7 @@ func validateFlowBodyReferences(ctx *ExecContext, body []ast.MicroflowStatement,
 					}
 				}
 				errors = append(errors, validateCodeActionParams("java action", ref, declared)...)
-				errors = append(errors, missingCodeActionArgs("java action", ref, declared, entityTypeParams)...)
+				errors = append(errors, missingCodeActionArgs("java action", ref, declared, entityTypeParams, requiredParams)...)
 				errors = append(errors, microflowParamArgErrors(ref, flowParams)...)
 				errors = append(errors, javaActionCallValueErrors(ctx, sc, ref, templates, documents)...)
 			}
@@ -1791,7 +1801,9 @@ func validateFlowBodyReferences(ctx *ExecContext, body []ast.MicroflowStatement,
 					}
 				}
 				errors = append(errors, validateCodeActionParams("javascript action", ref, declared)...)
-				errors = append(errors, missingCodeActionArgs("javascript action", ref, declared, entityTypeParams)...)
+				// A JavaScript action's required parameter left out is not
+				// measured; only the entity-type rule applies there.
+				errors = append(errors, missingCodeActionArgs("javascript action", ref, declared, entityTypeParams, nil)...)
 			}
 		}
 	}
@@ -2124,8 +2136,8 @@ func validateCodeActionParams(kind string, ref codeActionCallRef, declared []str
 // parameters and need to be refreshed" (ako/mxcli#2464); a missing Integer,
 // object, type-parameter object or Microflow argument builds clean, so it is
 // not reported. declared nil means the parameters are unknown.
-func missingCodeActionArgs(kind string, ref codeActionCallRef, declared, entityTypeParams []string) []string {
-	if declared == nil || len(entityTypeParams) == 0 {
+func missingCodeActionArgs(kind string, ref codeActionCallRef, declared, entityTypeParams, requiredParams []string) []string {
+	if declared == nil || len(entityTypeParams)+len(requiredParams) == 0 {
 		return nil
 	}
 	declaredSet := make(map[string]bool, len(declared))
@@ -2141,18 +2153,34 @@ func missingCodeActionArgs(kind string, ref codeActionCallRef, declared, entityT
 		}
 		written[n] = true
 	}
-	var missing []string
-	for _, d := range entityTypeParams {
-		if !written[d] {
-			missing = append(missing, d)
+	unwritten := func(names []string, skip map[string]bool) []string {
+		var out []string
+		for _, d := range names {
+			if !written[d] && !skip[d] {
+				out = append(out, d)
+			}
 		}
+		return out
 	}
-	if len(missing) == 0 {
-		return nil
+	var errs []string
+	entity := unwritten(entityTypeParams, nil)
+	if len(entity) > 0 {
+		errs = append(errs, fmt.Sprintf("%s %s: no argument for entity-type parameter(s) %s — the call must name "+
+			"the entity (`%s = Module.Entity`). Mendix build fails CE0115 \"The arguments that are passed to … "+
+			"do not match the expected parameters\".", kind, ref.name, strings.Join(entity, ", "), entity[0]))
 	}
-	return []string{fmt.Sprintf("%s %s: no argument for entity-type parameter(s) %s — the call must name "+
-		"the entity (`%s = Module.Entity`). Mendix build fails CE0115 \"The arguments that are passed to … "+
-		"do not match the expected parameters\".", kind, ref.name, strings.Join(missing, ", "), missing[0])}
+	// A required (`not null`) parameter left out is CE0115 too; a nullable
+	// one builds clean (measured on 11.14.0, ako/mxcli#2577).
+	isEntity := make(map[string]bool, len(entityTypeParams))
+	for _, e := range entityTypeParams {
+		isEntity[e] = true
+	}
+	if req := unwritten(requiredParams, isEntity); len(req) > 0 {
+		errs = append(errs, fmt.Sprintf("%s %s: no argument for required parameter(s) %s — each is declared `not null`, "+
+			"so the call must pass one (`%s = …`). Mendix build fails CE0115 \"The arguments that are passed to … "+
+			"do not match the expected parameters\".", kind, ref.name, strings.Join(req, ", "), req[0]))
+	}
+	return errs
 }
 
 // entityRef tracks an entity reference along with the statement that referenced it.
@@ -2586,4 +2614,24 @@ func validateConsumedMCPRefs(ctx *ExecContext, sc *scriptContext, name ast.Quali
 		return nil
 	}
 	return mdlerrors.NewValidationf("consumed mcp service %s: %s", name, strings.Join(problems, "; "))
+}
+
+// codeActionMustPass is what a call to a code action must give an argument
+// for: its entity-type parameters, and its required (`not null`) ones.
+type codeActionMustPass struct {
+	entityType, required []string
+}
+
+// mustPassParams lists them for a Java action the script declares.
+func mustPassParams(params []ast.JavaActionParam) codeActionMustPass {
+	var m codeActionMustPass
+	for _, p := range params {
+		if p.Type.Kind == ast.TypeEntityTypeParam {
+			m.entityType = append(m.entityType, p.Name)
+		}
+		if p.IsRequired {
+			m.required = append(m.required, p.Name)
+		}
+	}
+	return m
 }
