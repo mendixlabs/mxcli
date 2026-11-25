@@ -63,11 +63,29 @@ from the module's constants and the contract's channel id. MDL needs no Kafka se
 for business events. (The constants are already authorable with
 `alter settings constant @BusinessEvents.ServerUrl …`.)
 
-**The module must be started, and nothing in the model says so.** The consumers are
-created by the Java action `BusinessEvents.StartupBusinessEvents`, called from the app's
-after-startup microflow, with `BusinessEvents.BSd_ShutdownSubscribers` as the
-before-shutdown counterpart. Nothing calls `BusinessEvents.ConsumeBusinessEvent`. In the
-fixture:
+**MxBuild starts the module; the app must NOT.** ~~The module must be started, and nothing
+in the model says so.~~ **Corrected 2026-11-25 (B1), measured on Mendix 11.16.1 with module
+3.12.1.** MxBuild writes a microflow `BusinessEvents.ASu_BusinessEvents` into the compiled
+model (`deployment/model/model.mdp`) that exists in neither the project nor the module
+package, and injects a call to it into the app's after-startup microflow. That generated
+microflow calls `ConsumeBusinessEvent` — which is what registers the consumers — and then
+`StartupBusinessEvents`. An OpenTelemetry trace of one boot shows the chain on one thread:
+
+```
+Microflow Fulfilment.ASU_Startup
+  Microflow BusinessEvents.ASu_BusinessEvents
+    Java action BusinessEvents.ConsumeBusinessEvent    (registers the consumers)
+    Java action BusinessEvents.StartupBusinessEvents   <- first start
+  Java action BusinessEvents.StartupBusinessEvents     <- the app's call, second start
+```
+
+So an explicit call is a **second** start. The fixture listing below predates this and shows
+the call; it is kept as the record of what was tried, not as the recipe. Which Mendix
+versions before 11.16.1 wire this in is not measured; on one that does not, the call is
+required.
+
+The before-shutdown counterpart is `BusinessEvents.BSd_ShutdownSubscribers`. In the
+fixture, as it was then:
 
 ```
 AfterStartupMicroflow:   'CdcPublish.ASu_StartBusinessEvents'
@@ -81,9 +99,33 @@ begin
 end;
 ```
 
-Both are authorable in MDL today, and the omission fails **silently**: the app boots, no
-consumer group is joined, no event arrives, and `mx check` is clean. Hence the startup
-check rule in §5.1. (This answers §9.5.)
+Both are authorable in MDL today. The claim that followed — that omitting the call fails
+silently, hence the §5.1 startup rule — **was wrong on 11.16.1**: MxBuild supplies the call,
+and the rule built on it warned on correctly wired apps. §5.1's rule is now the inverse.
+(This answers §9.5.)
+
+**What the startup action actually does, read from the shipped module**
+(`BusinessEvents_3.12.1.mpk`, which is in this repo — no running app needed):
+
+- `StartupBusinessEvents.java` calls `StartupService.INSTANCE.init(...)` and then logs
+  **two** lines: `Business events started successfully`, and the module-running-mode line
+  (`… is using the Space constant with value:"…" to resolve topics.`, from
+  `ConfigurationProvider.getModuleRunningMode`). So **one execution logs the pair**, and
+  the pair appearing twice per boot means the action ran twice — not that the module
+  started itself. It cannot: those strings exist only in the action's user code and that
+  helper, and the jar's `META-INF/services` holds only Kafka's `ConfigProvider` and
+  SLF4J's provider, i.e. no Mendix auto-start hook.
+- `StartupService.init` initialises `EventRateMetricsService`, `LogCollectorService` and
+  `HeartbeatService` — and **not** consumer subscriptions. So "events still flow with the
+  call removed" would NOT show the call is unnecessary: metrics, the summary log and the
+  heartbeat would stop silently while publishing and consuming carried on. Any test of
+  whether the call is needed has to look at those, not at event flow.
+- **Call it once.** `HeartbeatService.init` creates a new `ScheduledExecutorService`,
+  assigns it to the static `pulseThread` and schedules a fixed-rate task, with no
+  shutdown of a pool already there. A second call therefore leaks the first pool and
+  leaves two heartbeat schedules running, of which `ShutdownBusinessEvents` can stop only
+  the last. (DuckGraphLake's own guide notes that a running app's heartbeats land in the
+  Kafka fixture, so a doubled heartbeat is visible there.)
 
 **Topic naming, and a dev-loop shortcut.** With no Event Broker config map the topic is
 `businessevents.<channel id>.<EventBrokerSpace>`, where `<channel id>` is the 32-hex
@@ -401,7 +443,7 @@ $$
 | entity shape | entity is persistent, `extends BusinessEvents.ConsumedBusinessEvent`, and has an attribute of the mapped type for each payload property |
 | handler shape | microflow has exactly one parameter, of the consumed entity |
 | module present | the `BusinessEvents` marketplace module is in the project |
-| module started | `BusinessEvents.StartupBusinessEvents` is reachable from the configured after-startup microflow (§1) — without it the app consumes nothing, silently, and every other check passes |
+| module started | **Inverted 2026-11-25 (B1).** The app must NOT call `BusinessEvents.StartupBusinessEvents`: from Mendix 11.16.1 MxBuild starts the module itself (§1), so an explicit call is a second start that leaks `HeartbeatService`'s thread pool and leaves two heartbeat schedules running. Warns when a call is present, on 11.16.1+ only — below it the call is required and the rule is silent. Nothing is said about a MISSING after-startup microflow: MxBuild injects into whichever one the app configures, and whether it supplies one when there is none is unmeasured |
 | broker configured | `BusinessEvents.ServerUrl` is non-blank, and at least one of `BusinessEvents.ChannelName` / `BusinessEvents.EventBrokerSpace` is set. **Measured**: with either missing the app does not merely consume nothing, it **fails to boot** — `StartupBusinessEvents` throws in the after-startup action and the runtime shuts down (`Resolved value for constant: BusinessEvents.ServerUrl was not found or blank`, then `Constant BusinessEvents.ChannelName or BusinessEvents.EventBrokerSpace should be set`). Both are per-environment values, so the rule is a warning on an empty *default* rather than an error: `mxcli constant set` or `--constant` supplies them for a dev run |
 
 ### 5.2 CDC service (part C)
@@ -632,11 +674,33 @@ with 0 errors, and the control (baseline omitted) fails it.
 Two shapes that only a document could have told us: the live and baseline sides use
 **different list markers** (live 3, baseline 2), and the service carries `Excluded` even
 at its default — the shape test caught the second rather than a reviewer.
-A2 is merged for `LIST` / `DESCRIBE` — the gen properties it needed landed first
-(ako/mxcli#2395). Still open from A2: the catalog tables
-(`change_data_capture_services` + sources), the `RefKind`s that would let
-`show callers` and impact analysis see CDC exposure, and the
-`CatalogSchemaVersion` bump. B4 (check rules) and all of C and D are untouched.
+A2 is complete. `LIST` / `DESCRIBE` landed first (the gen properties they needed
+in ako/mxcli#2395), and the catalog now carries the rest:
+`change_data_capture_services`, `change_data_capture_sources` and `expose` edges
+from a service to the entity, attributes and associations it publishes, at
+schema 52.
+
+The edges are the part that mattered. A CDC service is an **exit** from the
+model — nothing in the app calls it — so before them an entity tracked only by
+CDC had no inbound edge at all: `refs` said "no references", `impact` agreed,
+and QUAL004 advised removing it. Dropping or renaming that entity ends or moves
+a Kafka topic, and a major bump starts a new one, which downstream is a new
+table with no history.
+
+The sources table carries the **topic** per source, which is also why
+`cdcTopic` moved to `model.ChangeDataCaptureService.Topic`: it is assembled from
+the service's `AppName`, the source's `ExposedName` and the **baseline's** major
+for that source — three properties in two halves of the document — and a second
+copy of that formula in the builder would have been a copy that drifts. The
+per-source major is load-bearing: two sources of one service can be on
+different majors, which a single service-level version would have got wrong.
+
+B4 is implemented: the seven rules of §5.1 as `MDL-BE01`..`MDL-BE07`, errors for the
+five a statement decides and warnings for the two that are per-environment project
+configuration. BE03's attribute half warns because mxbuild does not validate the
+contract-to-entity mapping at all, so a mismatch is a runtime fact; it judges the
+encoding against a SET of acceptable attribute types, since an enumeration travels
+as its key. All of C is implemented (above); D is untouched.
 
 Measured while implementing A2, and worth keeping: the storage layer refuses the
 document outright below 11.10 and names the properties and their versions
@@ -714,10 +778,30 @@ Mendix app and no Studio Pro**. That gives §8 a runtime check and retires item 
 It does **not** retire items 1–4: those are about what Studio Pro *writes*, which only a
 Studio Pro export can settle.
 
-1. AsyncAPI rendering of Integer, Decimal, Boolean, String, DateTime and Enumeration
-   payload fields: add one attribute of each to `OrdersEventService`, export, diff
-   against the generator. Until then the renderer refuses those types for
-   `ContractFrom` (`Contract` / `ContractFile` are unaffected).
+1. ~~AsyncAPI rendering of Integer, Decimal, Boolean, String, DateTime and Enumeration
+   payload fields.~~ **Answered for the six types a business event may carry — no Studio
+   Pro export needed.** `Mendix.Modeler.BusinessEvents.dll` IS the generator, and its
+   string heap holds every literal of the export plus exactly four JSON Schema type
+   values and four formats, with nothing else: `boolean`, `number`, `integer`, `string`,
+   `int32`, `int64`, `binary`, `date-time`. So the generator cannot emit anything outside
+   that set. Mendix's published REST JSON-schema reference gives the same four pairings
+   (Long/int64, Integer/int32, Date and time/date-time, Decimal/number) for a different
+   feature, and a contract carrying string, date and decimal fields was measured
+   round-tripping on 11.16.1. Implemented in `asyncAPIType`.
+
+   **The other four are not a gap in mxcli.** Mendix documents AutoNumber, Binary and
+   Hashed string as *unsupported* for a business event attribute ("Attribute Types",
+   Business Events configuration), so there is no encoding to find. Enumeration is
+   supported from Studio Pro 10.0, but "the enumeration items are stored in the exported
+   AsyncAPI document" and a message attribute carries only a name, a type and a length —
+   there is no enumeration for the renderer to take the items from. Rendering it as a
+   bare `string` would drop them silently, which is the one failure refusing was there to
+   prevent, so both cases stay refused with their real reason. Adding Enumeration needs
+   the item encoding **and** a model field naming the enumeration.
+
+   A first attempt mapped all ten by elimination — "eight literals, ten types, nothing
+   left over". That argument was wrong: `binary` is in the heap and unreachable for a
+   business event attribute, which is what checking the weakest step caught.
 2. CDC version policy (§5.2): add, rename and remove a property in Studio Pro, accept,
    and record the versions it picks.
 3. ~~CDC `Type` for Integer/Boolean/DateTime/Enumeration/Binary/AutoNumber/HashString.~~

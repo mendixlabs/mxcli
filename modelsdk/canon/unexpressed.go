@@ -39,9 +39,10 @@ import (
 //
 // and, from a drop + create of a flow (ako/mxcli#2179):
 //
-//   - A loop's Size. MDL has no way to state it, so a rebuild wrote the size
-//     mxcli computes and a loop drawn larger in Studio Pro overlapped its
-//     neighbours (carryLoopSize).
+//   - A loop's Size. A rebuild from a script that does not state it (@size,
+//     ako/mxcli#2369, came later) wrote the size mxcli computes, and a loop
+//     drawn larger in Studio Pro overlapped its neighbours (carryLoopSize). A
+//     patch is not a rebuild and is not carried (ako/mxcli#2564).
 //
 // and, measured on the Marketplace modules FactoryManagement ships
 // (ako/mxcli#2106, AgentCommons and MxGenAIConnector on 11.16.1):
@@ -56,6 +57,16 @@ import (
 // after TransplantIDs means the elements that correspond; a real change — other
 // expression text, a label with text — is not touched and still lands.
 func CarryUnexpressed(contents, stored []byte) []byte {
+	return carryUnexpressed(contents, stored, false)
+}
+
+// carryUnexpressed is CarryUnexpressed; patch says the write patched the
+// stored bytes (ContentsOwnElementIDs) rather than rebuilding them. A patch
+// keeps every stored loop box it does not mean to change, so a Size it writes
+// is meant — the splice fitting a box to a body the script moved
+// (ako/mxcli#2564) — and carryLoopSize, which exists for rebuilds, would put
+// the old box back.
+func carryUnexpressed(contents, stored []byte, patch bool) []byte {
 	if len(contents) == 0 || len(stored) == 0 {
 		return contents
 	}
@@ -84,7 +95,7 @@ func CarryUnexpressed(contents, stored []byte) []byte {
 		if carryUnstatedFlowProperties(d, old, used) {
 			changed = true
 		}
-		if carryLoopSize(d, old) {
+		if !patch && carryLoopSize(d, old) {
 			changed = true
 		}
 		if carryTabIndex(d, old) {

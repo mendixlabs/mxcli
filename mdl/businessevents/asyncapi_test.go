@@ -72,18 +72,70 @@ func TestRenderAsyncAPI_EndsWithNewline(t *testing.T) {
 	}
 }
 
-// §9.1: only Long is measured. A contract that is subtly wrong is worse than
-// one that was refused, because the consuming app imports it and finds out at
-// deploy time — so an unmeasured type is an error naming the attribute and the
-// way round it, not a guess.
-func TestRenderAsyncAPI_RefusesUnmeasuredAttributeTypes(t *testing.T) {
-	for _, typ := range []string{"String", "Integer", "Decimal", "Boolean", "DateTime", "Enumeration"} {
+// The six types a business event attribute may have, each with the encoding
+// Mendix writes (ako/mxcli#2384 M1). Asserted per type on the rendered YAML
+// rather than through the golden file, because the golden fixture is all Long:
+// it would keep passing whatever the other five rendered as, which is how a
+// widening can ship with no evidence behind it.
+//
+// The three sources behind the table are in asyncAPIType's comment. Long is the
+// one measured byte-for-byte, and TestRenderAsyncAPI_MatchesStudioProExport
+// pins it.
+func TestRenderAsyncAPI_EncodesEverySupportedType(t *testing.T) {
+	for _, c := range []struct {
+		mendix string
+		want   string
+	}{
+		{"Boolean", "          type: boolean\n"},
+		{"Decimal", "          type: number\n"},
+		{"Integer", "          type: integer\n          format: int32\n"},
+		{"Long", "          type: integer\n          format: int64\n"},
+		{"String", "          type: string\n"},
+		{"DateTime", "          type: string\n          format: date-time\n"},
+		// mxcli's own spelling: Mendix has no date-only type, so it is a DateTime.
+		{"Date", "          type: string\n          format: date-time\n"},
+	} {
+		t.Run(c.mendix, func(t *testing.T) {
+			svc := fixturePublisher()
+			svc.Definition.Channels[0].Messages[0].Attributes[0].AttributeType = c.mendix
+			got, err := RenderAsyncAPI(svc)
+			if err != nil {
+				t.Fatalf("refused %s: %v", c.mendix, err)
+			}
+			want := "        OrderId:\n" + c.want
+			if !strings.Contains(got, want) {
+				t.Errorf("OrderId of type %s rendered as:\n%s\nwant it to contain:\n%s",
+					c.mendix, payloadPropertiesOf(got), want)
+			}
+		})
+	}
+}
+
+// payloadPropertiesOf is the schemas section of a render, for a readable
+// failure message.
+func payloadPropertiesOf(contract string) string {
+	start := strings.Index(contract, "  schemas:\n")
+	if start < 0 {
+		return contract
+	}
+	rest := contract[start:]
+	if end := strings.Index(rest, "  messageTraits:"); end >= 0 {
+		return rest[:end]
+	}
+	return rest
+}
+
+// A type Mendix does not support for a business event attribute is refused, and
+// the refusal says so rather than blaming a missing measurement. The list is
+// Mendix's own ("Attribute Types", Business Events configuration).
+func TestRenderAsyncAPI_RefusesTypesMendixDoesNotSupport(t *testing.T) {
+	for _, typ := range []string{"AutoNumber", "Binary", "HashedString"} {
 		t.Run(typ, func(t *testing.T) {
 			svc := fixturePublisher()
 			svc.Definition.Channels[0].Messages[0].Attributes[0].AttributeType = typ
 			_, err := RenderAsyncAPI(svc)
 			if err == nil {
-				t.Fatalf("rendered %s without a measurement to back it", typ)
+				t.Fatalf("rendered %s, which Mendix does not support for a business event", typ)
 			}
 			var unsupported *UnsupportedAttributeTypeError
 			if !asUnsupported(err, &unsupported) {
@@ -92,15 +144,52 @@ func TestRenderAsyncAPI_RefusesUnmeasuredAttributeTypes(t *testing.T) {
 			if unsupported.Attribute != "OrderId" || unsupported.Type != typ {
 				t.Errorf("error does not name the attribute and type: %+v", unsupported)
 			}
-			if !strings.Contains(err.Error(), "ContractFile") {
-				t.Errorf("error does not say how to proceed: %v", err)
+			if !strings.Contains(err.Error(), "does not support") {
+				t.Errorf("refusal should say Mendix does not support the type: %v", err)
+			}
+			// It must name a type the author can switch to.
+			if !strings.Contains(err.Error(), "String") {
+				t.Errorf("refusal should name the supported types: %v", err)
 			}
 		})
 	}
 }
 
-// A consumed service has no definition: it already stores a contract, and a
-// second one rendered from nothing would carry channel ids no producer has.
+// An enumeration is supported by Mendix from Studio Pro 10.0, and its ITEMS go
+// into the exported contract. A message attribute carries only a name, a type
+// and a length, so the renderer has no items to write — and a bare `string`
+// would import cleanly and be wrong, which is the one failure refusing exists
+// to prevent. So it is refused, and the refusal explains that rather than
+// claiming Mendix cannot do it.
+func TestRenderAsyncAPI_RefusesEnumerationBecauseItsItemsAreMissing(t *testing.T) {
+	svc := fixturePublisher()
+	svc.Definition.Channels[0].Messages[0].Attributes[0].AttributeType = "Enumeration"
+	_, err := RenderAsyncAPI(svc)
+	if err == nil {
+		t.Fatal("rendered an enumeration without its items")
+	}
+	for _, want := range []string{"items", "ContractFile"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal should mention %q: %v", want, err)
+		}
+	}
+	// NOT the wording for a type Mendix rejects: an enumeration is supported.
+	if strings.Contains(err.Error(), "does not support Enumeration") {
+		t.Errorf("an enumeration is supported by Mendix; the refusal is about its items: %v", err)
+	}
+}
+
+// A name that is not a Mendix attribute type at all still reaches the error,
+// with the generic reason.
+func TestRenderAsyncAPI_RefusesANonType(t *testing.T) {
+	svc := fixturePublisher()
+	svc.Definition.Channels[0].Messages[0].Attributes[0].AttributeType = "Sparkle"
+	_, err := RenderAsyncAPI(svc)
+	if err == nil || !strings.Contains(err.Error(), "not a Mendix attribute type") {
+		t.Fatalf("want the generic refusal for an unknown type, got %v", err)
+	}
+}
+
 func TestRenderAsyncAPI_RefusesAServiceWithoutADefinition(t *testing.T) {
 	_, err := RenderAsyncAPI(&model.BusinessEventService{Name: "OrdersEventClient", Document: "asyncapi: 2.2.0\n"})
 	if err == nil {

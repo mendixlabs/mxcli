@@ -117,9 +117,16 @@ type MicroflowMutator interface {
 	// its caption, in place; the decision and its flows stay. A decision that
 	// calls a rule is refused.
 	SetCondition(target model.ID, expression, caption string) error
-	// Move sets where the top-level node target is drawn, and nothing else:
-	// its flows keep their ends, sides and curves (ako/mxcli#818).
+	// Move sets where the node target is drawn, and nothing else: its flows
+	// keep their ends, sides and curves (ako/mxcli#818). A node in a loop body
+	// is placed in the loop box's coordinates (ako/mxcli#2564).
 	Move(target model.ID, to model.Point) error
+	// FitLoop sizes the box of the loop target: to size when it is given (a
+	// stated @size), else to its body the way `create` sizes a loop — the
+	// body's right and bottom edges plus the padding, no smaller than minimum.
+	// The box keeps its centre. Used when the script moves the body's nodes
+	// (ako/mxcli#2564); a box that would be drawn over another node is refused.
+	FitLoop(target model.ID, size *model.Size, minimum model.Size) error
 	// Pin says the script states that a node is drawn at the point at — a
 	// stored node, or one a fragment places there. An insert or replace that
 	// would move the node drawn there to make room is refused instead, so the

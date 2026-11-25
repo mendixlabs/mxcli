@@ -1496,6 +1496,11 @@ func (unsupportedBackend) UpdateRawUnitOwningTranslations(_ string, _ []uint8) (
 	return
 }
 
+func (unsupportedBackend) UpdateRawUnitPatch(_ string, _ []uint8) (err0 error) {
+	err0 = errUnsupported("UpdateRawUnitPatch")
+	return
+}
+
 func (unsupportedBackend) UpdateRegularExpression(_ *model.RegularExpression) (err0 error) {
 	err0 = errUnsupported("UpdateRegularExpression")
 	return

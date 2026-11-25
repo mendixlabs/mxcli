@@ -76,7 +76,7 @@ var (
 var geometryFields = map[reflect.Type]map[string]bool{
 	annotationsStructType: {
 		"Position": true, "Anchor": true, "TrueBranchAnchor": true, "FalseBranchAnchor": true,
-		"IteratorAnchor": true, "BodyTailAnchor": true, "CaseAnchors": true, "Curve": true, "Merge": true, "Start": true,
+		"IteratorAnchor": true, "BodyTailAnchor": true, "CaseAnchors": true, "Curve": true, "TrueCurve": true, "FalseCurve": true, "Merge": true, "Start": true,
 		"MergeSize": true, "Size": true, // ako/mxcli#2369
 	},
 	noteStructType:  {"Position": true, "Size": true},

@@ -246,6 +246,10 @@ func replaceQNInDocCounted(doc bson.D, oldName, newName string, count *int) bson
 				if rewritten, n := types.RewriteOQLQualifiedName(q, oldName, newName); n > 0 {
 					*count += n
 					doc[i].Value = rewritten
+				} else if rewritten, n := types.RewriteModulePrefix(q, oldName, newName); n > 0 {
+					// A module rename (ako/mxcli#2590).
+					*count += n
+					doc[i].Value = rewritten
 				}
 				continue
 			}
@@ -307,6 +311,12 @@ func replaceQNInValueCounted(v any, oldName, newName string, count *int) any {
 		// A reference inside an expression: @Module.Constant, or an
 		// enumeration value in a longer expression (ako/mxcli#1671).
 		if rewritten, n := types.RewriteExpressionReferences(val, oldName, newName); n > 0 {
+			*count += n
+			return rewritten
+		}
+		// A module rename names the module bare: every qualified reference
+		// inside an expression or XPath (ako/mxcli#2590).
+		if rewritten, n := types.RewriteModulePrefix(val, oldName, newName); n > 0 {
 			*count += n
 			return rewritten
 		}

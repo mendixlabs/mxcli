@@ -359,6 +359,14 @@ func collectListInputVariables(stmts []ast.MicroflowStatement) map[string]bool {
 				if s.ErrorHandling != nil {
 					walk(s.ErrorHandling.Body)
 				}
+			case *ast.IncrementCounterStmt:
+				if s.ErrorHandling != nil {
+					walk(s.ErrorHandling.Body)
+				}
+			case *ast.SetGaugeStmt:
+				if s.ErrorHandling != nil {
+					walk(s.ErrorHandling.Body)
+				}
 			case *ast.SendRestRequestStmt:
 				if s.ErrorHandling != nil {
 					walk(s.ErrorHandling.Body)
@@ -517,6 +525,20 @@ func collectObjectInputVariables(stmts []ast.MicroflowStatement) map[string]bool
 					walk(s.ErrorHandling.Body)
 				}
 			case *ast.SendEmailStmt:
+				for _, e := range s.Expressions() {
+					walkExpr(e)
+				}
+				if s.ErrorHandling != nil {
+					walk(s.ErrorHandling.Body)
+				}
+			case *ast.IncrementCounterStmt:
+				for _, e := range s.Expressions() {
+					walkExpr(e)
+				}
+				if s.ErrorHandling != nil {
+					walk(s.ErrorHandling.Body)
+				}
+			case *ast.SetGaugeStmt:
 				for _, e := range s.Expressions() {
 					walkExpr(e)
 				}
@@ -761,6 +783,10 @@ func (fb *flowBuilder) addStatement(stmt ast.MicroflowStatement) model.ID {
 		return fb.addRestCallAction(s)
 	case *ast.SendEmailStmt:
 		return fb.addSendEmailAction(s)
+	case *ast.IncrementCounterStmt:
+		return fb.addIncrementCounterAction(s)
+	case *ast.SetGaugeStmt:
+		return fb.addSetGaugeAction(s)
 	case *ast.SendRestRequestStmt:
 		return fb.addSendRestRequestAction(s)
 	case *ast.ImportFromMappingStmt:

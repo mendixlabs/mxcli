@@ -100,6 +100,8 @@ func checkDisallowedNanoflowAction(stmt ast.MicroflowStatement) string {
 		return "workflow actions are not allowed in nanoflows"
 	case *ast.DownloadFileStmt:
 		return "file downloads are not allowed in nanoflows"
+	case *ast.IncrementCounterStmt, *ast.SetGaugeStmt:
+		return "metrics activities are not allowed in nanoflows — metrics are reported by the runtime (Studio Pro: \"This activity can only be used in microflows\")"
 	}
 	return ""
 }

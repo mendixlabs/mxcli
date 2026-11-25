@@ -94,6 +94,10 @@ features:
       min_version: "9.0.3"
       mdl: "$Found = FIND $List WHERE expression; $Kept = FILTER $List WHERE expression;"
       notes: "Microflows$FindByExpression and FilterByExpression introduced in 9.0.3 (mendixmodelsdk 4.117.0); `BY Member = value` writes Microflows$Find/Filter, which every version has. The write refuses each type below it (canon.UndeclaredTypeError); check -p names the statement first (ako/mxcli#1811)."
+    metrics_activities:
+      min_version: "9.5.0"
+      mdl: "INCREMENT COUNTER 'name' [BY value]; SET GAUGE 'name' TO value;  (microflow only)"
+      notes: "Microflows$CounterMeterAction, IncrementCounterMeterAction, GaugeMeterAction and MeterTagMapping introduced in 9.5.0 (mendixmodelsdk). Measured on 11.16.1 (ako/TestApp)."
     send_external_object:
       min_version: "9.6.0"
       mdl: "SEND EXTERNAL OBJECT $Obj [REFRESH];"

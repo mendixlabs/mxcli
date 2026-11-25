@@ -100,6 +100,9 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 		violations = append(violations, validateIndexNames(stmt)...)
 		violations = append(violations, validateEnumValueDocs(stmt)...)
 		violations = append(violations, validateMenuItemIcons(stmt)...)
+		// A NativePhone bottom bar is flat, page-only and glyph-iconed; exec
+		// refuses the rest, one at a time (MDL-NATIVEBAR01, ako/mxcli#2561).
+		violations = append(violations, validateNativeBottomBar(stmt)...)
 		violations = append(violations, validateGlyphCodes(stmt)...)
 		// A `[%Token%]` whose name Mendix does not have where it is written:
 		// lexed whatever the name, so a typo passed check and exec and the build
@@ -262,7 +265,7 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// catches typos in property keys before MxBuild does. Uses built-in
 	// definitions alone when no project is given; with --project, also
 	// loads project-installed .def.json files for full coverage.
-	violations = append(violations, ValidateWidgetProperties(prog, projectPath)...)
+	violations = append(violations, withoutWebOnlyNotesOnNativePages(ValidateWidgetProperties(prog, projectPath), prog, project)...)
 
 	// Warn (MPR010) when an edit/new form (a parameter-bound DataView) is not
 	// wrapped in a layout grid — its label/input widths only render correctly

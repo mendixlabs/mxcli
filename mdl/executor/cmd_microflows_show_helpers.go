@@ -458,6 +458,14 @@ func emitCurveAnnotation(
 	indentStr string,
 ) {
 	outgoing := flowsByOrigin[obj.GetID()]
+	if _, isSplit := obj.(*microflows.ExclusiveSplit); isSplit {
+		if line, ok := outcomeCurveAnnotation(outgoing); ok {
+			if line != "" {
+				*lines = append(*lines, indentStr+line)
+			}
+			return
+		}
+	}
 	var flow *microflows.SequenceFlow
 	for _, f := range outgoing {
 		if isNonWritableLoopBodyTailFlow(obj.GetID(), f, activityMap) {
@@ -480,6 +488,56 @@ func emitCurveAnnotation(
 		return
 	}
 	*lines = append(*lines, indentStr+fmt.Sprintf("@curve(%s)", strings.Join(parts, ", ")))
+}
+
+// curveParts is a flow's stored vectors as `from: (x, y), to: (x, y)`, either
+// left out when straight.
+func curveParts(f *microflows.SequenceFlow) []string {
+	var parts []string
+	if p, ok := controlVectorPair(f.OriginControlVector); ok {
+		parts = append(parts, "from: "+p)
+	}
+	if p, ok := controlVectorPair(f.DestinationControlVector); ok {
+		parts = append(parts, "to: "+p)
+	}
+	return parts
+}
+
+// outcomeCurveAnnotation is a decision's @curve when its true and false flows
+// are shaped differently: `@curve(true: (…), false: (…))`, a straight outcome
+// left out (ako/mxcli#2592). The flat form, which the builder stamps on every
+// outgoing flow, bent a straight vertical false edge when only the true one was
+// curved. ok is false for a decision that is not a true/false pair or whose two
+// flows are shaped alike, which the flat form describes exactly; a "" line
+// with ok means both are straight.
+func outcomeCurveAnnotation(outgoing []*microflows.SequenceFlow) (string, bool) {
+	var trueFlow, falseFlow *microflows.SequenceFlow
+	for _, f := range outgoing {
+		if f.IsErrorHandler {
+			continue
+		}
+		switch flowBranchKey(f) {
+		case "'true'":
+			trueFlow = f
+		case "'false'":
+			falseFlow = f
+		}
+	}
+	if trueFlow == nil || falseFlow == nil {
+		return "", false
+	}
+	t, f := curveParts(trueFlow), curveParts(falseFlow)
+	if strings.Join(t, ", ") == strings.Join(f, ", ") {
+		return "", false
+	}
+	var outcomes []string
+	if len(t) > 0 {
+		outcomes = append(outcomes, "true: ("+strings.Join(t, ", ")+")")
+	}
+	if len(f) > 0 {
+		outcomes = append(outcomes, "false: ("+strings.Join(f, ", ")+")")
+	}
+	return "@curve(" + strings.Join(outcomes, ", ") + ")", true
 }
 
 // emitMergeAnnotation emits @merge(x, y) for the implicit merge node that closes

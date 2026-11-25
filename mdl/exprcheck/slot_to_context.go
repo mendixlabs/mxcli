@@ -27,4 +27,8 @@ var slotContext = map[string]string{
 	"SendEmailStmt.Port":          "SEND EMAIL port",
 	"SendEmailStmt.Credential":    "SEND EMAIL user or password",
 	"SendEmailStmt.TemplateParam": "SEND EMAIL template parameter",
+	"MeterStmt.Name":              "metric name",
+	"MeterStmt.CounterValue":      "INCREMENT COUNTER value",
+	"MeterStmt.GaugeValue":        "SET GAUGE value",
+	"MeterStmt.Tag":               "metric tag key or value",
 }

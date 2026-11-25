@@ -452,6 +452,10 @@ func (v *microflowValidator) walkBody(body []ast.MicroflowStatement) {
 			v.checkSynchronizeIsNanoflowOnly()
 		case *ast.SendEmailStmt:
 			v.checkSendEmail(stmt)
+		case *ast.IncrementCounterStmt:
+			v.checkMeterActivity("increment counter", stmt.Name, stmt.By)
+		case *ast.SetGaugeStmt:
+			v.checkMeterActivity("set gauge", stmt.Name, stmt.Value)
 		case *ast.ListOperationStmt:
 			v.checkRangeHasABound(stmt)
 		case *ast.WhileStmt:
@@ -1955,6 +1959,7 @@ func (v *microflowValidator) checkCaseAnchors(s ast.MicroflowStatement, ann *ast
 // An error rather than a warning: the statement's meaning silently differs from
 // what was written, and warnings on a generated script are not read. (#884)
 func (v *microflowValidator) checkUnknownAnnotations(s ast.MicroflowStatement) {
+	v.checkLoopBodyCoordinates(s) // MDL-LOOP01, ako/mxcli#2583
 	ann := ast.StatementAnnotations(s)
 	if ann == nil {
 		return
@@ -1963,7 +1968,22 @@ func (v *microflowValidator) checkUnknownAnnotations(s ast.MicroflowStatement) {
 		v.addViolation("MDL060", linter.SeverityError,
 			fmt.Sprintf("`@curve` parameter `%s` is not a whole-number (x, y) pair", bad),
 			"A sequence flow's shape is two bezier control vectors, each a pixel offset from its end "+
-				"of the line: `@curve(from: (40, -90), to: (-40, 90))`. Only `from:` and `to:` are accepted.")
+				"of the line: `@curve(from: (40, -90), to: (-40, 90))`. Only `from:` and `to:` are accepted, "+
+				"and on an IF one curve per outcome: `@curve(true: (from: …, to: …), false: (…))`.")
+	}
+	if _, isIf := s.(*ast.IfStmt); !isIf {
+		for _, key := range []struct {
+			name string
+			set  bool
+		}{{"true", ann.TrueCurve != nil}, {"false", ann.FalseCurve != nil}} {
+			if key.set {
+				v.addViolation("MDL060", linter.SeverityError,
+					fmt.Sprintf("`@curve` parameter `%s: (…)` names an IF outcome, but it is not on an IF, "+
+						"so the edge keeps its stored shape", key.name),
+					"Only an IF has true and false outcomes (ako/mxcli#2592); the flow leaving any other "+
+						"statement is `@curve(from: (x, y), to: (x, y))`.")
+			}
+		}
 	}
 	for _, bad := range ann.InvalidAnchors {
 		v.addViolation(invalidAnchorRule, linter.SeverityError,

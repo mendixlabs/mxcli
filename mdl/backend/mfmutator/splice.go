@@ -1246,17 +1246,59 @@ func (m *Mutator) SetCondition(target model.ID, expression, caption string) erro
 // @start that differs from the stored one. Only the node's RelativeMiddlePoint
 // changes. Its flows keep their ends, sides and control vectors — a control
 // vector is relative to its end, so a curve keeps its shape — and no other
-// node moves. A node inside a loop body is refused: its coordinates are
-// relative to the loop box, and alter does not edit inside a loop yet.
+// node moves. A node inside a loop body is placed in the loop box's
+// coordinates, which is what its stored position and the script's @position
+// are in (ako/mxcli#2564); the executor fits the box afterwards (FitLoop).
 func (m *Mutator) Move(target model.ID, to model.Point) error {
 	g := m.graph()
-	x, err := g.node(target)
+	x, err := g.anyNode(target)
 	if err != nil {
 		return err
 	}
 	if !dSet(x.doc, "RelativeMiddlePoint", point{to.X, to.Y}.String()) {
 		return fmt.Errorf("%s stores no position", describeNode(x))
 	}
+	return nil
+}
+
+// FitLoop sizes the box of loop target to size, or, with none, to its body
+// as the builder sizes a new loop (fitContainerSize): the body's right and
+// bottom edges plus loopPadding, no smaller than minimum (ako/mxcli#2564). The
+// box keeps its centre, so its body, drawn in the box's coordinates from its
+// top-left corner, stays where the script draws it in the box.
+func (m *Mutator) FitLoop(target model.ID, size *model.Size, minimum model.Size) error {
+	g := m.graph()
+	l, err := g.anyNode(target)
+	if err != nil {
+		return err
+	}
+	if l.typ != "Microflows$LoopedActivity" {
+		return fmt.Errorf("%s is not a loop", describeNode(l))
+	}
+	want := point{minimum.Width, minimum.Height}
+	if size != nil {
+		want = point{size.Width, size.Height}
+	} else if b := m.contentBounds(l.id); b.n > 0 {
+		want = point{max(b.max.X+loopPadding, want.X), max(b.max.Y+loopPadding, want.Y)}
+	}
+	if want == l.size {
+		return nil
+	}
+	lo := point{l.pos.X - want.X/2, l.pos.Y - want.Y/2}
+	hi := point{l.pos.X + want.X/2, l.pos.Y + want.Y/2}
+	for _, n := range g.order {
+		if n.loop != l.loop || n.id == l.id || n.typ == "Microflows$MicroflowParameter" || n.typ == "Microflows$Annotation" {
+			continue
+		}
+		nlo := point{n.pos.X - n.size.X/2, n.pos.Y - n.size.Y/2}
+		nhi := point{n.pos.X + n.size.X/2, n.pos.Y + n.size.Y/2}
+		if nlo.X < hi.X && lo.X < nhi.X && nlo.Y < hi.Y && lo.Y < nhi.Y {
+			return fmt.Errorf("fitted to its body, %s would be %dx%d and drawn over %s; move that object, "+
+				"or state the box with @size(w, h)", describeNode(l), want.X, want.Y, describeNode(n))
+		}
+	}
+	l.size = want
+	dSet(l.doc, "Size", want.String())
 	return nil
 }
 

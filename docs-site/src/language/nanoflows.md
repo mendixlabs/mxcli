@@ -120,6 +120,7 @@ The following activities are server-only and cannot be used in nanoflows:
 - `IMPORT FROM MAPPING` / `EXPORT TO MAPPING` — mapping operations are server-side
 - `EXECUTE DATABASE QUERY` — direct SQL requires server
 - `TRANSFORM JSON` — JSON transformations are server-side
+- `INCREMENT COUNTER` / `SET GAUGE` — metrics are reported by the runtime
 - `SHOW HOME PAGE` — home page navigation is server-side
 - `CALL EXTERNAL ACTION` — external actions are server-side
 - All **workflow actions** (call/open workflow, set task outcome, user task, etc.)

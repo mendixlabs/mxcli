@@ -157,7 +157,11 @@ func layoutFlow(ctx *ExecContext, kind string, name ast.QualifiedName, dryRun bo
 	if err != nil {
 		return res, mdlerrors.NewBackend("encode "+kind+" "+name.String(), err)
 	}
-	if err := ctx.Backend.UpdateRawUnit(string(stored.id), out); err != nil {
+	// A patch of the stored bytes, not a rebuild: the loop boxes it fitted to
+	// their bodies are meant, and carrying the stored sizes back (as a rebuild
+	// is) kept every one at its old size while reporting it moved
+	// (ako/mxcli#2564).
+	if err := ctx.Backend.UpdateRawUnitPatch(string(stored.id), out); err != nil {
 		return res, mdlerrors.NewBackend("write "+kind+" "+name.String(), err)
 	}
 	return res, nil
@@ -291,8 +295,15 @@ func clearLayoutAnnotations(v reflect.Value, seen map[uintptr]bool) {
 			ann.IteratorAnchor = nil
 			ann.BodyTailAnchor = nil
 			ann.Curve = nil
+			ann.TrueCurve = nil
+			ann.FalseCurve = nil
 			ann.Merge = nil
 			ann.Start = nil
+			// A loop's box and a merge's box are layout too (ako/mxcli#2369):
+			// kept, the rebuild drew every loop at its stored size, so a box
+			// too big for its body stayed that size (ako/mxcli#2564).
+			ann.Size = nil
+			ann.MergeSize = nil
 		}
 		clearLayoutAnnotations(v.Elem(), seen)
 	case reflect.Interface:

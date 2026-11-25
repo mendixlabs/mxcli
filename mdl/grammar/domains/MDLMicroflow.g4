@@ -326,6 +326,8 @@ microflowStatement
     | annotation* validationFeedbackStatement SEMICOLON
     | annotation* restCallStatement SEMICOLON
     | annotation* sendEmailStatement SEMICOLON
+    | annotation* incrementCounterStatement SEMICOLON
+    | annotation* setGaugeStatement SEMICOLON
     | annotation* sendRestRequestStatement SEMICOLON
     | annotation* importFromMappingStatement SEMICOLON
     | annotation* exportToMappingStatement SEMICOLON
@@ -1036,6 +1038,46 @@ sendEmailSettingValue
     | BASIC LPAREN restCallMapEntry (COMMA restCallMapEntry)* COMMA? RPAREN // Authentication: basic ( Username: $u, Password: $p )
     | TEMPLATE STRING_LITERAL templateParams?                               // Body: template '…' [with ({1} = …)]
     | expression templateParams?                                            // Subject: '…' [with (…)] / To: $x / SecurityType: tls
+    ;
+
+/**
+ * Metrics activities (Studio Pro toolbox "Metrics Activities"; microflow only,
+ * Microflows$*MeterAction, 9.5+):
+ *
+ *   increment counter 'acme.orders.placed' ( Tags: ( 'region': $Order/Region ) );
+ *   increment counter @Shop.ItemsMetric by $Order/ItemCount;
+ *   set gauge 'acme.queue.depth' to $Depth ( Tags: ( 'queue': 'mail' ) );
+ *
+ * `increment counter` without `by` is Increment Counter (by one,
+ * IncrementCounterMeterAction); with `by` it is Counter (CounterMeterAction).
+ * The metric name, the value and each tag key and value are expressions, as
+ * Studio Pro stores them. ADR-0013: the dialog's remaining setting, Tags, goes
+ * in one ( Key: value, … ) list; the visitor checks the keys.
+ */
+incrementCounterStatement
+    : INCREMENT COUNTER expression (BY expression)? meterSettings? onErrorClause?
+    ;
+
+setGaugeStatement
+    : SET GAUGE expression TO expression meterSettings? onErrorClause?
+    ;
+
+meterSettings
+    : LPAREN meterSetting (COMMA meterSetting)* COMMA? RPAREN
+    ;
+
+meterSetting
+    : identifierOrKeyword COLON meterSettingValue
+    ;
+
+// Tags: ( key: value, … ) — both sides expressions. An empty map is allowed.
+meterSettingValue
+    : LPAREN (meterTag (COMMA meterTag)* COMMA?)? RPAREN
+    | expression
+    ;
+
+meterTag
+    : expression COLON expression
     ;
 
 /**

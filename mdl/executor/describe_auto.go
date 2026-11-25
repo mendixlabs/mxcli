@@ -51,6 +51,7 @@ var objectTypeToDescribeKind = map[string]ast.DescribeObjectType{
 	"REST_CLIENT":                   ast.DescribeRestClient,
 	"PUBLISHED_REST_SERVICE":        ast.DescribePublishedRestService,
 	"BUSINESS_EVENT_SERVICE":        ast.DescribeBusinessEventService,
+	"CHANGE_DATA_CAPTURE_SERVICE":   ast.DescribeChangeDataCaptureService,
 	"DATABASE_CONNECTION":           ast.DescribeDatabaseConnection,
 	"IMAGE_COLLECTION":              ast.DescribeImageCollection,
 	"ICON_COLLECTION":               ast.DescribeIconCollection,

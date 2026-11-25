@@ -642,6 +642,53 @@ type DownloadFileAction struct {
 
 func (DownloadFileAction) isMicroflowAction() {}
 
+// CounterMeterAction increments a metrics counter by Value (Studio Pro's
+// "Counter"; Microflows$CounterMeterAction, 9.5+). Name, Value and the tag keys
+// and values are Mendix expressions.
+type CounterMeterAction struct {
+	model.BaseElement
+	ErrorHandlingType ErrorHandlingType `json:"errorHandlingType,omitempty"`
+	Name              string            `json:"name"`
+	Description       string            `json:"description,omitempty"`
+	Value             string            `json:"value"`
+	Tags              []*MeterTag       `json:"tags,omitempty"`
+}
+
+func (CounterMeterAction) isMicroflowAction() {}
+
+// IncrementCounterMeterAction increments a metrics counter by one (Studio Pro's
+// "Increment Counter"; Microflows$IncrementCounterMeterAction, 9.5+).
+type IncrementCounterMeterAction struct {
+	model.BaseElement
+	ErrorHandlingType ErrorHandlingType `json:"errorHandlingType,omitempty"`
+	Name              string            `json:"name"`
+	Description       string            `json:"description,omitempty"`
+	Tags              []*MeterTag       `json:"tags,omitempty"`
+}
+
+func (IncrementCounterMeterAction) isMicroflowAction() {}
+
+// GaugeMeterAction sets a metrics gauge to Value (Studio Pro's "Gauge";
+// Microflows$GaugeMeterAction, 9.5+).
+type GaugeMeterAction struct {
+	model.BaseElement
+	ErrorHandlingType ErrorHandlingType `json:"errorHandlingType,omitempty"`
+	Name              string            `json:"name"`
+	Description       string            `json:"description,omitempty"`
+	Value             string            `json:"value"`
+	Tags              []*MeterTag       `json:"tags,omitempty"`
+}
+
+func (GaugeMeterAction) isMicroflowAction() {}
+
+// MeterTag is one tag of a metrics activity (Microflows$MeterTagMapping). Key
+// and Value are both Mendix expressions: Studio Pro stores `'region'`, quoted.
+type MeterTag struct {
+	model.BaseElement
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 // EmailSecurityType is the transport security of a Send Email action's SMTP
 // connection. Values are the Mendix Model SDK's `SecurityType` enum.
 type EmailSecurityType string

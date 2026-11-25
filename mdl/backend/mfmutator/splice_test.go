@@ -331,8 +331,6 @@ func TestSplice_Refusals(t *testing.T) {
 		// (ako/mxcli#1693); a decision changes the body's shape.
 		{"insert a decision inside a loop", withLoop, loopFlows,
 			func(m *Mutator) error { return m.InsertAfter(model.ID(uid("inner")), oneDecision()) }, "inside a loop body"},
-		{"move inside a loop", withLoop, loopFlows,
-			func(m *Mutator) error { return m.Move(model.ID(uid("inner")), model.Point{X: 1, Y: 1}) }, "inside a loop body"},
 		{"insert before a join", twoIn, twoInFlows,
 			func(m *Mutator) error { return m.InsertBefore(model.ID(uid("b")), oneActivity()) }, "2 flows enter"},
 		{"insert after the end", line(), lineFlows(),

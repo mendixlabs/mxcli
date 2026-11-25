@@ -562,6 +562,10 @@ func runCheckFileAgainst(cmd *cobra.Command, filePath, against string) int {
 		// reported shape was drop + create in separate runs, which loses the
 		// roles that `create or modify` keeps.
 		projectViolations = append(projectViolations, exec.CheckFlowAccess(prog)...)
+		// MDL-NATIVEBAR02: a NativePhone bottom bar item whose page no user
+		// role may view is hidden, and with none left the bar is not shown —
+		// which nothing else reports (ako/mxcli#2565).
+		projectViolations = append(projectViolations, exec.CheckNativeBottomBarRoles(prog)...)
 		// MDL-SEC22 (MxBuild CE0114): a microflow that does not apply entity
 		// access calling a microflow or rule that does (mendixlabs/mxcli#1500).
 		// A consistency rule between two documents, not a reference, so the

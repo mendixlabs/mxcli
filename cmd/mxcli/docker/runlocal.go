@@ -203,7 +203,7 @@ func (o *LocalRunOptions) applyDefaults() {
 		o.AdminPort = 8090
 	}
 	if o.ServePort == 0 {
-		o.ServePort = 6543
+		o.ServePort = defaultServePort()
 	}
 	if o.AdminPass == "" {
 		o.AdminPass = defaultLocalAdminPass
@@ -549,6 +549,52 @@ func pingTCP(hostPort string, timeout time.Duration) error {
 	}
 	_ = conn.Close()
 	return nil
+}
+
+// defaultServePort is the `mxbuild --serve` port for a run that did not name
+// one, and the fix for a second app refusing to boot beside a first
+// (ako/mxcli#2384 M2).
+//
+// It is 6543 whenever 6543 is free, so the documented default, `run status` and
+// every example stay true. When something already answers there — in practice
+// another `mxcli run --local` — it is a free ephemeral port instead, because
+// nothing outside mxcli connects to this port: the handshake at
+// <project>/.mxcli/handshake.json publishes whichever port was chosen, and that
+// is how `mxcli test --attach` finds it (testrunner.Handshake.ServePort). An
+// attached serve already picks its port this way (freeLoopbackPort).
+//
+// So a second app boots without being told three port flags. The app and admin
+// ports keep refusing a collision, and should: those are the ones a person
+// opens in a browser, and adopting another app's runtime is what makes edits
+// appear to do nothing (checkTargetPortsFree). A build server cannot do that —
+// mxbuild --serve takes the project per request
+// (BuildRequest.ProjectFilePath), so it would build the right model — and the
+// one real hazard in sharing it, a second app on a DIFFERENT Mendix version
+// (serve is started pinned to one mxbuild and JDK, serveOptionsFor), is avoided
+// by taking a port of our own rather than by refusing.
+//
+// An explicit --serve-port is never moved: the caller asked for that port, and
+// checkTargetPortsFree still refuses when it is busy.
+func defaultServePort() int { return servePortOrFree(documentedServePort) }
+
+// documentedServePort is the serve port in the docs, the skills and every
+// example. A run keeps it whenever it can.
+const documentedServePort = 6543
+
+// servePortOrFree is defaultServePort over any documented port, so a test can
+// exercise it on a port it bound itself rather than on 6543, which a real run
+// on this machine may hold.
+func servePortOrFree(documented int) int {
+	if err := pingTCP(fmt.Sprintf("127.0.0.1:%d", documented), 500*time.Millisecond); err != nil {
+		return documented
+	}
+	if p, err := freeLoopbackPort(); err == nil {
+		return p
+	}
+	// Nothing free to offer: keep the documented port and let
+	// checkTargetPortsFree report it, which is a clear message rather than a
+	// silent adoption.
+	return documented
 }
 
 // checkTargetPortsFree refuses to boot when any of the loop's ports is already

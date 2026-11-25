@@ -767,6 +767,14 @@ func errorHandlerStatementVarRefs(stmt ast.MicroflowStatement) []string {
 			}
 		}
 		refs = append(refs, exprVarRefs(s.Timeout)...)
+	case *ast.IncrementCounterStmt:
+		for _, e := range s.Expressions() {
+			refs = append(refs, exprVarRefs(e)...)
+		}
+	case *ast.SetGaugeStmt:
+		for _, e := range s.Expressions() {
+			refs = append(refs, exprVarRefs(e)...)
+		}
 	case *ast.SendEmailStmt:
 		for _, e := range s.Expressions() {
 			refs = append(refs, exprVarRefs(e)...)

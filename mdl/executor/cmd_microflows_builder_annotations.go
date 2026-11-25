@@ -74,6 +74,12 @@ func (fb *flowBuilder) mergeStatementAnnotations(stmt ast.MicroflowStatement) {
 	if ann.Curve != nil {
 		fb.pendingAnnotations.Curve = ann.Curve
 	}
+	if ann.TrueCurve != nil {
+		fb.pendingAnnotations.TrueCurve = ann.TrueCurve
+	}
+	if ann.FalseCurve != nil {
+		fb.pendingAnnotations.FalseCurve = ann.FalseCurve
+	}
 	if ann.Merge != nil {
 		fb.pendingAnnotations.Merge = ann.Merge
 	}
@@ -197,6 +203,18 @@ func (fb *flowBuilder) applyPendingAnnotations(activityID model.ID) {
 		}
 		fb.curveByOrigin[activityID] = c
 	}
+	for outcome, c := range map[string]*ast.FlowCurve{"true": fb.pendingAnnotations.TrueCurve, "false": fb.pendingAnnotations.FalseCurve} {
+		if c == nil {
+			continue
+		}
+		if fb.outcomeCurves == nil {
+			fb.outcomeCurves = map[model.ID]map[string]*ast.FlowCurve{}
+		}
+		if fb.outcomeCurves[activityID] == nil {
+			fb.outcomeCurves[activityID] = map[string]*ast.FlowCurve{}
+		}
+		fb.outcomeCurves[activityID][outcome] = c
+	}
 	fb.applyAnnotations(activityID, fb.pendingAnnotations)
 	fb.pendingAnnotations = nil
 }
@@ -237,21 +255,41 @@ func (fb *flowBuilder) adoptCurves(sub *flowBuilder) {
 		}
 		fb.curveByOrigin[id] = c
 	}
+	for id, m := range sub.outcomeCurves {
+		if fb.outcomeCurves == nil {
+			fb.outcomeCurves = map[model.ID]map[string]*ast.FlowCurve{}
+		}
+		fb.outcomeCurves[id] = m
+	}
 }
 
 // applyFlowCurves stamps each recorded @curve onto the flows leaving that
 // activity. Runs once, after the graph is built.
 //
-// A statement with several outgoing flows (a split) applies the same curve to
-// all of them; @anchor's per-branch form has no curve equivalent yet, and
-// silently curving only one branch would be worse than curving both.
+// A statement with several outgoing flows (a split) applies its flat @curve to
+// all of them. An IF's per-outcome curve, @curve(true: …, false: …), goes to
+// that outcome's flow alone, over the flat one (ako/mxcli#2592): a decision
+// whose true edge runs right and false edge down had its one curve stamped on
+// both, and the vertical false edge was drawn as an S-curve.
 func (fb *flowBuilder) applyFlowCurves() {
-	if len(fb.curveByOrigin) == 0 {
+	if len(fb.curveByOrigin) == 0 && len(fb.outcomeCurves) == 0 {
 		return
 	}
 	for _, f := range fb.flows {
-		c, ok := fb.curveByOrigin[f.OriginID]
-		if !ok || c == nil {
+		c := fb.curveByOrigin[f.OriginID]
+		if m := fb.outcomeCurves[f.OriginID]; m != nil && !f.IsErrorHandler {
+			switch flowBranchKey(f) {
+			case "'true'":
+				if oc, ok := m["true"]; ok {
+					c = oc
+				}
+			case "'false'":
+				if oc, ok := m["false"]; ok {
+					c = oc
+				}
+			}
+		}
+		if c == nil {
 			continue
 		}
 		if c.From != nil {

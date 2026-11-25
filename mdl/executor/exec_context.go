@@ -365,15 +365,24 @@ func (ctx *ExecContext) ensureCache() {
 
 // trackModifiedDomainModel records a domain model that was modified during
 // execution, so it can be reconciled at the end of the program.
-func (ctx *ExecContext) trackModifiedDomainModel(moduleID model.ID, moduleName string) {
-	if ctx.Backend == nil || !ctx.Backend.IsConnected() {
+func (ctx *ExecContext) trackModifiedDomainModel(module *model.Module) {
+	if ctx.Backend == nil || !ctx.Backend.IsConnected() || module == nil {
 		return
 	}
 	ctx.ensureCache()
 	if ctx.Cache.modifiedDomainModels == nil {
 		ctx.Cache.modifiedDomainModels = make(map[model.ID]string)
 	}
-	ctx.Cache.modifiedDomainModels[moduleID] = moduleName
+	ctx.Cache.modifiedDomainModels[module.ID] = module.Name
+	// Whether it is a Marketplace module, from the module the statement already
+	// read, so the end-of-run layout reminder need not read it again
+	// (ako/mxcli#2555).
+	if isMarketplaceModule(nil, module) {
+		if ctx.Cache.marketplaceModules == nil {
+			ctx.Cache.marketplaceModules = make(map[model.ID]bool)
+		}
+		ctx.Cache.marketplaceModules[module.ID] = true
+	}
 }
 
 // trackCreatedMicroflow registers a microflow created during this session.

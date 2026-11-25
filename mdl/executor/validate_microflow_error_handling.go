@@ -81,6 +81,10 @@ var continueUnsupportedOn = map[string]string{
 	// ako/mxcli#2534, measured on 10.24.11, 11.12.6 and 11.16.1, one project
 	// each: continue is CE6035; no clause and both custom handlers build.
 	"send rest request": "Send REST request activity",
+	// Measured on 11.16.1 (ako/TestApp): continue is CE6035 on each metrics
+	// activity; no clause and a custom handler with or without rollback build.
+	"increment counter": "Increment Counter / Counter activity",
+	"set gauge":         "Gauge activity",
 }
 
 // checkErrorHandlingContinueSupported reports `ON ERROR CONTINUE` on a statement
@@ -162,6 +166,10 @@ func continueUnsupportedStatement(stmt ast.MicroflowStatement) (keyword, activit
 		keyword = "show home page"
 	case *ast.SendRestRequestStmt:
 		keyword = "send rest request"
+	case *ast.IncrementCounterStmt:
+		keyword = "increment counter"
+	case *ast.SetGaugeStmt:
+		keyword = "set gauge"
 	case *ast.ExternalObjectStmt:
 		keyword = "send external object"
 		if s.Delete {

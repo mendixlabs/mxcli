@@ -96,6 +96,44 @@ func init() {
 	})
 
 	Register(SyntaxFeature{
+		Path:     "microflow.metrics",
+		Features: []string{"microflows/metrics_activities"},
+		Summary:  "INCREMENT COUNTER / SET GAUGE — the metrics activities (OpenTelemetry, Prometheus, … via Micrometer)",
+		Keywords: []string{
+			"metrics", "metric", "counter", "increment counter", "gauge", "set gauge",
+			"opentelemetry", "otel", "otlp", "prometheus", "micrometer", "telemetry",
+			"observability", "meter", "tags",
+		},
+		Syntax: "INCREMENT COUNTER <name> [( Tags: ( <key>: <value>, ... ) )] [ON ERROR ...];\n" +
+			"INCREMENT COUNTER <name> BY <value> [( Tags: (...) )] [ON ERROR ...];\n" +
+			"SET GAUGE <name> TO <value> [( Tags: (...) )] [ON ERROR ...];\n\n" +
+			"Microflow only, Mendix 9.5+. Studio Pro's Metrics Activities: without BY,\n" +
+			"Increment Counter (by one; Microflows$IncrementCounterMeterAction); with BY,\n" +
+			"Counter (Microflows$CounterMeterAction); SET GAUGE is Gauge\n" +
+			"(Microflows$GaugeMeterAction). The runtime reports them through the\n" +
+			"registries in the Metrics.Registries custom runtime setting\n" +
+			"(opentelemetry, prometheus, jmx, influx, statsd).\n\n" +
+			"The name, the value and every tag key and value are expressions, as Studio\n" +
+			"Pro stores them: a quoted literal or a constant (@Module.MetricName).\n" +
+			"Name, tag keys and tag values are String; a counter's BY is Integer/Long;\n" +
+			"a gauge's TO is Decimal (Integer accepted). Anything else is CE0117\n" +
+			"(`check --references` reports E009 first).\n\n" +
+			"A literal name starts with a letter, holds only letters, digits, dots and\n" +
+			"underscores, and does not start with 'mx' in any case (MDL-METRIC01;\n" +
+			"mxbuild CE7040/CE7048/CE7049). A counter only goes up: BY with a negative\n" +
+			"literal is MDL-METRIC02 (mxbuild accepts it; the runtime does not).\n" +
+			"ON ERROR CONTINUE is CE6035 on all three (MDL076); a custom handler works.",
+		Example: "mdl 1;\n" +
+			"create or modify microflow Shop.ACT_PlaceOrder ($Order: Shop.Order)\n" +
+			"begin\n" +
+			"  increment counter 'shop.orders.placed' (Tags: ('channel': $Order/Channel));\n" +
+			"  increment counter 'shop.orders.items' by $Order/ItemCount;\n" +
+			"  set gauge @Shop.OpenOrdersMetric to $Order/OpenOrderCount (Tags: ('region': 'eu'));\n" +
+			"end;",
+		SeeAlso: []string{"microflow.error-handling", "microflow.nanoflow"},
+	})
+
+	Register(SyntaxFeature{
 		Path:     "microflow.create",
 		Features: []string{"microflows/deep_link_url"},
 		Summary:  "Create a microflow with parameters, return type, and body",
@@ -973,6 +1011,7 @@ func init() {
 			"                                      -- leaves by; to = the side the flow ARRIVING at\n" +
 			"                                      -- this statement enters by (not its far end)\n" +
 			"@curve(from: (40, -90), to: (-40, 90))  -- the flow's bezier control vectors\n" +
+			"@curve(true: (from: (15, 0), to: (-30, 0)), false: (…))  -- on an IF: one outcome's edge\n" +
 			"@merge(x, y)                          -- the implicit merge that closes a split\n" +
 			"@merge(x, y, w, h)                    -- … and its box, when not the default 40x40\n" +
 			"@size(w, h)                           -- a LOOP's box, a `while true`'s loop-head merge,\n" +
@@ -1000,8 +1039,10 @@ func init() {
 			"outside it: @anchor(to:) on the handler's first statement is the side the\n" +
 			"error edge enters, @anchor(from:) and @curve shape the edge leaving a\n" +
 			"statement — for the last one, the edge that rejoins the main flow.\n\n" +
-			"@curve has no per-branch form: on a split it curves every outgoing edge, and\n" +
-			"@curve(true: …) is refused (MDL060). An @anchor parameter that is not a\n" +
+			"On an IF, the flat @curve curves both outcomes alike; @curve(true: (…),\n" +
+			"false: (…)) shapes each on its own, an outcome left out staying straight,\n" +
+			"and describe prints that form when the two differ. Only an IF takes it: on\n" +
+			"any other statement it is refused (MDL060). An @anchor parameter that is not a\n" +
 			"side mxcli knows is refused too (MDL092) rather than left on the default.\n\n" +
 			"An unrecognised @name is an error (MDL059): it would parse and do nothing,\n" +
 			"so a typo of @position would silently discard the layout. That covers\n" +
@@ -1022,7 +1063,17 @@ func init() {
 			"Mendix stores no waypoints — a flow's shape is two control vectors, each a\n" +
 			"pixel offset from its end of the line. (0, 0) at both ends is straight.\n" +
 			"@position on a split belongs to the SPLIT, so its end-if join has its own\n" +
-			"annotation. Container Size is still computed, not authorable.\n\n" +
+			"annotation.\n\n" +
+			"Inside a LOOP or WHILE body, @position is in the LOOP BOX's coordinates,\n" +
+			"from its top-left corner, not the canvas's: Mendix stores a body node that\n" +
+			"way, and describe prints it so. A box left without @size is sized to reach\n" +
+			"its body (the body's right and bottom edges plus 50px), so a body written in\n" +
+			"canvas coordinates under a loop at x = 1200 makes a box over 1200px wide\n" +
+			"that covers its neighbours (ako/mxcli#2564); check warns about such a body\n" +
+			"(MDL-LOOP01) and gives the shift. The first body activity sits\n" +
+			"at (210, height / 2). create or modify moves a body node to a changed\n" +
+			"@position and fits the box to the moved body, or to the @size it states;\n" +
+			"`mxcli layout flows` refits every box.\n\n" +
 			"WITHOUT @position the builder places everything. The main line runs left to\n" +
 			"right and wraps onto a new row past 2880px; the line joining two rows leaves\n" +
 			"the bottom of one and arrives on top of the next. A guard (if … return; end\n" +

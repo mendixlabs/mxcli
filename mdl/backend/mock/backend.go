@@ -345,6 +345,9 @@ type MockBackend struct {
 	// authoritative about a unit's translations. Falls back to UpdateRawUnitFunc
 	// when unset, because most tests do not care about the distinction.
 	UpdateRawUnitOwningTranslationsFunc func(unitID string, contents []byte) error
+	// UpdateRawUnitPatchFunc stubs the write of a unit patched in place.
+	// Falls back to UpdateRawUnitFunc when unset.
+	UpdateRawUnitPatchFunc func(unitID string, contents []byte) error
 
 	// UpdateRawUnitOwningStorageGUIDsFunc stubs the write path that deliberately
 	// transplants storage GUIDs (the marketplace module update). Separate from

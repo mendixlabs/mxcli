@@ -428,6 +428,12 @@ type ActivityAnnotations struct {
 	// they defaulted to "0;0" and any rewrite flattened a curve drawn in Studio
 	// Pro. (upstream #884)
 	Curve *FlowCurve
+	// TrueCurve and FalseCurve are an IF's per-outcome curves,
+	// @curve(true: (from: …, to: …), false: (…)): a decision has two outgoing
+	// flows, and one curve stamped on both bent a vertical false edge sideways
+	// (ako/mxcli#2592). An outcome left out is straight; the flat form above
+	// still curves every outgoing flow alike.
+	TrueCurve, FalseCurve *FlowCurve
 
 	// Merge positions the implicit merge node that closes a split — the end-if
 	// join, or an enum/inheritance split's rejoin: @merge(x, y).
@@ -1434,6 +1440,67 @@ func (s *SendEmailStmt) Expressions() []Expression {
 	add(s.Host, s.Port)
 	if s.Auth != nil {
 		add(s.Auth.Username, s.Auth.Password)
+	}
+	return out
+}
+
+// IncrementCounterStmt is a metrics counter activity, microflow only:
+// `increment counter <name> [by <value>] [( Tags: ( k: v, … ) )] [on error …]`.
+// Without By it is Studio Pro's Increment Counter (IncrementCounterMeterAction,
+// by one); with By it is Counter (CounterMeterAction). Name and By are
+// expressions, as stored.
+type IncrementCounterStmt struct {
+	Name          Expression
+	By            Expression // nil: increment by one
+	Tags          []MeterTag
+	ErrorHandling *ErrorHandlingClause
+	Annotations   *ActivityAnnotations
+}
+
+func (s *IncrementCounterStmt) isMicroflowStatement() {}
+
+// Expressions returns the statement's expressions, for variable-reference walks.
+func (s *IncrementCounterStmt) Expressions() []Expression {
+	return meterExpressions(s.Tags, s.Name, s.By)
+}
+
+// SetGaugeStmt is the Gauge metrics activity (GaugeMeterAction), microflow only:
+// `set gauge <name> to <value> [( Tags: ( k: v, … ) )] [on error …]`.
+type SetGaugeStmt struct {
+	Name          Expression
+	Value         Expression
+	Tags          []MeterTag
+	ErrorHandling *ErrorHandlingClause
+	Annotations   *ActivityAnnotations
+}
+
+func (s *SetGaugeStmt) isMicroflowStatement() {}
+
+// Expressions returns the statement's expressions, for variable-reference walks.
+func (s *SetGaugeStmt) Expressions() []Expression {
+	return meterExpressions(s.Tags, s.Name, s.Value)
+}
+
+// MeterTag is one metric tag (Microflows$MeterTagMapping); key and value are
+// both expressions.
+type MeterTag struct {
+	Key   Expression
+	Value Expression
+}
+
+func meterExpressions(tags []MeterTag, es ...Expression) []Expression {
+	var out []Expression
+	for _, e := range es {
+		if e != nil {
+			out = append(out, e)
+		}
+	}
+	for _, t := range tags {
+		for _, e := range []Expression{t.Key, t.Value} {
+			if e != nil {
+				out = append(out, e)
+			}
+		}
 	}
 	return out
 }

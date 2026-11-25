@@ -693,6 +693,11 @@ func styledDynamicText(w *ast.WidgetV3) bool {
 // its layout is the author's, not Atlas's default inline span. Report pages
 // that lay out label/value pairs with SCSS drew ~35 of these notes, none of
 // them about text that actually fused (ako/mxcli#943).
+// consecutiveDynamicTextRule is MDL-WIDGET15's id, named so a filter that
+// drops it on native pages (withoutWebOnlyNotesOnNativePages) does not raise
+// it a second time.
+const consecutiveDynamicTextRule = "MDL-WIDGET15"
+
 func validateConsecutiveDynamicText(siblings []*ast.WidgetV3, locationPrefix string) []linter.Violation {
 	var run []*ast.WidgetV3
 	for _, w := range siblings {
@@ -705,7 +710,7 @@ func validateConsecutiveDynamicText(siblings []*ast.WidgetV3, locationPrefix str
 		// only warns once.
 		if len(run) == 2 {
 			return []linter.Violation{{
-				RuleID:   "MDL-WIDGET15",
+				RuleID:   consecutiveDynamicTextRule,
 				Severity: linter.SeverityInfo,
 				Message: fmt.Sprintf(
 					"%s: adjacent inline dynamictext widgets — %s and %s — (RenderMode Text or Paragraph, both <span>) render with no separator, so their text concatenates. Merge them into one dynamictext with multiple content params, wrap each in its own container, give them a class or style that lays them out, or use a heading RenderMode (H1–H6, which is block-level). Note: Paragraph does NOT fix this — it also renders inline.",

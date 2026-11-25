@@ -134,6 +134,14 @@ var moduleDocKindsAfterDomainModel = []moduleDocKind{
 		l, err := ctx.Backend.ListBusinessEventServices()
 		return docs(l, err, func(x *model.BusinessEventService) moduleDoc { return moduleDoc{x.ID, x.ContainerID, x.Name} })
 	}},
+	// A change data capture service names entities and their members, so it
+	// follows the domain model like the other publishers.
+	{ast.DescribeChangeDataCaptureService, func(ctx *ExecContext) ([]moduleDoc, error) {
+		l, err := ctx.Backend.ListChangeDataCaptureServices()
+		return docs(l, err, func(x *model.ChangeDataCaptureService) moduleDoc {
+			return moduleDoc{x.ID, x.ContainerID, x.Name}
+		})
+	}},
 	{ast.DescribeDataTransformer, func(ctx *ExecContext) ([]moduleDoc, error) {
 		l, err := ctx.Backend.ListDataTransformers()
 		return docs(l, err, func(x *model.DataTransformer) moduleDoc { return moduleDoc{x.ID, x.ContainerID, x.Name} })

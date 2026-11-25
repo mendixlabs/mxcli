@@ -54,6 +54,12 @@ const (
 	RefKindByName      = "by_name"      // A constant's value (default or a configuration's) is a flow's qualified name: the flow is called by name
 	RefKindQueue       = "queue"        // A task queue runs a microflow or Java action a call places in it
 	RefKindEnqueue     = "enqueue"      // A microflow places a call in a task queue: the caller uses the queue (ako/mxcli#2503)
+	// A change data capture service publishes an entity's changes, and names
+	// the attributes and associations it publishes. The service is an EXIT from
+	// the model — nothing in the app calls it — so without these edges an
+	// entity tracked only by CDC read as unused, and dropping or renaming it
+	// silently ended or moved a Kafka topic (ako/mxcli#2384 A2).
+	RefKindExpose = "expose"
 )
 
 // RefKindsNotModuleUse are kinds whose edge does not mean the source's module
@@ -80,7 +86,7 @@ var RefKinds = []string{
 	RefKindValue, RefKindMapping, RefKindSplit, RefKindSnippetCall,
 	RefKindMappingCall, RefKindStructure, RefKindTool, RefKindModel,
 	RefKindKey, RefKindEndpoint, RefKindByName, RefKindQueue,
-	RefKindEnqueue,
+	RefKindEnqueue, RefKindExpose,
 }
 
 // Object types recorded in refs.SourceType and refs.TargetType — the catalog's
@@ -135,6 +141,8 @@ const (
 	RefObjectTaskQueue           = "TASK_QUEUE"
 	// A user role, named in an XPath by its token `[%UserRole_X%]` (ako/mxcli#2529).
 	RefObjectUserRole = "USER_ROLE"
+	// A change data capture service, the source of every `expose` edge.
+	RefObjectChangeDataCaptureService = "CHANGE_DATA_CAPTURE_SERVICE"
 )
 
 // RefSourceObjectTypes is every value that reaches refs.SourceType, and
@@ -161,6 +169,7 @@ var (
 		RefObjectPublishedODataService,
 		RefObjectConsumedODataService,
 		RefObjectBusinessEventService,
+		RefObjectChangeDataCaptureService,
 		RefObjectProjectSettings,
 		RefObjectImportMapping,
 		RefObjectExportMapping,

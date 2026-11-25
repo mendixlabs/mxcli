@@ -711,6 +711,10 @@ SEND: S E N D;
 // Send Email activity (Microflows$SendEmailAction, 11.13+). Its settings are
 // property-list keys (identifiers), so the verb is the only new word.
 EMAIL: E M A I L;
+// Metrics activities (Microflows$*MeterAction): `increment counter …`, `set gauge …`.
+INCREMENT: I N C R E M E N T;
+COUNTER: C O U N T E R;
+GAUGE: G A U G E;
 RECEIVE: R E C E I V E;
 DEPRECATED: D E P R E C A T E D;
 RESOURCE: R E S O U R C E;

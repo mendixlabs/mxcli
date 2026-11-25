@@ -13,9 +13,9 @@ description: "Provision a Mendix project in a repo that has none — interview, 
 | 23-43 | When to Use This Skill |
 | 44-134 | Step 0 — interview, and WAIT for the answers |
 | 135-273 | Provision |
-| 274-343 | If this is a solution (several apps in one repo) |
-| 344-403 | Then propose the model — do not build it yet |
-| 404-472 | After bootstrap — the inner loop |
+| 274-344 | If this is a solution (several apps in one repo) |
+| 345-404 | Then propose the model — do not build it yet |
+| 405-473 | After bootstrap — the inner loop |
 
 <!-- /skill-index -->
 # Bootstrap a Mendix App in an Empty Repo
@@ -279,9 +279,10 @@ with these deltas:
 - **Layout.** One subfolder per app, nothing at the repo root but `README.md`,
   `FINDINGS.md` and `.claude/`. Run `mxcli new <AppName> --version <version> --theme
   <theme>` once per app and leave each where it lands; do not move anything up.
-- **Ports.** Every app defaults to 8080/8090/6543 and they will collide. Give the
-  first app the defaults and the second `--app-port 8180 --admin-port 8190
-  --serve-port 6643`. Avoid 8081/8091/6544 — `mxcli test --local` uses those.
+- **Ports.** Every app defaults to 8080/8090 and they will collide. Give the
+  first app the defaults and the second `--app-port 8180 --admin-port 8190`. The
+  serve port needs no flag: unset, a run keeps 6543 when it can and takes a free
+  port when another run holds it. Avoid 8081/8091 — `mxcli test --local` uses those.
 - **Give each app its own hostname**, not just its own port. Cookies are keyed on
   host name and **ignore the port**, so two apps on `localhost:8080` and
   `localhost:8180` share one cookie jar: logging into one can silently replace the

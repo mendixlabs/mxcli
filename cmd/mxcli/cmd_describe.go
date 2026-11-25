@@ -64,6 +64,7 @@ Types:
   scheduledevent   Describe a scheduled event (also: "scheduled event")
   regularexpression  Describe a regular expression (also: "regular expression")
   businesseventservice  Describe a business event service (also: "business event service")
+  changedatacaptureservice  Describe a change data capture service (also: "change data capture service")
   databaseconnection    Describe a database connection (also: "database connection")
   agent            Describe an AI agent (also: "agent")
   aimodel          Describe an AI model (also: "ai model"; old: model)
@@ -140,8 +141,8 @@ Example:
 		mdlCmd, ok := describeMDLCommand(objectType, name)
 		if !ok {
 			fmt.Fprintf(os.Stderr, "Unknown type: %s\n", strings.Join(args[:len(args)-1], " "))
-			fmt.Fprintln(os.Stderr, "Valid types: module, entity, association, enumeration, constant, microflow, nanoflow, rule, workflow, page, snippet, layout, javaaction, javascriptaction, jsonstructure, importmapping, exportmapping, consumedrestservice, consumedodataservice, publishedodataservice, publishedrestservice, imagecollection, menu, taskqueue, scheduledevent, businesseventservice, databaseconnection, agent, aimodel, knowledgebase, consumedmcpservice, publishedmcpservice, datatransformer, modulerole, userrole, appsecurity, settings, demouser, navigation, systemoverview")
-			fmt.Fprintln(os.Stderr, "Multi-word types also accepted: json structure, import mapping, export mapping, consumed rest service, consumed odata service, published odata service, published rest service, task queue, app security, image collection, scheduled event, regular expression, business event service, ai model, knowledge base, consumed mcp service, published mcp service, data transformer, etc.")
+			fmt.Fprintln(os.Stderr, "Valid types: module, entity, association, enumeration, constant, microflow, nanoflow, rule, workflow, page, snippet, layout, javaaction, javascriptaction, jsonstructure, importmapping, exportmapping, consumedrestservice, consumedodataservice, publishedodataservice, publishedrestservice, imagecollection, menu, taskqueue, scheduledevent, businesseventservice, changedatacaptureservice, databaseconnection, agent, aimodel, knowledgebase, consumedmcpservice, publishedmcpservice, datatransformer, modulerole, userrole, appsecurity, settings, demouser, navigation, systemoverview")
+			fmt.Fprintln(os.Stderr, "Multi-word types also accepted: json structure, import mapping, export mapping, consumed rest service, consumed odata service, published odata service, published rest service, task queue, app security, image collection, scheduled event, regular expression, business event service, change data capture service, ai model, knowledge base, consumed mcp service, published mcp service, data transformer, etc.")
 			os.Exit(1)
 		}
 		all, _ := cmd.Flags().GetBool("all")
@@ -324,6 +325,8 @@ func describeMDLCommand(objectType, name string) (mdlCmd string, ok bool) {
 		return fmt.Sprintf("DESCRIBE REGULAR EXPRESSION %s", name), true
 	case "BUSINESSEVENTSERVICE", "BUSINESS EVENT SERVICE":
 		return fmt.Sprintf("DESCRIBE BUSINESS EVENT SERVICE %s", name), true
+	case "CHANGEDATACAPTURESERVICE", "CHANGE DATA CAPTURE SERVICE":
+		return fmt.Sprintf("DESCRIBE CHANGE DATA CAPTURE SERVICE %s", name), true
 	case "DATABASECONNECTION", "DATABASE CONNECTION":
 		return fmt.Sprintf("DESCRIBE DATABASE CONNECTION %s", name), true
 	case "EXTERNALENTITY", "EXTERNAL ENTITY":
@@ -395,22 +398,23 @@ var objectTypeToDescribe = map[string]string{
 	"CONSUMED_REST_SERVICE":   "consumedrestservice",
 	"TASK_QUEUE":              "taskqueue",
 	// Pre-#1395 ObjectType values, for a catalog cached by an older build.
-	"ODATA_CLIENT":           "consumedodataservice",
-	"ODATA_SERVICE":          "publishedodataservice",
-	"REST_CLIENT":            "consumedrestservice",
-	"QUEUE":                  "taskqueue",
-	"PUBLISHED_REST_SERVICE": "publishedrestservice",
-	"BUSINESS_EVENT_SERVICE": "businesseventservice",
-	"DATABASE_CONNECTION":    "databaseconnection",
-	"IMAGE_COLLECTION":       "imagecollection",
-	"MENU":                   "menu",
-	"DATA_TRANSFORMER":       "datatransformer",
-	"AGENT":                  "agent",
-	"AI_MODEL":               "aimodel",
-	"KNOWLEDGE_BASE":         "knowledgebase",
-	"CONSUMED_MCP_SERVICE":   "consumedmcpservice",
-	"PUBLISHED_MCP_SERVICE":  "publishedmcpservice",
-	"JAVASCRIPT_ACTION":      "javascriptaction",
+	"ODATA_CLIENT":                "consumedodataservice",
+	"ODATA_SERVICE":               "publishedodataservice",
+	"REST_CLIENT":                 "consumedrestservice",
+	"QUEUE":                       "taskqueue",
+	"PUBLISHED_REST_SERVICE":      "publishedrestservice",
+	"BUSINESS_EVENT_SERVICE":      "businesseventservice",
+	"CHANGE_DATA_CAPTURE_SERVICE": "changedatacaptureservice",
+	"DATABASE_CONNECTION":         "databaseconnection",
+	"IMAGE_COLLECTION":            "imagecollection",
+	"MENU":                        "menu",
+	"DATA_TRANSFORMER":            "datatransformer",
+	"AGENT":                       "agent",
+	"AI_MODEL":                    "aimodel",
+	"KNOWLEDGE_BASE":              "knowledgebase",
+	"CONSUMED_MCP_SERVICE":        "consumedmcpservice",
+	"PUBLISHED_MCP_SERVICE":       "publishedmcpservice",
+	"JAVASCRIPT_ACTION":           "javascriptaction",
 }
 
 // unitTypeToDescribe maps a top-level unit's BSON $Type to the `describe`

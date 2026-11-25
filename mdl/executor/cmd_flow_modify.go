@@ -897,6 +897,10 @@ type patchDiff struct {
 	ops     []*ast.AlterFlowOperation
 	targets []mfmutator.Candidate
 	moves   []flowMove
+	// declaredLoop is the declared loop whose body inLoopBody is diffing: what
+	// it states of its box decides how the box is fitted when a body node
+	// moves (ako/mxcli#2564).
+	declaredLoop ast.MicroflowStatement
 	// bodyPins are the points the declared loop bodies state their nodes at
 	// (pinBody).
 	bodyPins []bodyPin
@@ -1420,7 +1424,7 @@ func (pd *patchDiff) loopBody(declared, stored ast.MicroflowStatement) error {
 	if err := pd.movedNode(declared, stored); err != nil {
 		return err
 	}
-	return pd.inLoopBody(c, loop, stored, loopStatements(declared), loopStatements(stored))
+	return pd.inLoopBody(c, loop, declared, stored, loopStatements(declared), loopStatements(stored))
 }
 
 // loopShell is a copy of a loop or while statement without its body.
@@ -1479,11 +1483,11 @@ func casePair(ins, del []ast.MicroflowStatement) (int, int, bool) {
 // `replace body of` the loop. A stored body that is empty has no activity to
 // insert next to: the declared one is put in it by replace body, which loses
 // nothing there.
-func (pd *patchDiff) inLoopBody(lc mfmutator.Candidate, loop *microflows.LoopedActivity, at ast.MicroflowStatement,
+func (pd *patchDiff) inLoopBody(lc mfmutator.Candidate, loop *microflows.LoopedActivity, declaredLoop, at ast.MicroflowStatement,
 	declared, stored []ast.MicroflowStatement) error {
-	outer := pd.loc
-	pd.loc = outer.within(loop)
-	defer func() { pd.loc = outer }()
+	outer, outerLoop := pd.loc, pd.declaredLoop
+	pd.loc, pd.declaredLoop = outer.within(loop), declaredLoop
+	defer func() { pd.loc, pd.declaredLoop = outer, outerLoop }()
 	pd.pinBody(lc.ID, declared)
 	if len(stored) == 0 {
 		if len(declared) > 0 {
@@ -1505,10 +1509,13 @@ func (pd *patchDiff) inLoopBody(lc mfmutator.Candidate, loop *microflows.LoopedA
 			d, st := declared[pairs[p][0]], stored[pairs[p][1]]
 			if !declaredMatches(d, st) {
 				if sameExceptPositions(d, st) {
-					return bodyRefusal(lc, at, fmt.Sprintf("the %s in it is drawn elsewhere, and the splice moves no node "+
-						"inside a loop body", describeAt(st)))
-				}
-				if err := pd.bodyGap(lc, at, []ast.MicroflowStatement{d}, stored, pairs[p][1], pairs[p][1]+1); err != nil {
+					// Drawn elsewhere in the box (ako/mxcli#2564): moved, and
+					// the box fitted to the moved body.
+					if err := pd.moved(d, st); err != nil {
+						return err
+					}
+					pd.fitLoop(lc.ID, declaredLoop, at)
+				} else if err := pd.bodyGap(lc, at, []ast.MicroflowStatement{d}, stored, pairs[p][1], pairs[p][1]+1); err != nil {
 					return err
 				}
 			}
@@ -1541,7 +1548,7 @@ func (pd *patchDiff) bodyGap(lc mfmutator.Candidate, at ast.MicroflowStatement, 
 				return bodyRefusal(lc, at, fmt.Sprintf("the %s in it is drawn elsewhere or its connectors are redrawn, and "+
 					"the splice moves no node inside a loop body", describeAt(del[0])))
 			}
-			return pd.inLoopBody(c, inner, del[0], loopStatements(ins[0]), loopStatements(del[0]))
+			return pd.inLoopBody(c, inner, ins[0], del[0], loopStatements(ins[0]), loopStatements(del[0]))
 		}
 		if replaceableInPlace(ins[0], del[0]) {
 			// One activity changed: replaced in place, drawn where it is
@@ -1611,6 +1618,32 @@ func (pd *patchDiff) bodyGap(lc mfmutator.Candidate, at ast.MicroflowStatement, 
 		}
 		pd.add(ast.AlterFlowReplace, cands[0], body)
 		pd.ops[len(pd.ops)-1].ReplaceNotes = replaceNotes
+		// An activity replaced by one of its kind keeps its place in the body
+		// and is drawn where it was; one the script draws elsewhere is then
+		// moved there, and the box fitted (ako/mxcli#2564). Replaced by another
+		// kind, its fragment is drawn where the script states, and the move
+		// finds nothing left to move.
+		if len(ins) == 1 && len(del) == 1 && statementKind(ins[0]) == statementKind(del[0]) {
+			if da, sa := statementAnnotations(ins[0]), statementAnnotations(del[0]); da != nil && da.Position != nil &&
+				(sa == nil || sa.Position == nil || *sa.Position != *da.Position) {
+				pd.moves = append(pd.moves, flowMove{id: cands[0].ID, to: model.Point{X: da.Position.X, Y: da.Position.Y},
+					what: describeAt(del[0]), optional: true})
+				pd.fitLoop(lc.ID, pd.declaredLoop, at)
+			}
+		}
+		// An activity replaced by one of its kind keeps its place in the body
+		// and is drawn where it was; one the script draws elsewhere is then
+		// moved there, and the box fitted (ako/mxcli#2564). Replaced by another
+		// kind, its fragment is drawn where the script states, and the move
+		// finds nothing left to move.
+		if len(ins) == 1 && len(del) == 1 && statementKind(ins[0]) == statementKind(del[0]) {
+			if da, sa := statementAnnotations(ins[0]), statementAnnotations(del[0]); da != nil && da.Position != nil &&
+				(sa == nil || sa.Position == nil || *sa.Position != *da.Position) {
+				pd.moves = append(pd.moves, flowMove{id: cands[0].ID, to: model.Point{X: da.Position.X, Y: da.Position.Y},
+					what: describeAt(del[0]), optional: true})
+				pd.fitLoop(lc.ID, pd.declaredLoop, at)
+			}
+		}
 		rest, restStmts = cands[1:], del[1:]
 	}
 	for i, c := range rest {
@@ -2157,11 +2190,22 @@ func patchSummary(ops []*ast.AlterFlowOperation, edited map[*ast.AlterFlowOperat
 			drop++
 		}
 	}
+	// A loop box fitted to its moved body is reported as what it is, not as
+	// another node moved (ako/mxcli#2564).
+	var moved, fitted int
+	for _, mv := range moves {
+		if mv.fit != nil {
+			fitted++
+		} else {
+			moved++
+		}
+	}
 	var parts []string
 	for _, p := range []struct {
 		n    int
 		verb string
-	}{{ins, "inserted"}, {edit, "edited in place"}, {rep, "replaced with new element IDs"}, {drop, "dropped"}, {len(moves), "moved"}} {
+	}{{ins, "inserted"}, {edit, "edited in place"}, {rep, "replaced with new element IDs"}, {drop, "dropped"}, {moved, "moved"},
+		{fitted, "loop box fitted"}} {
 		if p.n > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", p.n, p.verb))
 		}
