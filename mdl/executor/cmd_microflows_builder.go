@@ -126,6 +126,9 @@ type flowBuilder struct {
 	// written on, applied to that activity's outgoing flows by applyFlowCurves
 	// once the graph is complete. (#884)
 	curveByOrigin map[model.ID]*ast.FlowCurve
+	// outcomeCurves holds an IF's per-outcome @curve(true: …, false: …), keyed
+	// by the split, then by "true"/"false" (ako/mxcli#2592).
+	outcomeCurves map[model.ID]map[string]*ast.FlowCurve
 	// startPosition is the StartEvent position read off the microflow being
 	// REPLACED, carried over so a hand-laid-out start survives the rebuild. The
 	// start has no MDL statement to annotate and DESCRIBE cannot emit it, so

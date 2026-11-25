@@ -1011,6 +1011,7 @@ func init() {
 			"                                      -- leaves by; to = the side the flow ARRIVING at\n" +
 			"                                      -- this statement enters by (not its far end)\n" +
 			"@curve(from: (40, -90), to: (-40, 90))  -- the flow's bezier control vectors\n" +
+			"@curve(true: (from: (15, 0), to: (-30, 0)), false: (…))  -- on an IF: one outcome's edge\n" +
 			"@merge(x, y)                          -- the implicit merge that closes a split\n" +
 			"@merge(x, y, w, h)                    -- … and its box, when not the default 40x40\n" +
 			"@size(w, h)                           -- a LOOP's box, a `while true`'s loop-head merge,\n" +
@@ -1038,8 +1039,10 @@ func init() {
 			"outside it: @anchor(to:) on the handler's first statement is the side the\n" +
 			"error edge enters, @anchor(from:) and @curve shape the edge leaving a\n" +
 			"statement — for the last one, the edge that rejoins the main flow.\n\n" +
-			"@curve has no per-branch form: on a split it curves every outgoing edge, and\n" +
-			"@curve(true: …) is refused (MDL060). An @anchor parameter that is not a\n" +
+			"On an IF, the flat @curve curves both outcomes alike; @curve(true: (…),\n" +
+			"false: (…)) shapes each on its own, an outcome left out staying straight,\n" +
+			"and describe prints that form when the two differ. Only an IF takes it: on\n" +
+			"any other statement it is refused (MDL060). An @anchor parameter that is not a\n" +
 			"side mxcli knows is refused too (MDL092) rather than left on the default.\n\n" +
 			"An unrecognised @name is an error (MDL059): it would parse and do nothing,\n" +
 			"so a typo of @position would silently discard the layout. That covers\n" +
