@@ -6,19 +6,20 @@ import (
 	"github.com/mendixlabs/mxcli/mdl/exprcheck/hints"
 )
 
-// checkBlankGuards reports the two blank checks around E015 that build and
-// mostly behave, so are info (ako/mxcli#2566):
+// checkBlankGuards reports E016 (info, ako/mxcli#2566): `$v != empty and
+// trim($v) != ”` has a dead `empty` half. trim(empty) is ” (measured,
+// mendixlabs/mxcli#580, and on 11.12.3), so trim($v) != ” is already false for
+// empty and decides the condition alone. Any function in neverEmptyStringFuncs
+// whose first argument is $v does the same, and so does the `or` chain with
+// `=`: `$v = empty or trim($v) = ”`. Only operands of one chain count, as for
+// E015, and only a variable or attribute path is judged as the guarded value.
 //
-//   - E016, `$v != empty and trim($v) != ”`: the `empty` half is dead.
-//     trim(empty) is ” (measured, mendixlabs/mxcli#580, and on 11.12.3), so
-//     trim($v) != ” is already false for empty and decides the condition
-//     alone. Any function in neverEmptyStringFuncs whose first argument is $v
-//     does the same.
-//   - E017, `$v != empty and $v != ”`: a value of only spaces passes as
-//     "has text". The blank check is trim($v) != ”.
-//
-// The same in an `or` chain with `=`: `$v = empty or trim($v) = ”`. Only
-// operands of one chain count, as for E015.
+// The issue's second shape, `$v != empty and $v != ”` (a value of only spaces
+// passes as text), is not reported: Studio Pro-authored Marketplace code is
+// full of it — five times in FeedbackModule alone, on base64 strings and ids
+// where spaces are not a concern — and nothing in the expression says which
+// value is user text. The round trip over that module (exprcheck_roundtrip_test)
+// holds every expression hint to zero there.
 func checkBlankGuards(expr RobustExpr, ctx Context) []Hint {
 	switch n := expr.(type) {
 	case *BinExpr:
@@ -63,9 +64,13 @@ func blankGuardHints(chain []RobustExpr, chainOp string, ctx Context) []Hint {
 		if guarded == nil {
 			continue
 		}
+		switch guarded.(type) {
+		case *VariableExpr, *AttributePathExpr:
+		default:
+			continue
+		}
 		key := exprKey(guarded)
 		var viaCall *CallExpr
-		bare := false
 		for _, other := range chain {
 			side, _ := comparedWith(other, cmpOp, func(e RobustExpr) bool {
 				lit, ok := e.(*StringLit)
@@ -74,16 +79,13 @@ func blankGuardHints(chain []RobustExpr, chainOp string, ctx Context) []Hint {
 			if side == nil {
 				continue
 			}
-			if exprKey(side) == key {
-				bare = true
-			} else if call, ok := side.(*CallExpr); ok && !call.Qualified && neverEmptyStringFuncs[call.Name] &&
+			if call, ok := side.(*CallExpr); ok && !call.Qualified && neverEmptyStringFuncs[call.Name] &&
 				len(call.Args) > 0 && exprKey(unwrapParens(call.Args[0])) == key {
 				viaCall = call
 			}
 		}
 		text := renderOperand(guarded)
-		switch {
-		case viaCall != nil:
+		if viaCall != nil {
 			out = append(out, Hint{
 				Code: "E016", Slug: "redundant-empty-guard", Severity: hints.SeverityInfo,
 				Where:    hintsLocation(ctx, guard.Pos()),
@@ -91,14 +93,6 @@ func blankGuardHints(chain []RobustExpr, chainOp string, ctx Context) []Hint {
 				Problem: viaCall.Name + "(empty) is '', so " + viaCall.Name + "(...) " + cmpOp +
 					" '' already decides it; the comparison with empty adds nothing.",
 				Fix: "Keep only " + callSpelling(viaCall, text) + " " + cmpOp + " ''",
-			})
-		case bare:
-			out = append(out, Hint{
-				Code: "E017", Slug: "blank-check-without-trim", Severity: hints.SeverityInfo,
-				Where:    hintsLocation(ctx, guard.Pos()),
-				YouWrote: text + " " + cmpOp + " empty, beside " + text + " " + cmpOp + " ''",
-				Problem:  "a value of only spaces is neither empty nor '', so it counts as text here.",
-				Fix:      "Check the trimmed value instead: trim(" + text + ") " + cmpOp + " ''",
 			})
 		}
 	}

@@ -29,9 +29,12 @@ func TestBlankGuards2566(t *testing.T) {
 		{"$V != empty and substring($V, 1) != ''", "E016"},
 		{"$V = empty or trim($V) = ''", "E016"},
 		{"$Flag and $V != empty and trim($V) != ''", "E016"},
-		{"$Sale/Code != empty and $Sale/Code != ''", "E017"},
-		{"$V != '' and $V != empty", "E017"},
-		{"$V = empty or $V = ''", "E017"},
+		// Not reported (see above), as FeedbackModule has them.
+		{"$Sale/Code != empty and $Sale/Code != ''", ""},
+		{"$V != '' and $V != empty", ""},
+		{"$V = empty or $V = ''", ""},
+		// The guarded value is already a call: E015's territory, not this.
+		{"trim($Feedback/Subject) != empty and trim($Feedback/Subject) != ''", ""},
 
 		// Controls.
 		{"trim($Sale/Code) != ''", ""},
