@@ -4,7 +4,7 @@
 
 ```sql
 CREATE [ OR MODIFY ] AGENT module.Name (
-    UsageType: { Task | Conversational },
+    UsageType: { Task | Chat },
     model: module.ModelName,
     SelectedModel: 'model id',
     SystemPrompt: 'prompt' | $$ multi-line prompt $$,
@@ -46,8 +46,10 @@ At startup Agent Editor copies each agent into Agent Commons entities with fixed
 
 | Value | Description |
 |-------|-------------|
-| `Task` | Single-turn task completion |
-| `Conversational` | Multi-turn conversational agent |
+| `Task` | Single-turn task completion (Agent Commons' `Single_Call`) |
+| `Chat` | Multi-turn conversational agent (Agent Commons' `Conversational`) |
+
+Agent Editor's import reads the value case-insensitively and accepts only these two: `Conversational`, the Agent Commons name, is refused ("Usage Type is not valid for the Agent"), and so is an agent with none ("Usage Type is missing for the Agent"). The build does not read it, so `mxcli check` warns on either (MDL-AGENT05).
 
 ### Prompts
 
@@ -82,7 +84,7 @@ If `OR MODIFY` is specified and the agent already exists, its properties and bod
 :   The qualified name of the agent document.
 
 `UsageType`
-:   Whether the agent is `Task` (single-turn) or `Conversational` (multi-turn).
+:   Whether the agent is `Task` (single-turn) or `Chat` (multi-turn). Any other value, or none, fails Agent Editor's import at startup (MDL-AGENT05).
 
 `model: module.ModelName`
 :   Qualified reference to the model document the agent uses.
@@ -211,7 +213,7 @@ Provide specific, actionable feedback.$$,
 
 ```sql
 CREATE AGENT MyModule."ResearchAssistant" (
-    UsageType: Conversational,
+    UsageType: Chat,
     description: 'Research assistant with web search and documentation',
     model: MyModule.GPT4Model,
     SelectedModel: 'eu.anthropic.claude-sonnet-5',

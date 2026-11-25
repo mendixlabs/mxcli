@@ -387,6 +387,7 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 	// been seen to hold. mxbuild never reads it, so a typo builds and only
 	// shows in Studio Pro (ako/mxcli#2023).
 	violations = append(violations, ValidateAgentProviders(prog)...)
+	violations = append(violations, ValidateAgentUsageTypes(prog)...)
 	violations = append(violations, ValidateAgentSelectedModel(prog)...)
 	violations = append(violations, ValidateConsumedMCPEndpoint(prog)...)
 	// An agent value longer than the Agent Commons attribute it is copied
