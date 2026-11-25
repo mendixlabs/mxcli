@@ -520,6 +520,10 @@ declare $HasText boolean = trim($Value) != empty;
 declare $HasText boolean = trim($Value) != '';
 ```
 
+Guarding it with `$Value != empty and …` adds nothing (`check` notes E016). And
+`$Value != empty and $Value != ''` without `trim` lets `'   '` through as text —
+`check` cannot tell whether that matters for the value, so it says nothing.
+
 ### 18. Concatenating `empty` Gives the Text `null`
 
 `+` turns an `empty` String operand into the four characters `null`, not `''`:
