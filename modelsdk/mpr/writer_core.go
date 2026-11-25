@@ -942,6 +942,14 @@ func (w *Writer) UpdateRawUnitPatch(unitID string, contents []byte) error {
 	return w.updateUnit(unitID, contents, canon.ContentsOwnElementIDs(), canon.ContentsOwnTranslations())
 }
 
+// UpdateRawUnitOwningLayout is UpdateRawUnit for `mxcli layout flows`, whose
+// patch IS the geometry: a loop's Size must be replaced by the value the layout
+// computed rather than carried back at its larger stored value, so a stale box
+// heals instead of surviving every run (mendixlabs/mxcli#1935).
+func (w *Writer) UpdateRawUnitOwningLayout(unitID string, contents []byte) error {
+	return w.updateUnit(unitID, contents, canon.ContentsOwnLayout())
+}
+
 // UpdateRawUnitOwningStorageGUIDs is UpdateRawUnit for a write that deliberately
 // transplants storage GUIDs onto elements that keep their $ID — the marketplace
 // module update, which carries a module's existing GUIDs onto the documents

@@ -39,16 +39,23 @@ import (
 //
 // and, from a drop + create of a flow (ako/mxcli#2179):
 //
-//   - A loop's Size. MDL has no way to state it, so a rebuild wrote the size
-//     mxcli computes and a loop drawn larger in Studio Pro overlapped its
-//     neighbours (carryLoopSize).
+//   - A loop's Size, unless the caller says it owns the layout: a rebuild wrote
+//     the size mxcli computes and a loop drawn larger in Studio Pro overlapped
+//     its neighbours (carryLoopSize). `layout flows` IS authoritative here — it
+//     recomputes the box — so it passes ContentsOwnLayout and a stale size is
+//     replaced instead of being carried at its larger stored value (mendixlabs/
+//     mxcli#1935).
 //
 // Only elements whose $ID the stored document already has take anything, which
 // after TransplantIDs means the elements that correspond; a real change — other
 // expression text, a label with text — is not touched and still lands.
-func CarryUnexpressed(contents, stored []byte) []byte {
+func CarryUnexpressed(contents, stored []byte, opts ...Option) []byte {
 	if len(contents) == 0 || len(stored) == 0 {
 		return contents
+	}
+	var o reconcileOpts
+	for _, fn := range opts {
+		fn(&o)
 	}
 	var storedDoc, newDoc bson.D
 	if bson.Unmarshal(stored, &storedDoc) != nil || bson.Unmarshal(contents, &newDoc) != nil {
@@ -75,7 +82,7 @@ func CarryUnexpressed(contents, stored []byte) []byte {
 		if carryUnstatedFlowProperties(d, old, used) {
 			changed = true
 		}
-		if carryLoopSize(d, old) {
+		if !o.contentsOwnLayout && carryLoopSize(d, old) {
 			changed = true
 		}
 		for i, e := range d {

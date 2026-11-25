@@ -63,3 +63,19 @@ func TestUnexpressed_LoopSizeOnlyForLoops(t *testing.T) {
 		t.Errorf("an activity's size was carried: %v", got)
 	}
 }
+
+// mendixlabs/mxcli#1935: `layout flows` recomputes the box, so it says it owns
+// the layout and the size it writes replaces a larger stale one. The default
+// above still carries a hand-drawn box; only the authoritative caller opts out.
+func TestUnexpressed_LoopSizeReplacingStaleBoxWhenLayoutOwnsIt(t *testing.T) {
+	w, _ := bson.Marshal(bson.D{{Key: "Objects", Value: bson.A{int32(3), loopDoc("320;160")}}})
+	s, _ := bson.Marshal(bson.D{{Key: "Objects", Value: bson.A{int32(3), loopDoc("710;480")}}})
+	var out bson.D
+	if err := bson.Unmarshal(CarryUnexpressed(w, s, ContentsOwnLayout()), &out); err != nil {
+		t.Fatal(err)
+	}
+	loop := docLookup(out, "Objects").(bson.A)[1].(bson.D)
+	if got := docLookup(loop, "Size"); got != "320;160" {
+		t.Errorf("a recomputed loop box was carried back as %v, want 320;160", got)
+	}
+}

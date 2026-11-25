@@ -55,6 +55,13 @@ func (b *Backend) UpdateRawUnitOwningStorageGUIDs(unitID string, contents []byte
 	return b.writer.UpdateRawUnitOwningStorageGUIDs(unitID, contents)
 }
 
+// UpdateRawUnitOwningLayout writes a unit whose geometry is authoritative:
+// `mxcli layout flows` recomputes a loop's box, so a stale stored Size must be
+// replaced rather than carried back at its larger value (mendixlabs/mxcli#1935).
+func (b *Backend) UpdateRawUnitOwningLayout(unitID string, contents []byte) error {
+	return b.writer.UpdateRawUnitOwningLayout(unitID, contents)
+}
+
 // ListRawUnitsByType returns every unit whose $Type has the given prefix, with
 // resolved raw contents — the catalog uses this for document types that have no
 // dedicated typed reader (e.g. JavaScript actions, data transformers). Delegates

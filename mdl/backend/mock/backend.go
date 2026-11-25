@@ -348,6 +348,11 @@ type MockBackend struct {
 	// moves a GUID without meaning to is the #1119 data-loss defect.
 	UpdateRawUnitOwningStorageGUIDsFunc func(unitID string, contents []byte) error
 
+	// UpdateRawUnitOwningLayoutFunc stubs the write path that recomputes a
+	// loop's box (layout flows). Falls back to UpdateRawUnitFunc when unset,
+	// because most tests do not care about the carry rule.
+	UpdateRawUnitOwningLayoutFunc func(unitID string, contents []byte) error
+
 	// MetadataBackend
 	ListAllUnitIDsFunc   func() ([]string, error)
 	ListUnitsFunc        func() ([]*types.UnitInfo, error)

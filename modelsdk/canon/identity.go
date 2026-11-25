@@ -40,6 +40,7 @@ type reconcileOpts struct {
 	contentsOwnTranslations bool
 	contentsOwnStorageGUIDs bool
 	contentsOwnElementIDs   bool
+	contentsOwnLayout       bool
 }
 
 // ContentsOwnElementIDs tells Reconcile that the write is a PATCH of the stored
@@ -90,6 +91,21 @@ func ContentsOwnTranslations() Option {
 // production data.
 func ContentsOwnStorageGUIDs() Option {
 	return func(o *reconcileOpts) { o.contentsOwnStorageGUIDs = true }
+}
+
+// ContentsOwnLayout tells Reconcile that the write is AUTHORITATIVE about the
+// geometry MDL cannot otherwise express, so a loop's stored Size must not be
+// carried back over the one this write computed.
+//
+// The default carry keeps a loop box a person drew larger than the engine's fit
+// (ako/mxcli#2179): a rebuild from MDL could not state a size, so the larger
+// stored value was kept to avoid shrinking a hand-drawn box. `layout flows` is
+// the opposite case — recomputing the box IS the command — and without this a
+// stale box (one written by the pre-#1935 builder from absolute canvas
+// coordinates) survived every run while the command reported `moved`
+// (mendixlabs/mxcli#1935).
+func ContentsOwnLayout() Option {
+	return func(o *reconcileOpts) { o.contentsOwnLayout = true }
 }
 
 // OwnsStorageGUIDs reports whether these options carry the storage-GUID
@@ -167,7 +183,7 @@ func Reconcile(contents, stored []byte, opts ...Option) (out []byte, unchanged b
 	// The rest of what MDL cannot state: an expression's surrounding whitespace
 	// and an empty screen-reader label Studio Pro stores as a ClientTemplate
 	// (ako/mxcli#1897).
-	contents = CarryUnexpressed(contents, stored)
+	contents = CarryUnexpressed(contents, stored, opts...)
 
 	if alwaysWrite() {
 		return contents, false
@@ -235,7 +251,7 @@ func reconcileInPasses(contents, stored []byte, opts ...Option) (out []byte, unc
 	// The rest of what MDL cannot state: an expression's surrounding whitespace
 	// and an empty screen-reader label Studio Pro stores as a ClientTemplate
 	// (ako/mxcli#1897).
-	contents = CarryUnexpressed(contents, stored)
+	contents = CarryUnexpressed(contents, stored, opts...)
 
 	if alwaysWrite() {
 		return contents, false

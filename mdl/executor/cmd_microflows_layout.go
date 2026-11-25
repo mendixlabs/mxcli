@@ -157,7 +157,10 @@ func layoutFlow(ctx *ExecContext, kind string, name ast.QualifiedName, dryRun bo
 	if err != nil {
 		return res, mdlerrors.NewBackend("encode "+kind+" "+name.String(), err)
 	}
-	if err := ctx.Backend.UpdateRawUnit(string(stored.id), out); err != nil {
+	// OwningLayout, not UpdateRawUnit: the recomputed loop box is the point of
+	// the command, so a stale stored Size must be replaced rather than carried
+	// back at its larger value (#1935).
+	if err := ctx.Backend.UpdateRawUnitOwningLayout(string(stored.id), out); err != nil {
 		return res, mdlerrors.NewBackend("write "+kind+" "+name.String(), err)
 	}
 	return res, nil
@@ -258,9 +261,13 @@ func rebuildFlowLayout(ctx *ExecContext, kind string, name ast.QualifiedName) (*
 // CREATE NANOFLOW statement, so the builder places everything itself.
 //
 // What goes is exactly what DESCRIBE emits to pin geometry: @position (on
-// activities, parameters and notes), @anchor in all its forms, @curve, @merge and
-// @start. A note keeps its size, which is its content's box rather than its
-// placement; everything else in the statement is left alone.
+// activities, parameters and notes), @anchor in all its forms, @curve, @merge,
+// @start and a loop's @size. A note keeps its size, which is its content's box
+// rather than its placement; everything else in the statement is left alone.
+//
+// @size has to go with the rest: DESCRIBE emits it from the STORED loop box, so
+// keeping it would rebuild that box verbatim and leave a stale size (#1935) — the
+// command would report a move while writing the same wrong Size back.
 //
 // Reflective because statements nest bodies in a dozen places — branches, loops,
 // splits' cases, error handlers — and a hand-written walk that missed one would
@@ -293,6 +300,7 @@ func clearLayoutAnnotations(v reflect.Value, seen map[uintptr]bool) {
 			ann.Curve = nil
 			ann.Merge = nil
 			ann.Start = nil
+			ann.Size = nil
 		}
 		clearLayoutAnnotations(v.Elem(), seen)
 	case reflect.Interface:

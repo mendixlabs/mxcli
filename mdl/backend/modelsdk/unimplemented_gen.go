@@ -1309,6 +1309,10 @@ func (unimplemented) UpdateRawUnit(_ string, _ []uint8) error {
 	return errUnimplemented("UpdateRawUnit")
 }
 
+func (unimplemented) UpdateRawUnitOwningLayout(_ string, _ []uint8) error {
+	return errUnimplemented("UpdateRawUnitOwningLayout")
+}
+
 func (unimplemented) UpdateRawUnitOwningStorageGUIDs(_ string, _ []uint8) error {
 	return errUnimplemented("UpdateRawUnitOwningStorageGUIDs")
 }

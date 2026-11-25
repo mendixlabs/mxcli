@@ -69,6 +69,17 @@ type RawUnitBackend interface {
 	// documents replacing it, which is what stops an update destroying that
 	// module's data. Only a caller doing that may use this.
 	UpdateRawUnitOwningStorageGUIDs(unitID string, contents []byte) error
+
+	// UpdateRawUnitOwningLayout is UpdateRawUnit for a write that is
+	// AUTHORITATIVE about the layout MDL cannot otherwise express — today a
+	// loop's box Size.
+	//
+	// The ordinary path keeps a loop box drawn larger than the engine's fit, so
+	// a rebuild never shrinks a hand-drawn one (ako/mxcli#2179). `mxcli layout
+	// flows` recomputes the box as its whole purpose, so it must replace a stale
+	// stored size instead of carrying it back (mendixlabs/mxcli#1935). Only that
+	// caller may use this.
+	UpdateRawUnitOwningLayout(unitID string, contents []byte) error
 }
 
 // MetadataBackend provides project-level metadata and introspection.

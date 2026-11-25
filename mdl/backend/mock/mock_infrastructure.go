@@ -105,6 +105,16 @@ func (m *MockBackend) UpdateRawUnitOwningStorageGUIDs(unitID string, contents []
 	return fmt.Errorf("MockBackend.UpdateRawUnitOwningStorageGUIDs not configured")
 }
 
+func (m *MockBackend) UpdateRawUnitOwningLayout(unitID string, contents []byte) error {
+	if m.UpdateRawUnitOwningLayoutFunc != nil {
+		return m.UpdateRawUnitOwningLayoutFunc(unitID, contents)
+	}
+	if m.UpdateRawUnitFunc != nil {
+		return m.UpdateRawUnitFunc(unitID, contents)
+	}
+	return fmt.Errorf("MockBackend.UpdateRawUnitOwningLayout not configured")
+}
+
 // ---------------------------------------------------------------------------
 // MetadataBackend
 // ---------------------------------------------------------------------------
