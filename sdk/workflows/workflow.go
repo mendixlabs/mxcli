@@ -145,6 +145,11 @@ func (a *BaseWorkflowActivity) SetAnnotation(s string) {
 	a.Annotation = s
 }
 
+// GetAnnotation returns the note attached to the activity, "" for none.
+func (a *BaseWorkflowActivity) GetAnnotation() string {
+	return a.Annotation
+}
+
 func (a *BaseWorkflowActivity) GetCaption() string {
 	return a.Caption
 }
