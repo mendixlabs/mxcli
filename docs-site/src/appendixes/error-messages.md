@@ -421,6 +421,23 @@ mxbuild does not read agent documents, so the build is green.
 **Solution:** Shorten the value. Lengths are counted in characters, not bytes. It is a warning,
 like MDL-AGENT01..03, because the lengths belong to the installed AgentCommons version.
 
+### MDL-AGENT05: An agent UsageType Agent Editor does not import
+
+```
+agent Helpdesk.HelpdeskAgent: UsageType "Conversational" is not one Agent Editor imports
+(Task or Chat): at startup the import refuses the agent [MDL-AGENT05]
+```
+
+**Cause:** At startup `AgentEditorCommons.AgentFromModel_Validate` reads the usage type through
+`UsageType_StringToENUM`, which accepts `task` and `chat` in any case and nothing else (Agent
+Editor 2.7.0). Any other value fails with "Usage Type is not valid for the Agent", and an agent
+with none with "Usage Type is missing for the Agent"; the agent is not imported. mxbuild does not
+read agent documents, so the build is green.
+
+**Solution:** Write `UsageType: Task` or `UsageType: Chat`. `Conversational` is Agent Commons'
+name for Chat and is refused. It is a warning, like MDL-AGENT01, because a newer Agent Editor
+may add usage types.
+
 ### MDL-BE01..BE07: A consumed business event service that cannot work
 
 ```
