@@ -654,7 +654,7 @@ func execGrantEntityAccess(ctx *ExecContext, s *ast.GrantEntityAccessStmt) error
 		reconciled = fmt.Sprintf("Reconciled %d access rule(s) in module %s\n", count, module.Name)
 	}
 
-	ctx.trackModifiedDomainModel(module.ID, module.Name)
+	ctx.trackModifiedDomainModel(module)
 	text := reconciled + fmt.Sprintf("Granted access on %s.%s to %s\n", s.Entity.Module, s.Entity.Name, strings.Join(roleNames, ", "))
 	if !ctx.Quiet {
 		text += formatAccessRuleResult(ctx, s.Entity.Module, s.Entity.Name, roleNames, xpathConstraint, false)
@@ -857,7 +857,7 @@ func execRevokeEntityAccess(ctx *ExecContext, s *ast.RevokeEntityAccessStmt) err
 				unchanged: fmt.Sprintf("entity access: %s.%s (%s)", s.Entity.Module, s.Entity.Name, strings.Join(roleNames, ", "))})
 		}
 	}
-	ctx.trackModifiedDomainModel(module.ID, module.Name)
+	ctx.trackModifiedDomainModel(module)
 	return nil
 }
 
