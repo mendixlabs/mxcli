@@ -222,6 +222,18 @@ CE4899 "Empty caption" [MDL-I18N01]
 
 **Solution:** Use the suggested spelling, or the right token for the context: a length or role token only in an XPath, the flow's variable instead of `[%CurrentObject%]`. A role token's role name is checked separately, against the project's user roles (CE1613).
 
+### MDL-LOOP01: A loop body in canvas coordinates
+
+```
+⚠ the body of `loop $Item in $Items` looks positioned in canvas coordinates: its box would be 1310x380
+  with 1140px empty before the body, and the box is centred on the loop, so it covers the activities around it [MDL-LOOP01]
+  → … Subtract (990, 220) from every body @position: @position(1200, 300) becomes @position(210, 80).
+```
+
+**Cause:** Inside a `loop` or `while` body, `@position` is measured from the loop box's top-left corner, not from the canvas. Mendix stores body nodes that way, and `describe` prints them that way. Without `@size`, mxcli sizes the box to reach the body: from the box's own edge to the body's right and bottom edges, plus 50px. A body written in canvas coordinates therefore makes a box that grows with the loop's position on the canvas. Measured on Mendix 11.12: a loop at x = 1200 with its body at x = 1200 stored a `1310;380` box. The box is centred on the loop, so it covers its neighbours, and lint later reports MPR008 or MPR011 there. The warning fires when more than half of the box, and more than 300px, would lie empty to the left of or above the body.
+
+**Solution:** Shift the body by the amount the suggestion gives, so its first node sits near (210, 80). Alternatively, leave the body's `@position` out and let mxcli place it, or state the box with `@size(w, h)`. A loop that already has a box that is too large is repaired by `mxcli layout flows`.
+
 ### MDL-DUPDEF: Element defined twice in one script
 
 ```

@@ -1955,6 +1955,7 @@ func (v *microflowValidator) checkCaseAnchors(s ast.MicroflowStatement, ann *ast
 // An error rather than a warning: the statement's meaning silently differs from
 // what was written, and warnings on a generated script are not read. (#884)
 func (v *microflowValidator) checkUnknownAnnotations(s ast.MicroflowStatement) {
+	v.checkLoopBodyCoordinates(s) // MDL-LOOP01, ako/mxcli#2583
 	ann := ast.StatementAnnotations(s)
 	if ann == nil {
 		return

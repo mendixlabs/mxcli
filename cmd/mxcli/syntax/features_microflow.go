@@ -1028,7 +1028,8 @@ func init() {
 			"way, and describe prints it so. A box left without @size is sized to reach\n" +
 			"its body (the body's right and bottom edges plus 50px), so a body written in\n" +
 			"canvas coordinates under a loop at x = 1200 makes a box over 1200px wide\n" +
-			"that covers its neighbours (ako/mxcli#2564). The first body activity sits\n" +
+			"that covers its neighbours (ako/mxcli#2564); check warns about such a body\n" +
+			"(MDL-LOOP01) and gives the shift. The first body activity sits\n" +
 			"at (210, height / 2). create or modify moves a body node to a changed\n" +
 			"@position and fits the box to the moved body, or to the @size it states;\n" +
 			"`mxcli layout flows` refits every box.\n\n" +
