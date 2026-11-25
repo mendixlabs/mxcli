@@ -113,6 +113,20 @@ func CarryTranslations(contents, stored []byte) []byte {
 		return contents
 	}
 
+	// A text holding a stored text's $ID is that text — an edit in place (ALTER
+	// PAGE) leaves an untouched widget's texts exactly as stored — so it is
+	// never paired by source: that pairing would hand it the languages of some
+	// other text with the same English. An untouched combobox with no Dutch
+	// screen-reader texts took the Dutch of the comboboxes beside it
+	// (ako/mxcli#2587). carryTranslationsByID, after the transplant, is the
+	// carry for a text paired by $ID.
+	storedTextIDs := map[string]bool{}
+	for _, t := range textsByPath(storedDoc) {
+		if id := textID(t); id != "" {
+			storedTextIDs[id] = true
+		}
+	}
+
 	// Every element id already in the rebuilt document, so a carried element that
 	// would collide with one gets a fresh id instead. See reuseSafeID.
 	used := elementIDs(newDoc)
@@ -135,7 +149,7 @@ func CarryTranslations(contents, stored []byte) []byte {
 			if dropUnmatchedEmpty(text, want) {
 				changed = true
 			}
-		} else {
+		} else if !storedTextIDs[textID(text)] {
 			want, order = matchBySource(textTranslations(text), sets)
 		}
 		if len(want) == 0 {
@@ -153,6 +167,14 @@ func CarryTranslations(contents, stored []byte) []byte {
 		return contents
 	}
 	return out
+}
+
+// textID is a text's $ID as a map key, or "" when it has none.
+func textID(text bson.D) string {
+	if id, ok := docLookup(text, "$ID").(bson.Binary); ok {
+		return string(id.Data)
+	}
+	return ""
 }
 
 // textsByPath addresses every Texts$Text in a document by its containment path.
