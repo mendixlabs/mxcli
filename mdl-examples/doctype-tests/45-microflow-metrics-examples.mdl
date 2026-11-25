@@ -17,7 +17,7 @@ mdl 1;
 
 create module MetricsDemo;
 
-create constant MetricsDemo.OpenOrdersMetric type String default 'metricsdemo.orders.open';
+create constant MetricsDemo.OpenOrdersMetric ( Type: String, DefaultValue: 'metricsdemo.orders.open' );
 
 create persistent entity MetricsDemo.Order (
   Channel: String(50),
