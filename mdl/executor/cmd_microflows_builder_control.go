@@ -387,6 +387,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 		if !elseReturns && needMerge {
 			if lastElseID != "" {
 				flow := newUpwardFlow(lastElseID, mergeID)
+				flow.DestinationConnectionIndex = fb.mergeEntrySide(lastElseID, mergeID)
 				originAnchor := prevElseAnchor
 				destAnchor := (*ast.FlowAnchors)(nil)
 				if pendingElseCase != "" || pendingElseAnchor != nil {
@@ -546,6 +547,7 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 		if !thenReturns && needMerge {
 			if lastThenID != "" {
 				flow := newUpwardFlow(lastThenID, mergeID)
+				flow.DestinationConnectionIndex = fb.mergeEntrySide(lastThenID, mergeID)
 				originAnchor := prevThenAnchor
 				destAnchor := (*ast.FlowAnchors)(nil)
 				if pendingThenCase != "" || pendingThenAnchor != nil {
@@ -638,6 +640,14 @@ func (fb *flowBuilder) addIfStatement(s *ast.IfStmt) model.ID {
 	}
 
 	return splitID
+}
+
+// mergeEntrySide is the side of the closing merge a branch's last element
+// enters, from where the two stand: the bottom for a branch in the lane below,
+// the left for one on the merge's own line (ako/mxcli#2593). The merge has no
+// statement, so DESCRIBE writes no `to:` for it and the geometry is all there is.
+func (fb *flowBuilder) mergeEntrySide(lastID, mergeID model.ID) int {
+	return mergeSideFor(fb.objectPosition(lastID), fb.objectPosition(mergeID))
 }
 
 // mergeExitFlowAnchor is the origin anchor an if's or a case's own
