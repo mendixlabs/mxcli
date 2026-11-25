@@ -3,6 +3,7 @@
 package executor
 
 import (
+	"github.com/mendixlabs/mxcli/modelsdk/meta"
 	"strings"
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
@@ -484,6 +485,17 @@ func (pb *pageBuilder) resolveMicroflow(qualifiedName string) (model.ID, error) 
 	}
 	moduleName := parts[0]
 	mfName := strings.Join(parts[1:], ".")
+
+	// A System microflow ships with the platform and is not stored in the
+	// project; the action names it and carries no ID. Studio Pro's "Show
+	// home page" on-click is a call of System.ShowHomePage, which describe
+	// prints and check accepts (#2247), so exec refusing it broke the round
+	// trip (ako/mxcli#2578).
+	for _, qn := range meta.SystemMicroflows {
+		if strings.EqualFold(qn, qualifiedName) {
+			return "", nil
+		}
+	}
 
 	// First, check if the microflow was created during this session
 	// (not yet visible via reader)
