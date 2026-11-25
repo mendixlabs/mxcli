@@ -795,6 +795,7 @@ keyword
     | SOURCE_KW | TIMEOUT | VERSION | WEB | PROGRESSIVE | XML
     | FILE_KW | LINK | DYNAMIC
     | EMAIL
+    | INCREMENT | COUNTER | GAUGE
 
     // HTTP methods
     | GET | POST | PUT | PATCH

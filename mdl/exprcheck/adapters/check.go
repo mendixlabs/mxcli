@@ -182,6 +182,10 @@ func (c *CheckAdapter) walkBodyWithScope(body []ast.MicroflowStatement, mf strin
 			}
 		case *ast.SendEmailStmt:
 			c.checkSendEmail(n, mf, r)
+		case *ast.IncrementCounterStmt:
+			c.checkMeter(n.Name, n.By, "MeterStmt.CounterValue", n.Tags, mf, r)
+		case *ast.SetGaugeStmt:
+			c.checkMeter(n.Name, n.Value, "MeterStmt.GaugeValue", n.Tags, mf, r)
 		case *ast.RestCallStmt:
 			// A binary body sends the bytes of a Binary expression: Studio Pro
 			// stores a FileDocument's Contents there. The object itself
@@ -338,6 +342,25 @@ func (c *CheckAdapter) checkSendEmail(n *ast.SendEmailStmt, mf string, r *Result
 	if n.Auth != nil {
 		c.checkExpr(n.Auth.Username, "SendEmailStmt.Credential", mf, r)
 		c.checkExpr(n.Auth.Password, "SendEmailStmt.Credential", mf, r)
+	}
+}
+
+// checkMeter checks a metrics activity's name, value and tags against the types
+// mxbuild requires (CE0117 otherwise).
+func (c *CheckAdapter) checkMeter(name, value ast.Expression, valueSlot string, tags []ast.MeterTag, mf string, r *Result) {
+	if name != nil {
+		c.checkExpr(name, "MeterStmt.Name", mf, r)
+	}
+	if value != nil {
+		c.checkExpr(value, valueSlot, mf, r)
+	}
+	for _, t := range tags {
+		if t.Key != nil {
+			c.checkExpr(t.Key, "MeterStmt.Tag", mf, r)
+		}
+		if t.Value != nil {
+			c.checkExpr(t.Value, "MeterStmt.Tag", mf, r)
+		}
 	}
 }
 

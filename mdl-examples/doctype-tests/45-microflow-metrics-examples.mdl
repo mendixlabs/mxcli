@@ -1,0 +1,45 @@
+mdl 1;
+-- ============================================================================
+-- Metrics activities — increment counter / set gauge (Mendix 9.5+)
+-- ============================================================================
+--
+-- Studio Pro's toolbox "Metrics Activities". The runtime reports them through
+-- Micrometer to the registries in the Metrics.Registries custom runtime
+-- setting: opentelemetry, prometheus, jmx, influx, statsd.
+--
+--   increment counter <name> [( Tags: (…) )]       Increment Counter (by one)
+--   increment counter <name> by <value> [( … )]    Counter
+--   set gauge <name> to <value> [( … )]            Gauge
+--
+-- Name, value and every tag key and value are expressions: a quoted literal
+-- or a constant. Microflow only. `mxcli syntax microflow.metrics`.
+-- ============================================================================
+
+create module MetricsDemo;
+
+create constant MetricsDemo.OpenOrdersMetric ( Type: String, DefaultValue: 'metricsdemo.orders.open' );
+
+create persistent entity MetricsDemo.Order (
+  Channel: String(50),
+  ItemCount: Integer,
+  Total: Decimal
+);
+
+create microflow MetricsDemo.ACT_PlaceOrder ($Order: MetricsDemo.Order, $OpenOrders: Decimal)
+begin
+  -- Increment Counter: by one, tagged with the order's channel.
+  increment counter 'metricsdemo.orders.placed' (Tags: ('channel': $Order/Channel));
+
+  -- Counter: by a value (Integer or Long; a counter never goes down).
+  increment counter 'metricsdemo.orders.items' by $Order/ItemCount;
+
+  -- Gauge: set to a value (Decimal; Integer is accepted). The name is a
+  -- constant, as Studio Pro lets you pick one.
+  set gauge @MetricsDemo.OpenOrdersMetric to $OpenOrders (Tags: ('region': 'eu', 'shop': 'web'));
+
+  -- Continue is not allowed (CE6035); a custom handler is.
+  set gauge 'metricsdemo.orders.last_total' to $Order/Total
+    on error without rollback begin
+      log warning node 'Metrics' 'Reporting the order total failed';
+    end error;
+end;

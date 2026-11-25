@@ -760,6 +760,38 @@ func microflowActionToGen(action microflows.MicroflowAction) element.Element {
 		g.SetFileDocumentVariableName(a.FileDocument)
 		g.SetShowFileInBrowser(a.ShowInBrowser)
 		return g
+	case *microflows.CounterMeterAction:
+		g := genMf.NewCounterMeterAction()
+		g.SetID(element.ID(a.ID))
+		g.SetErrorHandlingType(orDefault(string(a.ErrorHandlingType), "Rollback"))
+		g.SetName(a.Name)
+		g.SetDescription(a.Description)
+		g.SetValue(a.Value)
+		for _, t := range meterTagsToGen(a.Tags) {
+			g.AddTags(t)
+		}
+		return g
+	case *microflows.IncrementCounterMeterAction:
+		g := genMf.NewIncrementCounterMeterAction()
+		g.SetID(element.ID(a.ID))
+		g.SetErrorHandlingType(orDefault(string(a.ErrorHandlingType), "Rollback"))
+		g.SetName(a.Name)
+		g.SetDescription(a.Description)
+		for _, t := range meterTagsToGen(a.Tags) {
+			g.AddTags(t)
+		}
+		return g
+	case *microflows.GaugeMeterAction:
+		g := genMf.NewGaugeMeterAction()
+		g.SetID(element.ID(a.ID))
+		g.SetErrorHandlingType(orDefault(string(a.ErrorHandlingType), "Rollback"))
+		g.SetName(a.Name)
+		g.SetDescription(a.Description)
+		g.SetValue(a.Value)
+		for _, t := range meterTagsToGen(a.Tags) {
+			g.AddTags(t)
+		}
+		return g
 	case *microflows.LogMessageAction:
 		g := genMf.NewLogMessageAction()
 		g.SetID(element.ID(a.ID))
@@ -1277,6 +1309,28 @@ func addStrList(b *element.Base, name string, vals []string) {
 }
 
 // addPart adds a dirty single-child property (BSON key = name).
+// meterTagsToGen builds the Microflows$MeterTagMapping children of a metrics
+// activity. Key and Value are expressions, stored as Studio Pro writes them
+// (`'region'`, quoted).
+func meterTagsToGen(tags []*microflows.MeterTag) []element.Element {
+	out := make([]element.Element, 0, len(tags))
+	for _, t := range tags {
+		if t == nil {
+			continue
+		}
+		m := genMf.NewMeterTagMapping()
+		id := t.ID
+		if id == "" {
+			id = model.ID(mmpr.GenerateID())
+		}
+		m.SetID(element.ID(id))
+		m.SetKey(t.Key)
+		m.SetValue(t.Value)
+		out = append(out, m)
+	}
+	return out
+}
+
 func addPart(b *element.Base, name string, child element.Element) {
 	p := property.NewPart[element.Element](name)
 	b.AddProperty(p, uint(len(b.Properties())))

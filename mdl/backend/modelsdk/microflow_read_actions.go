@@ -529,6 +529,38 @@ func actionFromGen(el element.Element) microflows.MicroflowAction {
 		out.ID = model.ID(a.ID())
 		return out
 
+	case *genMf.CounterMeterAction:
+		out := &microflows.CounterMeterAction{
+			ErrorHandlingType: meterErrorHandling(a.ErrorHandlingType()),
+			Name:              a.Name(),
+			Description:       a.Description(),
+			Value:             a.Value(),
+			Tags:              meterTagsFromGen(a.TagsItems()),
+		}
+		out.ID = model.ID(a.ID())
+		return out
+
+	case *genMf.IncrementCounterMeterAction:
+		out := &microflows.IncrementCounterMeterAction{
+			ErrorHandlingType: meterErrorHandling(a.ErrorHandlingType()),
+			Name:              a.Name(),
+			Description:       a.Description(),
+			Tags:              meterTagsFromGen(a.TagsItems()),
+		}
+		out.ID = model.ID(a.ID())
+		return out
+
+	case *genMf.GaugeMeterAction:
+		out := &microflows.GaugeMeterAction{
+			ErrorHandlingType: meterErrorHandling(a.ErrorHandlingType()),
+			Name:              a.Name(),
+			Description:       a.Description(),
+			Value:             a.Value(),
+			Tags:              meterTagsFromGen(a.TagsItems()),
+		}
+		out.ID = model.ID(a.ID())
+		return out
+
 	case *genMf.DownloadFileAction:
 		// DOWNLOAD FILE. Without this case it renders "-- Empty action". Mirror
 		// legacy parseDownloadFileAction, including the Rollback default for an
@@ -1680,4 +1712,27 @@ func closePageCount(a *genMf.CloseFormAction) int {
 		return n
 	}
 	return 1
+}
+
+func meterErrorHandling(v string) microflows.ErrorHandlingType {
+	if v == "" {
+		return microflows.ErrorHandlingTypeRollback
+	}
+	return microflows.ErrorHandlingType(v)
+}
+
+// meterTagsFromGen reads a metrics activity's Microflows$MeterTagMapping
+// children. A child of another type is skipped.
+func meterTagsFromGen(items []element.Element) []*microflows.MeterTag {
+	var out []*microflows.MeterTag
+	for _, it := range items {
+		m, ok := it.(*genMf.MeterTagMapping)
+		if !ok {
+			continue
+		}
+		t := &microflows.MeterTag{Key: m.Key(), Value: m.Value()}
+		t.ID = model.ID(m.ID())
+		out = append(out, t)
+	}
+	return out
 }

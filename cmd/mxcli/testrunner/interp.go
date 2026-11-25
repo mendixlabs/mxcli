@@ -419,6 +419,7 @@ var mdlStatementNames = map[string]string{
 	"RemoveFromList": "remove from", "ClearList": "clear", "Log": "log", "ShowPage": "show page",
 	"ClosePage": "close page", "ShowMessage": "show message", "ValidationFeedback": "validation feedback",
 	"SendEmail": "send email", "DownloadFile": "download file",
+	"IncrementCounter": "increment counter", "SetGauge": "set gauge",
 }
 
 // expressionVariables lists the $variables an expression in Mendix's grammar

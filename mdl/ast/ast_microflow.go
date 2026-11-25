@@ -1438,6 +1438,67 @@ func (s *SendEmailStmt) Expressions() []Expression {
 	return out
 }
 
+// IncrementCounterStmt is a metrics counter activity, microflow only:
+// `increment counter <name> [by <value>] [( Tags: ( k: v, … ) )] [on error …]`.
+// Without By it is Studio Pro's Increment Counter (IncrementCounterMeterAction,
+// by one); with By it is Counter (CounterMeterAction). Name and By are
+// expressions, as stored.
+type IncrementCounterStmt struct {
+	Name          Expression
+	By            Expression // nil: increment by one
+	Tags          []MeterTag
+	ErrorHandling *ErrorHandlingClause
+	Annotations   *ActivityAnnotations
+}
+
+func (s *IncrementCounterStmt) isMicroflowStatement() {}
+
+// Expressions returns the statement's expressions, for variable-reference walks.
+func (s *IncrementCounterStmt) Expressions() []Expression {
+	return meterExpressions(s.Tags, s.Name, s.By)
+}
+
+// SetGaugeStmt is the Gauge metrics activity (GaugeMeterAction), microflow only:
+// `set gauge <name> to <value> [( Tags: ( k: v, … ) )] [on error …]`.
+type SetGaugeStmt struct {
+	Name          Expression
+	Value         Expression
+	Tags          []MeterTag
+	ErrorHandling *ErrorHandlingClause
+	Annotations   *ActivityAnnotations
+}
+
+func (s *SetGaugeStmt) isMicroflowStatement() {}
+
+// Expressions returns the statement's expressions, for variable-reference walks.
+func (s *SetGaugeStmt) Expressions() []Expression {
+	return meterExpressions(s.Tags, s.Name, s.Value)
+}
+
+// MeterTag is one metric tag (Microflows$MeterTagMapping); key and value are
+// both expressions.
+type MeterTag struct {
+	Key   Expression
+	Value Expression
+}
+
+func meterExpressions(tags []MeterTag, es ...Expression) []Expression {
+	var out []Expression
+	for _, e := range es {
+		if e != nil {
+			out = append(out, e)
+		}
+	}
+	for _, t := range tags {
+		for _, e := range []Expression{t.Key, t.Value} {
+			if e != nil {
+				out = append(out, e)
+			}
+		}
+	}
+	return out
+}
+
 // EmailTemplateClause is a subject or body: template text plus optional
 // `with ({1} = …)` parameters. Text is a string literal for a template, or any
 // other expression, which the builder wraps as `{1}`.

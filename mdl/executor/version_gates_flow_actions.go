@@ -174,6 +174,18 @@ var flowActionGates = []typeGate{
 		},
 	},
 	{
+		versionGate: versionGate{"microflows", "metrics_activities", "increment counter / set gauge",
+			"this version has no metrics activities (Microflows$*MeterAction): report the metric from a Java action, or upgrade the project"},
+		types: []string{"Microflows$IncrementCounterMeterAction", "Microflows$CounterMeterAction", "Microflows$GaugeMeterAction", "Microflows$MeterTagMapping"},
+		match: func(st ast.MicroflowStatement) bool {
+			switch st.(type) {
+			case *ast.IncrementCounterStmt, *ast.SetGaugeStmt:
+				return true
+			}
+			return false
+		},
+	},
+	{
 		versionGate: versionGate{"microflows", "list_find_filter_by_expression", "find / filter by expression (a list operation)",
 			"this version has no Microflows$FindByExpression or FilterByExpression: find or filter by a member " +
 				"(`find($List, Member = value)`), or upgrade the project"},

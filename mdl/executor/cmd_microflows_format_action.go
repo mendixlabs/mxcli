@@ -1058,6 +1058,15 @@ func formatAction(
 	case *microflows.RestCallAction:
 		return formatRestCallAction(ctx, a)
 
+	case *microflows.IncrementCounterMeterAction:
+		return fmt.Sprintf("increment counter %s%s;", meterExpr(ctx, a.Name), formatMeterTags(ctx, a.Tags))
+
+	case *microflows.CounterMeterAction:
+		return fmt.Sprintf("increment counter %s by %s%s;", meterExpr(ctx, a.Name), meterExpr(ctx, a.Value), formatMeterTags(ctx, a.Tags))
+
+	case *microflows.GaugeMeterAction:
+		return fmt.Sprintf("set gauge %s to %s%s;", meterExpr(ctx, a.Name), meterExpr(ctx, a.Value), formatMeterTags(ctx, a.Tags))
+
 	case *microflows.SendEmailAction:
 		return formatSendEmailAction(ctx, a)
 
@@ -2116,6 +2125,31 @@ func (e *Executor) formatListOperation(op microflows.ListOperation, outputVar st
 // (SecurityType tls, ConnectionTimeout 20000, CheckServerIdentity false, no
 // authentication) and empty optional settings are omitted, so a statement that
 // does not state them builds the same action (R12).
+// meterExpr prints a metrics activity's stored expression; an empty one (an
+// activity Studio Pro left unfilled) as ” so the statement still parses.
+func meterExpr(ctx *ExecContext, e string) string {
+	if d := describeExpr(ctx, e); d != "" {
+		return d
+	}
+	return "''"
+}
+
+// formatMeterTags prints a metrics activity's tags as the ADR-0013 settings
+// list, ` (Tags: ('k': v, …))`, or "" when it has none.
+func formatMeterTags(ctx *ExecContext, tags []*microflows.MeterTag) string {
+	if len(tags) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(tags))
+	for _, t := range tags {
+		if t == nil {
+			continue
+		}
+		parts = append(parts, meterExpr(ctx, t.Key)+": "+meterExpr(ctx, t.Value))
+	}
+	return " (Tags: (" + strings.Join(parts, ", ") + "))"
+}
+
 func formatSendEmailAction(ctx *ExecContext, a *microflows.SendEmailAction) string {
 	var settings []string
 	set := func(key, value string) { settings = append(settings, key+": "+value) }
