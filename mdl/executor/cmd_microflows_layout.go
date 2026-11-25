@@ -295,6 +295,8 @@ func clearLayoutAnnotations(v reflect.Value, seen map[uintptr]bool) {
 			ann.IteratorAnchor = nil
 			ann.BodyTailAnchor = nil
 			ann.Curve = nil
+			ann.TrueCurve = nil
+			ann.FalseCurve = nil
 			ann.Merge = nil
 			ann.Start = nil
 			// A loop's box and a merge's box are layout too (ako/mxcli#2369):

@@ -428,6 +428,12 @@ type ActivityAnnotations struct {
 	// they defaulted to "0;0" and any rewrite flattened a curve drawn in Studio
 	// Pro. (upstream #884)
 	Curve *FlowCurve
+	// TrueCurve and FalseCurve are an IF's per-outcome curves,
+	// @curve(true: (from: …, to: …), false: (…)): a decision has two outgoing
+	// flows, and one curve stamped on both bent a vertical false edge sideways
+	// (ako/mxcli#2592). An outcome left out is straight; the flat form above
+	// still curves every outgoing flow alike.
+	TrueCurve, FalseCurve *FlowCurve
 
 	// Merge positions the implicit merge node that closes a split — the end-if
 	// join, or an enum/inheritance split's rejoin: @merge(x, y).

@@ -2027,8 +2027,9 @@ func buildReturnStatement(ctx parser.IReturnStatementContext) *ast.ReturnStmt {
 	return stmt
 }
 
-// parseCurveAnnotation populates result.Curve from @curve(from: (x, y), to: (x, y)).
-// Either end may be omitted, which leaves that end straight.
+// parseCurveAnnotation populates result.Curve from @curve(from: (x, y), to: (x, y)),
+// or an IF's per-outcome curves from @curve(true: (from: …, to: …), false: (…))
+// (ako/mxcli#2592). Either end may be omitted, which leaves that end straight.
 func parseCurveAnnotation(params *parser.AnnotationParamsContext, result *ast.ActivityAnnotations) {
 	curve := &ast.FlowCurve{}
 	for _, p := range params.AllAnnotationParam() {
@@ -2036,6 +2037,20 @@ func parseCurveAnnotation(params *parser.AnnotationParamsContext, result *ast.Ac
 		nameCtx := pCtx.AnnotationParamName()
 		if nameCtx == nil {
 			result.InvalidCurves = append(result.InvalidCurves, strings.TrimSpace(pCtx.GetText()))
+			continue
+		}
+		switch name := strings.ToLower(nameCtx.GetText()); name {
+		case "true", "false":
+			branch, ok := nestedCurve(pCtx)
+			if !ok {
+				result.InvalidCurves = append(result.InvalidCurves, strings.TrimSpace(pCtx.GetText()))
+				continue
+			}
+			if name == "true" {
+				result.TrueCurve = branch
+			} else {
+				result.FalseCurve = branch
+			}
 			continue
 		}
 		pt, ok := annotationPointValue(pCtx)
@@ -2055,6 +2070,40 @@ func parseCurveAnnotation(params *parser.AnnotationParamsContext, result *ast.Ac
 	if curve.From != nil || curve.To != nil {
 		result.Curve = curve
 	}
+}
+
+// nestedCurve reads an outcome's `(from: (x, y), to: (x, y))`. ok is false for
+// any other shape, or for one that names neither end.
+func nestedCurve(pCtx *parser.AnnotationParamContext) (*ast.FlowCurve, bool) {
+	paren := pCtx.AnnotationParenValue()
+	if paren == nil {
+		return nil, false
+	}
+	inner := paren.(*parser.AnnotationParenValueContext).AnnotationParams()
+	if inner == nil {
+		return nil, false
+	}
+	c := &ast.FlowCurve{}
+	for _, p := range inner.(*parser.AnnotationParamsContext).AllAnnotationParam() {
+		ip := p.(*parser.AnnotationParamContext)
+		n := ip.AnnotationParamName()
+		pt, ok := annotationPointValue(ip)
+		if n == nil || !ok {
+			return nil, false
+		}
+		switch strings.ToLower(n.GetText()) {
+		case "from":
+			c.From = pt
+		case "to":
+			c.To = pt
+		default:
+			return nil, false
+		}
+	}
+	if c.From == nil && c.To == nil {
+		return nil, false
+	}
+	return c, true
 }
 
 // annotationPointValue reads a `(x, y)` parenthesised annotation value into a

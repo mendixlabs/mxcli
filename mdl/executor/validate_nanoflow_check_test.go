@@ -31,14 +31,15 @@ func hasErrorRule(vs []linter.Violation, rule string) bool {
 // `mxcli check` reported nothing a nanoflow could not hold: the nanoflow rules
 // ran only inside exec's build (validateNanoflow), and the annotation rules
 // (MDL059/MDL060) ran only for CREATE MICROFLOW. So `call nanoflow … on error
-// continue` (mendixlabs/mxcli#591), `show home page` in a nanoflow, and the
-// per-case `@curve(true: …)` mxcli does not implement (mendixlabs/mxcli#992)
-// all passed check — the curve one passed exec too, and was dropped.
+// continue` (mendixlabs/mxcli#591), `show home page` in a nanoflow, and an
+// outcome `@curve(true: …)` (mendixlabs/mxcli#992) all passed check — the
+// curve one passed exec too, and was dropped. An IF now takes an outcome curve
+// (ako/mxcli#2592); on any other statement it is still refused.
 func TestValidateNanoflow_ReportsWhatExecWouldRefuse(t *testing.T) {
 	for _, tc := range []struct{ name, body, rule string }{
 		{"error handling", "call nanoflow M.NF_Sub() on error continue;", nanoflowActivityRule},
 		{"disallowed action", "show home page;", nanoflowActivityRule},
-		{"per-case curve", "@curve(true: (from: (15, 0), to: (0, -30)))\nif true then\n  log info node 'a' 'b';\nend if;", "MDL060"},
+		{"outcome curve off an IF", "@curve(true: (from: (15, 0), to: (0, -30)))\nlog info node 'a' 'b';", "MDL060"},
 		{"unknown annotation", "@postion(1, 2)\nlog info node 'a' 'b';", "MDL059"},
 		{"inside a handler", "call microflow M.MF() on error without rollback begin\n  @curve(true: (from: (1, 0)))\n  log info node 'a' 'b';\nend error;", "MDL060"},
 	} {
@@ -48,15 +49,21 @@ func TestValidateNanoflow_ReportsWhatExecWouldRefuse(t *testing.T) {
 			}
 		})
 	}
-	// CONTROL: a nanoflow with none of these is clean.
-	if vs := nanoflowViolations(t, "@position(100, 100)\n@curve(from: (0, 30), to: (0, -30))\nlog info node 'a' 'b';"); hasErrorRule(vs, nanoflowActivityRule) || hasErrorRule(vs, "MDL060") || hasErrorRule(vs, "MDL059") {
-		t.Errorf("a valid nanoflow was reported: %+v", vs)
+	// CONTROL: a nanoflow with none of these is clean, an IF's outcome curve
+	// included.
+	for _, body := range []string{
+		"@position(100, 100)\n@curve(from: (0, 30), to: (0, -30))\nlog info node 'a' 'b';",
+		"@curve(true: (from: (15, 0), to: (0, -30)))\nif true then\n  log info node 'a' 'b';\nend if;",
+	} {
+		if vs := nanoflowViolations(t, body); hasErrorRule(vs, nanoflowActivityRule) || hasErrorRule(vs, "MDL060") || hasErrorRule(vs, "MDL059") {
+			t.Errorf("a valid nanoflow was reported: %+v", vs)
+		}
 	}
 }
 
 // exec refuses MDL060 and MDL059 on a nanoflow as it does on a microflow.
 func TestValidateNanoflowRules_RefusesAnIgnoredCurve(t *testing.T) {
-	prog, errs := visitor.Build("mdl 1;\ncreate nanoflow M.NF_T()\nbegin\n@curve(true: (from: (15, 0)))\nif true then\n  log info node 'a' 'b';\nend if;\nend;")
+	prog, errs := visitor.Build("mdl 1;\ncreate nanoflow M.NF_T()\nbegin\n@curve(true: (from: (15, 0)))\nlog info node 'a' 'b';\nend;")
 	if len(errs) > 0 {
 		t.Fatal(errs)
 	}
