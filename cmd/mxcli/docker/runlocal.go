@@ -913,6 +913,11 @@ func RunLocal(opts LocalRunOptions) error {
 	if opts.Watch {
 		keep = newClientSourceKeep(opts.DeployDir)
 		defer keep.Close()
+		// From Mendix 11.17.0 mxbuild needs no help; the keep waits unused
+		// unless a build proves otherwise (ako/mxcli#2610).
+		if keep != nil && !keepNeededFor(version) {
+			keep.dormant = true
+		}
 	}
 	stopKeeping := keep.watch()
 	build, err := serve.Build(BuildRequest{Target: TargetDeploy, ProjectFilePath: opts.ProjectPath})

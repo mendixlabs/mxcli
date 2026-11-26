@@ -176,6 +176,7 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 		fmt.Fprintf(r.out, "  mxbuild --serve's incremental build left web/dist without %s "+
 			"(this Mendix version bundles the client completely only in a serve process's first build); "+
 			"restarting mxbuild --serve for a full build...\n", strings.Join(lost, " and "))
+		r.wakeKeep()
 		fresh, err := r.rebuildFresh(req)
 		if err != nil || !fresh.OK() {
 			return fresh, err
@@ -210,6 +211,7 @@ func (r *serveRecovery) Build(req BuildRequest) (*BuildResult, error) {
 		// is the only answer there is, and it is marked ColdRestart: a caller
 		// that cannot restart the runtime must not read it as "an entity
 		// changed".
+		r.wakeKeep()
 		return r.rebuildFresh(req)
 	}
 	return res, nil
@@ -269,6 +271,15 @@ func (r *serveRecovery) rebuildFresh(req BuildRequest) (*BuildResult, error) {
 		}
 	}
 	return res, err
+}
+
+// wakeKeep turns on a keep that started dormant because this Mendix version
+// was measured not to need one, when a build shows that it does after all.
+func (r *serveRecovery) wakeKeep() {
+	if r.keep.wake() {
+		fmt.Fprintln(r.out, "  this Mendix version was expected to build incrementally without help and did not; "+
+			"mxcli keeps the client source between builds from here on")
+	}
 }
 
 // buildKeeping runs one build while the keep copies aside the client source
