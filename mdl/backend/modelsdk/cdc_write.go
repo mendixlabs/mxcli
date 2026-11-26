@@ -303,11 +303,22 @@ func (b *Backend) resolveCdcMember(
 	}
 	// An association belongs to its FROM entity — the one stored in
 	// ParentPointer (CLAUDE.md, "Association Parent/Child Pointer Semantics").
-	// Tracking it from the TO side is not a thing the model can express.
+	// One that both sides own (owner Both) belongs to its TO entity as well:
+	// Studio Pro's CDC editor offers an entity every association it owns
+	// (getAssociationProperties: getAllAssociations(e).filter(isOwnerOf)), and
+	// mx check reports CE1583 when a both-owned association is tracked from one
+	// side only (ako/mxcli#2613). other is the end the member points at.
 	var assoc *domainmodel.Association
+	var other model.ID
 	for _, a := range dm.Associations {
-		if strings.EqualFold(a.Name, name) && a.ParentID == ent.ID {
-			assoc = a
+		if !strings.EqualFold(a.Name, name) {
+			continue
+		}
+		switch {
+		case a.ParentID == ent.ID:
+			assoc, other = a, a.ChildID
+		case a.ChildID == ent.ID && a.Owner == domainmodel.AssociationOwnerBoth:
+			assoc, other = a, a.ParentID
 		}
 	}
 	switch {
@@ -335,11 +346,12 @@ func (b *Backend) resolveCdcMember(
 		if err != nil {
 			return resolvedMember{}, fmt.Errorf("association %q: %w", name, err)
 		}
-		// The baseline records the TO entity's GUID, which is the association's
-		// Child end.
+		// The baseline records the GUID of the entity at the other end: the TO
+		// entity (the Child end) from the FROM side, the FROM entity from the TO
+		// side of a both-owned association.
 		var toGUID string
 		for _, e := range dm.Entities {
-			if e.ID == assoc.ChildID {
+			if e.ID == other {
 				if toGUID, err = guidOf(dm, e.ID); err != nil {
 					return resolvedMember{}, fmt.Errorf("association %q target: %w", name, err)
 				}

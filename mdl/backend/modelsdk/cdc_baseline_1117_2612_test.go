@@ -175,3 +175,31 @@ func TestBumpCdcVersions_Facts_2612(t *testing.T) {
 		t.Errorf("no recorded facts: source %s, want 1.0", ver(got))
 	}
 }
+
+// An association both sides own (owner Both) is tracked from its TO entity as
+// well, pointing back at the FROM entity (ako/mxcli#2613): Studio Pro offers it
+// on both entities, and mxbuild reports CE1583 until both track it. An owner
+// Default association stays FROM-side only.
+func TestResolveCdcMember_OwnerBothFromTheToSide_2613(t *testing.T) {
+	order := &domainmodel.Entity{BaseElement: model.BaseElement{ID: "order"}, Name: "Order"}
+	tag := &domainmodel.Entity{BaseElement: model.BaseElement{ID: "tag"}, Name: "Tag"}
+	both := &domainmodel.Association{BaseElement: model.BaseElement{ID: "both"}, Name: "Order_Primary",
+		ParentID: "order", ChildID: "tag", Type: domainmodel.AssociationTypeReference, Owner: domainmodel.AssociationOwnerBoth}
+	def := &domainmodel.Association{BaseElement: model.BaseElement{ID: "def"}, Name: "Order_Tag",
+		ParentID: "order", ChildID: "tag", Type: domainmodel.AssociationTypeReference, Owner: domainmodel.AssociationOwnerDefault}
+	dm := &domainmodel.DomainModel{Entities: []*domainmodel.Entity{order, tag}, Associations: []*domainmodel.Association{both, def}}
+	guid := func(_ *domainmodel.DomainModel, id model.ID) (string, error) { return "g-" + string(id), nil }
+	b := New()
+
+	from, err := b.resolveCdcMember(dm, order, "Shop", "Order_Primary", guid)
+	if err != nil || from.assocGUID != "g-tag" || from.multiplicity != "OneToOne" {
+		t.Errorf("from the FROM side: %+v, %v; want it to point at Tag", from, err)
+	}
+	to, err := b.resolveCdcMember(dm, tag, "Shop", "Order_Primary", guid)
+	if err != nil || to.assocGUID != "g-order" || to.guid != "g-both" || to.qualified != "Shop.Order_Primary" || !to.isAssoc {
+		t.Errorf("from the TO side: %+v, %v; want the same association pointing back at Order", to, err)
+	}
+	if _, err := b.resolveCdcMember(dm, tag, "Shop", "Order_Tag", guid); err == nil {
+		t.Error("an owner Default association was accepted from its TO side")
+	}
+}
