@@ -94,7 +94,10 @@ func legacyClientBuildHint(deployDir, message, raw string) string {
 	if missing := missingClientDirs(deployDir, message); len(missing) > 0 {
 		return hintText("this build wants "+strings.Join(missing, " and ")+
 			", which this Mendix version's first build does not create",
-			"  Seen on Mendix 11.12.5, 11.14 and 11.15.0 (macOS).\n")
+			// Measured over mxbuild's /build API with no mxcli in the picture
+			// (2026-11-26): 11.16.0 and 11.16.1 fail a page change this way,
+			// 11.17.0 builds it in the same serve process.
+			"  Seen on Mendix 11.12.5, 11.14, 11.15.0 and 11.16.1; fixed in Mendix 11.17.0 (measured on Linux).\n")
 	}
 	if name := missingBundlerConfig(deployDir, message+raw); name != "" {
 		return hintText("mxbuild's own bundler cannot find web/"+name+
