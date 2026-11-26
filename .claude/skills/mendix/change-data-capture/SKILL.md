@@ -12,12 +12,12 @@ description: "Stream entity changes to a data lake with Mendix change data captu
 |---|---|
 | 25-37 | When to Use This Skill |
 | 38-66 | Commands |
-| 67-99 | Members Are Named, Not Typed |
-| 100-122 | The Topic, and Why a Major Bump Is Expensive |
-| 123-150 | What You Author, and What Is Computed |
-| 151-168 | Version Policy — Inferred, Not Measured |
-| 169-222 | Verifying the Whole Chain |
-| 223-235 | Checklist |
+| 67-102 | Members Are Named, Not Typed |
+| 103-125 | The Topic, and Why a Major Bump Is Expensive |
+| 126-153 | What You Author, and What Is Computed |
+| 154-171 | Version Policy — Inferred, Not Measured |
+| 172-225 | Verifying the Whole Chain |
+| 226-238 | Checklist |
 
 <!-- /skill-index -->
 # Change Data Capture
@@ -90,7 +90,10 @@ Two rules the editor enforces and so does `check`:
   disabled row but stores no property for it; the object id reaches a consumer
   from the runtime's change envelope, not from the model.
 - **An association is tracked from its FROM entity** — the one that owns the
-  foreign key. Naming it on the TO side is not something the model can express.
+  foreign key — and the entity at its other end must be tracked too. An
+  association both sides own (`owner Both`) is tracked from **both** entities:
+  name it in each entity's member list, or mxbuild refuses the service (CE1583).
+  `check -p` reports either gap as MDL-CDC01 (ako/mxcli#2613).
 
 Only **persistable** entities can be tracked. A view entity or an external
 entity has no rows of its own, so there is nothing to capture; both are refused.

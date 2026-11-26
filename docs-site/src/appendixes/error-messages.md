@@ -438,6 +438,23 @@ read agent documents, so the build is green.
 name for Chat and is refused. It is a warning, like MDL-AGENT01, because a newer Agent Editor
 may add usage types.
 
+### MDL-CDC01: A tracked association mxbuild cannot capture
+
+```
+change data capture service Shop.OrdersCdc tracks association Shop.Order_Primary (owner Both)
+from Shop.Order only: both sides own it, and mxbuild refuses it until Shop.Tag tracks it too
+(CE1583) [MDL-CDC01]
+```
+
+**Cause:** mxbuild requires the entity at the other end of a tracked association to be a
+source of the service, and an association both sides own (`owner Both`) to be tracked from
+both: Studio Pro's CDC editor offers it on both entities. Either gap is CE1583, "For an
+association to function correctly in data to capture, the associated entity … must also be
+included". `check` and `exec` passed both before (measured on 11.17.0).
+
+**Solution:** Add the other entity to the service, and for an `owner Both` association name it
+in that entity's member list too, or make the association `owner Default`.
+
 ### MDL-BE01..BE07: A consumed business event service that cannot work
 
 ```
