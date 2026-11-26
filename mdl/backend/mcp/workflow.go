@@ -451,6 +451,13 @@ func mapEventSubProcesses(esps []*workflows.EventSubProcess) ([]any, error) {
 	}
 	out := make([]any, 0, len(esps))
 	for _, esp := range esps {
+		if esp.Annotation != "" {
+			// PED's EventSubProcess constructor takes name, caption and flow, and
+			// nothing sets a note on it (registry main.js, mxbuild 11.16) — refused
+			// rather than dropped (ako/mxcli#1741).
+			return nil, fmt.Errorf("event sub-process %q has a note (`@annotation`), which the MCP backend cannot "+
+				"write yet — create the workflow without --mcp, or add the note in Studio Pro", esp.Name)
+		}
 		fm, err := mapWorkflowFlowValue(esp.Flow)
 		if err != nil {
 			return nil, err
@@ -972,9 +979,27 @@ func mapWorkflowFlowValue(flow *workflows.Flow) (map[string]any, error) {
 	return map[string]any{"$Type": "Workflows$Flow", "activities": acts}, nil
 }
 
-// mapWorkflowActivity maps one workflow activity. Coverage grows one type at a
-// time; unmapped types are rejected rather than silently dropped.
+// mapWorkflowActivity maps one workflow activity, with its note. Coverage grows
+// one type at a time; unmapped types are rejected rather than silently dropped.
+//
+// The note goes in the constructor's `annotation` (ako/mxcli#1741): PED's shared
+// workflowActivityArgs declares it for every activity, and its implementation
+// creates the Workflows$Annotation from the text (registry main.js, mxbuild
+// 11.15–11.16). Before, no case passed it, and a `create workflow` over MCP
+// reported success with every note gone — the start's included, which is the
+// header `annotation '…'` (StartWorkflowActivity.Annotation since #1717).
 func mapWorkflowActivity(a workflows.WorkflowActivity) (map[string]any, error) {
+	m, err := mapWorkflowActivityShape(a)
+	if err != nil || m == nil {
+		return m, err
+	}
+	if an, ok := a.(interface{ GetAnnotation() string }); ok && an.GetAnnotation() != "" {
+		m["annotation"] = an.GetAnnotation()
+	}
+	return m, nil
+}
+
+func mapWorkflowActivityShape(a workflows.WorkflowActivity) (map[string]any, error) {
 	switch act := a.(type) {
 	case *workflows.StartWorkflowActivity:
 		return map[string]any{"$Type": "Workflows$StartWorkflowActivity", "name": act.Name, "caption": act.Caption}, nil
