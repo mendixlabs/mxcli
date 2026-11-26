@@ -84,6 +84,11 @@ func (b *Backend) UpdatePage(page *pages.Page) error {
 	if err != nil {
 		return fmt.Errorf("UpdatePage: encode: %w", err)
 	}
+	if b.reader != nil {
+		if stored, err := b.reader.GetRawUnitBytes(string(page.ID)); err == nil {
+			contents = carryStoredPopupClose(contents, stored)
+		}
+	}
 	if err := b.writer.UpdateRawUnit(string(page.ID), contents); err != nil {
 		return fmt.Errorf("UpdatePage: update: %w", err)
 	}
@@ -474,4 +479,53 @@ func paramTypeToGen(bsonType, entityName string) element.Element {
 	}
 	assignID(t)
 	return t
+}
+
+// storedPopupCloseKeys are the page properties Mendix 11.17 added for a popup's
+// close behaviour (ako/mxcli#2612). MDL has no spelling for either.
+var storedPopupCloseKeys = []string{"PopupOnCloseAction", "UseOldPopupCloseAction"}
+
+// carryStoredPopupClose puts the stored page's popup close behaviour back on a
+// rebuilt page that does not state it, so a rewrite does not change how the
+// page's popups close.
+//
+// Measured: mx convert from 11.16.1 to 11.17.0 gave an existing page
+// UseOldPopupCloseAction false and a Forms$CancelChangesClientAction, the same
+// as every page of a blank 11.17.0 project — but a page can be set otherwise in
+// Studio Pro, and canon.CompletePropertySets would fill the default, which
+// changes behaviour nobody asked to change. Same reasoning as
+// carryStoredPageHeader. A stored page without the keys (below 11.17) gives
+// nothing to carry, so an older project gains no key its metamodel lacks.
+func carryStoredPopupClose(contents, stored []byte) []byte {
+	if len(stored) == 0 {
+		return contents
+	}
+	var doc bson.D
+	if err := bson.Unmarshal(contents, &doc); err != nil {
+		return contents
+	}
+	have := map[string]bool{}
+	for _, e := range doc {
+		have[e.Key] = true
+	}
+	changed := false
+	for _, k := range storedPopupCloseKeys {
+		if have[k] {
+			continue
+		}
+		v, err := bson.Raw(stored).LookupErr(k)
+		if err != nil {
+			continue
+		}
+		doc = append(doc, bson.E{Key: k, Value: v})
+		changed = true
+	}
+	if !changed {
+		return contents
+	}
+	out, err := bson.Marshal(doc)
+	if err != nil {
+		return contents
+	}
+	return out
 }

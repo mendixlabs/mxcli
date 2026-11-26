@@ -1,6 +1,7 @@
 [
   {"type":"BusinessEvents$BusinessEventService","key":"Document","since":"10.24.0","seen":"10.24.24","value":{"v":""}},
   {"type":"BusinessEvents$MessageAttribute","key":"EnumerationDefinition","since":"10.24.0","seen":"10.24.24","value":{"v":null}},
+  {"type":"CustomWidgets$CustomWidget","key":"SystemTextOverrides","since":"11.17.0","seen":"11.17.0","value":{"v":[{"$numberInt":"2"}]}},
   {"type":"DatabaseConnector$SimpleSqlDataType","key":"DataTypeName","since":"10.24.24","seen":"10.24.24","value":{"v":""}},
   {"type":"DomainModels$AccessRule","key":"Documentation","since":"10.24.0","seen":"11.15.0","value":{"v":""}},
   {"type":"DomainModels$AccessRule","key":"MemberAccesses","since":"10.24.0","seen":"11.16.1","value":{"v":[{"$numberInt":"3"}]}},
@@ -28,6 +29,8 @@
   {"type":"Forms$DivContainer","key":"Widgets","since":"10.24.0","seen":"11.15.0","value":{"v":[{"$numberInt":"2"}]}},
   {"type":"Forms$FormCallArgument","key":"Widgets","since":"10.24.0","seen":"11.15.0","value":{"v":[{"$numberInt":"2"}]}},
   {"type":"Forms$LayoutGridColumn","key":"Widgets","since":"10.24.0","seen":"11.15.0","value":{"v":[{"$numberInt":"2"}]}},
+  {"type":"Forms$Page","key":"PopupOnCloseAction","since":"11.17.0","seen":"11.17.0","value":{"v":{"$ID":{"$binary":{"base64":"AAAAAAAAAAAAAAAAAAAAAA==","subType":"00"}},"$Type":"Forms$CancelChangesClientAction","ClosePage":true,"DisabledDuringExecution":true}}},
+  {"type":"Forms$Page","key":"UseOldPopupCloseAction","since":"11.17.0","seen":"11.17.0","value":{"v":false}},
   {"type":"Forms$ScrollContainer","key":"Alignment","since":"10.24.0","seen":"11.15.0","value":{"v":"Center"}},
   {"type":"Forms$ScrollContainer","key":"Bottom","since":"10.24.0","seen":"11.15.0","value":{"v":null}},
   {"type":"Forms$ScrollContainer","key":"LayoutMode","since":"10.24.0","seen":"11.15.0","value":{"v":"Headline"}},
