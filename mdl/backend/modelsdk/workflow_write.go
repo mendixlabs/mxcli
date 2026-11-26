@@ -827,7 +827,10 @@ func boundaryEventsToGen(events []*workflows.BoundaryEvent) []element.Element {
 		if ev.Flow != nil {
 			addPart(g, "Flow", flowToGen(ev.Flow))
 		}
-		if ev.IsNotification() {
+		// A timer's Name exists from Mendix 11.17 (ako/mxcli#2616) and is only
+		// ever read from such a project; canon.RaiseBoundaryEventContainers
+		// names the ones without.
+		if ev.IsNotification() || ev.Name != "" {
 			addStr(g, "Name", ev.Name)
 		}
 		addFreshPersistentID(g)

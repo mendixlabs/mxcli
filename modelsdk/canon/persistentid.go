@@ -172,11 +172,19 @@ func hasDuplicatePersistentID(raw []byte) bool {
 		if err != nil {
 			return
 		}
+		// A Mendix 11.17 boundary event container shares its PersistentId with
+		// the event activity its flow starts with — mx convert gives both the
+		// old event's (ako/mxcli#2616) — so the container's does not count as a
+		// second claim to it.
+		container := false
+		if t, ok := doc.Lookup("$Type").StringValueOK(); ok && t == boundaryContainerType {
+			container = true
+		}
 		for _, e := range elems {
 			v := e.Value()
 			switch v.Type {
 			case bsoncore.TypeBinary:
-				if e.Key() != persistentIDKey {
+				if e.Key() != persistentIDKey || container {
 					continue
 				}
 				_, data, ok := v.BinaryOK()
