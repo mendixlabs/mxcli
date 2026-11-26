@@ -14,10 +14,10 @@ description: "Stream entity changes to a data lake with Mendix change data captu
 | 38-66 | Commands |
 | 67-99 | Members Are Named, Not Typed |
 | 100-122 | The Topic, and Why a Major Bump Is Expensive |
-| 123-147 | What You Author, and What Is Computed |
-| 148-165 | Version Policy — Inferred, Not Measured |
-| 166-219 | Verifying the Whole Chain |
-| 220-232 | Checklist |
+| 123-150 | What You Author, and What Is Computed |
+| 151-168 | Version Policy — Inferred, Not Measured |
+| 169-222 | Verifying the Whole Chain |
+| 223-235 | Checklist |
 
 <!-- /skill-index -->
 # Change Data Capture
@@ -142,7 +142,10 @@ Consequences worth knowing:
   on a service nobody touched, something has drifted — investigate rather than
   accept it.
 - mxbuild reports CE1585 when the two sides disagree, and CE1577 on an empty
-  `AppName`. An *absent* baseline is worse than either: `mx check` crashes with
+  `AppName`. From **Mendix 11.17** the baseline also records the project's
+  decimal scale and, per member, its multiplicity, nullability and String length
+  (ako/mxcli#2612); mxcli derives them from the domain model as Studio Pro's
+  editor does, and a change to one is a major version bump. An *absent* baseline is worse than either: `mx check` crashes with
   `The given key '<guid>' was not present in the dictionary`.
 
 ## Version Policy — Inferred, Not Measured
