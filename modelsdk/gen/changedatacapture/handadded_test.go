@@ -174,3 +174,38 @@ func TestGuidBinaryRoundTripsExactly(t *testing.T) {
 		}
 	}
 }
+
+// The Mendix 11.17 baseline facts are hand-added too (ako/mxcli#2612). Read
+// back from what 11.17 stores — integers as 64-bit, as mx convert writes them —
+// so a regeneration that drops them, or decodes them at the wrong width, fails
+// here rather than as CE1585 on the next write.
+func TestVersionedFacts_DecodeFrom1117_2612(t *testing.T) {
+	raw, err := bson.Marshal(bson.D{
+		{Key: "$Type", Value: "ChangeDataCapture$VersionedProperty"},
+		{Key: "AssociationMultiplicity", Value: "OneToMany"},
+		{Key: "ExposedName", Value: "Customer"},
+		{Key: "IsNullable", Value: true},
+		{Key: "MaxLength", Value: int64(20)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := initVersionedProperty()
+	p.InitFromRaw(bson.Raw(raw))
+	if p.AssociationMultiplicity() != "OneToMany" || !p.IsNullable() || p.MaxLength() != 20 {
+		t.Errorf("facts = %q, %v, %d; want OneToMany, true, 20", p.AssociationMultiplicity(), p.IsNullable(), p.MaxLength())
+	}
+
+	raw, err = bson.Marshal(bson.D{
+		{Key: "$Type", Value: "ChangeDataCapture$VersionedEntityChangeDataCaptureService"},
+		{Key: "DecimalScale", Value: int64(8)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := initVersionedEntityChangeDataCaptureService()
+	b.InitFromRaw(bson.Raw(raw))
+	if b.DecimalScale() != 8 {
+		t.Errorf("DecimalScale = %d, want 8", b.DecimalScale())
+	}
+}

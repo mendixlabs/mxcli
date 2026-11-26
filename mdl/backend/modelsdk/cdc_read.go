@@ -93,6 +93,12 @@ func changeBaselineFromGen(g *genCdc.VersionedEntityChangeDataCaptureService) *m
 	bl := &model.ChangeBaseline{Version: changeVersionFromGen(g.Version())}
 	bl.ID = model.ID(g.ID())
 	bl.TypeName = "ChangeDataCapture$VersionedEntityChangeDataCaptureService"
+	if raw := g.Raw(); raw != nil {
+		if _, err := raw.LookupErr("DecimalScale"); err == nil {
+			ds := int(g.DecimalScale())
+			bl.DecimalScale = &ds
+		}
+	}
 
 	for _, el := range g.SourcesItems() {
 		vs, ok := el.(*genCdc.VersionedEntityChangeSource)
@@ -117,6 +123,15 @@ func changeBaselineFromGen(g *genCdc.VersionedEntityChangeDataCaptureService) *m
 				PropertyGUID:         vp.PropertyGuid(),
 				AssociatedEntityGUID: vp.AssociatedEntityGuid(),
 				Type:                 vp.Type(),
+			}
+			if raw := vp.Raw(); raw != nil {
+				if _, err := raw.LookupErr("MaxLength"); err == nil {
+					prop.Facts = &model.ChangePropertyFacts{
+						AssociationMultiplicity: vp.AssociationMultiplicity(),
+						IsNullable:              vp.IsNullable(),
+						MaxLength:               int(vp.MaxLength()),
+					}
+				}
 			}
 			prop.ID = model.ID(vp.ID())
 			prop.TypeName = "ChangeDataCapture$VersionedProperty"

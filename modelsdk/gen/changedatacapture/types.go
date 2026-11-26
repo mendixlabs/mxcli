@@ -424,6 +424,21 @@ type VersionedEntityChangeDataCaptureService struct {
 	element.Base
 	version *property.Part[element.Element]
 	sources *property.PartList[element.Element]
+	// decimalScale is hand-added (ako/mxcli#2612): Mendix 11.17 records the
+	// project's Settings$RuntimeSettings.DecimalScale in the baseline. Studio
+	// Pro's CDC editor (createBaseline) writes it; on an older project the key
+	// does not exist and must not be written.
+	decimalScale *property.Primitive[int32]
+}
+
+// DecimalScale returns the value of the decimalScale property (11.17+).
+func (o *VersionedEntityChangeDataCaptureService) DecimalScale() int32 {
+	return o.decimalScale.Get()
+}
+
+// SetDecimalScale sets the decimalScale property (11.17+).
+func (o *VersionedEntityChangeDataCaptureService) SetDecimalScale(v int32) {
+	o.decimalScale.Set(v)
 }
 
 // Version returns the value of the version property.
@@ -461,6 +476,7 @@ func (o *VersionedEntityChangeDataCaptureService) InitFromRaw(raw bson.Raw) {
 			o.sources.AppendFromDecode(child)
 		}
 	}
+	o.decimalScale.Init(raw)
 }
 
 // ────────────────────────────────────────────────────────
@@ -561,6 +577,43 @@ type VersionedProperty struct {
 	associatedEntityGuid *property.ByIdRef[element.Element]
 	exposedName          *property.Primitive[string]
 	propType             *property.Enum[string]
+	// associationMultiplicity, isNullable and maxLength are hand-added
+	// (ako/mxcli#2612): Mendix 11.17 records them per member so the editor can
+	// tell a domain-model change from the baseline. 11.17+ only.
+	associationMultiplicity *property.Primitive[string]
+	isNullable              *property.Primitive[bool]
+	maxLength               *property.Primitive[int32]
+}
+
+// AssociationMultiplicity returns the association's multiplicity, "" for an
+// attribute (11.17+).
+func (o *VersionedProperty) AssociationMultiplicity() string {
+	return o.associationMultiplicity.Get()
+}
+
+// SetAssociationMultiplicity sets the associationMultiplicity property (11.17+).
+func (o *VersionedProperty) SetAssociationMultiplicity(v string) {
+	o.associationMultiplicity.Set(v)
+}
+
+// IsNullable returns the isNullable property (11.17+).
+func (o *VersionedProperty) IsNullable() bool {
+	return o.isNullable.Get()
+}
+
+// SetIsNullable sets the isNullable property (11.17+).
+func (o *VersionedProperty) SetIsNullable(v bool) {
+	o.isNullable.Set(v)
+}
+
+// MaxLength returns the maxLength property (11.17+).
+func (o *VersionedProperty) MaxLength() int32 {
+	return o.maxLength.Get()
+}
+
+// SetMaxLength sets the maxLength property (11.17+).
+func (o *VersionedProperty) SetMaxLength(v int32) {
+	o.maxLength.Set(v)
 }
 
 // PropertyGuid returns the value of the propertyGuid property.
@@ -626,6 +679,9 @@ func (o *VersionedProperty) InitFromRaw(raw bson.Raw) {
 			o.propType.SetFromDecode(s)
 		}
 	}
+	o.associationMultiplicity.Init(raw)
+	o.isNullable.Init(raw)
+	o.maxLength.Init(raw)
 }
 
 // ────────────────────────────────────────────────────────
@@ -777,7 +833,9 @@ func initVersionedEntityChangeDataCaptureService() *VersionedEntityChangeDataCap
 	o.version.Bind(&o.Base, 0)
 	o.sources = property.NewPartList[element.Element]("Sources")
 	o.sources.Bind(&o.Base, 1)
-	o.SetProperties([]element.Property{o.version, o.sources})
+	o.decimalScale = property.NewPrimitive[int32]("DecimalScale", property.DecodeInt32)
+	o.decimalScale.Bind(&o.Base, 2)
+	o.SetProperties([]element.Property{o.version, o.sources, o.decimalScale})
 	return o
 }
 
@@ -831,7 +889,14 @@ func initVersionedProperty() *VersionedProperty {
 	o.propType.Bind(&o.Base, 2)
 	o.associatedEntityGuid = property.NewByIdRef[element.Element]("AssociatedEntityGuid")
 	o.associatedEntityGuid.Bind(&o.Base, 3)
-	o.SetProperties([]element.Property{o.propertyGuid, o.exposedName, o.propType, o.associatedEntityGuid})
+	o.associationMultiplicity = property.NewPrimitive[string]("AssociationMultiplicity", property.DecodeString)
+	o.associationMultiplicity.Bind(&o.Base, 4)
+	o.isNullable = property.NewPrimitive[bool]("IsNullable", property.DecodeBool)
+	o.isNullable.Bind(&o.Base, 5)
+	o.maxLength = property.NewPrimitive[int32]("MaxLength", property.DecodeInt32)
+	o.maxLength.Bind(&o.Base, 6)
+	o.SetProperties([]element.Property{o.propertyGuid, o.exposedName, o.propType, o.associatedEntityGuid,
+		o.associationMultiplicity, o.isNullable, o.maxLength})
 	return o
 }
 
