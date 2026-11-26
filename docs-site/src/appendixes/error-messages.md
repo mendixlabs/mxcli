@@ -421,6 +421,40 @@ mxbuild does not read agent documents, so the build is green.
 **Solution:** Shorten the value. Lengths are counted in characters, not bytes. It is a warning,
 like MDL-AGENT01..03, because the lengths belong to the installed AgentCommons version.
 
+### MDL-AGENT05: An agent UsageType Agent Editor does not import
+
+```
+agent Helpdesk.HelpdeskAgent: UsageType "Conversational" is not one Agent Editor imports
+(Task or Chat): at startup the import refuses the agent [MDL-AGENT05]
+```
+
+**Cause:** At startup `AgentEditorCommons.AgentFromModel_Validate` reads the usage type through
+`UsageType_StringToENUM`, which accepts `task` and `chat` in any case and nothing else (Agent
+Editor 2.7.0). Any other value fails with "Usage Type is not valid for the Agent", and an agent
+with none with "Usage Type is missing for the Agent"; the agent is not imported. mxbuild does not
+read agent documents, so the build is green.
+
+**Solution:** Write `UsageType: Task` or `UsageType: Chat`. `Conversational` is Agent Commons'
+name for Chat and is refused. It is a warning, like MDL-AGENT01, because a newer Agent Editor
+may add usage types.
+
+### MDL-CDC01: A tracked association mxbuild cannot capture
+
+```
+change data capture service Shop.OrdersCdc tracks association Shop.Order_Primary (owner Both)
+from Shop.Order only: both sides own it, and mxbuild refuses it until Shop.Tag tracks it too
+(CE1583) [MDL-CDC01]
+```
+
+**Cause:** mxbuild requires the entity at the other end of a tracked association to be a
+source of the service, and an association both sides own (`owner Both`) to be tracked from
+both: Studio Pro's CDC editor offers it on both entities. Either gap is CE1583, "For an
+association to function correctly in data to capture, the associated entity … must also be
+included". `check` and `exec` passed both before (measured on 11.17.0).
+
+**Solution:** Add the other entity to the service, and for an `owner Both` association name it
+in that entity's member list too, or make the association `owner Default`.
+
 ### MDL-BE01..BE07: A consumed business event service that cannot work
 
 ```

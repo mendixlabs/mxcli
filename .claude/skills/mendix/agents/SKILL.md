@@ -148,7 +148,7 @@ create published mcp service Module.CustomerMCP (
 ```sql
 mdl 1;
 create agent Module.MyAgent (
-  UsageType: task,              -- Task | Conversational
+  UsageType: Task,              -- Task | Chat (MDL-AGENT05 warns on anything else)
   model: Module.MyModel,        -- must exist
   SelectedModel: 'eu.anthropic.claude-sonnet-5',
   description: 'Agent description',
@@ -299,7 +299,7 @@ The feature uses `CustomBlobDocument` BSON type with a `Contents` field holding 
 mdl 1;
 create ai model Module.M (Provider: MxCloudGenAI, key: @Module.K);
 create agent Module.A (
-  UsageType: task,
+  UsageType: Task,
   model: Module.M,
   SelectedModel: 'eu.anthropic.claude-sonnet-5',
   SystemPrompt: 'You are a helpful assistant.',

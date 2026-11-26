@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/mendixlabs/mxcli/modelsdk/version"
 )
 
 // client_source_keep.go gives mxbuild --serve's incremental build back the
@@ -42,6 +44,24 @@ import (
 // next. The 11.14 measurement in webclient_legacy_paths.go is not this one: it
 // restored the bundler config and the empty directories, not what was in them.
 //
+// Mendix 11.17.0 fixes this in mxbuild itself. The same four builds, driven
+// over the /build API with no keep, one serve process each, blank apps:
+//
+//	build                 11.16.0 / 11.16.1          11.17.0
+//	1  cold               complete (47 files)        complete (49 files)
+//	2  no change          4 files, 0 pages           complete, 2.3 s
+//	3  microflow change   4 files, 0 pages           complete, 2.2 s
+//	4  page change        Failure, web/layouts/…     complete, 2.2 s, the edit in its page module
+//
+// 11.17.0 still deletes the source after each build; its later builds no
+// longer need it back. So from 11.17.0 on the keep starts dormant
+// (ako/mxcli#2610): it neither sweeps nor restores. The reason is not speed —
+// builds took 2.2 s with it and without — but that sweeping web/ while mxbuild
+// rewrites it is the one thing here that can fail a build, on Windows, where
+// an open file blocks another process's delete (mendixlabs/mxcli#1342).
+// A version cannot promise the defect stays fixed, so serveRecovery wakes a
+// dormant keep the first time an incremental build loses the bundle after all.
+//
 // Nothing here names the directories. What is kept is whatever a build wrote
 // under web/ that a successful build then removed, so a Mendix version that
 // leaves its source in place (the rollup shape, 11.13 and earlier) keeps
@@ -53,6 +73,10 @@ type clientSourceKeep struct {
 	// off is set once a successful build removed nothing it wrote: this
 	// Mendix version needs no keep, and the sweeps would be pure cost.
 	off bool
+
+	// dormant is set for a Mendix version whose mxbuild needs no keep
+	// (keepNeededFor). Unlike off it can be undone: wake.
+	dormant bool
 
 	// restored is what restore put back before the build now running, for
 	// watch's stop to take out again when that build fails.
@@ -118,7 +142,7 @@ func (k *clientSourceKeep) files() []string {
 // restore puts the kept source back into web/ where it is absent, and returns
 // how many files it wrote.
 func (k *clientSourceKeep) restore() int {
-	if k == nil || k.off {
+	if !k.active() {
 		return 0
 	}
 	k.restored = nil
@@ -147,7 +171,7 @@ func (k *clientSourceKeep) restore() int {
 // back is taken out again, so a build that died before its own cleanup does
 // not leave web/ looking like another client shape (planWebClient reads it).
 func (k *clientSourceKeep) watch() (stop func(ok bool)) {
-	if k == nil || k.off {
+	if !k.active() {
 		return func(bool) {}
 	}
 	existing := k.present()
@@ -304,14 +328,37 @@ func (k *clientSourceKeep) disable() {
 }
 
 // active reports whether the keep sweeps and restores.
-func (k *clientSourceKeep) active() bool { return k != nil && !k.off }
+func (k *clientSourceKeep) active() bool { return k != nil && !k.off && !k.dormant }
+
+// keepFixedIn is the first Mendix version whose mxbuild --serve builds a
+// complete client in every build of a process, not only the first (measured;
+// see the table above). 11.16.1 was measured still failing.
+var keepFixedIn = version.Version{Major: 11, Minor: 17, Patch: 0}
+
+// keepNeededFor reports whether a project on this Mendix version needs the
+// keep. A version that cannot be read gets one: an unneeded keep switches
+// itself off, a missing one costs a full build per change.
+func keepNeededFor(mendixVersion string) bool {
+	v := version.Parse(mendixVersion)
+	return v.IsZero() || v.Compare(keepFixedIn) < 0
+}
+
+// wake makes a dormant keep work, and reports whether it was dormant. It does
+// not revive one that switched itself off or was disabled after a collision.
+func (k *clientSourceKeep) wake() bool {
+	if k == nil || !k.dormant {
+		return false
+	}
+	k.dormant = false
+	return true
+}
 
 // missingPageSource names the page modules in dist/pages that the keep holds
 // no source for. The build that just ran bundled them from a file the sweeps
 // missed, and the next build would silently leave them out — a page that 404s
 // while the loop reports the change applied.
 func (k *clientSourceKeep) missingPageSource() []string {
-	if k == nil || k.off {
+	if !k.active() {
 		return nil
 	}
 	entries, err := os.ReadDir(filepath.Join(k.webDir, "dist", "pages"))

@@ -386,7 +386,7 @@ func TestBumpCdcVersions_Policy(t *testing.T) {
 			"2.0", "2.0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := bumpCdcVersions(stored, tc.sources)
+			got := bumpCdcVersions(stored, tc.sources, nil)
 			ov := got.source["Order"]
 			if g := ov.String(); g != tc.wantOrder {
 				t.Errorf("Order version = %s, want %s", g, tc.wantOrder)
@@ -420,7 +420,7 @@ func TestBumpCdcVersions_NewSourceDoesNotBumpTheService(t *testing.T) {
 	got := bumpCdcVersions(stored, []resolvedSource{
 		{exposedName: "Order", members: []resolvedMember{{exposedName: "OrderId", cdcType: "Int64"}}},
 		{exposedName: "Invoice", members: []resolvedMember{{exposedName: "InvoiceId", cdcType: "Int64"}}},
-	})
+	}, nil)
 	iv := got.source["Invoice"]
 	if g := iv.String(); g != "1.0" {
 		t.Errorf("new source = %s, want 1.0", g)

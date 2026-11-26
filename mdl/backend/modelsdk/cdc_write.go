@@ -95,6 +95,81 @@ type resolvedMember struct {
 	guid        string // the member's own GUID
 	assocGUID   string // an association's TO entity GUID; zeroGUID for an attribute
 	cdcType     string
+	// What Mendix 11.17 records per member (ako/mxcli#2612); written only when
+	// the project is that new (cdcBaselineFacts).
+	maxLength    int32
+	nullable     bool
+	multiplicity string
+}
+
+// cdcBaselineFacts are the project-level inputs of the facts Mendix 11.17
+// records in a baseline. nil means the project is older and none is written:
+// the keys are not in its metamodel.
+type cdcBaselineFacts struct {
+	decimalScale int32
+}
+
+// cdcFactsSince is the first version whose baseline records the facts —
+// measured: an 11.16.1 project converted to 11.17.0 gains them.
+const cdcFactsMajor, cdcFactsMinor, cdcFactsPatch = 11, 17, 0
+
+// baselineFacts returns the facts' project inputs, or nil below 11.17. The
+// decimal scale is Settings$RuntimeSettings.DecimalScale, which Studio Pro's
+// editor reads (getRuntimeSettings(model).decimalScale).
+func (b *Backend) baselineFacts() *cdcBaselineFacts {
+	pv := b.ProjectVersion()
+	if pv == nil || !pv.IsAtLeastFull(cdcFactsMajor, cdcFactsMinor, cdcFactsPatch) {
+		return nil
+	}
+	facts := &cdcBaselineFacts{}
+	if ps, err := b.GetProjectSettings(); err == nil && ps != nil && ps.Model != nil {
+		facts.decimalScale = int32(ps.Model.DecimalScale)
+	}
+	return facts
+}
+
+// cdcAttributeNullable is Studio Pro's isNullable for an attribute: it can be
+// empty unless a required rule covers it or it is a Boolean, and an AutoNumber
+// cannot (canBeEmpty && !isAutoNumberAttributeType, change-data-capture-editor
+// 11.17.0).
+//
+// A rule names its attribute by qualified name as the reader returns it
+// (domainmodel.go: AttributeID holds AttributeQualifiedName), so qualified is
+// matched as well as the $ID.
+func cdcAttributeNullable(a *domainmodel.Attribute, ent *domainmodel.Entity, qualified string) bool {
+	switch a.Type.(type) {
+	case *domainmodel.BooleanAttributeType, *domainmodel.AutoNumberAttributeType:
+		return false
+	}
+	if ent != nil {
+		for _, r := range ent.ValidationRules {
+			if r.Type == "Required" && (r.AttributeID == a.ID || strings.EqualFold(string(r.AttributeID), qualified)) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// cdcMaxLength is a String attribute's length and 0 for any other type.
+func cdcMaxLength(a *domainmodel.Attribute) int32 {
+	if s, ok := a.Type.(*domainmodel.StringAttributeType); ok {
+		return int32(s.Length)
+	}
+	return 0
+}
+
+// cdcAssociationMultiplicity is Studio Pro's getMultiplicity: a reference set
+// is ManyToMany, a reference both sides own OneToOne, any other OneToMany.
+func cdcAssociationMultiplicity(a *domainmodel.Association) string {
+	switch {
+	case a.Type == domainmodel.AssociationTypeReferenceSet:
+		return "ManyToMany"
+	case a.Owner == domainmodel.AssociationOwnerBoth:
+		return "OneToOne"
+	default:
+		return "OneToMany"
+	}
 }
 
 // resolvedSource is one tracked entity, resolved against the domain model.
@@ -228,11 +303,22 @@ func (b *Backend) resolveCdcMember(
 	}
 	// An association belongs to its FROM entity — the one stored in
 	// ParentPointer (CLAUDE.md, "Association Parent/Child Pointer Semantics").
-	// Tracking it from the TO side is not a thing the model can express.
+	// One that both sides own (owner Both) belongs to its TO entity as well:
+	// Studio Pro's CDC editor offers an entity every association it owns
+	// (getAssociationProperties: getAllAssociations(e).filter(isOwnerOf)), and
+	// mx check reports CE1583 when a both-owned association is tracked from one
+	// side only (ako/mxcli#2613). other is the end the member points at.
 	var assoc *domainmodel.Association
+	var other model.ID
 	for _, a := range dm.Associations {
-		if strings.EqualFold(a.Name, name) && a.ParentID == ent.ID {
-			assoc = a
+		if !strings.EqualFold(a.Name, name) {
+			continue
+		}
+		switch {
+		case a.ParentID == ent.ID:
+			assoc, other = a, a.ChildID
+		case a.ChildID == ent.ID && a.Owner == domainmodel.AssociationOwnerBoth:
+			assoc, other = a, a.ParentID
 		}
 	}
 	switch {
@@ -252,17 +338,20 @@ func (b *Backend) resolveCdcMember(
 			guid:      g,
 			assocGUID: zeroGUID,
 			cdcType:   t,
+			maxLength: cdcMaxLength(attr),
+			nullable:  cdcAttributeNullable(attr, ent, modName+"."+ent.Name+"."+attr.Name),
 		}, nil
 	case assoc != nil:
 		g, err := guidOf(dm, assoc.ID)
 		if err != nil {
 			return resolvedMember{}, fmt.Errorf("association %q: %w", name, err)
 		}
-		// The baseline records the TO entity's GUID, which is the association's
-		// Child end.
+		// The baseline records the GUID of the entity at the other end: the TO
+		// entity (the Child end) from the FROM side, the FROM entity from the TO
+		// side of a both-owned association.
 		var toGUID string
 		for _, e := range dm.Entities {
-			if e.ID == assoc.ChildID {
+			if e.ID == other {
 				if toGUID, err = guidOf(dm, e.ID); err != nil {
 					return resolvedMember{}, fmt.Errorf("association %q target: %w", name, err)
 				}
@@ -277,6 +366,10 @@ func (b *Backend) resolveCdcMember(
 			guid:      g,
 			assocGUID: toGUID,
 			cdcType:   "ArrayOfInt64",
+			// The editor writes no isNullable for an association; the stored
+			// value is the metamodel default, true.
+			nullable:     true,
+			multiplicity: cdcAssociationMultiplicity(assoc),
 		}, nil
 	default:
 		return resolvedMember{}, fmt.Errorf("%q is not an attribute or an association of %s", name, ent.Name)
@@ -313,7 +406,7 @@ func (b *Backend) appNameForProject() string {
 // the two agree without comparing them.
 func buildCdcService(
 	id element.ID, name, serviceName, appName, documentation, exportLevel string, excluded bool,
-	sources []resolvedSource, versions cdcVersions,
+	sources []resolvedSource, versions cdcVersions, facts *cdcBaselineFacts,
 ) element.Element {
 	svc := genCdc.NewEntityChangeDataCaptureService()
 	svc.SetID(id)
@@ -332,6 +425,9 @@ func buildCdcService(
 	baseline := genCdc.NewVersionedEntityChangeDataCaptureService()
 	baseline.SetID(element.ID(mmpr.GenerateID()))
 	baseline.SetVersion(newCdcVersion(versions.service))
+	if facts != nil {
+		baseline.SetDecimalScale(facts.decimalScale)
+	}
 
 	for _, rs := range sources {
 		// The baseline element is built first so the live side has an $ID to
@@ -356,6 +452,14 @@ func buildCdcService(
 			vProp.SetPropertyGuid(rm.guid)
 			vProp.SetAssociatedEntityGuid(rm.assocGUID)
 			vProp.SetType(rm.cdcType)
+			if facts != nil {
+				// Mendix 11.17 writes all three on every member, an attribute's
+				// AssociationMultiplicity as "" (ako/mxcli#2612). Below it the
+				// keys do not exist, so they stay unset and are not encoded.
+				vProp.SetAssociationMultiplicity(rm.multiplicity)
+				vProp.SetIsNullable(rm.nullable)
+				vProp.SetMaxLength(rm.maxLength)
+			}
 			vSrc.AddProperties(vProp)
 
 			if rm.isAssoc {
@@ -441,7 +545,7 @@ func (b *Backend) CreateChangeDataCaptureService(svc *model.ChangeDataCaptureSer
 		appName = b.appNameForProject()
 	}
 	g := buildCdcService(element.ID(svc.ID), svc.Name, serviceName, appName,
-		svc.Documentation, svc.ExportLevel, svc.Excluded, sources, freshCdcVersions(sources))
+		svc.Documentation, svc.ExportLevel, svc.Excluded, sources, freshCdcVersions(sources), b.baselineFacts())
 	contents, err := (&codec.Encoder{}).Encode(g)
 	if err != nil {
 		return fmt.Errorf("CreateChangeDataCaptureService: encode: %w", err)
@@ -474,7 +578,7 @@ func (b *Backend) DeleteChangeDataCaptureService(id model.ID) error {
 // a contract signal to consumers, and a wrong MAJOR is worse than cosmetic: the
 // major is a topic segment, so bumping it when nothing needed it starts a new
 // topic and, downstream, a new table with no history.
-func bumpCdcVersions(stored *model.ChangeBaseline, sources []resolvedSource) cdcVersions {
+func bumpCdcVersions(stored *model.ChangeBaseline, sources []resolvedSource, facts *cdcBaselineFacts) cdcVersions {
 	out := cdcVersions{source: map[string]model.ChangeVersion{}}
 	if stored == nil {
 		return freshCdcVersions(sources)
@@ -482,15 +586,17 @@ func bumpCdcVersions(stored *model.ChangeBaseline, sources []resolvedSource) cdc
 	type storedSource struct {
 		version model.ChangeVersion
 		members map[string]string // exposed name -> CDC type
+		facts   map[string]*model.ChangePropertyFacts
 	}
 	was := map[string]storedSource{}
 	for _, s := range stored.Sources {
-		ss := storedSource{members: map[string]string{}}
+		ss := storedSource{members: map[string]string{}, facts: map[string]*model.ChangePropertyFacts{}}
 		if s.Version != nil {
 			ss.version = *s.Version
 		}
 		for _, p := range s.Properties {
 			ss.members[p.ExposedName] = p.Type
+			ss.facts[p.ExposedName] = p.Facts
 		}
 		was[s.ExposedName] = ss
 	}
@@ -514,6 +620,13 @@ func bumpCdcVersions(stored *model.ChangeBaseline, sources []resolvedSource) cdc
 				added = true
 			case t != rm.cdcType:
 				breaking = true // a type change is not something a consumer can absorb
+			case factsChanged(prev.facts[rm.exposedName], rm, stored.DecimalScale, facts):
+				// Studio Pro's editor rates a changed multiplicity, nullability,
+				// length or decimal scale a Major impact (ako/mxcli#2612). Only
+				// against facts the baseline recorded: one written before 11.17
+				// has none, and a major bump there would start a new topic for
+				// nothing.
+				breaking = true
 			}
 		}
 		for name := range prev.members {
@@ -546,6 +659,19 @@ func bumpCdcVersions(stored *model.ChangeBaseline, sources []resolvedSource) cdc
 		out.service = svc
 	}
 	return out
+}
+
+// factsChanged reports whether a member's 11.17 facts differ from the ones its
+// baseline recorded. A baseline that recorded none (stored == nil), or a
+// project too old to record them (facts == nil), is no change.
+func factsChanged(stored *model.ChangePropertyFacts, rm resolvedMember, storedScale *int, facts *cdcBaselineFacts) bool {
+	if stored == nil || facts == nil {
+		return false
+	}
+	if stored.AssociationMultiplicity != rm.multiplicity || stored.IsNullable != rm.nullable || stored.MaxLength != int(rm.maxLength) {
+		return true
+	}
+	return rm.cdcType == "Decimal" && storedScale != nil && *storedScale != int(facts.decimalScale)
 }
 
 // UpdateChangeDataCaptureService rewrites an existing service (CREATE OR MODIFY).
@@ -597,12 +723,13 @@ func (b *Backend) UpdateChangeDataCaptureService(svc *model.ChangeDataCaptureSer
 	if appName == "" {
 		appName = b.appNameForProject()
 	}
+	facts := b.baselineFacts()
 	// Documentation arrives already resolved: the executor decides between
 	// preserving the stored value and clearing it (carriedDocumentation,
 	// mendixlabs/mxcli#1018), so the backend must not second-guess an empty one.
 	g := buildCdcService(element.ID(svc.ID), svc.Name, serviceName, appName,
 		svc.Documentation, stored.ExportLevel, stored.Excluded,
-		sources, bumpCdcVersions(stored.Baseline, sources))
+		sources, bumpCdcVersions(stored.Baseline, sources, facts), facts)
 	contents, err := (&codec.Encoder{}).Encode(g)
 	if err != nil {
 		return fmt.Errorf("UpdateChangeDataCaptureService: encode: %w", err)

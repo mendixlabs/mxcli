@@ -26,6 +26,9 @@ type fakePrebuiltMxbuild struct {
 	// failBundle makes the bundler step fail when a restored source file has
 	// this content.
 	failBundle string
+	// fixed is mxbuild from 11.17.0: every build bundles every page of the
+	// model, whatever source is on disk.
+	fixed bool
 	// hide names a page whose source is deleted before any sweep can see it.
 	hide string
 }
@@ -64,6 +67,12 @@ func (m *fakePrebuiltMxbuild) build() *BuildResult {
 		}
 		keepWrite(m.t, filepath.Join(dist, "pages", e.Name()), string(b))
 	}
+	if m.fixed {
+		for name, content := range m.model {
+			keepWrite(m.t, filepath.Join(dist, "pages", name+".js"), content)
+		}
+		keepWrite(m.t, filepath.Join(dist, "widgets.css"), "/**/")
+	}
 	if m.hide != "" && cold {
 		keepWrite(m.t, filepath.Join(dist, "pages", m.hide+".js"), m.model[m.hide])
 	}
@@ -79,7 +88,7 @@ func (m *fakePrebuiltMxbuild) build() *BuildResult {
 // has finished. Counting sweeps rather than sleeping keeps the test off the
 // wall clock.
 func (m *fakePrebuiltMxbuild) waitForSweep() {
-	if m.keep == nil || m.keep.off {
+	if !m.keep.active() {
 		return
 	}
 	target := m.keep.sweeps.Load() + 2
@@ -371,5 +380,110 @@ func TestCopyClientSource(t *testing.T) {
 	}
 	if err := copyClientSource(filepath.Join(dir, "gone.js"), dst); err == nil {
 		t.Fatal("a source mxbuild already deleted must be an error, not an empty copy")
+	}
+}
+
+// 11.16.1 was measured still losing the bundle and 11.17.0 not (the table in
+// client_source_keep.go).
+func TestKeepNeededFor(t *testing.T) {
+	for v, want := range map[string]bool{
+		"11.14.0": true, "11.16.0": true, "11.16.1": true, "10.24.26": true,
+		"11.17.0": false, "11.17.1": false, "11.18.0": false, "12.0.0": false,
+		"": true, "not-a-version": true,
+	} {
+		if got := keepNeededFor(v); got != want {
+			t.Errorf("keepNeededFor(%q) = %v, want %v", v, got, want)
+		}
+	}
+}
+
+// dormantLoop is newKeptLoop for a Mendix version that needs no keep.
+func dormantLoop(t *testing.T, fixed bool) (*fakePrebuiltMxbuild, *scriptedServe, *serveRecovery, *strings.Builder) {
+	t.Helper()
+	deploy := t.TempDir()
+	m := &fakePrebuiltMxbuild{t: t, deploy: deploy, fixed: fixed,
+		model: map[string]string{"Mod.Home": "home v1", "Mod.Other": "other v1"}}
+	keep := newClientSourceKeep(deploy)
+	t.Cleanup(keep.Close)
+	keep.dormant = true
+	m.keep = keep
+	f := &scriptedServe{build: func(proc, nth int) (*BuildResult, error) {
+		if nth == 1 && proc > 0 {
+			m.restartProcess()
+		}
+		return m.build(), nil
+	}}
+	stop := keep.watch()
+	stop(m.build().OK())
+	out := &strings.Builder{}
+	return m, f, &serveRecovery{serve: f, deployDir: deploy, out: out, keep: keep}, out
+}
+
+// On a Mendix version whose mxbuild builds incrementally by itself, the keep
+// reads nothing and writes nothing: web/ is mxbuild's alone (ako/mxcli#2610).
+func TestClientSourceKeep_DormantOnAFixedMxbuildTouchesNothing(t *testing.T) {
+	m, f, r, out := dormantLoop(t, true)
+
+	m.model["Mod.Home"] = "home v2"
+	res, err := r.Build(BuildRequest{ProjectFilePath: "/p/App.mpr"})
+	if err != nil || !res.OK() {
+		t.Fatalf("Build = %+v, %v", res, err)
+	}
+	if f.restarts != 0 {
+		t.Fatalf("restarts = %d, want 0\n%s", f.restarts, out)
+	}
+	if got := distPages(t, m.deploy); got["Mod.Home"] != "home v2" || got["Mod.Other"] != "other v1" {
+		t.Fatalf("dist/pages = %v", got)
+	}
+	if n := r.keep.sweeps.Load(); n != 0 {
+		t.Fatalf("a dormant keep swept web/ %d times; it must not read it at all", n)
+	}
+	if got := r.keep.files(); len(got) != 0 {
+		t.Fatalf("a dormant keep holds %v", got)
+	}
+	if !r.keep.dormant {
+		t.Fatal("a build that kept the bundle complete must leave the keep dormant")
+	}
+}
+
+// A later Mendix release that loses the bundle again wakes the keep: the first
+// change pays a full build, the next ones build incrementally. Control: before
+// the wake the keep had swept nothing.
+func TestClientSourceKeep_DormantKeepWakesWhenTheBundleIsLostAfterAll(t *testing.T) {
+	m, f, r, out := dormantLoop(t, false)
+	if n := r.keep.sweeps.Load(); n != 0 {
+		t.Fatalf("control: the dormant keep swept %d times during the boot build", n)
+	}
+
+	// A change that regenerates no page, such as a microflow edit.
+	if _, err := r.Build(BuildRequest{ProjectFilePath: "/p/App.mpr"}); err != nil {
+		t.Fatal(err)
+	}
+	if f.restarts != 1 || r.keep.dormant {
+		t.Fatalf("restarts = %d, dormant = %v; want one full build and the keep awake\n%s", f.restarts, r.keep.dormant, out)
+	}
+	if !strings.Contains(out.String(), "keeps the client source between builds from here on") {
+		t.Fatalf("waking the keep must be reported, got:\n%s", out)
+	}
+
+	m.model["Mod.Home"] = "home v2"
+	if _, err := r.Build(BuildRequest{ProjectFilePath: "/p/App.mpr"}); err != nil {
+		t.Fatal(err)
+	}
+	if f.restarts != 1 {
+		t.Fatalf("restarts = %d after the second change, want still 1: the woken keep makes it incremental", f.restarts)
+	}
+	if got := distPages(t, m.deploy); got["Mod.Home"] != "home v2" || got["Mod.Other"] != "other v1" {
+		t.Fatalf("dist/pages = %v", got)
+	}
+}
+
+// wake does not revive a keep that gave way after colliding with a build.
+func TestClientSourceKeep_WakeLeavesADisabledKeepOff(t *testing.T) {
+	k := newClientSourceKeep(t.TempDir())
+	t.Cleanup(k.Close)
+	k.disable()
+	if k.wake() || k.active() {
+		t.Fatal("a disabled keep must stay off")
 	}
 }

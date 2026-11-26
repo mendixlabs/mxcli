@@ -1692,6 +1692,9 @@ type ChangeBaseline struct {
 	BaseElement
 	Version *ChangeVersion           `json:"version,omitempty"`
 	Sources []*VersionedChangeSource `json:"sources,omitempty"`
+	// DecimalScale is the project decimal scale the baseline recorded (Mendix
+	// 11.17+), nil when it records none (ako/mxcli#2612).
+	DecimalScale *int `json:"decimalScale,omitempty"`
 }
 
 // VersionedChangeSource is one tracked entity as the baseline froze it. It
@@ -1713,6 +1716,17 @@ type VersionedChangeProperty struct {
 	PropertyGUID         string `json:"propertyGuid"`
 	AssociatedEntityGUID string `json:"associatedEntityGuid,omitempty"`
 	Type                 string `json:"type,omitempty"`
+	// Facts are the member facts the baseline recorded (Mendix 11.17+), nil
+	// when it records none (ako/mxcli#2612).
+	Facts *ChangePropertyFacts `json:"facts,omitempty"`
+}
+
+// ChangePropertyFacts are what Mendix 11.17 records about a tracked member so
+// its editor can tell a domain-model change from the baseline.
+type ChangePropertyFacts struct {
+	AssociationMultiplicity string `json:"associationMultiplicity,omitempty"`
+	IsNullable              bool   `json:"isNullable"`
+	MaxLength               int    `json:"maxLength"`
 }
 
 // ChangeVersion is ChangeDataCapture$Version. The major is a topic component,
