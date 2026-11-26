@@ -42,6 +42,21 @@ import (
 // next. The 11.14 measurement in webclient_legacy_paths.go is not this one: it
 // restored the bundler config and the empty directories, not what was in them.
 //
+// Mendix 11.17.0 fixes this in mxbuild itself. The same four builds, driven
+// over the /build API with no keep, one serve process each, blank apps:
+//
+//	build                 11.16.0 / 11.16.1          11.17.0
+//	1  cold               complete (47 files)        complete (49 files)
+//	2  no change          4 files, 0 pages           complete, 2.3 s
+//	3  microflow change   4 files, 0 pages           complete, 2.2 s
+//	4  page change        Failure, web/layouts/…     complete, 2.2 s, the edit in its page module
+//
+// 11.17.0 still deletes the source after each build; its later builds no
+// longer need it back. So from 11.17 on the keep is redundant, and it is left
+// on rather than gated by version: what it restores is what mxbuild would
+// regenerate, a run with it on 11.17.0 applied ten changes with no fallback,
+// and a version check would have to be right about every release in between.
+//
 // Nothing here names the directories. What is kept is whatever a build wrote
 // under web/ that a successful build then removed, so a Mendix version that
 // leaves its source in place (the rollup shape, 11.13 and earlier) keeps

@@ -168,9 +168,11 @@ func TestLegacyClientBuildHintStaysSilentWhenTheArtifactsExist(t *testing.T) {
 // ako/mxcli#606: the two halves of the failure have different remedies, and the
 // hint must not promise one for the other. The bundler-config half was measured
 // gone on 11.15.0 (BankV1, Linux, 2026-10-03: builds #2-#4 reloaded in 2.8-3.9 s
-// after a convert from 11.14.0), so its hint names the upgrade. The per-document
-// client half was still seen on macOS 11.15.0 (the fixture above), so its hint
-// must not.
+// after a convert from 11.14.0), so its hint names that upgrade. The
+// per-document client half was still seen on macOS 11.15.0 (the fixture above)
+// and on 11.16.0 and 11.16.1, and was measured gone on 11.17.0 (four builds in
+// one serve process over the /build API, Linux, 2026-11-26). So its hint names
+// 11.17.0, and must not send anyone to 11.15.0 for it.
 func TestLegacyClientBuildHint_UpgradeAdviceOnlyForTheHalfItFixes(t *testing.T) {
 	config := legacyClientBuildHint(deploy1114(t), bundleFailedMessage, real1114MissingRollupConfig)
 	if !strings.Contains(config, "11.15.0") {
@@ -180,8 +182,11 @@ func TestLegacyClientBuildHint_UpgradeAdviceOnlyForTheHalfItFixes(t *testing.T) 
 	if pages == "" {
 		t.Fatal("no hint for the client-directory half")
 	}
-	if strings.Contains(pages, "fixed in") || strings.Contains(pages, "upgrade") {
-		t.Errorf("the client-directory hint promises an upgrade fix that 11.15.0 (macOS) did not deliver:\n%s", pages)
+	if !strings.Contains(pages, "fixed in Mendix 11.17.0") {
+		t.Errorf("the client-directory hint does not name the version that fixes it:\n%s", pages)
+	}
+	if strings.Contains(pages, "fixed in Mendix 11.15") || strings.Contains(pages, "converted to 11.15.0") {
+		t.Errorf("the client-directory hint promises a fix that 11.15.0 (macOS) did not deliver:\n%s", pages)
 	}
 	if !strings.Contains(pages, "11.15") {
 		t.Errorf("the client-directory hint still lists only 11.12.5 and 11.14 though 11.15.0 was measured failing:\n%s", pages)
