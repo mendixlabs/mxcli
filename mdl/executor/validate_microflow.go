@@ -310,6 +310,7 @@ func (v *microflowValidator) walkBody(body []ast.MicroflowStatement) {
 			v.checkDivisionSlash("return", stmt.Value)
 			v.checkDateTimeLiterals("return", stmt.Value)
 		case *ast.IfStmt:
+			v.checkQualifiedCallInCondition(stmt.Condition)
 			v.checkDivisionSlash("if condition", stmt.Condition)
 			v.checkDateTimeLiterals("if condition", stmt.Condition)
 			v.walkBody(stmt.ThenBody)

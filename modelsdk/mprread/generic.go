@@ -4,6 +4,7 @@ package mprread
 
 import (
 	"fmt"
+	"github.com/mendixlabs/mxcli/modelsdk/canon"
 	"reflect"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -115,7 +116,10 @@ func decodeUnits[T element.Element](r *mmpr.Reader, refs []mmpr.UnitRef, typeNam
 			}
 		}
 		unitsDecoded.Add(1)
-		elem, err := dec.Decode(bson.Raw(ref.Contents))
+		// Workflow boundary events decode in the 11.16 shape; an 11.17 unit
+		// stores them in containers (canon.LowerBoundaryEventContainers,
+		// ako/mxcli#2616). A unit without them is returned as is.
+		elem, err := dec.Decode(bson.Raw(canon.LowerBoundaryEventContainers(ref.Contents)))
 		if err != nil {
 			return nil, fmt.Errorf("decode unit %s: %w", ref.ID, err)
 		}

@@ -501,7 +501,10 @@ func exportValueElementToGen(id string, elem *model.ExportMappingElement, parent
 func mappingValueDataTypeToGen(dataType string) element.Element {
 	var typeName string
 	switch dataType {
-	case "Integer", "Long":
+	case "Integer", "Long", "AutoNumber":
+		// An AutoNumber is an integer to its schema element: as String, mx
+		// check failed CE0227 + CE5015 against the Integer it maps
+		// (ako/mxcli#2603).
 		typeName = "DataTypes$IntegerType"
 	case "Decimal":
 		typeName = "DataTypes$DecimalType"
@@ -520,7 +523,7 @@ func mappingValueDataTypeToGen(dataType string) element.Element {
 // xmlPrimitiveTypeName maps a value element's data type to its XML primitive name.
 func xmlPrimitiveTypeName(dataType string) string {
 	switch dataType {
-	case "Integer", "Long":
+	case "Integer", "Long", "AutoNumber":
 		return "Integer"
 	case "Decimal":
 		return "Decimal"

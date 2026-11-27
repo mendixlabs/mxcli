@@ -1007,14 +1007,26 @@ func deduplicateActivityNamesInFlow(activities []workflows.WorkflowActivity, nam
 	}
 }
 
-// uniqueName returns a unique name by appending a number if the name was seen before.
+// uniqueName returns a unique name by appending a number if the name was seen
+// before. The suffix skips a name already seen: a carried stored name (End2 on
+// a boundary path) takes part in the count, and numbering by count alone gave
+// an uncarried End the same End2 — CE0495 on a workflow the script had just
+// created.
 func uniqueName(name string, nameCount map[string]int) string {
 	nameCount[name]++
 	count := nameCount[name]
 	if count == 1 {
 		return name
 	}
-	return fmt.Sprintf("%s%d", name, count)
+	for {
+		candidate := fmt.Sprintf("%s%d", name, count)
+		if nameCount[candidate] == 0 {
+			nameCount[candidate] = 1
+			nameCount[name] = count
+			return candidate
+		}
+		count++
+	}
 }
 
 func buildAnnotationActivity(n *ast.WorkflowAnnotationActivityNode) *workflows.WorkflowAnnotationActivity {

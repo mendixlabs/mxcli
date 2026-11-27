@@ -4,6 +4,7 @@ package modelsdkbackend
 
 import (
 	"fmt"
+	"github.com/mendixlabs/mxcli/modelsdk/canon"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -27,6 +28,9 @@ func (b *Backend) OpenWorkflowForMutation(unitID model.ID) (backend.WorkflowMuta
 	if err != nil {
 		return nil, fmt.Errorf("OpenWorkflowForMutation: load unit: %w", err)
 	}
+	// The mutator edits boundary events in the 11.16 shape; the write raises
+	// them back on an 11.17 project (ako/mxcli#2616).
+	raw = canon.LowerBoundaryEventContainers(raw)
 	var d bson.D
 	if err := bson.Unmarshal(raw, &d); err != nil {
 		return nil, fmt.Errorf("OpenWorkflowForMutation: unmarshal: %w", err)

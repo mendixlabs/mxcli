@@ -1912,8 +1912,14 @@ func (pb *pageBuilder) buildClientActionV3Base(action *ast.ActionV3) (pages.Clie
 			// parameter of the document being built: Studio Pro binds it by name,
 			// as an explicit mapping whose Variable is a Forms$PageVariable — which
 			// is what DESCRIBE prints back as `Param = $Param` (mendixlabs/mxcli#1403).
+			//
+			// ALTER builds against a stored document it never walks, so its
+			// context is unknown and binds() accepts everything — but a document
+			// parameter is bound by name whatever encloses the widget, so it is
+			// asked for there too; otherwise `alter snippet … show page P(S = $S)`
+			// stored an empty mapping, CE1571 (ako/mxcli#2621).
 			explicitVar, explicitKind := "", ""
-			if strVal, ok := arg.Value.(string); ok && !pb.argCtx.binds(strVal) {
+			if strVal, ok := arg.Value.(string); ok && (!pb.argCtx.known || !pb.argCtx.binds(strVal)) {
 				explicitVar, explicitKind = pb.namedParameterArgument(strVal)
 			}
 			if strVal, ok := arg.Value.(string); ok && explicitKind == "" && !pb.argCtx.binds(strVal) {

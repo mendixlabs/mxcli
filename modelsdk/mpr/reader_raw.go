@@ -10,6 +10,7 @@ package mpr
 import (
 	"fmt"
 	"github.com/mendixlabs/mxcli/modelsdk/bsoncompat"
+	"github.com/mendixlabs/mxcli/modelsdk/canon"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"strings"
 
@@ -27,6 +28,9 @@ func (r *Reader) GetRawUnit(id model.ID) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The raw-map consumers walk workflow boundary events in the 11.16 shape;
+	// an 11.17 unit stores them in containers (ako/mxcli#2616).
+	contents = canon.LowerBoundaryEventContainers(contents)
 	var raw map[string]any
 	if err := bsoncompat.UnmarshalDocMap(contents, &raw); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal BSON: %w", err)

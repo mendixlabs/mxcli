@@ -641,6 +641,10 @@ func boundaryEventFromGen(el element.Element) *workflows.BoundaryEvent {
 	}
 	be := &workflows.BoundaryEvent{Caption: t.Caption()}
 	be.ID = model.ID(el.ID())
+	// Mendix 11.17 names timer events too (boundaryEvent1, …); a stored unit
+	// lowered from that shape keeps the name, so a rewrite gives it back
+	// rather than renumbering (ako/mxcli#2616). Below 11.17 there is none.
+	be.Name = genWf.RawFieldString(el.Raw(), "Name")
 	be.TimerDelay = t.FirstExecutionTime()
 	if be.TimerDelay == "" {
 		be.TimerDelay = t.Delay()

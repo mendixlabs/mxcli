@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/mdl/linter"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 	"github.com/mendixlabs/mxcli/modelsdk/widgets/mpk"
 )
@@ -139,5 +140,36 @@ func TestWidgetPlatform_UnknownLayoutIsNotJudged(t *testing.T) {
 };`)
 	if len(got) != 0 {
 		t.Fatalf("a page on an unresolved layout must not be judged, got:\n%s", strings.Join(got, "\n"))
+	}
+}
+
+// A web widget on a native page fails mxbuild: CE6089 "Widget 'Image' is only
+// supported on web documents." (mx check 11.12.6, image/accordion/gallery), so
+// it is an error check refuses and exec with it (ako/mxcli#2619). A native
+// widget on a web page is not measured and stays a warning.
+func TestWidgetPlatform_WebOnNativeIsAnError_2619(t *testing.T) {
+	mpr := writeNativeWidgetProject(t)
+	severities := func(src string) map[string]linter.Severity {
+		prog, errs := visitor.Build(src)
+		if len(errs) > 0 {
+			t.Fatalf("parse: %v", errs[0])
+		}
+		out := map[string]linter.Severity{}
+		for _, v := range validateWidgetPlatforms(prog, platformRegistry(), mpr, nil) {
+			out[v.Message] = v.Severity
+		}
+		return out
+	}
+	for msg, sev := range severities(`create layout M.NL (LayoutType: Default) { placeholder Main };
+create page M.P (Title: 'N', Layout: M.NL) { image img1 (Image: 'M.Images.logo') };`) {
+		if sev != linter.SeverityError || !strings.Contains(msg, "CE6089") {
+			t.Errorf("web image on a native page: %v %q, want an error naming CE6089", sev, msg)
+		}
+	}
+	for msg, sev := range severities(`create layout M.WL (LayoutType: Responsive) { placeholder Main };
+create page M.P (Title: 'W', Layout: M.WL) { nativeslider s1 };`) {
+		if sev != linter.SeverityWarning {
+			t.Errorf("control, native slider on a web page: %v %q, want a warning", sev, msg)
+		}
 	}
 }

@@ -165,7 +165,15 @@ func storageFormFor(pv *version.ProjectVersion, unitID string, contents []byte, 
 	// Properties whose shape changed at a version are written in the project's
 	// shape first, so the floor sees the keys this version declares
 	// (ako/mxcli#1209). A version that has every shape is not parsed for it.
-	lowered, err := lowerToProjectShape(contents, &v)
+	// The writers build workflow boundary events in the 11.16 shape; an 11.17+
+	// project stores them in containers (ako/mxcli#2616). Raised first, so the
+	// lowering, the floor and the comparison with the stored unit all see the
+	// shape this version stores.
+	raised, err := canon.RaiseBoundaryEventContainers(contents, &v)
+	if err != nil {
+		return nil, fmt.Errorf("unit %s: %w", unitID, err)
+	}
+	lowered, err := lowerToProjectShape(raised, &v)
 	if err != nil {
 		return nil, fmt.Errorf("unit %s: %w", unitID, err)
 	}

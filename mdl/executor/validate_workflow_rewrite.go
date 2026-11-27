@@ -163,7 +163,11 @@ func checkNoDroppedWorkflowConstructs(ctx *ExecContext, workflowID model.ID, qua
 	// counted when it is stored: below Mendix 11.3 it is not, and subtracting
 	// it regardless hid one branch End (ako/mxcli#1754).
 	// An event sub-process's closing End is implicit too, like the main flow's.
-	if storedEnds := countRawWorkflowNodesExact(raw, "Workflows$EndWorkflowActivity") - rawMainFlowEnd(raw) - rawImplicitSubProcessEnds(raw); storedEnds > 0 {
+	// So is the End that closes an interrupting boundary event's path: the
+	// writer appends it and Studio Pro normalizes the path to one, and MDL never
+	// states it.
+	if storedEnds := countRawWorkflowNodesExact(raw, "Workflows$EndWorkflowActivity") - rawMainFlowEnd(raw) -
+		rawImplicitSubProcessEnds(raw) - rawImplicitBoundaryEnds(raw); storedEnds > 0 {
 		if authored := countAuthoredEnds(authoredActs); authored < storedEnds {
 			return mdlerrors.NewUnsupported(fmt.Sprintf(
 				"workflow %s has %d stored `end workflow` inside its branches but this statement declares %d — "+
@@ -760,6 +764,31 @@ func rawImplicitSubProcessEnds(raw map[string]any) int {
 			n++
 		}
 	}
+	return n
+}
+
+// rawImplicitBoundaryEnds counts the interrupting boundary events whose path
+// closes with an End: the End every such path ends in, which MDL does not
+// state. Counted on the stored shape the readers see (11.16; an 11.17 unit is
+// lowered by canon.LowerBoundaryEventContainers).
+func rawImplicitBoundaryEnds(raw map[string]any) int {
+	n := 0
+	walkRawDocs(raw, func(d map[string]any) {
+		t, _ := d["$Type"].(string)
+		if !strings.HasPrefix(t, "Workflows$Interrupting") || !strings.HasSuffix(t, "BoundaryEvent") {
+			return
+		}
+		flow, _ := d["Flow"].(map[string]any)
+		acts := rawList(flow["Activities"])
+		if len(acts) == 0 {
+			return
+		}
+		if last, ok := acts[len(acts)-1].(map[string]any); ok {
+			if lt, _ := last["$Type"].(string); lt == "Workflows$EndWorkflowActivity" {
+				n++
+			}
+		}
+	})
 	return n
 }
 
