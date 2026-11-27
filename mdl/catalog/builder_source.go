@@ -4,6 +4,7 @@ package catalog
 
 import (
 	"fmt"
+	"log"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -265,11 +266,22 @@ func (b *Builder) buildSource() error {
 		}
 	}()
 
+	var stalled []string
 	results, failures := runDescribes(toDescribe, b.describeFunc,
 		max(min(runtime.NumCPU(), 8), 1),
-		func(n int) { done.Store(int64(n)) })
+		func(n int) { done.Store(int64(n)) },
+		func(it sourceItem, after time.Duration) {
+			// Logged at once; said once the describes are over, since the
+			// ticker is the progress sink's one writer until then.
+			stalled = append(stalled, it.qn)
+			logDescribeStall(it.qn)
+		})
 
 	close(stop)
+	for _, qn := range stalled {
+		b.say(fmt.Sprintf("source: describing %s did not finish within %s; built without it (the session log holds where it waited)",
+			qn, describeStallAfter), 1)
+	}
 
 	// Phase 3: Insert results into FTS5 table (serial — SQLite constraint)
 	stmt, err := b.tx.Prepare(`
@@ -336,13 +348,23 @@ func firstFailureReason(failures []describeFailure, objType string) string {
 	return ""
 }
 
+// describeStallAfter is how long one describe may run before the build stops
+// waiting for it. A describe that blocked — measured at 0% CPU on the last of
+// 2,184 documents, with a stale catalog.db present — hung lint, report and
+// search forever with nothing on screen but "source 2183/2184" (ako/mxcli#2641).
+// A var so the tests can shorten it.
+var describeStallAfter = 2 * time.Minute
+
 // runDescribes fans the describe calls out across workers and returns both the
 // per-item results (positionally, so text stays matched to its document) and
-// every item that produced no row.
+// the items that produced no row, with why.
 //
-// Split out of buildSource so the failure handling is testable without a
-// project: the whole of #912 lived in the two swallowed error paths below.
-func runDescribes(items []sourceItem, describe DescribeFunc, workers int, onProgress func(done int)) ([]sourceResult, []describeFailure) {
+// A describe still running after describeStallAfter is given up on: it is
+// recorded as a failure naming the wait, onStall is told (the caller logs
+// where every goroutine is, so the cause can be found), and a fresh worker
+// takes its place so the rest of the queue still runs. Its goroutine cannot be
+// stopped; its result, should it ever come, is discarded.
+func runDescribes(items []sourceItem, describe DescribeFunc, workers int, onProgress func(done int), onStall func(item sourceItem, after time.Duration)) ([]sourceResult, []describeFailure) {
 	if len(items) == 0 {
 		return nil, nil
 	}
@@ -354,41 +376,101 @@ func runDescribes(items []sourceItem, describe DescribeFunc, workers int, onProg
 	failed := make([]*describeFailure, len(items))
 	work := make(chan int, len(items))
 
-	var done atomic.Int64
-	var wg sync.WaitGroup
-	for range workers {
-		wg.Go(func() {
-			for idx := range work {
-				item := items[idx]
-				text, err := describe(item.objType, item.qn, item.id)
-				switch {
-				case err != nil:
-					failed[idx] = &describeFailure{item, err.Error()}
-				case text == "":
-					failed[idx] = &describeFailure{item, "describe returned empty output"}
-				default:
-					results[idx] = sourceResult{item, text}
-				}
-				n := done.Add(1)
-				if onProgress != nil {
-					onProgress(int(n))
-				}
-			}
-		})
-	}
+	var mu sync.Mutex
+	started := map[int]time.Time{} // in flight, by item
+	abandoned := map[int]bool{}
+	finished := 0
+	allDone := make(chan struct{})
 
+	worker := func() {
+		for idx := range work {
+			item := items[idx]
+			mu.Lock()
+			started[idx] = time.Now()
+			mu.Unlock()
+			text, err := describe(item.objType, item.qn, item.id)
+			mu.Lock()
+			if abandoned[idx] {
+				// Given up on already; this worker was replaced, so it stops.
+				mu.Unlock()
+				return
+			}
+			delete(started, idx)
+			switch {
+			case err != nil:
+				failed[idx] = &describeFailure{item, err.Error()}
+			case text == "":
+				failed[idx] = &describeFailure{item, "describe returned empty output"}
+			default:
+				results[idx] = sourceResult{item, text}
+			}
+			finished++
+			n := finished
+			if n == len(items) {
+				close(allDone)
+			}
+			mu.Unlock()
+			if onProgress != nil {
+				onProgress(n)
+			}
+		}
+	}
+	for range workers {
+		go worker()
+	}
 	for i := range items {
 		work <- i
 	}
 	close(work)
-	wg.Wait()
 
-	// Collected in index order so the report is stable run to run.
-	var failures []describeFailure
-	for _, f := range failed {
-		if f != nil {
-			failures = append(failures, *f)
+	tick := time.NewTicker(min(describeStallAfter/4, time.Second))
+	defer tick.Stop()
+	for {
+		select {
+		case <-allDone:
+			var failures []describeFailure
+			for _, f := range failed {
+				if f != nil {
+					failures = append(failures, *f)
+				}
+			}
+			return results, failures
+		case now := <-tick.C:
+			mu.Lock()
+			var stalled []int
+			for idx, at := range started {
+				if now.Sub(at) >= describeStallAfter {
+					stalled = append(stalled, idx)
+				}
+			}
+			for _, idx := range stalled {
+				delete(started, idx)
+				abandoned[idx] = true
+				failed[idx] = &describeFailure{items[idx], fmt.Sprintf("describe did not finish within %s and was given up on", describeStallAfter)}
+				finished++
+				if finished == len(items) {
+					close(allDone)
+				}
+				go worker() // the stalled one never comes back to the queue
+			}
+			n := finished
+			mu.Unlock()
+			for _, idx := range stalled {
+				if onStall != nil {
+					onStall(items[idx], describeStallAfter)
+				}
+			}
+			if len(stalled) > 0 && onProgress != nil {
+				onProgress(n)
+			}
 		}
 	}
-	return results, failures
+}
+
+// logDescribeStall writes every goroutine's stack to the session log, so the
+// next stalled describe shows where it waits (ako/mxcli#2641).
+func logDescribeStall(qn string) {
+	buf := make([]byte, 1<<20)
+	n := runtime.Stack(buf, true)
+	log.Printf("catalog: describe of %s stalled; goroutines:\n%s", qn, buf[:n])
 }
