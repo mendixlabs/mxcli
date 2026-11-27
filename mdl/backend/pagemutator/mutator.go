@@ -38,6 +38,12 @@ type Deps interface {
 	SerializeClientAction(a pages.ClientAction) bson.D
 	// SerializeCustomWidgetDataSource converts a pluggable-widget data source to raw bson.D.
 	SerializeCustomWidgetDataSource(ds pages.DataSource) bson.D
+	// SerializeFormDataSource converts a microflow or nanoflow data source of
+	// a built-in widget (a data view, or a list widget when list is set) to
+	// raw bson.D, exactly as create page writes it — its parameter mappings
+	// and call settings included (ako/mxcli#2634). nil when the engine does
+	// not, and the mutator then writes the source itself.
+	SerializeFormDataSource(ds pages.DataSource, list bool) bson.D
 	// SerializeClientTemplate builds an empty Forms$ClientTemplate, for a
 	// text-template property that is stored null and has to hold text — the
 	// codec's shape, not one assembled here.
@@ -162,7 +168,19 @@ func (m *Mutator) SetWidgetDataSource(widgetRef string, ds pages.DataSource) err
 		return m.setPluggableDataSource(result.widget, ds)
 	}
 
-	serialized := serializeDataSourceBson(ds)
+	var serialized bson.D
+	switch ds.(type) {
+	case *pages.MicroflowSource, *pages.NanoflowSource:
+		// Through create page's serializer: the one below wrote no parameter
+		// mappings and FormValidations All whatever the statement said, so a
+		// flow with parameters failed CE1571 (ako/mxcli#2634).
+		if m.deps != nil {
+			serialized = m.deps.SerializeFormDataSource(ds, bsonnav.DGetString(result.widget, "$Type") != "Forms$DataView")
+		}
+	}
+	if serialized == nil {
+		serialized = serializeDataSourceBson(ds)
+	}
 	if serialized == nil {
 		return fmt.Errorf("unsupported DataSource type %T", ds)
 	}
