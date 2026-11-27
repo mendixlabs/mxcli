@@ -256,7 +256,13 @@ HEAD) and theirs revisions are checked out into temporary worktrees and the
 three projects' .mpr files go to `mx merge` (resolved for the project's
 Mendix version; MINE is never the working tree mid-merge — the engine
 chokes on the conflicted state); the engine writes its result into MINE and
-it is copied back, so the engine owns the `.mpr`:
+it is copied back, so the engine owns the `.mpr`. The engine must be the
+project's own Mendix release: an mx of another version (an `mx` on PATH, or
+the only cached download), or one whose version cannot be told, is refused
+before it runs and the merge is aborted. Install the matching one with
+`mxcli setup mxbuild --version <project version>`, which is the usual first
+step on a Linux container or CI runner; `--mxbuild-path` names an mx on
+purpose, and then a mismatch is only a warning:
 
 - what the engine auto-resolves is copied back, hash-checked, staged and
   committed as the normal two-parent merge commit, with the note attached.
