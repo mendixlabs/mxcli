@@ -65,13 +65,24 @@ func carryWorkflowActivityNames(declared, stored []workflows.WorkflowActivity) {
 		if match == nil {
 			continue
 		}
-		d, s := workflowFlowSlots(a), workflowFlowSlots(match)
-		if len(d) != len(s) {
-			continue
+		carryBoundaryEventNames(a, match)
+		// Outcome flows and boundary-event flows are paired separately: a
+		// stored call microflow holds a void outcome the rebuild does not, and
+		// counting both in one list made every boundary path of such an
+		// activity miss its stored names — the End closing it then took a
+		// name another End already had (CE0495).
+		if d, s := workflowFlowSlots(a), workflowFlowSlots(match); len(d) == len(s) {
+			for i := range d {
+				if d[i] != nil && s[i] != nil {
+					carryWorkflowActivityNames(d[i].Activities, s[i].Activities)
+				}
+			}
 		}
-		for i := range d {
-			if d[i] != nil && s[i] != nil {
-				carryWorkflowActivityNames(d[i].Activities, s[i].Activities)
+		if d, s := activityBoundaryEvents(a), activityBoundaryEvents(match); len(d) == len(s) {
+			for i := range d {
+				if d[i] != nil && s[i] != nil && d[i].Flow != nil && s[i].Flow != nil {
+					carryWorkflowActivityNames(d[i].Flow.Activities, s[i].Flow.Activities)
+				}
 			}
 		}
 	}
@@ -108,9 +119,10 @@ func unnamedWorkflowActivity(act workflows.WorkflowActivity) bool {
 	return false
 }
 
-// workflowFlowSlots lists the flows nested in act in a fixed order — outcomes,
-// then boundary events — keeping an absent flow as nil so the two sides of a
-// pair line up by position. nestedFlows skips absent flows, which suits a walk
+// workflowFlowSlots lists the outcome flows nested in act in a fixed order,
+// keeping an absent flow as nil so the two sides of a pair line up by
+// position. Boundary-event flows are paired on their own (see
+// carryWorkflowActivityNames). nestedFlows skips absent flows, which suits a walk
 // but not a pairing: the rebuild leaves an empty outcome's flow nil where the
 // stored one has an empty Flow.
 func workflowFlowSlots(act workflows.WorkflowActivity) []*workflows.Flow {
@@ -124,19 +136,9 @@ func workflowFlowSlots(act workflows.WorkflowActivity) []*workflows.Flow {
 			flows = append(flows, o.GetFlow())
 		}
 	}
-	boundary := func(events []*workflows.BoundaryEvent) {
-		for _, be := range events {
-			if be == nil {
-				flows = append(flows, nil)
-				continue
-			}
-			flows = append(flows, be.Flow)
-		}
-	}
 	switch a := act.(type) {
 	case *workflows.CallMicroflowTask:
 		conditions(a.Outcomes)
-		boundary(a.BoundaryEvents)
 	case *workflows.SystemTask:
 		conditions(a.Outcomes)
 	case *workflows.ExclusiveSplitActivity:
@@ -149,7 +151,6 @@ func workflowFlowSlots(act workflows.WorkflowActivity) []*workflows.Flow {
 			}
 			flows = append(flows, o.Flow)
 		}
-		boundary(a.BoundaryEvents)
 	case *workflows.ParallelSplitActivity:
 		for _, o := range a.Outcomes {
 			if o == nil {
@@ -158,10 +159,29 @@ func workflowFlowSlots(act workflows.WorkflowActivity) []*workflows.Flow {
 			}
 			flows = append(flows, o.Flow)
 		}
-	case *workflows.CallWorkflowActivity:
-		boundary(a.BoundaryEvents)
-	case *workflows.WaitForNotificationActivity:
-		boundary(a.BoundaryEvents)
 	}
 	return flows
+}
+
+// carryBoundaryEventNames gives each of declared's timer boundary events the
+// name its stored counterpart has, pairing them by position when both sides
+// hold the same kinds in the same order. Mendix 11.17 names timers
+// (boundaryEvent1, …) and MDL cannot state the name, so without this a rewrite
+// renumbered them (ako/mxcli#2616). A notification event's name is its MDL
+// name and is not carried.
+func carryBoundaryEventNames(declared, stored workflows.WorkflowActivity) {
+	d, s := activityBoundaryEvents(declared), activityBoundaryEvents(stored)
+	if len(d) == 0 || len(d) != len(s) {
+		return
+	}
+	for i := range d {
+		if d[i] == nil || s[i] == nil || d[i].EventType != s[i].EventType {
+			return
+		}
+	}
+	for i := range d {
+		if !d[i].IsNotification() && d[i].Name == "" {
+			d[i].Name = s[i].Name
+		}
+	}
 }
