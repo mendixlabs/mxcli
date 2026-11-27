@@ -1075,7 +1075,7 @@ func resolveAttributeType(entityQN, attrName string, b backend.DomainModelBacken
 		if t := ResolveMemberType(hb, entityQN, attrName); t != "" {
 			return t
 		}
-		return "String"
+		return systemMemberTypeOr(attrName, "String")
 	}
 
 	dms, err := b.ListDomainModels()
@@ -1093,7 +1093,18 @@ func resolveAttributeType(entityQN, attrName string, b backend.DomainModelBacken
 			}
 		}
 	}
-	return "String"
+	return systemMemberTypeOr(attrName, "String")
+}
+
+// systemMemberTypeOr is the type of a system date member (createdDate,
+// changedDate), which no entity lists among its attributes, or fallback. A
+// mapping value bound to one was typed String against its DateTime schema
+// element: CE0227 + CE5015 (ako/mxcli#2603).
+func systemMemberTypeOr(name, fallback string) string {
+	if strings.EqualFold(name, "createdDate") || strings.EqualFold(name, "changedDate") {
+		return "DateTime"
+	}
+	return fallback
 }
 
 // execDropImportMapping deletes an import mapping.
