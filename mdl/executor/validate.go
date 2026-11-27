@@ -2507,6 +2507,26 @@ func documentEntityParameters(stmt ast.Statement) []string {
 	return out
 }
 
+// documentPrimitiveParameters is the names of a page's or snippet's primitive
+// parameters — the ones an input binds directly (`Attribute: $Label`), as it
+// does a page variable.
+func documentPrimitiveParameters(stmt ast.Statement) []string {
+	var params []ast.PageParameter
+	switch s := stmt.(type) {
+	case *ast.CreatePageStmtV3:
+		params = s.Parameters
+	case *ast.CreateSnippetStmtV3:
+		params = s.Parameters
+	}
+	var out []string
+	for _, p := range params {
+		if pageParamBSONType(p.Type) != "" {
+			out = append(out, p.Name)
+		}
+	}
+	return out
+}
+
 // documentVariables is a page's or snippet's `Variables:` declarations.
 func documentVariables(stmt ast.Statement) []ast.PageVariable {
 	switch s := stmt.(type) {

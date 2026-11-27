@@ -230,7 +230,8 @@ func checkAddedParameterURLSegments(ctx *ExecContext, s *ast.AlterPageStmt, h *C
 // alterParameterSpec resolves an `add parameters` declaration the way CREATE
 // resolves its Params clause (cmd_pages_builder_v3.go): a primitive becomes its
 // DataTypes $Type, anything else must name an entity that exists, and a snippet
-// takes entities only (MDL087 — mxbuild's CE0046 otherwise).
+// takes a primitive only from 11.17 (pages/snippet_parameter_primitive —
+// mxbuild's CE0046 below).
 func alterParameterSpec(ctx *ExecContext, s *ast.AlterPageStmt, containerType string, p ast.PageParameter) (backend.PageParameterSpec, error) {
 	spec := backend.PageParameterSpec{Name: p.Name, Optional: p.Optional}
 	bsonType := pageParamBSONType(p.Type)
@@ -238,13 +239,11 @@ func alterParameterSpec(ctx *ExecContext, s *ast.AlterPageStmt, containerType st
 		if p.Optional {
 			return spec, mdlerrors.NewValidation(optionalSnippetParameterMessage(s.PageName, p.Name))
 		}
-		if caption := types.SnippetParameterTypeRule(bsonType); caption != "" {
-			return spec, mdlerrors.NewValidationf(
-				"snippet '%s' cannot take parameter $%s with the primitive type %s — a snippet "+
-					"parameter must be an entity, and mxbuild rejects a primitive one with "+
-					"CE0046 (\"Invalid data type '%s'.\"). Pass the value on an object, or "+
-					"keep the primitive on the calling page's parameters.",
-				s.PageName.String(), p.Name, paramTypeSourceName(p.Type), caption)
+		if bsonType != "" {
+			// 11.17+; CE0046 below (types.SnippetParameterTypeRule).
+			if err := checkGate(ctx, snippetPrimitiveParameterGate(p)); err != nil {
+				return spec, err
+			}
 		}
 	}
 	if bsonType != "" {

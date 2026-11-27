@@ -4,10 +4,11 @@ package types
 
 // SnippetParameterTypeRule answers the one question both `mxcli check` and the
 // snippet writer have to answer about a snippet parameter's declared type:
-// may it be a primitive?
+// is it a primitive, and if so what does mxbuild call it?
 //
-// It may not. Measured on Mendix 11.13.0 against a project whose only content
-// was the snippets below (so nothing else could be the cause):
+// A primitive snippet parameter is valid from Mendix 11.17 and refused below.
+// Measured on Mendix 11.13.0 against a project whose only content was the
+// snippets below (so nothing else could be the cause):
 //
 //	create snippet S.Label   ( params: { $Label: string } )
 //	  → [error] [CE0046] "Invalid data type 'String'." at Snippet 'S.Label'
@@ -23,16 +24,24 @@ package types
 // parameters rather than about primitives: a PAGE declaring all six of those
 // primitives as parameters builds at 0 errors.
 //
+// Re-measured across the 11.17 boundary with the same bytes: a snippet with
+// five primitive parameters, inputs and a text template bound to them, and a
+// page passing its own primitive parameters into the call. mx 11.16.0 reports
+// one CE0046 per parameter; mx 11.17.0 reports 0 errors — and so does Studio
+// Pro 11.17's own primitive snippet (ako/TestApp Snippet.SnippetPrimitiveParameter).
+// The floor is registered as pages/snippet_parameter_primitive
+// (sdk/versions/mendix-11.yaml); this function only names the type.
+//
 // Storage does not encode the restriction — Forms$SnippetParameter's
 // ParameterType is the polymorphic DataTypes$DataType, exactly as
 // Forms$PageParameter's is (generated/metamodel: PagesSnippetParameter
 // .ParameterType *DataTypesDataType), so a primitive serializes perfectly well.
-// Only mxbuild's validator says no. That is why this has to live somewhere
-// mxcli can consult it, and why a shape argument from the metamodel was not
-// enough to settle it.
+// Only mxbuild's validator says no, and the metamodel release notes record no
+// change at 11.17. That is why the floor is a measurement, not a type gate.
 //
-// Returned string is the Studio Pro caption mxbuild quotes in CE0046, so the
-// message can be checked against a build log verbatim; "" means allowed.
+// Returned string is the Studio Pro caption mxbuild quotes in CE0046 below
+// 11.17, so the message can be checked against a build log verbatim; "" means
+// not a primitive (an entity parameter).
 func SnippetParameterTypeRule(bsonType string) (ce0046Caption string) {
 	switch bsonType {
 	case "DataTypes$StringType":

@@ -162,7 +162,7 @@ func validateWidgetPropertiesOf(stmt ast.Statement, registry *WidgetRegistry) []
 				Suggestion: "Put the file manager in a data view whose object extends System.FileDocument.",
 			})
 		}
-		return append(out, validatePageVariableBindings(widgets, documentVariables(stmt), label)...)
+		return append(out, validatePageVariableBindings(widgets, documentVariables(stmt), documentPrimitiveParameters(stmt), label)...)
 	}
 	switch s := stmt.(type) {
 	case *ast.CreateLayoutStmt:

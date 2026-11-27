@@ -6,14 +6,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/visitor"
 )
 
-// MDL087 — mendixlabs/mxcli#1028. `mxcli check` has to carry this because
-// nothing between the author and mxbuild types a snippet parameter: the
-// reported script passed `check`, and the documented spelling is the one that
-// fails. The rule and its measurements live in types.SnippetParameterTypeRule;
-// this asserts the check reports them, on the same function exec refuses with.
+// MDL087 refuses, without a project, what no Mendix version stores on a
+// snippet parameter: `optional`. It used to refuse a primitive type as well
+// (mendixlabs/mxcli#1028, CE0046); that is valid from 11.17 and is now the
+// pages/snippet_parameter_primitive version gate, which `check -p` and exec
+// apply (TestStatementVersionGates_PrimitiveSnippetParameter). This pass cannot
+// know the version, and refusing here blocked the valid form at exec's
+// pre-flight.
 func checkSnippetSource(t *testing.T, src string) []string {
 	t.Helper()
 	prog, errs := visitor.Build(src)
@@ -39,39 +42,29 @@ func TestValidateSnippetParameters(t *testing.T) {
 		want    int
 		phrases []string
 	}{{
-		// The reported repro, in the reporter's casing.
-		name:    "the reported String parameter",
-		params:  "$Label: string",
-		want:    1,
-		phrases: []string{"$Label", "CE0046", "Invalid data type 'String'"},
+		// The #1028 repro: a primitive is now a version question, not a
+		// project-free refusal.
+		name:   "a primitive parameter is left to the version gate",
+		params: "$Label: string",
+		want:   0,
 	}, {
-		// Long and Integer are one stored type, so both quote Studio Pro's
-		// combined caption — the message is meant to match a build log verbatim.
-		name:    "Long reports the Integer/Long caption",
-		params:  "$Count: Long",
-		want:    1,
-		phrases: []string{"Integer/Long"},
-	}, {
-		name:    "DateTime reports Mendix's own wording",
-		params:  "$Due: DateTime",
-		want:    1,
-		phrases: []string{"Date and time"},
-	}, {
-		// One violation per bad parameter: a clause with six of them names all
-		// six rather than one per run.
 		name: "every primitive in one clause",
 		params: "$Label: String, $Count: Long, $Rank: Integer, " +
 			"$Amount: Decimal, $Active: Boolean, $Due: DateTime",
-		want: 6,
+		want: 0,
 	}, {
-		// CONTROL: the form Mendix accepts. Measured at 0 errors on 11.13.0.
+		// `optional` is stored by no version: still refused, per parameter.
+		name:    "an optional parameter",
+		params:  "$Order: Sales.Order optional",
+		want:    1,
+		phrases: []string{"$Order", "optional"},
+	}, {
+		// CONTROL: the form Mendix accepts on every version.
 		name:   "an entity parameter is clean",
 		params: "$Order: Sales.Order",
 		want:   0,
 	}, {
-		// CONTROL: a quoted entity name is still an entity — the clause's other
-		// bug (visitor.TestSnippetParameter_QuotedEntityNameIsUnquoted) must not
-		// come back as a spurious MDL087.
+		// CONTROL: a quoted entity name is still an entity.
 		name:   "a quoted entity parameter is clean",
 		params: `$Order: Sales."Order"`,
 		want:   0,
@@ -101,25 +94,40 @@ func TestValidateSnippetParameters(t *testing.T) {
 	}
 }
 
-// CONTROL: a PAGE with the same parameters produces nothing. MDL087 is about
-// snippet parameters, and a rule that also fired on pages would break the
-// documented, measured-valid page form.
-func TestValidateSnippetParameters_IgnoresPages(t *testing.T) {
-	if msgs := checkSnippetSource(t, `CREATE PAGE M.P (
-  Title: 'P', Params: { $Label: String, $Count: Long }
-) { }`); len(msgs) != 0 {
-		t.Errorf("page flagged by MDL087: %v", msgs)
+// `alter snippet … add parameters` declares the same element (mendixlabs/mxcli#1234):
+// `optional` refused, a primitive left to the gate.
+func TestValidateSnippetParameters_AlterAdd(t *testing.T) {
+	if msgs := checkSnippetSource(t, `alter snippet M.S { add parameters $Label: String; add parameters $C: M.Customer; };`); len(msgs) != 0 {
+		t.Fatalf("a primitive is the version gate's, got %v", msgs)
+	}
+	msgs := checkSnippetSource(t, `alter snippet M.S { add parameters $C: M.Customer optional; };`)
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "$C") {
+		t.Fatalf("want one MDL087 for optional $C, got %v", msgs)
 	}
 }
 
-// `alter snippet … add parameters` declares the same element, so `check` refuses
-// the same primitive (mendixlabs/mxcli#1234). The page form is the control.
-func TestValidateSnippetParameters_AlterAdd(t *testing.T) {
-	msgs := checkSnippetSource(t, `alter snippet M.S { add parameters $Label: String; add parameters $C: M.Customer; };`)
-	if len(msgs) != 1 || !strings.Contains(msgs[0], "$Label") {
-		t.Fatalf("want one MDL087 for $Label, got %v", msgs)
+// MDL-WIDGET34 at check time: `Attribute: $Label` binds a primitive parameter
+// of the document as it binds a page variable — exec writes it in the
+// SnippetParameter or PageParameter slot (mx 11.17.0: 0 errors). A name that is
+// neither still fails, and an entity parameter is not a value an input edits.
+func TestValidatePageVariableBindings_PrimitiveParameter(t *testing.T) {
+	input := func(name string) []*ast.WidgetV3 {
+		return []*ast.WidgetV3{{Type: "textbox", Name: "tb", Properties: map[string]any{
+			"Attribute": &ast.DataSourceV3{Reference: "$" + name},
+		}}}
 	}
-	if msgs := checkSnippetSource(t, `alter page M.P { add parameters $Label: String; };`); len(msgs) != 0 {
-		t.Fatalf("a page parameter may be primitive, got %v", msgs)
+	if got := validatePageVariableBindings(input("Label"), nil, []string{"Label"}, "snippet M.S"); len(got) != 0 {
+		t.Errorf("$Label (a primitive parameter): %+v, want none", got)
+	}
+	// Control: the same binding with nothing declared is the refusal it was.
+	if got := validatePageVariableBindings(input("Label"), nil, nil, "snippet M.S"); len(got) != 1 || got[0].RuleID != "MDL-WIDGET34" {
+		t.Errorf("$Label (undeclared): %+v, want one MDL-WIDGET34", got)
+	}
+	stmt := &ast.CreateSnippetStmtV3{Parameters: []ast.PageParameter{
+		{Name: "Label", Type: ast.DataType{Kind: ast.TypeString}},
+		{Name: "C", EntityType: ast.QualifiedName{Module: "M", Name: "Customer"}},
+	}}
+	if got := documentPrimitiveParameters(stmt); len(got) != 1 || got[0] != "Label" {
+		t.Errorf("documentPrimitiveParameters = %v, want [Label]", got)
 	}
 }
