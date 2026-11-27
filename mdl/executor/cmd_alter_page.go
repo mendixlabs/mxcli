@@ -1390,6 +1390,9 @@ func resolveDataSourceFlowEntity(ctx *ExecContext, moduleName string, moduleID m
 // excludeFromScope removes named widgets from the duplicate-detection scope,
 // used when replacing a widget so the new one may reuse the target's name.
 func buildWidgetsFromAST(ctx *ExecContext, widgets []*ast.WidgetV3, moduleName string, moduleID model.ID, entityContext string, mutator backend.PageMutator, excludeFromScope ...string) ([]pages.Widget, error) {
+	if err := refuseWebWidgetsOnNativeDocument(ctx, mutator, widgets); err != nil {
+		return nil, err
+	}
 	pb := newAlterPageBuilder(ctx, moduleName, moduleID, entityContext, mutator, excludeFromScope...)
 	pb.isDocumentWidget = alterDocumentWidgets(mutator, widgets)
 
