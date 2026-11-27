@@ -84,7 +84,14 @@ func (a *attachedApp) adminOptions() docker.M2EEOptions {
 }
 
 func (a *attachedApp) applyModelChange(projectPath string) (string, error) {
+	// The running runtime reads its project.jar at the offsets it opened it
+	// with; the build rewrites that file in place (ako/mxcli#2640).
+	jar := guardProjectJar(projectPath)
 	build, err := a.builds.Build(docker.BuildRequest{Target: docker.TargetDeploy, ProjectFilePath: projectPath})
+	javaChanged, jarErr := jar.settle()
+	if jarErr != nil && err == nil {
+		return "", jarErr
+	}
 	if err != nil {
 		return "", fmt.Errorf("rebuilding through the attached app's build server on port %d: %w", a.hs.ServePort, err)
 	}
@@ -94,6 +101,14 @@ func (a *attachedApp) applyModelChange(projectPath string) (string, error) {
 		// is what made an --attach run say nothing but "the project cannot be
 		// deployed" (mendixlabs/mxcli#1104).
 		return "", buildFailure(build)
+	}
+	if javaChanged {
+		// New classes cannot be loaded into the running runtime without a
+		// restart; its own jar was put back, and the change is refused as a
+		// structural one is.
+		return docker.ActionRestart.String(), fmt.Errorf("this change compiles to other Java classes, which the " +
+			"running runtime cannot load without a restart, and --attach cannot restart it — the runtime belongs " +
+			"to the 'mxcli run --local' process.\n  Restart that process, or drop --attach to run against a scratch runtime.")
 	}
 	// No restart callback: the runtime belongs to the other process. A structural
 	// change is refused rather than half-applied — see attachRestartRefusal.
