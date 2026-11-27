@@ -536,7 +536,8 @@ func applySetProperties(ctx *ExecContext, mutator backend.PageMutator, op *ast.S
 			}
 		} else if propName == "DataSource" {
 			// DataSource requires special handling via SetWidgetDataSource
-			ds, err := convertASTDataSource(value)
+			ds, err := convertASTDataSource(value, newAlterPageBuilder(ctx, moduleName, moduleID,
+				mutator.EnclosingEntity(op.Target.Widget), mutator))
 			if err != nil {
 				return err
 			}
@@ -631,7 +632,10 @@ func resetHiddenColumnProperties(ctx *ExecContext, mutator backend.PageMutator, 
 }
 
 // convertASTDataSource converts an AST DataSource value to a pages.DataSource.
-func convertASTDataSource(value interface{}) (pages.DataSource, error) {
+//
+// pb maps a flow source's arguments, as create page does: they were dropped,
+// and the build failed CE1571 for every parameter (ako/mxcli#2634).
+func convertASTDataSource(value interface{}, pb *pageBuilder) (pages.DataSource, error) {
 	ds, ok := value.(*ast.DataSourceV3)
 	if !ok {
 		return nil, mdlerrors.NewValidation("DataSource value must be a datasource expression")
@@ -651,9 +655,10 @@ func convertASTDataSource(value interface{}) (pages.DataSource, error) {
 		}
 		return &pages.DatabaseSource{EntityName: ds.Reference}, nil
 	case "microflow":
-		return &pages.MicroflowSource{Microflow: ds.Reference, FormValidations: ds.FormValidations}, nil
+		return &pages.MicroflowSource{Microflow: ds.Reference, FormValidations: ds.FormValidations,
+			ParameterMappings: pb.flowArgsToParameterMappings(ds.Args)}, nil
 	case "nanoflow":
-		return &pages.NanoflowSource{Nanoflow: ds.Reference}, nil
+		return &pages.NanoflowSource{Nanoflow: ds.Reference, ParameterMappings: pb.flowArgsToParameterMappings(ds.Args)}, nil
 	case "parameter":
 		// "Data from context". Only the parameter name is known here; the entity
 		// it is typed with lives in the container's own Parameters list, which

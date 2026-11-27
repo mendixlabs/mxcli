@@ -17,6 +17,8 @@ import (
 // so the test asserts where the source lands without an engine's serializer.
 type cwSourceDeps struct{ Deps }
 
+func (cwSourceDeps) SerializeFormDataSource(pages.DataSource, bool) bson.D { return nil }
+
 func (cwSourceDeps) SerializeCustomWidgetDataSource(ds pages.DataSource) bson.D {
 	switch d := ds.(type) {
 	case *pages.MicroflowSource:

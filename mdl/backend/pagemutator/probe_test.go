@@ -15,9 +15,10 @@ import (
 // recordingDeps counts the one thing a dry run must never do.
 type recordingDeps struct{ saves int }
 
-func (d *recordingDeps) SerializeWidget(pages.Widget) bson.D             { return nil }
-func (d *recordingDeps) SerializeClientAction(pages.ClientAction) bson.D { return nil }
-func (d *recordingDeps) SerializeClientTemplate() bson.D                 { return nil }
+func (d *recordingDeps) SerializeWidget(pages.Widget) bson.D                 { return nil }
+func (d *recordingDeps) SerializeClientAction(pages.ClientAction) bson.D     { return nil }
+func (*recordingDeps) SerializeFormDataSource(pages.DataSource, bool) bson.D { return nil }
+func (d *recordingDeps) SerializeClientTemplate() bson.D                     { return nil }
 
 func (d *recordingDeps) SerializeCustomWidgetDataSource(pages.DataSource) bson.D {
 	return nil

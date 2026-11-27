@@ -369,6 +369,7 @@ func TestSetItemPropertyRefusesAHiddenTemplateItNames(t *testing.T) {
 // templateDeps builds an empty Forms$ClientTemplate, as the codec does.
 type templateDeps struct{ stubWidgetDeps }
 
+func (templateDeps) SerializeFormDataSource(pages.DataSource, bool) bson.D { return nil }
 func (templateDeps) SerializeClientTemplate() bson.D {
 	return bson.D{
 		{Key: "$Type", Value: "Forms$ClientTemplate"},
