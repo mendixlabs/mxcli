@@ -302,24 +302,25 @@ func (pb *pageBuilder) buildSnippetV3(s *ast.CreateSnippetStmtV3) (*pages.Snippe
 			Name:        param.Name,
 		}
 
-		// A snippet parameter must name an entity. A primitive one is refused
-		// rather than resolved as an entity name — the reported symptom was
-		// "entity not found: string", for a type nobody spelled — and rather
-		// than written, which storage would allow and mxbuild would not
-		// (CE0046). Same rule check applies, so a script cannot pass one and
-		// fail the other (mendixlabs/mxcli#1028).
 		if param.Optional {
 			return nil, mdlerrors.NewValidation(optionalSnippetParameterMessage(s.Name, param.Name))
 		}
-		if caption := types.SnippetParameterTypeRule(pageParamBSONType(param.Type)); caption != "" {
-			return nil, mdlerrors.NewValidationf(
-				"snippet '%s' declares parameter $%s with the primitive type %s — a snippet "+
-					"parameter must be an entity, and mxbuild rejects a primitive one with "+
-					"CE0046 (\"Invalid data type '%s'.\"). Pass the value on an object, or "+
-					"keep the primitive on the calling page's parameters.",
-				s.Name.String(), param.Name, paramTypeSourceName(param.Type), caption)
-		}
-		if param.EntityType.Name != "" {
+		// A primitive snippet parameter is 11.17+; below it mxbuild rejects it
+		// with CE0046 (types.SnippetParameterTypeRule). It is typed here, not
+		// resolved as an entity name — the #1028 symptom was "entity not found:
+		// string", for a type nobody spelled — and not left untyped: a
+		// parameter with no Type is written as an ObjectType naming no entity,
+		// which mx cannot load at all.
+		if bsonType := pageParamBSONType(param.Type); bsonType != "" {
+			if err := pb.checkGate(snippetPrimitiveParameterGate(param)); err != nil {
+				return nil, err
+			}
+			snippetParam.Type = bsonType
+			if pb.primitiveParams == nil {
+				pb.primitiveParams = map[string]bool{}
+			}
+			pb.primitiveParams[param.Name] = true
+		} else if param.EntityType.Name != "" {
 			entityID, err := pb.resolveEntity(param.EntityType)
 			if err != nil {
 				return nil, mdlerrors.NewBackend("resolve entity "+param.EntityType.String(), err)
@@ -2427,13 +2428,15 @@ func (pb *pageBuilder) resolveTemplateAttributePathFull(attrRef string, param *p
 			param.SourceVariableKind = "local"
 			return
 		}
-		// A primitive page parameter binds the same way, in the PageParameter
-		// slot. It used to fall through to the attribute path "$IpAddress",
-		// which binds nothing: mxbuild CE0402 "No value specified."
-		// (ako/mxcli#2132).
+		// A primitive parameter binds the same way: a page's in the
+		// PageParameter slot, a snippet's in SnippetParameter. It used to fall
+		// through to the attribute path "$IpAddress", which binds nothing:
+		// mxbuild CE0402 "No value specified." (ako/mxcli#2132). A snippet's
+		// in the PageParameter slot names a page parameter the snippet does
+		// not have: CE0402 + CE7005 on mx 11.17.
 		if pb.primitiveParams[after] {
 			param.SourceVariable = after
-			param.SourceVariableKind = ""
+			param.SourceVariableKind = pb.primitiveParameterSlot()
 			return
 		}
 	}

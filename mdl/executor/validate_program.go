@@ -119,10 +119,8 @@ func ValidateProgram(prog *ast.Program, projectPath string) []linter.Violation {
 		// not hold (CE0628), a toggle on a page or snippet (CE6086): each passed
 		// check and exec and failed the build (MDL-LAYOUT01..04, ako/mxcli#2461).
 		violations = append(violations, validateLayoutWidgets(stmt)...)
-		// A snippet parameter must be an entity; mxbuild rejects a primitive one
-		// with CE0046 (MDL087). The documented spelling used the primitive form,
-		// so this was reachable straight from `mxcli syntax snippet.create`
-		// (mendixlabs/mxcli#1028).
+		// `optional` on a snippet parameter, which no version stores (MDL087). A
+		// primitive one is a version gate, 11.17+ (mendixlabs/mxcli#1028).
 		violations = append(violations, validateSnippetParameters(stmt)...)
 		// A page, snippet, Java action or JavaScript action parameter named with
 		// a platform-reserved word (`Context`, `Type`, `Id`, …): CE7247 at build

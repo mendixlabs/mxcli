@@ -451,7 +451,7 @@ alter page MyModule.Order_Edit {
 Adds a `Forms$PageParameter` (or `Forms$SnippetParameter`) to the stored document and touches nothing else — reach for it instead of `create or replace page`, which rebuilds every widget and loses whatever `describe` does not round-trip. Same declaration as `Params:` on CREATE.
 
 - **A page with a `Url` needs a `{Name}` segment per parameter** (CE5601). Set it in the same statement — `set (Url: 'orders/{Customer}/{Order}');` — or exec refuses and prints the URL to use.
-- **A snippet parameter must be an entity** (MDL087 / CE0046).
+- **A snippet parameter is an entity, or a primitive from Mendix 11.17** — below 11.17 a primitive is CE0046 and refused (MDL-VERSION01).
 - **Callers are not updated.** Every page that opens this page (or places this snippet) must now pass the parameter; `mxcli docker check` names the ones that do not.
 
 ### DROP Parameters - Remove a Parameter

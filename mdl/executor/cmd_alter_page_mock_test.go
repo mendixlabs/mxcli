@@ -664,20 +664,43 @@ func TestAlterPage_AddParameters_UnknownEntityRefused(t *testing.T) {
 }
 
 // A snippet parameter must be an entity (CE0046), as on CREATE SNIPPET.
-func TestAlterSnippet_AddPrimitiveParameterRefused(t *testing.T) {
-	var added []backend.PageParameterSpec
-	ctx, _ := alterParamsBackend(t, &added)
-	err := execAlterPage(ctx, &ast.AlterPageStmt{
-		ContainerType: "snippet",
-		PageName:      ast.QualifiedName{Module: "MyModule", Name: "TestSnippet"},
-		Operations: []ast.AlterPageOperation{
-			&ast.AddParameterOp{Parameter: ast.PageParameter{Name: "Label", Type: ast.DataType{Kind: ast.TypeString}}},
-		},
-	})
-	assertError(t, err)
-	assertContainsStr(t, err.Error(), "CE0046")
-	if len(added) != 0 {
-		t.Errorf("a primitive snippet parameter reached the mutator: %+v", added)
+// `alter snippet … add parameters $Label: String` is the 11.17 feature: below
+// it mxbuild rejects the parameter with CE0046 (measured on 11.13.0 and
+// 11.16.0), from it the same bytes check clean (11.17.0). The refusal names
+// the floor and the CE; the 11.17 run is the control that it is the version
+// deciding, not the primitive.
+func TestAlterSnippet_AddPrimitiveParameterGatedAt1117(t *testing.T) {
+	for _, c := range []struct {
+		version string
+		minor   int
+		refused bool
+	}{{"11.16.0", 16, true}, {"11.17.0", 17, false}} {
+		t.Run(c.version, func(t *testing.T) {
+			var added []backend.PageParameterSpec
+			ctx, _ := alterParamsBackend(t, &added)
+			v := &types.ProjectVersion{ProductVersion: c.version, MajorVersion: 11, MinorVersion: c.minor}
+			ctx.Backend.(*mock.MockBackend).ProjectVersionFunc = func() *types.ProjectVersion { return v }
+			err := execAlterPage(ctx, &ast.AlterPageStmt{
+				ContainerType: "snippet",
+				PageName:      ast.QualifiedName{Module: "MyModule", Name: "TestSnippet"},
+				Operations: []ast.AlterPageOperation{
+					&ast.AddParameterOp{Parameter: ast.PageParameter{Name: "Label", Type: ast.DataType{Kind: ast.TypeString}}},
+				},
+			})
+			if c.refused {
+				assertError(t, err)
+				assertContainsStr(t, err.Error(), "CE0046")
+				assertContainsStr(t, err.Error(), "11.17")
+				if len(added) != 0 {
+					t.Errorf("a primitive snippet parameter reached the mutator below 11.17: %+v", added)
+				}
+				return
+			}
+			assertNoError(t, err)
+			if len(added) != 1 || added[0].PrimitiveType != "DataTypes$StringType" {
+				t.Errorf("added %+v, want one $Label typed DataTypes$StringType", added)
+			}
+		})
 	}
 }
 

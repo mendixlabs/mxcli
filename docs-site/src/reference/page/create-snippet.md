@@ -35,13 +35,20 @@ The optional `FOLDER 'path'` clause, after the name, places the snippet in a sub
 
 `Params: ( ... )`
 :   Optional snippet parameters. Each parameter has a `$`-prefixed name and an
-    **entity** type (`Module.Entity`).
+    **entity** type (`Module.Entity`) or, from **Mendix 11.17**, a primitive
+    type (`String`, `Integer`, `Long`, `Decimal`, `Boolean`, `DateTime`).
 
-    A snippet parameter cannot be a primitive. Mendix rejects one with
-    **CE0046** *"Invalid data type 'String'."* — a *page* parameter may be a
-    primitive, a snippet parameter may not — so `mxcli check` refuses it as
-    **MDL087** rather than letting it reach a build. To parameterise a snippet
-    on a value, keep the primitive on the calling page's parameters, or pass an
+    An input binds a primitive parameter directly — `textbox tb (Attribute:
+    $Label)` — and a text template reads it as `{1} = $Label`. The calling
+    page passes a page parameter, a page variable or its own snippet
+    parameter of the same type: `snippetcall sc (Snippet: M.S, Params: (Label
+    = $Caption))`. No data context supplies a primitive, so it is always
+    passed.
+
+    Below 11.17 Mendix rejects a primitive snippet parameter with **CE0046**
+    *"Invalid data type 'String'."*, so `mxcli check -p` and `exec` refuse it
+    there (**MDL-VERSION01**) rather than letting it reach a build. On an older
+    project, keep the primitive on the calling page's parameters, or pass an
     object and read the member inside the snippet.
 
 `FOLDER 'path'`
