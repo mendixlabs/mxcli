@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-27
+
+Headline: **Mendix 11.17 support, domain model diagrams that `mxcli layout` actually untangles, and pluggable widgets judged by running their own `editorConfig.js`.** Workflows with boundary events, pages and change data capture services are written in the shape 11.17 reads, and `run --local --watch` drops its client-copy workaround there. `mxcli layout` places entities by what they link to, re-attaches every association line and reports crossings, while new lint rules `MPR020`-`MPR022` flag a diagram never laid out, a line through an unrelated entity and an agent naming a missing document. Microflows gain Metrics activities (`increment counter`, `set gauge`), `@documentation` on a statement and a `@curve` per decision outcome.
+
 ### Added
 - **`check` warns on an agent `UsageType` Agent Editor does not import** (ako/mxcli#2309, MDL-AGENT05) — Agent Editor accepts only `Task` and `Chat`, in any case. `UsageType: Conversational`, which the agents skill and reference page documented, passed `check`, `exec` and `docker check`, and at startup the import refused the agent (in the reporter's app the published MCP server did not start either). `check` now warns on any other value, on `alter agent … set UsageType`, and on an agent with no `UsageType`, which the import also refuses. The skill and reference now say `Task | Chat`.
 - **`@curve(true: (…), false: (…))`: a curve per decision outcome** (ako/mxcli#2592, upstream mendixlabs/mxcli#1950) — a decision took one `@curve`, which was applied to both outgoing edges. When the true edge ran right and the false edge down, the false edge was bent into an S-curve, and a Studio Pro decision with only the true edge curved did not survive a rebuild. On an IF, each outcome can now take its own curve; an outcome left out stays straight. `describe` prints this form when the two edges differ, and the flat form still curves both alike.
