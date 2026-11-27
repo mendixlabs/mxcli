@@ -21,11 +21,11 @@ description: "The CRUD overview page pattern in MDL — a navigation snippet, a 
 | 489-500 | Naming Conventions |
 | 501-510 | Button Styles |
 | 511-526 | Folder Organization |
-| 527-559 | Parameterized Snippets |
-| 560-614 | Entity Menu Snippets with NavigationList |
-| 615-684 | Handling Circular Dependencies |
-| 685-691 | Related Skills |
-| 692-702 | Snippet Commands Reference |
+| 527-566 | Parameterized Snippets |
+| 567-621 | Entity Menu Snippets with NavigationList |
+| 622-691 | Handling Circular Dependencies |
+| 692-698 | Related Skills |
+| 699-709 | Snippet Commands Reference |
 
 <!-- /skill-index -->
 # Overview Pages - CRUD Page Pattern
@@ -527,11 +527,18 @@ module/
 ## Parameterized Snippets
 
 Snippets can accept parameters to display context-specific data. **A snippet
-parameter must be an entity.** A primitive one (`params: ( $Label: String )`) is
-refused as **MDL087**, because Mendix rejects it with **CE0046** *"Invalid data
-type 'String'."* — a *page* parameter may be a primitive, a snippet parameter may
-not. To parameterise a snippet on a value, keep the primitive on the calling
-page's parameters, or pass an object and read the member inside the snippet.
+parameter is an entity, or — from Mendix 11.17 — a primitive** (`params: (
+$Label: String )`). Below 11.17 Mendix rejects a primitive one with **CE0046**
+*"Invalid data type 'String'."*, and `check -p`/`exec` refuse it there
+(**MDL-VERSION01**): keep the primitive on the calling page's parameters, or pass
+an object and read the member inside the snippet.
+
+On 11.17+, bind an input straight to the primitive parameter (`textbox tb (Label:
+'Label', Attribute: $Label)` — no data view), read it in a template as `{1} =
+$Label`, and pass it from the caller as a page parameter, a page variable or the
+caller's own snippet parameter (`snippetcall sc (Snippet: M.S, Params: (Label =
+$Caption))`). A primitive parameter is always passed — no data context supplies
+one. Expression arguments (`Label = $Order/Name`) are not supported yet.
 
 ```sql
 mdl 1;

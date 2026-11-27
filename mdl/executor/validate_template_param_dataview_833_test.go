@@ -44,8 +44,14 @@ func TestTemplateParamNamingNonEnclosingDataViewIsRefused(t *testing.T) {
 
 // ako/mxcli#833: a page variable passed to a snippet parameter passed check and
 // exec and was CE0115 "The arguments that are passed to snippet 'M833c.SN' do
-// not match the expected parameters and need to be refreshed." Page variables
-// are primitive, snippet parameters objects: it can never match.
+// not match the expected parameters and need to be refreshed." A page variable
+// is primitive and that snippet parameter an object: it can never match.
+//
+// From 11.17 a snippet parameter may itself be primitive, and then a page
+// variable is a valid argument. The project-free pass cannot see the called
+// snippet's parameter types, so it no longer decides this; the builder, which
+// reads them, refuses it for an entity parameter (below) and takes it for a
+// primitive one (TestSnippetCall_PageVariableToPrimitiveParameter).
 func TestSnippetCallPassingPageVariableIsRefused(t *testing.T) {
 	call := func(arg string) *ast.WidgetV3 {
 		return &ast.WidgetV3{Type: "snippetcall", Name: "sc1", Properties: map[string]any{
@@ -54,13 +60,8 @@ func TestSnippetCallPassingPageVariableIsRefused(t *testing.T) {
 		}}
 	}
 	vars := []ast.PageVariable{{Name: "Flag"}}
-	if got := validatePageVariableBindings([]*ast.WidgetV3{call("$Flag")}, vars, "page M.P"); len(got) != 1 ||
-		!strings.Contains(got[0].Message, "CE0115") {
-		t.Errorf("$Flag: %+v, want one CE0115 refusal", got)
-	}
-	// Control: a parameter is passed as before.
-	if got := validatePageVariableBindings([]*ast.WidgetV3{call("$Item")}, vars, "page M.P"); len(got) != 0 {
-		t.Errorf("$Item: %+v, want none", got)
+	if got := validatePageVariableBindings([]*ast.WidgetV3{call("$Flag")}, vars, nil, "page M.P"); len(got) != 0 {
+		t.Errorf("$Flag: %+v — the project-free pass cannot know the parameter's type; the builder decides", got)
 	}
 
 	// The builder refuses it too (exec --no-check).

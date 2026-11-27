@@ -190,7 +190,8 @@ ALTER PAGE Module.EditPage {
 Add or remove a page or snippet parameter without rewriting the page. A
 parameter is declared exactly as in `CREATE PAGE`'s `Params:` — an entity or a
 primitive (`String`, `Integer`, `Long`, `Decimal`, `Boolean`, `DateTime`). A
-snippet parameter must be an entity (MDL087; mxbuild reports CE0046).
+snippet parameter may be a primitive from Mendix 11.17; below it, it must be an
+entity (mxbuild reports CE0046, and mxcli refuses it as MDL-VERSION01).
 
 ```sql
 mdl 1;
