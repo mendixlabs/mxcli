@@ -208,7 +208,10 @@ func buildCaseStatement(ctx parser.ICaseStatementContext) *ast.EnumSplitStmt {
 	if source := caseCtx.EnumSplitSource(); source != nil {
 		sourceCtx := source.(*parser.EnumSplitSourceContext)
 		if attr := sourceCtx.AttributePath(); attr != nil {
-			stmt.Variable = strings.TrimPrefix(attr.GetText(), "$")
+			// From the structured segments, quotes stripped, as SET does: the
+			// raw text kept `$Item/"Color"` verbatim as the split expression,
+			// which mxbuild fails CE0117 (ako/mxcli#2605).
+			stmt.Variable = strings.TrimPrefix(attributePathTargetText(attr), "$")
 		} else if variable := sourceCtx.VARIABLE(); variable != nil {
 			stmt.Variable = strings.TrimPrefix(variable.GetText(), "$")
 		} else if call := sourceCtx.FunctionCall(); call != nil {
