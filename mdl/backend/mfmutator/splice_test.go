@@ -136,7 +136,7 @@ func (d *fakeDeps) SerializeObject(o microflows.MicroflowObject) (bson.D, error)
 }
 
 func (d *fakeDeps) SerializeSequenceFlow(f *microflows.SequenceFlow) (bson.D, error) {
-	return bson.D{
+	doc := bson.D{
 		{Key: "$ID", Value: bson.Binary{Data: types.UUIDToBlob(string(f.ID))}},
 		{Key: "$Type", Value: "Microflows$SequenceFlow"},
 		{Key: "DestinationConnectionIndex", Value: int32(f.DestinationConnectionIndex)},
@@ -148,7 +148,16 @@ func (d *fakeDeps) SerializeSequenceFlow(f *microflows.SequenceFlow) (bson.D, er
 		}},
 		{Key: "OriginConnectionIndex", Value: int32(f.OriginConnectionIndex)},
 		{Key: "OriginPointer", Value: bson.Binary{Data: types.UUIDToBlob(string(f.OriginID))}},
-	}, nil
+	}
+	// An enumeration case, as the real serializer writes one (ako/mxcli#2618).
+	if c, ok := f.CaseValue.(*microflows.EnumerationCase); ok {
+		doc = append(doc, bson.E{Key: "CaseValues", Value: bson.A{int32(2), bson.D{
+			{Key: "$ID", Value: bson.Binary{Data: types.UUIDToBlob(types.GenerateID())}},
+			{Key: "$Type", Value: "Microflows$EnumerationCase"},
+			{Key: "Value", Value: c.Value},
+		}}})
+	}
+	return doc, nil
 }
 
 func (d *fakeDeps) SerializeAnnotationFlow(f *microflows.AnnotationFlow) (bson.D, error) {

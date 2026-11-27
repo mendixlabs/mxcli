@@ -7,6 +7,17 @@ import (
 	"github.com/mendixlabs/mxcli/sdk/microflows"
 )
 
+// CaseBranchEdit is one declared branch of a `case` for SetCaseValues.
+type CaseBranchEdit struct {
+	// Values are the branch's declared values.
+	Values []string
+	// Stored are the values of the stored branch it is; nil for a new one.
+	Stored []string
+	// Body is a new branch's body; nil when it has none, or for a stored one
+	// (whose body is spliced by operations of its own).
+	Body *MicroflowFragment
+}
+
 // MicroflowFragment is what an `alter microflow` insert or replace splices in:
 // the objects and flows a fragment of MDL builds to, written exactly as
 // `create microflow` writes the same statements, and the two objects the
@@ -117,6 +128,13 @@ type MicroflowMutator interface {
 	// its caption, in place; the decision and its flows stay. A decision that
 	// calls a rule is refused.
 	SetCondition(target model.ID, expression, caption string) error
+	// SetCaseValues puts the values of the `case` decision target on its
+	// branches, in place: a value that moves has its flow re-pointed, a new
+	// one gets a flow, a value no branch keeps loses its flow; a branch in
+	// removed (by its stored values) takes the activities on its path with
+	// it, and a branch with no stored values gets a path into the case's
+	// merge with its body. Every other node stays (ako/mxcli#2618).
+	SetCaseValues(target model.ID, branches []CaseBranchEdit, removed [][]string) error
 	// Move sets where the node target is drawn, and nothing else: its flows
 	// keep their ends, sides and curves (ako/mxcli#818). A node in a loop body
 	// is placed in the loop box's coordinates (ako/mxcli#2564).
