@@ -28,8 +28,10 @@ import (
 // and a rule belongs in a decision (`if Module.SomeRule(…) then`).
 //
 // The one legal home for a bare qualified call is that decision condition,
-// which mxcli serializes as a Microflows$RuleSplitCondition — so the IF
-// condition is not walked here. Whether the name in that position resolves to a
+// which mxcli serializes as a Microflows$RuleSplitCondition — but only as the
+// WHOLE condition. Inside a larger one (`$x != empty and Rule(…)`, `not
+// Rule(…)`) it is expression text again, and mxbuild fails CE0117
+// (ako/mxcli#2625): checkQualifiedCallInCondition. Whether the name in that position resolves to a
 // real rule needs the project, and is checked by the flow builder
 // (tryBuildRuleSplitCondition) where the backend is at hand.
 
@@ -78,4 +80,17 @@ func qualifiedCallNames(expr ast.Expression) []string {
 	}
 	walk(expr)
 	return out
+}
+
+// checkQualifiedCallInCondition flags a qualified call in an IF condition that
+// is not the whole condition. A condition that is one call (parenthesized or
+// not) is the rule-based decision; only its arguments are judged.
+func (v *microflowValidator) checkQualifiedCallInCondition(cond ast.Expression) {
+	if call := unwrapParenCall(cond); call != nil && strings.Contains(call.Name, ".") {
+		for _, arg := range call.Arguments {
+			v.checkQualifiedCallInExpression(fmt.Sprintf("argument of decision rule '%s'", call.Name), arg)
+		}
+		return
+	}
+	v.checkQualifiedCallInExpression("if condition", cond)
 }
