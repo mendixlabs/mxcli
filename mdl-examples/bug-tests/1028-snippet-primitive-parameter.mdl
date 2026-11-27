@@ -31,8 +31,11 @@ mdl 1;
 -- six of those primitives as parameters builds at 0 ERRORS. The restriction is
 -- on snippet parameters, not on primitives.
 --
--- So a primitive snippet parameter is refused, by one rule that `mxcli check`
--- (MDL087) and `exec` both call. This script is the form that works.
+-- So below Mendix 11.17 a primitive snippet parameter is refused: `mxcli check
+-- -p` and `exec` apply the version gate pages/snippet_parameter_primitive
+-- (MDL-VERSION01). From 11.17 Mendix accepts it (CE0046 on 11.16.0, 0 errors on
+-- 11.17.0) — see 1028-snippet-primitive-parameter-1117.mdl. This script is the
+-- form that works on every version.
 --
 -- Verified on Mendix 11.13.0: 0 errors.
 -- ============================================================================
@@ -42,7 +45,7 @@ create persistent entity S1028.Order (Code: String(20), Label: String(100));
 
 -- The reported snippet, in the shape Mendix accepts: the value travels on an
 -- object. `create snippet S1028.SNIPPET_Label ( params: { $Label: string } )`
--- is refused as MDL087 — see 1028-snippet-primitive-parameter.fail.mdl.
+-- is refused below 11.17 — see 1028-snippet-primitive-parameter-1117.mdl.
 create snippet S1028.SNIPPET_Label ( params: ( $Order: S1028.Order ) ) {
   layoutgrid gl { row { column (desktopwidth: autofill) {
     dataview dvLabel (datasource: $Order) {
