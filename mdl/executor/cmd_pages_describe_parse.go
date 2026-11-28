@@ -1473,13 +1473,22 @@ func extractSnippetCallParams(w map[string]any) string {
 // An input bound directly to a page variable stores no AttributeRef and names
 // the variable in SourceVariable.LocalVariable; it prints as `$ShowAll`, the
 // spelling the builder takes. describe used to print it unbound, so a round
-// trip silently cut the binding (mendixlabs/mxcli#1235).
+// trip silently cut the binding (mendixlabs/mxcli#1235). A primitive page or
+// snippet parameter, the same, as `$Label`.
 func extractInputAttribute(ctx *ExecContext, w map[string]any) string {
 	sv, _ := w["SourceVariable"].(map[string]any)
 	widget := extractString(sv["Widget"])
 	attrRef, _ := w["AttributeRef"].(map[string]any)
 	if local := extractString(sv["LocalVariable"]); local != "" && widget == "" && attrRef == nil {
 		return "$" + local
+	}
+	// The same for a primitive parameter: Studio Pro names a page's in
+	// SourceVariable.PageParameter and a snippet's (11.17+) in
+	// SnippetParameter, with no AttributeRef (ako/TestApp
+	// Snippet.SnippetPrimitiveParameter). Printed unbound, describe → exec
+	// wrote an input that edits nothing.
+	if param := parameterSourceName(w["SourceVariable"]); param != "" && attrRef == nil {
+		return "$" + param
 	}
 	// Read straight from a page or snippet parameter — a widget outside every
 	// data container (TestApp Snip_WorkflowUserTaskView_Details): `$Param.Attr`.

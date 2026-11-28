@@ -88,3 +88,21 @@ func (d codecPageDeps) SerializeParameter(container backend.ContainerKind, p bac
 func (d codecPageDeps) SaveUnit(unitID string, contents []byte) error {
 	return d.b.writer.UpdateRawUnit(unitID, contents)
 }
+
+// SerializeFormDataSource writes a built-in widget's flow data source as create
+// page does (ako/mxcli#2634).
+func (d codecPageDeps) SerializeFormDataSource(ds pages.DataSource, list bool) bson.D {
+	build := dataViewSourceToGen
+	if list {
+		build = listViewSourceToGen
+	}
+	el, err := build(ds)
+	if err != nil {
+		recordChildSerializeErr(fmt.Errorf("serialize data source %T: %w", ds, err))
+		return nil
+	}
+	if el == nil {
+		return nil
+	}
+	return genToV1BSON(el)
+}

@@ -238,30 +238,63 @@ func bareVariableReference(raw any) (string, bool) {
 	return name, true
 }
 
+// isLocalVariable answers whether an input may bind `$name` directly: a page
+// variable, or a primitive parameter of the document being built.
 func (pb *pageBuilder) isLocalVariable(name string) bool {
-	return pb.localVariables[name]
+	return pb.localVariables[name] || pb.primitiveParams[name]
 }
 
 // pageVariableInputBinding is the SourceVariable of an input bound directly to
-// a page variable — `checkbox cb (Attribute: $ShowAll)` — or nil. Studio Pro
-// stores that binding as a Forms$PageVariable naming the variable in its
-// LocalVariable slot, with no AttributeRef (mendixlabs/mxcli#1235).
+// a page variable or a primitive parameter — `checkbox cb (Attribute: $ShowAll)`
+// — or nil. Studio Pro stores that binding as a Forms$PageVariable with no
+// AttributeRef, naming the variable in its LocalVariable slot
+// (mendixlabs/mxcli#1235), a page's primitive parameter in PageParameter, and
+// a snippet's in SnippetParameter (Studio Pro 11.17, ako/TestApp
+// Snippet.SnippetPrimitiveParameter). Before this, a primitive parameter was
+// refused as "not a page variable" — no input could edit one.
 func (pb *pageBuilder) pageVariableInputBinding(w *ast.WidgetV3) *pages.WidgetVariable {
 	raw, _ := lookupPropCI(w, "Attribute")
 	name, ok := bareVariableReference(raw)
-	if !ok || !pb.localVariables[name] {
+	if !ok {
 		return nil
 	}
-	return &pages.WidgetVariable{Variable: name, Kind: "local"}
+	if pb.localVariables[name] {
+		return &pages.WidgetVariable{Variable: name, Kind: "local"}
+	}
+	if pb.primitiveParams[name] {
+		return &pages.WidgetVariable{Variable: name, Kind: pb.primitiveParameterSlot()}
+	}
+	return nil
+}
+
+// primitiveParameterSlot is the Forms$PageVariable slot a primitive parameter
+// of the document being built is named in: "snippet" (SnippetParameter) inside
+// a snippet, "" (PageParameter) on a page.
+func (pb *pageBuilder) primitiveParameterSlot() string {
+	if pb.isSnippet {
+		return "snippet"
+	}
+	return ""
 }
 
 // validatePageVariableBindings is MDL-WIDGET34 for `Attribute: $name` on a
-// whole page or snippet, where the document's Variables are known: a name that
-// is not one of them is a binding the writer would drop.
-func validatePageVariableBindings(widgets []*ast.WidgetV3, variables []ast.PageVariable, locationPrefix string) []linter.Violation {
-	declared := make(map[string]bool, len(variables))
+// whole page or snippet, where the document's Variables and parameters are
+// known: a name that is neither a page variable nor a primitive parameter is a
+// binding the writer would drop.
+//
+// A page variable passed to a snippet call used to be refused here as well
+// (CE0115, ako/mxcli#833): a snippet parameter was an object and a page
+// variable never is. From 11.17 a snippet parameter may be primitive, and then
+// a page variable is exactly what Studio Pro passes — but this pass has no
+// project and so cannot see the called snippet's parameter types. The builder,
+// which can, refuses it for an entity parameter (buildSnippetCallParams).
+func validatePageVariableBindings(widgets []*ast.WidgetV3, variables []ast.PageVariable, primitiveParams []string, locationPrefix string) []linter.Violation {
+	declared := make(map[string]bool, len(variables)+len(primitiveParams))
 	for _, v := range variables {
 		declared[strings.TrimPrefix(v.Name, "$")] = true
+	}
+	for _, p := range primitiveParams {
+		declared[strings.TrimPrefix(p, "$")] = true
 	}
 	isDeclared := func(name string) bool { return declared[name] }
 	var out []linter.Violation
@@ -271,21 +304,6 @@ func validatePageVariableBindings(widgets []*ast.WidgetV3, variables []ast.PageV
 			if w == nil {
 				continue
 			}
-			// A page variable passed to a snippet parameter: page variables are
-			// primitive and a snippet parameter is an object, so the call can
-			// never match — mx check CE0115 "The arguments that are passed to
-			// snippet '…' do not match the expected parameters" (ako/mxcli#833).
-			for _, sp := range w.GetSnippetParams() {
-				if name := strings.TrimPrefix(sp.Variable, "$"); declared[name] {
-					out = append(out, linter.Violation{
-						RuleID:   "MDL-WIDGET34",
-						Severity: linter.SeverityError,
-						Message: locationPrefix + ": " + snippetCallPageVariableMessage(w.Name,
-							strings.TrimPrefix(sp.ParamName, "$"), name),
-						Suggestion: "Pass an object: a parameter of this document, an enclosing data view (`$dvName`), or leave the parameter to the enclosing data context.",
-					})
-				}
-			}
 			raw, _ := lookupPropCI(w, "Attribute")
 			if _, ok := bareVariableReference(raw); ok {
 				if msg := inputBindingProblem(w, pageArgContext{}, false, isDeclared); msg != "" {
@@ -293,7 +311,7 @@ func validatePageVariableBindings(widgets []*ast.WidgetV3, variables []ast.PageV
 						RuleID:     "MDL-WIDGET34",
 						Severity:   linter.SeverityError,
 						Message:    locationPrefix + ": " + msg,
-						Suggestion: "Bind an input to a page variable by declaring it: `Variables: ( $name: Boolean = true )`, then `Attribute: $name`.",
+						Suggestion: "Bind an input to a page variable or a primitive parameter by declaring it: `Variables: ( $name: Boolean = true )` or `Params: ( $name: Boolean )`, then `Attribute: $name`.",
 					})
 				}
 			}
@@ -415,10 +433,11 @@ func propertyKeys(props map[string]any) []string {
 	return keys
 }
 
-// snippetCallPageVariableMessage is the refusal for a snippet call passing a
-// page variable, shared by check and the builder.
+// snippetCallPageVariableMessage is the builder's refusal for a snippet call
+// passing a page variable to an entity snippet parameter.
 func snippetCallPageVariableMessage(call, param, variable string) string {
-	return fmt.Sprintf("snippetcall `%s`: `%s = $%s` passes a page variable, but a snippet parameter is an object "+
+	return fmt.Sprintf("snippetcall `%s`: `%s = $%s` passes a page variable, but the snippet parameter $%s is an object "+
 		"and a page variable is not — mx check CE0115 \"The arguments that are passed to snippet … do not match the "+
-		"expected parameters\"", call, param, variable)
+		"expected parameters\". Only a primitive snippet parameter (Mendix 11.17+) takes a page variable",
+		call, param, variable, param)
 }

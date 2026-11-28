@@ -1685,7 +1685,14 @@ func (pb *pageBuilder) buildSnippetCallParams(sc *pages.SnippetCallWidget, snipp
 		if !ok {
 			// Omitted. Legal exactly when the surrounding data context supplies
 			// the parameter's entity; otherwise nothing can satisfy it and the
-			// author gets the guidance rather than a build error later.
+			// author gets the guidance rather than a build error later. No data
+			// context supplies a primitive (11.17+): it is always passed.
+			if declared.Type != "" {
+				return mdlerrors.NewValidationf(
+					"snippet %s requires parameter $%s — add Params: (%s = $<variable>) to the SNIPPETCALL, "+
+						"passing a page parameter, page variable or snippet parameter of that type",
+					snippetQName, declared.Name, declared.Name)
+			}
 			if pb.contextSupplies(declared.EntityName) {
 				continue
 			}
@@ -1700,9 +1707,11 @@ func (pb *pageBuilder) buildSnippetCallParams(sc *pages.SnippetCallWidget, snipp
 		// the snippet does not have — CE0115 (ako/mxcli#721 L3).
 		// A page `Variables:` entry is named in LocalVariable (ako/mxcli#826).
 		_, kind := pb.classifyFlowArgValue(argument)
-		if kind == "local" {
-			// A page variable is primitive and a snippet parameter an object:
-			// CE0115 whichever slot it is written to (ako/mxcli#833).
+		if kind == "local" && declared.Type == "" {
+			// A page variable is primitive and this snippet parameter an
+			// object: CE0115 whichever slot it is written to (ako/mxcli#833).
+			// A primitive snippet parameter (11.17+) takes one, in the
+			// LocalVariable slot — mx 11.17.0 checks that clean.
 			return mdlerrors.NewValidation(snippetCallPageVariableMessage(sc.Name, declared.Name, strings.TrimPrefix(argument, "$")))
 		}
 		sc.ParameterMappings = append(sc.ParameterMappings, pages.SnippetParamMapping{

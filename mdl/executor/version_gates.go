@@ -10,6 +10,7 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/linter"
+	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
 // versionGate is one feature a statement needs from the project's Mendix
@@ -149,7 +150,7 @@ func statementCaseGates(stmt ast.Statement) []versionGate {
 		}
 		return append(gates, flowReturnsGates(s)...)
 	case *ast.CreateSnippetStmtV3, *ast.AlterPageStmt:
-		return flowReturnsGates(s)
+		return append(snippetPrimitiveParameterGates(s), flowReturnsGates(s)...)
 	case *ast.CreateMicroflowStmt:
 		gates := microflowBodyGates(s.Parameters, s.Body)
 		// Deep links are Mendix 10.6+. Gated on the clause being STATED, not on
@@ -532,6 +533,45 @@ func userTaskGates(activities []ast.WorkflowActivityNode) []versionGate {
 			"Mendix added `await all users` in 10.2: leave it out, so the task completes once its rule is met, or upgrade the project"})
 	}
 	return gates
+}
+
+// snippetPrimitiveParameterGate is the floor of a primitive-typed snippet
+// parameter: 11.17, measured (types.SnippetParameterTypeRule). The builder and
+// `alter snippet … add parameters` apply it again, so `exec --no-check` cannot
+// write what mxbuild below 11.17 rejects with CE0046.
+func snippetPrimitiveParameterGate(p ast.PageParameter) versionGate {
+	caption := types.SnippetParameterTypeRule(pageParamBSONType(p.Type))
+	return versionGate{"pages", "snippet_parameter_primitive",
+		fmt.Sprintf("a primitive snippet parameter ($%s: %s)", p.Name, paramTypeSourceName(p.Type)),
+		fmt.Sprintf("below 11.17 mxbuild rejects a primitive snippet parameter with CE0046 (\"Invalid data type '%s'.\"): "+
+			"pass the value on an object — declare `$%s: <Module>.<Entity>` and read the member inside the snippet — "+
+			"keep the primitive on the calling page, or upgrade the project", caption, p.Name)}
+}
+
+// snippetPrimitiveParameterGates is the gate of the first primitive parameter
+// a create snippet or `alter snippet … add parameters` declares; one is enough
+// to name the floor.
+func snippetPrimitiveParameterGates(stmt ast.Statement) []versionGate {
+	var params []ast.PageParameter
+	switch s := stmt.(type) {
+	case *ast.CreateSnippetStmtV3:
+		params = s.Parameters
+	case *ast.AlterPageStmt:
+		if !strings.EqualFold(s.ContainerType, "snippet") {
+			return nil
+		}
+		for _, op := range s.Operations {
+			if add, ok := op.(*ast.AddParameterOp); ok {
+				params = append(params, add.Parameter)
+			}
+		}
+	}
+	for _, p := range params {
+		if pageParamBSONType(p.Type) != "" {
+			return []versionGate{snippetPrimitiveParameterGate(p)}
+		}
+	}
+	return nil
 }
 
 // The floors of a flow call's `returns ( … )` mappings (ako/mxcli#977). The

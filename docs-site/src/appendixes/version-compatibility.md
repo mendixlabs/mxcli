@@ -97,6 +97,7 @@ the write refused them part-way through the script
 | Page parameters (primitive) | `Params: ( $Qty: Integer )` | -- | -- | -- | 11.6+ |
 | Page variables | `Variables: ( ... )` | -- | 10.20+ | 10.20+ | Yes |
 | Snippet parameters | `CREATE SNIPPET ... (Params: ( ... ))` | 9.21+ | Yes | Yes | Yes |
+| Snippet parameters (primitive) | `CREATE SNIPPET ... (Params: ( $Label: String ))` | -- | -- | -- | 11.17+ |
 | Workflow actions on a button | `action: open user task`, `open workflow`, `call workflow ...`; `complete task '...'` | 9.0.2+; 9.19+ | Yes | Yes | Yes |
 | Design properties (Atlas v3) | `DesignProperties: (...)` | -- | -- | -- | Yes |
 

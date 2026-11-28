@@ -131,6 +131,11 @@ func (m *mcpFlowMutator) SetCondition(model.ID, string, string) error {
 	return fmt.Errorf("changing a decision's condition is not supported by the MCP backend yet; run without --mcp to alter %s in the .mpr", m.qn)
 }
 
+// SetCaseValues is refused like SetCondition, for the same reason.
+func (m *mcpFlowMutator) SetCaseValues(model.ID, []backend.CaseBranchEdit, [][]string) error {
+	return fmt.Errorf("changing a case's values is not supported by the MCP backend yet; run without --mcp to alter %s in the .mpr", m.qn)
+}
+
 // SetHeader is refused like SetReturnValue: the patch Save sends carries
 // positions, pointers and added or removed flow elements only, so a changed
 // document property would not reach Studio Pro.

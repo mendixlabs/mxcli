@@ -230,7 +230,8 @@ func checkAddedParameterURLSegments(ctx *ExecContext, s *ast.AlterPageStmt, h *C
 // alterParameterSpec resolves an `add parameters` declaration the way CREATE
 // resolves its Params clause (cmd_pages_builder_v3.go): a primitive becomes its
 // DataTypes $Type, anything else must name an entity that exists, and a snippet
-// takes entities only (MDL087 — mxbuild's CE0046 otherwise).
+// takes a primitive only from 11.17 (pages/snippet_parameter_primitive —
+// mxbuild's CE0046 below).
 func alterParameterSpec(ctx *ExecContext, s *ast.AlterPageStmt, containerType string, p ast.PageParameter) (backend.PageParameterSpec, error) {
 	spec := backend.PageParameterSpec{Name: p.Name, Optional: p.Optional}
 	bsonType := pageParamBSONType(p.Type)
@@ -238,13 +239,11 @@ func alterParameterSpec(ctx *ExecContext, s *ast.AlterPageStmt, containerType st
 		if p.Optional {
 			return spec, mdlerrors.NewValidation(optionalSnippetParameterMessage(s.PageName, p.Name))
 		}
-		if caption := types.SnippetParameterTypeRule(bsonType); caption != "" {
-			return spec, mdlerrors.NewValidationf(
-				"snippet '%s' cannot take parameter $%s with the primitive type %s — a snippet "+
-					"parameter must be an entity, and mxbuild rejects a primitive one with "+
-					"CE0046 (\"Invalid data type '%s'.\"). Pass the value on an object, or "+
-					"keep the primitive on the calling page's parameters.",
-				s.PageName.String(), p.Name, paramTypeSourceName(p.Type), caption)
+		if bsonType != "" {
+			// 11.17+; CE0046 below (types.SnippetParameterTypeRule).
+			if err := checkGate(ctx, snippetPrimitiveParameterGate(p)); err != nil {
+				return spec, err
+			}
 		}
 	}
 	if bsonType != "" {
@@ -537,7 +536,8 @@ func applySetProperties(ctx *ExecContext, mutator backend.PageMutator, op *ast.S
 			}
 		} else if propName == "DataSource" {
 			// DataSource requires special handling via SetWidgetDataSource
-			ds, err := convertASTDataSource(value)
+			ds, err := convertASTDataSource(value, newAlterPageBuilder(ctx, moduleName, moduleID,
+				mutator.EnclosingEntity(op.Target.Widget), mutator))
 			if err != nil {
 				return err
 			}
@@ -632,7 +632,10 @@ func resetHiddenColumnProperties(ctx *ExecContext, mutator backend.PageMutator, 
 }
 
 // convertASTDataSource converts an AST DataSource value to a pages.DataSource.
-func convertASTDataSource(value interface{}) (pages.DataSource, error) {
+//
+// pb maps a flow source's arguments, as create page does: they were dropped,
+// and the build failed CE1571 for every parameter (ako/mxcli#2634).
+func convertASTDataSource(value interface{}, pb *pageBuilder) (pages.DataSource, error) {
 	ds, ok := value.(*ast.DataSourceV3)
 	if !ok {
 		return nil, mdlerrors.NewValidation("DataSource value must be a datasource expression")
@@ -652,9 +655,10 @@ func convertASTDataSource(value interface{}) (pages.DataSource, error) {
 		}
 		return &pages.DatabaseSource{EntityName: ds.Reference}, nil
 	case "microflow":
-		return &pages.MicroflowSource{Microflow: ds.Reference, FormValidations: ds.FormValidations}, nil
+		return &pages.MicroflowSource{Microflow: ds.Reference, FormValidations: ds.FormValidations,
+			ParameterMappings: pb.flowArgsToParameterMappings(ds.Args)}, nil
 	case "nanoflow":
-		return &pages.NanoflowSource{Nanoflow: ds.Reference}, nil
+		return &pages.NanoflowSource{Nanoflow: ds.Reference, ParameterMappings: pb.flowArgsToParameterMappings(ds.Args)}, nil
 	case "parameter":
 		// "Data from context". Only the parameter name is known here; the entity
 		// it is typed with lives in the container's own Parameters list, which

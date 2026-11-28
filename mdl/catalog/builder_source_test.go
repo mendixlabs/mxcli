@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // #912: buildSource discarded every describe failure —
@@ -39,7 +40,7 @@ func TestRunDescribes_ReturnsFailuresInsteadOfSwallowingThem(t *testing.T) {
 		return "create " + strings.ToLower(objType) + " " + qn + ";", nil
 	}
 
-	results, failures := runDescribes(items, describe, 2, nil)
+	results, failures := runDescribes(items, describe, 2, nil, nil)
 
 	var described int
 	for _, r := range results {
@@ -78,7 +79,7 @@ func TestRunDescribes_EmptyOutputCountsAsFailure(t *testing.T) {
 
 	_, failures := runDescribes(items, func(string, string, string) (string, error) {
 		return "", nil
-	}, 1, nil)
+	}, 1, nil, nil)
 
 	if len(failures) != 1 {
 		t.Fatalf("got %d failures, want 1 — empty describe output indexes nothing", len(failures))
@@ -95,7 +96,7 @@ func TestRunDescribes_AllSucceeding(t *testing.T) {
 	}
 	results, failures := runDescribes(items, func(_, qn, _ string) (string, error) {
 		return "create entity " + qn + ";", nil
-	}, 4, nil)
+	}, 4, nil, nil)
 
 	if len(failures) != 0 {
 		t.Errorf("got %d failures, want 0: %v", len(failures), failures)
@@ -111,7 +112,7 @@ func TestRunDescribes_NoItems(t *testing.T) {
 	results, failures := runDescribes(nil, func(string, string, string) (string, error) {
 		t.Fatal("describe called with no items")
 		return "", nil
-	}, 4, nil)
+	}, 4, nil, nil)
 	if len(results) != 0 || len(failures) != 0 {
 		t.Errorf("got %d results and %d failures, want none", len(results), len(failures))
 	}
@@ -143,5 +144,52 @@ func TestSourceObjectTypesListsEveryConstant(t *testing.T) {
 	}
 	if len(SourceObjectTypes) != len(constants) {
 		t.Errorf("SourceObjectTypes has %d entries, %d constants are declared", len(SourceObjectTypes), len(constants))
+	}
+}
+
+// A describe that never returns hung the whole build with "source 2183/2184"
+// on screen and 0% CPU (ako/mxcli#2641). It is given up on after
+// describeStallAfter: recorded as a failure, reported, and the rest of the
+// queue still runs — even when every worker is stuck.
+func TestRunDescribes_StalledDescribeIsGivenUpOn_2641(t *testing.T) {
+	old := describeStallAfter
+	describeStallAfter = 50 * time.Millisecond
+	defer func() { describeStallAfter = old }()
+
+	block := make(chan struct{})
+	defer close(block)
+	items := []sourceItem{
+		{SourcePage, "Mod.Stuck", "Mod", ""},
+		{SourcePage, "Mod.A", "Mod", ""},
+		{SourcePage, "Mod.B", "Mod", ""},
+	}
+	var reported []string
+	finished := make(chan struct{})
+	var results []sourceResult
+	var failures []describeFailure
+	go func() {
+		results, failures = runDescribes(items, func(_, qn, _ string) (string, error) {
+			if qn == "Mod.Stuck" {
+				<-block
+			}
+			return "create page " + qn + ";", nil
+		}, 1, nil, func(it sourceItem, _ time.Duration) { reported = append(reported, it.qn) })
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("runDescribes still waiting on a describe that never returns")
+	}
+	if len(failures) != 1 || failures[0].item.qn != "Mod.Stuck" || !strings.Contains(failures[0].reason, "did not finish") {
+		t.Errorf("failures %v, want Mod.Stuck given up on", failures)
+	}
+	if len(reported) != 1 || reported[0] != "Mod.Stuck" {
+		t.Errorf("reported %v, want Mod.Stuck", reported)
+	}
+	// With one worker, stuck first, the others only ran because a fresh
+	// worker took its place.
+	if results[1].text == "" || results[2].text == "" {
+		t.Errorf("the rest of the queue did not run: %+v", results)
 	}
 }

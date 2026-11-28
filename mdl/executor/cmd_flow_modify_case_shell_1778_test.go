@@ -36,8 +36,11 @@ func TestSameCaseShell(t *testing.T) {
 	}{
 		{"a change inside one branch is the same shell", caseStmt("Root/Src", changed, "A", "B", "C"), true},
 		{"control: another subject", caseStmt("Root/Other", changed, "A", "B", "C"), false},
-		{"control: a branch fewer", caseStmt("Root/Src", changed, "A", "B"), false},
-		{"control: branches reordered", caseStmt("Root/Src", changed, "B", "A", "C"), false},
+		// A branch taken out, or the branches written in another order, are
+		// the same case since ako/mxcli#2618: branches pair by value.
+		{"a branch fewer is the same case", caseStmt("Root/Src", changed, "A", "B"), true},
+		{"branches reordered pair by value", caseStmt("Root/Src", changed, "B", "A", "C"), true},
+		{"control: no branch in common", caseStmt("Root/Src", map[string]string{"X": "x"}, "X"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stored := caseStmt("Root/Src", base, "A", "B", "C")

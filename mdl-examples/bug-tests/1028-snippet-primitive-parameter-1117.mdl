@@ -1,0 +1,26 @@
+mdl 1;
+-- ============================================================================
+-- Upstream #1028, then Mendix 11.17: a primitive SNIPPET parameter
+-- ============================================================================
+--
+-- The reported script, unchanged. Below Mendix 11.17 Mendix rejects it with
+-- CE0046 "Invalid data type 'String'." (measured on 11.13.0 and 11.16.0); from
+-- 11.17.0 it is valid ("Primitive Parameters Support for Snippets"), and the
+-- same bytes check at 0 errors.
+--
+-- This file used to be 1028-snippet-primitive-parameter.fail.mdl, refused by
+-- the project-free `mxcli check` as MDL087. That check cannot know the
+-- project's version, so the refusal is now the version gate
+-- pages/snippet_parameter_primitive: `mxcli check -p` and `exec` refuse it on a
+-- project below 11.17 (MDL-VERSION01, naming CE0046) and write it on 11.17+.
+-- Covered by mdl/executor/snippet_param_primitive_test.go
+-- (TestBuildSnippetV3_PrimitiveParameterRefusedBelow1117,
+-- TestStatementVersionGates_PrimitiveSnippetParameter). The companion
+-- 1028-snippet-primitive-parameter.mdl is the form that works on every version.
+-- ============================================================================
+
+create module F1028;
+
+create snippet F1028.SNIPPET_Label ( params: ( $Label: string ) ) {
+  dynamictext dt (content: $Label)
+};

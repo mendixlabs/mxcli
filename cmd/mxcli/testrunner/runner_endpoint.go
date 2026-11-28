@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mendixlabs/mxcli/cmd/mxcli/docker"
@@ -296,11 +297,43 @@ func cleanupEndpoint(projectPath string, st projectState, suite *TestSuite, w io
 // lying around. Failure is not fatal: the file is inert without the model
 // document, and a cleanup error here would mask the real ones.
 func removeGeneratedJavaSource(projectPath string, w io.Writer) {
+	// The registrar first: it can name MxTest's action whether or not the
+	// action's own source directory is still there.
+	scrubUserActionsRegistrar(projectPath, w)
 	dir := filepath.Join(filepath.Dir(projectPath), "javasource", lowerModule(mxTestModule))
 	if _, err := os.Stat(dir); err != nil {
 		return
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		fmt.Fprintf(w, "  note: could not remove generated Java source at %s: %v\n", dir, err)
+	}
+}
+
+// scrubUserActionsRegistrar takes the generated module's actions out of the
+// registrar mxbuild wrote while it existed. Left in, a running dev loop's next
+// warm build — which does not regenerate the file — failed to compile
+// ("package mxtest.actions does not exist") and the app served a blank page
+// until a restart (ako/mxcli#2639). Only the lines registering the removed
+// package go; the file is otherwise left as it is.
+func scrubUserActionsRegistrar(projectPath string, w io.Writer) {
+	path := filepath.Join(filepath.Dir(projectPath), "javasource", "system", "UserActionsRegistrar.java")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	needle := "registerUserAction(" + lowerModule(mxTestModule) + "."
+	lines := strings.SplitAfter(string(data), "\n")
+	kept := lines[:0]
+	for _, l := range lines {
+		if !strings.Contains(l, needle) {
+			kept = append(kept, l)
+		}
+	}
+	out := strings.Join(kept, "")
+	if out == string(data) {
+		return
+	}
+	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
+		fmt.Fprintf(w, "  note: could not update %s: %v\n", path, err)
 	}
 }

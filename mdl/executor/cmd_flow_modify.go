@@ -1011,12 +1011,19 @@ func (pd *patchDiff) gap(ins []ast.MicroflowStatement, stored []ast.MicroflowSta
 			if err := pd.movedNode(d, s); err != nil {
 				return err
 			}
-			for i := range d.Cases {
-				if err := pd.statements(d.Cases[i].Body, s.Cases[i].Body); err != nil {
+			pairs, _ := caseBranchPairs(d, s)
+			for i, j := range pairs {
+				if j < 0 {
+					continue // a new branch: written with its values
+				}
+				if err := pd.statements(d.Cases[i].Body, s.Cases[j].Body); err != nil {
 					return err
 				}
 			}
-			return pd.statements(d.ElseBody, s.ElseBody)
+			if err := pd.statements(d.ElseBody, s.ElseBody); err != nil {
+				return err
+			}
+			return pd.caseValuesEdit(d, s)
 		}
 		if sameHandlerShell(ins[0], del[0]) {
 			return pd.handlerEdit(ins[0], del[0])
@@ -1233,33 +1240,143 @@ func sameIfShell(declared, stored ast.MicroflowStatement) (*ast.IfStmt, *ast.IfS
 }
 
 // sameCaseShell reports whether two statements are the same `case` — the
-// same subject, annotations and branches, each branch deciding on the same
-// values in the same order, and an else on both or neither — differing at most
-// inside its branches and in where the split is drawn. A branch's activities
-// are top-level nodes of the stored graph, as an if's are, so each branch is
-// spliced like one.
-//
-// The branches are paired by position, not by value: describe prints them in
-// the order the stored flows leave the split, and a script restating the flow
-// keeps that order. A reordered or regrouped branch is a change of the split
-// itself, which is still replaced (and refused for more than two paths).
+// same subject, the same notes, an else on both or neither — differing at most
+// in its branches: their bodies, their values, and which branches there are
+// (ako/mxcli#2618; a change inside a branch, mendixlabs/mxcli#1778). Its
+// branches are paired by caseBranchPairs: a declared branch is the stored one
+// it shares a value with, so branches written in another order still pair.
 func sameCaseShell(declared, stored ast.MicroflowStatement) (*ast.EnumSplitStmt, *ast.EnumSplitStmt, bool) {
 	d, ok1 := declared.(*ast.EnumSplitStmt)
 	s, ok2 := stored.(*ast.EnumSplitStmt)
-	if !ok1 || !ok2 || len(d.Cases) != len(s.Cases) || (len(d.ElseBody) == 0) != (len(s.ElseBody) == 0) {
+	if !ok1 || !ok2 || (len(d.ElseBody) == 0) != (len(s.ElseBody) == 0) {
 		return nil, nil, false
 	}
 	dShell, sShell := *d, *s
-	dShell.Cases, sShell.Cases = make([]ast.EnumSplitCase, len(d.Cases)), make([]ast.EnumSplitCase, len(s.Cases))
-	for i := range d.Cases {
-		dShell.Cases[i] = ast.EnumSplitCase{Value: d.Cases[i].Value, Values: d.Cases[i].Values}
-		sShell.Cases[i] = ast.EnumSplitCase{Value: s.Cases[i].Value, Values: s.Cases[i].Values}
-	}
+	dShell.Cases, sShell.Cases = nil, nil
 	dShell.ElseBody, sShell.ElseBody = nil, nil
+	// The case anchors are keyed by value, and go with the values; a case
+	// that states none and one that is described with them are the same.
+	dShell.Annotations, sShell.Annotations = withoutCaseAnchors(d.Annotations), withoutCaseAnchors(s.Annotations)
 	if !sameExceptPositions(&dShell, &sShell) {
 		return nil, nil, false
 	}
-	return d, s, true
+	pairs, _ := caseBranchPairs(d, s)
+	// A case none of whose branches is a stored one restated is not the
+	// stored case: nothing would stay but its subject.
+	for _, j := range pairs {
+		if j >= 0 {
+			return d, s, true
+		}
+	}
+	return nil, nil, false
+}
+
+// withoutCaseAnchors is a without its per-value anchors, nil when nothing else
+// is stated.
+func withoutCaseAnchors(a *ast.ActivityAnnotations) *ast.ActivityAnnotations {
+	if a == nil {
+		return nil
+	}
+	c := *a
+	c.CaseAnchors = nil
+	if reflect.DeepEqual(c, ast.ActivityAnnotations{}) {
+		return nil
+	}
+	return &c
+}
+
+// caseBranchPairs pairs each declared branch with the stored branch it is —
+// the first one not yet paired that has one of its values — or -1 for a new
+// branch, and returns the stored branches no declared one is.
+func caseBranchPairs(d, s *ast.EnumSplitStmt) (pairs []int, removed []int) {
+	claimed := make([]bool, len(s.Cases))
+	pairs = make([]int, len(d.Cases))
+	for i := range d.Cases {
+		pairs[i] = -1
+		for j := range s.Cases {
+			if !claimed[j] && shareCaseValue(enumSplitCaseValues(d.Cases[i]), enumSplitCaseValues(s.Cases[j])) {
+				pairs[i], claimed[j] = j, true
+				break
+			}
+		}
+	}
+	for j, c := range claimed {
+		if !c {
+			removed = append(removed, j)
+		}
+	}
+	return pairs, removed
+}
+
+// caseValuesEdit puts the declared `case` on the stored one in place, when its
+// branches differ in more than their bodies: a new enumeration value added to
+// a `when`, one moved to another `when`, a `when` taken out or a new one added
+// (ako/mxcli#2618). The branches pair by caseBranchPairs, as the bodies were
+// diffed; this runs after those, so it reads each branch's entry as it then
+// stands.
+func (pd *patchDiff) caseValuesEdit(declared, stored *ast.EnumSplitStmt) error {
+	pairs, removed := caseBranchPairs(declared, stored)
+	same := len(removed) == 0
+	branchStored := make([][]string, len(declared.Cases))
+	for i, j := range pairs {
+		if j < 0 {
+			same = false
+			continue
+		}
+		branchStored[i] = enumSplitCaseValues(stored.Cases[j])
+		if !sameCaseValueList(branchStored[i], enumSplitCaseValues(declared.Cases[i])) {
+			same = false
+		}
+	}
+	if same {
+		return nil
+	}
+	c, err := pd.loc.locate(stored)
+	if err != nil {
+		return err
+	}
+	if _, ok := c.Object.(*microflows.ExclusiveSplit); !ok {
+		return cannotSplice("the stored %s is not drawn as a decision", describeAt(stored))
+	}
+	pd.add(ast.AlterFlowReplace, c, []ast.MicroflowStatement{declared})
+	op := pd.ops[len(pd.ops)-1]
+	op.SetCaseValues, op.CaseBranchStored = true, branchStored
+	for _, j := range removed {
+		op.CaseRemoved = append(op.CaseRemoved, enumSplitCaseValues(stored.Cases[j]))
+	}
+	return nil
+}
+
+// shareCaseValue reports whether two branches have a value in common.
+func shareCaseValue(a, b []string) bool {
+	for _, x := range a {
+		for _, y := range b {
+			if strings.EqualFold(strings.Trim(x, "\"`"), strings.Trim(y, "\"`")) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// sameCaseValueList reports whether two branches hold the same values, in
+// any order, matched as WHEN values are.
+func sameCaseValueList(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := map[string]int{}
+	for _, v := range a {
+		seen[strings.ToLower(strings.Trim(v, "\"`"))]++
+	}
+	for _, v := range b {
+		k := strings.ToLower(strings.Trim(v, "\"`"))
+		if seen[k] == 0 {
+			return false
+		}
+		seen[k]--
+	}
+	return true
 }
 
 // ifConditionChanged reports whether two statements are the same `if` but for

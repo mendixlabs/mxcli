@@ -464,26 +464,25 @@ LIST IMPACT OF htmlelement;
 			"snippet", "snippets", "reusable", "snippetcall",
 			"page fragment", "component",
 		},
-		Syntax:  "CREATE SNIPPET Module.Name [FOLDER 'path']\n  [( Params: ( $P: Module.Entity ) )]   -- parameters are entities only\n  {\n    -- widgets (same as page)\n  }\n\n-- Embed in a page:\nSNIPPETCALL scName (Snippet: Module.SnippetName)\n-- A snippet call renders no element: Class / Style / DynamicClasses /\n-- DesignProperties on it never reach the page (MDL-WIDGET48). Style a\n-- container around the call, or inside the snippet, instead.",
+		Syntax:  "CREATE SNIPPET Module.Name [FOLDER 'path']\n  [( Params: ( $P: Module.Entity ) )]   -- entities; a primitive needs 11.17+\n  {\n    -- widgets (same as page)\n  }\n\n-- Embed in a page:\nSNIPPETCALL scName (Snippet: Module.SnippetName)\n-- A snippet call renders no element: Class / Style / DynamicClasses /\n-- DesignProperties on it never reach the page (MDL-WIDGET48). Style a\n-- container around the call, or inside the snippet, instead.",
 		Example: "CREATE SNIPPET MyModule.CustomerInfo (\n  Params: ( $Customer: MyModule.Customer )\n)\n{\n  DATAVIEW dv (DataSource: $Customer) {\n    TEXTBOX txtName (Label: 'Name', Attribute: Name)\n    TEXTBOX txtEmail (Label: 'Email', Attribute: Email)\n  }\n};",
 		SeeAlso: []string{"snippet.create", "snippet.alter", "page"},
 	})
 
 	Register(SyntaxFeature{
 		Path:     "snippet.create",
-		Features: []string{"pages/snippet_parameters"},
+		Features: []string{"pages/snippet_parameters", "pages/snippet_parameter_primitive"},
 		Summary:  "CREATE SNIPPET with parameters, variables, and folder",
 		Keywords: []string{
 			"create snippet", "new snippet", "snippet parameters",
 			"snippet variables",
 		},
-		// Every snippet parameter is an entity. This line used to print
-		// "$Label: String", which is not executable: mxbuild rejects a
-		// primitive snippet parameter with CE0046 "Invalid data type 'String'."
-		// (a PAGE parameter may be primitive; a snippet parameter may not), and
-		// the reporter of mendixlabs/mxcli#1028 reached the bug by following
-		// this line. A primitive is now refused as MDL087.
-		Syntax:  "CREATE SNIPPET Module.Name [FOLDER 'Snippets/Common']\n  [( Params: ( $P: Module.Entity ) )]   -- entities only; a primitive is CE0046\n  [( Variables: ( $isEditable: Boolean = true ) )]\n  {\n    -- widgets\n  }\n\n-- To parameterise a snippet on a primitive, keep the primitive on the\n-- calling PAGE and pass an object, or read the value off an entity member.",
+		// A snippet parameter is an entity, or — from Mendix 11.17 — a
+		// primitive. Below 11.17 mxbuild rejects a primitive one with CE0046
+		// "Invalid data type 'String'." (the reporter of mendixlabs/mxcli#1028
+		// reached that by following a "$Label: String" printed here), so the
+		// primitive form is version-gated (pages/snippet_parameter_primitive).
+		Syntax:  "CREATE SNIPPET Module.Name [FOLDER 'Snippets/Common']\n  [( Params: ( $P: Module.Entity, $Label: String ) )]   -- a primitive needs 11.17+\n  [( Variables: ( $isEditable: Boolean = true ) )]\n  {\n    -- widgets; an input binds a primitive parameter directly:\n    -- TEXTBOX tb (Label: 'Label', Attribute: $Label)\n  }\n\n-- Below 11.17 a primitive snippet parameter is CE0046: keep the primitive\n-- on the calling PAGE and pass an object, or read it off an entity member.",
 		Example: "CREATE SNIPPET MyModule.NavigationMenu\n{\n  NAVIGATIONLIST navMenu {\n    ITEM itemCustomers (Action: SHOW PAGE MyModule.CustomerOverview) {\n      DYNAMICTEXT txtCustomers (Content: 'Customers')\n    }\n  }\n};",
 		SeeAlso: []string{"snippet", "snippet.alter", "page.widgets"},
 	})

@@ -70,9 +70,10 @@ func storedGridPage() bson.D {
 // countingDeps records the writes a validation pass must not make.
 type countingDeps struct{ saves int }
 
-func (d *countingDeps) SerializeWidget(pages.Widget) bson.D             { return nil }
-func (d *countingDeps) SerializeClientAction(pages.ClientAction) bson.D { return nil }
-func (d *countingDeps) SerializeClientTemplate() bson.D                 { return nil }
+func (d *countingDeps) SerializeWidget(pages.Widget) bson.D                 { return nil }
+func (d *countingDeps) SerializeClientAction(pages.ClientAction) bson.D     { return nil }
+func (*countingDeps) SerializeFormDataSource(pages.DataSource, bool) bson.D { return nil }
+func (d *countingDeps) SerializeClientTemplate() bson.D                     { return nil }
 
 func (d *countingDeps) SerializeCustomWidgetDataSource(pages.DataSource) bson.D {
 	return nil

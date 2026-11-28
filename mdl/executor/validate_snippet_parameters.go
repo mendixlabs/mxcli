@@ -8,33 +8,19 @@ import (
 
 	"github.com/mendixlabs/mxcli/mdl/ast"
 	"github.com/mendixlabs/mxcli/mdl/linter"
-	"github.com/mendixlabs/mxcli/mdl/types"
 )
 
-// validateSnippetParameters (MDL087) refuses a primitive-typed snippet
-// parameter. A snippet parameter must name an entity; mxbuild rejects every
-// primitive with CE0046 "Invalid data type '<caption>'." — the measurements,
-// and the page control that makes this specific to snippets, are in
-// types.SnippetParameterTypeRule.
+// validateSnippetParameters (MDL087) refuses what no Mendix version stores on
+// a snippet parameter: `optional` (Forms$SnippetParameter has no IsRequired).
 //
-// # Why this is a check and not a write
-//
-// mendixlabs/mxcli#1028 reported the documented spelling failing at exec:
-//
-//	create snippet Test.SNIPPET_Label ( params: { $Label: string } )
-//	  → Error: failed to build snippet: failed to resolve entity string:
-//	           entity not found: string
-//
-// — a type nobody spelled, because the snippet's Params clause had its own
-// visitor that handed the resolver the source text verbatim. The obvious repair
-// is to write the primitive the way a page parameter writes one; the storage
-// even allows it. mxbuild does not, so that repair trades an incomprehensible
-// refusal for a document that fails a build later. The statement is refused
-// here instead, in the project-free pass, naming the CE the author would
-// otherwise meet at the far end of a build.
-//
-// Reported per parameter, so a clause with several bad ones names them all
-// rather than one per run.
+// It used to refuse a primitive-typed parameter as well — mxbuild rejected
+// every one with CE0046 "Invalid data type '<caption>'." (mendixlabs/mxcli#1028,
+// measured in types.SnippetParameterTypeRule). Mendix 11.17 accepts them, so
+// that refusal is now a version gate (pages/snippet_parameter_primitive in
+// snippetPrimitiveParameterGates): this pass runs without a project and cannot
+// know which side of 11.17 the script lands on, and refusing here would block
+// the valid form at exec's pre-flight. `mxcli check -p` and exec still refuse
+// a primitive below 11.17, through the gate, naming CE0046.
 func validateSnippetParameters(stmt ast.Statement) []linter.Violation {
 	var name ast.QualifiedName
 	var params []ast.PageParameter
@@ -42,8 +28,8 @@ func validateSnippetParameters(stmt ast.Statement) []linter.Violation {
 	case *ast.CreateSnippetStmtV3:
 		name, params = s.Name, s.Parameters
 	case *ast.AlterPageStmt:
-		// `alter snippet … { add parameters … }` declares the same element and
-		// meets the same CE0046 (mendixlabs/mxcli#1234).
+		// `alter snippet … { add parameters … }` declares the same element
+		// (mendixlabs/mxcli#1234).
 		if !strings.EqualFold(s.ContainerType, "snippet") {
 			return nil
 		}
@@ -67,29 +53,6 @@ func validateSnippetParameters(stmt ast.Statement) []linter.Violation {
 				Message:  optionalSnippetParameterMessage(name, p.Name),
 			})
 		}
-		caption := types.SnippetParameterTypeRule(pageParamBSONType(p.Type))
-		if caption == "" {
-			continue
-		}
-		out = append(out, linter.Violation{
-			RuleID:   "MDL087",
-			Severity: linter.SeverityError,
-			Location: linter.Location{
-				Module:       name.Module,
-				DocumentType: "snippet",
-				DocumentName: name.Name,
-			},
-			Message: fmt.Sprintf(
-				"snippet '%s' declares parameter $%s with the primitive type %s. "+
-					"A snippet parameter must be an entity — mxbuild rejects a primitive one "+
-					"with CE0046 (\"Invalid data type '%s'.\"). A page parameter may be primitive; "+
-					"a snippet parameter may not.",
-				name.String(), p.Name, paramTypeSourceName(p.Type), caption),
-			Suggestion: fmt.Sprintf(
-				"pass the value on an object: declare `$%s: <Module>.<Entity>` and read the "+
-					"member inside the snippet, or move the primitive to the calling PAGE's "+
-					"parameters and keep it out of the snippet.", p.Name),
-		})
 	}
 	return out
 }

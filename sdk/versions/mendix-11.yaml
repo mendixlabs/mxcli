@@ -215,6 +215,16 @@ features:
       min_version: "9.21.0"
       mdl: "CREATE SNIPPET Module.Name (Params: ($P: Module.Entity)) { … }"
       notes: "Forms$SnippetParameter and Snippet.Parameters introduced in 9.21.0 (mendixmodelsdk 4.117.0). A snippet call writes a mapping only for a parameter the called snippet declares, so it cannot reach an older project (ako/mxcli#1811)."
+    snippet_parameter_primitive:
+      # A snippet parameter of a primitive type (String, Integer/Long, Decimal,
+      # Boolean, DateTime). Measured, not from the metamodel: storage has always
+      # allowed it (Forms$SnippetParameter.ParameterType is the polymorphic
+      # DataTypes$DataType), and the metamodel release notes record no change.
+      # The identical bytes fail CE0046 "Invalid data type '<caption>'." on
+      # mx 11.16.0 (and 11.13.0) and check clean on mx 11.17.0, which is the
+      # release that announces "Primitive Parameters Support for Snippets".
+      min_version: "11.17.0"
+      mdl: "CREATE SNIPPET Module.Name (Params: ($Label: String)) { … }"
 
   security:
     module_roles:

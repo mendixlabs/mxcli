@@ -134,7 +134,7 @@ func (a *alterFlowContext) applyTo(ctx *ExecContext, mut backend.MicroflowMutato
 		// A decision taken out takes the activities on its paths with it
 		// (ako/mxcli#1694): their outputs are judged like the target's.
 		takenOut := []mfmutator.Candidate{target}
-		if (op.Op == ast.AlterFlowDrop || op.Op == ast.AlterFlowReplace) && !op.SetCondition && !op.SetNotes {
+		if (op.Op == ast.AlterFlowDrop || op.Op == ast.AlterFlowReplace) && !op.SetCondition && !op.SetNotes && !op.SetCaseValues {
 			takenOut = append(takenOut, a.candidatesOf(mut.DecisionNodes(target.ID))...)
 		}
 		if op.Op == ast.AlterFlowDrop {
@@ -174,6 +174,35 @@ func (a *alterFlowContext) applyTo(ctx *ExecContext, mut backend.MicroflowMutato
 				return fail(err)
 			}
 			a.noteRewritten(target, "if "+expr)
+			a.noteEdited(op)
+			continue
+		}
+		if op.SetCaseValues {
+			// A `case` whose values move between its branches, or gain one, is
+			// the stored decision with its flows re-pointed (ako/mxcli#2618).
+			cs, ok := op.Body[0].(*ast.EnumSplitStmt)
+			if !ok {
+				return fail(fmt.Errorf("a case values edit carries no case"))
+			}
+			branches := make([]backend.CaseBranchEdit, len(cs.Cases))
+			for i := range cs.Cases {
+				branches[i] = backend.CaseBranchEdit{Values: enumSplitCaseValues(cs.Cases[i])}
+				if i < len(op.CaseBranchStored) && op.CaseBranchStored[i] != nil {
+					branches[i].Stored = op.CaseBranchStored[i]
+					continue
+				}
+				// A new branch: its body is built as an insert's fragment.
+				if len(cs.Cases[i].Body) > 0 {
+					frag, _, err := a.buildFragmentVars(ctx, cs.Cases[i].Body)
+					if err != nil {
+						return fail(err)
+					}
+					branches[i].Body = frag
+				}
+			}
+			if err := mut.SetCaseValues(target.ID, branches, op.CaseRemoved); err != nil {
+				return fail(err)
+			}
 			a.noteEdited(op)
 			continue
 		}

@@ -68,6 +68,17 @@ type AlterFlowOperation struct {
 	// `create or modify`, for an `if` that differs from the stored one in its
 	// condition; the branches are diffed by operations of their own.
 	SetCondition bool
+	// SetCaseValues, on a replace of a `case` decision, says Body is a single
+	// `case` to put on the stored one in place (ako/mxcli#2618): values moved
+	// between or added to its branches, branches taken out and new ones added.
+	// CaseBranchStored holds, per declared branch, the values of the stored
+	// branch it is, or nil for a new one, whose body is written with it;
+	// CaseRemoved the values of each stored branch taken out. Set only by
+	// `create or modify`; the bodies of the stored branches that stay are
+	// diffed by operations of their own.
+	SetCaseValues    bool
+	CaseBranchStored [][]string
+	CaseRemoved      [][]string
 	// KeepHandler, on a replace of an activity with a custom error handler,
 	// says Body's one statement states the stored handler unchanged: the
 	// activity alone is replaced, in place, and the stored handler — its
